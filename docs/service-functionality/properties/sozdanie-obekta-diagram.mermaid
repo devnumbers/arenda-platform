@@ -1,0 +1,63 @@
+flowchart TD
+    start((Добавление объекта)):::black
+    addObject[Добавить объект]:::button
+    limit{"Есть место<br/>в тарифном лимите?"}:::decision
+    objectInfo[Информация об объекте]:::screen
+    type[Тип]:::button
+
+    flat[Квартира]:::button
+    room[Комната]:::button
+    commercial[Коммерческая]:::button
+    house[Дом]:::button
+    land[Участок]:::button
+    parking[Машиноместо]:::button
+
+    address[Адрес]:::button
+    title[Название]:::button
+    description[Описание]:::button
+    comment[Комментарий]:::button
+    photo[Фотография]:::button
+    nextStep{"Что дальше?"}:::decision
+    status{"Объект свободен<br/>и не на ремонте?"}:::decision
+    createRent[Создать аренду]:::button
+    createOperation[Создать операцию]:::button
+    createRecurring[Создать регулярную<br/>операцию]:::button
+    keepFree[Оставить свободным]:::button
+    tariffLimit["Сначала освободить лимит<br/>или повысить тариф"]:::button
+
+    start --> addObject
+    addObject --> limit
+    limit -- Да --> objectInfo
+    limit -- Нет --> tariffLimit
+    objectInfo --> type
+
+    type --> flat
+    type --> room
+    type --> commercial
+    type --> house
+    type --> land
+    type --> parking
+
+    flat --> address
+    room --> address
+    commercial --> address
+    house --> address
+    land --> address
+    parking --> address
+
+    address --> title
+    title --> description
+    description --> comment
+    comment --> photo
+    photo --> nextStep
+    nextStep --> status
+    status -- Да --> createRent
+    status -- Нет --> keepFree
+    nextStep --> createOperation
+    nextStep --> createRecurring
+    nextStep --> keepFree
+
+    classDef black fill:#1f1f1f,color:#ffffff,stroke:#1f1f1f;
+    classDef screen fill:#ffffff,color:#222222,stroke:#d9d9d9,stroke-width:2px;
+    classDef button fill:#35a9f4,color:#ffffff,stroke:#35a9f4,stroke-width:1px;
+    classDef decision fill:#57d1c9,color:#111111,stroke:#57d1c9,stroke-width:1px;

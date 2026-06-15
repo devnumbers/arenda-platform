@@ -1,0 +1,38 @@
+flowchart TD
+    object["Объект"]:::button
+    tenant["Арендатор<br/>необязательно"]:::button
+    rentPrice["Арендная плата<br/>₽ в месяц"]:::button
+    deposit["Залог<br/>справочная сумма"]:::button
+    paymentDay["День оплаты"]:::button
+
+    startDate["Дата начала аренды"]:::button
+    endDate["Дата окончания<br/>включительно"]:::button
+    sms["SMS-напоминание<br/>необязательно"]:::button
+    backdated{"Дата начала<br/>в прошлом?"}:::decision
+    pastOps["Создать прошлые<br/>арендные операции"]:::button
+    futureOps["Создать операции<br/>на 12 месяцев вперед"]:::button
+
+    comment["Комментарий"]:::button
+    createLease["Создать аренду"]:::button
+    createRecurring["Создать системную<br/>регулярную операцию"]:::button
+
+    object --> tenant
+    object --> rentPrice
+    tenant --> rentPrice
+    rentPrice --> deposit
+    deposit --> paymentDay
+    paymentDay --> startDate
+    paymentDay --> endDate
+    paymentDay --> sms
+    startDate --> backdated
+    backdated -- Да --> pastOps
+    backdated -- Нет --> futureOps
+    pastOps --> futureOps
+    futureOps --> comment
+    endDate --> comment
+    sms --> comment
+    comment --> createLease
+    createLease --> createRecurring
+
+    classDef button fill:#35a9f4,color:#ffffff,stroke:#35a9f4,stroke-width:1px;
+    classDef decision fill:#57d1c9,color:#111111,stroke:#57d1c9,stroke-width:1px;
