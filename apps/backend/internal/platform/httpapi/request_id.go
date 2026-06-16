@@ -4,7 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net/http"
+	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -39,11 +42,15 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+var fallbackCounter atomic.Uint64
+
 func fallbackRequestID() string {
 	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		// Last resort: return zeros; this should never happen in practice.
+	if _, err := rand.Read(b); err == nil {
 		return hex.EncodeToString(b)
 	}
-	return hex.EncodeToString(b)
+
+	ts := uint64(time.Now().UTC().UnixNano())
+	n := fallbackCounter.Add(1)
+	return fmt.Sprintf("%016x%016x", ts, n)
 }

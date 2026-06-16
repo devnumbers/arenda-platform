@@ -125,16 +125,17 @@ func (s *AuthService) SendCode(ctx context.Context, phone domain.Phone) error {
 func (s *AuthService) VerifyCode(ctx context.Context, phone domain.Phone, code string) (domain.RawSession, domain.User, error) {
 	now := s.clock.Now()
 
-	window, err := s.attempts.GetByPhone(ctx, phone)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("get attempts: %w", err)
-	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.RawSession{}, domain.User{}, fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	txAttempts := s.attempts.WithTx(tx)
+	window, err := txAttempts.GetByPhone(ctx, phone)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return domain.RawSession{}, domain.User{}, fmt.Errorf("get attempts: %w", err)
+	}
 
 	codes := s.codes.WithTx(tx)
 	users := s.users.WithTx(tx)
@@ -142,9 +143,8 @@ func (s *AuthService) VerifyCode(ctx context.Context, phone domain.Phone, code s
 
 	sms, err := codes.GetLatestByPhone(ctx, phone, now)
 	if err != nil {
-		_ = tx.Rollback(ctx)
 		if errors.Is(err, ErrNotFound) {
-			if recErr := s.recordFailure(ctx, s.attempts, phone, window, now); recErr != nil {
+			if recErr := s.recordFailure(ctx, txAttempts, phone, window, now); recErr != nil {
 				if errors.Is(recErr, domain.ErrTooManyAttempts) || errors.Is(recErr, ErrUserBlocked) {
 					return domain.RawSession{}, domain.User{}, recErr
 				}
@@ -156,8 +156,7 @@ func (s *AuthService) VerifyCode(ctx context.Context, phone domain.Phone, code s
 	}
 
 	if err := sms.Verify(code, now); err != nil {
-		_ = tx.Rollback(ctx)
-		if recErr := s.recordFailure(ctx, s.attempts, phone, window, now); recErr != nil {
+		if recErr := s.recordFailure(ctx, txAttempts, phone, window, now); recErr != nil {
 			if errors.Is(recErr, domain.ErrTooManyAttempts) || errors.Is(recErr, ErrUserBlocked) {
 				return domain.RawSession{}, domain.User{}, recErr
 			}

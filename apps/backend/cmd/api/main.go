@@ -25,6 +25,7 @@ import (
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+	"golang.org/x/time/rate"
 )
 
 type realClock struct{}
@@ -76,6 +77,9 @@ func run(fallback *slog.Logger) error {
 	var smsSender identityapp.Sender
 	switch cfg.SMSSender {
 	case "", "fake":
+		if cfg.AppEnv == "production" {
+			return fmt.Errorf("production environment requires a real SMS_SENDER")
+		}
 		smsSender = fakesms.NewFakeSender(logger)
 	default:
 		return fmt.Errorf("unsupported SMS_SENDER: %s", cfg.SMSSender)
@@ -138,6 +142,13 @@ func run(fallback *slog.Logger) error {
 	dataCleaner := cleaner.New(identitySessionRepo, identitySMSRepo, identityAttemptRepo, 1*time.Hour, 7*24*time.Hour, logger)
 	go dataCleaner.Run(ctx)
 
+	ipLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.IPRPS), cfg.RateLimit.IPBurst, 1*time.Hour)
+	defer ipLimiter.Stop()
+	phoneSendLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.PhoneSendPerHour)/3600, cfg.RateLimit.PhoneSendPerHour, 1*time.Hour)
+	defer phoneSendLimiter.Stop()
+	phoneVerifyLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.PhoneVerifyPer15Min)/(15*60), cfg.RateLimit.PhoneVerifyPer15Min, 1*time.Hour)
+	defer phoneVerifyLimiter.Stop()
+
 	handler := httpapi.New(httpapi.Deps{
 		Auth:                authService,
 		Sessions:            identitySessionRepo,
@@ -148,6 +159,9 @@ func run(fallback *slog.Logger) error {
 		RecurringOperations: recurringOperationService,
 		CookieSecure:        cfg.CookieSecure,
 		Logger:              logger,
+		IPRateLimiter:       ipLimiter,
+		PhoneSendLimiter:    phoneSendLimiter,
+		PhoneVerifyLimiter:  phoneVerifyLimiter,
 	})
 
 	server := &http.Server{

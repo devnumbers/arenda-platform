@@ -23,14 +23,28 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 
 // AuthHandlers implements the generated non-strict ServerInterface.
 type AuthHandlers struct {
-	auth         *application.AuthService
-	cookieSecure bool
-	logger       *slog.Logger
+	auth           *application.AuthService
+	cookieSecure   bool
+	logger         *slog.Logger
+	phoneSend      *RateLimiter
+	phoneVerify    *RateLimiter
 }
 
 // NewAuthHandlers creates HTTP handlers for the auth API.
-func NewAuthHandlers(auth *application.AuthService, cookieSecure bool, logger *slog.Logger) *AuthHandlers {
-	return &AuthHandlers{auth: auth, cookieSecure: cookieSecure, logger: logger}
+func NewAuthHandlers(
+	auth *application.AuthService,
+	cookieSecure bool,
+	logger *slog.Logger,
+	phoneSend *RateLimiter,
+	phoneVerify *RateLimiter,
+) *AuthHandlers {
+	return &AuthHandlers{
+		auth:        auth,
+		cookieSecure: cookieSecure,
+		logger:      logger,
+		phoneSend:   phoneSend,
+		phoneVerify: phoneVerify,
+	}
 }
 
 // SendPhoneCode implements POST /auth/phone/send.
@@ -46,6 +60,11 @@ func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "invalid phone in request body", slog.String("error", err.Error()))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "invalid phone"))
+		return
+	}
+
+	if h.phoneSend != nil && !h.phoneSend.Allow(phone.String()) {
+		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "rate limit exceeded"))
 		return
 	}
 
@@ -78,6 +97,11 @@ func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.phoneVerify != nil && !h.phoneVerify.Allow(phone.String()) {
+		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "rate limit exceeded"))
+		return
+	}
+
 	raw, user, err := h.auth.VerifyCode(r.Context(), phone, body.Code)
 	if err != nil {
 		switch {
@@ -86,7 +110,7 @@ func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", err.Error()))
 		case errors.Is(err, domain.ErrSMSCodeInvalid),
 			errors.Is(err, application.ErrNotFound):
-			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", err.Error()))
+			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "invalid phone or code"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -99,7 +123,7 @@ func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 
 // Logout implements POST /auth/logout.
 func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
-	token := sessionTokenFromRequest(r)
+	token := sessionTokenFromRequest(r, h.cookieSecure)
 	if token == "" {
 		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return

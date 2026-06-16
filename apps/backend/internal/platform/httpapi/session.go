@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -12,7 +13,12 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 )
 
-const sessionCookieName = "session_id"
+func sessionCookieName(secure bool) string {
+	if secure {
+		return "__Host-session_id"
+	}
+	return "session_id"
+}
 
 type contextKey int
 
@@ -25,33 +31,41 @@ func UserIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 }
 
 func setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time, secure bool) {
-	//nolint:gosec // Secure flag is configured via COOKIE_SECURE for local dev.
+	sameSite := http.SameSiteLaxMode
+	if secure {
+		sameSite = http.SameSiteStrictMode
+	}
+	//nolint:gosec // Secure/HttpOnly/SameSite are configured dynamically based on APP_ENV.
 	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
+		Name:     sessionCookieName(secure),
 		Value:    token,
 		Path:     "/",
 		MaxAge:   int(time.Until(expiresAt).Seconds()),
 		HttpOnly: true,
 		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sameSite,
 	})
 }
 
 func clearSessionCookie(w http.ResponseWriter, secure bool) {
-	//nolint:gosec // Secure flag is configured via COOKIE_SECURE for local dev.
+	sameSite := http.SameSiteLaxMode
+	if secure {
+		sameSite = http.SameSiteStrictMode
+	}
+	//nolint:gosec // Secure/HttpOnly/SameSite are configured dynamically based on APP_ENV.
 	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
+		Name:     sessionCookieName(secure),
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sameSite,
 	})
 }
 
-func sessionTokenFromRequest(r *http.Request) string {
-	cookie, err := r.Cookie(sessionCookieName)
+func sessionTokenFromRequest(r *http.Request, secure bool) string {
+	cookie, err := r.Cookie(sessionCookieName(secure))
 	if err != nil {
 		return ""
 	}
@@ -75,17 +89,27 @@ func SessionMiddleware(logger *slog.Logger, sessions application.SessionReposito
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			token := sessionTokenFromRequest(r)
-			if token != "" {
-				now := clock.Now()
-				session, user, err := sessions.GetByTokenHash(r.Context(), hashSessionToken(token), now)
-				if err != nil {
-					if logger != nil {
-						logger.ErrorContext(r.Context(), "session lookup failed", slog.String("error", err.Error()))
-					}
-				} else if !session.IsExpired(now) {
-					r = r.WithContext(context.WithValue(r.Context(), userIDKey, user.ID))
+			token := sessionTokenFromRequest(r, secure)
+			if token == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			now := clock.Now()
+			session, user, err := sessions.GetByTokenHash(r.Context(), hashSessionToken(token), now)
+			if err != nil {
+				if errors.Is(err, application.ErrNotFound) {
+					next.ServeHTTP(w, r)
+					return
 				}
+				if logger != nil {
+					logger.ErrorContext(r.Context(), "session lookup failed", slog.String("error", err.Error()))
+				}
+				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+				return
+			}
+			if !session.IsExpired(now) {
+				r = r.WithContext(context.WithValue(r.Context(), userIDKey, user.ID))
 			}
 			next.ServeHTTP(w, r)
 		})

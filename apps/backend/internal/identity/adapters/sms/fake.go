@@ -17,7 +17,7 @@ func NewFakeSender(logger *slog.Logger) *FakeSender {
 	return &FakeSender{logger: logger}
 }
 
-func (s *FakeSender) Send(ctx context.Context, phone domain.Phone, message string) error {
-	s.logger.InfoContext(ctx, "fake sms sent", "phone", phone.String(), "message", message)
+func (s *FakeSender) Send(ctx context.Context, phone domain.Phone, _ string) error {
+	s.logger.InfoContext(ctx, "fake sms sent", "phone", phone.String())
 	return nil
 }

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -45,4 +46,28 @@ func stringPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// openAPIErrorHandler converts OpenAPI path/header/param errors into RFC 7807 problems.
+func openAPIErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	var (
+		requiredParam     *openapi.RequiredParamError
+		requiredHeader    *openapi.RequiredHeaderError
+		invalidParamFmt   *openapi.InvalidParamFormatError
+		tooManyValues     *openapi.TooManyValuesForParamError
+		unescapedCookie   *openapi.UnescapedCookieParamError
+		unmarshalingParam *openapi.UnmarshalingParamError
+	)
+
+	switch {
+	case errors.As(err, &requiredParam),
+		errors.As(err, &requiredHeader),
+		errors.As(err, &invalidParamFmt),
+		errors.As(err, &tooManyValues),
+		errors.As(err, &unescapedCookie),
+		errors.As(err, &unmarshalingParam):
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", err.Error()))
+	default:
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request parameter"))
+	}
 }

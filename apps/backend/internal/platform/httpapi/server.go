@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"log/slog"
+	"net"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -24,6 +25,9 @@ type Deps struct {
 	CookieSecure        bool
 	Logger              *slog.Logger
 	Clock               identityapp.Clock
+	IPRateLimiter       *RateLimiter
+	PhoneSendLimiter    *RateLimiter
+	PhoneVerifyLimiter  *RateLimiter
 }
 
 func securityHeaders(next http.Handler) http.Handler {
@@ -40,12 +44,15 @@ func securityHeaders(next http.Handler) http.Handler {
 func New(deps Deps) http.Handler {
 	r := chi.NewRouter()
 	r.Use(RequestIDMiddleware)
+	//nolint:staticcheck // middleware.RealIP is used here as the project-wide IP extraction strategy.
+	r.Use(middleware.RealIP)
 	r.Use(RequestLogger(deps.Logger))
 	r.Use(securityHeaders)
 	r.Use(middleware.Recoverer)
+	r.Use(rateLimitMiddleware(deps.IPRateLimiter))
 	r.Use(SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
 
-	authHandlers := NewAuthHandlers(deps.Auth, deps.CookieSecure, deps.Logger)
+	authHandlers := NewAuthHandlers(deps.Auth, deps.CookieSecure, deps.Logger, deps.PhoneSendLimiter, deps.PhoneVerifyLimiter)
 	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.Logger)
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger)
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Logger)
@@ -59,7 +66,30 @@ func New(deps Deps) http.Handler {
 		RecurringOperationHandlers:  recurringOperationHandlers,
 	}
 
-	return openapi.HandlerFromMux(handler, r)
+	return openapi.HandlerWithOptions(handler, openapi.ChiServerOptions{
+		BaseRouter:       r,
+		ErrorHandlerFunc: openAPIErrorHandler,
+	})
+}
+
+func rateLimitMiddleware(limiter *RateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if limiter == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			ip, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				ip = r.RemoteAddr
+			}
+			if !limiter.Allow(ip) {
+				writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too Many Requests", "rate limit exceeded"))
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // composedHandler groups the existing handler sets. Embedding provides the
