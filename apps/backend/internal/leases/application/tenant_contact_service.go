@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
@@ -37,6 +38,10 @@ func NewTenantContactService(repo TenantContactRepository, logger *slog.Logger) 
 
 // CreateTenantContact creates a tenant contact for the given owner.
 func (s *TenantContactService) CreateTenantContact(ctx context.Context, ownerID uuid.UUID, cmd CreateTenantContactCommand) (domain.TenantContact, error) {
+	if strings.TrimSpace(cmd.Name) == "" {
+		return domain.TenantContact{}, ErrInvalidInput
+	}
+
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return domain.TenantContact{}, fmt.Errorf("generate tenant contact id: %w", err)

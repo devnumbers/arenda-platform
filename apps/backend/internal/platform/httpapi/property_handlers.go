@@ -45,6 +45,8 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property is already archived"))
 	case errors.Is(err, propertiesapp.ErrNotArchived):
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property is not archived"))
+	case errors.Is(err, propertiesapp.ErrPropertyHasOpenLease):
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property has an open lease"))
 	case isInvalidStatusTransition(err):
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", err.Error()))
 	case errors.Is(err, propertiesapp.ErrInvalidTransition):

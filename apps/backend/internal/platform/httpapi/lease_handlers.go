@@ -277,6 +277,8 @@ func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Reques
 
 func handleTenantContactError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, leasesapp.ErrInvalidInput):
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", err.Error()))
 	case errors.Is(err, leasesapp.ErrNotFound):
 		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "tenant contact not found"))
 	default:

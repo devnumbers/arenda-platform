@@ -222,6 +222,14 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 		return domain.Property{}, ErrAlreadyArchived
 	}
 
+	occupied, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, ownerID, []uuid.UUID{property.ID})
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
+	}
+	if occupied[property.ID] {
+		return domain.Property{}, ErrPropertyHasOpenLease
+	}
+
 	if err := s.repo.Archive(ctx, id, ownerID); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
