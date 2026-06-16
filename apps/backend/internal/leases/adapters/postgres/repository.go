@@ -380,6 +380,22 @@ func (r *OperationRepository) DeleteUneditedFutureOperationsByLease(ctx context.
 	})
 }
 
+func (r *OperationRepository) DeleteOperationsOutsideLeaseRange(ctx context.Context, leaseID uuid.UUID, start time.Time, end *time.Time) error {
+	var endDate pgtype.Date
+	if end != nil {
+		endDate = dateToPgtype(*end)
+	}
+	return r.q().DeleteOperationsOutsideLeaseRange(ctx, postgres.DeleteOperationsOutsideLeaseRangeParams{
+		LeaseID:       uuidToPgtype(leaseID),
+		OperationDate: dateToPgtype(start),
+		Column3:       endDate,
+	})
+}
+
+func (r *OperationRepository) DeleteUneditedOperationsByLease(ctx context.Context, leaseID uuid.UUID) error {
+	return r.q().DeleteUneditedOperationsByLease(ctx, uuidToPgtype(leaseID))
+}
+
 func operationFromRow(row postgres.Operation) domain.Operation {
 	return domain.Operation{
 		ID:                   uuidFromPgtype(row.ID),

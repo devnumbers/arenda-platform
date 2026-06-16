@@ -43,5 +43,7 @@ type OperationRepository interface {
 	BulkCreate(ctx context.Context, ops []domain.Operation) error
 	ListByLease(ctx context.Context, leaseID uuid.UUID) ([]domain.Operation, error)
 	DeleteUneditedFutureOperationsByLease(ctx context.Context, leaseID uuid.UUID, after time.Time) error
+	DeleteOperationsOutsideLeaseRange(ctx context.Context, leaseID uuid.UUID, start time.Time, end *time.Time) error
+	DeleteUneditedOperationsByLease(ctx context.Context, leaseID uuid.UUID) error
 	WithTx(tx transaction.Tx) OperationRepository
 }

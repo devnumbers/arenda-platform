@@ -29,6 +29,7 @@ type CreateLeaseCommand struct {
 
 type UpdateLeaseCommand struct {
 	TenantContactID      *uuid.UUID
+	StartDate            *time.Time
 	EndDate              *time.Time
 	RentAmountKopecks    *int64
 	DepositAmountKopecks *int64
@@ -217,7 +218,12 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 	}
 
 	scheduleChanged := false
+	scheduleRebuilt := false
 
+	if cmd.StartDate != nil {
+		lease.StartDate = *cmd.StartDate
+		scheduleRebuilt = true
+	}
 	if cmd.EndDate != nil {
 		lease.EndDate = cmd.EndDate
 		scheduleChanged = true
@@ -264,7 +270,11 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 		return domain.Lease{}, fmt.Errorf("update lease: %w", err)
 	}
 
-	if scheduleChanged {
+	if scheduleRebuilt {
+		if err := txRentService.RebuildSchedule(ctx, tx, updated); err != nil {
+			return domain.Lease{}, fmt.Errorf("rebuild schedule: %w", err)
+		}
+	} else if scheduleChanged {
 		if err := txRentService.RegenerateFutureOperations(ctx, tx, updated, now); err != nil {
 			return domain.Lease{}, fmt.Errorf("regenerate future operations: %w", err)
 		}

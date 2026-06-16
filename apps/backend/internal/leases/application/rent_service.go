@@ -87,8 +87,14 @@ func (r *RentService) RegenerateFutureOperations(
 		return fmt.Errorf("delete future operations: %w", err)
 	}
 
+	existingDates, err := r.existingOperationDates(ctx, txOps, lease.ID)
+	if err != nil {
+		return fmt.Errorf("list existing operations: %w", err)
+	}
+
 	ops := r.GenerateRentOperations(ctx, lease, rec.ID, lease.OwnerID)
 	futureOps := filterFutureOperations(ops, fromDate)
+	futureOps = excludeExistingDates(futureOps, existingDates)
 	if len(futureOps) == 0 {
 		return nil
 	}
@@ -98,6 +104,86 @@ func (r *RentService) RegenerateFutureOperations(
 	}
 
 	return nil
+}
+
+// RebuildSchedule re-creates the entire rent schedule for a lease.
+// It updates the recurring operation template, removes operations that fall
+// outside the lease date range (including manual exceptions), and regenerates
+// all operations according to the current lease terms. Manual exception
+// operations inside the lease range are preserved.
+func (r *RentService) RebuildSchedule(
+	ctx context.Context,
+	tx transaction.Tx,
+	lease domain.Lease,
+) error {
+	txOps := r.ops.WithTx(tx)
+	txRecurring := r.recurringOps.WithTx(tx)
+
+	rec, err := txRecurring.GetByLease(ctx, lease.ID)
+	if err != nil {
+		return fmt.Errorf("get recurring operation: %w", err)
+	}
+
+	rec.StartDate = lease.StartDate
+	rec.AmountKopecks = lease.RentAmountKopecks
+	rec.PaymentDay = lease.PaymentDay
+	rec.EndDate = lease.EndDate
+	rec.UpdatedAt = time.Now()
+
+	if _, err := txRecurring.Update(ctx, rec); err != nil {
+		return fmt.Errorf("update recurring operation: %w", err)
+	}
+
+	if err := txOps.DeleteOperationsOutsideLeaseRange(ctx, lease.ID, lease.StartDate, lease.EndDate); err != nil {
+		return fmt.Errorf("delete out-of-range operations: %w", err)
+	}
+
+	if err := txOps.DeleteUneditedOperationsByLease(ctx, lease.ID); err != nil {
+		return fmt.Errorf("delete unedited operations: %w", err)
+	}
+
+	existingDates, err := r.existingOperationDates(ctx, txOps, lease.ID)
+	if err != nil {
+		return fmt.Errorf("list existing operations: %w", err)
+	}
+
+	ops := r.GenerateRentOperations(ctx, lease, rec.ID, lease.OwnerID)
+	ops = excludeExistingDates(ops, existingDates)
+	if len(ops) == 0 {
+		return nil
+	}
+
+	if err := txOps.BulkCreate(ctx, ops); err != nil {
+		return fmt.Errorf("bulk create operations: %w", err)
+	}
+
+	return nil
+}
+
+func (r *RentService) existingOperationDates(ctx context.Context, ops OperationRepository, leaseID uuid.UUID) (map[time.Time]struct{}, error) {
+	existing, err := ops.ListByLease(ctx, leaseID)
+	if err != nil {
+		return nil, err
+	}
+	dates := make(map[time.Time]struct{}, len(existing))
+	for _, op := range existing {
+		dates[date(op.OperationDate)] = struct{}{}
+	}
+	return dates, nil
+}
+
+func excludeExistingDates(ops []domain.Operation, existing map[time.Time]struct{}) []domain.Operation {
+	if len(existing) == 0 {
+		return ops
+	}
+	filtered := make([]domain.Operation, 0, len(ops))
+	for _, op := range ops {
+		if _, ok := existing[date(op.OperationDate)]; ok {
+			continue
+		}
+		filtered = append(filtered, op)
+	}
+	return filtered
 }
 
 func filterFutureOperations(ops []domain.Operation, fromDate time.Time) []domain.Operation {

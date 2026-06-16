@@ -83,6 +83,26 @@ func (q *Queries) DeleteFutureOperationsByLease(ctx context.Context, arg DeleteF
 	return err
 }
 
+const deleteOperationsOutsideLeaseRange = `-- name: DeleteOperationsOutsideLeaseRange :exec
+DELETE FROM operations
+WHERE lease_id = $1
+  AND (
+      operation_date < $2
+      OR ($3::date IS NOT NULL AND operation_date > $3::date)
+  )
+`
+
+type DeleteOperationsOutsideLeaseRangeParams struct {
+	LeaseID       pgtype.UUID `json:"lease_id"`
+	OperationDate pgtype.Date `json:"operation_date"`
+	Column3       pgtype.Date `json:"column_3"`
+}
+
+func (q *Queries) DeleteOperationsOutsideLeaseRange(ctx context.Context, arg DeleteOperationsOutsideLeaseRangeParams) error {
+	_, err := q.db.Exec(ctx, deleteOperationsOutsideLeaseRange, arg.LeaseID, arg.OperationDate, arg.Column3)
+	return err
+}
+
 const deleteUneditedFutureOperationsByLease = `-- name: DeleteUneditedFutureOperationsByLease :exec
 DELETE FROM operations
 WHERE lease_id = $1
@@ -97,6 +117,17 @@ type DeleteUneditedFutureOperationsByLeaseParams struct {
 
 func (q *Queries) DeleteUneditedFutureOperationsByLease(ctx context.Context, arg DeleteUneditedFutureOperationsByLeaseParams) error {
 	_, err := q.db.Exec(ctx, deleteUneditedFutureOperationsByLease, arg.LeaseID, arg.OperationDate)
+	return err
+}
+
+const deleteUneditedOperationsByLease = `-- name: DeleteUneditedOperationsByLease :exec
+DELETE FROM operations
+WHERE lease_id = $1
+  AND is_exception = false
+`
+
+func (q *Queries) DeleteUneditedOperationsByLease(ctx context.Context, leaseID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUneditedOperationsByLease, leaseID)
 	return err
 }
 

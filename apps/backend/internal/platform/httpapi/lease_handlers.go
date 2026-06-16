@@ -169,6 +169,7 @@ func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id u
 
 	cmd := leasesapp.UpdateLeaseCommand{
 		TenantContactID: uuidPtrFromOpenAPI(body.TenantContactId),
+		StartDate:       datePtrFromOpenAPI(body.StartDate),
 		EndDate:         datePtrFromOpenAPI(body.EndDate),
 		Comment:         body.Comment,
 	}

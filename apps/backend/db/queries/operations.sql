@@ -28,3 +28,16 @@ DELETE FROM operations
 WHERE lease_id = $1
   AND is_exception = false
   AND operation_date > $2;
+
+-- name: DeleteOperationsOutsideLeaseRange :exec
+DELETE FROM operations
+WHERE lease_id = $1
+  AND (
+      operation_date < $2
+      OR ($3::date IS NOT NULL AND operation_date > $3::date)
+  );
+
+-- name: DeleteUneditedOperationsByLease :exec
+DELETE FROM operations
+WHERE lease_id = $1
+  AND is_exception = false;
