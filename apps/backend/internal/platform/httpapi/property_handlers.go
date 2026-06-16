@@ -201,6 +201,5 @@ func ptrString[T ~string](v *T) *string {
 	if v == nil {
 		return nil
 	}
-	s := string(*v)
-	return &s
+	return new(string(*v))
 }
