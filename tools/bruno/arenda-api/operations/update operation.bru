@@ -1,0 +1,41 @@
+meta {
+  name: Update Operation
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/operations/{{operationId}}
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "amount_kopecks": {{operationUpdatedAmountKopecks}},
+    "operation_date": "{{operationUpdatedDate}}",
+    "comment": "{{operationUpdatedComment}}"
+  }
+}
+
+script:pre-request {
+  // Requires an authenticated session. Run auth/verify-code first.
+  const sessionId = bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have operation id", function() {
+    expect(res.body.id).to.equal(bru.getVar("operationId"));
+  });
+}

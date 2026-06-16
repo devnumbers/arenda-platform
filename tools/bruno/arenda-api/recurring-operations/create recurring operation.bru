@@ -1,0 +1,51 @@
+meta {
+  name: Create Recurring Operation
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyId}}/recurring-operations
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "type": "{{recurringOperationType}}",
+    "category": "{{recurringOperationCategory}}",
+    "amount_kopecks": {{recurringOperationAmountKopecks}},
+    "start_date": "{{recurringOperationStartDate}}",
+    "payment_day": {{recurringOperationPaymentDay}},
+    "comment": "Monthly utilities"
+  }
+}
+
+script:pre-request {
+  // Requires an authenticated session. Run auth/verify-code first.
+  const sessionId = bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  // Save the created recurring operation id for subsequent requests.
+  if (res.body && res.body.id) {
+    bru.setVar("recurringOperationId", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have recurring operation id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+}

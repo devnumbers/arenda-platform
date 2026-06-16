@@ -1,0 +1,50 @@
+meta {
+  name: Create Operation
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyId}}/operations
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "type": "{{operationType}}",
+    "category": "{{operationCategory}}",
+    "amount_kopecks": {{operationAmountKopecks}},
+    "operation_date": "{{operationDate}}",
+    "comment": "Manual operation"
+  }
+}
+
+script:pre-request {
+  // Requires an authenticated session. Run auth/verify-code first.
+  const sessionId = bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  // Save the created operation id for subsequent operation requests.
+  if (res.body && res.body.id) {
+    bru.setVar("operationId", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have operation id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+}
