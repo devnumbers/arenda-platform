@@ -1,0 +1,28 @@
+meta {
+  name: Get Current User
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/me
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have phone", function() {
+    expect(res.body.phone).to.equal(bru.getEnvVar("phone"));
+  });
+}

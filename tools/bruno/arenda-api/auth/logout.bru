@@ -1,0 +1,28 @@
+meta {
+  name: Logout
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/auth/logout
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  bru.setVar("session_id", null);
+}
+
+tests {
+  test("should return 204", function() {
+    expect(res.status).to.equal(204);
+  });
+}

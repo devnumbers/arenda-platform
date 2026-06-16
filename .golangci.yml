@@ -38,7 +38,7 @@ linters:
         domain-clean:
           list-mode: lax
           files:
-            - internal/**/domain/*.go
+            - "**/internal/**/domain/*.go"
             - "!**/*_test.go"
           deny:
             - pkg: database/sql
@@ -49,18 +49,18 @@ linters:
               desc: domain must stay external-service agnostic
             - pkg: github.com/jackc/pgx
               desc: domain must stay persistence agnostic
-            - pkg: github.com/nambers/arenda-platform/apps/backend/internal/platform
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/platform
               desc: domain must not depend on platform infrastructure
-            - pkg: github.com/nambers/arenda-platform/apps/backend/internal/billing/adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters
               desc: domain must not depend on adapters
-            - pkg: github.com/nambers/arenda-platform/apps/backend/internal/identity/adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters
               desc: domain must not depend on adapters
-            - pkg: github.com/nambers/arenda-platform/apps/backend/internal/properties/adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters
               desc: domain must not depend on adapters
         application-clean:
           list-mode: lax
           files:
-            - internal/**/application/*.go
+            - "**/internal/**/application/*.go"
             - "!**/*_test.go"
           deny:
             - pkg: database/sql
@@ -71,13 +71,13 @@ linters:
               desc: application layer must use ports instead of concrete external clients
             - pkg: github.com/jackc/pgx
               desc: application layer must use ports instead of concrete persistence
-            - pkg: github.com/nambers/arenda-platform/apps/backend/internal/platform
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/platform
               desc: application layer must not depend on platform infrastructure
-            - pkg: github.com/nambers/arenda-platform/apps/backend/internal/billing/adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters
               desc: application layer must not depend on adapters
-            - pkg: github.com/nambers/arenda-platform/apps/backend/internal/identity/adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters
               desc: application layer must not depend on adapters
-            - pkg: github.com/nambers/arenda-platform/apps/backend/internal/properties/adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters
               desc: application layer must not depend on adapters
     modernize:
       disable:

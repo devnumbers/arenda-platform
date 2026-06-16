@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS user_subscriptions;
+DROP TABLE IF EXISTS tariffs;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS login_attempts;
+DROP TABLE IF EXISTS sms_codes;
+DROP TABLE IF EXISTS users;
+DROP FUNCTION IF EXISTS set_updated_at();
