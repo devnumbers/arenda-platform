@@ -16,6 +16,18 @@ type LoginAttempt struct {
 	LastFailureAt  pgtype.Timestamptz `json:"last_failure_at"`
 }
 
+type Property struct {
+	ID          pgtype.UUID        `json:"id"`
+	OwnerID     pgtype.UUID        `json:"owner_id"`
+	Name        string             `json:"name"`
+	Type        string             `json:"type"`
+	Address     string             `json:"address"`
+	Description pgtype.Text        `json:"description"`
+	Status      string             `json:"status"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Session struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`

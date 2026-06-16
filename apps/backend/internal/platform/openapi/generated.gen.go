@@ -13,9 +13,11 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -27,6 +29,61 @@ const (
 const (
 	Admin MeResponseRole = "admin"
 	Owner MeResponseRole = "owner"
+)
+
+// Defines values for PropertyCreateRequestType.
+const (
+	PropertyCreateRequestTypeApartment  PropertyCreateRequestType = "apartment"
+	PropertyCreateRequestTypeApartments PropertyCreateRequestType = "apartments"
+	PropertyCreateRequestTypeCommercial PropertyCreateRequestType = "commercial"
+	PropertyCreateRequestTypeGarage     PropertyCreateRequestType = "garage"
+	PropertyCreateRequestTypeHouse      PropertyCreateRequestType = "house"
+	PropertyCreateRequestTypeLand       PropertyCreateRequestType = "land"
+	PropertyCreateRequestTypeOffice     PropertyCreateRequestType = "office"
+	PropertyCreateRequestTypeParking    PropertyCreateRequestType = "parking"
+	PropertyCreateRequestTypeRoom       PropertyCreateRequestType = "room"
+	PropertyCreateRequestTypeWarehouse  PropertyCreateRequestType = "warehouse"
+)
+
+// Defines values for PropertyResponseStatus.
+const (
+	PropertyResponseStatusActive      PropertyResponseStatus = "active"
+	PropertyResponseStatusArchived    PropertyResponseStatus = "archived"
+	PropertyResponseStatusMaintenance PropertyResponseStatus = "maintenance"
+)
+
+// Defines values for PropertyResponseType.
+const (
+	PropertyResponseTypeApartment  PropertyResponseType = "apartment"
+	PropertyResponseTypeApartments PropertyResponseType = "apartments"
+	PropertyResponseTypeCommercial PropertyResponseType = "commercial"
+	PropertyResponseTypeGarage     PropertyResponseType = "garage"
+	PropertyResponseTypeHouse      PropertyResponseType = "house"
+	PropertyResponseTypeLand       PropertyResponseType = "land"
+	PropertyResponseTypeOffice     PropertyResponseType = "office"
+	PropertyResponseTypeParking    PropertyResponseType = "parking"
+	PropertyResponseTypeRoom       PropertyResponseType = "room"
+	PropertyResponseTypeWarehouse  PropertyResponseType = "warehouse"
+)
+
+// Defines values for PropertyUpdateRequestStatus.
+const (
+	PropertyUpdateRequestStatusActive      PropertyUpdateRequestStatus = "active"
+	PropertyUpdateRequestStatusMaintenance PropertyUpdateRequestStatus = "maintenance"
+)
+
+// Defines values for PropertyUpdateRequestType.
+const (
+	Apartment  PropertyUpdateRequestType = "apartment"
+	Apartments PropertyUpdateRequestType = "apartments"
+	Commercial PropertyUpdateRequestType = "commercial"
+	Garage     PropertyUpdateRequestType = "garage"
+	House      PropertyUpdateRequestType = "house"
+	Land       PropertyUpdateRequestType = "land"
+	Office     PropertyUpdateRequestType = "office"
+	Parking    PropertyUpdateRequestType = "parking"
+	Room       PropertyUpdateRequestType = "room"
+	Warehouse  PropertyUpdateRequestType = "warehouse"
 )
 
 // MeResponse defines model for MeResponse.
@@ -53,6 +110,55 @@ type Problem struct {
 	Type      string  `json:"type"`
 }
 
+// PropertiesResponse defines model for PropertiesResponse.
+type PropertiesResponse struct {
+	Items []PropertyResponse `json:"items"`
+}
+
+// PropertyCreateRequest defines model for PropertyCreateRequest.
+type PropertyCreateRequest struct {
+	Address     string                    `json:"address"`
+	Description *string                   `json:"description,omitempty"`
+	Name        string                    `json:"name"`
+	Type        PropertyCreateRequestType `json:"type"`
+}
+
+// PropertyCreateRequestType defines model for PropertyCreateRequest.Type.
+type PropertyCreateRequestType string
+
+// PropertyResponse defines model for PropertyResponse.
+type PropertyResponse struct {
+	Address     string                 `json:"address"`
+	CreatedAt   time.Time              `json:"created_at"`
+	Description *string                `json:"description,omitempty"`
+	Id          openapi_types.UUID     `json:"id"`
+	Name        string                 `json:"name"`
+	Status      PropertyResponseStatus `json:"status"`
+	Type        PropertyResponseType   `json:"type"`
+	UpdatedAt   time.Time              `json:"updated_at"`
+}
+
+// PropertyResponseStatus defines model for PropertyResponse.Status.
+type PropertyResponseStatus string
+
+// PropertyResponseType defines model for PropertyResponse.Type.
+type PropertyResponseType string
+
+// PropertyUpdateRequest defines model for PropertyUpdateRequest.
+type PropertyUpdateRequest struct {
+	Address     *string                      `json:"address,omitempty"`
+	Description *string                      `json:"description,omitempty"`
+	Name        *string                      `json:"name,omitempty"`
+	Status      *PropertyUpdateRequestStatus `json:"status,omitempty"`
+	Type        *PropertyUpdateRequestType   `json:"type,omitempty"`
+}
+
+// PropertyUpdateRequestStatus defines model for PropertyUpdateRequest.Status.
+type PropertyUpdateRequestStatus string
+
+// PropertyUpdateRequestType defines model for PropertyUpdateRequest.Type.
+type PropertyUpdateRequestType string
+
 // SendPhoneCodeRequest defines model for SendPhoneCodeRequest.
 type SendPhoneCodeRequest struct {
 	Phone string `json:"phone"`
@@ -67,6 +173,9 @@ type VerifyPhoneCodeRequest struct {
 // BadRequest defines model for BadRequest.
 type BadRequest = Problem
 
+// NotFound defines model for NotFound.
+type NotFound = Problem
+
 // TooManyRequests defines model for TooManyRequests.
 type TooManyRequests = Problem
 
@@ -78,6 +187,12 @@ type SendPhoneCodeJSONRequestBody = SendPhoneCodeRequest
 
 // VerifyPhoneCodeJSONRequestBody defines body for VerifyPhoneCode for application/json ContentType.
 type VerifyPhoneCodeJSONRequestBody = VerifyPhoneCodeRequest
+
+// CreatePropertyJSONRequestBody defines body for CreateProperty for application/json ContentType.
+type CreatePropertyJSONRequestBody = PropertyCreateRequest
+
+// UpdatePropertyJSONRequestBody defines body for UpdateProperty for application/json ContentType.
+type UpdatePropertyJSONRequestBody = PropertyUpdateRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -93,6 +208,24 @@ type ServerInterface interface {
 
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+
+	// (GET /properties)
+	ListProperties(w http.ResponseWriter, r *http.Request)
+
+	// (POST /properties)
+	CreateProperty(w http.ResponseWriter, r *http.Request)
+
+	// (GET /properties/{id})
+	GetProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PATCH /properties/{id})
+	UpdateProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /properties/{id}/archive)
+	ArchiveProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /properties/{id}/unarchive)
+	UnarchiveProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -116,6 +249,36 @@ func (_ Unimplemented) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 
 // (GET /me)
 func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties)
+func (_ Unimplemented) ListProperties(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties)
+func (_ Unimplemented) CreateProperty(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{id})
+func (_ Unimplemented) GetProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /properties/{id})
+func (_ Unimplemented) UpdateProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{id}/archive)
+func (_ Unimplemented) ArchiveProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{id}/unarchive)
+func (_ Unimplemented) UnarchiveProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -187,6 +350,170 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListProperties operation middleware
+func (siw *ServerInterfaceWrapper) ListProperties(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProperties(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateProperty operation middleware
+func (siw *ServerInterfaceWrapper) CreateProperty(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateProperty(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProperty operation middleware
+func (siw *ServerInterfaceWrapper) GetProperty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProperty(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateProperty operation middleware
+func (siw *ServerInterfaceWrapper) UpdateProperty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateProperty(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveProperty operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveProperty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveProperty(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnarchiveProperty operation middleware
+func (siw *ServerInterfaceWrapper) UnarchiveProperty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnarchiveProperty(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -321,6 +648,24 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/me", wrapper.GetMe)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties", wrapper.ListProperties)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties", wrapper.CreateProperty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{id}", wrapper.GetProperty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/properties/{id}", wrapper.UpdateProperty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{id}/archive", wrapper.ArchiveProperty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{id}/unarchive", wrapper.UnarchiveProperty)
+	})
 
 	return r
 }
@@ -328,19 +673,27 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"H4sIAAAAAAAC/+RYUW/bNhD+K8Ztb1Mj2U22Rm9pgA3FkiJomr0ERsGIZ4utRKoklVYL9N8HkpIsxZIt",
+	"N7EXoG+SeDzefd/d8U4PEIk0Exy5VhA+gESVCa7Qvrwl9AN+zVFp8xYJrpHbR5JlCYuIZoL7n5Xg5puK",
+	"YkyJefpV4gJC+MVfqfbdqvKvpLhLMIWyLD2gqCLJMqMGQnPaRFbHlR68F/pPkXN6iKPfCz1Z2MNKDz4K",
+	"cUl4UXmuDnH+RyEmKeFF7b8ydtxwkutYSPYvHgSEznlmudpjVF7ihyowzFsmRYZSMxclmBKWmAeeJwm5",
+	"SxBCLXP0QBcZQghKS8aXxiNm/VgImRINIeQ5o9AjxkmKo/RlREvBi5RF48Rjwa3itRUpEruAPE8hvAXx",
+	"jaMEDwhNGYd5jy6Vy5FmGvX4NWfSsHgL1mVnSXXuSr24+4yRDf6apjWwKeoK7XV0udKERwMeusB6R3tX",
+	"lSY6V60lxjUuUZo1zXTSr9N9eNjisF2t1TRHDThdeTocbExj2n3YEu1mb9Hoa6wGIiUp1tmxWjcYV5xL",
+	"JBpbZbFrH6FUorKPKfl+gXypYwhPgqAnhjrp15GfBb0b6ohrS56ceMPM1PFMMiJ1aoqHiTmRmtCuPynw",
+	"IBa5MuREIk1RRowk4IFYLFhkvn4jEmuJJZFkaR4yIr+Y0zxICKc9OfIIWWu7V0dDDdMmpIeDoAXymuuR",
+	"5Yd+IrpTayjR+EqzlQ0biHhq3dqQXg0hkWb3xpaUmFTjNm89IDKK2T3S3pLzEkj1IM/ojvj2FcD+aGiQ",
+	"6tDYOXNTwNxYsReemiNjYf5ys3oN/2vk9MrcaOeCDsPf3L74naSZuVLgtz9OT0+DIJhOZ7OtceP29/H/",
+	"D0q2KLZbEAn6yIDp7PXxye+wQ6/Qa5TnVK/bZvjGKJdMF9fmSnJ2KFSKCX4uxBdmz2Cm/Yrcax1KtdSn",
+	"dq0hGfsbC9e8Mb4Q1kB3P8OZRE7J5Coh3GTl5OzqHXhwj1K59i44mh4FxjWRIScZgxBeHwVHry3rOraW",
+	"+aYD9BOxFLnDTzgcDYq22zT9A1y4da87LMyCY9egtHvKC7FcIp048RgJRWmFr1G/Wvm/al0fo20cPQ6m",
+	"Q/d8Y4C/3rxWuEN4u4b47bycGxnnruXQV+hGjX6XOyEOTTv1VtDi2Vrz3jQquxFnOsxyDPBGx0QZmyyC",
+	"wXYEW8Oe2TI73b7l8aTk+Gqjem9TcxjXR6m7J2QHCsQobINns6I1Q/VMX2e5jpFroxrpU5Jld6p3z6+n",
+	"xYe7KZfYEw9/ob5E+N9IOM+lRK4nuXKzzx5LT/dq6gXjgim9mon2iUrP5NWDzkpqkrAfjp0xAHkD5cIN",
+	"X3W/t6dq0T/pjSoW02c3YgQfxaRqluFg+b97kPsPjJab0r5FakYkSVHb6ndbdUemRVn1RrYn6pLhtYDd",
+	"MqmV8/2n0jji3N8c9eNV2F39mzc1P1LHph7RUbzOkZuuDk7T/vK7Oy4euBnYKUyq+RcOeb8/f2T1FAS/",
+	"+uEx3CCeOYGfsjo0f4NeOIk530rjTS3yUxLZAPSyqLRC8r4mIJcJhBBrnYW+n4iIJLFQOnwTvAmgnJf/",
+	"BQAA//9VHkwlKhwAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

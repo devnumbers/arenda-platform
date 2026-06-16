@@ -11,6 +11,9 @@ import (
 )
 
 type Querier interface {
+	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
+	CountActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) (int64, error)
+	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
 	CreateSMSCode(ctx context.Context, arg CreateSMSCodeParams) (SmsCode, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (UserSubscription, error)
@@ -23,12 +26,17 @@ type Querier interface {
 	DeleteStaleLoginAttempts(ctx context.Context, lastFailureAt pgtype.Timestamptz) error
 	GetLatestSMSCodeByPhone(ctx context.Context, arg GetLatestSMSCodeByPhoneParams) (SmsCode, error)
 	GetLoginAttemptByPhone(ctx context.Context, phone string) (LoginAttempt, error)
+	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (Property, error)
 	GetSessionByTokenHash(ctx context.Context, arg GetSessionByTokenHashParams) (GetSessionByTokenHashRow, error)
 	GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (UserSubscription, error)
+	GetTariffByID(ctx context.Context, id pgtype.UUID) (Tariff, error)
 	GetTariffByName(ctx context.Context, name string) (Tariff, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone string) (User, error)
+	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Property, error)
 	MarkSMSCodeUsed(ctx context.Context, id pgtype.UUID) error
+	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
+	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)
 	UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error
 }
 

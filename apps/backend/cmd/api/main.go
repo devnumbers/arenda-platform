@@ -20,6 +20,8 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
+	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
+	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -89,12 +91,17 @@ func run(fallback *slog.Logger) error {
 		logger,
 	)
 
+	propertyRepo := propertiespg.NewPropertyRepository(pool)
+	limiter := billingpg.NewSubscriptionLimiter(pool)
+	propertyService := propertiesapp.NewPropertyService(propertyRepo, limiter, transaction.NewBeginner(pool), logger)
+
 	dataCleaner := cleaner.New(identitySessionRepo, identitySMSRepo, identityAttemptRepo, 1*time.Hour, 7*24*time.Hour, logger)
 	go dataCleaner.Run(ctx)
 
 	handler := httpapi.New(httpapi.Deps{
 		Auth:         authService,
 		Sessions:     identitySessionRepo,
+		Properties:   propertyService,
 		CookieSecure: cfg.CookieSecure,
 		Logger:       logger,
 	})

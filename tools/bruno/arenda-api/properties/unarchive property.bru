@@ -1,0 +1,29 @@
+meta {
+  name: Unarchive Property
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyId}}/unarchive
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  // Requires an authenticated session and a propertyId. Run properties/archive first.
+  const sessionId = bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should not be archived", function() {
+    expect(res.body.status).to.not.equal("archived");
+  });
+}

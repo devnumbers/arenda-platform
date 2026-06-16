@@ -1,6 +1,9 @@
 -- name: GetTariffByName :one
 SELECT * FROM tariffs WHERE name = $1;
 
+-- name: GetTariffByID :one
+SELECT * FROM tariffs WHERE id = $1;
+
 -- name: CreateSubscription :one
 INSERT INTO user_subscriptions (user_id, tariff_id, source, status)
 VALUES ($1, $2, $3, $4)

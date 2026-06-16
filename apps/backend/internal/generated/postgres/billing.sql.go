@@ -66,6 +66,24 @@ func (q *Queries) GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUI
 	return i, err
 }
 
+const getTariffByID = `-- name: GetTariffByID :one
+SELECT id, name, active_property_limit, monthly_price, yearly_price, created_at FROM tariffs WHERE id = $1
+`
+
+func (q *Queries) GetTariffByID(ctx context.Context, id pgtype.UUID) (Tariff, error) {
+	row := q.db.QueryRow(ctx, getTariffByID, id)
+	var i Tariff
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ActivePropertyLimit,
+		&i.MonthlyPrice,
+		&i.YearlyPrice,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getTariffByName = `-- name: GetTariffByName :one
 SELECT id, name, active_property_limit, monthly_price, yearly_price, created_at FROM tariffs WHERE name = $1
 `

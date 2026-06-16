@@ -6,17 +6,19 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
+	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 )
 
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
-	Auth         *application.AuthService
-	Sessions     application.SessionRepository
+	Auth         *identityapp.AuthService
+	Sessions     identityapp.SessionRepository
+	Properties   *propertiesapp.PropertyService
 	CookieSecure bool
 	Logger       *slog.Logger
-	Clock        application.Clock
+	Clock        identityapp.Clock
 }
 
 func securityHeaders(next http.Handler) http.Handler {
@@ -39,5 +41,15 @@ func New(deps Deps) http.Handler {
 	r.Use(SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
 
 	authHandlers := NewAuthHandlers(deps.Auth, deps.CookieSecure, deps.Logger)
-	return openapi.HandlerFromMux(authHandlers, r)
+	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.Logger)
+
+	handler := struct {
+		*AuthHandlers
+		*PropertyHandlers
+	}{
+		AuthHandlers:     authHandlers,
+		PropertyHandlers: propertyHandlers,
+	}
+
+	return openapi.HandlerFromMux(handler, r)
 }
