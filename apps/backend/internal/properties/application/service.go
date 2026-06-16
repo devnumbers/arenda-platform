@@ -129,7 +129,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 	}
 
 	if property.Status == domain.PropertyStatusArchived {
-		return domain.Property{}, ErrInvalidTransition
+		return domain.Property{}, ErrArchivedProperty
 	}
 
 	if cmd.Name != nil {
@@ -154,7 +154,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 			return domain.Property{}, fmt.Errorf("%w: invalid property status: %w", ErrInvalidInput, err)
 		}
 		if !isUpdatableStatusTransition(property.Status, status) {
-			return domain.Property{}, ErrInvalidTransition
+			return domain.Property{}, &InvalidStatusTransitionError{From: property.Status, To: status}
 		}
 		property.Status = status
 	}
@@ -186,7 +186,7 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 	}
 
 	if property.Status == domain.PropertyStatusArchived {
-		return domain.Property{}, ErrInvalidTransition
+		return domain.Property{}, ErrAlreadyArchived
 	}
 
 	if err := s.repo.Archive(ctx, id, ownerID); err != nil {
@@ -223,7 +223,7 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 
 	if property.Status != domain.PropertyStatusArchived {
 		_ = tx.Rollback(ctx)
-		return domain.Property{}, ErrInvalidTransition
+		return domain.Property{}, ErrNotArchived
 	}
 
 	limit, err := s.limiter.ActivePropertyLimit(ctx, ownerID)

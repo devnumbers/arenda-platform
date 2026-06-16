@@ -33,7 +33,7 @@ tests {
   test("should return 200", function() {
     expect(res.status).to.equal(200);
   });
-
+  
   test("should have matching id", function() {
     expect(res.body.id).to.equal(bru.getVar("propertyId"));
   });

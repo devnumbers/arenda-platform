@@ -39,6 +39,14 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "property not found"))
 	case errors.Is(err, propertiesapp.ErrLimitExceeded):
 		writeProblem(w, http.StatusPaymentRequired, problem(r.Context(), "Limit exceeded", "active property limit exceeded"))
+	case errors.Is(err, propertiesapp.ErrArchivedProperty):
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "cannot modify an archived property"))
+	case errors.Is(err, propertiesapp.ErrAlreadyArchived):
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property is already archived"))
+	case errors.Is(err, propertiesapp.ErrNotArchived):
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property is not archived"))
+	case isInvalidStatusTransition(err):
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", err.Error()))
 	case errors.Is(err, propertiesapp.ErrInvalidTransition):
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", err.Error()))
 	default:
@@ -202,4 +210,9 @@ func ptrString[T ~string](v *T) *string {
 		return nil
 	}
 	return new(string(*v))
+}
+
+func isInvalidStatusTransition(err error) bool {
+	var target *propertiesapp.InvalidStatusTransitionError
+	return errors.As(err, &target)
 }
