@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/google/uuid"
+	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -39,6 +41,7 @@ type PropertyService struct {
 	recurringOps      RecurringOperationStatusUpdater
 	scheduler         RecurringOperationScheduler
 	db                txBeginner
+	clock             clock.Clock
 	logger            *slog.Logger
 }
 
@@ -50,6 +53,7 @@ func NewPropertyService(
 	recurringOps RecurringOperationStatusUpdater,
 	scheduler RecurringOperationScheduler,
 	db txBeginner,
+	clock clock.Clock,
 	logger *slog.Logger,
 ) *PropertyService {
 	if logger == nil {
@@ -63,6 +67,7 @@ func NewPropertyService(
 		recurringOps:      recurringOps,
 		scheduler:         scheduler,
 		db:                db,
+		clock:             clock,
 		logger:            logger,
 	}
 }
@@ -78,7 +83,7 @@ func (s *PropertyService) CreateProperty(ctx context.Context, ownerID uuid.UUID,
 		return domain.Property{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 
-	now := time.Now()
+	now := s.clock.Now()
 	property.CreatedAt = now
 	property.UpdatedAt = now
 
@@ -220,7 +225,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 		return domain.Property{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 
-	property.UpdatedAt = time.Now()
+	property.UpdatedAt = s.clock.Now()
 
 	updated, err := s.repo.Update(ctx, ownerID, property)
 	if err != nil {
@@ -268,7 +273,7 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 	txOperationArchiver := s.operationArchiver.WithTx(tx)
 	txRecurringOps := s.recurringOps.WithTx(tx)
 
-	if err := txOperationArchiver.DeleteFutureUneditedOperationsByProperty(ctx, id, date(time.Now())); err != nil {
+	if err := txOperationArchiver.DeleteFutureUneditedOperationsByProperty(ctx, id, timeutil.Date(s.clock.Now())); err != nil {
 		_ = tx.Rollback(ctx)
 		return domain.Property{}, fmt.Errorf("delete future operations: %w", err)
 	}
@@ -280,7 +285,7 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 	}
 
 	for _, rec := range recs {
-		if err := txRecurringOps.UpdateStatus(ctx, rec.ID, "paused"); err != nil {
+		if err := txRecurringOps.UpdateStatus(ctx, rec.ID, string(leasesdomain.RecurringOperationStatusPaused)); err != nil {
 			_ = tx.Rollback(ctx)
 			return domain.Property{}, fmt.Errorf("pause recurring operation: %w", err)
 		}
@@ -357,12 +362,12 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 		return domain.Property{}, fmt.Errorf("list recurring operations: %w", err)
 	}
 
-	now := time.Now()
+	now := s.clock.Now()
 	for _, rec := range recs {
-		if err := txRecurringOps.UpdateStatus(ctx, rec.ID, "active"); err != nil {
+		if err := txRecurringOps.UpdateStatus(ctx, rec.ID, string(leasesdomain.RecurringOperationStatusActive)); err != nil {
 			return domain.Property{}, fmt.Errorf("resume recurring operation: %w", err)
 		}
-		if err := txScheduler.GenerateOperations(ctx, tx, rec, date(now)); err != nil {
+		if err := txScheduler.GenerateOperations(ctx, tx, rec, timeutil.Date(now)); err != nil {
 			return domain.Property{}, fmt.Errorf("generate operations: %w", err)
 		}
 	}
@@ -390,8 +395,4 @@ func isUpdatableStatusTransition(from, to domain.PropertyStatus) bool {
 		return to == domain.PropertyStatusActive
 	}
 	return false
-}
-
-func date(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }

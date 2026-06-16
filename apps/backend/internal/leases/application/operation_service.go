@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 )
 
@@ -38,6 +39,7 @@ type OperationService struct {
 	operations OperationRepository
 	properties PropertyRepository
 	leases     LeaseRepository
+	clock      clock.Clock
 	logger     *slog.Logger
 }
 
@@ -46,6 +48,7 @@ func NewOperationService(
 	operations OperationRepository,
 	properties PropertyRepository,
 	leases LeaseRepository,
+	clock clock.Clock,
 	logger *slog.Logger,
 ) *OperationService {
 	if logger == nil {
@@ -55,17 +58,18 @@ func NewOperationService(
 		operations: operations,
 		properties: properties,
 		leases:     leases,
+		clock:      clock,
 		logger:     logger,
 	}
 }
 
 // CreateOperation creates a manual operation for the given owner and property.
 func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUID, cmd CreateOperationCommand) (domain.Operation, error) {
-	if err := s.validateProperty(ctx, ownerID, cmd.PropertyID); err != nil {
+	if err := validateProperty(ctx, s.properties, ownerID, cmd.PropertyID); err != nil {
 		return domain.Operation{}, err
 	}
 
-	opType, category, err := s.parseTypeAndCategory(cmd.Type, cmd.Category)
+	opType, category, err := parseTypeAndCategory(cmd.Type, cmd.Category)
 	if err != nil {
 		return domain.Operation{}, err
 	}
@@ -84,7 +88,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		return domain.Operation{}, fmt.Errorf("generate operation id: %w", err)
 	}
 
-	now := time.Now()
+	now := s.clock.Now()
 	var comment string
 	if cmd.Comment != nil {
 		comment = *cmd.Comment
@@ -95,8 +99,8 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		OwnerID:       ownerID,
 		PropertyID:    cmd.PropertyID,
 		LeaseID:       leaseID,
-		Type:          string(opType),
-		Category:      string(category),
+		Type:          opType,
+		Category:      category,
 		AmountKopecks: cmd.AmountKopecks,
 		OperationDate: cmd.OperationDate,
 		Comment:       comment,
@@ -114,7 +118,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 
 // ListOperationsByProperty returns operations for the given owner and property.
 func (s *OperationService) ListOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.Operation, error) {
-	if err := s.validateProperty(ctx, ownerID, propertyID); err != nil {
+	if err := validateProperty(ctx, s.properties, ownerID, propertyID); err != nil {
 		return nil, err
 	}
 
@@ -147,15 +151,20 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
 	}
 
+	typeStr := string(op.Type)
+	categoryStr := string(op.Category)
 	if cmd.Type != nil {
-		op.Type = *cmd.Type
+		typeStr = *cmd.Type
 	}
 	if cmd.Category != nil {
-		op.Category = *cmd.Category
+		categoryStr = *cmd.Category
 	}
-	if _, _, err := s.parseTypeAndCategory(op.Type, op.Category); err != nil {
+	opType, category, err := parseTypeAndCategory(typeStr, categoryStr)
+	if err != nil {
 		return domain.Operation{}, err
 	}
+	op.Type = opType
+	op.Category = category
 
 	if cmd.AmountKopecks != nil {
 		op.AmountKopecks = *cmd.AmountKopecks
@@ -180,7 +189,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	}
 
 	op.IsException = true
-	op.UpdatedAt = time.Now()
+	op.UpdatedAt = s.clock.Now()
 
 	updated, err := s.operations.Update(ctx, op)
 	if err != nil {
@@ -201,35 +210,6 @@ func (s *OperationService) DeleteOperation(ctx context.Context, ownerID, id uuid
 		return fmt.Errorf("delete operation: %w", err)
 	}
 	return nil
-}
-
-func (s *OperationService) validateProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error {
-	exists, err := s.properties.ExistsByOwner(ctx, propertyID, ownerID)
-	if err != nil {
-		return fmt.Errorf("check property: %w", err)
-	}
-	if !exists {
-		return ErrNotFound
-	}
-	return nil
-}
-
-func (s *OperationService) parseTypeAndCategory(typeStr, categoryStr string) (domain.OperationType, domain.OperationCategory, error) {
-	opType, err := domain.ParseOperationType(typeStr)
-	if err != nil {
-		return "", "", fmt.Errorf("%w: %w", ErrInvalidInput, err)
-	}
-
-	category, err := domain.ParseOperationCategory(categoryStr)
-	if err != nil {
-		return "", "", fmt.Errorf("%w: %w", ErrInvalidInput, err)
-	}
-
-	if !domain.IsValidCategoryForType(category, opType) {
-		return "", "", fmt.Errorf("%w: category %q is not valid for type %q", ErrInvalidInput, category, opType)
-	}
-
-	return opType, category, nil
 }
 
 func (s *OperationService) validateAmountAndDate(amount int64, operationDate time.Time) error {

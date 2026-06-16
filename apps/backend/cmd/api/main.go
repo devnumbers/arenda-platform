@@ -104,7 +104,7 @@ func run(fallback *slog.Logger) error {
 	recurringOpRepo := leasespg.NewRecurringOperationRepository(pool)
 	propertyOperationArchiver := leasespg.NewPropertyOperationArchiver(operationRepo)
 	propertyRecurringOpUpdater := leasespg.NewPropertyRecurringOperationStatusUpdater(recurringOpRepo)
-	propertyRecurringOpScheduler := leasesapp.NewPropertyRecurringOperationScheduler(operationRepo)
+	propertyRecurringOpScheduler := leasesapp.NewPropertyRecurringOperationScheduler(operationRepo, realClock{})
 	propertyService := propertiesapp.NewPropertyService(
 		propertyRepo,
 		occupancyProvider,
@@ -113,6 +113,7 @@ func run(fallback *slog.Logger) error {
 		propertyRecurringOpUpdater,
 		propertyRecurringOpScheduler,
 		transaction.NewBeginner(pool),
+		realClock{},
 		logger,
 	)
 
@@ -127,15 +128,17 @@ func run(fallback *slog.Logger) error {
 		recurringOpRepo,
 		operationRepo,
 		transaction.NewBeginner(pool),
+		realClock{},
 		logger,
 	)
 	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, logger)
-	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, logger)
+	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, realClock{}, logger)
 	recurringOperationService := leasesapp.NewRecurringOperationService(
 		recurringOpRepo,
 		operationRepo,
 		leasePropertyRepo,
 		transaction.NewBeginner(pool),
+		realClock{},
 		logger,
 	)
 
@@ -159,6 +162,7 @@ func run(fallback *slog.Logger) error {
 		RecurringOperations: recurringOperationService,
 		CookieSecure:        cfg.CookieSecure,
 		Logger:              logger,
+		Clock:               realClock{},
 		IPRateLimiter:       ipLimiter,
 		PhoneSendLimiter:    phoneSendLimiter,
 		PhoneVerifyLimiter:  phoneVerifyLimiter,

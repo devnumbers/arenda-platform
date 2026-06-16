@@ -62,13 +62,13 @@ func (r *PropertyRecurringOperationStatusUpdater) ListByProperty(ctx context.Con
 			OwnerID:       rec.OwnerID,
 			PropertyID:    rec.PropertyID,
 			LeaseID:       rec.LeaseID,
-			Type:          rec.Type,
-			Category:      rec.Category,
+			Type:          string(rec.Type),
+			Category:      string(rec.Category),
 			AmountKopecks: rec.AmountKopecks,
 			StartDate:     rec.StartDate,
 			PaymentDay:    rec.PaymentDay,
 			EndDate:       rec.EndDate,
-			Status:        rec.Status,
+			Status:        string(rec.Status),
 			Comment:       rec.Comment,
 		}
 	}

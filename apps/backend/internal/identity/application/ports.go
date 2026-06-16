@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -14,9 +15,8 @@ var (
 	ErrNotFound = errors.New("not found")
 )
 
-type Clock interface {
-	Now() time.Time
-}
+// Clock is re-exported from the shared clock package for backwards compatibility.
+type Clock = clock.Clock
 
 type Sender interface {
 	Send(ctx context.Context, phone domain.Phone, message string) error

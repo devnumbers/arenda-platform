@@ -30,15 +30,6 @@ func NewLeaseHandlers(leaseSvc *leasesapp.LeaseService, tenantContactSvc *leases
 	}
 }
 
-func (h *LeaseHandlers) ownerIDFromContext(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
-	userID, ok := UserIDFromContext(r.Context())
-	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
-		return uuid.UUID{}, false
-	}
-	return userID, true
-}
-
 func (h *LeaseHandlers) handleLeaseError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, leasesapp.ErrInvalidInput):
@@ -63,8 +54,9 @@ func (h *LeaseHandlers) handleLeaseError(w http.ResponseWriter, r *http.Request,
 
 // CreateLease implements POST /leases.
 func (h *LeaseHandlers) CreateLease(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -107,8 +99,9 @@ func (h *LeaseHandlers) CreateLease(w http.ResponseWriter, r *http.Request) {
 
 // ListLeases implements GET /leases.
 func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -133,8 +126,9 @@ func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
 
 // GetLease implements GET /leases/{id}.
 func (h *LeaseHandlers) GetLease(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -155,8 +149,9 @@ func (h *LeaseHandlers) GetLease(w http.ResponseWriter, r *http.Request, id uuid
 
 // UpdateLease implements PATCH /leases/{id}.
 func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -202,8 +197,9 @@ func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id u
 
 // CompleteLease implements POST /leases/{id}/complete.
 func (h *LeaseHandlers) CompleteLease(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -224,8 +220,9 @@ func (h *LeaseHandlers) CompleteLease(w http.ResponseWriter, r *http.Request, id
 
 // CreateTenantContact implements POST /tenant-contacts.
 func (h *LeaseHandlers) CreateTenantContact(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -256,8 +253,9 @@ func (h *LeaseHandlers) CreateTenantContact(w http.ResponseWriter, r *http.Reque
 
 // ListTenantContacts implements GET /tenant-contacts.
 func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -277,8 +275,9 @@ func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Reques
 
 // GetTenantContact implements GET /tenant-contacts/{id}.
 func (h *LeaseHandlers) GetTenantContact(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -293,8 +292,9 @@ func (h *LeaseHandlers) GetTenantContact(w http.ResponseWriter, r *http.Request,
 
 // UpdateTenantContact implements PATCH /tenant-contacts/{id}.
 func (h *LeaseHandlers) UpdateTenantContact(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 

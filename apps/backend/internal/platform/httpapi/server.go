@@ -11,6 +11,7 @@ import (
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
 // Deps holds the dependencies required by the HTTP server.
@@ -24,7 +25,7 @@ type Deps struct {
 	RecurringOperations *leasesapp.RecurringOperationService
 	CookieSecure        bool
 	Logger              *slog.Logger
-	Clock               identityapp.Clock
+	Clock               clock.Clock
 	IPRateLimiter       *RateLimiter
 	PhoneSendLimiter    *RateLimiter
 	PhoneVerifyLimiter  *RateLimiter

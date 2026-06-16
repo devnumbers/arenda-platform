@@ -12,6 +12,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -35,7 +36,7 @@ func (r *UserRepository) WithTx(tx transaction.Tx) application.UserRepository {
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
-	row, err := r.q().GetUserByID(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	row, err := r.q().GetUserByID(ctx, pgconv.UUIDToPgtype(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.User{}, application.ErrNotFound
@@ -43,13 +44,13 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User
 		return domain.User{}, err
 	}
 	return domain.User{
-		ID:         uuidFromPgtype(row.ID),
+		ID:         pgconv.UUIDFromPgtype(row.ID),
 		Phone:      domain.Phone(row.Phone),
 		Role:       domain.Role(row.Role),
-		Name:       pgtypeTextPtr(row.Name),
-		Surname:    pgtypeTextPtr(row.Surname),
-		Patronymic: pgtypeTextPtr(row.Patronymic),
-		Email:      pgtypeTextPtr(row.Email),
+		Name:       pgconv.TextToPtrString(row.Name),
+		Surname:    pgconv.TextToPtrString(row.Surname),
+		Patronymic: pgconv.TextToPtrString(row.Patronymic),
+		Email:      pgconv.TextToPtrString(row.Email),
 	}, nil
 }
 
@@ -62,19 +63,19 @@ func (r *UserRepository) GetByPhone(ctx context.Context, phone domain.Phone) (do
 		return domain.User{}, err
 	}
 	return domain.User{
-		ID:         uuidFromPgtype(row.ID),
+		ID:         pgconv.UUIDFromPgtype(row.ID),
 		Phone:      domain.Phone(row.Phone),
 		Role:       domain.Role(row.Role),
-		Name:       pgtypeTextPtr(row.Name),
-		Surname:    pgtypeTextPtr(row.Surname),
-		Patronymic: pgtypeTextPtr(row.Patronymic),
-		Email:      pgtypeTextPtr(row.Email),
+		Name:       pgconv.TextToPtrString(row.Name),
+		Surname:    pgconv.TextToPtrString(row.Surname),
+		Patronymic: pgconv.TextToPtrString(row.Patronymic),
+		Email:      pgconv.TextToPtrString(row.Email),
 	}, nil
 }
 
 func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.User, error) {
 	row, err := r.q().CreateUser(ctx, postgres.CreateUserParams{
-		ID:    pgtype.UUID{Bytes: user.ID, Valid: true},
+		ID:    pgconv.UUIDToPgtype(user.ID),
 		Phone: user.Phone.String(),
 		Role:  string(user.Role),
 	})
@@ -82,13 +83,13 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.U
 		return domain.User{}, err
 	}
 	return domain.User{
-		ID:         uuidFromPgtype(row.ID),
+		ID:         pgconv.UUIDFromPgtype(row.ID),
 		Phone:      domain.Phone(row.Phone),
 		Role:       domain.Role(row.Role),
-		Name:       pgtypeTextPtr(row.Name),
-		Surname:    pgtypeTextPtr(row.Surname),
-		Patronymic: pgtypeTextPtr(row.Patronymic),
-		Email:      pgtypeTextPtr(row.Email),
+		Name:       pgconv.TextToPtrString(row.Name),
+		Surname:    pgconv.TextToPtrString(row.Surname),
+		Patronymic: pgconv.TextToPtrString(row.Patronymic),
+		Email:      pgconv.TextToPtrString(row.Email),
 	}, nil
 }
 
@@ -113,7 +114,7 @@ func (r *SMSCodeRepository) WithTx(tx transaction.Tx) application.SMSCodeReposit
 
 func (r *SMSCodeRepository) Save(ctx context.Context, code domain.SMSCode) error {
 	_, err := r.q().CreateSMSCode(ctx, postgres.CreateSMSCodeParams{
-		ID:        pgtype.UUID{Bytes: code.ID, Valid: true},
+		ID:        pgconv.UUIDToPgtype(code.ID),
 		Phone:     code.Phone.String(),
 		CodeHash:  code.CodeHash,
 		ExpiresAt: pgtype.Timestamptz{Time: code.ExpiresAt, Valid: true},
@@ -133,7 +134,7 @@ func (r *SMSCodeRepository) GetLatestByPhone(ctx context.Context, phone domain.P
 		return domain.SMSCode{}, err
 	}
 	return domain.SMSCode{
-		ID:        uuidFromPgtype(row.ID),
+		ID:        pgconv.UUIDFromPgtype(row.ID),
 		Phone:     domain.Phone(row.Phone),
 		CodeHash:  row.CodeHash,
 		ExpiresAt: row.ExpiresAt.Time,
@@ -143,11 +144,11 @@ func (r *SMSCodeRepository) GetLatestByPhone(ctx context.Context, phone domain.P
 }
 
 func (r *SMSCodeRepository) MarkUsedByID(ctx context.Context, id uuid.UUID) error {
-	return r.q().MarkSMSCodeUsed(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	return r.q().MarkSMSCodeUsed(ctx, pgconv.UUIDToPgtype(id))
 }
 
 func (r *SMSCodeRepository) DeleteByID(ctx context.Context, id uuid.UUID) error {
-	return r.q().DeleteSMSCodeByID(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	return r.q().DeleteSMSCodeByID(ctx, pgconv.UUIDToPgtype(id))
 }
 
 func (r *SMSCodeRepository) DeleteExpiredBefore(ctx context.Context, before time.Time) error {
@@ -233,7 +234,7 @@ func (r *SessionRepository) WithTx(tx transaction.Tx) application.SessionReposit
 
 func (r *SessionRepository) Create(ctx context.Context, session domain.Session) error {
 	_, err := r.q().CreateSession(ctx, postgres.CreateSessionParams{
-		UserID:    pgtype.UUID{Bytes: session.UserID, Valid: true},
+		UserID:    pgconv.UUIDToPgtype(session.UserID),
 		TokenHash: session.TokenHash,
 		ExpiresAt: pgtype.Timestamptz{Time: session.ExpiresAt, Valid: true},
 	})
@@ -260,30 +261,16 @@ func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string
 		return domain.Session{}, domain.User{}, err
 	}
 	return domain.Session{
-			UserID:    uuidFromPgtype(row.UserID),
+			UserID:    pgconv.UUIDFromPgtype(row.UserID),
 			TokenHash: row.TokenHash,
 			ExpiresAt: row.ExpiresAt.Time,
 		}, domain.User{
-			ID:         uuidFromPgtype(row.UserID),
+			ID:         pgconv.UUIDFromPgtype(row.UserID),
 			Phone:      domain.Phone(row.Phone),
 			Role:       domain.Role(row.Role),
-			Name:       pgtypeTextPtr(row.Name),
-			Surname:    pgtypeTextPtr(row.Surname),
-			Patronymic: pgtypeTextPtr(row.Patronymic),
-			Email:      pgtypeTextPtr(row.Email),
+			Name:       pgconv.TextToPtrString(row.Name),
+			Surname:    pgconv.TextToPtrString(row.Surname),
+			Patronymic: pgconv.TextToPtrString(row.Patronymic),
+			Email:      pgconv.TextToPtrString(row.Email),
 		}, nil
-}
-
-func uuidFromPgtype(u pgtype.UUID) uuid.UUID {
-	if !u.Valid {
-		return uuid.UUID{}
-	}
-	return uuid.UUID(u.Bytes)
-}
-
-func pgtypeTextPtr(t pgtype.Text) *string {
-	if !t.Valid || t.String == "" {
-		return nil
-	}
-	return &t.String
 }

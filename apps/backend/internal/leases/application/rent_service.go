@@ -6,19 +6,23 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 type RentService struct {
 	ops          OperationRepository
 	recurringOps RecurringOperationRepository
+	clock        clock.Clock
 }
 
-func NewRentService(ops OperationRepository, recurringOps RecurringOperationRepository) *RentService {
+func NewRentService(ops OperationRepository, recurringOps RecurringOperationRepository, clock clock.Clock) *RentService {
 	return &RentService{
 		ops:          ops,
 		recurringOps: recurringOps,
+		clock:        clock,
 	}
 }
 
@@ -30,12 +34,12 @@ func (r *RentService) GenerateRentOperations(
 	recurringOpID uuid.UUID,
 	ownerID uuid.UUID,
 ) []domain.Operation {
-	dates := domain.GenerateDates(lease.StartDate, lease.PaymentDay, lease.EndDate, time.Now())
+	dates := domain.GenerateDates(lease.StartDate, lease.PaymentDay, lease.EndDate, r.clock.Now())
 	if len(dates) == 0 {
 		return nil
 	}
 
-	now := time.Now()
+	now := r.clock.Now()
 	ops := make([]domain.Operation, 0, len(dates))
 
 	for _, d := range dates {
@@ -44,8 +48,8 @@ func (r *RentService) GenerateRentOperations(
 			PropertyID:           lease.PropertyID,
 			LeaseID:              lease.ID,
 			RecurringOperationID: recurringOpID,
-			Type:                 string(domain.OperationTypeIncome),
-			Category:             string(domain.OperationCategoryRent),
+			Type:                 domain.OperationTypeIncome,
+			Category:             domain.OperationCategoryRent,
 			AmountKopecks:        lease.RentAmountKopecks,
 			OperationDate:        d,
 			IsException:          false,
@@ -77,7 +81,7 @@ func (r *RentService) RegenerateFutureOperations(
 	rec.AmountKopecks = lease.RentAmountKopecks
 	rec.PaymentDay = lease.PaymentDay
 	rec.EndDate = lease.EndDate
-	rec.UpdatedAt = time.Now()
+	rec.UpdatedAt = r.clock.Now()
 
 	if _, err := txRecurring.Update(ctx, rec); err != nil {
 		return fmt.Errorf("update recurring operation: %w", err)
@@ -128,7 +132,7 @@ func (r *RentService) RebuildSchedule(
 	rec.AmountKopecks = lease.RentAmountKopecks
 	rec.PaymentDay = lease.PaymentDay
 	rec.EndDate = lease.EndDate
-	rec.UpdatedAt = time.Now()
+	rec.UpdatedAt = r.clock.Now()
 
 	if _, err := txRecurring.Update(ctx, rec); err != nil {
 		return fmt.Errorf("update recurring operation: %w", err)
@@ -167,7 +171,7 @@ func (r *RentService) existingOperationDates(ctx context.Context, ops OperationR
 	}
 	dates := make(map[time.Time]struct{}, len(existing))
 	for _, d := range existing {
-		dates[date(d)] = struct{}{}
+		dates[timeutil.Date(d)] = struct{}{}
 	}
 	return dates, nil
 }
@@ -178,7 +182,7 @@ func excludeExistingDates(ops []domain.Operation, existing map[time.Time]struct{
 	}
 	filtered := make([]domain.Operation, 0, len(ops))
 	for _, op := range ops {
-		if _, ok := existing[date(op.OperationDate)]; ok {
+		if _, ok := existing[timeutil.Date(op.OperationDate)]; ok {
 			continue
 		}
 		filtered = append(filtered, op)
@@ -187,16 +191,12 @@ func excludeExistingDates(ops []domain.Operation, existing map[time.Time]struct{
 }
 
 func filterFutureOperations(ops []domain.Operation, fromDate time.Time) []domain.Operation {
-	from := date(fromDate)
+	from := timeutil.Date(fromDate)
 	filtered := make([]domain.Operation, 0, len(ops))
 	for _, op := range ops {
-		if !date(op.OperationDate).Before(from) {
+		if !timeutil.Date(op.OperationDate).Before(from) {
 			filtered = append(filtered, op)
 		}
 	}
 	return filtered
-}
-
-func date(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }

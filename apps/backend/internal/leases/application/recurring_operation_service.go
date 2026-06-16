@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 )
 
 // CreateRecurringOperationCommand carries the data needed to create a user-managed
@@ -42,6 +44,7 @@ type RecurringOperationService struct {
 	operations   OperationRepository
 	properties   PropertyRepository
 	db           txBeginner
+	clock        clock.Clock
 	logger       *slog.Logger
 }
 
@@ -51,6 +54,7 @@ func NewRecurringOperationService(
 	operations OperationRepository,
 	properties PropertyRepository,
 	db txBeginner,
+	clock clock.Clock,
 	logger *slog.Logger,
 ) *RecurringOperationService {
 	if logger == nil {
@@ -61,6 +65,7 @@ func NewRecurringOperationService(
 		operations:   operations,
 		properties:   properties,
 		db:           db,
+		clock:        clock,
 		logger:       logger,
 	}
 }
@@ -72,7 +77,7 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 	ownerID uuid.UUID,
 	cmd CreateRecurringOperationCommand,
 ) (domain.RecurringOperation, error) {
-	if err := s.validateProperty(ctx, ownerID, cmd.PropertyID); err != nil {
+	if err := validateProperty(ctx, s.properties, ownerID, cmd.PropertyID); err != nil {
 		return domain.RecurringOperation{}, err
 	}
 
@@ -85,19 +90,19 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("generate recurring operation id: %w", err)
 	}
 
-	now := time.Now()
+	now := s.clock.Now()
 	rec := domain.RecurringOperation{
 		ID:            id,
 		OwnerID:       ownerID,
 		PropertyID:    cmd.PropertyID,
-		Type:          cmd.Type,
-		Category:      cmd.Category,
+		Type:          domain.OperationType(cmd.Type),
+		Category:      domain.OperationCategory(cmd.Category),
 		AmountKopecks: cmd.AmountKopecks,
 		StartDate:     cmd.StartDate,
 		PaymentDay:    cmd.PaymentDay,
 		EndDate:       cmd.EndDate,
-		Periodicity:   string(domain.RecurringOperationPeriodicityMonthly),
-		Status:        string(domain.RecurringOperationStatusActive),
+		Periodicity:   domain.RecurringOperationPeriodicityMonthly,
+		Status:        domain.RecurringOperationStatusActive,
 		Comment:       stringOrEmpty(cmd.Comment),
 		CreatedAt:     now,
 		UpdatedAt:     now,
@@ -134,7 +139,7 @@ func (s *RecurringOperationService) ListRecurringOperationsByProperty(
 	ctx context.Context,
 	ownerID, propertyID uuid.UUID,
 ) ([]domain.RecurringOperation, error) {
-	if err := s.validateProperty(ctx, ownerID, propertyID); err != nil {
+	if err := validateProperty(ctx, s.properties, ownerID, propertyID); err != nil {
 		return nil, err
 	}
 
@@ -143,9 +148,9 @@ func (s *RecurringOperationService) ListRecurringOperationsByProperty(
 		return nil, fmt.Errorf("list recurring operations: %w", err)
 	}
 
-	now := time.Now()
+	now := s.clock.Now()
 	for i := range recs {
-		if recs[i].Status != string(domain.RecurringOperationStatusActive) {
+		if recs[i].Status != domain.RecurringOperationStatusActive {
 			continue
 		}
 		if err := s.extendHorizon(ctx, recs[i], now); err != nil {
@@ -170,8 +175,8 @@ func (s *RecurringOperationService) GetRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
 	}
 
-	if rec.Status == string(domain.RecurringOperationStatusActive) {
-		if err := s.extendHorizon(ctx, rec, time.Now()); err != nil {
+	if rec.Status == domain.RecurringOperationStatusActive {
+		if err := s.extendHorizon(ctx, rec, s.clock.Now()); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("extend horizon: %w", err)
 		}
 	}
@@ -194,15 +199,20 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
 	}
 
+	typeStr := string(rec.Type)
+	categoryStr := string(rec.Category)
 	if cmd.Type != nil {
-		rec.Type = *cmd.Type
+		typeStr = *cmd.Type
 	}
 	if cmd.Category != nil {
-		rec.Category = *cmd.Category
+		categoryStr = *cmd.Category
 	}
-	if _, _, err := s.parseTypeAndCategory(rec.Type, rec.Category); err != nil {
+	opType, category, err := parseTypeAndCategory(typeStr, categoryStr)
+	if err != nil {
 		return domain.RecurringOperation{}, err
 	}
+	rec.Type = opType
+	rec.Category = category
 
 	if cmd.AmountKopecks != nil {
 		rec.AmountKopecks = *cmd.AmountKopecks
@@ -220,11 +230,11 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		rec.Comment = *cmd.Comment
 	}
 
-	if err := s.validateCommand(rec.Type, rec.Category, rec.AmountKopecks, rec.StartDate, rec.PaymentDay, rec.EndDate); err != nil {
+	if err := s.validateCommand(string(rec.Type), string(rec.Category), rec.AmountKopecks, rec.StartDate, rec.PaymentDay, rec.EndDate); err != nil {
 		return domain.RecurringOperation{}, err
 	}
 
-	rec.UpdatedAt = time.Now()
+	rec.UpdatedAt = s.clock.Now()
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -243,13 +253,13 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("update recurring operation: %w", err)
 	}
 
-	now := time.Now()
+	now := s.clock.Now()
 	if err := txOps.DeleteUneditedFutureOperationsByRecurringOperation(ctx, updated.ID, now); err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("delete future operations: %w", err)
 	}
 
 	if err := s.generateOperations(ctx, txOps, updated, now, func(d time.Time) bool {
-		return !date(d).Before(date(now))
+		return !timeutil.Date(d).Before(timeutil.Date(now))
 	}); err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("regenerate operations: %w", err)
 	}
@@ -290,7 +300,7 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
 	}
 
-	if rec.Status == string(domain.RecurringOperationStatusActive) {
+	if rec.Status == domain.RecurringOperationStatusActive {
 		return rec, nil
 	}
 
@@ -311,9 +321,9 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("resume recurring operation: %w", err)
 	}
 
-	now := time.Now()
+	now := s.clock.Now()
 	if err := s.generateOperations(ctx, txOps, rec, now, func(d time.Time) bool {
-		return !date(d).Before(date(now))
+		return !timeutil.Date(d).Before(timeutil.Date(now))
 	}); err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
 	}
@@ -325,19 +335,8 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 	return rec, nil
 }
 
-func (s *RecurringOperationService) validateProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error {
-	exists, err := s.properties.ExistsByOwner(ctx, propertyID, ownerID)
-	if err != nil {
-		return fmt.Errorf("check property: %w", err)
-	}
-	if !exists {
-		return ErrNotFound
-	}
-	return nil
-}
-
 func (s *RecurringOperationService) validateCommand(opType, category string, amount int64, startDate time.Time, paymentDay int, endDate *time.Time) error {
-	if _, _, err := s.parseTypeAndCategory(opType, category); err != nil {
+	if _, _, err := parseTypeAndCategory(opType, category); err != nil {
 		return err
 	}
 	if amount < 0 {
@@ -349,28 +348,10 @@ func (s *RecurringOperationService) validateCommand(opType, category string, amo
 	if paymentDay < 1 || paymentDay > 31 {
 		return fmt.Errorf("%w: payment_day must be between 1 and 31", ErrInvalidInput)
 	}
-	if endDate != nil && date(*endDate).Before(date(startDate)) {
+	if endDate != nil && timeutil.Date(*endDate).Before(timeutil.Date(startDate)) {
 		return fmt.Errorf("%w: end_date must be on or after start_date", ErrInvalidInput)
 	}
 	return nil
-}
-
-func (s *RecurringOperationService) parseTypeAndCategory(typeStr, categoryStr string) (domain.OperationType, domain.OperationCategory, error) {
-	opType, err := domain.ParseOperationType(typeStr)
-	if err != nil {
-		return "", "", fmt.Errorf("%w: %w", ErrInvalidInput, err)
-	}
-
-	category, err := domain.ParseOperationCategory(categoryStr)
-	if err != nil {
-		return "", "", fmt.Errorf("%w: %w", ErrInvalidInput, err)
-	}
-
-	if !domain.IsValidCategoryForType(category, opType) {
-		return "", "", fmt.Errorf("%w: category %q is not valid for type %q", ErrInvalidInput, category, opType)
-	}
-
-	return opType, category, nil
 }
 
 func (s *RecurringOperationService) existingOperationDates(ctx context.Context, ops OperationRepository, recurringOperationID uuid.UUID) (map[time.Time]struct{}, error) {
@@ -380,7 +361,7 @@ func (s *RecurringOperationService) existingOperationDates(ctx context.Context, 
 	}
 	dates := make(map[time.Time]struct{}, len(existing))
 	for _, d := range existing {
-		dates[date(d)] = struct{}{}
+		dates[timeutil.Date(d)] = struct{}{}
 	}
 	return dates, nil
 }
@@ -394,18 +375,18 @@ func (s *RecurringOperationService) extendHorizon(ctx context.Context, rec domai
 		return fmt.Errorf("list existing dates: %w", err)
 	}
 
-	maxDate := date(rec.StartDate)
+	maxDate := timeutil.Date(rec.StartDate)
 	for d := range existing {
 		if d.After(maxDate) {
 			maxDate = d
 		}
 	}
 
-	horizon := date(now).AddDate(0, 12, 0)
+	horizon := timeutil.Date(now).AddDate(0, 12, 0)
 	if !maxDate.Before(horizon) {
 		return nil
 	}
-	if rec.EndDate != nil && date(*rec.EndDate).Before(horizon) {
+	if rec.EndDate != nil && timeutil.Date(*rec.EndDate).Before(horizon) {
 		return nil
 	}
 
@@ -459,10 +440,10 @@ func (s *RecurringOperationService) buildOperations(
 ) ([]domain.Operation, error) {
 	dates := domain.GenerateDates(rec.StartDate, rec.PaymentDay, rec.EndDate, now)
 
-	createdAt := time.Now()
+	createdAt := s.clock.Now()
 	ops := make([]domain.Operation, 0, len(dates))
 	for _, d := range dates {
-		d = date(d)
+		d = timeutil.Date(d)
 		if filter != nil && !filter(d) {
 			continue
 		}

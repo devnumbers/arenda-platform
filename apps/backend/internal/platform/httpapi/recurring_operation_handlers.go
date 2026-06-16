@@ -23,15 +23,6 @@ func NewRecurringOperationHandlers(svc *leasesapp.RecurringOperationService, log
 	return &RecurringOperationHandlers{svc: svc, logger: logger}
 }
 
-func (h *RecurringOperationHandlers) ownerIDFromContext(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
-	userID, ok := UserIDFromContext(r.Context())
-	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
-		return uuid.UUID{}, false
-	}
-	return userID, true
-}
-
 func (h *RecurringOperationHandlers) handleRecurringOperationError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, leasesapp.ErrInvalidInput):
@@ -45,8 +36,9 @@ func (h *RecurringOperationHandlers) handleRecurringOperationError(w http.Respon
 
 // CreateRecurringOperation implements POST /properties/{propertyId}/recurring-operations.
 func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -84,8 +76,9 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 
 // ListRecurringOperationsByProperty implements GET /properties/{propertyId}/recurring-operations.
 func (h *RecurringOperationHandlers) ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -105,8 +98,9 @@ func (h *RecurringOperationHandlers) ListRecurringOperationsByProperty(w http.Re
 
 // GetRecurringOperation implements GET /recurring-operations/{id}.
 func (h *RecurringOperationHandlers) GetRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -121,8 +115,9 @@ func (h *RecurringOperationHandlers) GetRecurringOperation(w http.ResponseWriter
 
 // UpdateRecurringOperation implements PATCH /recurring-operations/{id}.
 func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -165,8 +160,9 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 
 // PauseRecurringOperation implements POST /recurring-operations/{id}/pause.
 func (h *RecurringOperationHandlers) PauseRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -181,8 +177,9 @@ func (h *RecurringOperationHandlers) PauseRecurringOperation(w http.ResponseWrit
 
 // ResumeRecurringOperation implements POST /recurring-operations/{id}/resume.
 func (h *RecurringOperationHandlers) ResumeRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 

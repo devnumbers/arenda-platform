@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -45,6 +46,7 @@ type LeaseService struct {
 	operations     OperationRepository
 	rentService    *RentService
 	db             txBeginner
+	clock          clock.Clock
 	logger         *slog.Logger
 }
 
@@ -55,6 +57,7 @@ func NewLeaseService(
 	recurringOps RecurringOperationRepository,
 	operations OperationRepository,
 	db txBeginner,
+	clock clock.Clock,
 	logger *slog.Logger,
 ) *LeaseService {
 	if logger == nil {
@@ -66,8 +69,9 @@ func NewLeaseService(
 		tenantContacts: tenantContacts,
 		recurringOps:   recurringOps,
 		operations:     operations,
-		rentService:    NewRentService(operations, recurringOps),
+		rentService:    NewRentService(operations, recurringOps, clock),
 		db:             db,
+		clock:          clock,
 		logger:         logger,
 	}
 }
@@ -112,7 +116,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		return domain.Lease{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 
-	now := time.Now()
+	now := s.clock.Now()
 	lease.Status = lease.CalculateStatus(now)
 	lease.CreatedAt = now
 	lease.UpdatedAt = now
@@ -126,7 +130,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 	txLeases := s.leases.WithTx(tx)
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
-	txRentService := NewRentService(txOps, txRecurring)
+	txRentService := NewRentService(txOps, txRecurring, s.clock)
 
 	created, err := txLeases.Create(ctx, ownerID, lease)
 	if err != nil {
@@ -143,14 +147,14 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		OwnerID:       ownerID,
 		PropertyID:    created.PropertyID,
 		LeaseID:       created.ID,
-		Type:          string(domain.OperationTypeIncome),
-		Category:      string(domain.OperationCategoryRent),
+		Type:          domain.OperationTypeIncome,
+		Category:      domain.OperationCategoryRent,
 		AmountKopecks: created.RentAmountKopecks,
 		StartDate:     created.StartDate,
 		PaymentDay:    created.PaymentDay,
 		EndDate:       created.EndDate,
-		Periodicity:   string(domain.RecurringOperationPeriodicityMonthly),
-		Status:        string(domain.RecurringOperationStatusActive),
+		Periodicity:   domain.RecurringOperationPeriodicityMonthly,
+		Status:        domain.RecurringOperationStatusActive,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
@@ -207,7 +211,7 @@ func (s *LeaseService) recalculateStatus(ctx context.Context, lease domain.Lease
 		return lease, nil
 	}
 
-	now := time.Now()
+	now := s.clock.Now()
 	calculated := lease.CalculateStatus(now)
 	if calculated == lease.Status {
 		return lease, nil
@@ -278,7 +282,7 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 		return domain.Lease{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 
-	now := time.Now()
+	now := s.clock.Now()
 	lease.Status = lease.CalculateStatus(now)
 	lease.UpdatedAt = now
 
@@ -291,7 +295,7 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 	txLeases := s.leases.WithTx(tx)
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
-	txRentService := NewRentService(txOps, txRecurring)
+	txRentService := NewRentService(txOps, txRecurring, s.clock)
 
 	updated, err := txLeases.Update(ctx, ownerID, lease)
 	if err != nil {
@@ -354,7 +358,7 @@ func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID)
 		return domain.Lease{}, fmt.Errorf("complete lease: %w", err)
 	}
 
-	now := time.Now()
+	now := s.clock.Now()
 	if err := txOps.DeleteUneditedFutureOperationsByLease(ctx, id, now); err != nil {
 		return domain.Lease{}, fmt.Errorf("delete future operations: %w", err)
 	}

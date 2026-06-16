@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
 func sessionCookieName(secure bool) string {
@@ -78,14 +79,14 @@ func hashSessionToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-type defaultClock struct{}
+type fallbackClock struct{}
 
-func (defaultClock) Now() time.Time { return time.Now().UTC() }
+func (fallbackClock) Now() time.Time { return time.Now().UTC() }
 
 // SessionMiddleware loads the authenticated user from the session cookie into the request context.
-func SessionMiddleware(logger *slog.Logger, sessions application.SessionRepository, secure bool, clock application.Clock) func(http.Handler) http.Handler {
+func SessionMiddleware(logger *slog.Logger, sessions application.SessionRepository, secure bool, clock clock.Clock) func(http.Handler) http.Handler {
 	if clock == nil {
-		clock = defaultClock{}
+		clock = fallbackClock{}
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

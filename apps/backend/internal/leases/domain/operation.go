@@ -29,11 +29,11 @@ func ParseOperationType(s string) (OperationType, error) {
 type OperationCategory string
 
 const (
-	OperationCategoryRent        OperationCategory = "rent"
-	OperationCategoryOtherIncome OperationCategory = "other_income"
-	OperationCategoryUtilities   OperationCategory = "utilities"
-	OperationCategoryRepair      OperationCategory = "repair"
-	OperationCategoryTax         OperationCategory = "tax"
+	OperationCategoryRent         OperationCategory = "rent"
+	OperationCategoryOtherIncome  OperationCategory = "other_income"
+	OperationCategoryUtilities    OperationCategory = "utilities"
+	OperationCategoryRepair       OperationCategory = "repair"
+	OperationCategoryTax          OperationCategory = "tax"
 	OperationCategoryOtherExpense OperationCategory = "other_expense"
 )
 
@@ -76,8 +76,8 @@ type Operation struct {
 	PropertyID           uuid.UUID
 	LeaseID              uuid.UUID
 	RecurringOperationID uuid.UUID
-	Type                 string
-	Category             string
+	Type                 OperationType
+	Category             OperationCategory
 	AmountKopecks        int64
 	OperationDate        time.Time
 	Comment              string
@@ -105,14 +105,14 @@ type RecurringOperation struct {
 	OwnerID       uuid.UUID
 	PropertyID    uuid.UUID
 	LeaseID       uuid.UUID
-	Type          string
-	Category      string
+	Type          OperationType
+	Category      OperationCategory
 	AmountKopecks int64
 	StartDate     time.Time
 	PaymentDay    int
 	EndDate       *time.Time
-	Periodicity   string
-	Status        string
+	Periodicity   RecurringOperationPeriodicity
+	Status        RecurringOperationStatus
 	Comment       string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time

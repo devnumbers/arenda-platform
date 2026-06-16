@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 )
 
 type LeaseStatus string
@@ -106,7 +107,7 @@ func (l Lease) Validate() error {
 	if l.PaymentDay < 1 || l.PaymentDay > 31 {
 		return ErrInvalidPaymentDay
 	}
-	if l.EndDate != nil && date(*l.EndDate).Before(date(l.StartDate)) {
+	if l.EndDate != nil && timeutil.Date(*l.EndDate).Before(timeutil.Date(l.StartDate)) {
 		return ErrEndDateBeforeStart
 	}
 	if !l.Status.Valid() {
@@ -118,15 +119,15 @@ func (l Lease) Validate() error {
 // CalculateStatus returns the date-driven status for the lease.
 // It does not account for terminal statuses such as completed or archived.
 func (l Lease) CalculateStatus(now time.Time) LeaseStatus {
-	today := date(now)
-	start := date(l.StartDate)
+	today := timeutil.Date(now)
+	start := timeutil.Date(l.StartDate)
 
 	if today.Before(start) {
 		return LeaseStatusAwaitingStart
 	}
 
 	if l.EndDate != nil {
-		end := date(*l.EndDate)
+		end := timeutil.Date(*l.EndDate)
 		if today.After(end) {
 			return LeaseStatusRequiresAction
 		}

@@ -23,15 +23,6 @@ func NewOperationHandlers(svc *leasesapp.OperationService, logger *slog.Logger) 
 	return &OperationHandlers{svc: svc, logger: logger}
 }
 
-func (h *OperationHandlers) ownerIDFromContext(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
-	userID, ok := UserIDFromContext(r.Context())
-	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
-		return uuid.UUID{}, false
-	}
-	return userID, true
-}
-
 func (h *OperationHandlers) handleOperationError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, leasesapp.ErrInvalidInput):
@@ -45,8 +36,9 @@ func (h *OperationHandlers) handleOperationError(w http.ResponseWriter, r *http.
 
 // CreateOperation implements POST /properties/{propertyId}/operations.
 func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -80,8 +72,9 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 
 // ListOperationsByProperty implements GET /properties/{propertyId}/operations.
 func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -101,8 +94,9 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 
 // GetOperation implements GET /operations/{id}.
 func (h *OperationHandlers) GetOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -117,8 +111,9 @@ func (h *OperationHandlers) GetOperation(w http.ResponseWriter, r *http.Request,
 
 // UpdateOperation implements PATCH /operations/{id}.
 func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -155,8 +150,9 @@ func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Reque
 
 // DeleteOperation implements DELETE /operations/{id}.
 func (h *OperationHandlers) DeleteOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 

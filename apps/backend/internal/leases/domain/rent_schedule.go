@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+)
 
 // GenerateDates returns the planned operation dates for a recurring rent
 // schedule. The first date is always the lease start date. Subsequent dates
@@ -10,8 +14,8 @@ import "time"
 func GenerateDates(start time.Time, paymentDay int, endDate *time.Time, now time.Time) []time.Time {
 	var dates []time.Time
 
-	windowEnd := date(now).AddDate(0, 12, 0)
-	current := date(start)
+	windowEnd := timeutil.Date(now).AddDate(0, 12, 0)
+	current := timeutil.Date(start)
 	first := true
 
 	for {
@@ -20,7 +24,7 @@ func GenerateDates(start time.Time, paymentDay int, endDate *time.Time, now time
 		}
 		first = false
 
-		if endDate != nil && current.After(date(*endDate)) {
+		if endDate != nil && current.After(timeutil.Date(*endDate)) {
 			break
 		}
 		if current.After(windowEnd) {
@@ -52,9 +56,4 @@ func nextPaymentDate(current time.Time, paymentDay int) time.Time {
 
 func lastDayOfMonth(year int, month time.Month) int {
 	return time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
-}
-
-// date normalizes a timestamp to a UTC date with no time component.
-func date(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }

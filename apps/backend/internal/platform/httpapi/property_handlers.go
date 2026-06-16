@@ -22,15 +22,6 @@ func NewPropertyHandlers(svc *propertiesapp.PropertyService, logger *slog.Logger
 	return &PropertyHandlers{svc: svc, logger: logger}
 }
 
-func (h *PropertyHandlers) ownerIDFromContext(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
-	userID, ok := UserIDFromContext(r.Context())
-	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
-		return uuid.UUID{}, false
-	}
-	return userID, true
-}
-
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, propertiesapp.ErrInvalidInput):
@@ -58,8 +49,9 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 
 // CreateProperty implements POST /properties.
 func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -93,8 +85,9 @@ func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request
 
 // ListProperties implements GET /properties.
 func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -114,8 +107,9 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 
 // GetProperty implements GET /properties/{id}.
 func (h *PropertyHandlers) GetProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -130,8 +124,9 @@ func (h *PropertyHandlers) GetProperty(w http.ResponseWriter, r *http.Request, i
 
 // UpdateProperty implements PATCH /properties/{id}.
 func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -161,8 +156,9 @@ func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request
 
 // ArchiveProperty implements POST /properties/{id}/archive.
 func (h *PropertyHandlers) ArchiveProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
@@ -177,8 +173,9 @@ func (h *PropertyHandlers) ArchiveProperty(w http.ResponseWriter, r *http.Reques
 
 // UnarchiveProperty implements POST /properties/{id}/unarchive.
 func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := h.ownerIDFromContext(w, r)
+	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 

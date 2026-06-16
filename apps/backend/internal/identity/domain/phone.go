@@ -1,25 +1,16 @@
 package domain
 
 import (
-	"errors"
-	"regexp"
-	"strings"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/phone"
 )
 
-var ErrInvalidPhone = errors.New("invalid Russian phone number")
+// ErrInvalidPhone is re-exported from the shared phone package for convenience.
+var ErrInvalidPhone = phone.ErrInvalidPhone
 
-var phoneRegex = regexp.MustCompile(`^(?:\+7|7|8)(9\d{9})$`)
+// Phone is a canonical Russian mobile phone number.
+type Phone = phone.Phone
 
-type Phone string
-
+// NewPhone parses and normalizes a raw phone string into a Phone value.
 func NewPhone(raw string) (Phone, error) {
-	digits := phoneRegex.FindStringSubmatch(strings.TrimSpace(raw))
-	if digits == nil {
-		return "", ErrInvalidPhone
-	}
-	return Phone("+7" + digits[1]), nil
-}
-
-func (p Phone) String() string {
-	return string(p)
+	return phone.NewPhone(raw)
 }

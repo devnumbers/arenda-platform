@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -34,7 +35,7 @@ func (r *PropertyRepository) WithTx(tx transaction.Tx) application.PropertyRepos
 
 func (r *PropertyRepository) Create(ctx context.Context, ownerID uuid.UUID, property domain.Property) (domain.Property, error) {
 	row, err := r.q().CreateProperty(ctx, postgres.CreatePropertyParams{
-		OwnerID:     pgtype.UUID{Bytes: ownerID, Valid: true},
+		OwnerID:     pgconv.UUIDToPgtype(ownerID),
 		Name:        property.Name,
 		Type:        string(property.Type),
 		Address:     property.Address,
@@ -49,8 +50,8 @@ func (r *PropertyRepository) Create(ctx context.Context, ownerID uuid.UUID, prop
 
 func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Property, error) {
 	row, err := r.q().GetPropertyByIDAndOwner(ctx, postgres.GetPropertyByIDAndOwnerParams{
-		ID:      pgtype.UUID{Bytes: id, Valid: true},
-		OwnerID: pgtype.UUID{Bytes: ownerID, Valid: true},
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -62,7 +63,7 @@ func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, ownerID uu
 }
 
 func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Property, error) {
-	rows, err := r.q().ListActivePropertiesByOwner(ctx, pgtype.UUID{Bytes: ownerID, Valid: true})
+	rows, err := r.q().ListActivePropertiesByOwner(ctx, pgconv.UUIDToPgtype(ownerID))
 	if err != nil {
 		return nil, err
 	}
@@ -75,8 +76,8 @@ func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, ownerID uuid
 
 func (r *PropertyRepository) Update(ctx context.Context, ownerID uuid.UUID, property domain.Property) (domain.Property, error) {
 	row, err := r.q().UpdateProperty(ctx, postgres.UpdatePropertyParams{
-		ID:          pgtype.UUID{Bytes: property.ID, Valid: true},
-		OwnerID:     pgtype.UUID{Bytes: ownerID, Valid: true},
+		ID:          pgconv.UUIDToPgtype(property.ID),
+		OwnerID:     pgconv.UUIDToPgtype(ownerID),
 		Name:        property.Name,
 		Type:        string(property.Type),
 		Address:     property.Address,
@@ -94,8 +95,8 @@ func (r *PropertyRepository) Update(ctx context.Context, ownerID uuid.UUID, prop
 
 func (r *PropertyRepository) Archive(ctx context.Context, id, ownerID uuid.UUID) error {
 	_, err := r.q().ArchiveProperty(ctx, postgres.ArchivePropertyParams{
-		ID:      pgtype.UUID{Bytes: id, Valid: true},
-		OwnerID: pgtype.UUID{Bytes: ownerID, Valid: true},
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return application.ErrNotFound
@@ -105,8 +106,8 @@ func (r *PropertyRepository) Archive(ctx context.Context, id, ownerID uuid.UUID)
 
 func (r *PropertyRepository) Unarchive(ctx context.Context, id, ownerID uuid.UUID) error {
 	_, err := r.q().UnarchiveProperty(ctx, postgres.UnarchivePropertyParams{
-		ID:      pgtype.UUID{Bytes: id, Valid: true},
-		OwnerID: pgtype.UUID{Bytes: ownerID, Valid: true},
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return application.ErrNotFound
@@ -115,7 +116,7 @@ func (r *PropertyRepository) Unarchive(ctx context.Context, id, ownerID uuid.UUI
 }
 
 func (r *PropertyRepository) CountActiveByOwner(ctx context.Context, ownerID uuid.UUID) (int, error) {
-	count, err := r.q().CountActivePropertiesByOwner(ctx, pgtype.UUID{Bytes: ownerID, Valid: true})
+	count, err := r.q().CountActivePropertiesByOwner(ctx, pgconv.UUIDToPgtype(ownerID))
 	if err != nil {
 		return 0, err
 	}
@@ -124,28 +125,14 @@ func (r *PropertyRepository) CountActiveByOwner(ctx context.Context, ownerID uui
 
 func propertyFromRow(row postgres.Property) domain.Property {
 	return domain.Property{
-		ID:          uuidFromPgtype(row.ID),
-		OwnerID:     uuidFromPgtype(row.OwnerID),
+		ID:          pgconv.UUIDFromPgtype(row.ID),
+		OwnerID:     pgconv.UUIDFromPgtype(row.OwnerID),
 		Name:        row.Name,
 		Type:        domain.PropertyType(row.Type),
 		Address:     row.Address,
-		Description: pgtypeTextToString(row.Description),
+		Description: pgconv.TextToString(row.Description),
 		Status:      domain.PropertyStatus(row.Status),
 		CreatedAt:   row.CreatedAt.Time,
 		UpdatedAt:   row.UpdatedAt.Time,
 	}
-}
-
-func uuidFromPgtype(u pgtype.UUID) uuid.UUID {
-	if !u.Valid {
-		return uuid.UUID{}
-	}
-	return uuid.UUID(u.Bytes)
-}
-
-func pgtypeTextToString(t pgtype.Text) string {
-	if !t.Valid {
-		return ""
-	}
-	return t.String
 }
