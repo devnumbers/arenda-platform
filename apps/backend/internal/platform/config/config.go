@@ -13,6 +13,7 @@ type Config struct {
 	HTTPAddr      string
 	LogLevel      string
 	LogLevelValue slog.Level
+	LogFormat     string
 	DatabaseURL   string
 	MigrationsDir string
 	CookieSecure  bool
@@ -24,6 +25,7 @@ func Load() (Config, error) {
 		AppEnv:        os.Getenv("APP_ENV"),
 		HTTPAddr:      os.Getenv("HTTP_ADDR"),
 		LogLevel:      os.Getenv("LOG_LEVEL"),
+		LogFormat:     os.Getenv("LOG_FORMAT"),
 		DatabaseURL:   os.Getenv("DATABASE_URL"),
 		MigrationsDir: os.Getenv("MIGRATIONS_DIR"),
 		SMSSender:     os.Getenv("SMS_SENDER"),
@@ -45,6 +47,19 @@ func Load() (Config, error) {
 	}
 	if err := cfg.LogLevelValue.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
 		return Config{}, fmt.Errorf("invalid LOG_LEVEL %q: %w", cfg.LogLevel, err)
+	}
+
+	if cfg.LogFormat == "" {
+		switch cfg.AppEnv {
+		case "local", "dev":
+			cfg.LogFormat = "pretty"
+		default:
+			cfg.LogFormat = "json"
+		}
+	}
+	allowedFormats := map[string]bool{"json": true, "pretty": true}
+	if !allowedFormats[cfg.LogFormat] {
+		return Config{}, fmt.Errorf("invalid LOG_FORMAT %q: must be json or pretty", cfg.LogFormat)
 	}
 
 	cookieSecure := os.Getenv("COOKIE_SECURE")
