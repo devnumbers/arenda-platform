@@ -58,8 +58,7 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 		PaymentDay:    body.PaymentDay,
 	}
 	if body.EndDate != nil {
-		t := body.EndDate.Time
-		cmd.EndDate = &t
+		cmd.EndDate = new(body.EndDate.Time)
 	}
 	if body.Comment != nil {
 		cmd.Comment = body.Comment
@@ -134,19 +133,16 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 		Comment:  body.Comment,
 	}
 	if body.AmountKopecks != nil {
-		v := int64(*body.AmountKopecks)
-		cmd.AmountKopecks = &v
+		cmd.AmountKopecks = new(int64(*body.AmountKopecks))
 	}
 	if body.StartDate != nil {
-		t := body.StartDate.Time
-		cmd.StartDate = &t
+		cmd.StartDate = new(body.StartDate.Time)
 	}
 	if body.PaymentDay != nil {
 		cmd.PaymentDay = body.PaymentDay
 	}
 	if body.EndDate != nil {
-		t := body.EndDate.Time
-		cmd.EndDate = &t
+		cmd.EndDate = new(body.EndDate.Time)
 	}
 
 	rec, err := h.svc.UpdateRecurringOperation(r.Context(), ownerID, id, cmd)

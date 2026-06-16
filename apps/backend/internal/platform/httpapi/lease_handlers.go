@@ -169,12 +169,10 @@ func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id u
 		Comment:         body.Comment,
 	}
 	if body.RentAmountKopecks != nil {
-		v := int64(*body.RentAmountKopecks)
-		cmd.RentAmountKopecks = &v
+		cmd.RentAmountKopecks = new(int64(*body.RentAmountKopecks))
 	}
 	if body.DepositAmountKopecks != nil {
-		v := int64(*body.DepositAmountKopecks)
-		cmd.DepositAmountKopecks = &v
+		cmd.DepositAmountKopecks = new(int64(*body.DepositAmountKopecks))
 	}
 	if body.PaymentDay != nil {
 		cmd.PaymentDay = body.PaymentDay
@@ -358,8 +356,7 @@ func (h *LeaseHandlers) leaseResponse(ctx context.Context, ownerID uuid.UUID, le
 		if err != nil {
 			return openapi.LeaseResponse{}, err
 		}
-		c := tenantContactResponse(contact)
-		resp.TenantContact = &c
+		resp.TenantContact = new(tenantContactResponse(contact))
 	}
 	return resp, nil
 }
@@ -388,8 +385,7 @@ func datePtrFromOpenAPI(d *openapi_types.Date) *time.Time {
 	if d == nil {
 		return nil
 	}
-	t := d.Time
-	return &t
+	return new(d.Time)
 }
 
 func datePtrToOpenAPI(t *time.Time) *openapi_types.Date {

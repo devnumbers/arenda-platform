@@ -256,8 +256,7 @@ func (r *TenantContactRepository) Update(ctx context.Context, ownerID uuid.UUID,
 }
 
 func isDuplicatePhoneError(err error) bool {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 		return pgErr.Code == pgerrcode.UniqueViolation &&
 			strings.Contains(pgErr.ConstraintName, "tenant_contacts_owner_phone")
 	}

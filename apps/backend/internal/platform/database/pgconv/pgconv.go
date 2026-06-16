@@ -33,8 +33,7 @@ func UUIDFromPgtypePtr(u pgtype.UUID) *uuid.UUID {
 	if !u.Valid {
 		return nil
 	}
-	v := uuid.UUID(u.Bytes)
-	return &v
+	return new(uuid.UUID(u.Bytes))
 }
 
 // TextToString returns the string value of a pgtype.Text, or empty string if invalid.
@@ -51,8 +50,7 @@ func TextToPtrString(t pgtype.Text) *string {
 	if !t.Valid {
 		return nil
 	}
-	s := t.String
-	return &s
+	return new(t.String)
 }
 
 // StringPtrToPgtype converts a *string to pgtype.Text.
@@ -82,8 +80,7 @@ func DatePtrFromPgtype(d pgtype.Date) *time.Time {
 	if !d.Valid {
 		return nil
 	}
-	t := d.Time
-	return &t
+	return new(d.Time)
 }
 
 // TimestamptzToTime returns the time.Time value of a pgtype.Timestamptz.
@@ -96,6 +93,5 @@ func TimestamptzToPtrTime(t pgtype.Timestamptz) *time.Time {
 	if !t.Valid {
 		return nil
 	}
-	tm := t.Time
-	return &tm
+	return new(t.Time)
 }

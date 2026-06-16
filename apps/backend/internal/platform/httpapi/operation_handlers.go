@@ -131,12 +131,10 @@ func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Reque
 		LeaseID:  uuidPtrFromOpenAPI(body.LeaseId),
 	}
 	if body.AmountKopecks != nil {
-		v := int64(*body.AmountKopecks)
-		cmd.AmountKopecks = &v
+		cmd.AmountKopecks = new(int64(*body.AmountKopecks))
 	}
 	if body.OperationDate != nil {
-		t := body.OperationDate.Time
-		cmd.OperationDate = &t
+		cmd.OperationDate = new(body.OperationDate.Time)
 	}
 
 	op, err := h.svc.UpdateOperation(r.Context(), ownerID, id, cmd)
@@ -166,16 +164,16 @@ func (h *OperationHandlers) DeleteOperation(w http.ResponseWriter, r *http.Reque
 
 func operationResponse(op domain.Operation) openapi.OperationResponse {
 	resp := openapi.OperationResponse{
-		Id:                   op.ID,
-		OwnerId:              op.OwnerID,
-		PropertyId:           op.PropertyID,
-		Type:                 openapi.OperationType(op.Type),
-		Category:             openapi.OperationCategory(op.Category),
-		AmountKopecks:        int(op.AmountKopecks),
-		OperationDate:        openapi_types.Date{Time: op.OperationDate},
-		IsException:          op.IsException,
-		CreatedAt:            op.CreatedAt,
-		UpdatedAt:            op.UpdatedAt,
+		Id:            op.ID,
+		OwnerId:       op.OwnerID,
+		PropertyId:    op.PropertyID,
+		Type:          openapi.OperationType(op.Type),
+		Category:      openapi.OperationCategory(op.Category),
+		AmountKopecks: int(op.AmountKopecks),
+		OperationDate: openapi_types.Date{Time: op.OperationDate},
+		IsException:   op.IsException,
+		CreatedAt:     op.CreatedAt,
+		UpdatedAt:     op.UpdatedAt,
 	}
 	if op.LeaseID != uuid.Nil {
 		resp.LeaseId = &op.LeaseID
