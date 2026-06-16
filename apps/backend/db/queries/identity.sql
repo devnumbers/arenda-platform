@@ -40,6 +40,9 @@ ON CONFLICT (phone) DO UPDATE SET
     first_failure_at = EXCLUDED.first_failure_at,
     last_failure_at = EXCLUDED.last_failure_at;
 
+-- name: DeleteLoginAttemptByPhone :exec
+DELETE FROM login_attempts WHERE phone = $1;
+
 -- name: DeleteStaleLoginAttempts :exec
 DELETE FROM login_attempts WHERE last_failure_at < $1;
 

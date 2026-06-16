@@ -204,6 +204,10 @@ func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, window
 	})
 }
 
+func (r *AttemptRepository) DeleteByPhone(ctx context.Context, phone domain.Phone) error {
+	return r.q().DeleteLoginAttemptByPhone(ctx, phone.String())
+}
+
 func (r *AttemptRepository) DeleteStaleBefore(ctx context.Context, before time.Time) error {
 	return r.q().DeleteStaleLoginAttempts(ctx, pgtype.Timestamptz{Time: before, Valid: true})
 }

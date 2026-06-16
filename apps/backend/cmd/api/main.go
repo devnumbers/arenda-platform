@@ -81,6 +81,7 @@ func run(fallback *slog.Logger) error {
 		realClock{},
 		onboardingService,
 		transaction.NewBeginner(pool),
+		logger,
 	)
 
 	dataCleaner := cleaner.New(identitySessionRepo, identitySMSRepo, identityAttemptRepo, 1*time.Hour, 7*24*time.Hour, logger)

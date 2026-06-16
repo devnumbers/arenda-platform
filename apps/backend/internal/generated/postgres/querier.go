@@ -17,6 +17,7 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteExpiredSMSCodes(ctx context.Context, expiresAt pgtype.Timestamptz) error
 	DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error
+	DeleteLoginAttemptByPhone(ctx context.Context, phone string) error
 	DeleteSMSCodeByID(ctx context.Context, id pgtype.UUID) error
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteStaleLoginAttempts(ctx context.Context, lastFailureAt pgtype.Timestamptz) error

@@ -41,6 +41,7 @@ type SMSCodeRepository interface {
 type AttemptRepository interface {
 	GetByPhone(ctx context.Context, phone domain.Phone) (domain.AttemptWindow, error)
 	Save(ctx context.Context, phone domain.Phone, window domain.AttemptWindow) error
+	DeleteByPhone(ctx context.Context, phone domain.Phone) error
 	DeleteStaleBefore(ctx context.Context, before time.Time) error
 	WithTx(tx transaction.Tx) AttemptRepository
 }

@@ -114,6 +114,15 @@ func (q *Queries) DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Ti
 	return err
 }
 
+const deleteLoginAttemptByPhone = `-- name: DeleteLoginAttemptByPhone :exec
+DELETE FROM login_attempts WHERE phone = $1
+`
+
+func (q *Queries) DeleteLoginAttemptByPhone(ctx context.Context, phone string) error {
+	_, err := q.db.Exec(ctx, deleteLoginAttemptByPhone, phone)
+	return err
+}
+
 const deleteSMSCodeByID = `-- name: DeleteSMSCodeByID :exec
 DELETE FROM sms_codes WHERE id = $1
 `

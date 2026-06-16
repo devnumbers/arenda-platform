@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"time"
 
@@ -26,17 +27,21 @@ type txBeginner interface {
 }
 
 type AuthService struct {
-	users     UserRepository
-	codes     SMSCodeRepository
-	attempts  AttemptRepository
-	sessions  SessionRepository
-	sender    Sender
-	clock     Clock
+	users      UserRepository
+	codes      SMSCodeRepository
+	attempts   AttemptRepository
+	sessions   SessionRepository
+	sender     Sender
+	clock      Clock
 	onboarding OnboardingService
-	db        txBeginner
+	db         txBeginner
+	logger     *slog.Logger
 }
 
-func NewAuthService(users UserRepository, codes SMSCodeRepository, attempts AttemptRepository, sessions SessionRepository, sender Sender, clock Clock, onboarding OnboardingService, db txBeginner) *AuthService {
+func NewAuthService(users UserRepository, codes SMSCodeRepository, attempts AttemptRepository, sessions SessionRepository, sender Sender, clock Clock, onboarding OnboardingService, db txBeginner, logger *slog.Logger) *AuthService {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &AuthService{
 		users:      users,
 		codes:      codes,
@@ -46,6 +51,7 @@ func NewAuthService(users UserRepository, codes SMSCodeRepository, attempts Atte
 		clock:      clock,
 		onboarding: onboarding,
 		db:         db,
+		logger:     logger,
 	}
 }
 
@@ -65,6 +71,16 @@ func (s *AuthService) SendCode(ctx context.Context, phone domain.Phone) error {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	txAttempts := s.attempts.WithTx(tx)
+	reload, err := txAttempts.GetByPhone(ctx, phone)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return fmt.Errorf("get attempts: %w", err)
+	}
+	if reload.Blocked(now) {
+		_ = tx.Rollback(ctx)
+		return ErrUserBlocked
+	}
 
 	txCodes := s.codes.WithTx(tx)
 
@@ -113,9 +129,6 @@ func (s *AuthService) VerifyCode(ctx context.Context, phone domain.Phone, code s
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return domain.RawSession{}, domain.User{}, fmt.Errorf("get attempts: %w", err)
 	}
-	if window.Blocked(now) {
-		return domain.RawSession{}, domain.User{}, ErrUserBlocked
-	}
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -126,12 +139,15 @@ func (s *AuthService) VerifyCode(ctx context.Context, phone domain.Phone, code s
 	codes := s.codes.WithTx(tx)
 	users := s.users.WithTx(tx)
 	sessions := s.sessions.WithTx(tx)
-	attempts := s.attempts.WithTx(tx)
 
 	sms, err := codes.GetLatestByPhone(ctx, phone, now)
 	if err != nil {
+		_ = tx.Rollback(ctx)
 		if errors.Is(err, ErrNotFound) {
-			if recErr := s.recordFailure(ctx, attempts, phone, window, now); recErr != nil {
+			if recErr := s.recordFailure(ctx, s.attempts, phone, window, now); recErr != nil {
+				if errors.Is(recErr, domain.ErrTooManyAttempts) || errors.Is(recErr, ErrUserBlocked) {
+					return domain.RawSession{}, domain.User{}, recErr
+				}
 				return domain.RawSession{}, domain.User{}, fmt.Errorf("verify code: %w", recErr)
 			}
 			return domain.RawSession{}, domain.User{}, domain.ErrSMSCodeInvalid
@@ -140,7 +156,11 @@ func (s *AuthService) VerifyCode(ctx context.Context, phone domain.Phone, code s
 	}
 
 	if err := sms.Verify(code, now); err != nil {
-		if recErr := s.recordFailure(ctx, attempts, phone, window, now); recErr != nil {
+		_ = tx.Rollback(ctx)
+		if recErr := s.recordFailure(ctx, s.attempts, phone, window, now); recErr != nil {
+			if errors.Is(recErr, domain.ErrTooManyAttempts) || errors.Is(recErr, ErrUserBlocked) {
+				return domain.RawSession{}, domain.User{}, recErr
+			}
 			return domain.RawSession{}, domain.User{}, fmt.Errorf("verify code: %w", recErr)
 		}
 		return domain.RawSession{}, domain.User{}, err
@@ -179,6 +199,10 @@ func (s *AuthService) VerifyCode(ctx context.Context, phone domain.Phone, code s
 
 	if err := tx.Commit(ctx); err != nil {
 		return domain.RawSession{}, domain.User{}, fmt.Errorf("commit tx: %w", err)
+	}
+
+	if err := s.attempts.DeleteByPhone(ctx, phone); err != nil {
+		s.logger.ErrorContext(ctx, "failed to reset login attempts", slog.String("error", err.Error()))
 	}
 
 	return raw, user, nil
