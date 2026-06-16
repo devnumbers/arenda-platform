@@ -7,6 +7,17 @@ RETURNING *;
 SELECT * FROM tenant_contacts
 WHERE id = $1 AND owner_id = $2;
 
+-- name: UpdateTenantContact :one
+UPDATE tenant_contacts
+SET name = $2,
+    surname = $3,
+    patronymic = $4,
+    phone = $5,
+    email = $6,
+    comment = $7
+WHERE id = $1 AND owner_id = $8
+RETURNING *;
+
 -- name: ListTenantContactsByOwner :many
 SELECT * FROM tenant_contacts
 WHERE owner_id = $1

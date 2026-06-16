@@ -1,0 +1,1258 @@
+openapi: 3.0.3
+info:
+  title: Arenda Planform API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /auth/phone/send:
+    post:
+      operationId: sendPhoneCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendPhoneCodeRequest'
+      responses:
+        '204':
+          description: Code sent
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/phone/verify:
+    post:
+      operationId: verifyPhoneCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyPhoneCodeRequest'
+      responses:
+        '200':
+          description: Authenticated
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/logout:
+    post:
+      operationId: logout
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: Logged out
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /me:
+    get:
+      operationId: getMe
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /properties:
+    post:
+      operationId: createProperty
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyCreateRequest'
+      responses:
+        '201':
+          description: Property created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    get:
+      operationId: listProperties
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Properties list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertiesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /properties/{id}:
+    get:
+      operationId: getProperty
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Property details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateProperty
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyUpdateRequest'
+      responses:
+        '200':
+          description: Property updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{id}/archive:
+    post:
+      operationId: archiveProperty
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Property archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{id}/unarchive:
+    post:
+      operationId: unarchiveProperty
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Property unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /properties/{propertyId}/operations:
+    get:
+      operationId: listOperationsByProperty
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Operations list for property
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: createOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationCreateRequest'
+      responses:
+        '201':
+          description: Operation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /operations/{id}:
+    get:
+      operationId: getOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Operation details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationUpdateRequest'
+      responses:
+        '200':
+          description: Operation updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Operation deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /properties/{propertyId}/recurring-operations:
+    get:
+      operationId: listRecurringOperationsByProperty
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Recurring operations list for property
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringOperationsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: createRecurringOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecurringOperationCreateRequest'
+      responses:
+        '201':
+          description: Recurring operation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringOperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /recurring-operations/{id}:
+    get:
+      operationId: getRecurringOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Recurring operation details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringOperationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateRecurringOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecurringOperationUpdateRequest'
+      responses:
+        '200':
+          description: Recurring operation updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringOperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /recurring-operations/{id}/pause:
+    post:
+      operationId: pauseRecurringOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Recurring operation paused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringOperationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /recurring-operations/{id}/resume:
+    post:
+      operationId: resumeRecurringOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Recurring operation resumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringOperationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /leases:
+    post:
+      operationId: createLease
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaseCreateRequest'
+      responses:
+        '201':
+          description: Lease created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaseResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    get:
+      operationId: listLeases
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Leases list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeasesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /leases/{id}:
+    get:
+      operationId: getLease
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lease details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaseResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateLease
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaseUpdateRequest'
+      responses:
+        '200':
+          description: Lease updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaseResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /leases/{id}/complete:
+    post:
+      operationId: completeLease
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lease completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaseResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /tenant-contacts:
+    post:
+      operationId: createTenantContact
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantContactCreateRequest'
+      responses:
+        '201':
+          description: Tenant contact created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantContactResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      operationId: listTenantContacts
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Tenant contacts list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantContactsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /tenant-contacts/{id}:
+    get:
+      operationId: getTenantContact
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Tenant contact details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantContactResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateTenantContact
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantContactUpdateRequest'
+      responses:
+        '200':
+          description: Tenant contact updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantContactResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session_id
+
+  schemas:
+    SendPhoneCodeRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone:
+          type: string
+          example: '+79990001122'
+
+    VerifyPhoneCodeRequest:
+      type: object
+      required: [phone, code]
+      properties:
+        phone:
+          type: string
+        code:
+          type: string
+          example: '123456'
+
+    MeResponse:
+      type: object
+      required: [id, phone, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [owner, admin]
+        name:
+          type: string
+          nullable: true
+        surname:
+          type: string
+          nullable: true
+        patronymic:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        requestId:
+          type: string
+
+    PropertyCreateRequest:
+      type: object
+      required: [name, type, address]
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        type:
+          type: string
+          enum: [apartment, room, apartments, house, commercial, office, warehouse, garage, parking, land]
+        address:
+          type: string
+          maxLength: 500
+        description:
+          type: string
+          maxLength: 2000
+
+    PropertyUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        type:
+          type: string
+          enum: [apartment, room, apartments, house, commercial, office, warehouse, garage, parking, land]
+        address:
+          type: string
+          maxLength: 500
+        description:
+          type: string
+          maxLength: 2000
+        status:
+          type: string
+          enum: [active, maintenance]
+
+    PropertyResponse:
+      type: object
+      required: [id, name, type, address, status, occupancy, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [apartment, room, apartments, house, commercial, office, warehouse, garage, parking, land]
+        address:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [active, maintenance, archived]
+        occupancy:
+          type: string
+          enum: [free, occupied]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    LeaseCreateRequest:
+      type: object
+      required: [property_id, start_date, rent_amount_kopecks, payment_day]
+      properties:
+        property_id:
+          type: string
+          format: uuid
+        tenant_contact_id:
+          type: string
+          format: uuid
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        rent_amount_kopecks:
+          type: integer
+          minimum: 0
+        deposit_amount_kopecks:
+          type: integer
+          minimum: 0
+          default: 0
+        payment_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+        comment:
+          type: string
+          maxLength: 2000
+
+    LeaseUpdateRequest:
+      type: object
+      properties:
+        tenant_contact_id:
+          type: string
+          format: uuid
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        rent_amount_kopecks:
+          type: integer
+        deposit_amount_kopecks:
+          type: integer
+        payment_day:
+          type: integer
+        comment:
+          type: string
+
+    LeaseResponse:
+      type: object
+      required: [id, property_id, owner_id, tenant_contact, status, start_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        property_id:
+          type: string
+          format: uuid
+        owner_id:
+          type: string
+          format: uuid
+        tenant_contact:
+          allOf:
+            - $ref: '#/components/schemas/TenantContactResponse'
+          nullable: true
+        status:
+          type: string
+          enum: [awaiting_start, active, requires_action, completed, archived]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        rent_amount_kopecks:
+          type: integer
+        deposit_amount_kopecks:
+          type: integer
+        payment_day:
+          type: integer
+        comment:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    LeasesResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaseResponse'
+
+    TenantContactCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        surname:
+          type: string
+        patronymic:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        comment:
+          type: string
+
+    TenantContactUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        surname:
+          type: string
+        patronymic:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        comment:
+          type: string
+
+    TenantContactResponse:
+      type: object
+      required: [id, owner_id, name, surname, patronymic, phone, email, comment, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        owner_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        surname:
+          type: string
+          nullable: true
+        patronymic:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        comment:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TenantContactsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantContactResponse'
+
+    PropertiesResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyResponse'
+
+    OperationType:
+      type: string
+      enum: [income, expense]
+
+    OperationCategory:
+      type: string
+      enum: [rent, other_income, utilities, repair, tax, other_expense]
+
+    OperationCreateRequest:
+      type: object
+      required: [type, category, amount_kopecks, operation_date]
+      properties:
+        type:
+          $ref: '#/components/schemas/OperationType'
+        category:
+          $ref: '#/components/schemas/OperationCategory'
+        amount_kopecks:
+          type: integer
+          minimum: 0
+        operation_date:
+          type: string
+          format: date
+        comment:
+          type: string
+          maxLength: 2000
+        lease_id:
+          type: string
+          format: uuid
+
+    OperationUpdateRequest:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/OperationType'
+        category:
+          $ref: '#/components/schemas/OperationCategory'
+        amount_kopecks:
+          type: integer
+        operation_date:
+          type: string
+          format: date
+        comment:
+          type: string
+          maxLength: 2000
+        lease_id:
+          type: string
+          format: uuid
+
+    OperationResponse:
+      type: object
+      required: [id, owner_id, property_id, type, category, amount_kopecks, operation_date, is_exception, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        owner_id:
+          type: string
+          format: uuid
+        property_id:
+          type: string
+          format: uuid
+        lease_id:
+          type: string
+          format: uuid
+          nullable: true
+        recurring_operation_id:
+          type: string
+          format: uuid
+          nullable: true
+        type:
+          $ref: '#/components/schemas/OperationType'
+        category:
+          $ref: '#/components/schemas/OperationCategory'
+        amount_kopecks:
+          type: integer
+        operation_date:
+          type: string
+          format: date
+        comment:
+          type: string
+          nullable: true
+        is_exception:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    OperationsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationResponse'
+
+    RecurringOperationCreateRequest:
+      type: object
+      required: [type, category, amount_kopecks, start_date, payment_day]
+      properties:
+        type:
+          $ref: '#/components/schemas/OperationType'
+        category:
+          $ref: '#/components/schemas/OperationCategory'
+        amount_kopecks:
+          type: integer
+          minimum: 0
+        start_date:
+          type: string
+          format: date
+        payment_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+        end_date:
+          type: string
+          format: date
+        comment:
+          type: string
+          maxLength: 2000
+
+    RecurringOperationUpdateRequest:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/OperationType'
+        category:
+          $ref: '#/components/schemas/OperationCategory'
+        amount_kopecks:
+          type: integer
+          minimum: 0
+        start_date:
+          type: string
+          format: date
+        payment_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+        end_date:
+          type: string
+          format: date
+        comment:
+          type: string
+          maxLength: 2000
+
+    RecurringOperationResponse:
+      type: object
+      required: [id, owner_id, property_id, type, category, amount_kopecks, start_date, payment_day, periodicity, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        owner_id:
+          type: string
+          format: uuid
+        property_id:
+          type: string
+          format: uuid
+        lease_id:
+          type: string
+          format: uuid
+          nullable: true
+        type:
+          $ref: '#/components/schemas/OperationType'
+        category:
+          $ref: '#/components/schemas/OperationCategory'
+        amount_kopecks:
+          type: integer
+        start_date:
+          type: string
+          format: date
+        payment_day:
+          type: integer
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        periodicity:
+          type: string
+          enum: [monthly]
+        status:
+          type: string
+          enum: [active, paused]
+        comment:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RecurringOperationsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecurringOperationResponse'
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooManyRequests:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'

@@ -40,6 +40,22 @@ const (
 	Owner MeResponseRole = "owner"
 )
 
+// Defines values for OperationCategory.
+const (
+	OtherExpense OperationCategory = "other_expense"
+	OtherIncome  OperationCategory = "other_income"
+	Rent         OperationCategory = "rent"
+	Repair       OperationCategory = "repair"
+	Tax          OperationCategory = "tax"
+	Utilities    OperationCategory = "utilities"
+)
+
+// Defines values for OperationType.
+const (
+	Expense OperationType = "expense"
+	Income  OperationType = "income"
+)
+
 // Defines values for PropertyCreateRequestType.
 const (
 	PropertyCreateRequestTypeApartment  PropertyCreateRequestType = "apartment"
@@ -83,8 +99,8 @@ const (
 
 // Defines values for PropertyUpdateRequestStatus.
 const (
-	Active      PropertyUpdateRequestStatus = "active"
-	Maintenance PropertyUpdateRequestStatus = "maintenance"
+	PropertyUpdateRequestStatusActive      PropertyUpdateRequestStatus = "active"
+	PropertyUpdateRequestStatusMaintenance PropertyUpdateRequestStatus = "maintenance"
 )
 
 // Defines values for PropertyUpdateRequestType.
@@ -99,6 +115,17 @@ const (
 	Parking    PropertyUpdateRequestType = "parking"
 	Room       PropertyUpdateRequestType = "room"
 	Warehouse  PropertyUpdateRequestType = "warehouse"
+)
+
+// Defines values for RecurringOperationResponsePeriodicity.
+const (
+	Monthly RecurringOperationResponsePeriodicity = "monthly"
+)
+
+// Defines values for RecurringOperationResponseStatus.
+const (
+	RecurringOperationResponseStatusActive RecurringOperationResponseStatus = "active"
+	RecurringOperationResponseStatusPaused RecurringOperationResponseStatus = "paused"
 )
 
 // LeaseCreateRequest defines model for LeaseCreateRequest.
@@ -163,6 +190,54 @@ type MeResponse struct {
 // MeResponseRole defines model for MeResponse.Role.
 type MeResponseRole string
 
+// OperationCategory defines model for OperationCategory.
+type OperationCategory string
+
+// OperationCreateRequest defines model for OperationCreateRequest.
+type OperationCreateRequest struct {
+	AmountKopecks int                 `json:"amount_kopecks"`
+	Category      OperationCategory   `json:"category"`
+	Comment       *string             `json:"comment,omitempty"`
+	LeaseId       *openapi_types.UUID `json:"lease_id,omitempty"`
+	OperationDate openapi_types.Date  `json:"operation_date"`
+	Type          OperationType       `json:"type"`
+}
+
+// OperationResponse defines model for OperationResponse.
+type OperationResponse struct {
+	AmountKopecks        int                 `json:"amount_kopecks"`
+	Category             OperationCategory   `json:"category"`
+	Comment              *string             `json:"comment"`
+	CreatedAt            time.Time           `json:"created_at"`
+	Id                   openapi_types.UUID  `json:"id"`
+	IsException          bool                `json:"is_exception"`
+	LeaseId              *openapi_types.UUID `json:"lease_id"`
+	OperationDate        openapi_types.Date  `json:"operation_date"`
+	OwnerId              openapi_types.UUID  `json:"owner_id"`
+	PropertyId           openapi_types.UUID  `json:"property_id"`
+	RecurringOperationId *openapi_types.UUID `json:"recurring_operation_id"`
+	Type                 OperationType       `json:"type"`
+	UpdatedAt            time.Time           `json:"updated_at"`
+}
+
+// OperationType defines model for OperationType.
+type OperationType string
+
+// OperationUpdateRequest defines model for OperationUpdateRequest.
+type OperationUpdateRequest struct {
+	AmountKopecks *int                `json:"amount_kopecks,omitempty"`
+	Category      *OperationCategory  `json:"category,omitempty"`
+	Comment       *string             `json:"comment,omitempty"`
+	LeaseId       *openapi_types.UUID `json:"lease_id,omitempty"`
+	OperationDate *openapi_types.Date `json:"operation_date,omitempty"`
+	Type          *OperationType      `json:"type,omitempty"`
+}
+
+// OperationsResponse defines model for OperationsResponse.
+type OperationsResponse struct {
+	Items []OperationResponse `json:"items"`
+}
+
 // Problem defines model for Problem.
 type Problem struct {
 	Detail    *string `json:"detail,omitempty"`
@@ -226,6 +301,58 @@ type PropertyUpdateRequestStatus string
 // PropertyUpdateRequestType defines model for PropertyUpdateRequest.Type.
 type PropertyUpdateRequestType string
 
+// RecurringOperationCreateRequest defines model for RecurringOperationCreateRequest.
+type RecurringOperationCreateRequest struct {
+	AmountKopecks int                 `json:"amount_kopecks"`
+	Category      OperationCategory   `json:"category"`
+	Comment       *string             `json:"comment,omitempty"`
+	EndDate       *openapi_types.Date `json:"end_date,omitempty"`
+	PaymentDay    int                 `json:"payment_day"`
+	StartDate     openapi_types.Date  `json:"start_date"`
+	Type          OperationType       `json:"type"`
+}
+
+// RecurringOperationResponse defines model for RecurringOperationResponse.
+type RecurringOperationResponse struct {
+	AmountKopecks int                                   `json:"amount_kopecks"`
+	Category      OperationCategory                     `json:"category"`
+	Comment       *string                               `json:"comment"`
+	CreatedAt     time.Time                             `json:"created_at"`
+	EndDate       *openapi_types.Date                   `json:"end_date"`
+	Id            openapi_types.UUID                    `json:"id"`
+	LeaseId       *openapi_types.UUID                   `json:"lease_id"`
+	OwnerId       openapi_types.UUID                    `json:"owner_id"`
+	PaymentDay    int                                   `json:"payment_day"`
+	Periodicity   RecurringOperationResponsePeriodicity `json:"periodicity"`
+	PropertyId    openapi_types.UUID                    `json:"property_id"`
+	StartDate     openapi_types.Date                    `json:"start_date"`
+	Status        RecurringOperationResponseStatus      `json:"status"`
+	Type          OperationType                         `json:"type"`
+	UpdatedAt     time.Time                             `json:"updated_at"`
+}
+
+// RecurringOperationResponsePeriodicity defines model for RecurringOperationResponse.Periodicity.
+type RecurringOperationResponsePeriodicity string
+
+// RecurringOperationResponseStatus defines model for RecurringOperationResponse.Status.
+type RecurringOperationResponseStatus string
+
+// RecurringOperationUpdateRequest defines model for RecurringOperationUpdateRequest.
+type RecurringOperationUpdateRequest struct {
+	AmountKopecks *int                `json:"amount_kopecks,omitempty"`
+	Category      *OperationCategory  `json:"category,omitempty"`
+	Comment       *string             `json:"comment,omitempty"`
+	EndDate       *openapi_types.Date `json:"end_date,omitempty"`
+	PaymentDay    *int                `json:"payment_day,omitempty"`
+	StartDate     *openapi_types.Date `json:"start_date,omitempty"`
+	Type          *OperationType      `json:"type,omitempty"`
+}
+
+// RecurringOperationsResponse defines model for RecurringOperationsResponse.
+type RecurringOperationsResponse struct {
+	Items []RecurringOperationResponse `json:"items"`
+}
+
 // SendPhoneCodeRequest defines model for SendPhoneCodeRequest.
 type SendPhoneCodeRequest struct {
 	Phone string `json:"phone"`
@@ -255,6 +382,16 @@ type TenantContactResponse struct {
 	UpdatedAt  time.Time          `json:"updated_at"`
 }
 
+// TenantContactUpdateRequest defines model for TenantContactUpdateRequest.
+type TenantContactUpdateRequest struct {
+	Comment    *string `json:"comment,omitempty"`
+	Email      *string `json:"email,omitempty"`
+	Name       *string `json:"name,omitempty"`
+	Patronymic *string `json:"patronymic,omitempty"`
+	Phone      *string `json:"phone,omitempty"`
+	Surname    *string `json:"surname,omitempty"`
+}
+
 // TenantContactsResponse defines model for TenantContactsResponse.
 type TenantContactsResponse struct {
 	Items []TenantContactResponse `json:"items"`
@@ -268,6 +405,9 @@ type VerifyPhoneCodeRequest struct {
 
 // BadRequest defines model for BadRequest.
 type BadRequest = Problem
+
+// Conflict defines model for Conflict.
+type Conflict = Problem
 
 // NotFound defines model for NotFound.
 type NotFound = Problem
@@ -290,14 +430,29 @@ type CreateLeaseJSONRequestBody = LeaseCreateRequest
 // UpdateLeaseJSONRequestBody defines body for UpdateLease for application/json ContentType.
 type UpdateLeaseJSONRequestBody = LeaseUpdateRequest
 
+// UpdateOperationJSONRequestBody defines body for UpdateOperation for application/json ContentType.
+type UpdateOperationJSONRequestBody = OperationUpdateRequest
+
 // CreatePropertyJSONRequestBody defines body for CreateProperty for application/json ContentType.
 type CreatePropertyJSONRequestBody = PropertyCreateRequest
 
 // UpdatePropertyJSONRequestBody defines body for UpdateProperty for application/json ContentType.
 type UpdatePropertyJSONRequestBody = PropertyUpdateRequest
 
+// CreateOperationJSONRequestBody defines body for CreateOperation for application/json ContentType.
+type CreateOperationJSONRequestBody = OperationCreateRequest
+
+// CreateRecurringOperationJSONRequestBody defines body for CreateRecurringOperation for application/json ContentType.
+type CreateRecurringOperationJSONRequestBody = RecurringOperationCreateRequest
+
+// UpdateRecurringOperationJSONRequestBody defines body for UpdateRecurringOperation for application/json ContentType.
+type UpdateRecurringOperationJSONRequestBody = RecurringOperationUpdateRequest
+
 // CreateTenantContactJSONRequestBody defines body for CreateTenantContact for application/json ContentType.
 type CreateTenantContactJSONRequestBody = TenantContactCreateRequest
+
+// UpdateTenantContactJSONRequestBody defines body for UpdateTenantContact for application/json ContentType.
+type UpdateTenantContactJSONRequestBody = TenantContactUpdateRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -329,6 +484,15 @@ type ServerInterface interface {
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
 
+	// (DELETE /operations/{id})
+	DeleteOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /operations/{id})
+	GetOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PATCH /operations/{id})
+	UpdateOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
 	// (GET /properties)
 	ListProperties(w http.ResponseWriter, r *http.Request)
 
@@ -347,11 +511,41 @@ type ServerInterface interface {
 	// (POST /properties/{id}/unarchive)
 	UnarchiveProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
+	// (GET /properties/{propertyId}/operations)
+	ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+
+	// (POST /properties/{propertyId}/operations)
+	CreateOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+
+	// (GET /properties/{propertyId}/recurring-operations)
+	ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+
+	// (POST /properties/{propertyId}/recurring-operations)
+	CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+
+	// (GET /recurring-operations/{id})
+	GetRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PATCH /recurring-operations/{id})
+	UpdateRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /recurring-operations/{id}/pause)
+	PauseRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /recurring-operations/{id}/resume)
+	ResumeRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
 	// (GET /tenant-contacts)
 	ListTenantContacts(w http.ResponseWriter, r *http.Request)
 
 	// (POST /tenant-contacts)
 	CreateTenantContact(w http.ResponseWriter, r *http.Request)
+
+	// (GET /tenant-contacts/{id})
+	GetTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PATCH /tenant-contacts/{id})
+	UpdateTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -403,6 +597,21 @@ func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (DELETE /operations/{id})
+func (_ Unimplemented) DeleteOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /operations/{id})
+func (_ Unimplemented) GetOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /operations/{id})
+func (_ Unimplemented) UpdateOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /properties)
 func (_ Unimplemented) ListProperties(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -433,6 +642,46 @@ func (_ Unimplemented) UnarchiveProperty(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /properties/{propertyId}/operations)
+func (_ Unimplemented) ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{propertyId}/operations)
+func (_ Unimplemented) CreateOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/recurring-operations)
+func (_ Unimplemented) ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{propertyId}/recurring-operations)
+func (_ Unimplemented) CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /recurring-operations/{id})
+func (_ Unimplemented) GetRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /recurring-operations/{id})
+func (_ Unimplemented) UpdateRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /recurring-operations/{id}/pause)
+func (_ Unimplemented) PauseRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /recurring-operations/{id}/resume)
+func (_ Unimplemented) ResumeRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /tenant-contacts)
 func (_ Unimplemented) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -440,6 +689,16 @@ func (_ Unimplemented) ListTenantContacts(w http.ResponseWriter, r *http.Request
 
 // (POST /tenant-contacts)
 func (_ Unimplemented) CreateTenantContact(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /tenant-contacts/{id})
+func (_ Unimplemented) GetTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /tenant-contacts/{id})
+func (_ Unimplemented) UpdateTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -653,6 +912,99 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteOperation operation middleware
+func (siw *ServerInterfaceWrapper) DeleteOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteOperation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOperation operation middleware
+func (siw *ServerInterfaceWrapper) GetOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOperation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateOperation operation middleware
+func (siw *ServerInterfaceWrapper) UpdateOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateOperation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListProperties operation middleware
 func (siw *ServerInterfaceWrapper) ListProperties(w http.ResponseWriter, r *http.Request) {
 
@@ -817,6 +1169,254 @@ func (siw *ServerInterfaceWrapper) UnarchiveProperty(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ListOperationsByProperty operation middleware
+func (siw *ServerInterfaceWrapper) ListOperationsByProperty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOperationsByProperty(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOperation operation middleware
+func (siw *ServerInterfaceWrapper) CreateOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOperation(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRecurringOperationsByProperty operation middleware
+func (siw *ServerInterfaceWrapper) ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRecurringOperationsByProperty(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateRecurringOperation operation middleware
+func (siw *ServerInterfaceWrapper) CreateRecurringOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateRecurringOperation(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRecurringOperation operation middleware
+func (siw *ServerInterfaceWrapper) GetRecurringOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRecurringOperation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateRecurringOperation operation middleware
+func (siw *ServerInterfaceWrapper) UpdateRecurringOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateRecurringOperation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PauseRecurringOperation operation middleware
+func (siw *ServerInterfaceWrapper) PauseRecurringOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PauseRecurringOperation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResumeRecurringOperation operation middleware
+func (siw *ServerInterfaceWrapper) ResumeRecurringOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResumeRecurringOperation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListTenantContacts operation middleware
 func (siw *ServerInterfaceWrapper) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
 
@@ -848,6 +1448,68 @@ func (siw *ServerInterfaceWrapper) CreateTenantContact(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateTenantContact(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTenantContact operation middleware
+func (siw *ServerInterfaceWrapper) GetTenantContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTenantContact(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateTenantContact operation middleware
+func (siw *ServerInterfaceWrapper) UpdateTenantContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateTenantContact(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -998,6 +1660,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/me", wrapper.GetMe)
 	})
 	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/operations/{id}", wrapper.DeleteOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/operations/{id}", wrapper.GetOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/operations/{id}", wrapper.UpdateOperation)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/properties", wrapper.ListProperties)
 	})
 	r.Group(func(r chi.Router) {
@@ -1016,10 +1687,40 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/properties/{id}/unarchive", wrapper.UnarchiveProperty)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/operations", wrapper.ListOperationsByProperty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/operations", wrapper.CreateOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/recurring-operations", wrapper.ListRecurringOperationsByProperty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/recurring-operations", wrapper.CreateRecurringOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/recurring-operations/{id}", wrapper.GetRecurringOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/recurring-operations/{id}", wrapper.UpdateRecurringOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/recurring-operations/{id}/pause", wrapper.PauseRecurringOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/recurring-operations/{id}/resume", wrapper.ResumeRecurringOperation)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/tenant-contacts", wrapper.ListTenantContacts)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/tenant-contacts", wrapper.CreateTenantContact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tenant-contacts/{id}", wrapper.GetTenantContact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/tenant-contacts/{id}", wrapper.UpdateTenantContact)
 	})
 
 	return r
@@ -1028,35 +1729,45 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -14,14 +14,16 @@ import (
 
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
-	Auth           *identityapp.AuthService
-	Sessions       identityapp.SessionRepository
-	Properties     *propertiesapp.PropertyService
-	Leases         *leasesapp.LeaseService
-	TenantContacts *leasesapp.TenantContactService
-	CookieSecure   bool
-	Logger         *slog.Logger
-	Clock          identityapp.Clock
+	Auth                *identityapp.AuthService
+	Sessions            identityapp.SessionRepository
+	Properties          *propertiesapp.PropertyService
+	Leases              *leasesapp.LeaseService
+	TenantContacts      *leasesapp.TenantContactService
+	Operations          *leasesapp.OperationService
+	RecurringOperations *leasesapp.RecurringOperationService
+	CookieSecure        bool
+	Logger              *slog.Logger
+	Clock               identityapp.Clock
 }
 
 func securityHeaders(next http.Handler) http.Handler {
@@ -46,11 +48,15 @@ func New(deps Deps) http.Handler {
 	authHandlers := NewAuthHandlers(deps.Auth, deps.CookieSecure, deps.Logger)
 	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.Logger)
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger)
+	operationHandlers := NewOperationHandlers(deps.Operations, deps.Logger)
+	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Logger)
 
 	handler := &composedHandler{
-		AuthHandlers:     authHandlers,
-		PropertyHandlers: propertyHandlers,
-		LeaseHandlers:    leaseHandlers,
+		AuthHandlers:                authHandlers,
+		PropertyHandlers:            propertyHandlers,
+		LeaseHandlers:               leaseHandlers,
+		OperationHandlers:           operationHandlers,
+		RecurringOperationHandlers:  recurringOperationHandlers,
 	}
 
 	return openapi.HandlerFromMux(handler, r)
@@ -62,4 +68,6 @@ type composedHandler struct {
 	*AuthHandlers
 	*PropertyHandlers
 	*LeaseHandlers
+	*OperationHandlers
+	*RecurringOperationHandlers
 }

@@ -96,13 +96,25 @@ func run(fallback *slog.Logger) error {
 	propertyRepo := propertiespg.NewPropertyRepository(pool)
 	occupancyProvider := propertiespg.NewOccupancyProvider(pool)
 	limiter := billingpg.NewSubscriptionLimiter(pool)
-	propertyService := propertiesapp.NewPropertyService(propertyRepo, occupancyProvider, limiter, transaction.NewBeginner(pool), logger)
+	operationRepo := leasespg.NewOperationRepository(pool)
+	recurringOpRepo := leasespg.NewRecurringOperationRepository(pool)
+	propertyOperationArchiver := leasespg.NewPropertyOperationArchiver(operationRepo)
+	propertyRecurringOpUpdater := leasespg.NewPropertyRecurringOperationStatusUpdater(recurringOpRepo)
+	propertyRecurringOpScheduler := leasesapp.NewPropertyRecurringOperationScheduler(operationRepo)
+	propertyService := propertiesapp.NewPropertyService(
+		propertyRepo,
+		occupancyProvider,
+		limiter,
+		propertyOperationArchiver,
+		propertyRecurringOpUpdater,
+		propertyRecurringOpScheduler,
+		transaction.NewBeginner(pool),
+		logger,
+	)
 
 	leaseRepo := leasespg.NewLeaseRepository(pool)
 	leasePropertyRepo := leasespg.NewPropertyRepository(pool)
 	tenantContactRepo := leasespg.NewTenantContactRepository(pool)
-	recurringOpRepo := leasespg.NewRecurringOperationRepository(pool)
-	operationRepo := leasespg.NewOperationRepository(pool)
 
 	leaseService := leasesapp.NewLeaseService(
 		leaseRepo,
@@ -114,18 +126,28 @@ func run(fallback *slog.Logger) error {
 		logger,
 	)
 	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, logger)
+	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, logger)
+	recurringOperationService := leasesapp.NewRecurringOperationService(
+		recurringOpRepo,
+		operationRepo,
+		leasePropertyRepo,
+		transaction.NewBeginner(pool),
+		logger,
+	)
 
 	dataCleaner := cleaner.New(identitySessionRepo, identitySMSRepo, identityAttemptRepo, 1*time.Hour, 7*24*time.Hour, logger)
 	go dataCleaner.Run(ctx)
 
 	handler := httpapi.New(httpapi.Deps{
-		Auth:           authService,
-		Sessions:       identitySessionRepo,
-		Properties:     propertyService,
-		Leases:         leaseService,
-		TenantContacts: tenantContactService,
-		CookieSecure:   cfg.CookieSecure,
-		Logger:         logger,
+		Auth:                authService,
+		Sessions:            identitySessionRepo,
+		Properties:          propertyService,
+		Leases:              leaseService,
+		TenantContacts:      tenantContactService,
+		Operations:          operationService,
+		RecurringOperations: recurringOperationService,
+		CookieSecure:        cfg.CookieSecure,
+		Logger:              logger,
 	})
 
 	server := &http.Server{

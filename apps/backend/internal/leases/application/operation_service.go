@@ -1,0 +1,263 @@
+package application
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+)
+
+// CreateOperationCommand carries the data needed to create a manual operation.
+type CreateOperationCommand struct {
+	PropertyID    uuid.UUID
+	Type          string
+	Category      string
+	AmountKopecks int64
+	OperationDate time.Time
+	Comment       *string
+	LeaseID       *uuid.UUID
+}
+
+// UpdateOperationCommand carries the optional updates for an operation.
+type UpdateOperationCommand struct {
+	Type          *string
+	Category      *string
+	AmountKopecks *int64
+	OperationDate *time.Time
+	Comment       *string
+	LeaseID       *uuid.UUID
+}
+
+// OperationService orchestrates manual operation use cases within the leases
+// bounded context.
+type OperationService struct {
+	operations OperationRepository
+	properties PropertyRepository
+	leases     LeaseRepository
+	logger     *slog.Logger
+}
+
+// NewOperationService creates a new operation service.
+func NewOperationService(
+	operations OperationRepository,
+	properties PropertyRepository,
+	leases LeaseRepository,
+	logger *slog.Logger,
+) *OperationService {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &OperationService{
+		operations: operations,
+		properties: properties,
+		leases:     leases,
+		logger:     logger,
+	}
+}
+
+// CreateOperation creates a manual operation for the given owner and property.
+func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUID, cmd CreateOperationCommand) (domain.Operation, error) {
+	if err := s.validateProperty(ctx, ownerID, cmd.PropertyID); err != nil {
+		return domain.Operation{}, err
+	}
+
+	opType, category, err := s.parseTypeAndCategory(cmd.Type, cmd.Category)
+	if err != nil {
+		return domain.Operation{}, err
+	}
+
+	if err := s.validateAmountAndDate(cmd.AmountKopecks, cmd.OperationDate); err != nil {
+		return domain.Operation{}, err
+	}
+
+	leaseID, err := s.resolveLeaseID(ctx, ownerID, cmd.PropertyID, cmd.LeaseID)
+	if err != nil {
+		return domain.Operation{}, err
+	}
+
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return domain.Operation{}, fmt.Errorf("generate operation id: %w", err)
+	}
+
+	now := time.Now()
+	var comment string
+	if cmd.Comment != nil {
+		comment = *cmd.Comment
+	}
+
+	op := domain.Operation{
+		ID:            id,
+		OwnerID:       ownerID,
+		PropertyID:    cmd.PropertyID,
+		LeaseID:       leaseID,
+		Type:          string(opType),
+		Category:      string(category),
+		AmountKopecks: cmd.AmountKopecks,
+		OperationDate: cmd.OperationDate,
+		Comment:       comment,
+		IsException:   true,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	created, err := s.operations.Create(ctx, op)
+	if err != nil {
+		return domain.Operation{}, fmt.Errorf("create operation: %w", err)
+	}
+	return created, nil
+}
+
+// ListOperationsByProperty returns operations for the given owner and property.
+func (s *OperationService) ListOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.Operation, error) {
+	if err := s.validateProperty(ctx, ownerID, propertyID); err != nil {
+		return nil, err
+	}
+
+	ops, err := s.operations.ListByProperty(ctx, ownerID, propertyID)
+	if err != nil {
+		return nil, fmt.Errorf("list operations: %w", err)
+	}
+	return ops, nil
+}
+
+// GetOperation returns a single operation owned by the given owner.
+func (s *OperationService) GetOperation(ctx context.Context, ownerID, id uuid.UUID) (domain.Operation, error) {
+	op, err := s.operations.GetByIDAndOwner(ctx, id, ownerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, ErrNotFound
+		}
+		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
+	}
+	return op, nil
+}
+
+// UpdateOperation updates an operation owned by the given owner.
+func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid.UUID, cmd UpdateOperationCommand) (domain.Operation, error) {
+	op, err := s.operations.GetByIDAndOwner(ctx, id, ownerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, ErrNotFound
+		}
+		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
+	}
+
+	if cmd.Type != nil {
+		op.Type = *cmd.Type
+	}
+	if cmd.Category != nil {
+		op.Category = *cmd.Category
+	}
+	if _, _, err := s.parseTypeAndCategory(op.Type, op.Category); err != nil {
+		return domain.Operation{}, err
+	}
+
+	if cmd.AmountKopecks != nil {
+		op.AmountKopecks = *cmd.AmountKopecks
+	}
+	if cmd.OperationDate != nil {
+		op.OperationDate = *cmd.OperationDate
+	}
+	if err := s.validateAmountAndDate(op.AmountKopecks, op.OperationDate); err != nil {
+		return domain.Operation{}, err
+	}
+
+	if cmd.Comment != nil {
+		op.Comment = *cmd.Comment
+	}
+
+	if cmd.LeaseID != nil {
+		leaseID, err := s.resolveLeaseID(ctx, ownerID, op.PropertyID, cmd.LeaseID)
+		if err != nil {
+			return domain.Operation{}, err
+		}
+		op.LeaseID = leaseID
+	}
+
+	op.IsException = true
+	op.UpdatedAt = time.Now()
+
+	updated, err := s.operations.Update(ctx, op)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, ErrNotFound
+		}
+		return domain.Operation{}, fmt.Errorf("update operation: %w", err)
+	}
+	return updated, nil
+}
+
+// DeleteOperation soft-deletes an operation owned by the given owner.
+func (s *OperationService) DeleteOperation(ctx context.Context, ownerID, id uuid.UUID) error {
+	if err := s.operations.SoftDeleteOperation(ctx, id, ownerID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("delete operation: %w", err)
+	}
+	return nil
+}
+
+func (s *OperationService) validateProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error {
+	exists, err := s.properties.ExistsByOwner(ctx, propertyID, ownerID)
+	if err != nil {
+		return fmt.Errorf("check property: %w", err)
+	}
+	if !exists {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *OperationService) parseTypeAndCategory(typeStr, categoryStr string) (domain.OperationType, domain.OperationCategory, error) {
+	opType, err := domain.ParseOperationType(typeStr)
+	if err != nil {
+		return "", "", fmt.Errorf("%w: %w", ErrInvalidInput, err)
+	}
+
+	category, err := domain.ParseOperationCategory(categoryStr)
+	if err != nil {
+		return "", "", fmt.Errorf("%w: %w", ErrInvalidInput, err)
+	}
+
+	if !domain.IsValidCategoryForType(category, opType) {
+		return "", "", fmt.Errorf("%w: category %q is not valid for type %q", ErrInvalidInput, category, opType)
+	}
+
+	return opType, category, nil
+}
+
+func (s *OperationService) validateAmountAndDate(amount int64, operationDate time.Time) error {
+	if amount < 0 {
+		return fmt.Errorf("%w: amount must be non-negative", ErrInvalidInput)
+	}
+	if operationDate.IsZero() {
+		return fmt.Errorf("%w: operation_date is required", ErrInvalidInput)
+	}
+	return nil
+}
+
+func (s *OperationService) resolveLeaseID(ctx context.Context, ownerID, propertyID uuid.UUID, leaseID *uuid.UUID) (uuid.UUID, error) {
+	if leaseID == nil {
+		return uuid.UUID{}, nil
+	}
+
+	lease, err := s.leases.GetByIDAndOwner(ctx, *leaseID, ownerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return uuid.UUID{}, fmt.Errorf("%w: lease not found", ErrInvalidInput)
+		}
+		return uuid.UUID{}, fmt.Errorf("get lease: %w", err)
+	}
+
+	if lease.PropertyID != propertyID {
+		return uuid.UUID{}, fmt.Errorf("%w: lease does not belong to the property", ErrInvalidInput)
+	}
+
+	return lease.ID, nil
+}

@@ -14,13 +14,15 @@ import (
 const createRecurringOperation = `-- name: CreateRecurringOperation :one
 INSERT INTO recurring_operations (
     owner_id, property_id, lease_id, type, category,
-    amount_kopecks, start_date, payment_day, end_date
+    amount_kopecks, start_date, payment_day, end_date,
+    periodicity, status, comment
 )
 VALUES (
     $1, $2, $3, $4, $5,
-    $6, $7, $8, $9
+    $6, $7, $8, $9,
+    $10, $11, $12
 )
-RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at
+RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status
 `
 
 type CreateRecurringOperationParams struct {
@@ -33,6 +35,9 @@ type CreateRecurringOperationParams struct {
 	StartDate     pgtype.Date `json:"start_date"`
 	PaymentDay    int32       `json:"payment_day"`
 	EndDate       pgtype.Date `json:"end_date"`
+	Periodicity   string      `json:"periodicity"`
+	Status        string      `json:"status"`
+	Comment       pgtype.Text `json:"comment"`
 }
 
 func (q *Queries) CreateRecurringOperation(ctx context.Context, arg CreateRecurringOperationParams) (RecurringOperation, error) {
@@ -46,6 +51,9 @@ func (q *Queries) CreateRecurringOperation(ctx context.Context, arg CreateRecurr
 		arg.StartDate,
 		arg.PaymentDay,
 		arg.EndDate,
+		arg.Periodicity,
+		arg.Status,
+		arg.Comment,
 	)
 	var i RecurringOperation
 	err := row.Scan(
@@ -61,6 +69,9 @@ func (q *Queries) CreateRecurringOperation(ctx context.Context, arg CreateRecurr
 		&i.EndDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Periodicity,
+		&i.Comment,
+		&i.Status,
 	)
 	return i, err
 }
@@ -75,8 +86,41 @@ func (q *Queries) DeleteRecurringOperationByLease(ctx context.Context, leaseID p
 	return err
 }
 
+const getRecurringOperationByIDAndOwner = `-- name: GetRecurringOperationByIDAndOwner :one
+SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status FROM recurring_operations
+WHERE id = $1 AND owner_id = $2
+`
+
+type GetRecurringOperationByIDAndOwnerParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) GetRecurringOperationByIDAndOwner(ctx context.Context, arg GetRecurringOperationByIDAndOwnerParams) (RecurringOperation, error) {
+	row := q.db.QueryRow(ctx, getRecurringOperationByIDAndOwner, arg.ID, arg.OwnerID)
+	var i RecurringOperation
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.LeaseID,
+		&i.Type,
+		&i.Category,
+		&i.AmountKopecks,
+		&i.StartDate,
+		&i.PaymentDay,
+		&i.EndDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Periodicity,
+		&i.Comment,
+		&i.Status,
+	)
+	return i, err
+}
+
 const getRecurringOperationByLease = `-- name: GetRecurringOperationByLease :many
-SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at FROM recurring_operations
+SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status FROM recurring_operations
 WHERE lease_id = $1
 ORDER BY created_at DESC
 `
@@ -103,6 +147,56 @@ func (q *Queries) GetRecurringOperationByLease(ctx context.Context, leaseID pgty
 			&i.EndDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Periodicity,
+			&i.Comment,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecurringOperationsByProperty = `-- name: ListRecurringOperationsByProperty :many
+SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status FROM recurring_operations
+WHERE owner_id = $1 AND property_id = $2
+ORDER BY created_at DESC
+`
+
+type ListRecurringOperationsByPropertyParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+func (q *Queries) ListRecurringOperationsByProperty(ctx context.Context, arg ListRecurringOperationsByPropertyParams) ([]RecurringOperation, error) {
+	rows, err := q.db.Query(ctx, listRecurringOperationsByProperty, arg.OwnerID, arg.PropertyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RecurringOperation{}
+	for rows.Next() {
+		var i RecurringOperation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.LeaseID,
+			&i.Type,
+			&i.Category,
+			&i.AmountKopecks,
+			&i.StartDate,
+			&i.PaymentDay,
+			&i.EndDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Periodicity,
+			&i.Comment,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -121,9 +215,10 @@ SET type = $2,
     amount_kopecks = $4,
     start_date = $5,
     payment_day = $6,
-    end_date = $7
-WHERE id = $1
-RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at
+    end_date = $7,
+    comment = $8
+WHERE id = $1 AND owner_id = $9
+RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status
 `
 
 type UpdateRecurringOperationParams struct {
@@ -134,6 +229,8 @@ type UpdateRecurringOperationParams struct {
 	StartDate     pgtype.Date `json:"start_date"`
 	PaymentDay    int32       `json:"payment_day"`
 	EndDate       pgtype.Date `json:"end_date"`
+	Comment       pgtype.Text `json:"comment"`
+	OwnerID       pgtype.UUID `json:"owner_id"`
 }
 
 func (q *Queries) UpdateRecurringOperation(ctx context.Context, arg UpdateRecurringOperationParams) (RecurringOperation, error) {
@@ -145,6 +242,8 @@ func (q *Queries) UpdateRecurringOperation(ctx context.Context, arg UpdateRecurr
 		arg.StartDate,
 		arg.PaymentDay,
 		arg.EndDate,
+		arg.Comment,
+		arg.OwnerID,
 	)
 	var i RecurringOperation
 	err := row.Scan(
@@ -160,6 +259,80 @@ func (q *Queries) UpdateRecurringOperation(ctx context.Context, arg UpdateRecurr
 		&i.EndDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Periodicity,
+		&i.Comment,
+		&i.Status,
+	)
+	return i, err
+}
+
+const updateRecurringOperationStatus = `-- name: UpdateRecurringOperationStatus :one
+UPDATE recurring_operations
+SET status = $2
+WHERE id = $1 AND owner_id = $3
+RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status
+`
+
+type UpdateRecurringOperationStatusParams struct {
+	ID      pgtype.UUID `json:"id"`
+	Status  string      `json:"status"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) UpdateRecurringOperationStatus(ctx context.Context, arg UpdateRecurringOperationStatusParams) (RecurringOperation, error) {
+	row := q.db.QueryRow(ctx, updateRecurringOperationStatus, arg.ID, arg.Status, arg.OwnerID)
+	var i RecurringOperation
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.LeaseID,
+		&i.Type,
+		&i.Category,
+		&i.AmountKopecks,
+		&i.StartDate,
+		&i.PaymentDay,
+		&i.EndDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Periodicity,
+		&i.Comment,
+		&i.Status,
+	)
+	return i, err
+}
+
+const updateRecurringOperationStatusByID = `-- name: UpdateRecurringOperationStatusByID :one
+UPDATE recurring_operations
+SET status = $2
+WHERE id = $1
+RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status
+`
+
+type UpdateRecurringOperationStatusByIDParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Status string      `json:"status"`
+}
+
+func (q *Queries) UpdateRecurringOperationStatusByID(ctx context.Context, arg UpdateRecurringOperationStatusByIDParams) (RecurringOperation, error) {
+	row := q.db.QueryRow(ctx, updateRecurringOperationStatusByID, arg.ID, arg.Status)
+	var i RecurringOperation
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.LeaseID,
+		&i.Type,
+		&i.Category,
+		&i.AmountKopecks,
+		&i.StartDate,
+		&i.PaymentDay,
+		&i.EndDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Periodicity,
+		&i.Comment,
+		&i.Status,
 	)
 	return i, err
 }

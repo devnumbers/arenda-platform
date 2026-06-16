@@ -21,6 +21,16 @@ type CreateTenantContactCommand struct {
 	Comment    *string
 }
 
+// UpdateTenantContactCommand carries the optional updates for a tenant contact.
+type UpdateTenantContactCommand struct {
+	Name       *string
+	Surname    *string
+	Patronymic *string
+	Phone      *string
+	Email      *string
+	Comment    *string
+}
+
 // TenantContactService orchestrates tenant contact use cases within the leases
 // bounded context.
 type TenantContactService struct {
@@ -40,6 +50,20 @@ func NewTenantContactService(repo TenantContactRepository, logger *slog.Logger) 
 func (s *TenantContactService) CreateTenantContact(ctx context.Context, ownerID uuid.UUID, cmd CreateTenantContactCommand) (domain.TenantContact, error) {
 	if strings.TrimSpace(cmd.Name) == "" {
 		return domain.TenantContact{}, ErrInvalidInput
+	}
+
+	if cmd.Phone != nil {
+		normalized, err := domain.NormalizePhone(*cmd.Phone)
+		if err != nil {
+			return domain.TenantContact{}, ErrInvalidInput
+		}
+		cmd.Phone = &normalized
+	}
+
+	if cmd.Email != nil {
+		if err := domain.ValidateEmail(*cmd.Email); err != nil {
+			return domain.TenantContact{}, ErrInvalidInput
+		}
 	}
 
 	id, err := uuid.NewRandom()
@@ -75,6 +99,56 @@ func (s *TenantContactService) GetTenantContact(ctx context.Context, ownerID, id
 		return domain.TenantContact{}, fmt.Errorf("get tenant contact: %w", err)
 	}
 	return contact, nil
+}
+
+// UpdateTenantContact updates a tenant contact owned by the given owner.
+func (s *TenantContactService) UpdateTenantContact(ctx context.Context, ownerID, id uuid.UUID, cmd UpdateTenantContactCommand) (domain.TenantContact, error) {
+	contact, err := s.repo.GetByIDAndOwner(ctx, id, ownerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.TenantContact{}, ErrNotFound
+		}
+		return domain.TenantContact{}, fmt.Errorf("get tenant contact: %w", err)
+	}
+
+	if cmd.Name != nil {
+		name := strings.TrimSpace(*cmd.Name)
+		if name == "" {
+			return domain.TenantContact{}, ErrInvalidInput
+		}
+		contact.Name = name
+	}
+	if cmd.Surname != nil {
+		contact.Surname = cmd.Surname
+	}
+	if cmd.Patronymic != nil {
+		contact.Patronymic = cmd.Patronymic
+	}
+	if cmd.Phone != nil {
+		normalized, err := domain.NormalizePhone(*cmd.Phone)
+		if err != nil {
+			return domain.TenantContact{}, ErrInvalidInput
+		}
+		contact.Phone = &normalized
+	}
+	if cmd.Email != nil {
+		if err := domain.ValidateEmail(*cmd.Email); err != nil {
+			return domain.TenantContact{}, ErrInvalidInput
+		}
+		contact.Email = cmd.Email
+	}
+	if cmd.Comment != nil {
+		contact.Comment = cmd.Comment
+	}
+
+	updated, err := s.repo.Update(ctx, ownerID, contact)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.TenantContact{}, ErrNotFound
+		}
+		return domain.TenantContact{}, fmt.Errorf("update tenant contact: %w", err)
+	}
+	return updated, nil
 }
 
 // ListTenantContacts returns all tenant contacts for the given owner.

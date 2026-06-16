@@ -149,6 +149,8 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		StartDate:     created.StartDate,
 		PaymentDay:    created.PaymentDay,
 		EndDate:       created.EndDate,
+		Periodicity:   string(domain.RecurringOperationPeriodicityMonthly),
+		Status:        string(domain.RecurringOperationStatusActive),
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
@@ -177,7 +179,16 @@ func (s *LeaseService) ListLeases(ctx context.Context, ownerID uuid.UUID) ([]dom
 	if err != nil {
 		return nil, fmt.Errorf("list leases: %w", err)
 	}
-	return leases, nil
+
+	result := make([]domain.Lease, 0, len(leases))
+	for _, lease := range leases {
+		lease, err = s.recalculateStatus(ctx, lease)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, lease)
+	}
+	return result, nil
 }
 
 func (s *LeaseService) GetLease(ctx context.Context, ownerID, id uuid.UUID) (domain.Lease, error) {
@@ -188,7 +199,27 @@ func (s *LeaseService) GetLease(ctx context.Context, ownerID, id uuid.UUID) (dom
 		}
 		return domain.Lease{}, fmt.Errorf("get lease: %w", err)
 	}
-	return lease, nil
+	return s.recalculateStatus(ctx, lease)
+}
+
+func (s *LeaseService) recalculateStatus(ctx context.Context, lease domain.Lease) (domain.Lease, error) {
+	if !lease.Status.IsOpen() {
+		return lease, nil
+	}
+
+	now := time.Now()
+	calculated := lease.CalculateStatus(now)
+	if calculated == lease.Status {
+		return lease, nil
+	}
+
+	lease.Status = calculated
+	lease.UpdatedAt = now
+	updated, err := s.leases.Update(ctx, lease.OwnerID, lease)
+	if err != nil {
+		return domain.Lease{}, fmt.Errorf("update lease status: %w", err)
+	}
+	return updated, nil
 }
 
 func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, cmd UpdateLeaseCommand) (domain.Lease, error) {

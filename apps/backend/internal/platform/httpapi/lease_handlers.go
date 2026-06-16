@@ -275,12 +275,62 @@ func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Reques
 	writeJSON(r.Context(), w, http.StatusOK, openapi.TenantContactsResponse{Items: items})
 }
 
+// GetTenantContact implements GET /tenant-contacts/{id}.
+func (h *LeaseHandlers) GetTenantContact(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := h.ownerIDFromContext(w, r)
+	if !ok {
+		return
+	}
+
+	contact, err := h.tenantContactSvc.GetTenantContact(r.Context(), ownerID, id)
+	if err != nil {
+		handleTenantContactError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, tenantContactResponse(contact))
+}
+
+// UpdateTenantContact implements PATCH /tenant-contacts/{id}.
+func (h *LeaseHandlers) UpdateTenantContact(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := h.ownerIDFromContext(w, r)
+	if !ok {
+		return
+	}
+
+	var body openapi.TenantContactUpdateRequest
+	if err := decodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode update tenant contact request", slog.String("error", err.Error()))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		return
+	}
+
+	cmd := leasesapp.UpdateTenantContactCommand{
+		Name:       body.Name,
+		Surname:    body.Surname,
+		Patronymic: body.Patronymic,
+		Phone:      body.Phone,
+		Email:      body.Email,
+		Comment:    body.Comment,
+	}
+
+	contact, err := h.tenantContactSvc.UpdateTenantContact(r.Context(), ownerID, id, cmd)
+	if err != nil {
+		handleTenantContactError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, tenantContactResponse(contact))
+}
+
 func handleTenantContactError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, leasesapp.ErrInvalidInput):
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", err.Error()))
 	case errors.Is(err, leasesapp.ErrNotFound):
 		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "tenant contact not found"))
+	case errors.Is(err, leasesapp.ErrDuplicatePhone):
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", err.Error()))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 	}

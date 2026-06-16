@@ -4,6 +4,5 @@
 .env.*
 !.env.example
 *.exe
-/apps/backend/api
 node_modules/
 *.log

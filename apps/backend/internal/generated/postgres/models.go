@@ -46,6 +46,7 @@ type Operation struct {
 	IsException          bool               `json:"is_exception"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Property struct {
@@ -73,6 +74,9 @@ type RecurringOperation struct {
 	EndDate       pgtype.Date        `json:"end_date"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Periodicity   string             `json:"periodicity"`
+	Comment       pgtype.Text        `json:"comment"`
+	Status        string             `json:"status"`
 }
 
 type Session struct {

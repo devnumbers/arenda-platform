@@ -35,11 +35,23 @@ type PropertyService struct {
 	repo              PropertyRepository
 	occupancyProvider OccupancyProvider
 	limiter           SubscriptionLimiter
+	operationArchiver OperationArchiver
+	recurringOps      RecurringOperationStatusUpdater
+	scheduler         RecurringOperationScheduler
 	db                txBeginner
 	logger            *slog.Logger
 }
 
-func NewPropertyService(repo PropertyRepository, occupancyProvider OccupancyProvider, limiter SubscriptionLimiter, db txBeginner, logger *slog.Logger) *PropertyService {
+func NewPropertyService(
+	repo PropertyRepository,
+	occupancyProvider OccupancyProvider,
+	limiter SubscriptionLimiter,
+	operationArchiver OperationArchiver,
+	recurringOps RecurringOperationStatusUpdater,
+	scheduler RecurringOperationScheduler,
+	db txBeginner,
+	logger *slog.Logger,
+) *PropertyService {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -47,6 +59,9 @@ func NewPropertyService(repo PropertyRepository, occupancyProvider OccupancyProv
 		repo:              repo,
 		occupancyProvider: occupancyProvider,
 		limiter:           limiter,
+		operationArchiver: operationArchiver,
+		recurringOps:      recurringOps,
+		scheduler:         scheduler,
 		db:                db,
 		logger:            logger,
 	}
@@ -189,6 +204,15 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 		if !isUpdatableStatusTransition(property.Status, status) {
 			return domain.Property{}, &InvalidStatusTransitionError{From: property.Status, To: status}
 		}
+		if status == domain.PropertyStatusMaintenance && property.Status == domain.PropertyStatusActive {
+			occupied, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, ownerID, []uuid.UUID{property.ID})
+			if err != nil {
+				return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
+			}
+			if occupied[property.ID] {
+				return domain.Property{}, ErrPropertyHasOpenLease
+			}
+		}
 		property.Status = status
 	}
 
@@ -210,7 +234,15 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 }
 
 func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.UUID) (domain.Property, error) {
-	property, err := s.repo.GetByIDAndOwner(ctx, id, ownerID)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := s.repo.WithTx(tx)
+
+	property, err := txRepo.GetByIDAndOwner(ctx, id, ownerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
@@ -219,27 +251,58 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 	}
 
 	if property.Status == domain.PropertyStatusArchived {
+		_ = tx.Rollback(ctx)
 		return domain.Property{}, ErrAlreadyArchived
 	}
 
 	occupied, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, ownerID, []uuid.UUID{property.ID})
 	if err != nil {
+		_ = tx.Rollback(ctx)
 		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
 	}
 	if occupied[property.ID] {
+		_ = tx.Rollback(ctx)
 		return domain.Property{}, ErrPropertyHasOpenLease
 	}
 
-	if err := s.repo.Archive(ctx, id, ownerID); err != nil {
+	txOperationArchiver := s.operationArchiver.WithTx(tx)
+	txRecurringOps := s.recurringOps.WithTx(tx)
+
+	if err := txOperationArchiver.DeleteFutureUneditedOperationsByProperty(ctx, id, date(time.Now())); err != nil {
+		_ = tx.Rollback(ctx)
+		return domain.Property{}, fmt.Errorf("delete future operations: %w", err)
+	}
+
+	recs, err := txRecurringOps.ListByProperty(ctx, ownerID, id)
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		return domain.Property{}, fmt.Errorf("list recurring operations: %w", err)
+	}
+
+	for _, rec := range recs {
+		if err := txRecurringOps.UpdateStatus(ctx, rec.ID, "paused"); err != nil {
+			_ = tx.Rollback(ctx)
+			return domain.Property{}, fmt.Errorf("pause recurring operation: %w", err)
+		}
+	}
+
+	if err := txRepo.Archive(ctx, id, ownerID); err != nil {
 		if errors.Is(err, ErrNotFound) {
+			_ = tx.Rollback(ctx)
 			return domain.Property{}, ErrNotFound
 		}
+		_ = tx.Rollback(ctx)
 		return domain.Property{}, fmt.Errorf("archive property: %w", err)
 	}
 
-	archived, err := s.repo.GetByIDAndOwner(ctx, id, ownerID)
+	archived, err := txRepo.GetByIDAndOwner(ctx, id, ownerID)
 	if err != nil {
+		_ = tx.Rollback(ctx)
 		return domain.Property{}, fmt.Errorf("reload archived property: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Property{}, fmt.Errorf("commit tx: %w", err)
 	}
 
 	return archived, nil
@@ -286,6 +349,24 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 		return domain.Property{}, fmt.Errorf("unarchive property: %w", err)
 	}
 
+	txRecurringOps := s.recurringOps.WithTx(tx)
+	txScheduler := s.scheduler.WithTx(tx)
+
+	recs, err := txRecurringOps.ListByProperty(ctx, ownerID, id)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("list recurring operations: %w", err)
+	}
+
+	now := time.Now()
+	for _, rec := range recs {
+		if err := txRecurringOps.UpdateStatus(ctx, rec.ID, "active"); err != nil {
+			return domain.Property{}, fmt.Errorf("resume recurring operation: %w", err)
+		}
+		if err := txScheduler.GenerateOperations(ctx, tx, rec, date(now)); err != nil {
+			return domain.Property{}, fmt.Errorf("generate operations: %w", err)
+		}
+	}
+
 	unarchived, err := txRepo.GetByIDAndOwner(ctx, id, ownerID)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("reload unarchived property: %w", err)
@@ -309,4 +390,8 @@ func isUpdatableStatusTransition(from, to domain.PropertyStatus) bool {
 		return to == domain.PropertyStatusActive
 	}
 	return false
+}
+
+func date(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }

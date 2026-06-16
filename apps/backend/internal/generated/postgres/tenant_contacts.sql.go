@@ -117,3 +117,53 @@ func (q *Queries) ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.
 	}
 	return items, nil
 }
+
+const updateTenantContact = `-- name: UpdateTenantContact :one
+UPDATE tenant_contacts
+SET name = $2,
+    surname = $3,
+    patronymic = $4,
+    phone = $5,
+    email = $6,
+    comment = $7
+WHERE id = $1 AND owner_id = $8
+RETURNING id, owner_id, name, surname, patronymic, phone, email, comment, created_at, updated_at
+`
+
+type UpdateTenantContactParams struct {
+	ID         pgtype.UUID `json:"id"`
+	Name       string      `json:"name"`
+	Surname    pgtype.Text `json:"surname"`
+	Patronymic pgtype.Text `json:"patronymic"`
+	Phone      pgtype.Text `json:"phone"`
+	Email      pgtype.Text `json:"email"`
+	Comment    pgtype.Text `json:"comment"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) UpdateTenantContact(ctx context.Context, arg UpdateTenantContactParams) (TenantContact, error) {
+	row := q.db.QueryRow(ctx, updateTenantContact,
+		arg.ID,
+		arg.Name,
+		arg.Surname,
+		arg.Patronymic,
+		arg.Phone,
+		arg.Email,
+		arg.Comment,
+		arg.OwnerID,
+	)
+	var i TenantContact
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Surname,
+		&i.Patronymic,
+		&i.Phone,
+		&i.Email,
+		&i.Comment,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

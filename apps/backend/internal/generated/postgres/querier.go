@@ -27,6 +27,7 @@ type Querier interface {
 	DeleteExpiredSMSCodes(ctx context.Context, expiresAt pgtype.Timestamptz) error
 	DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error
 	DeleteFutureOperationsByLease(ctx context.Context, arg DeleteFutureOperationsByLeaseParams) error
+	DeleteFutureUneditedOperationsByProperty(ctx context.Context, arg DeleteFutureUneditedOperationsByPropertyParams) error
 	DeleteLoginAttemptByPhone(ctx context.Context, phone string) error
 	DeleteOperationsOutsideLeaseRange(ctx context.Context, arg DeleteOperationsOutsideLeaseRangeParams) error
 	DeleteRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) error
@@ -34,12 +35,15 @@ type Querier interface {
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteStaleLoginAttempts(ctx context.Context, lastFailureAt pgtype.Timestamptz) error
 	DeleteUneditedFutureOperationsByLease(ctx context.Context, arg DeleteUneditedFutureOperationsByLeaseParams) error
+	DeleteUneditedFutureOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedFutureOperationsByRecurringOperationParams) error
 	DeleteUneditedOperationsByLease(ctx context.Context, leaseID pgtype.UUID) error
 	GetLatestSMSCodeByPhone(ctx context.Context, arg GetLatestSMSCodeByPhoneParams) (SmsCode, error)
 	GetLeaseByIDAndOwner(ctx context.Context, arg GetLeaseByIDAndOwnerParams) (Lease, error)
 	GetLoginAttemptByPhone(ctx context.Context, phone string) (LoginAttempt, error)
 	GetOpenLeaseByProperty(ctx context.Context, propertyID pgtype.UUID) (Lease, error)
+	GetOperationByIDAndOwner(ctx context.Context, arg GetOperationByIDAndOwnerParams) (Operation, error)
 	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (Property, error)
+	GetRecurringOperationByIDAndOwner(ctx context.Context, arg GetRecurringOperationByIDAndOwnerParams) (RecurringOperation, error)
 	GetRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) ([]RecurringOperation, error)
 	GetSessionByTokenHash(ctx context.Context, arg GetSessionByTokenHashParams) (GetSessionByTokenHashRow, error)
 	GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (UserSubscription, error)
@@ -52,13 +56,22 @@ type Querier interface {
 	ListFutureOperationsByLease(ctx context.Context, arg ListFutureOperationsByLeaseParams) ([]Operation, error)
 	ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Lease, error)
 	ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
+	ListOperationDatesByLease(ctx context.Context, leaseID pgtype.UUID) ([]pgtype.Date, error)
+	ListOperationDatesByRecurringOperation(ctx context.Context, recurringOperationID pgtype.UUID) ([]pgtype.Date, error)
 	ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID) ([]Operation, error)
+	ListOperationsByProperty(ctx context.Context, arg ListOperationsByPropertyParams) ([]Operation, error)
+	ListRecurringOperationsByProperty(ctx context.Context, arg ListRecurringOperationsByPropertyParams) ([]RecurringOperation, error)
 	ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]TenantContact, error)
 	MarkSMSCodeUsed(ctx context.Context, id pgtype.UUID) error
+	SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperationParams) (Operation, error)
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
 	UpdateLease(ctx context.Context, arg UpdateLeaseParams) (Lease, error)
+	UpdateOperation(ctx context.Context, arg UpdateOperationParams) (Operation, error)
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)
 	UpdateRecurringOperation(ctx context.Context, arg UpdateRecurringOperationParams) (RecurringOperation, error)
+	UpdateRecurringOperationStatus(ctx context.Context, arg UpdateRecurringOperationStatusParams) (RecurringOperation, error)
+	UpdateRecurringOperationStatusByID(ctx context.Context, arg UpdateRecurringOperationStatusByIDParams) (RecurringOperation, error)
+	UpdateTenantContact(ctx context.Context, arg UpdateTenantContactParams) (TenantContact, error)
 	UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error
 }
 

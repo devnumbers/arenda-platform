@@ -161,13 +161,13 @@ func (r *RentService) RebuildSchedule(
 }
 
 func (r *RentService) existingOperationDates(ctx context.Context, ops OperationRepository, leaseID uuid.UUID) (map[time.Time]struct{}, error) {
-	existing, err := ops.ListByLease(ctx, leaseID)
+	existing, err := ops.ListOperationDatesByLease(ctx, leaseID)
 	if err != nil {
 		return nil, err
 	}
 	dates := make(map[time.Time]struct{}, len(existing))
-	for _, op := range existing {
-		dates[date(op.OperationDate)] = struct{}{}
+	for _, d := range existing {
+		dates[date(d)] = struct{}{}
 	}
 	return dates, nil
 }

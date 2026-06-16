@@ -9,13 +9,14 @@ import (
 
 var (
 	ErrNotFound              = errors.New("not found")
-	ErrInvalidInput          = errors.New("invalid lease input")
+	ErrInvalidInput          = errors.New("invalid input")
 	ErrPropertyNotAvailable  = errors.New("property is not available for a lease")
 	ErrOpenLeaseExists       = errors.New("property already has an open lease")
 	ErrInvalidTransition     = errors.New("invalid lease status transition")
 	ErrAlreadyCompleted      = errors.New("lease is already completed")
 	ErrArchivedLease         = errors.New("cannot modify an archived lease")
 	ErrTenantContactNotFound = errors.New("tenant contact not found")
+	ErrDuplicatePhone        = errors.New("tenant contact with this phone already exists")
 )
 
 // InvalidStatusTransitionError describes a status change that is not allowed.
