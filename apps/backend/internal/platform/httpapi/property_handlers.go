@@ -196,6 +196,7 @@ func propertyResponse(property domain.Property) openapi.PropertyResponse {
 		Type:      openapi.PropertyResponseType(property.Type),
 		Address:   property.Address,
 		Status:    openapi.PropertyResponseStatus(property.Status),
+		Occupancy: openapi.PropertyResponseOccupancy(property.Occupancy),
 		CreatedAt: property.CreatedAt,
 		UpdatedAt: property.UpdatedAt,
 	}

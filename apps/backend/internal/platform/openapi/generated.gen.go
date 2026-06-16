@@ -25,6 +25,15 @@ const (
 	SessionCookieScopes = "sessionCookie.Scopes"
 )
 
+// Defines values for LeaseResponseStatus.
+const (
+	LeaseResponseStatusActive         LeaseResponseStatus = "active"
+	LeaseResponseStatusArchived       LeaseResponseStatus = "archived"
+	LeaseResponseStatusAwaitingStart  LeaseResponseStatus = "awaiting_start"
+	LeaseResponseStatusCompleted      LeaseResponseStatus = "completed"
+	LeaseResponseStatusRequiresAction LeaseResponseStatus = "requires_action"
+)
+
 // Defines values for MeResponseRole.
 const (
 	Admin MeResponseRole = "admin"
@@ -43,6 +52,12 @@ const (
 	PropertyCreateRequestTypeParking    PropertyCreateRequestType = "parking"
 	PropertyCreateRequestTypeRoom       PropertyCreateRequestType = "room"
 	PropertyCreateRequestTypeWarehouse  PropertyCreateRequestType = "warehouse"
+)
+
+// Defines values for PropertyResponseOccupancy.
+const (
+	Free     PropertyResponseOccupancy = "free"
+	Occupied PropertyResponseOccupancy = "occupied"
 )
 
 // Defines values for PropertyResponseStatus.
@@ -68,8 +83,8 @@ const (
 
 // Defines values for PropertyUpdateRequestStatus.
 const (
-	PropertyUpdateRequestStatusActive      PropertyUpdateRequestStatus = "active"
-	PropertyUpdateRequestStatusMaintenance PropertyUpdateRequestStatus = "maintenance"
+	Active      PropertyUpdateRequestStatus = "active"
+	Maintenance PropertyUpdateRequestStatus = "maintenance"
 )
 
 // Defines values for PropertyUpdateRequestType.
@@ -85,6 +100,53 @@ const (
 	Room       PropertyUpdateRequestType = "room"
 	Warehouse  PropertyUpdateRequestType = "warehouse"
 )
+
+// LeaseCreateRequest defines model for LeaseCreateRequest.
+type LeaseCreateRequest struct {
+	Comment              *string             `json:"comment,omitempty"`
+	DepositAmountKopecks *int                `json:"deposit_amount_kopecks,omitempty"`
+	EndDate              *openapi_types.Date `json:"end_date,omitempty"`
+	PaymentDay           int                 `json:"payment_day"`
+	PropertyId           openapi_types.UUID  `json:"property_id"`
+	RentAmountKopecks    int                 `json:"rent_amount_kopecks"`
+	StartDate            openapi_types.Date  `json:"start_date"`
+	TenantContactId      *openapi_types.UUID `json:"tenant_contact_id,omitempty"`
+}
+
+// LeaseResponse defines model for LeaseResponse.
+type LeaseResponse struct {
+	Comment              *string                `json:"comment"`
+	CreatedAt            time.Time              `json:"created_at"`
+	DepositAmountKopecks int                    `json:"deposit_amount_kopecks"`
+	EndDate              *openapi_types.Date    `json:"end_date"`
+	Id                   openapi_types.UUID     `json:"id"`
+	OwnerId              openapi_types.UUID     `json:"owner_id"`
+	PaymentDay           int                    `json:"payment_day"`
+	PropertyId           openapi_types.UUID     `json:"property_id"`
+	RentAmountKopecks    int                    `json:"rent_amount_kopecks"`
+	StartDate            openapi_types.Date     `json:"start_date"`
+	Status               LeaseResponseStatus    `json:"status"`
+	TenantContact        *TenantContactResponse `json:"tenant_contact"`
+	UpdatedAt            time.Time              `json:"updated_at"`
+}
+
+// LeaseResponseStatus defines model for LeaseResponse.Status.
+type LeaseResponseStatus string
+
+// LeaseUpdateRequest defines model for LeaseUpdateRequest.
+type LeaseUpdateRequest struct {
+	Comment              *string             `json:"comment,omitempty"`
+	DepositAmountKopecks *int                `json:"deposit_amount_kopecks,omitempty"`
+	EndDate              *openapi_types.Date `json:"end_date,omitempty"`
+	PaymentDay           *int                `json:"payment_day,omitempty"`
+	RentAmountKopecks    *int                `json:"rent_amount_kopecks,omitempty"`
+	TenantContactId      *openapi_types.UUID `json:"tenant_contact_id,omitempty"`
+}
+
+// LeasesResponse defines model for LeasesResponse.
+type LeasesResponse struct {
+	Items []LeaseResponse `json:"items"`
+}
 
 // MeResponse defines model for MeResponse.
 type MeResponse struct {
@@ -128,15 +190,19 @@ type PropertyCreateRequestType string
 
 // PropertyResponse defines model for PropertyResponse.
 type PropertyResponse struct {
-	Address     string                 `json:"address"`
-	CreatedAt   time.Time              `json:"created_at"`
-	Description *string                `json:"description,omitempty"`
-	Id          openapi_types.UUID     `json:"id"`
-	Name        string                 `json:"name"`
-	Status      PropertyResponseStatus `json:"status"`
-	Type        PropertyResponseType   `json:"type"`
-	UpdatedAt   time.Time              `json:"updated_at"`
+	Address     string                    `json:"address"`
+	CreatedAt   time.Time                 `json:"created_at"`
+	Description *string                   `json:"description,omitempty"`
+	Id          openapi_types.UUID        `json:"id"`
+	Name        string                    `json:"name"`
+	Occupancy   PropertyResponseOccupancy `json:"occupancy"`
+	Status      PropertyResponseStatus    `json:"status"`
+	Type        PropertyResponseType      `json:"type"`
+	UpdatedAt   time.Time                 `json:"updated_at"`
 }
+
+// PropertyResponseOccupancy defines model for PropertyResponse.Occupancy.
+type PropertyResponseOccupancy string
 
 // PropertyResponseStatus defines model for PropertyResponse.Status.
 type PropertyResponseStatus string
@@ -164,6 +230,35 @@ type SendPhoneCodeRequest struct {
 	Phone string `json:"phone"`
 }
 
+// TenantContactCreateRequest defines model for TenantContactCreateRequest.
+type TenantContactCreateRequest struct {
+	Comment    *string `json:"comment,omitempty"`
+	Email      *string `json:"email,omitempty"`
+	Name       string  `json:"name"`
+	Patronymic *string `json:"patronymic,omitempty"`
+	Phone      *string `json:"phone,omitempty"`
+	Surname    *string `json:"surname,omitempty"`
+}
+
+// TenantContactResponse defines model for TenantContactResponse.
+type TenantContactResponse struct {
+	Comment    *string            `json:"comment"`
+	CreatedAt  time.Time          `json:"created_at"`
+	Email      *string            `json:"email"`
+	Id         openapi_types.UUID `json:"id"`
+	Name       string             `json:"name"`
+	OwnerId    openapi_types.UUID `json:"owner_id"`
+	Patronymic *string            `json:"patronymic"`
+	Phone      *string            `json:"phone"`
+	Surname    *string            `json:"surname"`
+	UpdatedAt  time.Time          `json:"updated_at"`
+}
+
+// TenantContactsResponse defines model for TenantContactsResponse.
+type TenantContactsResponse struct {
+	Items []TenantContactResponse `json:"items"`
+}
+
 // VerifyPhoneCodeRequest defines model for VerifyPhoneCodeRequest.
 type VerifyPhoneCodeRequest struct {
 	Code  string `json:"code"`
@@ -188,11 +283,20 @@ type SendPhoneCodeJSONRequestBody = SendPhoneCodeRequest
 // VerifyPhoneCodeJSONRequestBody defines body for VerifyPhoneCode for application/json ContentType.
 type VerifyPhoneCodeJSONRequestBody = VerifyPhoneCodeRequest
 
+// CreateLeaseJSONRequestBody defines body for CreateLease for application/json ContentType.
+type CreateLeaseJSONRequestBody = LeaseCreateRequest
+
+// UpdateLeaseJSONRequestBody defines body for UpdateLease for application/json ContentType.
+type UpdateLeaseJSONRequestBody = LeaseUpdateRequest
+
 // CreatePropertyJSONRequestBody defines body for CreateProperty for application/json ContentType.
 type CreatePropertyJSONRequestBody = PropertyCreateRequest
 
 // UpdatePropertyJSONRequestBody defines body for UpdateProperty for application/json ContentType.
 type UpdatePropertyJSONRequestBody = PropertyUpdateRequest
+
+// CreateTenantContactJSONRequestBody defines body for CreateTenantContact for application/json ContentType.
+type CreateTenantContactJSONRequestBody = TenantContactCreateRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -205,6 +309,21 @@ type ServerInterface interface {
 
 	// (POST /auth/phone/verify)
 	VerifyPhoneCode(w http.ResponseWriter, r *http.Request)
+
+	// (GET /leases)
+	ListLeases(w http.ResponseWriter, r *http.Request)
+
+	// (POST /leases)
+	CreateLease(w http.ResponseWriter, r *http.Request)
+
+	// (GET /leases/{id})
+	GetLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PATCH /leases/{id})
+	UpdateLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /leases/{id}/complete)
+	CompleteLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -226,6 +345,12 @@ type ServerInterface interface {
 
 	// (POST /properties/{id}/unarchive)
 	UnarchiveProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /tenant-contacts)
+	ListTenantContacts(w http.ResponseWriter, r *http.Request)
+
+	// (POST /tenant-contacts)
+	CreateTenantContact(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -244,6 +369,31 @@ func (_ Unimplemented) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 
 // (POST /auth/phone/verify)
 func (_ Unimplemented) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /leases)
+func (_ Unimplemented) ListLeases(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /leases)
+func (_ Unimplemented) CreateLease(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /leases/{id})
+func (_ Unimplemented) GetLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /leases/{id})
+func (_ Unimplemented) UpdateLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /leases/{id}/complete)
+func (_ Unimplemented) CompleteLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -279,6 +429,16 @@ func (_ Unimplemented) ArchiveProperty(w http.ResponseWriter, r *http.Request, i
 
 // (POST /properties/{id}/unarchive)
 func (_ Unimplemented) UnarchiveProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /tenant-contacts)
+func (_ Unimplemented) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /tenant-contacts)
+func (_ Unimplemented) CreateTenantContact(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -330,6 +490,139 @@ func (siw *ServerInterfaceWrapper) VerifyPhoneCode(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.VerifyPhoneCode(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListLeases operation middleware
+func (siw *ServerInterfaceWrapper) ListLeases(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListLeases(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateLease operation middleware
+func (siw *ServerInterfaceWrapper) CreateLease(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateLease(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetLease operation middleware
+func (siw *ServerInterfaceWrapper) GetLease(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetLease(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateLease operation middleware
+func (siw *ServerInterfaceWrapper) UpdateLease(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateLease(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompleteLease operation middleware
+func (siw *ServerInterfaceWrapper) CompleteLease(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteLease(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -523,6 +816,46 @@ func (siw *ServerInterfaceWrapper) UnarchiveProperty(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ListTenantContacts operation middleware
+func (siw *ServerInterfaceWrapper) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTenantContacts(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateTenantContact operation middleware
+func (siw *ServerInterfaceWrapper) CreateTenantContact(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateTenantContact(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -646,6 +979,21 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/auth/phone/verify", wrapper.VerifyPhoneCode)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/leases", wrapper.ListLeases)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/leases", wrapper.CreateLease)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/leases/{id}", wrapper.GetLease)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/leases/{id}", wrapper.UpdateLease)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/leases/{id}/complete", wrapper.CompleteLease)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/me", wrapper.GetMe)
 	})
 	r.Group(func(r chi.Router) {
@@ -666,6 +1014,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/properties/{id}/unarchive", wrapper.UnarchiveProperty)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tenant-contacts", wrapper.ListTenantContacts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tenant-contacts", wrapper.CreateTenantContact)
+	})
 
 	return r
 }
@@ -673,27 +1027,35 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/+RYUW/bNhD+K8Ztb1Mj2U22Rm9pgA3FkiJomr0ERsGIZ4utRKoklVYL9N8HkpIsxZIt",
-	"N7EXoG+SeDzefd/d8U4PEIk0Exy5VhA+gESVCa7Qvrwl9AN+zVFp8xYJrpHbR5JlCYuIZoL7n5Xg5puK",
-	"YkyJefpV4gJC+MVfqfbdqvKvpLhLMIWyLD2gqCLJMqMGQnPaRFbHlR68F/pPkXN6iKPfCz1Z2MNKDz4K",
-	"cUl4UXmuDnH+RyEmKeFF7b8ydtxwkutYSPYvHgSEznlmudpjVF7ihyowzFsmRYZSMxclmBKWmAeeJwm5",
-	"SxBCLXP0QBcZQghKS8aXxiNm/VgImRINIeQ5o9AjxkmKo/RlREvBi5RF48Rjwa3itRUpEruAPE8hvAXx",
-	"jaMEDwhNGYd5jy6Vy5FmGvX4NWfSsHgL1mVnSXXuSr24+4yRDf6apjWwKeoK7XV0udKERwMeusB6R3tX",
-	"lSY6V60lxjUuUZo1zXTSr9N9eNjisF2t1TRHDThdeTocbExj2n3YEu1mb9Hoa6wGIiUp1tmxWjcYV5xL",
-	"JBpbZbFrH6FUorKPKfl+gXypYwhPgqAnhjrp15GfBb0b6ohrS56ceMPM1PFMMiJ1aoqHiTmRmtCuPynw",
-	"IBa5MuREIk1RRowk4IFYLFhkvn4jEmuJJZFkaR4yIr+Y0zxICKc9OfIIWWu7V0dDDdMmpIeDoAXymuuR",
-	"5Yd+IrpTayjR+EqzlQ0biHhq3dqQXg0hkWb3xpaUmFTjNm89IDKK2T3S3pLzEkj1IM/ojvj2FcD+aGiQ",
-	"6tDYOXNTwNxYsReemiNjYf5ys3oN/2vk9MrcaOeCDsPf3L74naSZuVLgtz9OT0+DIJhOZ7OtceP29/H/",
-	"D0q2KLZbEAn6yIDp7PXxye+wQ6/Qa5TnVK/bZvjGKJdMF9fmSnJ2KFSKCX4uxBdmz2Cm/Yrcax1KtdSn",
-	"dq0hGfsbC9e8Mb4Q1kB3P8OZRE7J5Coh3GTl5OzqHXhwj1K59i44mh4FxjWRIScZgxBeHwVHry3rOraW",
-	"+aYD9BOxFLnDTzgcDYq22zT9A1y4da87LMyCY9egtHvKC7FcIp048RgJRWmFr1G/Wvm/al0fo20cPQ6m",
-	"Q/d8Y4C/3rxWuEN4u4b47bycGxnnruXQV+hGjX6XOyEOTTv1VtDi2Vrz3jQquxFnOsxyDPBGx0QZmyyC",
-	"wXYEW8Oe2TI73b7l8aTk+Gqjem9TcxjXR6m7J2QHCsQobINns6I1Q/VMX2e5jpFroxrpU5Jld6p3z6+n",
-	"xYe7KZfYEw9/ob5E+N9IOM+lRK4nuXKzzx5LT/dq6gXjgim9mon2iUrP5NWDzkpqkrAfjp0xAHkD5cIN",
-	"X3W/t6dq0T/pjSoW02c3YgQfxaRqluFg+b97kPsPjJab0r5FakYkSVHb6ndbdUemRVn1RrYn6pLhtYDd",
-	"MqmV8/2n0jji3N8c9eNV2F39mzc1P1LHph7RUbzOkZuuDk7T/vK7Oy4euBnYKUyq+RcOeb8/f2T1FAS/",
-	"+uEx3CCeOYGfsjo0f4NeOIk530rjTS3yUxLZAPSyqLRC8r4mIJcJhBBrnYW+n4iIJLFQOnwTvAmgnJf/",
-	"BQAA//9VHkwlKhwAAA==",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

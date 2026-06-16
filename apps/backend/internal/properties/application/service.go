@@ -32,21 +32,23 @@ type UpdatePropertyCommand struct {
 }
 
 type PropertyService struct {
-	repo    PropertyRepository
-	limiter SubscriptionLimiter
-	db      txBeginner
-	logger  *slog.Logger
+	repo              PropertyRepository
+	occupancyProvider OccupancyProvider
+	limiter           SubscriptionLimiter
+	db                txBeginner
+	logger            *slog.Logger
 }
 
-func NewPropertyService(repo PropertyRepository, limiter SubscriptionLimiter, db txBeginner, logger *slog.Logger) *PropertyService {
+func NewPropertyService(repo PropertyRepository, occupancyProvider OccupancyProvider, limiter SubscriptionLimiter, db txBeginner, logger *slog.Logger) *PropertyService {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &PropertyService{
-		repo:    repo,
-		limiter: limiter,
-		db:      db,
-		logger:  logger,
+		repo:              repo,
+		occupancyProvider: occupancyProvider,
+		limiter:           limiter,
+		db:                db,
+		logger:            logger,
 	}
 }
 
@@ -97,6 +99,7 @@ func (s *PropertyService) CreateProperty(ctx context.Context, ownerID uuid.UUID,
 		return domain.Property{}, fmt.Errorf("commit tx: %w", err)
 	}
 
+	created.Occupancy = domain.OccupancyFree
 	return created, nil
 }
 
@@ -105,6 +108,25 @@ func (s *PropertyService) ListProperties(ctx context.Context, ownerID uuid.UUID)
 	if err != nil {
 		return nil, fmt.Errorf("list properties: %w", err)
 	}
+
+	ids := make([]uuid.UUID, len(properties))
+	for i, p := range properties {
+		ids[i] = p.ID
+	}
+
+	occupied, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, ownerID, ids)
+	if err != nil {
+		return nil, fmt.Errorf("check occupancy: %w", err)
+	}
+
+	for i := range properties {
+		if occupied[properties[i].ID] {
+			properties[i].Occupancy = domain.OccupancyOccupied
+		} else {
+			properties[i].Occupancy = domain.OccupancyFree
+		}
+	}
+
 	return properties, nil
 }
 
@@ -116,6 +138,17 @@ func (s *PropertyService) GetProperty(ctx context.Context, ownerID, id uuid.UUID
 		}
 		return domain.Property{}, fmt.Errorf("get property: %w", err)
 	}
+
+	occupied, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, ownerID, []uuid.UUID{property.ID})
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
+	}
+	if occupied[property.ID] {
+		property.Occupancy = domain.OccupancyOccupied
+	} else {
+		property.Occupancy = domain.OccupancyFree
+	}
+
 	return property, nil
 }
 

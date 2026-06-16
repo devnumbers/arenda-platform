@@ -7,18 +7,21 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
+	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 )
 
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
-	Auth         *identityapp.AuthService
-	Sessions     identityapp.SessionRepository
-	Properties   *propertiesapp.PropertyService
-	CookieSecure bool
-	Logger       *slog.Logger
-	Clock        identityapp.Clock
+	Auth           *identityapp.AuthService
+	Sessions       identityapp.SessionRepository
+	Properties     *propertiesapp.PropertyService
+	Leases         *leasesapp.LeaseService
+	TenantContacts *leasesapp.TenantContactService
+	CookieSecure   bool
+	Logger         *slog.Logger
+	Clock          identityapp.Clock
 }
 
 func securityHeaders(next http.Handler) http.Handler {
@@ -42,14 +45,21 @@ func New(deps Deps) http.Handler {
 
 	authHandlers := NewAuthHandlers(deps.Auth, deps.CookieSecure, deps.Logger)
 	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.Logger)
+	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger)
 
-	handler := struct {
-		*AuthHandlers
-		*PropertyHandlers
-	}{
+	handler := &composedHandler{
 		AuthHandlers:     authHandlers,
 		PropertyHandlers: propertyHandlers,
+		LeaseHandlers:    leaseHandlers,
 	}
 
 	return openapi.HandlerFromMux(handler, r)
+}
+
+// composedHandler groups the existing handler sets. Embedding provides the
+// generated ServerInterface implementation without forwarding methods.
+type composedHandler struct {
+	*AuthHandlers
+	*PropertyHandlers
+	*LeaseHandlers
 }

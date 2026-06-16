@@ -12,6 +12,11 @@ type SubscriptionLimiter interface {
 	ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error)
 }
 
+// OccupancyProvider reports which of the given properties have an open lease.
+type OccupancyProvider interface {
+	OccupiedPropertyIDs(ctx context.Context, ownerID uuid.UUID, propertyIDs []uuid.UUID) (map[uuid.UUID]bool, error)
+}
+
 type PropertyRepository interface {
 	Create(ctx context.Context, ownerID uuid.UUID, property domain.Property) (domain.Property, error)
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Property, error)

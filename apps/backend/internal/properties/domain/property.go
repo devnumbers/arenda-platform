@@ -79,6 +79,13 @@ func (s PropertyStatus) Valid() bool {
 	return false
 }
 
+type PropertyOccupancy string
+
+const (
+	OccupancyFree     PropertyOccupancy = "free"
+	OccupancyOccupied PropertyOccupancy = "occupied"
+)
+
 type Property struct {
 	ID          uuid.UUID
 	OwnerID     uuid.UUID
@@ -87,6 +94,7 @@ type Property struct {
 	Address     string
 	Description string
 	Status      PropertyStatus
+	Occupancy   PropertyOccupancy
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

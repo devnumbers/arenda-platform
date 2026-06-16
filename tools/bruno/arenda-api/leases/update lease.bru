@@ -1,0 +1,40 @@
+meta {
+  name: Update Lease
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/leases/{{leaseId}}
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "end_date": "{{leaseUpdatedEndDate}}",
+    "comment": "{{leaseUpdatedComment}}"
+  }
+}
+
+script:pre-request {
+  // Requires an authenticated session and a leaseId. Run leases/create first.
+  const sessionId = bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have matching id", function() {
+    expect(res.body.id).to.equal(bru.getVar("leaseId"));
+  });
+}

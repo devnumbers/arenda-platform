@@ -12,31 +12,51 @@ import (
 
 type Querier interface {
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
+	CompleteLease(ctx context.Context, arg CompleteLeaseParams) (Lease, error)
 	CountActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) (int64, error)
+	CountOpenLeasesByProperty(ctx context.Context, propertyID pgtype.UUID) (int64, error)
+	CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease, error)
+	CreateOperation(ctx context.Context, arg CreateOperationParams) (Operation, error)
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
+	CreateRecurringOperation(ctx context.Context, arg CreateRecurringOperationParams) (RecurringOperation, error)
 	CreateSMSCode(ctx context.Context, arg CreateSMSCodeParams) (SmsCode, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (UserSubscription, error)
+	CreateTenantContact(ctx context.Context, arg CreateTenantContactParams) (TenantContact, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteExpiredSMSCodes(ctx context.Context, expiresAt pgtype.Timestamptz) error
 	DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error
+	DeleteFutureOperationsByLease(ctx context.Context, arg DeleteFutureOperationsByLeaseParams) error
 	DeleteLoginAttemptByPhone(ctx context.Context, phone string) error
+	DeleteRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) error
 	DeleteSMSCodeByID(ctx context.Context, id pgtype.UUID) error
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteStaleLoginAttempts(ctx context.Context, lastFailureAt pgtype.Timestamptz) error
+	DeleteUneditedFutureOperationsByLease(ctx context.Context, arg DeleteUneditedFutureOperationsByLeaseParams) error
 	GetLatestSMSCodeByPhone(ctx context.Context, arg GetLatestSMSCodeByPhoneParams) (SmsCode, error)
+	GetLeaseByIDAndOwner(ctx context.Context, arg GetLeaseByIDAndOwnerParams) (Lease, error)
 	GetLoginAttemptByPhone(ctx context.Context, phone string) (LoginAttempt, error)
+	GetOpenLeaseByProperty(ctx context.Context, propertyID pgtype.UUID) (Lease, error)
 	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (Property, error)
+	GetRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) ([]RecurringOperation, error)
 	GetSessionByTokenHash(ctx context.Context, arg GetSessionByTokenHashParams) (GetSessionByTokenHashRow, error)
 	GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (UserSubscription, error)
 	GetTariffByID(ctx context.Context, id pgtype.UUID) (Tariff, error)
 	GetTariffByName(ctx context.Context, name string) (Tariff, error)
+	GetTenantContactByIDAndOwner(ctx context.Context, arg GetTenantContactByIDAndOwnerParams) (TenantContact, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone string) (User, error)
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Property, error)
+	ListFutureOperationsByLease(ctx context.Context, arg ListFutureOperationsByLeaseParams) ([]Operation, error)
+	ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Lease, error)
+	ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
+	ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID) ([]Operation, error)
+	ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]TenantContact, error)
 	MarkSMSCodeUsed(ctx context.Context, id pgtype.UUID) error
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
+	UpdateLease(ctx context.Context, arg UpdateLeaseParams) (Lease, error)
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)
+	UpdateRecurringOperation(ctx context.Context, arg UpdateRecurringOperationParams) (RecurringOperation, error)
 	UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error
 }
 

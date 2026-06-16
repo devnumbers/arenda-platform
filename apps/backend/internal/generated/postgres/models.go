@@ -8,12 +8,44 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Lease struct {
+	ID                   pgtype.UUID        `json:"id"`
+	OwnerID              pgtype.UUID        `json:"owner_id"`
+	PropertyID           pgtype.UUID        `json:"property_id"`
+	TenantContactID      pgtype.UUID        `json:"tenant_contact_id"`
+	Status               string             `json:"status"`
+	StartDate            pgtype.Date        `json:"start_date"`
+	EndDate              pgtype.Date        `json:"end_date"`
+	RentAmountKopecks    int64              `json:"rent_amount_kopecks"`
+	DepositAmountKopecks int64              `json:"deposit_amount_kopecks"`
+	PaymentDay           int32              `json:"payment_day"`
+	Comment              pgtype.Text        `json:"comment"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type LoginAttempt struct {
 	ID             pgtype.UUID        `json:"id"`
 	Phone          string             `json:"phone"`
 	Failures       int32              `json:"failures"`
 	FirstFailureAt pgtype.Timestamptz `json:"first_failure_at"`
 	LastFailureAt  pgtype.Timestamptz `json:"last_failure_at"`
+}
+
+type Operation struct {
+	ID                   pgtype.UUID        `json:"id"`
+	OwnerID              pgtype.UUID        `json:"owner_id"`
+	PropertyID           pgtype.UUID        `json:"property_id"`
+	LeaseID              pgtype.UUID        `json:"lease_id"`
+	RecurringOperationID pgtype.UUID        `json:"recurring_operation_id"`
+	Type                 string             `json:"type"`
+	Category             string             `json:"category"`
+	AmountKopecks        int64              `json:"amount_kopecks"`
+	OperationDate        pgtype.Date        `json:"operation_date"`
+	Comment              pgtype.Text        `json:"comment"`
+	IsException          bool               `json:"is_exception"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Property struct {
@@ -26,6 +58,21 @@ type Property struct {
 	Status      string             `json:"status"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RecurringOperation struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	LeaseID       pgtype.UUID        `json:"lease_id"`
+	Type          string             `json:"type"`
+	Category      string             `json:"category"`
+	AmountKopecks int64              `json:"amount_kopecks"`
+	StartDate     pgtype.Date        `json:"start_date"`
+	PaymentDay    int32              `json:"payment_day"`
+	EndDate       pgtype.Date        `json:"end_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Session struct {
@@ -53,6 +100,19 @@ type Tariff struct {
 	MonthlyPrice        pgtype.Numeric     `json:"monthly_price"`
 	YearlyPrice         pgtype.Numeric     `json:"yearly_price"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type TenantContact struct {
+	ID         pgtype.UUID        `json:"id"`
+	OwnerID    pgtype.UUID        `json:"owner_id"`
+	Name       string             `json:"name"`
+	Surname    pgtype.Text        `json:"surname"`
+	Patronymic pgtype.Text        `json:"patronymic"`
+	Phone      pgtype.Text        `json:"phone"`
+	Email      pgtype.Text        `json:"email"`
+	Comment    pgtype.Text        `json:"comment"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {

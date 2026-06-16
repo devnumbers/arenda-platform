@@ -15,6 +15,8 @@ import (
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
 	fakesms "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/sms"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
+	leasespg "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/postgres"
+	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/cleaner"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
@@ -92,18 +94,38 @@ func run(fallback *slog.Logger) error {
 	)
 
 	propertyRepo := propertiespg.NewPropertyRepository(pool)
+	occupancyProvider := propertiespg.NewOccupancyProvider(pool)
 	limiter := billingpg.NewSubscriptionLimiter(pool)
-	propertyService := propertiesapp.NewPropertyService(propertyRepo, limiter, transaction.NewBeginner(pool), logger)
+	propertyService := propertiesapp.NewPropertyService(propertyRepo, occupancyProvider, limiter, transaction.NewBeginner(pool), logger)
+
+	leaseRepo := leasespg.NewLeaseRepository(pool)
+	leasePropertyRepo := leasespg.NewPropertyRepository(pool)
+	tenantContactRepo := leasespg.NewTenantContactRepository(pool)
+	recurringOpRepo := leasespg.NewRecurringOperationRepository(pool)
+	operationRepo := leasespg.NewOperationRepository(pool)
+
+	leaseService := leasesapp.NewLeaseService(
+		leaseRepo,
+		leasePropertyRepo,
+		tenantContactRepo,
+		recurringOpRepo,
+		operationRepo,
+		transaction.NewBeginner(pool),
+		logger,
+	)
+	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, logger)
 
 	dataCleaner := cleaner.New(identitySessionRepo, identitySMSRepo, identityAttemptRepo, 1*time.Hour, 7*24*time.Hour, logger)
 	go dataCleaner.Run(ctx)
 
 	handler := httpapi.New(httpapi.Deps{
-		Auth:         authService,
-		Sessions:     identitySessionRepo,
-		Properties:   propertyService,
-		CookieSecure: cfg.CookieSecure,
-		Logger:       logger,
+		Auth:           authService,
+		Sessions:       identitySessionRepo,
+		Properties:     propertyService,
+		Leases:         leaseService,
+		TenantContacts: tenantContactService,
+		CookieSecure:   cfg.CookieSecure,
+		Logger:         logger,
 	})
 
 	server := &http.Server{
