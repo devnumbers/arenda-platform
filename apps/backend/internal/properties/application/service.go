@@ -7,7 +7,6 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
@@ -34,24 +33,20 @@ type UpdatePropertyCommand struct {
 }
 
 type PropertyService struct {
-	repo              PropertyRepository
+	repo             PropertyRepository
 	occupancyProvider OccupancyProvider
-	limiter           SubscriptionLimiter
-	operationArchiver OperationArchiver
-	recurringOps      RecurringOperationStatusUpdater
-	scheduler         RecurringOperationScheduler
-	db                txBeginner
-	clock             clock.Clock
-	logger            *slog.Logger
+	limiter          SubscriptionLimiter
+	billingLifecycle PropertyBillingLifecycle
+	db               txBeginner
+	clock            clock.Clock
+	logger           *slog.Logger
 }
 
 func NewPropertyService(
 	repo PropertyRepository,
 	occupancyProvider OccupancyProvider,
 	limiter SubscriptionLimiter,
-	operationArchiver OperationArchiver,
-	recurringOps RecurringOperationStatusUpdater,
-	scheduler RecurringOperationScheduler,
+	billingLifecycle PropertyBillingLifecycle,
 	db txBeginner,
 	clock clock.Clock,
 	logger *slog.Logger,
@@ -60,15 +55,13 @@ func NewPropertyService(
 		logger = slog.Default()
 	}
 	return &PropertyService{
-		repo:              repo,
+		repo:             repo,
 		occupancyProvider: occupancyProvider,
-		limiter:           limiter,
-		operationArchiver: operationArchiver,
-		recurringOps:      recurringOps,
-		scheduler:         scheduler,
-		db:                db,
-		clock:             clock,
-		logger:            logger,
+		limiter:          limiter,
+		billingLifecycle: billingLifecycle,
+		db:               db,
+		clock:            clock,
+		logger:           logger,
 	}
 }
 
@@ -129,12 +122,7 @@ func (s *PropertyService) ListProperties(ctx context.Context, ownerID uuid.UUID)
 		return nil, fmt.Errorf("list properties: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(properties))
-	for i, p := range properties {
-		ids[i] = p.ID
-	}
-
-	occupied, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, ownerID, ids)
+	occupied, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, ownerID)
 	if err != nil {
 		return nil, fmt.Errorf("check occupancy: %w", err)
 	}
@@ -159,11 +147,11 @@ func (s *PropertyService) GetProperty(ctx context.Context, ownerID, id uuid.UUID
 		return domain.Property{}, fmt.Errorf("get property: %w", err)
 	}
 
-	occupied, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, ownerID, []uuid.UUID{property.ID})
+	occupied, err := s.occupancyProvider.IsOccupied(ctx, ownerID, property.ID)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
 	}
-	if occupied[property.ID] {
+	if occupied {
 		property.Occupancy = domain.OccupancyOccupied
 	} else {
 		property.Occupancy = domain.OccupancyFree
@@ -210,11 +198,11 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 			return domain.Property{}, &InvalidStatusTransitionError{From: property.Status, To: status}
 		}
 		if status == domain.PropertyStatusMaintenance && property.Status == domain.PropertyStatusActive {
-			occupied, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, ownerID, []uuid.UUID{property.ID})
+			occupied, err := s.occupancyProvider.IsOccupied(ctx, ownerID, property.ID)
 			if err != nil {
 				return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
 			}
-			if occupied[property.ID] {
+			if occupied {
 				return domain.Property{}, ErrPropertyHasOpenLease
 			}
 		}
@@ -260,35 +248,19 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 		return domain.Property{}, ErrAlreadyArchived
 	}
 
-	occupied, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, ownerID, []uuid.UUID{property.ID})
+	occupied, err := s.occupancyProvider.IsOccupied(ctx, ownerID, property.ID)
 	if err != nil {
 		_ = tx.Rollback(ctx)
 		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
 	}
-	if occupied[property.ID] {
+	if occupied {
 		_ = tx.Rollback(ctx)
 		return domain.Property{}, ErrPropertyHasOpenLease
 	}
 
-	txOperationArchiver := s.operationArchiver.WithTx(tx)
-	txRecurringOps := s.recurringOps.WithTx(tx)
-
-	if err := txOperationArchiver.DeleteFutureUneditedOperationsByProperty(ctx, id, timeutil.Date(s.clock.Now())); err != nil {
+	if err := s.billingLifecycle.WithTx(tx).Suspend(ctx, id, timeutil.Date(s.clock.Now())); err != nil {
 		_ = tx.Rollback(ctx)
-		return domain.Property{}, fmt.Errorf("delete future operations: %w", err)
-	}
-
-	recs, err := txRecurringOps.ListByProperty(ctx, ownerID, id)
-	if err != nil {
-		_ = tx.Rollback(ctx)
-		return domain.Property{}, fmt.Errorf("list recurring operations: %w", err)
-	}
-
-	for _, rec := range recs {
-		if err := txRecurringOps.UpdateStatus(ctx, rec.ID, string(leasesdomain.RecurringOperationStatusPaused)); err != nil {
-			_ = tx.Rollback(ctx)
-			return domain.Property{}, fmt.Errorf("pause recurring operation: %w", err)
-		}
+		return domain.Property{}, fmt.Errorf("suspend billing: %w", err)
 	}
 
 	if err := txRepo.Archive(ctx, id, ownerID); err != nil {
@@ -354,22 +326,9 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 		return domain.Property{}, fmt.Errorf("unarchive property: %w", err)
 	}
 
-	txRecurringOps := s.recurringOps.WithTx(tx)
-	txScheduler := s.scheduler.WithTx(tx)
-
-	recs, err := txRecurringOps.ListByProperty(ctx, ownerID, id)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("list recurring operations: %w", err)
-	}
-
-	now := s.clock.Now()
-	for _, rec := range recs {
-		if err := txRecurringOps.UpdateStatus(ctx, rec.ID, string(leasesdomain.RecurringOperationStatusActive)); err != nil {
-			return domain.Property{}, fmt.Errorf("resume recurring operation: %w", err)
-		}
-		if err := txScheduler.GenerateOperations(ctx, tx, rec, timeutil.Date(now)); err != nil {
-			return domain.Property{}, fmt.Errorf("generate operations: %w", err)
-		}
+	if err := s.billingLifecycle.WithTx(tx).Resume(ctx, id, ownerID, timeutil.Date(s.clock.Now())); err != nil {
+		_ = tx.Rollback(ctx)
+		return domain.Property{}, fmt.Errorf("resume billing: %w", err)
 	}
 
 	unarchived, err := txRepo.GetByIDAndOwner(ctx, id, ownerID)

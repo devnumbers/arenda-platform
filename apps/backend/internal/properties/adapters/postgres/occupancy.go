@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 )
 
@@ -23,17 +23,23 @@ func (p *OccupancyProvider) q() *postgres.Queries {
 	return postgres.New(p.db)
 }
 
-// OccupiedPropertyIDs returns a set of property IDs that currently have an open lease.
-func (p *OccupancyProvider) OccupiedPropertyIDs(ctx context.Context, ownerID uuid.UUID, propertyIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
-	rows, err := p.q().ListOpenLeasePropertyIDsByOwner(ctx, pgtype.UUID{Bytes: ownerID, Valid: true})
+// IsOccupied reports whether the given property currently has an open lease.
+func (p *OccupancyProvider) IsOccupied(ctx context.Context, ownerID, propertyID uuid.UUID) (bool, error) {
+	count, err := p.q().CountOpenLeasesByProperty(ctx, pgconv.UUIDToPgtype(propertyID))
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// OccupiedPropertyIDs returns a set of property IDs that currently have an open lease for the owner.
+func (p *OccupancyProvider) OccupiedPropertyIDs(ctx context.Context, ownerID uuid.UUID) (map[uuid.UUID]bool, error) {
+	rows, err := p.q().ListOpenLeasePropertyIDsByOwner(ctx, pgconv.UUIDToPgtype(ownerID))
 	if err != nil {
 		return nil, err
 	}
 
-	occupied := make(map[uuid.UUID]bool, len(propertyIDs))
-	for _, id := range propertyIDs {
-		occupied[id] = false
-	}
+	occupied := make(map[uuid.UUID]bool, len(rows))
 	for _, row := range rows {
 		if row.Valid {
 			occupied[uuid.UUID(row.Bytes)] = true

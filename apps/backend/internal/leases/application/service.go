@@ -44,7 +44,6 @@ type LeaseService struct {
 	tenantContacts TenantContactRepository
 	recurringOps   RecurringOperationRepository
 	operations     OperationRepository
-	rentService    *RentService
 	db             txBeginner
 	clock          clock.Clock
 	logger         *slog.Logger
@@ -69,7 +68,6 @@ func NewLeaseService(
 		tenantContacts: tenantContacts,
 		recurringOps:   recurringOps,
 		operations:     operations,
-		rentService:    NewRentService(operations, recurringOps, clock),
 		db:             db,
 		clock:          clock,
 		logger:         logger,
@@ -306,11 +304,11 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 	}
 
 	if scheduleRebuilt {
-		if err := txRentService.RebuildSchedule(ctx, tx, updated); err != nil {
+		if err := txRentService.RebuildSchedule(ctx, updated); err != nil {
 			return domain.Lease{}, fmt.Errorf("rebuild schedule: %w", err)
 		}
 	} else if scheduleChanged {
-		if err := txRentService.RegenerateFutureOperations(ctx, tx, updated, now); err != nil {
+		if err := txRentService.RegenerateFutureOperations(ctx, updated, now); err != nil {
 			return domain.Lease{}, fmt.Errorf("regenerate future operations: %w", err)
 		}
 	}

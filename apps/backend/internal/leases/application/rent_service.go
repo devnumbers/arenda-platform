@@ -9,7 +9,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 type RentService struct {
@@ -63,16 +62,14 @@ func (r *RentService) GenerateRentOperations(
 
 // RegenerateFutureOperations deletes unedited future rent operations for a lease
 // and recreates them according to the current lease terms.
+// The service instance must be constructed with transaction-bound repositories
+// when this method is called inside a transaction.
 func (r *RentService) RegenerateFutureOperations(
 	ctx context.Context,
-	tx transaction.Tx,
 	lease domain.Lease,
 	fromDate time.Time,
 ) error {
-	txOps := r.ops.WithTx(tx)
-	txRecurring := r.recurringOps.WithTx(tx)
-
-	rec, err := txRecurring.GetByLease(ctx, lease.ID)
+	rec, err := r.recurringOps.GetByLease(ctx, lease.ID)
 	if err != nil {
 		return fmt.Errorf("get recurring operation: %w", err)
 	}
@@ -83,15 +80,15 @@ func (r *RentService) RegenerateFutureOperations(
 	rec.EndDate = lease.EndDate
 	rec.UpdatedAt = r.clock.Now()
 
-	if _, err := txRecurring.Update(ctx, rec); err != nil {
+	if _, err := r.recurringOps.Update(ctx, rec); err != nil {
 		return fmt.Errorf("update recurring operation: %w", err)
 	}
 
-	if err := txOps.DeleteUneditedFutureOperationsByLease(ctx, lease.ID, fromDate); err != nil {
+	if err := r.ops.DeleteUneditedFutureOperationsByLease(ctx, lease.ID, fromDate); err != nil {
 		return fmt.Errorf("delete future operations: %w", err)
 	}
 
-	existingDates, err := r.existingOperationDates(ctx, txOps, lease.ID)
+	existingDates, err := r.existingOperationDates(ctx, lease.ID)
 	if err != nil {
 		return fmt.Errorf("list existing operations: %w", err)
 	}
@@ -103,7 +100,7 @@ func (r *RentService) RegenerateFutureOperations(
 		return nil
 	}
 
-	if err := txOps.BulkCreate(ctx, futureOps); err != nil {
+	if err := r.ops.BulkCreate(ctx, futureOps); err != nil {
 		return fmt.Errorf("bulk create operations: %w", err)
 	}
 
@@ -115,15 +112,13 @@ func (r *RentService) RegenerateFutureOperations(
 // outside the lease date range (including manual exceptions), and regenerates
 // all operations according to the current lease terms. Manual exception
 // operations inside the lease range are preserved.
+// The service instance must be constructed with transaction-bound repositories
+// when this method is called inside a transaction.
 func (r *RentService) RebuildSchedule(
 	ctx context.Context,
-	tx transaction.Tx,
 	lease domain.Lease,
 ) error {
-	txOps := r.ops.WithTx(tx)
-	txRecurring := r.recurringOps.WithTx(tx)
-
-	rec, err := txRecurring.GetByLease(ctx, lease.ID)
+	rec, err := r.recurringOps.GetByLease(ctx, lease.ID)
 	if err != nil {
 		return fmt.Errorf("get recurring operation: %w", err)
 	}
@@ -134,19 +129,19 @@ func (r *RentService) RebuildSchedule(
 	rec.EndDate = lease.EndDate
 	rec.UpdatedAt = r.clock.Now()
 
-	if _, err := txRecurring.Update(ctx, rec); err != nil {
+	if _, err := r.recurringOps.Update(ctx, rec); err != nil {
 		return fmt.Errorf("update recurring operation: %w", err)
 	}
 
-	if err := txOps.DeleteOperationsOutsideLeaseRange(ctx, lease.ID, lease.StartDate, lease.EndDate); err != nil {
+	if err := r.ops.DeleteOperationsOutsideLeaseRange(ctx, lease.ID, lease.StartDate, lease.EndDate); err != nil {
 		return fmt.Errorf("delete out-of-range operations: %w", err)
 	}
 
-	if err := txOps.DeleteUneditedOperationsByLease(ctx, lease.ID); err != nil {
+	if err := r.ops.DeleteUneditedOperationsByLease(ctx, lease.ID); err != nil {
 		return fmt.Errorf("delete unedited operations: %w", err)
 	}
 
-	existingDates, err := r.existingOperationDates(ctx, txOps, lease.ID)
+	existingDates, err := r.existingOperationDates(ctx, lease.ID)
 	if err != nil {
 		return fmt.Errorf("list existing operations: %w", err)
 	}
@@ -157,15 +152,15 @@ func (r *RentService) RebuildSchedule(
 		return nil
 	}
 
-	if err := txOps.BulkCreate(ctx, ops); err != nil {
+	if err := r.ops.BulkCreate(ctx, ops); err != nil {
 		return fmt.Errorf("bulk create operations: %w", err)
 	}
 
 	return nil
 }
 
-func (r *RentService) existingOperationDates(ctx context.Context, ops OperationRepository, leaseID uuid.UUID) (map[time.Time]struct{}, error) {
-	existing, err := ops.ListOperationDatesByLease(ctx, leaseID)
+func (r *RentService) existingOperationDates(ctx context.Context, leaseID uuid.UUID) (map[time.Time]struct{}, error) {
+	existing, err := r.ops.ListOperationDatesByLease(ctx, leaseID)
 	if err != nil {
 		return nil, err
 	}

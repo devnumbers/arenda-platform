@@ -3,11 +3,7 @@
 // port so that application code stays free of driver-specific types.
 package transaction
 
-import (
-	"context"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-)
+import "context"
 
 // Tx is the application-layer view of a database transaction.
 type Tx interface {
@@ -16,16 +12,6 @@ type Tx interface {
 }
 
 // Beginner starts database transactions.
-type Beginner struct {
-	pool *pgxpool.Pool
-}
-
-// NewBeginner creates a transaction beginner from a pgx connection pool.
-func NewBeginner(pool *pgxpool.Pool) *Beginner {
-	return &Beginner{pool: pool}
-}
-
-// Begin starts a new transaction.
-func (b *Beginner) Begin(ctx context.Context) (Tx, error) {
-	return b.pool.Begin(ctx)
+type Beginner interface {
+	Begin(ctx context.Context) (Tx, error)
 }

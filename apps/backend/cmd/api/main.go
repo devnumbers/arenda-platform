@@ -20,11 +20,11 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/cleaner"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
+	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 	"golang.org/x/time/rate"
 )
 
@@ -93,7 +93,7 @@ func run(fallback *slog.Logger) error {
 		smsSender,
 		realClock{},
 		onboardingService,
-		transaction.NewBeginner(pool),
+		platformpostgres.NewBeginner(pool),
 		logger,
 	)
 
@@ -102,17 +102,13 @@ func run(fallback *slog.Logger) error {
 	limiter := billingpg.NewSubscriptionLimiter(pool)
 	operationRepo := leasespg.NewOperationRepository(pool)
 	recurringOpRepo := leasespg.NewRecurringOperationRepository(pool)
-	propertyOperationArchiver := leasespg.NewPropertyOperationArchiver(operationRepo)
-	propertyRecurringOpUpdater := leasespg.NewPropertyRecurringOperationStatusUpdater(recurringOpRepo)
-	propertyRecurringOpScheduler := leasesapp.NewPropertyRecurringOperationScheduler(operationRepo, realClock{})
+	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, realClock{})
 	propertyService := propertiesapp.NewPropertyService(
 		propertyRepo,
 		occupancyProvider,
 		limiter,
-		propertyOperationArchiver,
-		propertyRecurringOpUpdater,
-		propertyRecurringOpScheduler,
-		transaction.NewBeginner(pool),
+		propertyBillingLifecycle,
+		platformpostgres.NewBeginner(pool),
 		realClock{},
 		logger,
 	)
@@ -127,7 +123,7 @@ func run(fallback *slog.Logger) error {
 		tenantContactRepo,
 		recurringOpRepo,
 		operationRepo,
-		transaction.NewBeginner(pool),
+		platformpostgres.NewBeginner(pool),
 		realClock{},
 		logger,
 	)
@@ -137,7 +133,7 @@ func run(fallback *slog.Logger) error {
 		recurringOpRepo,
 		operationRepo,
 		leasePropertyRepo,
-		transaction.NewBeginner(pool),
+		platformpostgres.NewBeginner(pool),
 		realClock{},
 		logger,
 	)

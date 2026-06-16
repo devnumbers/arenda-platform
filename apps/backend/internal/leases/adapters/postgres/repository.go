@@ -411,6 +411,17 @@ func (r *RecurringOperationRepository) UpdateStatusByID(ctx context.Context, id 
 	return recurringOperationFromRow(row), nil
 }
 
+// UpdateStatusByPropertyID updates the status of all recurring operations for
+// the given property.
+func (r *RecurringOperationRepository) UpdateStatusByPropertyID(ctx context.Context, propertyID uuid.UUID, status string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE recurring_operations
+		SET status = $1
+		WHERE property_id = $2
+	`, status, pgconv.UUIDToPgtype(propertyID))
+	return err
+}
+
 func (r *RecurringOperationRepository) DeleteByLease(ctx context.Context, leaseID uuid.UUID) error {
 	return r.q().DeleteRecurringOperationByLease(ctx, pgconv.UUIDToPgtype(leaseID))
 }
