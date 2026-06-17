@@ -59,6 +59,7 @@ WHERE owner_id = $1
 
 -- name: ListOpenLeasesWithPastEndDate :many
 SELECT * FROM leases
-WHERE status IN ('awaiting_start', 'active', 'requires_action')
+WHERE status IN ('awaiting_start', 'active')
   AND end_date IS NOT NULL
-  AND end_date < CURRENT_DATE;
+  AND end_date < sqlc.arg('as_of')::date
+FOR UPDATE SKIP LOCKED;

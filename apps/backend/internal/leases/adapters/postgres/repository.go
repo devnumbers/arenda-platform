@@ -146,8 +146,8 @@ func (r *LeaseRepository) GetOpenLeaseByProperty(ctx context.Context, propertyID
 	return leaseFromRow(row)
 }
 
-func (r *LeaseRepository) ListOpenLeasesWithPastEndDate(ctx context.Context) ([]domain.Lease, error) {
-	rows, err := r.q().ListOpenLeasesWithPastEndDate(ctx)
+func (r *LeaseRepository) ListOpenLeasesWithPastEndDate(ctx context.Context, asOf time.Time) ([]domain.Lease, error) {
+	rows, err := r.q().ListOpenLeasesWithPastEndDate(ctx, pgconv.DateToPgtype(asOf))
 	if err != nil {
 		return nil, err
 	}

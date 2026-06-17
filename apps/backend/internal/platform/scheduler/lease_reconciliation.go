@@ -65,7 +65,8 @@ func (w *LeaseReconciliationWorker) Run(ctx context.Context) {
 }
 
 func (w *LeaseReconciliationWorker) tick(ctx context.Context) error {
-	leases, err := w.leases.ListOpenLeasesWithPastEndDate(ctx)
+	asOf := w.clock.Now()
+	leases, err := w.leases.ListOpenLeasesWithPastEndDate(ctx, asOf)
 	if err != nil {
 		return fmt.Errorf("list open leases with past end date: %w", err)
 	}
@@ -96,13 +97,13 @@ func (w *LeaseReconciliationWorker) reconcile(ctx context.Context, lease leasedo
 		}
 	}
 
-	if err := txScheduler.ScheduleForLease(ctx, notificationsapp.LeaseInfo{
+	if err := txScheduler.EnsureRequiresActionReminder(ctx, notificationsapp.LeaseInfo{
 		ID:         lease.ID,
 		OwnerID:    lease.OwnerID,
 		PropertyID: lease.PropertyID,
 		EndDate:    lease.EndDate,
 	}); err != nil {
-		return fmt.Errorf("schedule lease reminder: %w", err)
+		return fmt.Errorf("ensure requires_action reminder: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

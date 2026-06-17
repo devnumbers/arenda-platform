@@ -23,7 +23,8 @@ WHERE status = 'pending'
   AND scheduled_at <= $1
   AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
 ORDER BY scheduled_at ASC
-LIMIT $2;
+LIMIT $2
+FOR UPDATE SKIP LOCKED;
 
 -- name: UpdateReminder :execrows
 UPDATE reminders

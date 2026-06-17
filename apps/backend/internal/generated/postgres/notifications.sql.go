@@ -212,6 +212,7 @@ WHERE status = 'pending'
   AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
 ORDER BY scheduled_at ASC
 LIMIT $2
+FOR UPDATE SKIP LOCKED
 `
 
 type ListDueRemindersParams struct {

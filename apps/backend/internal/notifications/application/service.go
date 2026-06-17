@@ -183,14 +183,17 @@ func buildLeaseReminders(lease LeaseInfo, now time.Time) ([]domain.Reminder, err
 		return nil, fmt.Errorf("create lease expiring reminder: %w", err)
 	}
 
-	requiresActionTitle := "Аренда требует действия"
-	requiresActionBody := "Срок аренды закончился. Подтвердите продление или завершение аренды."
-	requiresActionDate := endDate.AddDate(0, 0, 1)
-	requiresAction, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, time.Time{}, requiresActionDate, requiresActionTitle, requiresActionBody, domain.EventLeaseRequiresAction, now)
+	requiresAction, err := buildLeaseRequiresActionReminder(lease, now, endDate.AddDate(0, 0, 1))
 	if err != nil {
 		return nil, fmt.Errorf("create lease requires_action reminder: %w", err)
 	}
 	return []domain.Reminder{expiring, requiresAction}, nil
+}
+
+func buildLeaseRequiresActionReminder(lease LeaseInfo, now, reminderDate time.Time) (domain.Reminder, error) {
+	requiresActionTitle := "Аренда требует действия"
+	requiresActionBody := "Срок аренды закончился. Подтвердите продление или завершение аренды."
+	return domain.NewLeaseReminder(lease.OwnerID, lease.ID, lease.PropertyID, time.Time{}, reminderDate, requiresActionTitle, requiresActionBody, domain.EventLeaseRequiresAction, now)
 }
 
 // scheduler implements ReminderScheduler and runs inside transactions.
@@ -261,6 +264,34 @@ func (s *scheduler) ScheduleForLease(ctx context.Context, lease LeaseInfo) error
 		if err := s.repo.Save(ctx, r); err != nil {
 			return fmt.Errorf("save lease %s reminder: %w", r.EventType, err)
 		}
+	}
+	return nil
+}
+
+// EnsureRequiresActionReminder cancels any pending lease_requires_action reminder
+// and creates a fresh one. It is used by the lease reconciliation worker for leases
+// whose end date has already passed, where a lease_expiring reminder is no longer
+// applicable.
+func (s *scheduler) EnsureRequiresActionReminder(ctx context.Context, lease LeaseInfo) error {
+	if lease.EndDate == nil || lease.EndDate.IsZero() {
+		return nil
+	}
+	if err := s.repo.CancelByTarget(ctx, lease.OwnerID, domain.TargetLease, lease.ID, domain.EventLeaseRequiresAction); err != nil {
+		return err
+	}
+
+	now := s.clock.Now()
+	reminderDate := lease.EndDate.AddDate(0, 0, 1)
+	if reminderDate.Before(now) {
+		reminderDate = now
+	}
+
+	r, err := buildLeaseRequiresActionReminder(lease, now, reminderDate)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.Save(ctx, r); err != nil {
+		return fmt.Errorf("save lease requires_action reminder: %w", err)
 	}
 	return nil
 }

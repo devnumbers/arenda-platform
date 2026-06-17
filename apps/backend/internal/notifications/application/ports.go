@@ -82,6 +82,7 @@ type ReminderScheduler interface {
 	ScheduleForOperation(ctx context.Context, op OperationInfo, reminderDate time.Time) error
 	ScheduleForRecurringOperation(ctx context.Context, rec RecurringOperationInfo, baseReminderDate time.Time, ops []OperationInfo) error
 	ScheduleForLease(ctx context.Context, lease LeaseInfo) error
+	EnsureRequiresActionReminder(ctx context.Context, lease LeaseInfo) error
 	CancelByOperation(ctx context.Context, ownerID, opID uuid.UUID) error
 	CancelByRecurringOperation(ctx context.Context, ownerID, recID uuid.UUID) error
 	CancelByLease(ctx context.Context, ownerID, leaseID uuid.UUID) error

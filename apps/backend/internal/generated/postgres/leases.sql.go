@@ -244,13 +244,14 @@ func (q *Queries) ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID p
 
 const listOpenLeasesWithPastEndDate = `-- name: ListOpenLeasesWithPastEndDate :many
 SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
-WHERE status IN ('awaiting_start', 'active', 'requires_action')
+WHERE status IN ('awaiting_start', 'active')
   AND end_date IS NOT NULL
-  AND end_date < CURRENT_DATE
+  AND end_date < $1::date
+FOR UPDATE SKIP LOCKED
 `
 
-func (q *Queries) ListOpenLeasesWithPastEndDate(ctx context.Context) ([]Lease, error) {
-	rows, err := q.db.Query(ctx, listOpenLeasesWithPastEndDate)
+func (q *Queries) ListOpenLeasesWithPastEndDate(ctx context.Context, asOf pgtype.Date) ([]Lease, error) {
+	rows, err := q.db.Query(ctx, listOpenLeasesWithPastEndDate, asOf)
 	if err != nil {
 		return nil, err
 	}

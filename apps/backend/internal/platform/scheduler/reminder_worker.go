@@ -2,12 +2,14 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // Backoff computes the next retry delay for a failed dispatch attempt.
@@ -20,6 +22,7 @@ type ReminderWorker struct {
 	repo        application.ReminderRepository
 	resolver    application.ContactResolver
 	notifier    application.Notifier
+	beginner    transaction.Beginner
 	clock       clock.Clock
 	backoff     Backoff
 	maxAttempts int
@@ -33,6 +36,7 @@ func NewReminderWorker(
 	repo application.ReminderRepository,
 	resolver application.ContactResolver,
 	notifier application.Notifier,
+	beginner transaction.Beginner,
 	clock clock.Clock,
 	backoff Backoff,
 	maxAttempts int,
@@ -47,6 +51,7 @@ func NewReminderWorker(
 		repo:        repo,
 		resolver:    resolver,
 		notifier:    notifier,
+		beginner:    beginner,
 		clock:       clock,
 		backoff:     backoff,
 		maxAttempts: maxAttempts,
@@ -75,22 +80,40 @@ func (w *ReminderWorker) Run(ctx context.Context) {
 
 func (w *ReminderWorker) tick(ctx context.Context) error {
 	now := w.clock.Now()
-	reminders, err := w.repo.ListDue(ctx, now, w.batchSize)
+
+	// Process each batch inside a transaction. The SMS send happens while the
+	// transaction holds FOR UPDATE SKIP LOCKED row locks. This serializes dispatch
+	// within a worker and prevents duplicate sends across instances; for MVP the
+	// external SMS call duration is acceptable inside the transaction.
+	tx, err := w.beginner.Begin(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := w.repo.WithTx(tx)
+
+	reminders, err := txRepo.ListDue(ctx, now, w.batchSize)
+	if err != nil {
+		return fmt.Errorf("list due reminders: %w", err)
 	}
 
 	for _, r := range reminders {
-		if err := w.dispatch(ctx, r, now); err != nil {
+		if err := w.dispatch(ctx, txRepo, r, now); err != nil {
 			w.logger.ErrorContext(ctx, "dispatch reminder failed", "reminder_id", r.ID, "error", err)
 		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 	return nil
 }
 
-func (w *ReminderWorker) dispatch(ctx context.Context, r domain.Reminder, now time.Time) error {
+func (w *ReminderWorker) dispatch(ctx context.Context, repo application.ReminderRepository, r domain.Reminder, now time.Time) error {
 	if _, err := w.resolver.Resolve(ctx, r.OwnerID); err != nil {
-		return w.markFailure(ctx, r, now)
+		w.logger.ErrorContext(ctx, "resolve contact failed", "reminder_id", r.ID, "error", err)
+		return w.markFailure(ctx, repo, r, now)
 	}
 
 	if err := w.notifier.Notify(ctx, application.Notification{
@@ -100,16 +123,17 @@ func (w *ReminderWorker) dispatch(ctx context.Context, r domain.Reminder, now ti
 		Title:       r.MessageTitle,
 		Body:        r.MessageBody,
 	}); err != nil {
-		return w.markFailure(ctx, r, now)
+		w.logger.ErrorContext(ctx, "notify reminder failed", "reminder_id", r.ID, "error", err)
+		return w.markFailure(ctx, repo, r, now)
 	}
 
-	if err := w.repo.MarkSent(ctx, r.ID, now); err != nil {
-		return err
+	if err := repo.MarkSent(ctx, r.ID, now); err != nil {
+		return fmt.Errorf("mark reminder sent: %w", err)
 	}
 	return nil
 }
 
-func (w *ReminderWorker) markFailure(ctx context.Context, r domain.Reminder, now time.Time) error {
+func (w *ReminderWorker) markFailure(ctx context.Context, repo application.ReminderRepository, r domain.Reminder, now time.Time) error {
 	attempts := r.FailedAttempts + 1
 	terminal := attempts >= w.maxAttempts
 
@@ -119,9 +143,8 @@ func (w *ReminderWorker) markFailure(ctx context.Context, r domain.Reminder, now
 		next = &n
 	}
 
-	if err := w.repo.MarkFailed(ctx, r.ID, next, terminal); err != nil {
-		w.logger.ErrorContext(ctx, "mark reminder failed", "reminder_id", r.ID, "error", err)
-		return err
+	if err := repo.MarkFailed(ctx, r.ID, next, terminal); err != nil {
+		return fmt.Errorf("mark reminder failed: %w", err)
 	}
 	return nil
 }
