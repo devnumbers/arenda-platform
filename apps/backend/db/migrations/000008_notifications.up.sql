@@ -24,9 +24,12 @@ CREATE TABLE reminders (
         (target_type = 'operation' AND operation_id IS NOT NULL AND lease_id IS NULL) OR
         (target_type = 'recurring_operation' AND recurring_operation_id IS NOT NULL AND operation_id IS NULL AND lease_id IS NULL) OR
         (target_type = 'lease' AND lease_id IS NOT NULL AND operation_id IS NULL AND recurring_operation_id IS NULL)
-    ),
-    CONSTRAINT one_reminder_per_target_event UNIQUE (owner_id, target_type, operation_id, recurring_operation_id, lease_id, event_type)
+    )
 );
+
+CREATE UNIQUE INDEX idx_reminders_active_unique
+ON reminders (owner_id, target_type, operation_id, recurring_operation_id, lease_id, event_type)
+WHERE status IN ('pending', 'sending');
 
 CREATE INDEX idx_reminders_due ON reminders (scheduled_at, next_attempt_at) WHERE status = 'pending';
 CREATE INDEX idx_reminders_owner ON reminders (owner_id, status, scheduled_at);
