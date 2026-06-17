@@ -11,6 +11,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cancelByIDAndOwner = `-- name: CancelByIDAndOwner :execrows
+UPDATE reminders
+SET status = 'cancelled', updated_at = NOW()
+WHERE id = $1 AND owner_id = $2 AND status IN ('pending', 'sending')
+`
+
+type CancelByIDAndOwnerParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) CancelByIDAndOwner(ctx context.Context, arg CancelByIDAndOwnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelByIDAndOwner, arg.ID, arg.OwnerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const cancelReminderByTarget = `-- name: CancelReminderByTarget :execrows
 UPDATE reminders
 SET status = 'cancelled'
@@ -477,17 +496,17 @@ func (q *Queries) MarkReminderSending(ctx context.Context, id pgtype.UUID) (Remi
 
 const markReminderSent = `-- name: MarkReminderSent :execrows
 UPDATE reminders
-SET status = 'sent', sent_at = $2
-WHERE id = $1 AND status = 'sending'
+SET status = 'sent', sent_at = $1, updated_at = NOW()
+WHERE id = $2 AND status IN ('pending', 'sending')
 `
 
 type MarkReminderSentParams struct {
-	ID     pgtype.UUID        `json:"id"`
 	SentAt pgtype.Timestamptz `json:"sent_at"`
+	ID     pgtype.UUID        `json:"id"`
 }
 
 func (q *Queries) MarkReminderSent(ctx context.Context, arg MarkReminderSentParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markReminderSent, arg.ID, arg.SentAt)
+	result, err := q.db.Exec(ctx, markReminderSent, arg.SentAt, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -515,6 +534,25 @@ func (q *Queries) MarkSendingReminderPending(ctx context.Context, arg MarkSendin
 	return result.RowsAffected(), nil
 }
 
+const markSendingReminderSent = `-- name: MarkSendingReminderSent :execrows
+UPDATE reminders
+SET status = 'sent', sent_at = $2
+WHERE id = $1 AND status = 'sending'
+`
+
+type MarkSendingReminderSentParams struct {
+	ID     pgtype.UUID        `json:"id"`
+	SentAt pgtype.Timestamptz `json:"sent_at"`
+}
+
+func (q *Queries) MarkSendingReminderSent(ctx context.Context, arg MarkSendingReminderSentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markSendingReminderSent, arg.ID, arg.SentAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const resetReminderSending = `-- name: ResetReminderSending :execrows
 UPDATE reminders
 SET status = 'pending'
@@ -523,6 +561,59 @@ WHERE id = $1 AND status = 'sending'
 
 func (q *Queries) ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, resetReminderSending, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const saveOrReplaceOperationReminder = `-- name: SaveOrReplaceOperationReminder :execrows
+INSERT INTO reminders (
+    id, owner_id, target_type, operation_id, recurring_operation_id, lease_id,
+    property_id, event_type, status, scheduled_at, message_title, message_body,
+    created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+ON CONFLICT (owner_id, target_type, operation_id, recurring_operation_id, lease_id, event_type)
+WHERE status IN ('pending', 'sending')
+DO UPDATE SET
+    scheduled_at = EXCLUDED.scheduled_at,
+    message_title = EXCLUDED.message_title,
+    message_body = EXCLUDED.message_body,
+    updated_at = NOW()
+`
+
+type SaveOrReplaceOperationReminderParams struct {
+	ID                   pgtype.UUID            `json:"id"`
+	OwnerID              pgtype.UUID            `json:"owner_id"`
+	TargetType           NotificationTargetType `json:"target_type"`
+	OperationID          pgtype.UUID            `json:"operation_id"`
+	RecurringOperationID pgtype.UUID            `json:"recurring_operation_id"`
+	LeaseID              pgtype.UUID            `json:"lease_id"`
+	PropertyID           pgtype.UUID            `json:"property_id"`
+	EventType            NotificationEventType  `json:"event_type"`
+	Status               NotificationStatus     `json:"status"`
+	ScheduledAt          pgtype.Timestamptz     `json:"scheduled_at"`
+	MessageTitle         string                 `json:"message_title"`
+	MessageBody          string                 `json:"message_body"`
+	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
+}
+
+func (q *Queries) SaveOrReplaceOperationReminder(ctx context.Context, arg SaveOrReplaceOperationReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, saveOrReplaceOperationReminder,
+		arg.ID,
+		arg.OwnerID,
+		arg.TargetType,
+		arg.OperationID,
+		arg.RecurringOperationID,
+		arg.LeaseID,
+		arg.PropertyID,
+		arg.EventType,
+		arg.Status,
+		arg.ScheduledAt,
+		arg.MessageTitle,
+		arg.MessageBody,
+		arg.CreatedAt,
+	)
 	if err != nil {
 		return 0, err
 	}

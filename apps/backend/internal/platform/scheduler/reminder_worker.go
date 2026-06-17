@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
@@ -169,43 +171,50 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 		return w.finalizeFailure(dispatchCtx, r, now)
 	}
 
-	providerResponse, err := w.notifier.Notify(dispatchCtx, application.Notification{
+	// Insert the audit row before contacting the provider. The audit row is the
+	// source of truth for at-most-once delivery.
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return fmt.Errorf("generate sent sms id: %w", err)
+	}
+	err = w.repo.SaveSentSMSReminder(dispatchCtx, id, r.ID, r.OwnerID, contact.Address, r.MessageTitle+" "+r.MessageBody, "", now)
+	if errors.Is(err, application.ErrDuplicateSMSReminder) || isUniqueViolation(err) {
+		w.logger.InfoContext(dispatchCtx, "reminder already sent, skipping notification", "reminder_id", r.ID, "event_type", r.EventType)
+		return w.finalizeAlreadySent(dispatchCtx, r, now)
+	}
+	if err != nil {
+		return w.finalizeFailure(dispatchCtx, r, now)
+	}
+
+	if _, err := w.notifier.Notify(dispatchCtx, application.Notification{
 		RecipientID: r.OwnerID,
 		ReminderID:  r.ID,
 		EventType:   r.EventType,
 		Title:       r.MessageTitle,
 		Body:        r.MessageBody,
 		Contact:     &contact,
-	})
-	if err != nil {
+	}); err != nil {
 		w.logger.ErrorContext(dispatchCtx, "notify reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
 		return w.finalizeFailure(dispatchCtx, r, now)
 	}
 
-	return w.finalizeSuccess(dispatchCtx, r, now, contact.Address, providerResponse)
+	return w.finalizeSuccess(dispatchCtx, r, now)
 }
 
-func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time, phone, providerResponse string) error {
-	tx2, err := w.db.Begin(ctx)
+func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time) error {
+	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin finalize transaction: %w", err)
 	}
-	defer func() { _ = tx2.Rollback(ctx) }()
+	defer func() { _ = tx.Rollback(ctx) }()
 
-	txRepo := w.repo.WithTx(tx2)
+	txRepo := w.repo.WithTx(tx)
 
-	id, err := uuid.NewRandom()
-	if err != nil {
-		return fmt.Errorf("generate sent sms id: %w", err)
-	}
-	if err := txRepo.SaveSentSMSReminder(ctx, id, r.ID, r.OwnerID, phone, r.MessageBody, providerResponse, now); err != nil {
-		return fmt.Errorf("save sent sms reminder: %w", err)
-	}
 	if err := txRepo.MarkSent(ctx, r.ID, now); err != nil {
 		return fmt.Errorf("mark reminder sent: %w", err)
 	}
 
-	if err := tx2.Commit(ctx); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit finalize transaction: %w", err)
 	}
 	return nil
@@ -213,18 +222,18 @@ func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder,
 
 // finalizeAlreadySent marks a reminder as sent when the audit row already exists.
 func (w *ReminderWorker) finalizeAlreadySent(ctx context.Context, r domain.Reminder, now time.Time) error {
-	tx2, err := w.db.Begin(ctx)
+	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin finalize transaction: %w", err)
 	}
-	defer func() { _ = tx2.Rollback(ctx) }()
+	defer func() { _ = tx.Rollback(ctx) }()
 
-	txRepo := w.repo.WithTx(tx2)
-	if err := txRepo.MarkSent(ctx, r.ID, now); err != nil {
+	txRepo := w.repo.WithTx(tx)
+	if err := txRepo.MarkReminderSent(ctx, r.ID, now); err != nil {
 		return fmt.Errorf("mark reminder sent: %w", err)
 	}
 
-	if err := tx2.Commit(ctx); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit finalize transaction: %w", err)
 	}
 	return nil
@@ -316,4 +325,12 @@ func (w *ReminderWorker) recoverStaleSending(ctx context.Context, now time.Time)
 		}
 	}
 	return nil
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == pgerrcode.UniqueViolation
+	}
+	return false
 }

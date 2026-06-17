@@ -33,7 +33,7 @@ func (s *ReminderService) WithTx(tx transaction.Tx) *ReminderService {
 
 // CreateForOperation creates a pending reminder for a future operation. It is
 // idempotent: any existing pending/sending reminder for the same operation and
-// event is cancelled before saving the new one.
+// event is atomically replaced by the new one.
 func (s *ReminderService) CreateForOperation(ctx context.Context, op OperationInfo, reminderDate time.Time) (domain.Reminder, error) {
 	r, err := buildOperationReminder(op, reminderDate, s.clock.Now())
 	if err != nil {
@@ -42,11 +42,8 @@ func (s *ReminderService) CreateForOperation(ctx context.Context, op OperationIn
 		}
 		return domain.Reminder{}, err
 	}
-	if err := s.repo.CancelByTarget(ctx, op.OwnerID, domain.TargetOperation, op.ID, domain.EventOperationDue); err != nil {
-		return domain.Reminder{}, fmt.Errorf("cancel existing operation reminder: %w", err)
-	}
-	if err := s.repo.Save(ctx, r); err != nil {
-		return domain.Reminder{}, fmt.Errorf("save reminder: %w", err)
+	if err := s.repo.SaveOrReplaceOperationReminder(ctx, r); err != nil {
+		return domain.Reminder{}, fmt.Errorf("save operation reminder: %w", err)
 	}
 	return r, nil
 }
@@ -125,39 +122,20 @@ func (s *ReminderService) Reschedule(ctx context.Context, ownerID, id uuid.UUID,
 
 // Cancel cancels a pending or sending reminder.
 func (s *ReminderService) Cancel(ctx context.Context, ownerID, id uuid.UUID) error {
-	r, err := s.GetByID(ctx, ownerID, id)
+	cancelled, err := s.repo.CancelByIDAndOwner(ctx, ownerID, id)
 	if err != nil {
-		return err
-	}
-	if r.Status != domain.ReminderPending && r.Status != domain.ReminderSending {
-		return ErrReminderNotPending
-	}
-	targetID, err := targetIDFor(r)
-	if err != nil {
-		return err
-	}
-
-	if err := s.repo.CancelByTarget(ctx, ownerID, r.TargetType, targetID, r.EventType); err != nil {
 		return fmt.Errorf("cancel reminder: %w", err)
+	}
+	if !cancelled {
+		return ErrNotFound
 	}
 	return nil
 }
 
-func targetIDFor(r domain.Reminder) (uuid.UUID, error) {
-	if r.OperationID != nil {
-		return *r.OperationID, nil
-	}
-	if r.RecurringOperationID != nil {
-		return *r.RecurringOperationID, nil
-	}
-	if r.LeaseID != nil {
-		return *r.LeaseID, nil
-	}
-	return uuid.UUID{}, errors.New("reminder has no target id")
-}
-
 func buildOperationReminder(op OperationInfo, reminderDate time.Time, now time.Time) (domain.Reminder, error) {
 	title := "Напоминание об операции"
+	// OperationInfo.AmountKopecks is guaranteed to be non-negative by the
+	// operations bounded context; integer division and modulo behave as expected.
 	rubles := op.AmountKopecks / 100
 	kopecks := op.AmountKopecks % 100
 	amountStr := fmt.Sprintf("%d.%02d", rubles, kopecks)

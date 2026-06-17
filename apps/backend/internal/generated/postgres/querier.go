@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
+	CancelByIDAndOwner(ctx context.Context, arg CancelByIDAndOwnerParams) (int64, error)
 	CancelReminderByTarget(ctx context.Context, arg CancelReminderByTargetParams) (int64, error)
 	CancelRemindersByRecurringOperationID(ctx context.Context, arg CancelRemindersByRecurringOperationIDParams) (int64, error)
 	CompleteLease(ctx context.Context, arg CompleteLeaseParams) (Lease, error)
@@ -85,7 +86,9 @@ type Querier interface {
 	MarkReminderSent(ctx context.Context, arg MarkReminderSentParams) (int64, error)
 	MarkSMSCodeUsed(ctx context.Context, id pgtype.UUID) error
 	MarkSendingReminderPending(ctx context.Context, arg MarkSendingReminderPendingParams) (int64, error)
+	MarkSendingReminderSent(ctx context.Context, arg MarkSendingReminderSentParams) (int64, error)
 	ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error)
+	SaveOrReplaceOperationReminder(ctx context.Context, arg SaveOrReplaceOperationReminderParams) (int64, error)
 	SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperationParams) (Operation, error)
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
 	UpdateLease(ctx context.Context, arg UpdateLeaseParams) (Lease, error)

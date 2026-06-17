@@ -3,8 +3,9 @@ package application
 import "errors"
 
 var (
-	ErrNotFound            = errors.New("reminder not found")
-	ErrReminderNotPending  = errors.New("reminder is not pending")
-	ErrInvalidReminderDate = errors.New("invalid reminder date")
-	ErrConcurrentUpdate    = errors.New("reminder changed concurrently")
+	ErrNotFound             = errors.New("reminder not found")
+	ErrReminderNotPending   = errors.New("reminder is not pending")
+	ErrInvalidReminderDate  = errors.New("invalid reminder date")
+	ErrConcurrentUpdate     = errors.New("reminder changed concurrently")
+	ErrDuplicateSMSReminder = errors.New("sms reminder already sent")
 )

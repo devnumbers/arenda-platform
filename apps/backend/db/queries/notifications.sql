@@ -48,10 +48,34 @@ SET status = 'sending'
 WHERE id = $1 AND status = 'pending'
 RETURNING *;
 
--- name: MarkReminderSent :execrows
+-- name: SaveOrReplaceOperationReminder :execrows
+INSERT INTO reminders (
+    id, owner_id, target_type, operation_id, recurring_operation_id, lease_id,
+    property_id, event_type, status, scheduled_at, message_title, message_body,
+    created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+ON CONFLICT (owner_id, target_type, operation_id, recurring_operation_id, lease_id, event_type)
+WHERE status IN ('pending', 'sending')
+DO UPDATE SET
+    scheduled_at = EXCLUDED.scheduled_at,
+    message_title = EXCLUDED.message_title,
+    message_body = EXCLUDED.message_body,
+    updated_at = NOW();
+
+-- name: CancelByIDAndOwner :execrows
+UPDATE reminders
+SET status = 'cancelled', updated_at = NOW()
+WHERE id = $1 AND owner_id = $2 AND status IN ('pending', 'sending');
+
+-- name: MarkSendingReminderSent :execrows
 UPDATE reminders
 SET status = 'sent', sent_at = $2
 WHERE id = $1 AND status = 'sending';
+
+-- name: MarkReminderSent :execrows
+UPDATE reminders
+SET status = 'sent', sent_at = $1, updated_at = NOW()
+WHERE id = $2 AND status IN ('pending', 'sending');
 
 -- name: MarkReminderFailed :execrows
 UPDATE reminders
