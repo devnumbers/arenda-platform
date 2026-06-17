@@ -533,7 +533,7 @@ func (s *RecurringOperationService) CreateReminder(
 
 	now := s.clock.Now()
 	if err := notificationsdomain.ValidateReminderDate(reminderDate, now); err != nil {
-		return nil, newInvalidInputError(err.Error())
+		return nil, newInvalidInputError("reminder date must be today or in the future")
 	}
 
 	ops, err := s.operations.ListByRecurringOperation(ctx, recurringOperationID)
@@ -803,7 +803,7 @@ func scheduleRemindersForOperations(
 
 	if err := scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, ToOperationInfoSlice(filtered)); err != nil {
 		if errors.Is(err, notificationsdomain.ErrInvalidReminderDate) {
-			return newInvalidInputError(err.Error())
+			return newInvalidInputError("reminder date must be today or in the future")
 		}
 		return err
 	}
