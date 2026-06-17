@@ -25,15 +25,16 @@ type Backoff interface {
 
 // ReminderWorker polls for due reminders and dispatches them through a Notifier.
 type ReminderWorker struct {
-	repo        application.ReminderRepository
-	notifier    application.Notifier
-	resolver    application.ContactResolver
-	db          transaction.Beginner
-	clock       clock.Clock
-	backoff     Backoff
-	maxAttempts int
-	interval    time.Duration
-	logger      *slog.Logger
+	repo            application.ReminderRepository
+	notifier        application.Notifier
+	resolver        application.ContactResolver
+	db              transaction.Beginner
+	clock           clock.Clock
+	backoff         Backoff
+	maxAttempts     int
+	interval        time.Duration
+	dispatchTimeout time.Duration
+	logger          *slog.Logger
 }
 
 // NewReminderWorker creates a new reminder dispatch worker.
@@ -46,21 +47,23 @@ func NewReminderWorker(
 	backoff Backoff,
 	maxAttempts int,
 	interval time.Duration,
+	dispatchTimeout time.Duration,
 	logger *slog.Logger,
 ) *ReminderWorker {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &ReminderWorker{
-		repo:        repo,
-		notifier:    notifier,
-		resolver:    resolver,
-		db:          db,
-		clock:       clock,
-		backoff:     backoff,
-		maxAttempts: maxAttempts,
-		interval:    interval,
-		logger:      logger,
+		repo:            repo,
+		notifier:        notifier,
+		resolver:        resolver,
+		db:              db,
+		clock:           clock,
+		backoff:         backoff,
+		maxAttempts:     maxAttempts,
+		interval:        interval,
+		dispatchTimeout: dispatchTimeout,
+		logger:          logger,
 	}
 }
 
@@ -134,6 +137,9 @@ func (w *ReminderWorker) dispatchDue(ctx context.Context, now time.Time) error {
 				continue
 			}
 			w.logger.ErrorContext(ctx, "dispatch reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
+			if recErr := w.recoverFinalizeFailure(ctx, r.ID); recErr != nil {
+				w.logger.ErrorContext(ctx, "reminder finalize recovery failed", "reminder_id", r.ID, "error", recErr)
+			}
 			continue
 		}
 	}
@@ -151,7 +157,9 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 		return w.finalizeFailure(ctx, r, now)
 	}
 
-	providerResponse, err := w.notifier.Notify(ctx, application.Notification{
+	notifyCtx, cancel := context.WithTimeout(ctx, w.dispatchTimeout)
+	defer cancel()
+	providerResponse, err := w.notifier.Notify(notifyCtx, application.Notification{
 		RecipientID: r.OwnerID,
 		ReminderID:  r.ID,
 		EventType:   r.EventType,
@@ -217,6 +225,24 @@ func (w *ReminderWorker) finalizeFailure(ctx context.Context, r domain.Reminder,
 
 	if err := tx2.Commit(ctx); err != nil {
 		return fmt.Errorf("commit finalize transaction: %w", err)
+	}
+	return nil
+}
+
+func (w *ReminderWorker) recoverFinalizeFailure(ctx context.Context, id uuid.UUID) error {
+	tx, err := w.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin finalize recovery transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := w.repo.WithTx(tx)
+	if err := txRepo.MarkSendingReminderPending(ctx, id); err != nil {
+		return fmt.Errorf("mark sending reminder pending: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit finalize recovery transaction: %w", err)
 	}
 	return nil
 }

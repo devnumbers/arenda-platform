@@ -465,6 +465,20 @@ func (q *Queries) MarkReminderSent(ctx context.Context, arg MarkReminderSentPara
 	return result.RowsAffected(), nil
 }
 
+const markSendingReminderPending = `-- name: MarkSendingReminderPending :execrows
+UPDATE reminders
+SET status = 'pending', next_attempt_at = NOW() + INTERVAL '1 minute', failed_attempts = failed_attempts + 1, updated_at = NOW()
+WHERE id = $1 AND status = 'sending'
+`
+
+func (q *Queries) MarkSendingReminderPending(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markSendingReminderPending, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const resetReminderSending = `-- name: ResetReminderSending :execrows
 UPDATE reminders
 SET status = 'pending', updated_at = NOW()

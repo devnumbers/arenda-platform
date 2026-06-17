@@ -291,6 +291,20 @@ func (r *ReminderRepository) ResetReminderSending(ctx context.Context, id uuid.U
 	return nil
 }
 
+// MarkSendingReminderPending resets a sending reminder back to pending with a
+// short retry delay and an incremented failed attempt count. It is used by the
+// worker to recover from a failed finalize transaction.
+func (r *ReminderRepository) MarkSendingReminderPending(ctx context.Context, id uuid.UUID) error {
+	rows, err := r.q().MarkSendingReminderPending(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		return fmt.Errorf("mark sending reminder pending: %w", err)
+	}
+	if rows == 0 {
+		return application.ErrConcurrentUpdate
+	}
+	return nil
+}
+
 // SaveSentSMSReminder records a successfully sent SMS reminder for audit.
 func (r *ReminderRepository) SaveSentSMSReminder(ctx context.Context, id, reminderID, ownerID uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error {
 	_, err := r.q().CreateSentSMSReminder(ctx, postgres.CreateSentSMSReminderParams{

@@ -79,6 +79,7 @@ type Querier interface {
 	MarkReminderSending(ctx context.Context, id pgtype.UUID) (Reminder, error)
 	MarkReminderSent(ctx context.Context, arg MarkReminderSentParams) (int64, error)
 	MarkSMSCodeUsed(ctx context.Context, id pgtype.UUID) error
+	MarkSendingReminderPending(ctx context.Context, id pgtype.UUID) (int64, error)
 	ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error)
 	SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperationParams) (Operation, error)
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)

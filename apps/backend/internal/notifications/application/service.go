@@ -16,13 +16,19 @@ const leaseExpiringOffsetDays = 30
 
 // ReminderService implements CRUD and scheduling use cases for reminders.
 type ReminderService struct {
-	repo  ReminderRepository
-	clock clock.Clock
+	repo     ReminderRepository
+	clock    clock.Clock
+	beginner transaction.Beginner
 }
 
 // NewReminderService creates a new reminder service.
-func NewReminderService(repo ReminderRepository, clock clock.Clock) *ReminderService {
-	return &ReminderService{repo: repo, clock: clock}
+func NewReminderService(repo ReminderRepository, clock clock.Clock, beginner transaction.Beginner) *ReminderService {
+	return &ReminderService{repo: repo, clock: clock, beginner: beginner}
+}
+
+// WithTx returns a service bound to the provided transaction.
+func (s *ReminderService) WithTx(tx transaction.Tx) *ReminderService {
+	return &ReminderService{repo: s.repo.WithTx(tx), clock: s.clock, beginner: s.beginner}
 }
 
 // CreateForOperation creates a pending reminder for a future operation.
@@ -43,10 +49,22 @@ func (s *ReminderService) CreateForRecurringOperation(ctx context.Context, rec R
 	if err != nil {
 		return err
 	}
+
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin create recurring reminders transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txService := s.WithTx(tx)
 	for _, r := range reminders {
-		if err := s.repo.Save(ctx, r); err != nil {
+		if err := txService.repo.Save(ctx, r); err != nil {
 			return fmt.Errorf("save reminder: %w", err)
 		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit create recurring reminders transaction: %w", err)
 	}
 	return nil
 }
@@ -57,10 +75,22 @@ func (s *ReminderService) CreateForLease(ctx context.Context, lease LeaseInfo) e
 	if err != nil {
 		return err
 	}
+
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin create lease reminders transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txService := s.WithTx(tx)
 	for _, r := range reminders {
-		if err := s.repo.Save(ctx, r); err != nil {
+		if err := txService.repo.Save(ctx, r); err != nil {
 			return fmt.Errorf("save lease %s reminder: %w", r.EventType, err)
 		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit create lease reminders transaction: %w", err)
 	}
 	return nil
 }
@@ -118,7 +148,22 @@ func (s *ReminderService) Cancel(ctx context.Context, ownerID, id uuid.UUID) err
 	if err != nil {
 		return err
 	}
-	return s.repo.CancelByTarget(ctx, ownerID, r.TargetType, targetID, r.EventType)
+
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin cancel reminder transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txService := s.WithTx(tx)
+	if err := txService.repo.CancelByTarget(ctx, ownerID, r.TargetType, targetID, r.EventType); err != nil {
+		return fmt.Errorf("cancel reminder: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit cancel reminder transaction: %w", err)
+	}
+	return nil
 }
 
 func targetIDFor(r domain.Reminder) (uuid.UUID, error) {

@@ -20,6 +20,9 @@ func NewSMSSender(sender identityapp.Sender) *SMSSender {
 }
 
 // Send sends an SMS message to the given phone number.
+// It returns an empty provider response because the identity Sender port only
+// exposes an error today. Once that port is extended to return a real provider
+// response, this adapter should propagate it instead of the empty string.
 func (s *SMSSender) Send(ctx context.Context, phone string, message string) (string, error) {
 	if err := s.sender.Send(ctx, identitydomain.Phone(phone), message); err != nil {
 		return "", fmt.Errorf("send sms: %w", err)

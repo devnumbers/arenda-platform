@@ -83,6 +83,11 @@ UPDATE reminders
 SET status = 'pending', updated_at = NOW()
 WHERE id = $1 AND status = 'sending';
 
+-- name: MarkSendingReminderPending :execrows
+UPDATE reminders
+SET status = 'pending', next_attempt_at = NOW() + INTERVAL '1 minute', failed_attempts = failed_attempts + 1, updated_at = NOW()
+WHERE id = $1 AND status = 'sending';
+
 -- name: CancelReminderByTarget :execrows
 UPDATE reminders
 SET status = 'cancelled', updated_at = NOW()
