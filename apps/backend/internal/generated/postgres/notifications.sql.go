@@ -45,27 +45,6 @@ func (q *Queries) CancelReminderByTarget(ctx context.Context, arg CancelReminder
 	return result.RowsAffected(), nil
 }
 
-const cancelRemindersByOperationIDs = `-- name: CancelRemindersByOperationIDs :execrows
-UPDATE reminders
-SET status = 'cancelled', updated_at = NOW()
-WHERE owner_id = $1
-  AND operation_id = ANY($2::uuid[])
-  AND status = 'pending'
-`
-
-type CancelRemindersByOperationIDsParams struct {
-	OwnerID      pgtype.UUID   `json:"owner_id"`
-	OperationIds []pgtype.UUID `json:"operation_ids"`
-}
-
-func (q *Queries) CancelRemindersByOperationIDs(ctx context.Context, arg CancelRemindersByOperationIDsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, cancelRemindersByOperationIDs, arg.OwnerID, arg.OperationIds)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const cancelRemindersByRecurringOperationID = `-- name: CancelRemindersByRecurringOperationID :execrows
 UPDATE reminders
 SET status = 'cancelled', updated_at = NOW()

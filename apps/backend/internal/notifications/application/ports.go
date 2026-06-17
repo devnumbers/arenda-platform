@@ -19,9 +19,13 @@ type ReminderRepository interface {
 	MarkSent(ctx context.Context, id uuid.UUID, at time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, nextAttempt *time.Time, terminal bool) error
 	CancelByTarget(ctx context.Context, ownerID uuid.UUID, targetType domain.TargetType, targetID uuid.UUID, eventType domain.EventType) error
-	CancelByOperationIDs(ctx context.Context, ownerID uuid.UUID, operationIDs []uuid.UUID) error
 	CancelByRecurringOperationID(ctx context.Context, ownerID, recID uuid.UUID) error
 	WithTx(tx transaction.Tx) ReminderRepository
+}
+
+// SentSMSReminderRepository tracks successfully sent SMS reminders for audit and deduplication.
+type SentSMSReminderRepository interface {
+	Save(ctx context.Context, reminderID *uuid.UUID, ownerID uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error
 }
 
 // ListFilter controls pagination and optional status filtering for ListByOwner.

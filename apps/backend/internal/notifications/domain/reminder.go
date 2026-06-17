@@ -50,7 +50,7 @@ func moscowLocation() *time.Location {
 		var err error
 		moscowLoc, err = time.LoadLocation(fixedDispatchTZ)
 		if err != nil {
-			moscowLoc = time.UTC
+			panic(fmt.Sprintf("load %s timezone: %v", fixedDispatchTZ, err))
 		}
 	})
 	return moscowLoc
@@ -109,7 +109,7 @@ func ValidatePendingDate(eventDate, reminderDate time.Time, now time.Time) error
 }
 
 // NewOperationReminder creates a pending reminder for a future operation.
-func NewOperationReminder(ownerID, operationID, propertyID uuid.UUID, eventDate, reminderDate time.Time, title, body string, now time.Time) (Reminder, error) {
+func NewOperationReminder(ownerID, operationID, propertyID uuid.UUID, eventDate, reminderDate time.Time, title, body string, now time.Time, recurringOperationID *uuid.UUID) (Reminder, error) {
 	if err := ValidatePendingDate(eventDate, reminderDate, now); err != nil {
 		return Reminder{}, err
 	}
@@ -118,19 +118,20 @@ func NewOperationReminder(ownerID, operationID, propertyID uuid.UUID, eventDate,
 		return Reminder{}, fmt.Errorf("generate reminder id: %w", err)
 	}
 	return Reminder{
-		ID:           id,
-		OwnerID:      ownerID,
-		TargetType:   TargetOperation,
-		OperationID:  &operationID,
-		PropertyID:   &propertyID,
-		EventType:    EventOperationDue,
-		Status:       ReminderPending,
-		ScheduledAt:  ScheduledAtForDate(reminderDate),
-		EventDate:    eventDate,
-		MessageTitle: title,
-		MessageBody:  body,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:                   id,
+		OwnerID:              ownerID,
+		TargetType:           TargetOperation,
+		OperationID:          &operationID,
+		RecurringOperationID: recurringOperationID,
+		PropertyID:           &propertyID,
+		EventType:            EventOperationDue,
+		Status:               ReminderPending,
+		ScheduledAt:          ScheduledAtForDate(reminderDate),
+		EventDate:            eventDate,
+		MessageTitle:         title,
+		MessageBody:          body,
+		CreatedAt:            now,
+		UpdatedAt:            now,
 	}, nil
 }
 

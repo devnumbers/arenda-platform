@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
-	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/sms"
+	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 )
 
@@ -42,4 +42,4 @@ func (r *SentSMSReminderRepository) Save(ctx context.Context, reminderID *uuid.U
 	return nil
 }
 
-var _ sms.SentSMSReminderRepository = (*SentSMSReminderRepository)(nil)
+var _ application.SentSMSReminderRepository = (*SentSMSReminderRepository)(nil)

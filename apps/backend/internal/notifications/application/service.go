@@ -29,11 +29,10 @@ func NewReminderService(repo ReminderRepository, clock clock.Clock) *ReminderSer
 func (s *ReminderService) CreateForOperation(ctx context.Context, op OperationInfo, reminderDate time.Time) (domain.Reminder, error) {
 	title := "Напоминание об операции"
 	body := fmt.Sprintf("%s %d коп. запланировано на %s", op.Category, op.AmountKopecks, op.OperationDate.Format("02.01.2006"))
-	r, err := domain.NewOperationReminder(op.OwnerID, op.ID, op.PropertyID, op.OperationDate, reminderDate, title, body, s.clock.Now())
+	r, err := domain.NewOperationReminder(op.OwnerID, op.ID, op.PropertyID, op.OperationDate, reminderDate, title, body, s.clock.Now(), op.RecurringOperationID)
 	if err != nil {
 		return domain.Reminder{}, err
 	}
-	r.RecurringOperationID = op.RecurringOperationID
 	if err := s.repo.Save(ctx, r); err != nil {
 		return domain.Reminder{}, fmt.Errorf("save reminder: %w", err)
 	}
@@ -168,18 +167,18 @@ func targetIDFor(r domain.Reminder) (uuid.UUID, error) {
 
 // scheduler implements ReminderScheduler and runs inside transactions.
 type scheduler struct {
-	service *ReminderService
-	repo    ReminderRepository
+	repo  ReminderRepository
+	clock clock.Clock
 }
 
 // NewReminderScheduler creates a transactional reminder scheduler.
-func NewReminderScheduler(service *ReminderService, repo ReminderRepository) ReminderScheduler {
-	return &scheduler{service: service, repo: repo}
+func NewReminderScheduler(repo ReminderRepository, clock clock.Clock) ReminderScheduler {
+	return &scheduler{repo: repo, clock: clock}
 }
 
 // WithTx returns a scheduler bound to the provided transaction.
 func (s *scheduler) WithTx(tx transaction.Tx) ReminderScheduler {
-	return &scheduler{service: s.service, repo: s.repo.WithTx(tx)}
+	return &scheduler{repo: s.repo.WithTx(tx), clock: s.clock}
 }
 
 // ScheduleForOperation ensures a pending reminder exists for an operation.
@@ -187,30 +186,89 @@ func (s *scheduler) ScheduleForOperation(ctx context.Context, op OperationInfo, 
 	if err := s.repo.CancelByTarget(ctx, op.OwnerID, domain.TargetOperation, op.ID, domain.EventOperationDue); err != nil {
 		return err
 	}
-	_, err := s.service.CreateForOperation(ctx, op, reminderDate)
-	return err
+	title := "Напоминание об операции"
+	body := fmt.Sprintf("%s %d коп. запланировано на %s", op.Category, op.AmountKopecks, op.OperationDate.Format("02.01.2006"))
+	r, err := domain.NewOperationReminder(op.OwnerID, op.ID, op.PropertyID, op.OperationDate, reminderDate, title, body, s.clock.Now(), op.RecurringOperationID)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.Save(ctx, r); err != nil {
+		return fmt.Errorf("save reminder: %w", err)
+	}
+	return nil
 }
 
 // ScheduleForRecurringOperation cancels existing reminders and creates concrete reminders for generated operations.
 func (s *scheduler) ScheduleForRecurringOperation(ctx context.Context, rec RecurringOperationInfo, baseReminderDate time.Time, ops []OperationInfo) error {
+	if len(ops) == 0 {
+		return nil
+	}
+	earliestOp := ops[0]
+	for _, op := range ops {
+		if op.OperationDate.Before(earliestOp.OperationDate) {
+			earliestOp = op
+		}
+	}
+	offset := domain.ReminderOffset(earliestOp.OperationDate, baseReminderDate)
+	if offset < 0 {
+		offset = 0
+	}
 	if err := s.repo.CancelByRecurringOperationID(ctx, rec.OwnerID, rec.ID); err != nil {
 		return err
 	}
-	return s.service.CreateForRecurringOperation(ctx, rec, baseReminderDate, ops)
+	for _, op := range ops {
+		reminderDate := op.OperationDate.AddDate(0, 0, -offset)
+		title := "Напоминание об операции"
+		body := fmt.Sprintf("%s %d коп. запланировано на %s", op.Category, op.AmountKopecks, op.OperationDate.Format("02.01.2006"))
+		r, err := domain.NewOperationReminder(op.OwnerID, op.ID, op.PropertyID, op.OperationDate, reminderDate, title, body, s.clock.Now(), op.RecurringOperationID)
+		if err != nil {
+			return fmt.Errorf("create reminder for operation %s: %w", op.ID, err)
+		}
+		if err := s.repo.Save(ctx, r); err != nil {
+			return fmt.Errorf("save reminder for operation %s: %w", op.ID, err)
+		}
+	}
+	return nil
 }
 
 // ScheduleForLease recreates lease reminders.
 func (s *scheduler) ScheduleForLease(ctx context.Context, lease LeaseInfo) error {
-	if lease.EndDate == nil {
+	if lease.EndDate == nil || lease.EndDate.IsZero() {
 		return nil
 	}
-	if err := s.repo.CancelByTarget(ctx, lease.OwnerID, domain.TargetLease, lease.ID, domain.EventLeaseExpiring); err != nil {
+	ownerID := lease.OwnerID
+	propertyID := lease.PropertyID
+	endDate := *lease.EndDate
+
+	if err := s.repo.CancelByTarget(ctx, ownerID, domain.TargetLease, lease.ID, domain.EventLeaseExpiring); err != nil {
 		return err
 	}
-	if err := s.repo.CancelByTarget(ctx, lease.OwnerID, domain.TargetLease, lease.ID, domain.EventLeaseRequiresAction); err != nil {
+	if err := s.repo.CancelByTarget(ctx, ownerID, domain.TargetLease, lease.ID, domain.EventLeaseRequiresAction); err != nil {
 		return err
 	}
-	return s.service.CreateForLease(ctx, lease)
+
+	expiringTitle := "Аренда скоро заканчивается"
+	expiringBody := fmt.Sprintf("Аренда по объекту заканчивается %s", endDate.Format("02.01.2006"))
+	expiringDate := endDate.AddDate(0, 0, -leaseExpiringOffsetDays)
+	expiring, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, endDate, expiringDate, expiringTitle, expiringBody, domain.EventLeaseExpiring, s.clock.Now())
+	if err != nil {
+		return fmt.Errorf("create lease expiring reminder: %w", err)
+	}
+	if err := s.repo.Save(ctx, expiring); err != nil {
+		return fmt.Errorf("save lease expiring reminder: %w", err)
+	}
+
+	requiresActionTitle := "Аренда требует действия"
+	requiresActionBody := "Срок аренды закончился. Подтвердите продление или завершение аренды."
+	requiresActionDate := endDate.AddDate(0, 0, 1)
+	requiresAction, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, time.Time{}, requiresActionDate, requiresActionTitle, requiresActionBody, domain.EventLeaseRequiresAction, s.clock.Now())
+	if err != nil {
+		return fmt.Errorf("create lease requires_action reminder: %w", err)
+	}
+	if err := s.repo.Save(ctx, requiresAction); err != nil {
+		return fmt.Errorf("save lease requires_action reminder: %w", err)
+	}
+	return nil
 }
 
 // CancelByOperation cancels reminders for a concrete operation.

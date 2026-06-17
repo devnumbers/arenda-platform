@@ -95,8 +95,9 @@ func run(fallback *slog.Logger) error {
 	sentSMSRepo := notificationspg.NewSentSMSReminderRepository(pool)
 	reminderRepo := notificationspg.NewReminderRepository(pool)
 	reminderService := notificationsapp.NewReminderService(reminderRepo, realClock{})
-	reminderScheduler := notificationsapp.NewReminderScheduler(reminderService, reminderRepo)
+	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, realClock{})
 	smsNotifier := notificationssms.NewNotifier(contactResolver, notificationSMSSender, sentSMSRepo, realClock{}, logger)
+	_ = reminderService
 	_ = reminderScheduler
 	_ = smsNotifier
 

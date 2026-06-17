@@ -117,7 +117,7 @@ func TestNewOperationReminder(t *testing.T) {
 	eventDate := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
 	reminderDate := time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC)
 
-	r, err := NewOperationReminder(owner, op, prop, eventDate, reminderDate, "title", "body", now)
+	r, err := NewOperationReminder(owner, op, prop, eventDate, reminderDate, "title", "body", now, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestNewOperationReminder_RejectReminderInThePast(t *testing.T) {
 	owner := uuid.New()
 	op := uuid.New()
 	prop := uuid.New()
-	_, err := NewOperationReminder(owner, op, prop, eventDate, reminderDate, "title", "body", now)
+	_, err := NewOperationReminder(owner, op, prop, eventDate, reminderDate, "title", "body", now, nil)
 	if !errors.Is(err, ErrInvalidReminderDate) {
 		t.Fatalf("expected ErrInvalidReminderDate, got %v", err)
 	}

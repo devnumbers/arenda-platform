@@ -13,7 +13,6 @@ import (
 type Querier interface {
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
 	CancelReminderByTarget(ctx context.Context, arg CancelReminderByTargetParams) (int64, error)
-	CancelRemindersByOperationIDs(ctx context.Context, arg CancelRemindersByOperationIDsParams) (int64, error)
 	CancelRemindersByRecurringOperationID(ctx context.Context, arg CancelRemindersByRecurringOperationIDParams) (int64, error)
 	CompleteLease(ctx context.Context, arg CompleteLeaseParams) (Lease, error)
 	CountActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) (int64, error)

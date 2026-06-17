@@ -4,29 +4,23 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
-// SentSMSReminderRepository tracks successfully sent SMS reminders for audit and deduplication.
-type SentSMSReminderRepository interface {
-	Save(ctx context.Context, reminderID *uuid.UUID, ownerID uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error
-}
-
 // Notifier dispatches reminders as SMS messages using an SMSSender port.
 type Notifier struct {
 	resolver application.ContactResolver
 	sender   application.SMSSender
-	sentRepo SentSMSReminderRepository
+	sentRepo application.SentSMSReminderRepository
 	clock    clock.Clock
 	logger   *slog.Logger
 }
 
 // NewNotifier creates a new SMS notifier.
-func NewNotifier(resolver application.ContactResolver, sender application.SMSSender, sentRepo SentSMSReminderRepository, clock clock.Clock, logger *slog.Logger) *Notifier {
+func NewNotifier(resolver application.ContactResolver, sender application.SMSSender, sentRepo application.SentSMSReminderRepository, clock clock.Clock, logger *slog.Logger) *Notifier {
 	if logger == nil {
 		logger = slog.Default()
 	}

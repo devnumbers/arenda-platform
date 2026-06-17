@@ -35,6 +35,20 @@ func (r *ReminderRepository) WithTx(tx transaction.Tx) application.ReminderRepos
 	return NewReminderRepository(tx.(postgres.DBTX))
 }
 
+func eventDateToPgtype(t time.Time) pgtype.Date {
+	if t.IsZero() {
+		return pgtype.Date{}
+	}
+	return pgtype.Date{Time: t, Valid: true}
+}
+
+func eventDateFromPgtype(d pgtype.Date) time.Time {
+	if !d.Valid {
+		return time.Time{}
+	}
+	return d.Time
+}
+
 // Save inserts a reminder.
 func (r *ReminderRepository) Save(ctx context.Context, rm domain.Reminder) error {
 	_, err := r.q().CreateReminder(ctx, postgres.CreateReminderParams{
@@ -48,7 +62,7 @@ func (r *ReminderRepository) Save(ctx context.Context, rm domain.Reminder) error
 		EventType:            postgres.NotificationEventType(rm.EventType),
 		Status:               postgres.NotificationStatus(rm.Status),
 		ScheduledAt:          pgtype.Timestamptz{Time: rm.ScheduledAt, Valid: true},
-		EventDate:            pgconv.DateToPgtype(rm.EventDate),
+		EventDate:            eventDateToPgtype(rm.EventDate),
 		MessageTitle:         rm.MessageTitle,
 		MessageBody:          rm.MessageBody,
 		CreatedAt:            pgtype.Timestamptz{Time: rm.CreatedAt, Valid: true},
@@ -80,7 +94,7 @@ func (r *ReminderRepository) Update(ctx context.Context, rm domain.Reminder) err
 		EventType:            postgres.NotificationEventType(rm.EventType),
 		Status:               postgres.NotificationStatus(rm.Status),
 		ScheduledAt:          pgtype.Timestamptz{Time: rm.ScheduledAt, Valid: true},
-		EventDate:            pgconv.DateToPgtype(rm.EventDate),
+		EventDate:            eventDateToPgtype(rm.EventDate),
 		SentAt:               sentAt,
 		//nolint:gosec // FailedAttempts is bounded by retry logic in the application layer.
 		FailedAttempts: int32(rm.FailedAttempts),
@@ -191,22 +205,6 @@ func (r *ReminderRepository) CancelByTarget(ctx context.Context, ownerID uuid.UU
 	return nil
 }
 
-// CancelByOperationIDs cancels pending reminders for a set of concrete operation IDs.
-func (r *ReminderRepository) CancelByOperationIDs(ctx context.Context, ownerID uuid.UUID, operationIDs []uuid.UUID) error {
-	pgIDs := make([]pgtype.UUID, len(operationIDs))
-	for i, id := range operationIDs {
-		pgIDs[i] = pgconv.UUIDToPgtype(id)
-	}
-	_, err := r.q().CancelRemindersByOperationIDs(ctx, postgres.CancelRemindersByOperationIDsParams{
-		OwnerID:      pgconv.UUIDToPgtype(ownerID),
-		OperationIds: pgIDs,
-	})
-	if err != nil {
-		return fmt.Errorf("cancel reminders by operation ids: %w", err)
-	}
-	return nil
-}
-
 // CancelByRecurringOperationID cancels all pending reminders linked to a recurring operation template.
 func (r *ReminderRepository) CancelByRecurringOperationID(ctx context.Context, ownerID, recID uuid.UUID) error {
 	_, err := r.q().CancelRemindersByRecurringOperationID(ctx, postgres.CancelRemindersByRecurringOperationIDParams{
@@ -231,7 +229,7 @@ func toDomain(row postgres.Reminder) domain.Reminder {
 		EventType:            domain.EventType(row.EventType),
 		Status:               domain.ReminderStatus(row.Status),
 		ScheduledAt:          pgconv.TimestamptzToTime(row.ScheduledAt),
-		EventDate:            pgconv.DateFromPgtype(row.EventDate),
+		EventDate:            eventDateFromPgtype(row.EventDate),
 		SentAt:               pgconv.TimestamptzToPtrTime(row.SentAt),
 		FailedAttempts:       int(row.FailedAttempts),
 		NextAttemptAt:        pgconv.TimestamptzToPtrTime(row.NextAttemptAt),

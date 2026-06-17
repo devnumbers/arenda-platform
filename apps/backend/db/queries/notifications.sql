@@ -71,13 +71,6 @@ WHERE owner_id = sqlc.arg('owner_id')
   AND event_type = sqlc.arg('event_type')
   AND status = 'pending';
 
--- name: CancelRemindersByOperationIDs :execrows
-UPDATE reminders
-SET status = 'cancelled', updated_at = NOW()
-WHERE owner_id = $1
-  AND operation_id = ANY(sqlc.arg('operation_ids')::uuid[])
-  AND status = 'pending';
-
 -- name: CancelRemindersByRecurringOperationID :execrows
 UPDATE reminders
 SET status = 'cancelled', updated_at = NOW()
