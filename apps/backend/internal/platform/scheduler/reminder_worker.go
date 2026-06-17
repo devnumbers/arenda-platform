@@ -63,6 +63,10 @@ func (w *ReminderWorker) Run(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
+	if err := w.tick(ctx); err != nil {
+		w.logger.ErrorContext(ctx, "reminder worker tick failed", "error", err)
+	}
+
 	for {
 		select {
 		case <-ctx.Done():

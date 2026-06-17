@@ -173,6 +173,31 @@ func (q *Queries) GetLeaseByIDAndOwner(ctx context.Context, arg GetLeaseByIDAndO
 	return i, err
 }
 
+const getLeaseByIDForUpdate = `-- name: GetLeaseByIDForUpdate :one
+SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetLeaseByIDForUpdate(ctx context.Context, id pgtype.UUID) (Lease, error) {
+	row := q.db.QueryRow(ctx, getLeaseByIDForUpdate, id)
+	var i Lease
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.TenantContactID,
+		&i.Status,
+		&i.StartDate,
+		&i.EndDate,
+		&i.RentAmountKopecks,
+		&i.DepositAmountKopecks,
+		&i.PaymentDay,
+		&i.Comment,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getOpenLeaseByProperty = `-- name: GetOpenLeaseByProperty :one
 SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
 WHERE property_id = $1
@@ -273,7 +298,6 @@ SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_dat
 WHERE status IN ('awaiting_start', 'active')
   AND end_date IS NOT NULL
   AND end_date < $1::date
-FOR UPDATE SKIP LOCKED
 `
 
 func (q *Queries) ListOpenLeasesWithPastEndDate(ctx context.Context, asOf pgtype.Date) ([]Lease, error) {

@@ -19,6 +19,9 @@ WHERE id = $1 AND owner_id = $2;
 SELECT * FROM leases
 WHERE id = $1;
 
+-- name: GetLeaseByIDForUpdate :one
+SELECT * FROM leases WHERE id = $1 FOR UPDATE;
+
 -- name: ListLeasesByOwner :many
 SELECT * FROM leases
 WHERE owner_id = $1
@@ -65,5 +68,4 @@ WHERE owner_id = $1
 SELECT * FROM leases
 WHERE status IN ('awaiting_start', 'active')
   AND end_date IS NOT NULL
-  AND end_date < sqlc.arg('as_of')::date
-FOR UPDATE SKIP LOCKED;
+  AND end_date < sqlc.arg('as_of')::date;

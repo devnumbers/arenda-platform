@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -54,6 +55,10 @@ func (w *LeaseReconciliationWorker) Run(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
+	if err := w.tick(ctx); err != nil {
+		w.logger.ErrorContext(ctx, "lease reconciliation tick failed", "error", err)
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -74,14 +79,14 @@ func (w *LeaseReconciliationWorker) tick(ctx context.Context) error {
 	}
 
 	for _, lease := range leases {
-		if err := w.reconcile(ctx, lease.ID); err != nil {
+		if err := w.reconcile(ctx, lease.ID, asOf); err != nil {
 			w.logger.ErrorContext(ctx, "reconcile lease failed", "lease_id", lease.ID, "error", err)
 		}
 	}
 	return nil
 }
 
-func (w *LeaseReconciliationWorker) reconcile(ctx context.Context, leaseID uuid.UUID) error {
+func (w *LeaseReconciliationWorker) reconcile(ctx context.Context, leaseID uuid.UUID, asOf time.Time) error {
 	tx, err := w.beginner.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -91,8 +96,12 @@ func (w *LeaseReconciliationWorker) reconcile(ctx context.Context, leaseID uuid.
 	txLeases := w.leases.WithTx(tx)
 	txScheduler := w.scheduler.WithTx(tx)
 
-	lease, err := txLeases.GetByID(ctx, leaseID)
+	lease, err := txLeases.GetByIDForUpdate(ctx, leaseID)
 	if err != nil {
+		if errors.Is(err, application.ErrNotFound) {
+			w.logger.InfoContext(ctx, "lease changed concurrently, skipping", "lease_id", leaseID)
+			return nil
+		}
 		return fmt.Errorf("get lease: %w", err)
 	}
 
@@ -100,7 +109,7 @@ func (w *LeaseReconciliationWorker) reconcile(ctx context.Context, leaseID uuid.
 		return nil
 	}
 
-	if !timeutil.Date(*lease.EndDate).Before(timeutil.Date(w.clock.Now())) {
+	if !timeutil.Date(*lease.EndDate).Before(timeutil.Date(asOf)) {
 		return nil
 	}
 
