@@ -1,0 +1,24 @@
+meta {
+  name: Delete Reminder
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{baseUrl}}/reminders/{{reminderId}}
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 204", function() {
+    expect(res.status).to.equal(204);
+  });
+}

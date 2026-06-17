@@ -1,0 +1,24 @@
+meta {
+  name: Get Operation Reminders
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/properties/{{propertyId}}/operations/{{operationId}}/reminders
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+}

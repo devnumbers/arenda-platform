@@ -1,0 +1,34 @@
+meta {
+  name: Update Reminder
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{baseUrl}}/reminders/{{reminderId}}
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "reminder_date": "{{updatedReminderDate}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+}
