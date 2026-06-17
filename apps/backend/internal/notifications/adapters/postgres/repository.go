@@ -330,6 +330,20 @@ func (r *ReminderRepository) HasReminderForLeaseEvent(ctx context.Context, owner
 	return exists, nil
 }
 
+// HasReminderForOperationEvent reports whether an active reminder already exists
+// for the given operation and event type.
+func (r *ReminderRepository) HasReminderForOperationEvent(ctx context.Context, ownerID, operationID uuid.UUID, eventType domain.EventType) (bool, error) {
+	exists, err := r.q().HasReminderForOperationEvent(ctx, postgres.HasReminderForOperationEventParams{
+		OwnerID:     pgconv.UUIDToPgtype(ownerID),
+		OperationID: pgconv.UUIDToPgtype(operationID),
+		EventType:   postgres.NotificationEventType(eventType),
+	})
+	if err != nil {
+		return false, fmt.Errorf("check reminder for operation event: %w", err)
+	}
+	return exists, nil
+}
+
 // ResetReminderSending resets a sending reminder back to pending.
 func (r *ReminderRepository) ResetReminderSending(ctx context.Context, id uuid.UUID) error {
 	rows, err := r.q().ResetReminderSending(ctx, pgconv.UUIDToPgtype(id))

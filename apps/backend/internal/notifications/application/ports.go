@@ -32,6 +32,7 @@ type ReminderRepository interface {
 	CancelByTarget(ctx context.Context, ownerID uuid.UUID, targetType domain.TargetType, targetID uuid.UUID, eventType domain.EventType) error
 	CancelByRecurringOperationID(ctx context.Context, ownerID, recID uuid.UUID) error
 	HasReminderForLeaseEvent(ctx context.Context, ownerID, leaseID uuid.UUID, eventType domain.EventType) (bool, error)
+	HasReminderForOperationEvent(ctx context.Context, ownerID, operationID uuid.UUID, eventType domain.EventType) (bool, error)
 	WithTx(tx transaction.Tx) ReminderRepository
 }
 
@@ -94,6 +95,7 @@ type ReminderScheduler interface {
 	CancelByOperation(ctx context.Context, ownerID, opID uuid.UUID) error
 	CancelByRecurringOperation(ctx context.Context, ownerID, recID uuid.UUID) error
 	CancelByLease(ctx context.Context, ownerID, leaseID uuid.UUID) error
+	HasReminderForOperationEvent(ctx context.Context, ownerID, operationID uuid.UUID, eventType domain.EventType) (bool, error)
 	WithTx(tx transaction.Tx) ReminderScheduler
 }
 

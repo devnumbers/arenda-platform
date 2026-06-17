@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	notificationsdomain "github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 )
@@ -226,9 +227,6 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 
 	if s.scheduler != nil && cmd.OperationDate != nil && !originalOperationDate.Equal(*cmd.OperationDate) {
 		txScheduler := s.scheduler.WithTx(tx)
-		if err := txScheduler.CancelByOperation(ctx, ownerID, updated.ID); err != nil {
-			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
-		}
 
 		now := s.clock.Now()
 		today := timeutil.Date(now)
@@ -249,7 +247,24 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 			}
 		} else {
 			reminderDate = updated.OperationDate
+			if reminderDate.Before(today) {
+				skipSchedule = true
+			}
+			if !skipSchedule {
+				hasReminder, err := txScheduler.HasReminderForOperationEvent(ctx, ownerID, updated.ID, notificationsdomain.EventOperationDue)
+				if err != nil {
+					return domain.Operation{}, fmt.Errorf("check existing reminder: %w", err)
+				}
+				if !hasReminder {
+					skipSchedule = true
+				}
+			}
 		}
+
+		if err := txScheduler.CancelByOperation(ctx, ownerID, updated.ID); err != nil {
+			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
+		}
+
 		if !skipSchedule {
 			if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated), reminderDate); err != nil {
 				return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)

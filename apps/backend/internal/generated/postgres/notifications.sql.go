@@ -264,6 +264,27 @@ func (q *Queries) HasReminderForLeaseEvent(ctx context.Context, arg HasReminderF
 	return exists, err
 }
 
+const hasReminderForOperationEvent = `-- name: HasReminderForOperationEvent :one
+SELECT EXISTS(
+    SELECT 1 FROM reminders
+    WHERE owner_id = $1 AND operation_id = $2 AND event_type = $3
+      AND status IN ('pending', 'sending', 'sent')
+) AS exists
+`
+
+type HasReminderForOperationEventParams struct {
+	OwnerID     pgtype.UUID           `json:"owner_id"`
+	OperationID pgtype.UUID           `json:"operation_id"`
+	EventType   NotificationEventType `json:"event_type"`
+}
+
+func (q *Queries) HasReminderForOperationEvent(ctx context.Context, arg HasReminderForOperationEventParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasReminderForOperationEvent, arg.OwnerID, arg.OperationID, arg.EventType)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const isSMSReminderSent = `-- name: IsSMSReminderSent :one
 SELECT EXISTS(SELECT 1 FROM sent_sms_reminders WHERE reminder_id = $1) AS exists
 `

@@ -338,3 +338,9 @@ func (s *scheduler) CancelByLease(ctx context.Context, ownerID, leaseID uuid.UUI
 	}
 	return errors.Join(errs...)
 }
+
+// HasReminderForOperationEvent reports whether an active reminder exists for the
+// given operation and event type.
+func (s *scheduler) HasReminderForOperationEvent(ctx context.Context, ownerID, operationID uuid.UUID, eventType domain.EventType) (bool, error) {
+	return s.repo.HasReminderForOperationEvent(ctx, ownerID, operationID, eventType)
+}

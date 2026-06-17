@@ -120,6 +120,13 @@ WHERE owner_id = $1
 -- name: HasReminderForLeaseEvent :one
 SELECT EXISTS(SELECT 1 FROM reminders WHERE owner_id = $1 AND lease_id = $2 AND event_type = $3 AND status IN ('pending', 'sending', 'sent')) AS exists;
 
+-- name: HasReminderForOperationEvent :one
+SELECT EXISTS(
+    SELECT 1 FROM reminders
+    WHERE owner_id = $1 AND operation_id = $2 AND event_type = $3
+      AND status IN ('pending', 'sending', 'sent')
+) AS exists;
+
 -- name: IsSMSReminderSent :one
 SELECT EXISTS(SELECT 1 FROM sent_sms_reminders WHERE reminder_id = $1) AS exists;
 
