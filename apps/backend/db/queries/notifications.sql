@@ -25,6 +25,25 @@ WHERE status = 'pending'
 ORDER BY scheduled_at ASC
 LIMIT $2;
 
+-- name: UpdateReminder :execrows
+UPDATE reminders
+SET owner_id = $2,
+    target_type = $3,
+    operation_id = $4,
+    recurring_operation_id = $5,
+    lease_id = $6,
+    property_id = $7,
+    event_type = $8,
+    status = $9,
+    scheduled_at = $10,
+    sent_at = $11,
+    failed_attempts = $12,
+    next_attempt_at = $13,
+    message_title = $14,
+    message_body = $15,
+    updated_at = $16
+WHERE id = $1;
+
 -- name: MarkReminderSent :execrows
 UPDATE reminders
 SET status = 'sent', sent_at = $2, updated_at = NOW()
@@ -56,6 +75,13 @@ UPDATE reminders
 SET status = 'cancelled', updated_at = NOW()
 WHERE owner_id = $1
   AND operation_id = ANY(sqlc.arg('operation_ids')::uuid[])
+  AND status = 'pending';
+
+-- name: CancelRemindersByRecurringOperationID :execrows
+UPDATE reminders
+SET status = 'cancelled', updated_at = NOW()
+WHERE owner_id = $1
+  AND recurring_operation_id = $2
   AND status = 'pending';
 
 -- name: CreateSentSMSReminder :one

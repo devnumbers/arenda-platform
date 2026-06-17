@@ -12,6 +12,7 @@ import (
 // ReminderRepository persists and queries reminders.
 type ReminderRepository interface {
 	Save(ctx context.Context, r domain.Reminder) error
+	Update(ctx context.Context, r domain.Reminder) error
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
 	ListByOwner(ctx context.Context, ownerID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	ListDue(ctx context.Context, before time.Time, limit int) ([]domain.Reminder, error)
@@ -19,6 +20,7 @@ type ReminderRepository interface {
 	MarkFailed(ctx context.Context, id uuid.UUID, nextAttempt *time.Time, terminal bool) error
 	CancelByTarget(ctx context.Context, ownerID uuid.UUID, targetType domain.TargetType, targetID uuid.UUID, eventType domain.EventType) error
 	CancelByOperationIDs(ctx context.Context, ownerID uuid.UUID, operationIDs []uuid.UUID) error
+	CancelByRecurringOperationID(ctx context.Context, ownerID, recID uuid.UUID) error
 	WithTx(tx transaction.Tx) ReminderRepository
 }
 
@@ -42,6 +44,7 @@ type ContactResolver interface {
 // Notification is a channel-agnostic outbound message.
 type Notification struct {
 	RecipientID uuid.UUID
+	ReminderID  uuid.UUID
 	EventType   domain.EventType
 	Title       string
 	Body        string

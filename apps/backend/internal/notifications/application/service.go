@@ -32,6 +32,7 @@ func (s *ReminderService) CreateForOperation(ctx context.Context, op OperationIn
 	if err != nil {
 		return domain.Reminder{}, err
 	}
+	r.RecurringOperationID = op.RecurringOperationID
 	if err := s.repo.Save(ctx, r); err != nil {
 		return domain.Reminder{}, fmt.Errorf("save reminder: %w", err)
 	}
@@ -73,14 +74,10 @@ func (s *ReminderService) CreateForLease(ctx context.Context, lease LeaseInfo) e
 	expiringTitle := "Аренда скоро заканчивается"
 	expiringBody := fmt.Sprintf("Аренда по объекту заканчивается %s", lease.EndDate.Format("02.01.2006"))
 	expiringDate := lease.EndDate.AddDate(0, 0, -leaseExpiringOffsetDays)
-	expiring, err := domain.NewOperationReminder(ownerID, lease.ID, propertyID, *lease.EndDate, expiringDate, expiringTitle, expiringBody, s.clock.Now())
+	expiring, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, expiringDate, expiringTitle, expiringBody, domain.EventLeaseExpiring, s.clock.Now())
 	if err != nil {
 		return fmt.Errorf("create lease expiring reminder: %w", err)
 	}
-	expiring.TargetType = domain.TargetLease
-	expiring.OperationID = nil
-	expiring.LeaseID = &lease.ID
-	expiring.EventType = domain.EventLeaseExpiring
 	if err := s.repo.Save(ctx, expiring); err != nil {
 		return fmt.Errorf("save lease expiring reminder: %w", err)
 	}
@@ -88,14 +85,10 @@ func (s *ReminderService) CreateForLease(ctx context.Context, lease LeaseInfo) e
 	requiresActionTitle := "Аренда требует действия"
 	requiresActionBody := "Срок аренды закончился. Подтвердите продление или завершение аренды."
 	requiresActionDate := lease.EndDate.AddDate(0, 0, 1)
-	requiresAction, err := domain.NewOperationReminder(ownerID, lease.ID, propertyID, *lease.EndDate, requiresActionDate, requiresActionTitle, requiresActionBody, s.clock.Now())
+	requiresAction, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, requiresActionDate, requiresActionTitle, requiresActionBody, domain.EventLeaseRequiresAction, s.clock.Now())
 	if err != nil {
 		return fmt.Errorf("create lease requires_action reminder: %w", err)
 	}
-	requiresAction.TargetType = domain.TargetLease
-	requiresAction.OperationID = nil
-	requiresAction.LeaseID = &lease.ID
-	requiresAction.EventType = domain.EventLeaseRequiresAction
 	if err := s.repo.Save(ctx, requiresAction); err != nil {
 		return fmt.Errorf("save lease requires_action reminder: %w", err)
 	}
@@ -130,8 +123,8 @@ func (s *ReminderService) Reschedule(ctx context.Context, ownerID, id uuid.UUID,
 	}
 	r.ScheduledAt = domain.ScheduledAtForDate(newDate)
 	r.UpdatedAt = s.clock.Now()
-	if err := s.repo.Save(ctx, r); err != nil {
-		return domain.Reminder{}, fmt.Errorf("save rescheduled reminder: %w", err)
+	if err := s.repo.Update(ctx, r); err != nil {
+		return domain.Reminder{}, fmt.Errorf("update rescheduled reminder: %w", err)
 	}
 	return r, nil
 }
@@ -185,7 +178,7 @@ func (s *scheduler) ScheduleForOperation(ctx context.Context, op OperationInfo, 
 
 // ScheduleForRecurringOperation cancels existing reminders and creates concrete reminders for generated operations.
 func (s *scheduler) ScheduleForRecurringOperation(ctx context.Context, rec RecurringOperationInfo, baseReminderDate time.Time, ops []OperationInfo) error {
-	if err := s.repo.CancelByTarget(ctx, rec.OwnerID, domain.TargetRecurringOperation, rec.ID, domain.EventOperationDue); err != nil {
+	if err := s.repo.CancelByRecurringOperationID(ctx, rec.OwnerID, rec.ID); err != nil {
 		return err
 	}
 	return s.service.CreateForRecurringOperation(ctx, rec, baseReminderDate, ops)
@@ -208,7 +201,7 @@ func (s *scheduler) CancelByOperation(ctx context.Context, ownerID, opID uuid.UU
 
 // CancelByRecurringOperation cancels reminders for a recurring operation template.
 func (s *scheduler) CancelByRecurringOperation(ctx context.Context, ownerID, recID uuid.UUID) error {
-	return s.repo.CancelByTarget(ctx, ownerID, domain.TargetRecurringOperation, recID, domain.EventOperationDue)
+	return s.repo.CancelByRecurringOperationID(ctx, ownerID, recID)
 }
 
 // CancelByLease cancels reminders for a lease.

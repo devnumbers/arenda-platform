@@ -33,7 +33,7 @@ func (r *ReminderRepository) WithTx(tx transaction.Tx) application.ReminderRepos
 	return NewReminderRepository(tx.(postgres.DBTX))
 }
 
-// Save inserts or updates a reminder.
+// Save inserts a reminder.
 func (r *ReminderRepository) Save(ctx context.Context, rm domain.Reminder) error {
 	_, err := r.q().CreateReminder(ctx, postgres.CreateReminderParams{
 		ID:                   pgconv.UUIDToPgtype(rm.ID),
@@ -53,6 +53,40 @@ func (r *ReminderRepository) Save(ctx context.Context, rm domain.Reminder) error
 	})
 	if err != nil {
 		return fmt.Errorf("create reminder: %w", err)
+	}
+	return nil
+}
+
+// Update replaces an existing reminder.
+func (r *ReminderRepository) Update(ctx context.Context, rm domain.Reminder) error {
+	var sentAt, nextAttemptAt pgtype.Timestamptz
+	if rm.SentAt != nil {
+		sentAt = pgtype.Timestamptz{Time: *rm.SentAt, Valid: true}
+	}
+	if rm.NextAttemptAt != nil {
+		nextAttemptAt = pgtype.Timestamptz{Time: *rm.NextAttemptAt, Valid: true}
+	}
+	_, err := r.q().UpdateReminder(ctx, postgres.UpdateReminderParams{
+		ID:                   pgconv.UUIDToPgtype(rm.ID),
+		OwnerID:              pgconv.UUIDToPgtype(rm.OwnerID),
+		TargetType:           postgres.NotificationTargetType(rm.TargetType),
+		OperationID:          pgconv.UUIDToPgtypePtr(rm.OperationID),
+		RecurringOperationID: pgconv.UUIDToPgtypePtr(rm.RecurringOperationID),
+		LeaseID:              pgconv.UUIDToPgtypePtr(rm.LeaseID),
+		PropertyID:           pgconv.UUIDToPgtypePtr(rm.PropertyID),
+		EventType:            postgres.NotificationEventType(rm.EventType),
+		Status:               postgres.NotificationStatus(rm.Status),
+		ScheduledAt:          pgtype.Timestamptz{Time: rm.ScheduledAt, Valid: true},
+		SentAt:               sentAt,
+		//nolint:gosec // FailedAttempts is bounded by retry logic in the application layer.
+		FailedAttempts:       int32(rm.FailedAttempts),
+		NextAttemptAt:        nextAttemptAt,
+		MessageTitle:         rm.MessageTitle,
+		MessageBody:          rm.MessageBody,
+		UpdatedAt:            pgtype.Timestamptz{Time: rm.UpdatedAt, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("update reminder: %w", err)
 	}
 	return nil
 }
@@ -162,6 +196,18 @@ func (r *ReminderRepository) CancelByOperationIDs(ctx context.Context, ownerID u
 	})
 	if err != nil {
 		return fmt.Errorf("cancel reminders by operation ids: %w", err)
+	}
+	return nil
+}
+
+// CancelByRecurringOperationID cancels all pending reminders linked to a recurring operation template.
+func (r *ReminderRepository) CancelByRecurringOperationID(ctx context.Context, ownerID, recID uuid.UUID) error {
+	_, err := r.q().CancelRemindersByRecurringOperationID(ctx, postgres.CancelRemindersByRecurringOperationIDParams{
+		OwnerID:              pgconv.UUIDToPgtype(ownerID),
+		RecurringOperationID: pgconv.UUIDToPgtype(recID),
+	})
+	if err != nil {
+		return fmt.Errorf("cancel reminders by recurring operation id: %w", err)
 	}
 	return nil
 }

@@ -66,6 +66,27 @@ func (q *Queries) CancelRemindersByOperationIDs(ctx context.Context, arg CancelR
 	return result.RowsAffected(), nil
 }
 
+const cancelRemindersByRecurringOperationID = `-- name: CancelRemindersByRecurringOperationID :execrows
+UPDATE reminders
+SET status = 'cancelled', updated_at = NOW()
+WHERE owner_id = $1
+  AND recurring_operation_id = $2
+  AND status = 'pending'
+`
+
+type CancelRemindersByRecurringOperationIDParams struct {
+	OwnerID              pgtype.UUID `json:"owner_id"`
+	RecurringOperationID pgtype.UUID `json:"recurring_operation_id"`
+}
+
+func (q *Queries) CancelRemindersByRecurringOperationID(ctx context.Context, arg CancelRemindersByRecurringOperationIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelRemindersByRecurringOperationID, arg.OwnerID, arg.RecurringOperationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createReminder = `-- name: CreateReminder :one
 INSERT INTO reminders (
     id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id,
@@ -360,6 +381,70 @@ type MarkReminderSentParams struct {
 
 func (q *Queries) MarkReminderSent(ctx context.Context, arg MarkReminderSentParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markReminderSent, arg.ID, arg.SentAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateReminder = `-- name: UpdateReminder :execrows
+UPDATE reminders
+SET owner_id = $2,
+    target_type = $3,
+    operation_id = $4,
+    recurring_operation_id = $5,
+    lease_id = $6,
+    property_id = $7,
+    event_type = $8,
+    status = $9,
+    scheduled_at = $10,
+    sent_at = $11,
+    failed_attempts = $12,
+    next_attempt_at = $13,
+    message_title = $14,
+    message_body = $15,
+    updated_at = $16
+WHERE id = $1
+`
+
+type UpdateReminderParams struct {
+	ID                   pgtype.UUID            `json:"id"`
+	OwnerID              pgtype.UUID            `json:"owner_id"`
+	TargetType           NotificationTargetType `json:"target_type"`
+	OperationID          pgtype.UUID            `json:"operation_id"`
+	RecurringOperationID pgtype.UUID            `json:"recurring_operation_id"`
+	LeaseID              pgtype.UUID            `json:"lease_id"`
+	PropertyID           pgtype.UUID            `json:"property_id"`
+	EventType            NotificationEventType  `json:"event_type"`
+	Status               NotificationStatus     `json:"status"`
+	ScheduledAt          pgtype.Timestamptz     `json:"scheduled_at"`
+	SentAt               pgtype.Timestamptz     `json:"sent_at"`
+	FailedAttempts       int32                  `json:"failed_attempts"`
+	NextAttemptAt        pgtype.Timestamptz     `json:"next_attempt_at"`
+	MessageTitle         string                 `json:"message_title"`
+	MessageBody          string                 `json:"message_body"`
+	UpdatedAt            pgtype.Timestamptz     `json:"updated_at"`
+}
+
+func (q *Queries) UpdateReminder(ctx context.Context, arg UpdateReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateReminder,
+		arg.ID,
+		arg.OwnerID,
+		arg.TargetType,
+		arg.OperationID,
+		arg.RecurringOperationID,
+		arg.LeaseID,
+		arg.PropertyID,
+		arg.EventType,
+		arg.Status,
+		arg.ScheduledAt,
+		arg.SentAt,
+		arg.FailedAttempts,
+		arg.NextAttemptAt,
+		arg.MessageTitle,
+		arg.MessageBody,
+		arg.UpdatedAt,
+	)
 	if err != nil {
 		return 0, err
 	}
