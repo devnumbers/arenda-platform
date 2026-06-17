@@ -298,10 +298,16 @@ SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_dat
 WHERE status IN ('awaiting_start', 'active')
   AND end_date IS NOT NULL
   AND end_date < $1::date
+LIMIT $2::int
 `
 
-func (q *Queries) ListOpenLeasesWithPastEndDate(ctx context.Context, asOf pgtype.Date) ([]Lease, error) {
-	rows, err := q.db.Query(ctx, listOpenLeasesWithPastEndDate, asOf)
+type ListOpenLeasesWithPastEndDateParams struct {
+	AsOf  pgtype.Date `json:"as_of"`
+	Limit int32       `json:"limit"`
+}
+
+func (q *Queries) ListOpenLeasesWithPastEndDate(ctx context.Context, arg ListOpenLeasesWithPastEndDateParams) ([]Lease, error) {
+	rows, err := q.db.Query(ctx, listOpenLeasesWithPastEndDate, arg.AsOf, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

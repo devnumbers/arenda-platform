@@ -211,6 +211,29 @@ func (r *ReminderRepository) CancelByRecurringOperationID(ctx context.Context, o
 	return nil
 }
 
+// HasReminderForLeaseEvent reports whether a non-cancelled reminder already exists
+// for the given lease and event type.
+func (r *ReminderRepository) HasReminderForLeaseEvent(ctx context.Context, ownerID, leaseID uuid.UUID, eventType domain.EventType) (bool, error) {
+	exists, err := r.q().HasReminderForLeaseEvent(ctx, postgres.HasReminderForLeaseEventParams{
+		OwnerID:   pgconv.UUIDToPgtype(ownerID),
+		LeaseID:   pgconv.UUIDToPgtype(leaseID),
+		EventType: postgres.NotificationEventType(eventType),
+	})
+	if err != nil {
+		return false, fmt.Errorf("check reminder for lease event: %w", err)
+	}
+	return exists, nil
+}
+
+// ExistsSentSMSReminder reports whether a sent SMS record already exists for the reminder.
+func (r *ReminderRepository) ExistsSentSMSReminder(ctx context.Context, reminderID uuid.UUID) (bool, error) {
+	exists, err := r.q().ExistsSentSMSReminder(ctx, pgconv.UUIDToPgtype(reminderID))
+	if err != nil {
+		return false, fmt.Errorf("check sent sms reminder: %w", err)
+	}
+	return exists, nil
+}
+
 func toDomain(row postgres.Reminder) domain.Reminder {
 	return domain.Reminder{
 		ID:                   pgconv.UUIDFromPgtype(row.ID),

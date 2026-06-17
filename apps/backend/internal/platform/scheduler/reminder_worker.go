@@ -21,12 +21,11 @@ type Backoff interface {
 type ReminderWorker struct {
 	repo        application.ReminderRepository
 	notifier    application.Notifier
-	beginner    transaction.Beginner
+	db          transaction.Beginner
 	clock       clock.Clock
 	backoff     Backoff
 	maxAttempts int
 	interval    time.Duration
-	batchSize   int
 	logger      *slog.Logger
 }
 
@@ -34,12 +33,11 @@ type ReminderWorker struct {
 func NewReminderWorker(
 	repo application.ReminderRepository,
 	notifier application.Notifier,
-	beginner transaction.Beginner,
+	db transaction.Beginner,
 	clock clock.Clock,
 	backoff Backoff,
 	maxAttempts int,
 	interval time.Duration,
-	batchSize int,
 	logger *slog.Logger,
 ) *ReminderWorker {
 	if logger == nil {
@@ -48,12 +46,11 @@ func NewReminderWorker(
 	return &ReminderWorker{
 		repo:        repo,
 		notifier:    notifier,
-		beginner:    beginner,
+		db:          db,
 		clock:       clock,
 		backoff:     backoff,
 		maxAttempts: maxAttempts,
 		interval:    interval,
-		batchSize:   batchSize,
 		logger:      logger,
 	}
 }
@@ -82,45 +79,36 @@ func (w *ReminderWorker) Run(ctx context.Context) {
 func (w *ReminderWorker) tick(ctx context.Context) error {
 	now := w.clock.Now()
 
-	// Process each batch inside a single transaction. The ListDue query holds
-	// FOR UPDATE SKIP LOCKED row locks for the selected reminders, and those
-	// locks are kept until the transaction commits. Calling the external
-	// Notifier inside the transaction guarantees that a concurrent worker or
-	// instance cannot dispatch the same reminder while the notify call is in
-	// flight, which prevents duplicate sends without additional idempotency
-	// infrastructure.
-	//
-	// Operational trade-off: slow or unresponsive providers extend the lock
-	// hold time and can delay other dispatch work. If that becomes a problem,
-	// replace this single long transaction with per-reminder short
-	// transactions (or advisory locks) so the external call happens outside
-	// the database transaction.
-	tx, err := w.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRepo := w.repo.WithTx(tx)
-
-	reminders, err := txRepo.ListDue(ctx, now, w.batchSize)
-	if err != nil {
-		return fmt.Errorf("list due reminders: %w", err)
-	}
-
-	for _, r := range reminders {
-		if err := w.dispatch(ctx, txRepo, r, now); err != nil {
-			w.logger.ErrorContext(ctx, "dispatch reminder failed", "reminder_id", r.ID, "error", err)
+	for {
+		tx, err := w.db.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin transaction: %w", err)
 		}
-	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
+		txRepo := w.repo.WithTx(tx)
+		reminders, err := txRepo.ListDue(ctx, now, 1)
+		if err != nil {
+			_ = tx.Rollback(ctx)
+			return fmt.Errorf("list due reminders: %w", err)
+		}
+		if len(reminders) == 0 {
+			_ = tx.Rollback(ctx)
+			break
+		}
+
+		r := reminders[0]
+		if err := w.dispatch(ctx, r, txRepo, now); err != nil {
+			_ = tx.Rollback(ctx)
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit transaction: %w", err)
+		}
 	}
 	return nil
 }
 
-func (w *ReminderWorker) dispatch(ctx context.Context, repo application.ReminderRepository, r domain.Reminder, now time.Time) error {
+func (w *ReminderWorker) dispatch(ctx context.Context, r domain.Reminder, repo application.ReminderRepository, now time.Time) error {
 	if err := w.notifier.Notify(ctx, application.Notification{
 		RecipientID: r.OwnerID,
 		ReminderID:  r.ID,
@@ -128,7 +116,7 @@ func (w *ReminderWorker) dispatch(ctx context.Context, repo application.Reminder
 		Title:       r.MessageTitle,
 		Body:        r.MessageBody,
 	}); err != nil {
-		w.logger.ErrorContext(ctx, "notify reminder failed", "reminder_id", r.ID, "error", err)
+		w.logger.ErrorContext(ctx, "notify reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
 		return w.markFailure(ctx, repo, r, now)
 	}
 

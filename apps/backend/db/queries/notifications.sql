@@ -79,6 +79,12 @@ WHERE owner_id = $1
   AND recurring_operation_id = $2
   AND status = 'pending';
 
+-- name: HasReminderForLeaseEvent :one
+SELECT EXISTS(SELECT 1 FROM reminders WHERE owner_id = $1 AND lease_id = $2 AND event_type = $3 AND status != 'cancelled') AS exists;
+
+-- name: ExistsSentSMSReminder :one
+SELECT EXISTS(SELECT 1 FROM sent_sms_reminders WHERE reminder_id = $1) AS exists;
+
 -- name: CreateSentSMSReminder :one
 INSERT INTO sent_sms_reminders (id, reminder_id, owner_id, phone, message, provider_response, sent_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)

@@ -20,6 +20,8 @@ type ReminderRepository interface {
 	MarkFailed(ctx context.Context, id uuid.UUID, nextAttempt *time.Time, terminal bool) error
 	CancelByTarget(ctx context.Context, ownerID uuid.UUID, targetType domain.TargetType, targetID uuid.UUID, eventType domain.EventType) error
 	CancelByRecurringOperationID(ctx context.Context, ownerID, recID uuid.UUID) error
+	HasReminderForLeaseEvent(ctx context.Context, ownerID, leaseID uuid.UUID, eventType domain.EventType) (bool, error)
+	ExistsSentSMSReminder(ctx context.Context, reminderID uuid.UUID) (bool, error)
 	WithTx(tx transaction.Tx) ReminderRepository
 }
 

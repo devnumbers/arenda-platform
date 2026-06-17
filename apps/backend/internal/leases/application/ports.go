@@ -32,7 +32,7 @@ type LeaseRepository interface {
 	Complete(ctx context.Context, id, ownerID uuid.UUID) (domain.Lease, error)
 	CountOpenLeasesByProperty(ctx context.Context, propertyID uuid.UUID) (int, error)
 	GetOpenLeaseByProperty(ctx context.Context, propertyID uuid.UUID) (domain.Lease, error)
-	ListOpenLeasesWithPastEndDate(ctx context.Context, asOf time.Time) ([]domain.Lease, error)
+	ListOpenLeasesWithPastEndDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Lease, error)
 	WithTx(tx transaction.Tx) LeaseRepository
 }
 

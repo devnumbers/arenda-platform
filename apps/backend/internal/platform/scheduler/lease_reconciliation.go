@@ -25,6 +25,7 @@ type LeaseReconciliationWorker struct {
 	beginner  transaction.Beginner
 	clock     clock.Clock
 	interval  time.Duration
+	batchSize int
 	logger    *slog.Logger
 }
 
@@ -35,6 +36,7 @@ func NewLeaseReconciliationWorker(
 	beginner transaction.Beginner,
 	clock clock.Clock,
 	interval time.Duration,
+	batchSize int,
 	logger *slog.Logger,
 ) *LeaseReconciliationWorker {
 	if logger == nil {
@@ -46,6 +48,7 @@ func NewLeaseReconciliationWorker(
 		beginner:  beginner,
 		clock:     clock,
 		interval:  interval,
+		batchSize: batchSize,
 		logger:    logger,
 	}
 }
@@ -73,14 +76,23 @@ func (w *LeaseReconciliationWorker) Run(ctx context.Context) {
 
 func (w *LeaseReconciliationWorker) tick(ctx context.Context) error {
 	asOf := w.clock.Now()
-	leases, err := w.leases.ListOpenLeasesWithPastEndDate(ctx, asOf)
-	if err != nil {
-		return fmt.Errorf("list open leases with past end date: %w", err)
-	}
+	for {
+		leases, err := w.leases.ListOpenLeasesWithPastEndDate(ctx, asOf, w.batchSize)
+		if err != nil {
+			return fmt.Errorf("list open leases with past end date: %w", err)
+		}
+		if len(leases) == 0 {
+			break
+		}
 
-	for _, lease := range leases {
-		if err := w.reconcile(ctx, lease.ID, asOf); err != nil {
-			w.logger.ErrorContext(ctx, "reconcile lease failed", "lease_id", lease.ID, "error", err)
+		for _, lease := range leases {
+			if err := w.reconcile(ctx, lease.ID, asOf); err != nil {
+				w.logger.ErrorContext(ctx, "reconcile lease failed", "lease_id", lease.ID, "error", err)
+			}
+		}
+
+		if len(leases) < w.batchSize {
+			break
 		}
 	}
 	return nil

@@ -168,8 +168,12 @@ func (r *LeaseRepository) GetOpenLeaseByProperty(ctx context.Context, propertyID
 	return leaseFromRow(row)
 }
 
-func (r *LeaseRepository) ListOpenLeasesWithPastEndDate(ctx context.Context, asOf time.Time) ([]domain.Lease, error) {
-	rows, err := r.q().ListOpenLeasesWithPastEndDate(ctx, pgconv.DateToPgtype(asOf))
+func (r *LeaseRepository) ListOpenLeasesWithPastEndDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Lease, error) {
+	rows, err := r.q().ListOpenLeasesWithPastEndDate(ctx, postgres.ListOpenLeasesWithPastEndDateParams{
+		AsOf: pgconv.DateToPgtype(asOf),
+		//nolint:gosec // Reconciliation batch size is configured and bounded.
+		Limit: int32(limit),
+	})
 	if err != nil {
 		return nil, err
 	}

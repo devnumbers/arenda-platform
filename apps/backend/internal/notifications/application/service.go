@@ -276,6 +276,14 @@ func (s *scheduler) EnsureRequiresActionReminder(ctx context.Context, lease Leas
 	if lease.EndDate == nil || lease.EndDate.IsZero() {
 		return nil
 	}
+	exists, err := s.repo.HasReminderForLeaseEvent(ctx, lease.OwnerID, lease.ID, domain.EventLeaseRequiresAction)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+
 	if err := s.repo.CancelByTarget(ctx, lease.OwnerID, domain.TargetLease, lease.ID, domain.EventLeaseRequiresAction); err != nil {
 		return err
 	}

@@ -12,19 +12,20 @@ import (
 
 // Notifier dispatches reminders as SMS messages using an SMSSender port.
 type Notifier struct {
-	resolver application.ContactResolver
-	sender   application.SMSSender
-	sentRepo application.SentSMSReminderRepository
-	clock    clock.Clock
-	logger   *slog.Logger
+	resolver     application.ContactResolver
+	sender       application.SMSSender
+	sentRepo     application.SentSMSReminderRepository
+	reminderRepo application.ReminderRepository
+	clock        clock.Clock
+	logger       *slog.Logger
 }
 
 // NewNotifier creates a new SMS notifier.
-func NewNotifier(resolver application.ContactResolver, sender application.SMSSender, sentRepo application.SentSMSReminderRepository, clock clock.Clock, logger *slog.Logger) *Notifier {
+func NewNotifier(resolver application.ContactResolver, sender application.SMSSender, sentRepo application.SentSMSReminderRepository, reminderRepo application.ReminderRepository, clock clock.Clock, logger *slog.Logger) *Notifier {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Notifier{resolver: resolver, sender: sender, sentRepo: sentRepo, clock: clock, logger: logger}
+	return &Notifier{resolver: resolver, sender: sender, sentRepo: sentRepo, reminderRepo: reminderRepo, clock: clock, logger: logger}
 }
 
 // Notify resolves the recipient contact and sends the notification via SMS.
@@ -35,6 +36,17 @@ func (n *Notifier) Notify(ctx context.Context, notification application.Notifica
 	}
 	if contact.Channel != application.ChannelSMS {
 		return fmt.Errorf("unsupported channel: %s", contact.Channel)
+	}
+
+	if notification.ReminderID != uuid.Nil {
+		exists, err := n.reminderRepo.ExistsSentSMSReminder(ctx, notification.ReminderID)
+		if err != nil {
+			return fmt.Errorf("check sent sms reminder: %w", err)
+		}
+		if exists {
+			n.logger.InfoContext(ctx, "sms reminder already sent, skipping", "reminder_id", notification.ReminderID, "event_type", notification.EventType)
+			return nil
+		}
 	}
 
 	if err := n.sender.Send(ctx, contact.Address, notification.Body); err != nil {
@@ -50,6 +62,6 @@ func (n *Notifier) Notify(ctx context.Context, notification application.Notifica
 		return fmt.Errorf("track sent sms: %w", err)
 	}
 
-	n.logger.InfoContext(ctx, "sms reminder sent", "recipient_id", notification.RecipientID, "event_type", notification.EventType)
+	n.logger.InfoContext(ctx, "sms reminder sent", "reminder_id", notification.ReminderID, "event_type", notification.EventType)
 	return nil
 }

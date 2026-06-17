@@ -18,17 +18,23 @@ func (b *ExponentialBackoff) Next(attempt int) time.Duration {
 	if attempt <= 0 {
 		return b.Base
 	}
+	if b.Max <= 0 {
+		return b.Base
+	}
 	if b.Factor <= 1 {
-		return b.min(b.Base)
+		return minDuration(b.Base, b.Max)
 	}
 
-	d := float64(b.Base) * math.Pow(b.Factor, float64(attempt-1))
-	return b.min(time.Duration(d))
-}
-
-func (b *ExponentialBackoff) min(d time.Duration) time.Duration {
-	if b.Max > 0 && d > b.Max {
+	next := float64(b.Base) * math.Pow(b.Factor, float64(attempt-1))
+	if next <= 0 || next > float64(b.Max) || next > float64(math.MaxInt64) {
 		return b.Max
 	}
-	return d
+	return minDuration(time.Duration(next), b.Max)
+}
+
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
 }

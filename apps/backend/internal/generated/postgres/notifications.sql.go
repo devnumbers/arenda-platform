@@ -175,6 +175,17 @@ func (q *Queries) CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSRe
 	return i, err
 }
 
+const existsSentSMSReminder = `-- name: ExistsSentSMSReminder :one
+SELECT EXISTS(SELECT 1 FROM sent_sms_reminders WHERE reminder_id = $1) AS exists
+`
+
+func (q *Queries) ExistsSentSMSReminder(ctx context.Context, reminderID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, existsSentSMSReminder, reminderID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const getReminderByID = `-- name: GetReminderByID :one
 SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, event_date FROM reminders WHERE id = $1
 `
@@ -203,6 +214,23 @@ func (q *Queries) GetReminderByID(ctx context.Context, id pgtype.UUID) (Reminder
 		&i.EventDate,
 	)
 	return i, err
+}
+
+const hasReminderForLeaseEvent = `-- name: HasReminderForLeaseEvent :one
+SELECT EXISTS(SELECT 1 FROM reminders WHERE owner_id = $1 AND lease_id = $2 AND event_type = $3 AND status != 'cancelled') AS exists
+`
+
+type HasReminderForLeaseEventParams struct {
+	OwnerID   pgtype.UUID           `json:"owner_id"`
+	LeaseID   pgtype.UUID           `json:"lease_id"`
+	EventType NotificationEventType `json:"event_type"`
+}
+
+func (q *Queries) HasReminderForLeaseEvent(ctx context.Context, arg HasReminderForLeaseEventParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasReminderForLeaseEvent, arg.OwnerID, arg.LeaseID, arg.EventType)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listDueReminders = `-- name: ListDueReminders :many
