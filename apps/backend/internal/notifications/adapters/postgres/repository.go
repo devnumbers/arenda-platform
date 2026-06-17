@@ -39,13 +39,6 @@ func (r *ReminderRepository) WithTx(tx transaction.Tx) application.ReminderRepos
 	return NewReminderRepository(pgtx)
 }
 
-func eventDateToPgtype(t time.Time) pgtype.Date {
-	if t.IsZero() {
-		return pgtype.Date{}
-	}
-	return pgtype.Date{Time: t, Valid: true}
-}
-
 // Save inserts a reminder.
 func (r *ReminderRepository) Save(ctx context.Context, rm domain.Reminder) error {
 	_, err := r.q().CreateReminder(ctx, postgres.CreateReminderParams{
@@ -59,7 +52,6 @@ func (r *ReminderRepository) Save(ctx context.Context, rm domain.Reminder) error
 		EventType:            postgres.NotificationEventType(rm.EventType),
 		Status:               postgres.NotificationStatus(rm.Status),
 		ScheduledAt:          pgtype.Timestamptz{Time: rm.ScheduledAt, Valid: true},
-		EventDate:            eventDateToPgtype(rm.EventDate),
 		MessageTitle:         rm.MessageTitle,
 		MessageBody:          rm.MessageBody,
 		CreatedAt:            pgtype.Timestamptz{Time: rm.CreatedAt, Valid: true},
@@ -67,41 +59,6 @@ func (r *ReminderRepository) Save(ctx context.Context, rm domain.Reminder) error
 	})
 	if err != nil {
 		return fmt.Errorf("create reminder: %w", err)
-	}
-	return nil
-}
-
-// Update replaces an existing reminder.
-func (r *ReminderRepository) Update(ctx context.Context, rm domain.Reminder) error {
-	var sentAt, nextAttemptAt pgtype.Timestamptz
-	if rm.SentAt != nil {
-		sentAt = pgtype.Timestamptz{Time: *rm.SentAt, Valid: true}
-	}
-	if rm.NextAttemptAt != nil {
-		nextAttemptAt = pgtype.Timestamptz{Time: *rm.NextAttemptAt, Valid: true}
-	}
-	_, err := r.q().UpdateReminder(ctx, postgres.UpdateReminderParams{
-		ID:                   pgconv.UUIDToPgtype(rm.ID),
-		OwnerID:              pgconv.UUIDToPgtype(rm.OwnerID),
-		TargetType:           postgres.NotificationTargetType(rm.TargetType),
-		OperationID:          pgconv.UUIDToPgtypePtr(rm.OperationID),
-		RecurringOperationID: pgconv.UUIDToPgtypePtr(rm.RecurringOperationID),
-		LeaseID:              pgconv.UUIDToPgtypePtr(rm.LeaseID),
-		PropertyID:           pgconv.UUIDToPgtypePtr(rm.PropertyID),
-		EventType:            postgres.NotificationEventType(rm.EventType),
-		Status:               postgres.NotificationStatus(rm.Status),
-		ScheduledAt:          pgtype.Timestamptz{Time: rm.ScheduledAt, Valid: true},
-		EventDate:            eventDateToPgtype(rm.EventDate),
-		SentAt:               sentAt,
-		//nolint:gosec // FailedAttempts is bounded by retry logic in the application layer.
-		FailedAttempts: int32(rm.FailedAttempts),
-		NextAttemptAt:  nextAttemptAt,
-		MessageTitle:   rm.MessageTitle,
-		MessageBody:    rm.MessageBody,
-		UpdatedAt:      pgtype.Timestamptz{Time: rm.UpdatedAt, Valid: true},
-	})
-	if err != nil {
-		return fmt.Errorf("update reminder: %w", err)
 	}
 	return nil
 }
@@ -122,14 +79,29 @@ func (r *ReminderRepository) UpdateScheduledAt(ctx context.Context, ownerID, id 
 	return nil
 }
 
-// GetByID returns a reminder by ID.
-func (r *ReminderRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Reminder, error) {
-	row, err := r.q().GetReminderByID(ctx, pgconv.UUIDToPgtype(id))
+// GetByID returns a reminder by ID scoped to an owner.
+func (r *ReminderRepository) GetByID(ctx context.Context, id, ownerID uuid.UUID) (domain.Reminder, error) {
+	row, err := r.q().GetReminderByIDAndOwner(ctx, postgres.GetReminderByIDAndOwnerParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Reminder{}, application.ErrNotFound
 		}
 		return domain.Reminder{}, fmt.Errorf("get reminder: %w", err)
+	}
+	return toDomain(row), nil
+}
+
+// GetByIDUnscoped returns a reminder by ID without owner scoping for internal/worker use.
+func (r *ReminderRepository) GetByIDUnscoped(ctx context.Context, id uuid.UUID) (domain.Reminder, error) {
+	row, err := r.q().GetReminderByIDUnscoped(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Reminder{}, application.ErrNotFound
+		}
+		return domain.Reminder{}, fmt.Errorf("get reminder unscoped: %w", err)
 	}
 	return toDomain(row), nil
 }
@@ -239,7 +211,7 @@ func (r *ReminderRepository) MarkFailed(ctx context.Context, id uuid.UUID, nextA
 	return nil
 }
 
-// CancelByTarget cancels pending reminders for a concrete target and event type.
+// CancelByTarget cancels pending or sending reminders for a concrete target and event type.
 func (r *ReminderRepository) CancelByTarget(ctx context.Context, ownerID uuid.UUID, targetType domain.TargetType, targetID uuid.UUID, eventType domain.EventType) error {
 	_, err := r.q().CancelReminderByTarget(ctx, postgres.CancelReminderByTargetParams{
 		OwnerID:    pgconv.UUIDToPgtype(ownerID),
@@ -253,7 +225,7 @@ func (r *ReminderRepository) CancelByTarget(ctx context.Context, ownerID uuid.UU
 	return nil
 }
 
-// CancelByRecurringOperationID cancels all pending reminders linked to a recurring operation template.
+// CancelByRecurringOperationID cancels all pending or sending reminders linked to a recurring operation template.
 func (r *ReminderRepository) CancelByRecurringOperationID(ctx context.Context, ownerID, recID uuid.UUID) error {
 	_, err := r.q().CancelRemindersByRecurringOperationID(ctx, postgres.CancelRemindersByRecurringOperationIDParams{
 		OwnerID:              pgconv.UUIDToPgtype(ownerID),
@@ -265,7 +237,7 @@ func (r *ReminderRepository) CancelByRecurringOperationID(ctx context.Context, o
 	return nil
 }
 
-// HasReminderForLeaseEvent reports whether a non-cancelled reminder already exists
+// HasReminderForLeaseEvent reports whether an active reminder already exists
 // for the given lease and event type.
 func (r *ReminderRepository) HasReminderForLeaseEvent(ctx context.Context, ownerID, leaseID uuid.UUID, eventType domain.EventType) (bool, error) {
 	exists, err := r.q().HasReminderForLeaseEvent(ctx, postgres.HasReminderForLeaseEventParams{
@@ -292,10 +264,13 @@ func (r *ReminderRepository) ResetReminderSending(ctx context.Context, id uuid.U
 }
 
 // MarkSendingReminderPending resets a sending reminder back to pending with a
-// short retry delay and an incremented failed attempt count. It is used by the
+// given retry time and an incremented failed attempt count. It is used by the
 // worker to recover from a failed finalize transaction.
-func (r *ReminderRepository) MarkSendingReminderPending(ctx context.Context, id uuid.UUID) error {
-	rows, err := r.q().MarkSendingReminderPending(ctx, pgconv.UUIDToPgtype(id))
+func (r *ReminderRepository) MarkSendingReminderPending(ctx context.Context, id uuid.UUID, nextAttemptAt time.Time) error {
+	rows, err := r.q().MarkSendingReminderPending(ctx, postgres.MarkSendingReminderPendingParams{
+		ID:            pgconv.UUIDToPgtype(id),
+		NextAttemptAt: pgtype.Timestamptz{Time: nextAttemptAt, Valid: true},
+	})
 	if err != nil {
 		return fmt.Errorf("mark sending reminder pending: %w", err)
 	}
@@ -334,7 +309,6 @@ func toDomain(row postgres.Reminder) domain.Reminder {
 		EventType:            domain.EventType(row.EventType),
 		Status:               domain.ReminderStatus(row.Status),
 		ScheduledAt:          pgconv.TimestamptzToTime(row.ScheduledAt),
-		EventDate:            pgconv.DateFromPgtype(row.EventDate),
 		SentAt:               pgconv.TimestamptzToPtrTime(row.SentAt),
 		FailedAttempts:       int(row.FailedAttempts),
 		NextAttemptAt:        pgconv.TimestamptzToPtrTime(row.NextAttemptAt),

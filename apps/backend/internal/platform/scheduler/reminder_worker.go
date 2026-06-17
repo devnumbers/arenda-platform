@@ -241,7 +241,12 @@ func (w *ReminderWorker) recoverFinalizeFailure(ctx context.Context, id uuid.UUI
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txRepo := w.repo.WithTx(tx)
-	if err := txRepo.MarkSendingReminderPending(ctx, id); err != nil {
+	r, err := txRepo.GetByIDUnscoped(ctx, id)
+	if err != nil {
+		return fmt.Errorf("get reminder for recovery: %w", err)
+	}
+	nextAttemptAt := w.clock.Now().Add(w.backoff.Next(r.FailedAttempts + 1))
+	if err := txRepo.MarkSendingReminderPending(ctx, id, nextAttemptAt); err != nil {
 		return fmt.Errorf("mark sending reminder pending: %w", err)
 	}
 

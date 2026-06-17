@@ -1,0 +1,1 @@
+ALTER TABLE recurring_operations DROP CONSTRAINT IF EXISTS chk_recurring_offset_nonnegative;

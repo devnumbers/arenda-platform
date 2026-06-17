@@ -52,7 +52,8 @@ type Querier interface {
 	GetRecurringOperationByIDAndOwner(ctx context.Context, arg GetRecurringOperationByIDAndOwnerParams) (RecurringOperation, error)
 	GetRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) ([]RecurringOperation, error)
 	GetRecurringOperationByLeaseIDAndOwner(ctx context.Context, arg GetRecurringOperationByLeaseIDAndOwnerParams) (RecurringOperation, error)
-	GetReminderByID(ctx context.Context, id pgtype.UUID) (Reminder, error)
+	GetReminderByIDAndOwner(ctx context.Context, arg GetReminderByIDAndOwnerParams) (Reminder, error)
+	GetReminderByIDUnscoped(ctx context.Context, id pgtype.UUID) (Reminder, error)
 	GetSessionByTokenHash(ctx context.Context, arg GetSessionByTokenHashParams) (GetSessionByTokenHashRow, error)
 	GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (UserSubscription, error)
 	GetTariffByID(ctx context.Context, id pgtype.UUID) (Tariff, error)
@@ -82,7 +83,7 @@ type Querier interface {
 	MarkReminderSending(ctx context.Context, id pgtype.UUID) (Reminder, error)
 	MarkReminderSent(ctx context.Context, arg MarkReminderSentParams) (int64, error)
 	MarkSMSCodeUsed(ctx context.Context, id pgtype.UUID) error
-	MarkSendingReminderPending(ctx context.Context, id pgtype.UUID) (int64, error)
+	MarkSendingReminderPending(ctx context.Context, arg MarkSendingReminderPendingParams) (int64, error)
 	ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error)
 	SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperationParams) (Operation, error)
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
@@ -94,7 +95,6 @@ type Querier interface {
 	UpdateRecurringOperationStatus(ctx context.Context, arg UpdateRecurringOperationStatusParams) (RecurringOperation, error)
 	UpdateRecurringOperationStatusByID(ctx context.Context, arg UpdateRecurringOperationStatusByIDParams) (RecurringOperation, error)
 	UpdateRecurringOperationStatusByLeaseID(ctx context.Context, arg UpdateRecurringOperationStatusByLeaseIDParams) ([]RecurringOperation, error)
-	UpdateReminder(ctx context.Context, arg UpdateReminderParams) (int64, error)
 	UpdateReminderScheduledAt(ctx context.Context, arg UpdateReminderScheduledAtParams) (int64, error)
 	UpdateTenantContact(ctx context.Context, arg UpdateTenantContactParams) (TenantContact, error)
 	UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error

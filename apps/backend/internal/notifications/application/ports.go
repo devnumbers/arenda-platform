@@ -12,9 +12,9 @@ import (
 // ReminderRepository persists and queries reminders.
 type ReminderRepository interface {
 	Save(ctx context.Context, r domain.Reminder) error
-	Update(ctx context.Context, r domain.Reminder) error
 	UpdateScheduledAt(ctx context.Context, ownerID, id uuid.UUID, scheduledAt time.Time) error
-	GetByID(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
+	GetByID(ctx context.Context, id, ownerID uuid.UUID) (domain.Reminder, error)
+	GetByIDUnscoped(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
 	ListByOwner(ctx context.Context, ownerID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	ListDue(ctx context.Context, before time.Time, limit int) ([]domain.Reminder, error)
 	ListStaleSendingReminders(ctx context.Context, staleBefore time.Time, limit int) ([]domain.Reminder, error)
@@ -23,7 +23,7 @@ type ReminderRepository interface {
 	MarkFailed(ctx context.Context, id uuid.UUID, nextAttempt *time.Time, terminal bool) error
 	SaveSentSMSReminder(ctx context.Context, id, reminderID, ownerID uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error
 	ResetReminderSending(ctx context.Context, id uuid.UUID) error
-	MarkSendingReminderPending(ctx context.Context, id uuid.UUID) error
+	MarkSendingReminderPending(ctx context.Context, id uuid.UUID, nextAttemptAt time.Time) error
 	CancelByTarget(ctx context.Context, ownerID uuid.UUID, targetType domain.TargetType, targetID uuid.UUID, eventType domain.EventType) error
 	CancelByRecurringOperationID(ctx context.Context, ownerID, recID uuid.UUID) error
 	HasReminderForLeaseEvent(ctx context.Context, ownerID, leaseID uuid.UUID, eventType domain.EventType) (bool, error)

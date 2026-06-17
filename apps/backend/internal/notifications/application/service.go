@@ -36,7 +36,7 @@ func (s *ReminderService) WithTx(tx transaction.Tx) *ReminderService {
 func (s *ReminderService) CreateForOperation(ctx context.Context, op OperationInfo, reminderDate time.Time) (domain.Reminder, error) {
 	r, err := buildOperationReminder(op, reminderDate, s.clock.Now())
 	if err != nil {
-		if errors.Is(err, domain.ErrInvalidReminderDate) || errors.Is(err, domain.ErrReminderAfterEvent) {
+		if errors.Is(err, domain.ErrInvalidReminderDate) {
 			return domain.Reminder{}, fmt.Errorf("%w: %w", ErrInvalidReminderDate, err)
 		}
 		return domain.Reminder{}, err
@@ -110,12 +110,9 @@ func (s *ReminderService) ListByOwner(ctx context.Context, ownerID uuid.UUID, fi
 
 // GetByID returns a reminder by ID after verifying ownership.
 func (s *ReminderService) GetByID(ctx context.Context, ownerID, id uuid.UUID) (domain.Reminder, error) {
-	r, err := s.repo.GetByID(ctx, id)
+	r, err := s.repo.GetByID(ctx, id, ownerID)
 	if err != nil {
 		return domain.Reminder{}, err
-	}
-	if r.OwnerID != ownerID {
-		return domain.Reminder{}, ErrNotFound
 	}
 	return r, nil
 }
@@ -129,13 +126,14 @@ func (s *ReminderService) Reschedule(ctx context.Context, ownerID, id uuid.UUID,
 	if r.Status != domain.ReminderPending {
 		return domain.Reminder{}, ErrReminderNotPending
 	}
-	if err := domain.ValidatePendingDate(r.EventDate, newDate, s.clock.Now()); err != nil {
+	if err := domain.ValidateReminderDate(newDate, s.clock.Now()); err != nil {
 		return domain.Reminder{}, fmt.Errorf("%w: %w", ErrInvalidReminderDate, err)
 	}
-	if err := s.repo.UpdateScheduledAt(ctx, ownerID, id, domain.ScheduledAtForDate(newDate)); err != nil {
+	scheduledAt := domain.ScheduledAtForDate(newDate)
+	if err := s.repo.UpdateScheduledAt(ctx, ownerID, id, scheduledAt); err != nil {
 		return domain.Reminder{}, fmt.Errorf("update rescheduled reminder: %w", err)
 	}
-	r.ScheduledAt = domain.ScheduledAtForDate(newDate)
+	r.ScheduledAt = scheduledAt
 	return r, nil
 }
 
@@ -187,7 +185,7 @@ func buildOperationReminder(op OperationInfo, reminderDate time.Time, now time.T
 	title := "Напоминание об операции"
 	amountRubles := float64(op.AmountKopecks) / 100
 	body := fmt.Sprintf("%s %.2f ₽ запланировано на %s", op.Category, amountRubles, op.OperationDate.Format("02.01.2006"))
-	return domain.NewOperationReminder(op.OwnerID, op.ID, op.PropertyID, op.OperationDate, reminderDate, title, body, now, op.RecurringOperationID)
+	return domain.NewOperationReminder(op.OwnerID, op.ID, op.PropertyID, reminderDate, title, body, now)
 }
 
 func buildRecurringReminders(rec RecurringOperationInfo, baseReminderDate time.Time, ops []OperationInfo, now time.Time) ([]domain.Reminder, error) {
@@ -230,7 +228,7 @@ func buildLeaseReminders(lease LeaseInfo, now time.Time) ([]domain.Reminder, err
 	if !timeutil.Date(expiringDate).Before(timeutil.Date(now)) {
 		expiringTitle := "Аренда скоро заканчивается"
 		expiringBody := fmt.Sprintf("Аренда по объекту заканчивается %s", endDate.Format("02.01.2006"))
-		expiring, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, endDate, expiringDate, expiringTitle, expiringBody, domain.EventLeaseExpiring, now)
+		expiring, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, expiringDate, expiringTitle, expiringBody, domain.EventLeaseExpiring, now)
 		if err != nil {
 			return nil, fmt.Errorf("create lease expiring reminder: %w", err)
 		}
@@ -248,7 +246,7 @@ func buildLeaseReminders(lease LeaseInfo, now time.Time) ([]domain.Reminder, err
 func buildLeaseRequiresActionReminder(lease LeaseInfo, now, reminderDate time.Time) (domain.Reminder, error) {
 	requiresActionTitle := "Аренда требует действия"
 	requiresActionBody := "Срок аренды закончился. Подтвердите продление или завершение аренды."
-	return domain.NewLeaseReminder(lease.OwnerID, lease.ID, lease.PropertyID, time.Time{}, reminderDate, requiresActionTitle, requiresActionBody, domain.EventLeaseRequiresAction, now)
+	return domain.NewLeaseReminder(lease.OwnerID, lease.ID, lease.PropertyID, reminderDate, requiresActionTitle, requiresActionBody, domain.EventLeaseRequiresAction, now)
 }
 
 // scheduler implements ReminderScheduler and runs inside transactions.

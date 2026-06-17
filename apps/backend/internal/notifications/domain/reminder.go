@@ -39,7 +39,6 @@ const fixedDispatchHour = 10
 const fixedDispatchTZ = "Europe/Moscow"
 
 var ErrInvalidReminderDate = errors.New("reminder date must be today or in the future")
-var ErrReminderAfterEvent = errors.New("reminder date must be on or before the event date")
 
 var (
 	moscowLoc     *time.Location
@@ -69,7 +68,6 @@ type Reminder struct {
 	EventType            EventType
 	Status               ReminderStatus
 	ScheduledAt          time.Time
-	EventDate            time.Time
 	SentAt               *time.Time
 	FailedAttempts       int
 	NextAttemptAt        *time.Time
@@ -92,26 +90,19 @@ func ReminderOffset(operationDate, reminderDate time.Time) int {
 	return int(op.Sub(rm).Hours() / 24)
 }
 
-// ValidatePendingDate checks that a reminder date is valid relative to an event date.
-func ValidatePendingDate(eventDate, reminderDate time.Time, now time.Time) error {
+// ValidateReminderDate checks that a reminder date is today or in the future.
+func ValidateReminderDate(reminderDate, now time.Time) error {
 	rm := reminderDate.UTC().Truncate(24 * time.Hour)
 	today := now.UTC().Truncate(24 * time.Hour)
 	if rm.Before(today) {
 		return fmt.Errorf("%w: %s", ErrInvalidReminderDate, reminderDate)
 	}
-	if eventDate.IsZero() {
-		return nil
-	}
-	ev := eventDate.UTC().Truncate(24 * time.Hour)
-	if rm.After(ev) {
-		return fmt.Errorf("%w: reminder %s after event %s", ErrReminderAfterEvent, reminderDate, eventDate)
-	}
 	return nil
 }
 
 // NewOperationReminder creates a pending reminder for a future operation.
-func NewOperationReminder(ownerID, operationID, propertyID uuid.UUID, eventDate, reminderDate time.Time, title, body string, now time.Time, recurringOperationID *uuid.UUID) (Reminder, error) {
-	if err := ValidatePendingDate(eventDate, reminderDate, now); err != nil {
+func NewOperationReminder(ownerID, operationID, propertyID uuid.UUID, reminderDate time.Time, title, body string, now time.Time) (Reminder, error) {
+	if err := ValidateReminderDate(reminderDate, now); err != nil {
 		return Reminder{}, err
 	}
 	id, err := uuid.NewRandom()
@@ -119,29 +110,24 @@ func NewOperationReminder(ownerID, operationID, propertyID uuid.UUID, eventDate,
 		return Reminder{}, fmt.Errorf("generate reminder id: %w", err)
 	}
 	return Reminder{
-		ID:                   id,
-		OwnerID:              ownerID,
-		TargetType:           TargetOperation,
-		OperationID:          &operationID,
-		RecurringOperationID: recurringOperationID,
-		PropertyID:           &propertyID,
-		EventType:            EventOperationDue,
-		Status:               ReminderPending,
-		ScheduledAt:          ScheduledAtForDate(reminderDate),
-		EventDate:            eventDate,
-		MessageTitle:         title,
-		MessageBody:          body,
-		CreatedAt:            now,
-		UpdatedAt:            now,
+		ID:           id,
+		OwnerID:      ownerID,
+		TargetType:   TargetOperation,
+		OperationID:  &operationID,
+		PropertyID:   &propertyID,
+		EventType:    EventOperationDue,
+		Status:       ReminderPending,
+		ScheduledAt:  ScheduledAtForDate(reminderDate),
+		MessageTitle: title,
+		MessageBody:  body,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}, nil
 }
 
 // NewLeaseReminder creates a pending reminder for a lease event.
-// A zero eventDate bypasses the "reminder must be on or before the event date" guard,
-// allowing reminders that intentionally fall after the event date
-// (for example, the lease_requires_action reminder is sent one day after the lease ends).
-func NewLeaseReminder(ownerID, leaseID, propertyID uuid.UUID, eventDate, reminderDate time.Time, title, body string, eventType EventType, now time.Time) (Reminder, error) {
-	if err := ValidatePendingDate(eventDate, reminderDate, now); err != nil {
+func NewLeaseReminder(ownerID, leaseID, propertyID uuid.UUID, reminderDate time.Time, title, body string, eventType EventType, now time.Time) (Reminder, error) {
+	if err := ValidateReminderDate(reminderDate, now); err != nil {
 		return Reminder{}, err
 	}
 	id, err := uuid.NewRandom()
@@ -157,7 +143,6 @@ func NewLeaseReminder(ownerID, leaseID, propertyID uuid.UUID, eventDate, reminde
 		EventType:    eventType,
 		Status:       ReminderPending,
 		ScheduledAt:  ScheduledAtForDate(reminderDate),
-		EventDate:    eventDate,
 		MessageTitle: title,
 		MessageBody:  body,
 		CreatedAt:    now,

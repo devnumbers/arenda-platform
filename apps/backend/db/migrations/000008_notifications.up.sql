@@ -21,11 +21,16 @@ CREATE TABLE reminders (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT exactly_one_target CHECK (
-        (target_type = 'operation' AND operation_id IS NOT NULL AND lease_id IS NULL) OR
+        (target_type = 'operation' AND operation_id IS NOT NULL AND recurring_operation_id IS NULL AND lease_id IS NULL) OR
         (target_type = 'recurring_operation' AND recurring_operation_id IS NOT NULL AND operation_id IS NULL AND lease_id IS NULL) OR
         (target_type = 'lease' AND lease_id IS NOT NULL AND operation_id IS NULL AND recurring_operation_id IS NULL)
     )
 );
+
+CREATE TRIGGER trg_reminders_updated_at
+BEFORE UPDATE ON reminders
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
 
 CREATE UNIQUE INDEX idx_reminders_active_unique
 ON reminders (owner_id, target_type, operation_id, recurring_operation_id, lease_id, event_type)
