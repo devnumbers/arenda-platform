@@ -209,6 +209,7 @@ func buildRecurringReminders(rec RecurringOperationInfo, baseReminderDate time.T
 		if err != nil {
 			return nil, fmt.Errorf("create reminder for operation %s: %w", op.ID, err)
 		}
+		r.RecurringOperationID = &rec.ID
 		reminders = append(reminders, r)
 	}
 	return reminders, nil
