@@ -28,8 +28,8 @@ script:pre-request {
 }
 
 script:post-response {
-  if (res.body && res.body.id) {
-    bru.setVar("reminderId", res.body.id);
+  if (res.body && res.body.items && res.body.items.length > 0) {
+    bru.setVar("reminderId", res.body.items[0].id);
   }
 }
 
@@ -38,7 +38,14 @@ tests {
     expect(res.status).to.equal(201);
   });
 
-  test("should have reminder id", function() {
-    expect(res.body.id).to.be.a("string");
+  test("should return array of reminders", function() {
+    expect(res.body.items).to.be.an("array");
+    expect(res.body.items.length).to.be.greaterThan(0);
+  });
+
+  test("should have reminder ids", function() {
+    for (const item of res.body.items) {
+      expect(item.id).to.be.a("string");
+    }
   });
 }

@@ -85,7 +85,7 @@ type Reminder struct {
     LeaseID              *uuid.UUID
     PropertyID           *uuid.UUID
     EventType            EventType     // operation_due | lease_expiring | lease_requires_action
-    Status               ReminderStatus // pending | sent | failed | cancelled
+    Status               ReminderStatus // pending | sending (internal) | sent | failed | cancelled
     ScheduledAt          time.Time
     SentAt               *time.Time
     FailedAttempts       int
@@ -143,7 +143,7 @@ type ReminderScheduler interface {
 ```sql
 CREATE TYPE notification_target_type AS ENUM ('operation', 'recurring_operation', 'lease');
 CREATE TYPE notification_event_type AS ENUM ('operation_due', 'lease_expiring', 'lease_requires_action');
-CREATE TYPE notification_status AS ENUM ('pending', 'sent', 'failed', 'cancelled');
+CREATE TYPE notification_status AS ENUM ('pending', 'sending', 'sent', 'failed', 'cancelled');
 
 CREATE TABLE reminders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -219,18 +219,22 @@ A background goroutine polls `ReminderRepository.ListDue` on a short interval (e
 
 ## API
 
-OpenAPI-first additions:
+OpenAPI-first additions. Paths are nested under `/properties/{propertyId}` for operations and recurring operations, while lease reminders remain under `/leases`:
 
 ```
-POST   /operations/{id}/reminders
-GET    /operations/{id}/reminders
-POST   /recurring-operations/{id}/reminders
-GET    /recurring-operations/{id}/reminders
-GET    /leases/{id}/reminders
-GET    /reminders
-PATCH  /reminders/{id}
-DELETE /reminders/{id}
+POST   /properties/{propertyId}/operations/{operationId}/reminders
+GET    /properties/{propertyId}/operations/{operationId}/reminders
+POST   /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders
+GET    /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders
+GET    /leases/{leaseId}/reminders
+GET    /reminders?limit={limit}&offset={offset}
+PATCH  /reminders/{reminderId}
+DELETE /reminders/{reminderId}
 ```
+
+`GET /reminders` supports optional `limit` (default 100, maximum 1000) and `offset` (default 0) query parameters for pagination.
+
+The `sending` status is an internal worker state and is never exposed through the API; external clients see `pending` instead.
 
 Request body for creation:
 

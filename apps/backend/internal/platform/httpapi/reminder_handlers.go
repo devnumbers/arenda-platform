@@ -4,15 +4,12 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
-	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	notificationsdomain "github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
 // ReminderHandlers implements the generated reminder endpoints.
@@ -22,7 +19,6 @@ type ReminderHandlers struct {
 	recurring  *leasesapp.RecurringOperationService
 	leases     *leasesapp.LeaseService
 	logger     *slog.Logger
-	clock      clock.Clock
 }
 
 // NewReminderHandlers creates HTTP handlers for the reminders API.
@@ -32,7 +28,6 @@ func NewReminderHandlers(
 	recurring *leasesapp.RecurringOperationService,
 	leases *leasesapp.LeaseService,
 	logger *slog.Logger,
-	clock clock.Clock,
 ) *ReminderHandlers {
 	return &ReminderHandlers{
 		svc:        svc,
@@ -40,19 +35,20 @@ func NewReminderHandlers(
 		recurring:  recurring,
 		leases:     leases,
 		logger:     logger,
-		clock:      clock,
 	}
 }
 
-func (h *ReminderHandlers) handleReminderError(w http.ResponseWriter, r *http.Request, err error) {
+func (h *ReminderHandlers) handleReminderError(w http.ResponseWriter, r *http.Request, err error, resource string) {
 	switch {
 	case errors.Is(err, notificationsapp.ErrNotFound),
 		errors.Is(err, leasesapp.ErrNotFound):
-		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", err.Error()))
+		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", resource+" not found"))
 	case errors.Is(err, notificationsapp.ErrInvalidReminderDate):
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", err.Error()))
 	case errors.Is(err, notificationsapp.ErrReminderNotPending):
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", err.Error()))
+	case errors.Is(err, notificationsapp.ErrConcurrentUpdate):
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "reminder changed concurrently"))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 	}
@@ -75,7 +71,7 @@ func (h *ReminderHandlers) CreateOperationReminder(w http.ResponseWriter, r *htt
 
 	op, err := h.operations.GetOperation(r.Context(), ownerID, operationId)
 	if err != nil {
-		h.handleReminderError(w, r, err)
+		h.handleReminderError(w, r, err, "operation")
 		return
 	}
 	if op.PropertyID != propertyId {
@@ -85,7 +81,7 @@ func (h *ReminderHandlers) CreateOperationReminder(w http.ResponseWriter, r *htt
 
 	reminder, err := h.svc.CreateForOperation(r.Context(), leasesapp.ToOperationInfo(op), body.ReminderDate.Time)
 	if err != nil {
-		h.handleReminderError(w, r, err)
+		h.handleReminderError(w, r, err, "operation")
 		return
 	}
 
@@ -102,7 +98,7 @@ func (h *ReminderHandlers) ListOperationReminders(w http.ResponseWriter, r *http
 
 	op, err := h.operations.GetOperation(r.Context(), ownerID, operationId)
 	if err != nil {
-		h.handleReminderError(w, r, err)
+		h.handleReminderError(w, r, err, "operation")
 		return
 	}
 	if op.PropertyID != propertyId {
@@ -112,7 +108,7 @@ func (h *ReminderHandlers) ListOperationReminders(w http.ResponseWriter, r *http
 
 	reminders, err := h.svc.ListByOwner(r.Context(), ownerID, notificationsapp.ListFilter{Limit: 1000})
 	if err != nil {
-		h.handleReminderError(w, r, err)
+		h.handleReminderError(w, r, err, "operation")
 		return
 	}
 
@@ -137,7 +133,7 @@ func (h *ReminderHandlers) CreateRecurringOperationReminder(w http.ResponseWrite
 
 	rec, err := h.recurring.GetRecurringOperation(r.Context(), ownerID, recurringOperationId)
 	if err != nil {
-		h.handleReminderError(w, r, err)
+		h.handleReminderError(w, r, err, "recurring operation")
 		return
 	}
 	if rec.PropertyID != propertyId {
@@ -145,49 +141,17 @@ func (h *ReminderHandlers) CreateRecurringOperationReminder(w http.ResponseWrite
 		return
 	}
 
-	ops, err := h.recurring.ListOperationsByRecurringOperation(r.Context(), ownerID, recurringOperationId)
+	created, err := h.recurring.CreateReminder(r.Context(), ownerID, recurringOperationId, body.ReminderDate.Time)
 	if err != nil {
-		h.handleReminderError(w, r, err)
+		h.handleReminderError(w, r, err, "recurring operation")
 		return
 	}
 
-	futureOps := filterFutureOperations(ops, h.clock.Now())
-	if len(futureOps) == 0 {
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "no future operations for reminder"))
-		return
+	items := make([]openapi.ReminderResponse, 0, len(created))
+	for _, rm := range created {
+		items = append(items, reminderResponse(rm))
 	}
-
-	earliest := futureOps[0]
-	for _, op := range futureOps {
-		if op.OperationDate.Before(earliest.OperationDate) {
-			earliest = op
-		}
-	}
-
-	offsetDays := notificationsdomain.ReminderOffset(earliest.OperationDate, body.ReminderDate.Time)
-	if offsetDays < 0 {
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "reminder date must be on or before the earliest future operation date"))
-		return
-	}
-
-	if err := h.recurring.SetReminderOffset(r.Context(), ownerID, recurringOperationId, offsetDays); err != nil {
-		h.handleReminderError(w, r, err)
-		return
-	}
-
-	reminders, err := h.svc.ListByOwner(r.Context(), ownerID, notificationsapp.ListFilter{Limit: 1000})
-	if err != nil {
-		h.handleReminderError(w, r, err)
-		return
-	}
-
-	created := filterRemindersByRecurringOperationID(reminders, recurringOperationId)
-	if len(created) == 0 {
-		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), errors.New("no reminders created after setting offset")))
-		return
-	}
-
-	writeJSON(r.Context(), w, http.StatusCreated, created[0])
+	writeJSON(r.Context(), w, http.StatusCreated, openapi.RemindersResponse{Items: items})
 }
 
 // ListRecurringOperationReminders implements GET /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders.
@@ -200,7 +164,7 @@ func (h *ReminderHandlers) ListRecurringOperationReminders(w http.ResponseWriter
 
 	rec, err := h.recurring.GetRecurringOperation(r.Context(), ownerID, recurringOperationId)
 	if err != nil {
-		h.handleReminderError(w, r, err)
+		h.handleReminderError(w, r, err, "recurring operation")
 		return
 	}
 	if rec.PropertyID != propertyId {
@@ -210,7 +174,7 @@ func (h *ReminderHandlers) ListRecurringOperationReminders(w http.ResponseWriter
 
 	reminders, err := h.svc.ListByOwner(r.Context(), ownerID, notificationsapp.ListFilter{Limit: 1000})
 	if err != nil {
-		h.handleReminderError(w, r, err)
+		h.handleReminderError(w, r, err, "recurring operation")
 		return
 	}
 
@@ -227,13 +191,13 @@ func (h *ReminderHandlers) ListLeaseReminders(w http.ResponseWriter, r *http.Req
 	}
 
 	if _, err := h.leases.GetLease(r.Context(), ownerID, leaseId); err != nil {
-		h.handleReminderError(w, r, err)
+		h.handleReminderError(w, r, err, "lease")
 		return
 	}
 
 	reminders, err := h.svc.ListByOwner(r.Context(), ownerID, notificationsapp.ListFilter{Limit: 1000})
 	if err != nil {
-		h.handleReminderError(w, r, err)
+		h.handleReminderError(w, r, err, "lease")
 		return
 	}
 
@@ -242,16 +206,35 @@ func (h *ReminderHandlers) ListLeaseReminders(w http.ResponseWriter, r *http.Req
 }
 
 // ListReminders implements GET /reminders.
-func (h *ReminderHandlers) ListReminders(w http.ResponseWriter, r *http.Request) {
+func (h *ReminderHandlers) ListReminders(w http.ResponseWriter, r *http.Request, params openapi.ListRemindersParams) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
 		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
-	reminders, err := h.svc.ListByOwner(r.Context(), ownerID, notificationsapp.ListFilter{Limit: 100, Offset: 0})
+	limit := 100
+	if params.Limit != nil {
+		limit = *params.Limit
+		if limit > 1000 {
+			limit = 1000
+		}
+		if limit < 1 {
+			limit = 1
+		}
+	}
+
+	offset := 0
+	if params.Offset != nil {
+		offset = *params.Offset
+		if offset < 0 {
+			offset = 0
+		}
+	}
+
+	reminders, err := h.svc.ListByOwner(r.Context(), ownerID, notificationsapp.ListFilter{Limit: limit, Offset: offset})
 	if err != nil {
-		h.handleReminderError(w, r, err)
+		h.handleReminderError(w, r, err, "reminder")
 		return
 	}
 
@@ -280,7 +263,7 @@ func (h *ReminderHandlers) UpdateReminder(w http.ResponseWriter, r *http.Request
 
 	reminder, err := h.svc.Reschedule(r.Context(), ownerID, reminderId, body.ReminderDate.Time)
 	if err != nil {
-		h.handleReminderError(w, r, err)
+		h.handleReminderError(w, r, err, "reminder")
 		return
 	}
 
@@ -296,7 +279,7 @@ func (h *ReminderHandlers) DeleteReminder(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := h.svc.Cancel(r.Context(), ownerID, reminderId); err != nil {
-		h.handleReminderError(w, r, err)
+		h.handleReminderError(w, r, err, "reminder")
 		return
 	}
 
@@ -304,6 +287,11 @@ func (h *ReminderHandlers) DeleteReminder(w http.ResponseWriter, r *http.Request
 }
 
 func reminderResponse(r notificationsdomain.Reminder) openapi.ReminderResponse {
+	status := openapi.ReminderResponseStatus(r.Status)
+	if r.Status == notificationsdomain.ReminderSending {
+		status = openapi.Pending
+	}
+
 	return openapi.ReminderResponse{
 		Id:                   r.ID,
 		OwnerId:              r.OwnerID,
@@ -311,10 +299,13 @@ func reminderResponse(r notificationsdomain.Reminder) openapi.ReminderResponse {
 		OperationId:          r.OperationID,
 		RecurringOperationId: r.RecurringOperationID,
 		LeaseId:              r.LeaseID,
+		PropertyId:           r.PropertyID,
 		EventType:            openapi.ReminderResponseEventType(r.EventType),
-		Status:               openapi.ReminderResponseStatus(r.Status),
+		Status:               status,
 		ScheduledAt:          r.ScheduledAt,
 		SentAt:               r.SentAt,
+		FailedAttempts:       r.FailedAttempts,
+		NextAttemptAt:        r.NextAttemptAt,
 		MessageTitle:         r.MessageTitle,
 		MessageBody:          r.MessageBody,
 		CreatedAt:            r.CreatedAt,
@@ -323,7 +314,7 @@ func reminderResponse(r notificationsdomain.Reminder) openapi.ReminderResponse {
 }
 
 func filterRemindersByOperationID(reminders []notificationsdomain.Reminder, operationID uuid.UUID) []openapi.ReminderResponse {
-	items := make([]openapi.ReminderResponse, 0)
+	items := make([]openapi.ReminderResponse, 0, len(reminders))
 	for _, r := range reminders {
 		if r.OperationID != nil && *r.OperationID == operationID {
 			items = append(items, reminderResponse(r))
@@ -333,7 +324,7 @@ func filterRemindersByOperationID(reminders []notificationsdomain.Reminder, oper
 }
 
 func filterRemindersByRecurringOperationID(reminders []notificationsdomain.Reminder, recurringOperationID uuid.UUID) []openapi.ReminderResponse {
-	items := make([]openapi.ReminderResponse, 0)
+	items := make([]openapi.ReminderResponse, 0, len(reminders))
 	for _, r := range reminders {
 		if r.RecurringOperationID != nil && *r.RecurringOperationID == recurringOperationID {
 			items = append(items, reminderResponse(r))
@@ -343,22 +334,11 @@ func filterRemindersByRecurringOperationID(reminders []notificationsdomain.Remin
 }
 
 func filterRemindersByLeaseID(reminders []notificationsdomain.Reminder, leaseID uuid.UUID) []openapi.ReminderResponse {
-	items := make([]openapi.ReminderResponse, 0)
+	items := make([]openapi.ReminderResponse, 0, len(reminders))
 	for _, r := range reminders {
 		if r.LeaseID != nil && *r.LeaseID == leaseID {
 			items = append(items, reminderResponse(r))
 		}
 	}
 	return items
-}
-
-func filterFutureOperations(ops []leasesdomain.Operation, now time.Time) []leasesdomain.Operation {
-	today := now.UTC().Truncate(24 * time.Hour)
-	out := make([]leasesdomain.Operation, 0, len(ops))
-	for _, op := range ops {
-		if !op.OperationDate.UTC().Truncate(24*time.Hour).Before(today) {
-			out = append(out, op)
-		}
-	}
-	return out
 }

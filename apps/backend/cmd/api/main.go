@@ -137,17 +137,17 @@ func run(fallback *slog.Logger) error {
 	)
 	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, logger)
 	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, reminderScheduler, platformpostgres.NewBeginner(pool), realClock{}, logger)
+	reminderService := notificationsapp.NewReminderService(reminderRepo, realClock{})
 	recurringOperationService := leasesapp.NewRecurringOperationService(
 		recurringOpRepo,
 		operationRepo,
 		leasePropertyRepo,
 		reminderScheduler,
+		reminderService,
 		platformpostgres.NewBeginner(pool),
 		realClock{},
 		logger,
 	)
-
-	reminderService := notificationsapp.NewReminderService(reminderRepo, realClock{})
 	userContactProvider := platformnotifications.NewContactProvider(identityUserRepo)
 	contactResolver := notificationspg.NewContactResolver(userContactProvider)
 	smsSenderAdapter := platformnotifications.NewSMSSenderAdapter(smsSender)

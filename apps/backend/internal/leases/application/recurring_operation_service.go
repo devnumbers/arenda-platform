@@ -46,9 +46,15 @@ type RecurringOperationService struct {
 	operations   OperationRepository
 	properties   PropertyRepository
 	scheduler    ReminderScheduler
+	reminders    ReminderLister
 	db           txBeginner
 	clock        clock.Clock
 	logger       *slog.Logger
+}
+
+// ReminderLister lists reminders for the recurring operation command.
+type ReminderLister interface {
+	ListByOwner(ctx context.Context, ownerID uuid.UUID, filter notificationsapp.ListFilter) ([]notificationsdomain.Reminder, error)
 }
 
 // NewRecurringOperationService creates a new recurring operation service.
@@ -57,6 +63,7 @@ func NewRecurringOperationService(
 	operations OperationRepository,
 	properties PropertyRepository,
 	scheduler ReminderScheduler,
+	reminders ReminderLister,
 	db txBeginner,
 	clock clock.Clock,
 	logger *slog.Logger,
@@ -75,6 +82,7 @@ func NewRecurringOperationService(
 		operations:   operations,
 		properties:   properties,
 		scheduler:    scheduler,
+		reminders:    reminders,
 		db:           db,
 		clock:        clock,
 		logger:       logger,
@@ -481,6 +489,62 @@ func (s *RecurringOperationService) SetReminderOffset(
 		return fmt.Errorf("commit tx: %w", err)
 	}
 	return nil
+}
+
+// CreateReminder creates concrete reminders for all future generated operations
+// of a recurring operation using the reminder date selected by the user. It
+// persists the computed offset and returns the created reminders.
+func (s *RecurringOperationService) CreateReminder(
+	ctx context.Context,
+	ownerID, recurringOperationID uuid.UUID,
+	reminderDate time.Time,
+) ([]notificationsdomain.Reminder, error) {
+	ops, err := s.operations.ListByRecurringOperation(ctx, recurringOperationID)
+	if err != nil {
+		return nil, fmt.Errorf("list operations: %w", err)
+	}
+
+	now := s.clock.Now()
+	futureOps := futureOperations(ops, now)
+	if len(futureOps) == 0 {
+		return nil, fmt.Errorf("%w: no future operations for reminder", ErrInvalidInput)
+	}
+
+	earliest := futureOps[0]
+	for _, op := range futureOps {
+		if op.OperationDate.Before(earliest.OperationDate) {
+			earliest = op
+		}
+	}
+
+	offsetDays := notificationsdomain.ReminderOffset(earliest.OperationDate, reminderDate)
+	if offsetDays < 0 {
+		return nil, fmt.Errorf("%w: reminder date must be on or before the earliest future operation date", ErrInvalidInput)
+	}
+
+	if err := s.SetReminderOffset(ctx, ownerID, recurringOperationID, offsetDays); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("set reminder offset: %w", err)
+	}
+
+	if s.reminders == nil {
+		return nil, fmt.Errorf("reminder lister is required")
+	}
+
+	allReminders, err := s.reminders.ListByOwner(ctx, ownerID, notificationsapp.ListFilter{Limit: 1000})
+	if err != nil {
+		return nil, fmt.Errorf("list reminders: %w", err)
+	}
+
+	out := make([]notificationsdomain.Reminder, 0, len(allReminders))
+	for _, r := range allReminders {
+		if r.RecurringOperationID != nil && *r.RecurringOperationID == recurringOperationID {
+			out = append(out, r)
+		}
+	}
+	return out, nil
 }
 
 func (s *RecurringOperationService) validateCommand(opType, category string, amount int64, startDate time.Time, paymentDay int, endDate *time.Time) error {

@@ -482,11 +482,11 @@ paths:
               $ref: '#/components/schemas/ReminderCreateRequest'
       responses:
         '201':
-          description: Reminder created
+          description: Reminders created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReminderResponse'
+                $ref: '#/components/schemas/RemindersResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -858,6 +858,22 @@ paths:
       operationId: listReminders
       security:
         - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
       responses:
         '200':
           description: Reminders
@@ -899,6 +915,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     delete:
       operationId: deleteReminder
       security:
@@ -1449,7 +1467,7 @@ components:
 
     ReminderResponse:
       type: object
-      required: [id, owner_id, target_type, event_type, status, scheduled_at, message_title, message_body, created_at, updated_at]
+      required: [id, owner_id, target_type, event_type, status, scheduled_at, message_title, message_body, failed_attempts, created_at, updated_at]
       properties:
         id:
           type: string
@@ -1472,16 +1490,27 @@ components:
           type: string
           format: uuid
           nullable: true
+        property_id:
+          type: string
+          format: uuid
+          nullable: true
         event_type:
           type: string
           enum: [operation_due, lease_expiring, lease_requires_action]
         status:
           type: string
-          enum: [pending, sending, sent, failed, cancelled]
+          enum: [pending, sent, failed, cancelled]
         scheduled_at:
           type: string
           format: date-time
         sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        failed_attempts:
+          type: integer
+          minimum: 0
+        next_attempt_at:
           type: string
           format: date-time
           nullable: true

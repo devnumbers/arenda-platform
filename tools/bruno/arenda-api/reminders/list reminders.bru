@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/reminders
+  url: {{baseUrl}}/reminders?limit=100&offset=0
   body: none
   auth: none
 }
@@ -20,5 +20,9 @@ script:pre-request {
 tests {
   test("should return 200", function() {
     expect(res.status).to.equal(200);
+  });
+
+  test("should return array", function() {
+    expect(res.body.items).to.be.an("array");
   });
 }
