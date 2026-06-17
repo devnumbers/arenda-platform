@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 )
 
 // CreateRecurringOperationCommand carries the data needed to create a user-managed
@@ -43,6 +44,7 @@ type RecurringOperationService struct {
 	recurringOps RecurringOperationRepository
 	operations   OperationRepository
 	properties   PropertyRepository
+	scheduler    ReminderScheduler
 	db           txBeginner
 	clock        clock.Clock
 	logger       *slog.Logger
@@ -53,6 +55,7 @@ func NewRecurringOperationService(
 	recurringOps RecurringOperationRepository,
 	operations OperationRepository,
 	properties PropertyRepository,
+	scheduler ReminderScheduler,
 	db txBeginner,
 	clock clock.Clock,
 	logger *slog.Logger,
@@ -64,6 +67,7 @@ func NewRecurringOperationService(
 		recurringOps: recurringOps,
 		operations:   operations,
 		properties:   properties,
+		scheduler:    scheduler,
 		db:           db,
 		clock:        clock,
 		logger:       logger,
@@ -122,8 +126,16 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("create recurring operation: %w", err)
 	}
 
-	if err := s.generateOperations(ctx, txOps, created, now, nil); err != nil {
+	generatedOps, err := s.generateOperations(ctx, txOps, created, now, nil)
+	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
+	}
+
+	if s.scheduler != nil && created.ReminderOffsetDays != nil && len(generatedOps) > 0 {
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := s.scheduleRemindersForOperations(ctx, txScheduler, created, generatedOps); err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -244,6 +256,7 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
+	txScheduler := s.scheduler.WithTx(tx)
 
 	updated, err := txRecurring.Update(ctx, rec)
 	if err != nil {
@@ -253,15 +266,28 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("update recurring operation: %w", err)
 	}
 
+	if s.scheduler != nil && updated.ReminderOffsetDays != nil {
+		if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, updated.ID); err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("cancel recurring reminders: %w", err)
+		}
+	}
+
 	now := s.clock.Now()
 	if err := txOps.DeleteUneditedFutureOperationsByRecurringOperation(ctx, updated.ID, now); err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("delete future operations: %w", err)
 	}
 
-	if err := s.generateOperations(ctx, txOps, updated, now, func(d time.Time) bool {
+	generatedOps, err := s.generateOperations(ctx, txOps, updated, now, func(d time.Time) bool {
 		return !timeutil.Date(d).Before(timeutil.Date(now))
-	}); err != nil {
+	})
+	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("regenerate operations: %w", err)
+	}
+
+	if s.scheduler != nil && updated.ReminderOffsetDays != nil && len(generatedOps) > 0 {
+		if err := s.scheduleRemindersForOperations(ctx, txScheduler, updated, generatedOps); err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -271,18 +297,36 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 	return updated, nil
 }
 
-// PauseRecurringOperation marks a recurring operation as paused.
+// PauseRecurringOperation marks a recurring operation as paused and cancels its reminders.
 func (s *RecurringOperationService) PauseRecurringOperation(
 	ctx context.Context,
 	ownerID, id uuid.UUID,
 ) (domain.RecurringOperation, error) {
-	rec, err := s.recurringOps.UpdateStatus(ctx, id, ownerID, string(domain.RecurringOperationStatusPaused))
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if s.scheduler != nil {
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, id); err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("cancel reminders: %w", err)
+		}
+	}
+
+	rec, err := s.recurringOps.WithTx(tx).UpdateStatus(ctx, id, ownerID, string(domain.RecurringOperationStatusPaused))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.RecurringOperation{}, ErrNotFound
 		}
 		return domain.RecurringOperation{}, fmt.Errorf("pause recurring operation: %w", err)
 	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("commit tx: %w", err)
+	}
+
 	return rec, nil
 }
 
@@ -322,10 +366,18 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 	}
 
 	now := s.clock.Now()
-	if err := s.generateOperations(ctx, txOps, rec, now, func(d time.Time) bool {
+	generatedOps, err := s.generateOperations(ctx, txOps, rec, now, func(d time.Time) bool {
 		return !timeutil.Date(d).Before(timeutil.Date(now))
-	}); err != nil {
+	})
+	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
+	}
+
+	if s.scheduler != nil && rec.ReminderOffsetDays != nil && len(generatedOps) > 0 {
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := s.scheduleRemindersForOperations(ctx, txScheduler, rec, generatedOps); err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -403,6 +455,19 @@ func (s *RecurringOperationService) extendHorizon(ctx context.Context, rec domai
 	if err := s.operations.BulkCreate(ctx, ops); err != nil {
 		return fmt.Errorf("bulk create operations: %w", err)
 	}
+
+	if s.scheduler != nil && rec.ReminderOffsetDays != nil {
+		allOps, err := s.operations.ListByRecurringOperation(ctx, rec.ID)
+		if err != nil {
+			return fmt.Errorf("list operations for scheduling: %w", err)
+		}
+		if len(allOps) > 0 {
+			if err := s.scheduleRemindersForOperations(ctx, s.scheduler, rec, allOps); err != nil {
+				return fmt.Errorf("schedule reminders: %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -412,24 +477,24 @@ func (s *RecurringOperationService) generateOperations(
 	rec domain.RecurringOperation,
 	now time.Time,
 	filter func(time.Time) bool,
-) error {
+) ([]domain.Operation, error) {
 	existing, err := s.existingOperationDates(ctx, ops, rec.ID)
 	if err != nil {
-		return fmt.Errorf("list existing dates: %w", err)
+		return nil, fmt.Errorf("list existing dates: %w", err)
 	}
 
 	toCreate, err := s.buildOperations(rec, now, existing, filter)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(toCreate) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	if err := ops.BulkCreate(ctx, toCreate); err != nil {
-		return fmt.Errorf("bulk create operations: %w", err)
+		return nil, fmt.Errorf("bulk create operations: %w", err)
 	}
-	return nil
+	return toCreate, nil
 }
 
 func (s *RecurringOperationService) buildOperations(
@@ -475,4 +540,34 @@ func stringOrEmpty(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func (s *RecurringOperationService) scheduleRemindersForOperations(
+	ctx context.Context,
+	scheduler ReminderScheduler,
+	rec domain.RecurringOperation,
+	ops []domain.Operation,
+) error {
+	if len(ops) == 0 || rec.ReminderOffsetDays == nil {
+		return nil
+	}
+
+	offsetDays := *rec.ReminderOffsetDays
+	baseReminderDate := ops[0].OperationDate.AddDate(0, 0, -offsetDays)
+
+	recInfo := notificationsapp.RecurringOperationInfo{
+		ID:         rec.ID,
+		OwnerID:    rec.OwnerID,
+		PropertyID: rec.PropertyID,
+		LeaseID:    leaseIDPtr(rec.LeaseID),
+	}
+
+	return scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, ToOperationInfoSlice(ops))
+}
+
+func leaseIDPtr(id uuid.UUID) *uuid.UUID {
+	if id == uuid.Nil {
+		return nil
+	}
+	return &id
 }

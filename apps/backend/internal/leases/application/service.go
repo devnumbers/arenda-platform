@@ -173,6 +173,18 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		}
 	}
 
+	if s.scheduler != nil {
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := txScheduler.ScheduleForLease(ctx, notificationsapp.LeaseInfo{
+			ID:         created.ID,
+			OwnerID:    created.OwnerID,
+			PropertyID: created.PropertyID,
+			EndDate:    created.EndDate,
+		}); err != nil {
+			return domain.Lease{}, fmt.Errorf("schedule lease reminders: %w", err)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Lease{}, fmt.Errorf("commit tx: %w", err)
 	}
@@ -256,6 +268,7 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 
 	scheduleChanged := false
 	scheduleRebuilt := false
+	originalEndDate := lease.EndDate
 
 	if cmd.StartDate != nil {
 		lease.StartDate = *cmd.StartDate
@@ -317,11 +330,36 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 		}
 	}
 
+	if s.scheduler != nil && cmd.EndDate != nil && !endDatesEqual(originalEndDate, cmd.EndDate) {
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := txScheduler.CancelByLease(ctx, ownerID, updated.ID); err != nil {
+			return domain.Lease{}, fmt.Errorf("cancel lease reminders: %w", err)
+		}
+		if err := txScheduler.ScheduleForLease(ctx, notificationsapp.LeaseInfo{
+			ID:         updated.ID,
+			OwnerID:    updated.OwnerID,
+			PropertyID: updated.PropertyID,
+			EndDate:    updated.EndDate,
+		}); err != nil {
+			return domain.Lease{}, fmt.Errorf("schedule lease reminders: %w", err)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Lease{}, fmt.Errorf("commit tx: %w", err)
 	}
 
 	return updated, nil
+}
+
+func endDatesEqual(a, b *time.Time) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return a.Equal(*b)
 }
 
 func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID) (domain.Lease, error) {
@@ -363,6 +401,13 @@ func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID)
 	now := s.clock.Now()
 	if err := txOps.DeleteUneditedFutureOperationsByLease(ctx, id, now); err != nil {
 		return domain.Lease{}, fmt.Errorf("delete future operations: %w", err)
+	}
+
+	if s.scheduler != nil {
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := txScheduler.CancelByLease(ctx, ownerID, id); err != nil {
+			return domain.Lease{}, fmt.Errorf("cancel lease reminders: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {

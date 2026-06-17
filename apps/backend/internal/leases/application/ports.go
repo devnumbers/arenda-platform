@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -41,16 +42,22 @@ type RecurringOperationRepository interface {
 	GetByLease(ctx context.Context, leaseID uuid.UUID) (domain.RecurringOperation, error)
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.RecurringOperation, error)
 	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.RecurringOperation, error)
+	ListByPropertyID(ctx context.Context, propertyID uuid.UUID) ([]domain.RecurringOperation, error)
 	Update(ctx context.Context, op domain.RecurringOperation) (domain.RecurringOperation, error)
 	UpdateStatus(ctx context.Context, id, ownerID uuid.UUID, status string) (domain.RecurringOperation, error)
+	SetReminderOffset(ctx context.Context, ownerID, recID uuid.UUID, offsetDays int) error
 	DeleteByLease(ctx context.Context, leaseID uuid.UUID) error
 	WithTx(tx transaction.Tx) RecurringOperationRepository
 }
+
+// ReminderScheduler is the port used by leases services to schedule/cancel reminders.
+type ReminderScheduler = notificationsapp.ReminderScheduler
 
 type OperationRepository interface {
 	Create(ctx context.Context, op domain.Operation) (domain.Operation, error)
 	BulkCreate(ctx context.Context, ops []domain.Operation) error
 	ListByLease(ctx context.Context, leaseID uuid.UUID) ([]domain.Operation, error)
+	ListByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID) ([]domain.Operation, error)
 	ListOperationDatesByLease(ctx context.Context, leaseID uuid.UUID) ([]time.Time, error)
 	ListOperationDatesByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID) ([]time.Time, error)
 	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.Operation, error)

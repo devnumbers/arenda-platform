@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
 // CreateOperationCommand carries the data needed to create a manual operation.
@@ -39,6 +39,7 @@ type OperationService struct {
 	operations OperationRepository
 	properties PropertyRepository
 	leases     LeaseRepository
+	scheduler  ReminderScheduler
 	clock      clock.Clock
 	logger     *slog.Logger
 }
@@ -48,6 +49,7 @@ func NewOperationService(
 	operations OperationRepository,
 	properties PropertyRepository,
 	leases LeaseRepository,
+	scheduler ReminderScheduler,
 	clock clock.Clock,
 	logger *slog.Logger,
 ) *OperationService {
@@ -58,6 +60,7 @@ func NewOperationService(
 		operations: operations,
 		properties: properties,
 		leases:     leases,
+		scheduler:  scheduler,
 		clock:      clock,
 		logger:     logger,
 	}
@@ -169,6 +172,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	if cmd.AmountKopecks != nil {
 		op.AmountKopecks = *cmd.AmountKopecks
 	}
+	originalOperationDate := op.OperationDate
 	if cmd.OperationDate != nil {
 		op.OperationDate = *cmd.OperationDate
 	}
@@ -198,6 +202,13 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 		}
 		return domain.Operation{}, fmt.Errorf("update operation: %w", err)
 	}
+
+	if s.scheduler != nil && cmd.OperationDate != nil && !originalOperationDate.Equal(*cmd.OperationDate) {
+		if err := s.scheduler.CancelByOperation(ctx, ownerID, updated.ID); err != nil {
+			s.logger.ErrorContext(ctx, "cancel reminders for updated operation failed", "operation_id", updated.ID, "error", err)
+		}
+	}
+
 	return updated, nil
 }
 
@@ -209,6 +220,13 @@ func (s *OperationService) DeleteOperation(ctx context.Context, ownerID, id uuid
 		}
 		return fmt.Errorf("delete operation: %w", err)
 	}
+
+	if s.scheduler != nil {
+		if err := s.scheduler.CancelByOperation(ctx, ownerID, id); err != nil {
+			s.logger.ErrorContext(ctx, "cancel reminders for deleted operation failed", "operation_id", id, "error", err)
+		}
+	}
+
 	return nil
 }
 

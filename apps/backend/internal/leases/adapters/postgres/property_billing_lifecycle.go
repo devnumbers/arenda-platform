@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
@@ -18,25 +20,31 @@ import (
 type PropertyBillingLifecycle struct {
 	ops          *OperationRepository
 	recurringOps *RecurringOperationRepository
+	scheduler    leasesapp.ReminderScheduler
 	clock        clock.Clock
 }
 
 // NewPropertyBillingLifecycle creates a new property billing lifecycle adapter.
-func NewPropertyBillingLifecycle(ops *OperationRepository, recurringOps *RecurringOperationRepository, clock clock.Clock) *PropertyBillingLifecycle {
-	return &PropertyBillingLifecycle{ops: ops, recurringOps: recurringOps, clock: clock}
+func NewPropertyBillingLifecycle(ops *OperationRepository, recurringOps *RecurringOperationRepository, scheduler leasesapp.ReminderScheduler, clock clock.Clock) *PropertyBillingLifecycle {
+	return &PropertyBillingLifecycle{ops: ops, recurringOps: recurringOps, scheduler: scheduler, clock: clock}
 }
 
 // WithTx returns an instance bound to the provided transaction.
 func (l *PropertyBillingLifecycle) WithTx(tx transaction.Tx) propertiesapp.PropertyBillingLifecycle {
+	var txScheduler leasesapp.ReminderScheduler
+	if l.scheduler != nil {
+		txScheduler = l.scheduler.WithTx(tx)
+	}
 	return NewPropertyBillingLifecycle(
 		l.ops.WithTx(tx).(*OperationRepository),
 		l.recurringOps.WithTx(tx).(*RecurringOperationRepository),
+		txScheduler,
 		l.clock,
 	)
 }
 
-// Suspend deletes future unedited operations for the property and pauses all
-// recurring operations associated with it.
+// Suspend deletes future unedited operations for the property, pauses all
+// recurring operations associated with it, and cancels their reminders.
 func (l *PropertyBillingLifecycle) Suspend(ctx context.Context, propertyID uuid.UUID, asOf time.Time) error {
 	if err := l.ops.DeleteFutureUneditedOperationsByProperty(ctx, propertyID, timeutil.Date(asOf)); err != nil {
 		return fmt.Errorf("delete future operations: %w", err)
@@ -45,6 +53,19 @@ func (l *PropertyBillingLifecycle) Suspend(ctx context.Context, propertyID uuid.
 	if err := l.recurringOps.UpdateStatusByPropertyID(ctx, propertyID, string(leasesdomain.RecurringOperationStatusPaused)); err != nil {
 		return fmt.Errorf("pause recurring operations: %w", err)
 	}
+
+	if l.scheduler != nil {
+		recs, err := l.recurringOps.ListByPropertyID(ctx, propertyID)
+		if err != nil {
+			return fmt.Errorf("list recurring operations: %w", err)
+		}
+		for _, rec := range recs {
+			if err := l.scheduler.CancelByRecurringOperation(ctx, rec.OwnerID, rec.ID); err != nil {
+				return fmt.Errorf("cancel reminders for recurring operation %s: %w", rec.ID, err)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -105,9 +126,35 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.U
 		if err := l.ops.BulkCreate(ctx, ops); err != nil {
 			return fmt.Errorf("bulk create operations: %w", err)
 		}
+
+		if l.scheduler != nil && rec.ReminderOffsetDays != nil {
+			allOps, err := l.ops.ListByRecurringOperation(ctx, rec.ID)
+			if err != nil {
+				return fmt.Errorf("list operations for scheduling: %w", err)
+			}
+			if len(allOps) > 0 {
+				recInfo := notificationsapp.RecurringOperationInfo{
+					ID:         rec.ID,
+					OwnerID:    rec.OwnerID,
+					PropertyID: rec.PropertyID,
+					LeaseID:    leaseIDPtr(rec.LeaseID),
+				}
+				baseReminderDate := allOps[0].OperationDate.AddDate(0, 0, -(*rec.ReminderOffsetDays))
+				if err := l.scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, leasesapp.ToOperationInfoSlice(allOps)); err != nil {
+					return fmt.Errorf("schedule reminders: %w", err)
+				}
+			}
+		}
 	}
 
 	return nil
+}
+
+func leaseIDPtr(id uuid.UUID) *uuid.UUID {
+	if id == uuid.Nil {
+		return nil
+	}
+	return &id
 }
 
 var _ propertiesapp.PropertyBillingLifecycle = (*PropertyBillingLifecycle)(nil)
