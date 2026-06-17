@@ -17,6 +17,8 @@ import (
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leasespg "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/postgres"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
+	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
+	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/cleaner"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
@@ -116,6 +118,8 @@ func run(fallback *slog.Logger) error {
 	leaseRepo := leasespg.NewLeaseRepository(pool)
 	leasePropertyRepo := leasespg.NewPropertyRepository(pool)
 	tenantContactRepo := leasespg.NewTenantContactRepository(pool)
+	reminderRepo := notificationspg.NewReminderRepository(pool)
+	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, realClock{})
 
 	leaseService := leasesapp.NewLeaseService(
 		leaseRepo,
@@ -123,6 +127,7 @@ func run(fallback *slog.Logger) error {
 		tenantContactRepo,
 		recurringOpRepo,
 		operationRepo,
+		reminderScheduler,
 		platformpostgres.NewBeginner(pool),
 		realClock{},
 		logger,

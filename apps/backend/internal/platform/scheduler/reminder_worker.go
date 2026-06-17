@@ -192,6 +192,10 @@ func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder,
 		return fmt.Errorf("save sent sms reminder: %w", err)
 	}
 	if err := txRepo.MarkSent(ctx, r.ID, now); err != nil {
+		if errors.Is(err, application.ErrConcurrentUpdate) {
+			w.logger.InfoContext(ctx, "reminder already marked sent by another worker", "reminder_id", r.ID)
+			return nil
+		}
 		return fmt.Errorf("mark reminder sent: %w", err)
 	}
 

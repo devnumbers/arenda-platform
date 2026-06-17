@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -44,6 +45,7 @@ type LeaseService struct {
 	tenantContacts TenantContactRepository
 	recurringOps   RecurringOperationRepository
 	operations     OperationRepository
+	scheduler      notificationsapp.ReminderScheduler
 	db             txBeginner
 	clock          clock.Clock
 	logger         *slog.Logger
@@ -55,6 +57,7 @@ func NewLeaseService(
 	tenantContacts TenantContactRepository,
 	recurringOps RecurringOperationRepository,
 	operations OperationRepository,
+	scheduler notificationsapp.ReminderScheduler,
 	db txBeginner,
 	clock clock.Clock,
 	logger *slog.Logger,
@@ -68,6 +71,7 @@ func NewLeaseService(
 		tenantContacts: tenantContacts,
 		recurringOps:   recurringOps,
 		operations:     operations,
+		scheduler:      scheduler,
 		db:             db,
 		clock:          clock,
 		logger:         logger,
@@ -366,4 +370,67 @@ func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID)
 	}
 
 	return completed, nil
+}
+
+// ListOpenLeasesWithPastEndDate returns open leases whose end date is before asOf.
+func (s *LeaseService) ListOpenLeasesWithPastEndDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Lease, error) {
+	leases, err := s.leases.ListOpenLeasesWithPastEndDate(ctx, asOf, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list open leases with past end date: %w", err)
+	}
+	return leases, nil
+}
+
+// ReconcileRequiresAction moves an open lease whose end date has passed to
+// requires_action and ensures a requires_action reminder exists. It is
+// idempotent: repeated calls with the same lease are no-ops once the status
+// and reminder are in place.
+func (s *LeaseService) ReconcileRequiresAction(ctx context.Context, leaseID uuid.UUID, asOf time.Time) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txLeases := s.leases.WithTx(tx)
+	txScheduler := s.scheduler.WithTx(tx)
+
+	lease, err := txLeases.GetByIDForUpdate(ctx, leaseID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("get lease: %w", err)
+	}
+
+	if !lease.Status.IsOpen() || lease.EndDate == nil {
+		return nil
+	}
+
+	expected := lease.CalculateStatus(asOf)
+	if expected != domain.LeaseStatusRequiresAction {
+		return nil
+	}
+
+	if lease.Status != domain.LeaseStatusRequiresAction {
+		lease.Status = domain.LeaseStatusRequiresAction
+		lease.UpdatedAt = s.clock.Now()
+		if _, err := txLeases.Update(ctx, lease.OwnerID, lease); err != nil {
+			return fmt.Errorf("update lease status: %w", err)
+		}
+	}
+
+	if err := txScheduler.EnsureRequiresActionReminder(ctx, notificationsapp.LeaseInfo{
+		ID:         lease.ID,
+		OwnerID:    lease.OwnerID,
+		PropertyID: lease.PropertyID,
+		EndDate:    lease.EndDate,
+	}); err != nil {
+		return fmt.Errorf("ensure requires_action reminder: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
 }

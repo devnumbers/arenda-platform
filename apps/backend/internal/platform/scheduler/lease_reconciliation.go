@@ -2,18 +2,13 @@ package scheduler
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
-	leasedomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
-	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
+	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // maxReconciliationBatches limits the number of batches processed per tick to
@@ -24,20 +19,16 @@ const maxReconciliationBatches = 10
 // ensures their status moves to requires_action and a requires_action reminder
 // exists.
 type LeaseReconciliationWorker struct {
-	leases    application.LeaseRepository
-	scheduler notificationsapp.ReminderScheduler
-	beginner  transaction.Beginner
-	clock     clock.Clock
-	interval  time.Duration
-	batchSize int
-	logger    *slog.Logger
+	leaseService *leasesapp.LeaseService
+	clock        clock.Clock
+	interval     time.Duration
+	batchSize    int
+	logger       *slog.Logger
 }
 
 // NewLeaseReconciliationWorker creates a new lease reconciliation worker.
 func NewLeaseReconciliationWorker(
-	leases application.LeaseRepository,
-	scheduler notificationsapp.ReminderScheduler,
-	beginner transaction.Beginner,
+	leaseService *leasesapp.LeaseService,
 	clock clock.Clock,
 	interval time.Duration,
 	batchSize int,
@@ -47,13 +38,11 @@ func NewLeaseReconciliationWorker(
 		logger = slog.Default()
 	}
 	return &LeaseReconciliationWorker{
-		leases:    leases,
-		scheduler: scheduler,
-		beginner:  beginner,
-		clock:     clock,
-		interval:  interval,
-		batchSize: batchSize,
-		logger:    logger,
+		leaseService: leaseService,
+		clock:        clock,
+		interval:     interval,
+		batchSize:    batchSize,
+		logger:       logger,
 	}
 }
 
@@ -81,7 +70,7 @@ func (w *LeaseReconciliationWorker) Run(ctx context.Context) {
 func (w *LeaseReconciliationWorker) tick(ctx context.Context) error {
 	asOf := w.clock.Now()
 	for batch := 0; batch < maxReconciliationBatches; batch++ {
-		leases, err := w.leases.ListOpenLeasesWithPastEndDate(ctx, asOf, w.batchSize)
+		leases, err := w.leaseService.ListOpenLeasesWithPastEndDate(ctx, asOf, w.batchSize)
 		if err != nil {
 			return fmt.Errorf("list open leases with past end date: %w", err)
 		}
@@ -103,50 +92,5 @@ func (w *LeaseReconciliationWorker) tick(ctx context.Context) error {
 }
 
 func (w *LeaseReconciliationWorker) reconcile(ctx context.Context, leaseID uuid.UUID, asOf time.Time) error {
-	tx, err := w.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txLeases := w.leases.WithTx(tx)
-	txScheduler := w.scheduler.WithTx(tx)
-
-	lease, err := txLeases.GetByIDForUpdate(ctx, leaseID)
-	if err != nil {
-		if errors.Is(err, application.ErrNotFound) {
-			w.logger.InfoContext(ctx, "lease changed concurrently, skipping", "lease_id", leaseID)
-			return nil
-		}
-		return fmt.Errorf("get lease: %w", err)
-	}
-
-	if !lease.Status.IsOpen() || lease.EndDate == nil {
-		return nil
-	}
-
-	if !timeutil.Date(*lease.EndDate).Before(timeutil.Date(asOf)) {
-		return nil
-	}
-
-	if lease.Status != leasedomain.LeaseStatusRequiresAction {
-		lease.Status = leasedomain.LeaseStatusRequiresAction
-		if _, err := txLeases.Update(ctx, lease.OwnerID, lease); err != nil {
-			return fmt.Errorf("update lease status: %w", err)
-		}
-	}
-
-	if err := txScheduler.EnsureRequiresActionReminder(ctx, notificationsapp.LeaseInfo{
-		ID:         lease.ID,
-		OwnerID:    lease.OwnerID,
-		PropertyID: lease.PropertyID,
-		EndDate:    lease.EndDate,
-	}); err != nil {
-		return fmt.Errorf("ensure requires_action reminder: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-	return nil
+	return w.leaseService.ReconcileRequiresAction(ctx, leaseID, asOf)
 }

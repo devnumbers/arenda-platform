@@ -181,7 +181,8 @@ func targetIDFor(r domain.Reminder) (uuid.UUID, error) {
 
 func buildOperationReminder(op OperationInfo, reminderDate time.Time, now time.Time) (domain.Reminder, error) {
 	title := "Напоминание об операции"
-	body := fmt.Sprintf("%s %d коп. запланировано на %s", op.Category, op.AmountKopecks, op.OperationDate.Format("02.01.2006"))
+	amountRubles := float64(op.AmountKopecks) / 100
+	body := fmt.Sprintf("%s %.2f ₽ запланировано на %s", op.Category, amountRubles, op.OperationDate.Format("02.01.2006"))
 	return domain.NewOperationReminder(op.OwnerID, op.ID, op.PropertyID, op.OperationDate, reminderDate, title, body, now, op.RecurringOperationID)
 }
 
