@@ -147,19 +147,29 @@ func (w *ReminderWorker) dispatchDue(ctx context.Context, now time.Time) error {
 }
 
 func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder, now time.Time) error {
-	contact, err := w.resolver.Resolve(ctx, r.OwnerID)
+	dispatchCtx, cancel := context.WithTimeout(ctx, w.dispatchTimeout)
+	defer cancel()
+
+	alreadySent, err := w.repo.IsSMSReminderSent(dispatchCtx, r.ID)
 	if err != nil {
-		w.logger.ErrorContext(ctx, "resolve contact failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
-		return w.finalizeFailure(ctx, r, now)
+		return fmt.Errorf("check sent sms reminder: %w", err)
 	}
-	if contact.Channel != application.ChannelSMS {
-		w.logger.ErrorContext(ctx, "unsupported contact channel", "reminder_id", r.ID, "event_type", r.EventType, "channel", contact.Channel)
-		return w.finalizeFailure(ctx, r, now)
+	if alreadySent {
+		w.logger.InfoContext(dispatchCtx, "reminder already sent, skipping notification", "reminder_id", r.ID, "event_type", r.EventType)
+		return w.finalizeAlreadySent(dispatchCtx, r, now)
 	}
 
-	notifyCtx, cancel := context.WithTimeout(ctx, w.dispatchTimeout)
-	defer cancel()
-	providerResponse, err := w.notifier.Notify(notifyCtx, application.Notification{
+	contact, err := w.resolver.Resolve(dispatchCtx, r.OwnerID)
+	if err != nil {
+		w.logger.ErrorContext(dispatchCtx, "resolve contact failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
+		return w.finalizeFailure(dispatchCtx, r, now)
+	}
+	if contact.Channel != application.ChannelSMS {
+		w.logger.ErrorContext(dispatchCtx, "unsupported contact channel", "reminder_id", r.ID, "event_type", r.EventType, "channel", contact.Channel)
+		return w.finalizeFailure(dispatchCtx, r, now)
+	}
+
+	providerResponse, err := w.notifier.Notify(dispatchCtx, application.Notification{
 		RecipientID: r.OwnerID,
 		ReminderID:  r.ID,
 		EventType:   r.EventType,
@@ -168,11 +178,11 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 		Contact:     &contact,
 	})
 	if err != nil {
-		w.logger.ErrorContext(ctx, "notify reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
-		return w.finalizeFailure(ctx, r, now)
+		w.logger.ErrorContext(dispatchCtx, "notify reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
+		return w.finalizeFailure(dispatchCtx, r, now)
 	}
 
-	return w.finalizeSuccess(ctx, r, now, contact.Address, providerResponse)
+	return w.finalizeSuccess(dispatchCtx, r, now, contact.Address, providerResponse)
 }
 
 func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time, phone, providerResponse string) error {
@@ -192,10 +202,25 @@ func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder,
 		return fmt.Errorf("save sent sms reminder: %w", err)
 	}
 	if err := txRepo.MarkSent(ctx, r.ID, now); err != nil {
-		if errors.Is(err, application.ErrConcurrentUpdate) {
-			w.logger.InfoContext(ctx, "reminder already marked sent by another worker", "reminder_id", r.ID)
-			return nil
-		}
+		return fmt.Errorf("mark reminder sent: %w", err)
+	}
+
+	if err := tx2.Commit(ctx); err != nil {
+		return fmt.Errorf("commit finalize transaction: %w", err)
+	}
+	return nil
+}
+
+// finalizeAlreadySent marks a reminder as sent when the audit row already exists.
+func (w *ReminderWorker) finalizeAlreadySent(ctx context.Context, r domain.Reminder, now time.Time) error {
+	tx2, err := w.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin finalize transaction: %w", err)
+	}
+	defer func() { _ = tx2.Rollback(ctx) }()
+
+	txRepo := w.repo.WithTx(tx2)
+	if err := txRepo.MarkSent(ctx, r.ID, now); err != nil {
 		return fmt.Errorf("mark reminder sent: %w", err)
 	}
 

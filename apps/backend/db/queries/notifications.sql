@@ -95,7 +95,10 @@ WHERE owner_id = $1
 -- name: HasReminderForLeaseEvent :one
 SELECT EXISTS(SELECT 1 FROM reminders WHERE owner_id = $1 AND lease_id = $2 AND event_type = $3 AND status IN ('pending', 'sending', 'sent')) AS exists;
 
--- name: CreateSentSMSReminder :one
+-- name: IsSMSReminderSent :one
+SELECT EXISTS(SELECT 1 FROM sent_sms_reminders WHERE reminder_id = $1) AS exists;
+
+-- name: CreateSentSMSReminder :execrows
 INSERT INTO sent_sms_reminders (id, reminder_id, owner_id, phone, message, provider_response, sent_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING *;
+ON CONFLICT (reminder_id) DO NOTHING;

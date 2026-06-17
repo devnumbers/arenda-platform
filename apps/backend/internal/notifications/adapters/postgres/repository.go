@@ -176,7 +176,8 @@ func (r *ReminderRepository) ListStaleSendingReminders(ctx context.Context, stal
 	return out, nil
 }
 
-// MarkSent marks a sending reminder as sent.
+// MarkSent marks a sending reminder as sent. It is idempotent: if the reminder
+// is already sent, it returns success.
 func (r *ReminderRepository) MarkSent(ctx context.Context, id uuid.UUID, at time.Time) error {
 	rows, err := r.q().MarkReminderSent(ctx, postgres.MarkReminderSentParams{
 		ID:     pgconv.UUIDToPgtype(id),
@@ -186,6 +187,14 @@ func (r *ReminderRepository) MarkSent(ctx context.Context, id uuid.UUID, at time
 		return fmt.Errorf("mark reminder sent: %w", err)
 	}
 	if rows == 0 {
+		// The update was a no-op. Treat as success if the reminder is already sent.
+		existing, err := r.GetByIDUnscoped(ctx, id)
+		if err != nil {
+			return fmt.Errorf("check reminder status after no-op sent: %w", err)
+		}
+		if existing.Status == domain.ReminderSent {
+			return nil
+		}
 		return application.ErrConcurrentUpdate
 	}
 	return nil
@@ -295,6 +304,15 @@ func (r *ReminderRepository) SaveSentSMSReminder(ctx context.Context, id, remind
 		return fmt.Errorf("create sent sms reminder: %w", err)
 	}
 	return nil
+}
+
+// IsSMSReminderSent reports whether an audit row already exists for the given reminder.
+func (r *ReminderRepository) IsSMSReminderSent(ctx context.Context, reminderID uuid.UUID) (bool, error) {
+	exists, err := r.q().IsSMSReminderSent(ctx, pgconv.UUIDToPgtype(reminderID))
+	if err != nil {
+		return false, fmt.Errorf("check sent sms reminder: %w", err)
+	}
+	return exists, nil
 }
 
 func toDomain(row postgres.Reminder) domain.Reminder {

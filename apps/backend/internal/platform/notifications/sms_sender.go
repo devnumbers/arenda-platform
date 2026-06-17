@@ -14,14 +14,9 @@ type SMSSender struct {
 	sender identityapp.Sender
 }
 
-// NewSMSSender creates a new SMSSender adapter.
-func NewSMSSender(sender identityapp.Sender) *SMSSender {
-	return &SMSSender{sender: sender}
-}
-
-// NewSMSSenderAdapter is an alias for NewSMSSender to satisfy wiring names.
+// NewSMSSenderAdapter creates a new SMSSender adapter.
 func NewSMSSenderAdapter(sender identityapp.Sender) *SMSSender {
-	return NewSMSSender(sender)
+	return &SMSSender{sender: sender}
 }
 
 // Send sends an SMS message to the given phone number.

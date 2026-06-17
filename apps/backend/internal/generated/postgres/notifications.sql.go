@@ -133,10 +133,10 @@ func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) 
 	return i, err
 }
 
-const createSentSMSReminder = `-- name: CreateSentSMSReminder :one
+const createSentSMSReminder = `-- name: CreateSentSMSReminder :execrows
 INSERT INTO sent_sms_reminders (id, reminder_id, owner_id, phone, message, provider_response, sent_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, reminder_id, owner_id, phone, message, provider_response, sent_at
+ON CONFLICT (reminder_id) DO NOTHING
 `
 
 type CreateSentSMSReminderParams struct {
@@ -149,8 +149,8 @@ type CreateSentSMSReminderParams struct {
 	SentAt           pgtype.Timestamptz `json:"sent_at"`
 }
 
-func (q *Queries) CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSReminderParams) (SentSmsReminder, error) {
-	row := q.db.QueryRow(ctx, createSentSMSReminder,
+func (q *Queries) CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createSentSMSReminder,
 		arg.ID,
 		arg.ReminderID,
 		arg.OwnerID,
@@ -159,17 +159,10 @@ func (q *Queries) CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSRe
 		arg.ProviderResponse,
 		arg.SentAt,
 	)
-	var i SentSmsReminder
-	err := row.Scan(
-		&i.ID,
-		&i.ReminderID,
-		&i.OwnerID,
-		&i.Phone,
-		&i.Message,
-		&i.ProviderResponse,
-		&i.SentAt,
-	)
-	return i, err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getReminderByIDAndOwner = `-- name: GetReminderByIDAndOwner :one
@@ -247,6 +240,17 @@ type HasReminderForLeaseEventParams struct {
 
 func (q *Queries) HasReminderForLeaseEvent(ctx context.Context, arg HasReminderForLeaseEventParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasReminderForLeaseEvent, arg.OwnerID, arg.LeaseID, arg.EventType)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const isSMSReminderSent = `-- name: IsSMSReminderSent :one
+SELECT EXISTS(SELECT 1 FROM sent_sms_reminders WHERE reminder_id = $1) AS exists
+`
+
+func (q *Queries) IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isSMSReminderSent, reminderID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err

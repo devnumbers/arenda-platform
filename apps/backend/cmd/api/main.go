@@ -147,7 +147,7 @@ func run(fallback *slog.Logger) error {
 		logger,
 	)
 
-	reminderService := notificationsapp.NewReminderService(reminderRepo, realClock{}, platformpostgres.NewBeginner(pool))
+	reminderService := notificationsapp.NewReminderService(reminderRepo, realClock{})
 	userContactProvider := platformnotifications.NewContactProvider(identityUserRepo)
 	contactResolver := notificationspg.NewContactResolver(userContactProvider)
 	smsSenderAdapter := platformnotifications.NewSMSSenderAdapter(smsSender)
