@@ -325,6 +325,7 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 		}
 		return domain.Lease{}, fmt.Errorf("update lease: %w", err)
 	}
+	endDateChanged := !endDatesEqual(originalEndDate, updated.EndDate)
 
 	if scheduleRebuilt {
 		if err := txRentService.RebuildSchedule(ctx, updated); err != nil {
@@ -345,8 +346,8 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 				return domain.Lease{}, fmt.Errorf("get recurring operation for lease: %w", err)
 			}
 			if err == nil {
-				if !endDatesEqual(originalEndDate, cmd.EndDate) {
-					rec.EndDate = cmd.EndDate
+				if endDateChanged {
+					rec.EndDate = updated.EndDate
 					if _, err := txRecurring.Update(ctx, rec); err != nil {
 						return domain.Lease{}, fmt.Errorf("update recurring operation end date: %w", err)
 					}
@@ -366,11 +367,11 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 			}
 		}
 
-		if !endDatesEqual(originalEndDate, cmd.EndDate) {
+		if endDateChanged {
 			if err := txScheduler.CancelByLease(ctx, ownerID, updated.ID); err != nil {
 				return domain.Lease{}, fmt.Errorf("cancel lease reminders: %w", err)
 			}
-			if cmd.EndDate != nil {
+			if updated.EndDate != nil {
 				if err := txScheduler.ScheduleForLease(ctx, notificationsapp.LeaseInfo{
 					ID:         updated.ID,
 					OwnerID:    updated.OwnerID,
