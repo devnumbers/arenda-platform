@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
+	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
@@ -23,6 +24,7 @@ type Deps struct {
 	TenantContacts      *leasesapp.TenantContactService
 	Operations          *leasesapp.OperationService
 	RecurringOperations *leasesapp.RecurringOperationService
+	Reminders           *notificationsapp.ReminderService
 	CookieSecure        bool
 	Logger              *slog.Logger
 	Clock               clock.Clock
@@ -60,11 +62,12 @@ func New(deps Deps) http.Handler {
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Logger)
 
 	handler := &composedHandler{
-		AuthHandlers:                authHandlers,
-		PropertyHandlers:            propertyHandlers,
-		LeaseHandlers:               leaseHandlers,
-		OperationHandlers:           operationHandlers,
-		RecurringOperationHandlers:  recurringOperationHandlers,
+		AuthHandlers:               authHandlers,
+		PropertyHandlers:           propertyHandlers,
+		LeaseHandlers:              leaseHandlers,
+		OperationHandlers:          operationHandlers,
+		RecurringOperationHandlers: recurringOperationHandlers,
+		ReminderHandlers:           &ReminderHandlers{},
 	}
 
 	return openapi.HandlerWithOptions(handler, openapi.ChiServerOptions{
@@ -101,4 +104,5 @@ type composedHandler struct {
 	*LeaseHandlers
 	*OperationHandlers
 	*RecurringOperationHandlers
+	*ReminderHandlers
 }

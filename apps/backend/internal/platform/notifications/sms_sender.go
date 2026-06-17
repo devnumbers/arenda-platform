@@ -19,6 +19,11 @@ func NewSMSSender(sender identityapp.Sender) *SMSSender {
 	return &SMSSender{sender: sender}
 }
 
+// NewSMSSenderAdapter is an alias for NewSMSSender to satisfy wiring names.
+func NewSMSSenderAdapter(sender identityapp.Sender) *SMSSender {
+	return NewSMSSender(sender)
+}
+
 // Send sends an SMS message to the given phone number.
 // It returns an empty provider response because the identity Sender port only
 // exposes an error today. Once that port is extended to return a real provider

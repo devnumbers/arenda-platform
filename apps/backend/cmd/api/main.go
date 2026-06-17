@@ -19,12 +19,15 @@ import (
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
+	notificationsms "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/sms"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/cleaner"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
+	platformnotifications "github.com/nambers/arenda-planform/apps/backend/internal/platform/notifications"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"golang.org/x/time/rate"
@@ -104,7 +107,9 @@ func run(fallback *slog.Logger) error {
 	limiter := billingpg.NewSubscriptionLimiter(pool)
 	operationRepo := leasespg.NewOperationRepository(pool)
 	recurringOpRepo := leasespg.NewRecurringOperationRepository(pool)
-	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, realClock{})
+	reminderRepo := notificationspg.NewReminderRepository(pool)
+	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, realClock{})
+	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, reminderScheduler, realClock{})
 	propertyService := propertiesapp.NewPropertyService(
 		propertyRepo,
 		occupancyProvider,
@@ -118,8 +123,6 @@ func run(fallback *slog.Logger) error {
 	leaseRepo := leasespg.NewLeaseRepository(pool)
 	leasePropertyRepo := leasespg.NewPropertyRepository(pool)
 	tenantContactRepo := leasespg.NewTenantContactRepository(pool)
-	reminderRepo := notificationspg.NewReminderRepository(pool)
-	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, realClock{})
 
 	leaseService := leasesapp.NewLeaseService(
 		leaseRepo,
@@ -133,18 +136,29 @@ func run(fallback *slog.Logger) error {
 		logger,
 	)
 	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, logger)
-	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, realClock{}, logger)
+	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, reminderScheduler, realClock{}, logger)
 	recurringOperationService := leasesapp.NewRecurringOperationService(
 		recurringOpRepo,
 		operationRepo,
 		leasePropertyRepo,
+		reminderScheduler,
 		platformpostgres.NewBeginner(pool),
 		realClock{},
 		logger,
 	)
 
+	reminderService := notificationsapp.NewReminderService(reminderRepo, realClock{}, platformpostgres.NewBeginner(pool))
+	userContactProvider := platformnotifications.NewContactProvider(identityUserRepo)
+	contactResolver := notificationspg.NewContactResolver(userContactProvider)
+	smsSenderAdapter := platformnotifications.NewSMSSenderAdapter(smsSender)
+	smsNotifier := notificationsms.NewNotifier(contactResolver, smsSenderAdapter, logger)
+	reminderWorker := scheduler.NewReminderWorker(reminderRepo, smsNotifier, contactResolver, platformpostgres.NewBeginner(pool), realClock{}, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, logger)
+	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, realClock{}, 1*time.Hour, 100, logger)
+
 	dataCleaner := cleaner.New(identitySessionRepo, identitySMSRepo, identityAttemptRepo, 1*time.Hour, 7*24*time.Hour, logger)
 	go dataCleaner.Run(ctx)
+	go reminderWorker.Run(ctx)
+	go leaseReconciliationWorker.Run(ctx)
 
 	ipLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.IPRPS), cfg.RateLimit.IPBurst, 1*time.Hour)
 	defer ipLimiter.Stop()
@@ -161,6 +175,7 @@ func run(fallback *slog.Logger) error {
 		TenantContacts:      tenantContactService,
 		Operations:          operationService,
 		RecurringOperations: recurringOperationService,
+		Reminders:           reminderService,
 		CookieSecure:        cfg.CookieSecure,
 		Logger:              logger,
 		Clock:               realClock{},
