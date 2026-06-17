@@ -31,6 +31,7 @@ func (r *ReminderRepository) q() *postgres.Queries {
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
+// It follows the existing repository convention of asserting transaction.Tx to postgres.DBTX.
 func (r *ReminderRepository) WithTx(tx transaction.Tx) application.ReminderRepository {
 	return NewReminderRepository(tx.(postgres.DBTX))
 }
@@ -40,13 +41,6 @@ func eventDateToPgtype(t time.Time) pgtype.Date {
 		return pgtype.Date{}
 	}
 	return pgtype.Date{Time: t, Valid: true}
-}
-
-func eventDateFromPgtype(d pgtype.Date) time.Time {
-	if !d.Valid {
-		return time.Time{}
-	}
-	return d.Time
 }
 
 // Save inserts a reminder.
@@ -229,7 +223,7 @@ func toDomain(row postgres.Reminder) domain.Reminder {
 		EventType:            domain.EventType(row.EventType),
 		Status:               domain.ReminderStatus(row.Status),
 		ScheduledAt:          pgconv.TimestamptzToTime(row.ScheduledAt),
-		EventDate:            eventDateFromPgtype(row.EventDate),
+		EventDate:            pgconv.DateFromPgtype(row.EventDate),
 		SentAt:               pgconv.TimestamptzToPtrTime(row.SentAt),
 		FailedAttempts:       int(row.FailedAttempts),
 		NextAttemptAt:        pgconv.TimestamptzToPtrTime(row.NextAttemptAt),

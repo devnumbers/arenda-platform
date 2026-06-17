@@ -17,16 +17,12 @@ import (
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leasespg "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/postgres"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
-	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
-	notificationssms "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/sms"
-	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/cleaner"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
-	platformnotifications "github.com/nambers/arenda-planform/apps/backend/internal/platform/notifications"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"golang.org/x/time/rate"
@@ -88,18 +84,6 @@ func run(fallback *slog.Logger) error {
 	default:
 		return fmt.Errorf("unsupported SMS_SENDER: %s", cfg.SMSSender)
 	}
-
-	contactProvider := platformnotifications.NewContactProvider(identityUserRepo)
-	contactResolver := notificationspg.NewContactResolver(contactProvider)
-	notificationSMSSender := platformnotifications.NewSMSSender(smsSender)
-	sentSMSRepo := notificationspg.NewSentSMSReminderRepository(pool)
-	reminderRepo := notificationspg.NewReminderRepository(pool)
-	reminderService := notificationsapp.NewReminderService(reminderRepo, realClock{})
-	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, realClock{})
-	smsNotifier := notificationssms.NewNotifier(contactResolver, notificationSMSSender, sentSMSRepo, realClock{}, logger)
-	_ = reminderService
-	_ = reminderScheduler
-	_ = smsNotifier
 
 	authService := identityapp.NewAuthService(
 		identityUserRepo,

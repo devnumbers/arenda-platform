@@ -136,7 +136,8 @@ func NewOperationReminder(ownerID, operationID, propertyID uuid.UUID, eventDate,
 }
 
 // NewLeaseReminder creates a pending reminder for a lease event.
-// Unlike operation reminders, the reminder date may intentionally fall after the event date
+// A zero eventDate bypasses the "reminder must be on or before the event date" guard,
+// allowing reminders that intentionally fall after the event date
 // (for example, the lease_requires_action reminder is sent one day after the lease ends).
 func NewLeaseReminder(ownerID, leaseID, propertyID uuid.UUID, eventDate, reminderDate time.Time, title, body string, eventType EventType, now time.Time) (Reminder, error) {
 	if err := ValidatePendingDate(eventDate, reminderDate, now); err != nil {
