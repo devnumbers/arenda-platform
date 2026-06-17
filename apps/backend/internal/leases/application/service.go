@@ -356,18 +356,20 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 		}
 	}
 
-	if s.scheduler != nil && cmd.EndDate != nil && !endDatesEqual(originalEndDate, cmd.EndDate) {
+	if s.scheduler != nil && !endDatesEqual(originalEndDate, cmd.EndDate) {
 		txScheduler := s.scheduler.WithTx(tx)
 		if err := txScheduler.CancelByLease(ctx, ownerID, updated.ID); err != nil {
 			return domain.Lease{}, fmt.Errorf("cancel lease reminders: %w", err)
 		}
-		if err := txScheduler.ScheduleForLease(ctx, notificationsapp.LeaseInfo{
-			ID:         updated.ID,
-			OwnerID:    updated.OwnerID,
-			PropertyID: updated.PropertyID,
-			EndDate:    updated.EndDate,
-		}); err != nil {
-			return domain.Lease{}, fmt.Errorf("schedule lease reminders: %w", err)
+		if cmd.EndDate != nil {
+			if err := txScheduler.ScheduleForLease(ctx, notificationsapp.LeaseInfo{
+				ID:         updated.ID,
+				OwnerID:    updated.OwnerID,
+				PropertyID: updated.PropertyID,
+				EndDate:    updated.EndDate,
+			}); err != nil {
+				return domain.Lease{}, fmt.Errorf("schedule lease reminders: %w", err)
+			}
 		}
 	}
 
@@ -438,6 +440,15 @@ func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID)
 		txScheduler := s.scheduler.WithTx(tx)
 		if err := txScheduler.CancelByLease(ctx, ownerID, id); err != nil {
 			return domain.Lease{}, fmt.Errorf("cancel lease reminders: %w", err)
+		}
+		rec, err := txRecurring.GetByLeaseID(ctx, ownerID, id)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return domain.Lease{}, fmt.Errorf("get recurring operation for lease: %w", err)
+		}
+		if err == nil {
+			if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, rec.ID); err != nil {
+				return domain.Lease{}, fmt.Errorf("cancel recurring operation reminders: %w", err)
+			}
 		}
 	}
 

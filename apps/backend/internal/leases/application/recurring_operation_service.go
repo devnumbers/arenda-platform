@@ -702,7 +702,7 @@ func scheduleRemindersForOperations(
 		ID:         rec.ID,
 		OwnerID:    rec.OwnerID,
 		PropertyID: rec.PropertyID,
-		LeaseID:    leaseIDPtr(rec.LeaseID),
+		LeaseID:    domain.LeaseIDPtr(rec.LeaseID),
 	}
 
 	if err := scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, ToOperationInfoSlice(filtered)); err != nil {
@@ -714,9 +714,3 @@ func scheduleRemindersForOperations(
 	return nil
 }
 
-func leaseIDPtr(id uuid.UUID) *uuid.UUID {
-	if id == uuid.Nil {
-		return nil
-	}
-	return &id
-}

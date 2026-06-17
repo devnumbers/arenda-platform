@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 )
 
 // CreateOperationCommand carries the data needed to create a manual operation.
@@ -228,16 +229,30 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 		if err := txScheduler.CancelByOperation(ctx, ownerID, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
 		}
+
+		now := s.clock.Now()
+		today := timeutil.Date(now)
+		var reminderDate time.Time
+		var skipSchedule bool
 		if updated.RecurringOperationID != uuid.Nil {
 			rec, err := txRecurring.GetByIDAndOwner(ctx, updated.RecurringOperationID, ownerID)
 			if err != nil {
 				return domain.Operation{}, fmt.Errorf("get recurring operation: %w", err)
 			}
-			if rec.ReminderOffsetDays != nil {
-				reminderDate := updated.OperationDate.AddDate(0, 0, -(*rec.ReminderOffsetDays))
-				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated), reminderDate); err != nil {
-					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
+			if rec.ReminderOffsetDays == nil {
+				skipSchedule = true
+			} else {
+				reminderDate = updated.OperationDate.AddDate(0, 0, -(*rec.ReminderOffsetDays))
+				if reminderDate.Before(today) {
+					skipSchedule = true
 				}
+			}
+		} else {
+			reminderDate = updated.OperationDate
+		}
+		if !skipSchedule {
+			if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated), reminderDate); err != nil {
+				return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
 			}
 		}
 	}

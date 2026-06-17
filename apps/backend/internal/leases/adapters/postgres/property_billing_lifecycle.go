@@ -144,7 +144,7 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.U
 					ID:         rec.ID,
 					OwnerID:    rec.OwnerID,
 					PropertyID: rec.PropertyID,
-					LeaseID:    leaseIDPtr(rec.LeaseID),
+					LeaseID:    leasesdomain.LeaseIDPtr(rec.LeaseID),
 				}
 				baseReminderDate := futureOps[0].OperationDate.AddDate(0, 0, -(*rec.ReminderOffsetDays))
 				if err := l.scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, leasesapp.ToOperationInfoSlice(futureOps)); err != nil {
@@ -155,13 +155,6 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.U
 	}
 
 	return nil
-}
-
-func leaseIDPtr(id uuid.UUID) *uuid.UUID {
-	if id == uuid.Nil {
-		return nil
-	}
-	return &id
 }
 
 var _ propertiesapp.PropertyBillingLifecycle = (*PropertyBillingLifecycle)(nil)
