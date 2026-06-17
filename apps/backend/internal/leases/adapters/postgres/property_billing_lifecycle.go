@@ -132,15 +132,22 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.U
 			if err != nil {
 				return fmt.Errorf("list operations for scheduling: %w", err)
 			}
-			if len(allOps) > 0 {
+			futureOps := make([]leasesdomain.Operation, 0, len(allOps))
+			asOfDate := timeutil.Date(asOf)
+			for _, op := range allOps {
+				if !timeutil.Date(op.OperationDate).Before(asOfDate) {
+					futureOps = append(futureOps, op)
+				}
+			}
+			if len(futureOps) > 0 {
 				recInfo := notificationsapp.RecurringOperationInfo{
 					ID:         rec.ID,
 					OwnerID:    rec.OwnerID,
 					PropertyID: rec.PropertyID,
 					LeaseID:    leaseIDPtr(rec.LeaseID),
 				}
-				baseReminderDate := allOps[0].OperationDate.AddDate(0, 0, -(*rec.ReminderOffsetDays))
-				if err := l.scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, leasesapp.ToOperationInfoSlice(allOps)); err != nil {
+				baseReminderDate := futureOps[0].OperationDate.AddDate(0, 0, -(*rec.ReminderOffsetDays))
+				if err := l.scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, leasesapp.ToOperationInfoSlice(futureOps)); err != nil {
 					return fmt.Errorf("schedule reminders: %w", err)
 				}
 			}

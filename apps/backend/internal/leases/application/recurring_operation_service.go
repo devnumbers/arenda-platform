@@ -131,9 +131,9 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
 	}
 
-	if s.scheduler != nil && created.ReminderOffsetDays != nil && len(generatedOps) > 0 {
+	if s.scheduler != nil && created.ReminderOffsetDays != nil {
 		txScheduler := s.scheduler.WithTx(tx)
-		if err := s.scheduleRemindersForOperations(ctx, txScheduler, created, generatedOps); err != nil {
+		if err := s.scheduleRemindersForOperations(ctx, txScheduler, created, generatedOps, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -256,7 +256,6 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
-	txScheduler := s.scheduler.WithTx(tx)
 
 	updated, err := txRecurring.Update(ctx, rec)
 	if err != nil {
@@ -266,13 +265,14 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("update recurring operation: %w", err)
 	}
 
+	now := s.clock.Now()
 	if s.scheduler != nil && updated.ReminderOffsetDays != nil {
+		txScheduler := s.scheduler.WithTx(tx)
 		if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, updated.ID); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("cancel recurring reminders: %w", err)
 		}
 	}
 
-	now := s.clock.Now()
 	if err := txOps.DeleteUneditedFutureOperationsByRecurringOperation(ctx, updated.ID, now); err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("delete future operations: %w", err)
 	}
@@ -284,8 +284,9 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("regenerate operations: %w", err)
 	}
 
-	if s.scheduler != nil && updated.ReminderOffsetDays != nil && len(generatedOps) > 0 {
-		if err := s.scheduleRemindersForOperations(ctx, txScheduler, updated, generatedOps); err != nil {
+	if s.scheduler != nil && updated.ReminderOffsetDays != nil {
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := s.scheduleRemindersForOperations(ctx, txScheduler, updated, generatedOps, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -373,9 +374,9 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
 	}
 
-	if s.scheduler != nil && rec.ReminderOffsetDays != nil && len(generatedOps) > 0 {
+	if s.scheduler != nil && rec.ReminderOffsetDays != nil {
 		txScheduler := s.scheduler.WithTx(tx)
-		if err := s.scheduleRemindersForOperations(ctx, txScheduler, rec, generatedOps); err != nil {
+		if err := s.scheduleRemindersForOperations(ctx, txScheduler, rec, generatedOps, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -385,6 +386,63 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 	}
 
 	return rec, nil
+}
+
+// SetReminderOffset updates the reminder offset for a recurring operation and
+// rebuilds its concrete reminders for all future generated operations.
+func (s *RecurringOperationService) SetReminderOffset(
+	ctx context.Context,
+	ownerID, id uuid.UUID,
+	offsetDays int,
+) error {
+	if offsetDays < 0 {
+		return fmt.Errorf("%w: offset_days must be non-negative", ErrInvalidInput)
+	}
+
+	rec, err := s.recurringOps.GetByIDAndOwner(ctx, id, ownerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("get recurring operation: %w", err)
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRecurring := s.recurringOps.WithTx(tx)
+	txOps := s.operations.WithTx(tx)
+
+	if err := txRecurring.SetReminderOffset(ctx, ownerID, id, offsetDays); err != nil {
+		return fmt.Errorf("set reminder offset: %w", err)
+	}
+
+	now := s.clock.Now()
+	ops, err := txOps.ListByRecurringOperation(ctx, id)
+	if err != nil {
+		return fmt.Errorf("list operations: %w", err)
+	}
+
+	if s.scheduler != nil {
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, id); err != nil {
+			return fmt.Errorf("cancel recurring reminders: %w", err)
+		}
+		if offsetDays > 0 {
+			rec.ReminderOffsetDays = &offsetDays
+			if err := s.scheduleRemindersForOperations(ctx, txScheduler, rec, ops, now); err != nil {
+				return fmt.Errorf("schedule reminders: %w", err)
+			}
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
 }
 
 func (s *RecurringOperationService) validateCommand(opType, category string, amount int64, startDate time.Time, paymentDay int, endDate *time.Time) error {
@@ -461,10 +519,8 @@ func (s *RecurringOperationService) extendHorizon(ctx context.Context, rec domai
 		if err != nil {
 			return fmt.Errorf("list operations for scheduling: %w", err)
 		}
-		if len(allOps) > 0 {
-			if err := s.scheduleRemindersForOperations(ctx, s.scheduler, rec, allOps); err != nil {
-				return fmt.Errorf("schedule reminders: %w", err)
-			}
+		if err := s.scheduleRemindersForOperations(ctx, s.scheduler, rec, allOps, now); err != nil {
+			return fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
 
@@ -542,12 +598,29 @@ func stringOrEmpty(s *string) string {
 	return *s
 }
 
+func futureOperations(ops []domain.Operation, now time.Time) []domain.Operation {
+	today := timeutil.Date(now)
+	out := make([]domain.Operation, 0, len(ops))
+	for _, op := range ops {
+		if !timeutil.Date(op.OperationDate).Before(today) {
+			out = append(out, op)
+		}
+	}
+	return out
+}
+
 func (s *RecurringOperationService) scheduleRemindersForOperations(
 	ctx context.Context,
 	scheduler ReminderScheduler,
 	rec domain.RecurringOperation,
 	ops []domain.Operation,
+	now time.Time,
 ) error {
+	if scheduler == nil {
+		return nil
+	}
+
+	ops = futureOperations(ops, now)
 	if len(ops) == 0 || rec.ReminderOffsetDays == nil {
 		return nil
 	}

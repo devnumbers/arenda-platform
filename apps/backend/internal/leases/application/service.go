@@ -438,7 +438,6 @@ func (s *LeaseService) ReconcileRequiresAction(ctx context.Context, leaseID uuid
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txLeases := s.leases.WithTx(tx)
-	txScheduler := s.scheduler.WithTx(tx)
 
 	lease, err := txLeases.GetByIDForUpdate(ctx, leaseID)
 	if err != nil {
@@ -465,13 +464,16 @@ func (s *LeaseService) ReconcileRequiresAction(ctx context.Context, leaseID uuid
 		}
 	}
 
-	if err := txScheduler.EnsureRequiresActionReminder(ctx, notificationsapp.LeaseInfo{
-		ID:         lease.ID,
-		OwnerID:    lease.OwnerID,
-		PropertyID: lease.PropertyID,
-		EndDate:    lease.EndDate,
-	}); err != nil {
-		return fmt.Errorf("ensure requires_action reminder: %w", err)
+	if s.scheduler != nil {
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := txScheduler.EnsureRequiresActionReminder(ctx, notificationsapp.LeaseInfo{
+			ID:         lease.ID,
+			OwnerID:    lease.OwnerID,
+			PropertyID: lease.PropertyID,
+			EndDate:    lease.EndDate,
+		}); err != nil {
+			return fmt.Errorf("ensure requires_action reminder: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
