@@ -13,7 +13,7 @@ import (
 
 const cancelByIDAndOwner = `-- name: CancelByIDAndOwner :execrows
 UPDATE reminders
-SET status = 'cancelled', updated_at = NOW()
+SET status = 'cancelled'
 WHERE id = $1 AND owner_id = $2 AND status IN ('pending', 'sending')
 `
 
@@ -88,9 +88,9 @@ func (q *Queries) CancelRemindersByRecurringOperationID(ctx context.Context, arg
 const createReminder = `-- name: CreateReminder :one
 INSERT INTO reminders (
     id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id,
-    event_type, status, scheduled_at, message_title, message_body, created_at, updated_at
+    event_type, status, scheduled_at, message_title, message_body, created_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
 RETURNING id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at
 `
@@ -109,7 +109,6 @@ type CreateReminderParams struct {
 	MessageTitle         string                 `json:"message_title"`
 	MessageBody          string                 `json:"message_body"`
 	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz     `json:"updated_at"`
 }
 
 func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) (Reminder, error) {
@@ -127,7 +126,6 @@ func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) 
 		arg.MessageTitle,
 		arg.MessageBody,
 		arg.CreatedAt,
-		arg.UpdatedAt,
 	)
 	var i Reminder
 	err := row.Scan(
@@ -313,6 +311,120 @@ type ListDueRemindersParams struct {
 
 func (q *Queries) ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error) {
 	rows, err := q.db.Query(ctx, listDueReminders, arg.ScheduledAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Reminder{}
+	for rows.Next() {
+		var i Reminder
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.TargetType,
+			&i.OperationID,
+			&i.RecurringOperationID,
+			&i.LeaseID,
+			&i.PropertyID,
+			&i.EventType,
+			&i.Status,
+			&i.ScheduledAt,
+			&i.SentAt,
+			&i.FailedAttempts,
+			&i.NextAttemptAt,
+			&i.MessageTitle,
+			&i.MessageBody,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemindersByLease = `-- name: ListRemindersByLease :many
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
+WHERE owner_id = $1 AND lease_id = $2 AND status != 'cancelled'
+ORDER BY scheduled_at ASC
+LIMIT $3 OFFSET $4
+`
+
+type ListRemindersByLeaseParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	LeaseID pgtype.UUID `json:"lease_id"`
+	Limit   int32       `json:"limit"`
+	Offset  int32       `json:"offset"`
+}
+
+func (q *Queries) ListRemindersByLease(ctx context.Context, arg ListRemindersByLeaseParams) ([]Reminder, error) {
+	rows, err := q.db.Query(ctx, listRemindersByLease,
+		arg.OwnerID,
+		arg.LeaseID,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Reminder{}
+	for rows.Next() {
+		var i Reminder
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.TargetType,
+			&i.OperationID,
+			&i.RecurringOperationID,
+			&i.LeaseID,
+			&i.PropertyID,
+			&i.EventType,
+			&i.Status,
+			&i.ScheduledAt,
+			&i.SentAt,
+			&i.FailedAttempts,
+			&i.NextAttemptAt,
+			&i.MessageTitle,
+			&i.MessageBody,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemindersByOperation = `-- name: ListRemindersByOperation :many
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
+WHERE owner_id = $1 AND operation_id = $2 AND status != 'cancelled'
+ORDER BY scheduled_at ASC
+LIMIT $3 OFFSET $4
+`
+
+type ListRemindersByOperationParams struct {
+	OwnerID     pgtype.UUID `json:"owner_id"`
+	OperationID pgtype.UUID `json:"operation_id"`
+	Limit       int32       `json:"limit"`
+	Offset      int32       `json:"offset"`
+}
+
+func (q *Queries) ListRemindersByOperation(ctx context.Context, arg ListRemindersByOperationParams) ([]Reminder, error) {
+	rows, err := q.db.Query(ctx, listRemindersByOperation,
+		arg.OwnerID,
+		arg.OperationID,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -574,7 +686,7 @@ func (q *Queries) MarkReminderSending(ctx context.Context, id pgtype.UUID) (Remi
 
 const markReminderSent = `-- name: MarkReminderSent :execrows
 UPDATE reminders
-SET status = 'sent', sent_at = $1, updated_at = NOW()
+SET status = 'sent', sent_at = $1
 WHERE id = $2 AND status IN ('pending', 'sending')
 `
 
@@ -649,16 +761,15 @@ const saveOrReplaceOperationReminder = `-- name: SaveOrReplaceOperationReminder 
 INSERT INTO reminders (
     id, owner_id, target_type, operation_id, recurring_operation_id, lease_id,
     property_id, event_type, status, scheduled_at, message_title, message_body,
-    created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+    created_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (owner_id, target_type, operation_id, recurring_operation_id, lease_id, event_type)
 WHERE status IN ('pending', 'sending')
 DO UPDATE SET
     scheduled_at = EXCLUDED.scheduled_at,
     message_title = EXCLUDED.message_title,
     message_body = EXCLUDED.message_body,
-    status = EXCLUDED.status,
-    updated_at = NOW()
+    status = EXCLUDED.status
 `
 
 type SaveOrReplaceOperationReminderParams struct {

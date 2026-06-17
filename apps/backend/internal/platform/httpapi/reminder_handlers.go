@@ -108,13 +108,16 @@ func (h *ReminderHandlers) ListOperationReminders(w http.ResponseWriter, r *http
 		return
 	}
 
-	reminders, err := h.svc.ListByOwner(r.Context(), ownerID, notificationsapp.ListFilter{Limit: 1000})
+	reminders, err := h.svc.ListByOperation(r.Context(), ownerID, operationId, notificationsapp.ListFilter{Limit: 1000})
 	if err != nil {
 		h.handleReminderError(w, r, err, "operation")
 		return
 	}
 
-	items := filterRemindersByOperationID(reminders, operationId)
+	items := make([]openapi.ReminderResponse, 0, len(reminders))
+	for _, rm := range reminders {
+		items = append(items, reminderResponse(rm))
+	}
 	writeJSON(r.Context(), w, http.StatusOK, openapi.RemindersResponse{Items: items})
 }
 
@@ -174,13 +177,16 @@ func (h *ReminderHandlers) ListRecurringOperationReminders(w http.ResponseWriter
 		return
 	}
 
-	reminders, err := h.svc.ListByOwner(r.Context(), ownerID, notificationsapp.ListFilter{Limit: 1000})
+	reminders, err := h.svc.ListByRecurringOperation(r.Context(), ownerID, recurringOperationId, notificationsapp.ListFilter{Limit: 1000})
 	if err != nil {
 		h.handleReminderError(w, r, err, "recurring operation")
 		return
 	}
 
-	items := filterRemindersByRecurringOperationID(reminders, recurringOperationId)
+	items := make([]openapi.ReminderResponse, 0, len(reminders))
+	for _, rm := range reminders {
+		items = append(items, reminderResponse(rm))
+	}
 	writeJSON(r.Context(), w, http.StatusOK, openapi.RemindersResponse{Items: items})
 }
 
@@ -197,13 +203,16 @@ func (h *ReminderHandlers) ListLeaseReminders(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	reminders, err := h.svc.ListByOwner(r.Context(), ownerID, notificationsapp.ListFilter{Limit: 1000})
+	reminders, err := h.svc.ListByLease(r.Context(), ownerID, leaseId, notificationsapp.ListFilter{Limit: 1000})
 	if err != nil {
 		h.handleReminderError(w, r, err, "lease")
 		return
 	}
 
-	items := filterRemindersByLeaseID(reminders, leaseId)
+	items := make([]openapi.ReminderResponse, 0, len(reminders))
+	for _, rm := range reminders {
+		items = append(items, reminderResponse(rm))
+	}
 	writeJSON(r.Context(), w, http.StatusOK, openapi.RemindersResponse{Items: items})
 }
 
@@ -315,32 +324,3 @@ func reminderResponse(r notificationsdomain.Reminder) openapi.ReminderResponse {
 	}
 }
 
-func filterRemindersByOperationID(reminders []notificationsdomain.Reminder, operationID uuid.UUID) []openapi.ReminderResponse {
-	items := make([]openapi.ReminderResponse, 0, len(reminders))
-	for _, r := range reminders {
-		if r.OperationID != nil && *r.OperationID == operationID {
-			items = append(items, reminderResponse(r))
-		}
-	}
-	return items
-}
-
-func filterRemindersByRecurringOperationID(reminders []notificationsdomain.Reminder, recurringOperationID uuid.UUID) []openapi.ReminderResponse {
-	items := make([]openapi.ReminderResponse, 0, len(reminders))
-	for _, r := range reminders {
-		if r.RecurringOperationID != nil && *r.RecurringOperationID == recurringOperationID {
-			items = append(items, reminderResponse(r))
-		}
-	}
-	return items
-}
-
-func filterRemindersByLeaseID(reminders []notificationsdomain.Reminder, leaseID uuid.UUID) []openapi.ReminderResponse {
-	items := make([]openapi.ReminderResponse, 0, len(reminders))
-	for _, r := range reminders {
-		if r.LeaseID != nil && *r.LeaseID == leaseID {
-			items = append(items, reminderResponse(r))
-		}
-	}
-	return items
-}

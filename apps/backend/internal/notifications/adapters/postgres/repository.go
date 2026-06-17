@@ -57,7 +57,6 @@ func (r *ReminderRepository) Save(ctx context.Context, rm domain.Reminder) error
 		MessageTitle:         rm.MessageTitle,
 		MessageBody:          rm.MessageBody,
 		CreatedAt:            pgtype.Timestamptz{Time: rm.CreatedAt, Valid: true},
-		UpdatedAt:            pgtype.Timestamptz{Time: rm.UpdatedAt, Valid: true},
 	})
 	if err != nil {
 		return fmt.Errorf("create reminder: %w", err)
@@ -167,6 +166,47 @@ func (r *ReminderRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID,
 		params.Status = postgres.NotificationStatus(*filter.Status)
 	}
 	rows, err := r.q().ListRemindersByOwner(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("list reminders: %w", err)
+	}
+	out := make([]domain.Reminder, len(rows))
+	for i, row := range rows {
+		out[i] = toDomain(row)
+	}
+	return out, nil
+}
+
+// ListByOperation returns non-cancelled reminders linked to a concrete operation
+// for the given owner.
+func (r *ReminderRepository) ListByOperation(ctx context.Context, ownerID, operationID uuid.UUID, filter application.ListFilter) ([]domain.Reminder, error) {
+	rows, err := r.q().ListRemindersByOperation(ctx, postgres.ListRemindersByOperationParams{
+		OwnerID:     pgconv.UUIDToPgtype(ownerID),
+		OperationID: pgconv.UUIDToPgtype(operationID),
+		//nolint:gosec // Pagination values are bounded by the transport layer.
+		Limit: int32(filter.Limit),
+		//nolint:gosec // Pagination values are bounded by the transport layer.
+		Offset: int32(filter.Offset),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list reminders: %w", err)
+	}
+	out := make([]domain.Reminder, len(rows))
+	for i, row := range rows {
+		out[i] = toDomain(row)
+	}
+	return out, nil
+}
+
+// ListByLease returns non-cancelled reminders linked to a lease for the given owner.
+func (r *ReminderRepository) ListByLease(ctx context.Context, ownerID, leaseID uuid.UUID, filter application.ListFilter) ([]domain.Reminder, error) {
+	rows, err := r.q().ListRemindersByLease(ctx, postgres.ListRemindersByLeaseParams{
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		LeaseID: pgconv.UUIDToPgtype(leaseID),
+		//nolint:gosec // Pagination values are bounded by the transport layer.
+		Limit: int32(filter.Limit),
+		//nolint:gosec // Pagination values are bounded by the transport layer.
+		Offset: int32(filter.Offset),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list reminders: %w", err)
 	}

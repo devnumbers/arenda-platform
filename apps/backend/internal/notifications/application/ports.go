@@ -17,6 +17,8 @@ type ReminderRepository interface {
 	GetByID(ctx context.Context, id, ownerID uuid.UUID) (domain.Reminder, error)
 	GetByIDUnscoped(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
 	ListByOwner(ctx context.Context, ownerID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
+	ListByOperation(ctx context.Context, ownerID, operationID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
+	ListByLease(ctx context.Context, ownerID, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	ListByRecurringOperation(ctx context.Context, ownerID, recurringOpID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	ListDue(ctx context.Context, before time.Time, limit int) ([]domain.Reminder, error)
 	ListStaleSendingReminders(ctx context.Context, staleBefore time.Time, limit int) ([]domain.Reminder, error)
@@ -97,6 +99,8 @@ type ReminderScheduler interface {
 	CancelByRecurringOperation(ctx context.Context, ownerID, recID uuid.UUID) error
 	CancelByLease(ctx context.Context, ownerID, leaseID uuid.UUID) error
 	HasReminderForOperationEvent(ctx context.Context, ownerID, operationID uuid.UUID, eventType domain.EventType) (bool, error)
+	ListByOperation(ctx context.Context, ownerID, operationID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
+	ListByLease(ctx context.Context, ownerID, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	WithTx(tx transaction.Tx) ReminderScheduler
 }
 

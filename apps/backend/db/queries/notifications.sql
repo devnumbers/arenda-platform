@@ -1,9 +1,9 @@
 -- name: CreateReminder :one
 INSERT INTO reminders (
     id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id,
-    event_type, status, scheduled_at, message_title, message_body, created_at, updated_at
+    event_type, status, scheduled_at, message_title, message_body, created_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
 RETURNING *;
 
@@ -19,6 +19,18 @@ WHERE owner_id = sqlc.arg('owner_id')
   AND (NOT sqlc.arg('filter_by_status')::boolean OR status = sqlc.arg('status'))
 ORDER BY scheduled_at ASC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: ListRemindersByOperation :many
+SELECT * FROM reminders
+WHERE owner_id = $1 AND operation_id = $2 AND status != 'cancelled'
+ORDER BY scheduled_at ASC
+LIMIT $3 OFFSET $4;
+
+-- name: ListRemindersByLease :many
+SELECT * FROM reminders
+WHERE owner_id = $1 AND lease_id = $2 AND status != 'cancelled'
+ORDER BY scheduled_at ASC
+LIMIT $3 OFFSET $4;
 
 -- name: ListRemindersByRecurringOperation :many
 SELECT * FROM reminders
@@ -58,20 +70,19 @@ RETURNING *;
 INSERT INTO reminders (
     id, owner_id, target_type, operation_id, recurring_operation_id, lease_id,
     property_id, event_type, status, scheduled_at, message_title, message_body,
-    created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+    created_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (owner_id, target_type, operation_id, recurring_operation_id, lease_id, event_type)
 WHERE status IN ('pending', 'sending')
 DO UPDATE SET
     scheduled_at = EXCLUDED.scheduled_at,
     message_title = EXCLUDED.message_title,
     message_body = EXCLUDED.message_body,
-    status = EXCLUDED.status,
-    updated_at = NOW();
+    status = EXCLUDED.status;
 
 -- name: CancelByIDAndOwner :execrows
 UPDATE reminders
-SET status = 'cancelled', updated_at = NOW()
+SET status = 'cancelled'
 WHERE id = $1 AND owner_id = $2 AND status IN ('pending', 'sending');
 
 -- name: MarkSendingReminderSent :execrows
@@ -81,7 +92,7 @@ WHERE id = $1 AND status = 'sending';
 
 -- name: MarkReminderSent :execrows
 UPDATE reminders
-SET status = 'sent', sent_at = $1, updated_at = NOW()
+SET status = 'sent', sent_at = $1
 WHERE id = $2 AND status IN ('pending', 'sending');
 
 -- name: MarkReminderFailed :execrows

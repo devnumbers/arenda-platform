@@ -91,6 +91,24 @@ func (s *ReminderService) ListByOwner(ctx context.Context, ownerID uuid.UUID, fi
 	return reminders, nil
 }
 
+// ListByOperation returns non-cancelled reminders for a concrete operation and owner.
+func (s *ReminderService) ListByOperation(ctx context.Context, ownerID, operationID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
+	reminders, err := s.repo.ListByOperation(ctx, ownerID, operationID, filter)
+	if err != nil {
+		return nil, fmt.Errorf("list reminders: %w", err)
+	}
+	return reminders, nil
+}
+
+// ListByLease returns non-cancelled reminders for a lease and owner.
+func (s *ReminderService) ListByLease(ctx context.Context, ownerID, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
+	reminders, err := s.repo.ListByLease(ctx, ownerID, leaseID, filter)
+	if err != nil {
+		return nil, fmt.Errorf("list reminders: %w", err)
+	}
+	return reminders, nil
+}
+
 // ListByRecurringOperation returns non-cancelled reminders for a recurring
 // operation template and owner.
 func (s *ReminderService) ListByRecurringOperation(ctx context.Context, ownerID, recurringOpID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
@@ -353,4 +371,14 @@ func (s *scheduler) CancelByLease(ctx context.Context, ownerID, leaseID uuid.UUI
 // given operation and event type.
 func (s *scheduler) HasReminderForOperationEvent(ctx context.Context, ownerID, operationID uuid.UUID, eventType domain.EventType) (bool, error) {
 	return s.repo.HasReminderForOperationEvent(ctx, ownerID, operationID, eventType)
+}
+
+// ListByOperation returns non-cancelled reminders for a concrete operation and owner.
+func (s *scheduler) ListByOperation(ctx context.Context, ownerID, operationID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
+	return s.repo.ListByOperation(ctx, ownerID, operationID, filter)
+}
+
+// ListByLease returns non-cancelled reminders for a lease and owner.
+func (s *scheduler) ListByLease(ctx context.Context, ownerID, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
+	return s.repo.ListByLease(ctx, ownerID, leaseID, filter)
 }
