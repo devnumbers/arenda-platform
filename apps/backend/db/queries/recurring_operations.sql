@@ -49,6 +49,12 @@ SET status = $2
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateRecurringOperationStatusByLeaseID :many
+UPDATE recurring_operations
+SET status = $1, updated_at = NOW()
+WHERE lease_id = $2 AND owner_id = $3
+RETURNING *;
+
 -- name: UpdateRecurringOperationReminderOffset :execrows
 UPDATE recurring_operations
 SET reminder_offset_days = $1, updated_at = NOW()

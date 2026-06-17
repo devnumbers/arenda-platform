@@ -40,6 +40,7 @@ type OperationService struct {
 	properties PropertyRepository
 	leases     LeaseRepository
 	scheduler  ReminderScheduler
+	db         txBeginner
 	clock      clock.Clock
 	logger     *slog.Logger
 }
@@ -50,9 +51,16 @@ func NewOperationService(
 	properties PropertyRepository,
 	leases LeaseRepository,
 	scheduler ReminderScheduler,
+	db txBeginner,
 	clock clock.Clock,
 	logger *slog.Logger,
 ) *OperationService {
+	if db == nil {
+		panic("db beginner is required")
+	}
+	if clock == nil {
+		panic("clock is required")
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -61,6 +69,7 @@ func NewOperationService(
 		properties: properties,
 		leases:     leases,
 		scheduler:  scheduler,
+		db:         db,
 		clock:      clock,
 		logger:     logger,
 	}
@@ -195,7 +204,14 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	op.IsException = true
 	op.UpdatedAt = s.clock.Now()
 
-	updated, err := s.operations.Update(ctx, op)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txOps := s.operations.WithTx(tx)
+	updated, err := txOps.Update(ctx, op)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Operation{}, ErrNotFound
@@ -204,9 +220,14 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	}
 
 	if s.scheduler != nil && cmd.OperationDate != nil && !originalOperationDate.Equal(*cmd.OperationDate) {
-		if err := s.scheduler.CancelByOperation(ctx, ownerID, updated.ID); err != nil {
-			s.logger.ErrorContext(ctx, "cancel reminders for updated operation failed", "operation_id", updated.ID, "error", err)
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := txScheduler.CancelByOperation(ctx, ownerID, updated.ID); err != nil {
+			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
 		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Operation{}, fmt.Errorf("commit tx: %w", err)
 	}
 
 	return updated, nil
@@ -214,7 +235,14 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 
 // DeleteOperation soft-deletes an operation owned by the given owner.
 func (s *OperationService) DeleteOperation(ctx context.Context, ownerID, id uuid.UUID) error {
-	if err := s.operations.SoftDeleteOperation(ctx, id, ownerID); err != nil {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txOps := s.operations.WithTx(tx)
+	if err := txOps.SoftDeleteOperation(ctx, id, ownerID); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
 		}
@@ -222,9 +250,14 @@ func (s *OperationService) DeleteOperation(ctx context.Context, ownerID, id uuid
 	}
 
 	if s.scheduler != nil {
-		if err := s.scheduler.CancelByOperation(ctx, ownerID, id); err != nil {
-			s.logger.ErrorContext(ctx, "cancel reminders for deleted operation failed", "operation_id", id, "error", err)
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := txScheduler.CancelByOperation(ctx, ownerID, id); err != nil {
+			return fmt.Errorf("cancel reminders: %w", err)
 		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
 	}
 
 	return nil

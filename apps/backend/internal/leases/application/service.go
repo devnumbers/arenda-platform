@@ -62,6 +62,12 @@ func NewLeaseService(
 	clock clock.Clock,
 	logger *slog.Logger,
 ) *LeaseService {
+	if db == nil {
+		panic("db beginner is required")
+	}
+	if clock == nil {
+		panic("clock is required")
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -388,6 +394,7 @@ func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID)
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txLeases := s.leases.WithTx(tx)
+	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
 
 	completed, err := txLeases.Complete(ctx, id, ownerID)
@@ -401,6 +408,10 @@ func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID)
 	now := s.clock.Now()
 	if err := txOps.DeleteUneditedFutureOperationsByLease(ctx, id, now); err != nil {
 		return domain.Lease{}, fmt.Errorf("delete future operations: %w", err)
+	}
+
+	if err := txRecurring.UpdateStatusByLeaseID(ctx, id, ownerID, string(domain.RecurringOperationStatusPaused)); err != nil {
+		return domain.Lease{}, fmt.Errorf("pause recurring operation: %w", err)
 	}
 
 	if s.scheduler != nil {

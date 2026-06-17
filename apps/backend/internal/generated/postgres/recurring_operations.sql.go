@@ -405,3 +405,53 @@ func (q *Queries) UpdateRecurringOperationStatusByID(ctx context.Context, arg Up
 	)
 	return i, err
 }
+
+const updateRecurringOperationStatusByLeaseID = `-- name: UpdateRecurringOperationStatusByLeaseID :many
+UPDATE recurring_operations
+SET status = $1, updated_at = NOW()
+WHERE lease_id = $2 AND owner_id = $3
+RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days
+`
+
+type UpdateRecurringOperationStatusByLeaseIDParams struct {
+	Status  string      `json:"status"`
+	LeaseID pgtype.UUID `json:"lease_id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) UpdateRecurringOperationStatusByLeaseID(ctx context.Context, arg UpdateRecurringOperationStatusByLeaseIDParams) ([]RecurringOperation, error) {
+	rows, err := q.db.Query(ctx, updateRecurringOperationStatusByLeaseID, arg.Status, arg.LeaseID, arg.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RecurringOperation{}
+	for rows.Next() {
+		var i RecurringOperation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.LeaseID,
+			&i.Type,
+			&i.Category,
+			&i.AmountKopecks,
+			&i.StartDate,
+			&i.PaymentDay,
+			&i.EndDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Periodicity,
+			&i.Comment,
+			&i.Status,
+			&i.ReminderOffsetDays,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

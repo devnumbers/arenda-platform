@@ -92,6 +92,7 @@ type Querier interface {
 	UpdateRecurringOperationReminderOffset(ctx context.Context, arg UpdateRecurringOperationReminderOffsetParams) (int64, error)
 	UpdateRecurringOperationStatus(ctx context.Context, arg UpdateRecurringOperationStatusParams) (RecurringOperation, error)
 	UpdateRecurringOperationStatusByID(ctx context.Context, arg UpdateRecurringOperationStatusByIDParams) (RecurringOperation, error)
+	UpdateRecurringOperationStatusByLeaseID(ctx context.Context, arg UpdateRecurringOperationStatusByLeaseIDParams) ([]RecurringOperation, error)
 	UpdateReminder(ctx context.Context, arg UpdateReminderParams) (int64, error)
 	UpdateReminderScheduledAt(ctx context.Context, arg UpdateReminderScheduledAtParams) (int64, error)
 	UpdateTenantContact(ctx context.Context, arg UpdateTenantContactParams) (TenantContact, error)

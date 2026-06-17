@@ -45,6 +45,7 @@ type RecurringOperationRepository interface {
 	ListByPropertyID(ctx context.Context, propertyID uuid.UUID) ([]domain.RecurringOperation, error)
 	Update(ctx context.Context, op domain.RecurringOperation) (domain.RecurringOperation, error)
 	UpdateStatus(ctx context.Context, id, ownerID uuid.UUID, status string) (domain.RecurringOperation, error)
+	UpdateStatusByLeaseID(ctx context.Context, leaseID, ownerID uuid.UUID, status string) error
 	SetReminderOffset(ctx context.Context, ownerID, recID uuid.UUID, offsetDays int) error
 	DeleteByLease(ctx context.Context, leaseID uuid.UUID) error
 	WithTx(tx transaction.Tx) RecurringOperationRepository

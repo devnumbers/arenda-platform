@@ -60,6 +60,12 @@ func NewRecurringOperationService(
 	clock clock.Clock,
 	logger *slog.Logger,
 ) *RecurringOperationService {
+	if db == nil {
+		panic("db beginner is required")
+	}
+	if clock == nil {
+		panic("clock is required")
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -160,12 +166,11 @@ func (s *RecurringOperationService) ListRecurringOperationsByProperty(
 		return nil, fmt.Errorf("list recurring operations: %w", err)
 	}
 
-	now := s.clock.Now()
 	for i := range recs {
 		if recs[i].Status != domain.RecurringOperationStatusActive {
 			continue
 		}
-		if err := s.extendHorizon(ctx, recs[i], now); err != nil {
+		if err := s.extendHorizon(ctx, recs[i]); err != nil {
 			return nil, fmt.Errorf("extend horizon: %w", err)
 		}
 	}
@@ -188,7 +193,7 @@ func (s *RecurringOperationService) GetRecurringOperation(
 	}
 
 	if rec.Status == domain.RecurringOperationStatusActive {
-		if err := s.extendHorizon(ctx, rec, s.clock.Now()); err != nil {
+		if err := s.extendHorizon(ctx, rec); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("extend horizon: %w", err)
 		}
 	}
@@ -479,8 +484,17 @@ func (s *RecurringOperationService) existingOperationDates(ctx context.Context, 
 // extendHorizon generates additional operations when the furthest generated date
 // is less than 12 months from now (and the template has no end_date or the end
 // date is further out).
-func (s *RecurringOperationService) extendHorizon(ctx context.Context, rec domain.RecurringOperation, now time.Time) error {
-	existing, err := s.existingOperationDates(ctx, s.operations, rec.ID)
+func (s *RecurringOperationService) extendHorizon(ctx context.Context, rec domain.RecurringOperation) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	now := s.clock.Now()
+
+	txOps := s.operations.WithTx(tx)
+	existing, err := s.existingOperationDates(ctx, txOps, rec.ID)
 	if err != nil {
 		return fmt.Errorf("list existing dates: %w", err)
 	}
@@ -510,18 +524,24 @@ func (s *RecurringOperationService) extendHorizon(ctx context.Context, rec domai
 		return nil
 	}
 
-	if err := s.operations.BulkCreate(ctx, ops); err != nil {
+	if err := txOps.BulkCreate(ctx, ops); err != nil {
 		return fmt.Errorf("bulk create operations: %w", err)
 	}
 
 	if s.scheduler != nil && rec.ReminderOffsetDays != nil {
-		allOps, err := s.operations.ListByRecurringOperation(ctx, rec.ID)
+		allOps, err := txOps.ListByRecurringOperation(ctx, rec.ID)
 		if err != nil {
 			return fmt.Errorf("list operations for scheduling: %w", err)
 		}
-		if err := s.scheduleRemindersForOperations(ctx, s.scheduler, rec, allOps, now); err != nil {
+		txScheduler := s.scheduler.WithTx(tx)
+		futureOps := futureOperations(allOps, now)
+		if err := s.scheduleRemindersForOperations(ctx, txScheduler, rec, futureOps, now); err != nil {
 			return fmt.Errorf("schedule reminders: %w", err)
 		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
 	}
 
 	return nil

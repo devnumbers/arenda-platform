@@ -452,6 +452,20 @@ func (r *RecurringOperationRepository) UpdateStatusByID(ctx context.Context, id 
 	return recurringOperationFromRow(row), nil
 }
 
+// UpdateStatusByLeaseID updates the status of all recurring operations
+// associated with the given lease and owner.
+func (r *RecurringOperationRepository) UpdateStatusByLeaseID(ctx context.Context, leaseID, ownerID uuid.UUID, status string) error {
+	_, err := r.q().UpdateRecurringOperationStatusByLeaseID(ctx, postgres.UpdateRecurringOperationStatusByLeaseIDParams{
+		Status:  status,
+		LeaseID: pgconv.UUIDToPgtype(leaseID),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		return fmt.Errorf("update recurring operation status by lease: %w", err)
+	}
+	return nil
+}
+
 // ListByPropertyID returns all recurring operations for the given property.
 func (r *RecurringOperationRepository) ListByPropertyID(ctx context.Context, propertyID uuid.UUID) ([]domain.RecurringOperation, error) {
 	rows, err := r.q().ListRecurringOperationsByPropertyID(ctx, pgconv.UUIDToPgtype(propertyID))
