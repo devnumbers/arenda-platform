@@ -20,7 +20,6 @@ type Backoff interface {
 // ReminderWorker polls for due reminders and dispatches them through a Notifier.
 type ReminderWorker struct {
 	repo        application.ReminderRepository
-	resolver    application.ContactResolver
 	notifier    application.Notifier
 	beginner    transaction.Beginner
 	clock       clock.Clock
@@ -34,7 +33,6 @@ type ReminderWorker struct {
 // NewReminderWorker creates a new reminder dispatch worker.
 func NewReminderWorker(
 	repo application.ReminderRepository,
-	resolver application.ContactResolver,
 	notifier application.Notifier,
 	beginner transaction.Beginner,
 	clock clock.Clock,
@@ -49,7 +47,6 @@ func NewReminderWorker(
 	}
 	return &ReminderWorker{
 		repo:        repo,
-		resolver:    resolver,
 		notifier:    notifier,
 		beginner:    beginner,
 		clock:       clock,
@@ -81,10 +78,19 @@ func (w *ReminderWorker) Run(ctx context.Context) {
 func (w *ReminderWorker) tick(ctx context.Context) error {
 	now := w.clock.Now()
 
-	// Process each batch inside a transaction. The SMS send happens while the
-	// transaction holds FOR UPDATE SKIP LOCKED row locks. This serializes dispatch
-	// within a worker and prevents duplicate sends across instances; for MVP the
-	// external SMS call duration is acceptable inside the transaction.
+	// Process each batch inside a single transaction. The ListDue query holds
+	// FOR UPDATE SKIP LOCKED row locks for the selected reminders, and those
+	// locks are kept until the transaction commits. Calling the external
+	// Notifier inside the transaction guarantees that a concurrent worker or
+	// instance cannot dispatch the same reminder while the notify call is in
+	// flight, which prevents duplicate sends without additional idempotency
+	// infrastructure.
+	//
+	// Operational trade-off: slow or unresponsive providers extend the lock
+	// hold time and can delay other dispatch work. If that becomes a problem,
+	// replace this single long transaction with per-reminder short
+	// transactions (or advisory locks) so the external call happens outside
+	// the database transaction.
 	tx, err := w.beginner.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -111,11 +117,6 @@ func (w *ReminderWorker) tick(ctx context.Context) error {
 }
 
 func (w *ReminderWorker) dispatch(ctx context.Context, repo application.ReminderRepository, r domain.Reminder, now time.Time) error {
-	if _, err := w.resolver.Resolve(ctx, r.OwnerID); err != nil {
-		w.logger.ErrorContext(ctx, "resolve contact failed", "reminder_id", r.ID, "error", err)
-		return w.markFailure(ctx, repo, r, now)
-	}
-
 	if err := w.notifier.Notify(ctx, application.Notification{
 		RecipientID: r.OwnerID,
 		ReminderID:  r.ID,

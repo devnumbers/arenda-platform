@@ -15,6 +15,10 @@ RETURNING *;
 SELECT * FROM leases
 WHERE id = $1 AND owner_id = $2;
 
+-- name: GetLeaseByID :one
+SELECT * FROM leases
+WHERE id = $1;
+
 -- name: ListLeasesByOwner :many
 SELECT * FROM leases
 WHERE owner_id = $1

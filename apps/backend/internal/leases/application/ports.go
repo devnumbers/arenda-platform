@@ -24,6 +24,7 @@ type TenantContactRepository interface {
 
 type LeaseRepository interface {
 	Create(ctx context.Context, ownerID uuid.UUID, lease domain.Lease) (domain.Lease, error)
+	GetByID(ctx context.Context, id uuid.UUID) (domain.Lease, error)
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Lease, error)
 	ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Lease, error)
 	Update(ctx context.Context, ownerID uuid.UUID, lease domain.Lease) (domain.Lease, error)

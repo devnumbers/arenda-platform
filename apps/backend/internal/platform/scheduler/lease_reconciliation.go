@@ -6,10 +6,12 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	leasedomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -72,14 +74,14 @@ func (w *LeaseReconciliationWorker) tick(ctx context.Context) error {
 	}
 
 	for _, lease := range leases {
-		if err := w.reconcile(ctx, lease); err != nil {
+		if err := w.reconcile(ctx, lease.ID); err != nil {
 			w.logger.ErrorContext(ctx, "reconcile lease failed", "lease_id", lease.ID, "error", err)
 		}
 	}
 	return nil
 }
 
-func (w *LeaseReconciliationWorker) reconcile(ctx context.Context, lease leasedomain.Lease) error {
+func (w *LeaseReconciliationWorker) reconcile(ctx context.Context, leaseID uuid.UUID) error {
 	tx, err := w.beginner.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -88,6 +90,19 @@ func (w *LeaseReconciliationWorker) reconcile(ctx context.Context, lease leasedo
 
 	txLeases := w.leases.WithTx(tx)
 	txScheduler := w.scheduler.WithTx(tx)
+
+	lease, err := txLeases.GetByID(ctx, leaseID)
+	if err != nil {
+		return fmt.Errorf("get lease: %w", err)
+	}
+
+	if !lease.Status.IsOpen() || lease.EndDate == nil {
+		return nil
+	}
+
+	if !timeutil.Date(*lease.EndDate).Before(timeutil.Date(w.clock.Now())) {
+		return nil
+	}
 
 	if lease.Status != leasedomain.LeaseStatusRequiresAction {
 		lease.Status = leasedomain.LeaseStatusRequiresAction
@@ -111,4 +126,3 @@ func (w *LeaseReconciliationWorker) reconcile(ctx context.Context, lease leasedo
 	}
 	return nil
 }
-

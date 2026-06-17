@@ -116,6 +116,32 @@ func (q *Queries) CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease
 	return i, err
 }
 
+const getLeaseByID = `-- name: GetLeaseByID :one
+SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
+WHERE id = $1
+`
+
+func (q *Queries) GetLeaseByID(ctx context.Context, id pgtype.UUID) (Lease, error) {
+	row := q.db.QueryRow(ctx, getLeaseByID, id)
+	var i Lease
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.TenantContactID,
+		&i.Status,
+		&i.StartDate,
+		&i.EndDate,
+		&i.RentAmountKopecks,
+		&i.DepositAmountKopecks,
+		&i.PaymentDay,
+		&i.Comment,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getLeaseByIDAndOwner = `-- name: GetLeaseByIDAndOwner :one
 SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
 WHERE id = $1 AND owner_id = $2

@@ -59,6 +59,17 @@ func (r *LeaseRepository) Create(ctx context.Context, ownerID uuid.UUID, lease d
 	return leaseFromRow(row)
 }
 
+func (r *LeaseRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Lease, error) {
+	row, err := r.q().GetLeaseByID(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Lease{}, application.ErrNotFound
+		}
+		return domain.Lease{}, err
+	}
+	return leaseFromRow(row)
+}
+
 func (r *LeaseRepository) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Lease, error) {
 	row, err := r.q().GetLeaseByIDAndOwner(ctx, postgres.GetLeaseByIDAndOwnerParams{
 		ID:      pgconv.UUIDToPgtype(id),
