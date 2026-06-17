@@ -17,6 +17,7 @@ type ReminderRepository interface {
 	GetByID(ctx context.Context, id, ownerID uuid.UUID) (domain.Reminder, error)
 	GetByIDUnscoped(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
 	ListByOwner(ctx context.Context, ownerID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
+	ListByRecurringOperation(ctx context.Context, ownerID, recurringOpID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	ListDue(ctx context.Context, before time.Time, limit int) ([]domain.Reminder, error)
 	ListStaleSendingReminders(ctx context.Context, staleBefore time.Time, limit int) ([]domain.Reminder, error)
 	MarkReminderSending(ctx context.Context, id uuid.UUID) (domain.Reminder, error)

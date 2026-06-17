@@ -19,6 +19,23 @@ var (
 	ErrDuplicatePhone        = errors.New("tenant contact with this phone already exists")
 )
 
+// invalidInputError is a user-facing invalid-input error that reports 400 in the
+// transport layer without embedding the "invalid input: " sentinel text.
+type invalidInputError struct {
+	detail string
+}
+
+func (e *invalidInputError) Error() string { return e.detail }
+func (e *invalidInputError) Is(target error) bool {
+	return target == ErrInvalidInput
+}
+
+// newInvalidInputError returns an error that matches ErrInvalidInput but whose
+// message is the supplied detail string.
+func newInvalidInputError(detail string) error {
+	return &invalidInputError{detail: detail}
+}
+
 // InvalidStatusTransitionError describes a status change that is not allowed.
 type InvalidStatusTransitionError struct {
 	From domain.LeaseStatus

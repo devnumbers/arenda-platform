@@ -409,6 +409,63 @@ func (q *Queries) ListRemindersByOwner(ctx context.Context, arg ListRemindersByO
 	return items, nil
 }
 
+const listRemindersByRecurringOperation = `-- name: ListRemindersByRecurringOperation :many
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
+WHERE owner_id = $1 AND recurring_operation_id = $2 AND status != 'cancelled'
+ORDER BY scheduled_at ASC
+LIMIT $3 OFFSET $4
+`
+
+type ListRemindersByRecurringOperationParams struct {
+	OwnerID              pgtype.UUID `json:"owner_id"`
+	RecurringOperationID pgtype.UUID `json:"recurring_operation_id"`
+	Limit                int32       `json:"limit"`
+	Offset               int32       `json:"offset"`
+}
+
+func (q *Queries) ListRemindersByRecurringOperation(ctx context.Context, arg ListRemindersByRecurringOperationParams) ([]Reminder, error) {
+	rows, err := q.db.Query(ctx, listRemindersByRecurringOperation,
+		arg.OwnerID,
+		arg.RecurringOperationID,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Reminder{}
+	for rows.Next() {
+		var i Reminder
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.TargetType,
+			&i.OperationID,
+			&i.RecurringOperationID,
+			&i.LeaseID,
+			&i.PropertyID,
+			&i.EventType,
+			&i.Status,
+			&i.ScheduledAt,
+			&i.SentAt,
+			&i.FailedAttempts,
+			&i.NextAttemptAt,
+			&i.MessageTitle,
+			&i.MessageBody,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStaleSendingReminders = `-- name: ListStaleSendingReminders :many
 SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
 WHERE status = 'sending'

@@ -91,6 +91,16 @@ func (s *ReminderService) ListByOwner(ctx context.Context, ownerID uuid.UUID, fi
 	return reminders, nil
 }
 
+// ListByRecurringOperation returns non-cancelled reminders for a recurring
+// operation template and owner.
+func (s *ReminderService) ListByRecurringOperation(ctx context.Context, ownerID, recurringOpID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
+	reminders, err := s.repo.ListByRecurringOperation(ctx, ownerID, recurringOpID, filter)
+	if err != nil {
+		return nil, fmt.Errorf("list reminders: %w", err)
+	}
+	return reminders, nil
+}
+
 // GetByID returns a reminder by ID after verifying ownership.
 func (s *ReminderService) GetByID(ctx context.Context, ownerID, id uuid.UUID) (domain.Reminder, error) {
 	r, err := s.repo.GetByID(ctx, id, ownerID)

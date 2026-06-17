@@ -20,6 +20,12 @@ WHERE owner_id = sqlc.arg('owner_id')
 ORDER BY scheduled_at ASC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
+-- name: ListRemindersByRecurringOperation :many
+SELECT * FROM reminders
+WHERE owner_id = $1 AND recurring_operation_id = $2 AND status != 'cancelled'
+ORDER BY scheduled_at ASC
+LIMIT $3 OFFSET $4;
+
 -- name: ListDueReminders :many
 SELECT * FROM reminders
 WHERE status = 'pending'

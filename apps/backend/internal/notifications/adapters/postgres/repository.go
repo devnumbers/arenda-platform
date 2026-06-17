@@ -177,6 +177,27 @@ func (r *ReminderRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID,
 	return out, nil
 }
 
+// ListByRecurringOperation returns non-cancelled reminders linked to a recurring
+// operation template for the given owner.
+func (r *ReminderRepository) ListByRecurringOperation(ctx context.Context, ownerID, recurringOpID uuid.UUID, filter application.ListFilter) ([]domain.Reminder, error) {
+	rows, err := r.q().ListRemindersByRecurringOperation(ctx, postgres.ListRemindersByRecurringOperationParams{
+		OwnerID:              pgconv.UUIDToPgtype(ownerID),
+		RecurringOperationID: pgconv.UUIDToPgtype(recurringOpID),
+		//nolint:gosec // Pagination values are bounded by the transport layer.
+		Limit: int32(filter.Limit),
+		//nolint:gosec // Pagination values are bounded by the transport layer.
+		Offset: int32(filter.Offset),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list reminders: %w", err)
+	}
+	out := make([]domain.Reminder, len(rows))
+	for i, row := range rows {
+		out[i] = toDomain(row)
+	}
+	return out, nil
+}
+
 // ListDue returns pending reminders that are due before the given time.
 func (r *ReminderRepository) ListDue(ctx context.Context, before time.Time, limit int) ([]domain.Reminder, error) {
 	rows, err := r.q().ListDueReminders(ctx, postgres.ListDueRemindersParams{

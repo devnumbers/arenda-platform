@@ -22,16 +22,16 @@ func validateProperty(ctx context.Context, properties PropertyRepository, ownerI
 func parseTypeAndCategory(typeStr, categoryStr string) (domain.OperationType, domain.OperationCategory, error) {
 	opType, err := domain.ParseOperationType(typeStr)
 	if err != nil {
-		return "", "", fmt.Errorf("%w: %w", ErrInvalidInput, err)
+		return "", "", newInvalidInputError(err.Error())
 	}
 
 	category, err := domain.ParseOperationCategory(categoryStr)
 	if err != nil {
-		return "", "", fmt.Errorf("%w: %w", ErrInvalidInput, err)
+		return "", "", newInvalidInputError(err.Error())
 	}
 
 	if !domain.IsValidCategoryForType(category, opType) {
-		return "", "", fmt.Errorf("%w: category %q is not valid for type %q", ErrInvalidInput, category, opType)
+		return "", "", newInvalidInputError(fmt.Sprintf("category %q is not valid for type %q", category, opType))
 	}
 
 	return opType, category, nil
