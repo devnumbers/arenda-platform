@@ -60,6 +60,7 @@ func New(deps Deps) http.Handler {
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger)
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Logger)
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Logger)
+	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
 
 	handler := &composedHandler{
 		AuthHandlers:               authHandlers,
@@ -67,7 +68,7 @@ func New(deps Deps) http.Handler {
 		LeaseHandlers:              leaseHandlers,
 		OperationHandlers:          operationHandlers,
 		RecurringOperationHandlers: recurringOperationHandlers,
-		ReminderHandlers:           &ReminderHandlers{},
+		ReminderHandlers:           reminderHandlers,
 	}
 
 	return openapi.HandlerWithOptions(handler, openapi.ChiServerOptions{

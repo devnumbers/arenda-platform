@@ -405,6 +405,26 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 	return rec, nil
 }
 
+// ListOperationsByRecurringOperation returns the generated operations for a
+// recurring operation after verifying ownership.
+func (s *RecurringOperationService) ListOperationsByRecurringOperation(
+	ctx context.Context,
+	ownerID, id uuid.UUID,
+) ([]domain.Operation, error) {
+	if _, err := s.recurringOps.GetByIDAndOwner(ctx, id, ownerID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("get recurring operation: %w", err)
+	}
+
+	ops, err := s.operations.ListByRecurringOperation(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("list operations: %w", err)
+	}
+	return ops, nil
+}
+
 // SetReminderOffset updates the reminder offset for a recurring operation and
 // rebuilds its concrete reminders for all future generated operations.
 func (s *RecurringOperationService) SetReminderOffset(

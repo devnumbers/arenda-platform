@@ -264,6 +264,72 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /properties/{propertyId}/operations/{operationId}/reminders:
+    post:
+      operationId: createOperationReminder
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: operationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReminderCreateRequest'
+      responses:
+        '201':
+          description: Reminder created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReminderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    get:
+      operationId: listOperationReminders
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: operationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reminders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemindersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /operations/{id}:
     get:
       operationId: getOperation
@@ -385,6 +451,72 @@ paths:
                 $ref: '#/components/schemas/RecurringOperationResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders:
+    post:
+      operationId: createRecurringOperationReminder
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: recurringOperationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReminderCreateRequest'
+      responses:
+        '201':
+          description: Reminder created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReminderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    get:
+      operationId: listRecurringOperationReminders
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: recurringOperationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reminders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemindersResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -603,6 +735,31 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /leases/{leaseId}/reminders:
+    get:
+      operationId: listLeaseReminders
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: leaseId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reminders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemindersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /tenant-contacts:
     post:
       operationId: createTenantContact
@@ -695,6 +852,71 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+
+  /reminders:
+    get:
+      operationId: listReminders
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Reminders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemindersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /reminders/{reminderId}:
+    patch:
+      operationId: updateReminder
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: reminderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReminderUpdateRequest'
+      responses:
+        '200':
+          description: Reminder updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReminderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteReminder
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: reminderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Reminder cancelled
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
 components:
   securitySchemes:
@@ -1224,6 +1446,80 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RecurringOperationResponse'
+
+    ReminderResponse:
+      type: object
+      required: [id, owner_id, target_type, event_type, status, scheduled_at, message_title, message_body, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        owner_id:
+          type: string
+          format: uuid
+        target_type:
+          type: string
+          enum: [operation, recurring_operation, lease]
+        operation_id:
+          type: string
+          format: uuid
+          nullable: true
+        recurring_operation_id:
+          type: string
+          format: uuid
+          nullable: true
+        lease_id:
+          type: string
+          format: uuid
+          nullable: true
+        event_type:
+          type: string
+          enum: [operation_due, lease_expiring, lease_requires_action]
+        status:
+          type: string
+          enum: [pending, sending, sent, failed, cancelled]
+        scheduled_at:
+          type: string
+          format: date-time
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        message_title:
+          type: string
+        message_body:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ReminderCreateRequest:
+      type: object
+      required: [reminder_date]
+      properties:
+        reminder_date:
+          type: string
+          format: date
+
+    ReminderUpdateRequest:
+      type: object
+      required: [reminder_date]
+      properties:
+        reminder_date:
+          type: string
+          format: date
+
+    RemindersResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReminderResponse'
 
   responses:
     BadRequest:

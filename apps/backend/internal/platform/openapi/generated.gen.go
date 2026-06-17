@@ -128,6 +128,29 @@ const (
 	RecurringOperationResponseStatusPaused RecurringOperationResponseStatus = "paused"
 )
 
+// Defines values for ReminderResponseEventType.
+const (
+	LeaseExpiring       ReminderResponseEventType = "lease_expiring"
+	LeaseRequiresAction ReminderResponseEventType = "lease_requires_action"
+	OperationDue        ReminderResponseEventType = "operation_due"
+)
+
+// Defines values for ReminderResponseStatus.
+const (
+	Cancelled ReminderResponseStatus = "cancelled"
+	Failed    ReminderResponseStatus = "failed"
+	Pending   ReminderResponseStatus = "pending"
+	Sending   ReminderResponseStatus = "sending"
+	Sent      ReminderResponseStatus = "sent"
+)
+
+// Defines values for ReminderResponseTargetType.
+const (
+	Lease              ReminderResponseTargetType = "lease"
+	Operation          ReminderResponseTargetType = "operation"
+	RecurringOperation ReminderResponseTargetType = "recurring_operation"
+)
+
 // LeaseCreateRequest defines model for LeaseCreateRequest.
 type LeaseCreateRequest struct {
 	Comment              *string             `json:"comment,omitempty"`
@@ -353,6 +376,48 @@ type RecurringOperationsResponse struct {
 	Items []RecurringOperationResponse `json:"items"`
 }
 
+// ReminderCreateRequest defines model for ReminderCreateRequest.
+type ReminderCreateRequest struct {
+	ReminderDate openapi_types.Date `json:"reminder_date"`
+}
+
+// ReminderResponse defines model for ReminderResponse.
+type ReminderResponse struct {
+	CreatedAt            time.Time                  `json:"created_at"`
+	EventType            ReminderResponseEventType  `json:"event_type"`
+	Id                   openapi_types.UUID         `json:"id"`
+	LeaseId              *openapi_types.UUID        `json:"lease_id"`
+	MessageBody          string                     `json:"message_body"`
+	MessageTitle         string                     `json:"message_title"`
+	OperationId          *openapi_types.UUID        `json:"operation_id"`
+	OwnerId              openapi_types.UUID         `json:"owner_id"`
+	RecurringOperationId *openapi_types.UUID        `json:"recurring_operation_id"`
+	ScheduledAt          time.Time                  `json:"scheduled_at"`
+	SentAt               *time.Time                 `json:"sent_at"`
+	Status               ReminderResponseStatus     `json:"status"`
+	TargetType           ReminderResponseTargetType `json:"target_type"`
+	UpdatedAt            time.Time                  `json:"updated_at"`
+}
+
+// ReminderResponseEventType defines model for ReminderResponse.EventType.
+type ReminderResponseEventType string
+
+// ReminderResponseStatus defines model for ReminderResponse.Status.
+type ReminderResponseStatus string
+
+// ReminderResponseTargetType defines model for ReminderResponse.TargetType.
+type ReminderResponseTargetType string
+
+// ReminderUpdateRequest defines model for ReminderUpdateRequest.
+type ReminderUpdateRequest struct {
+	ReminderDate openapi_types.Date `json:"reminder_date"`
+}
+
+// RemindersResponse defines model for RemindersResponse.
+type RemindersResponse struct {
+	Items []ReminderResponse `json:"items"`
+}
+
 // SendPhoneCodeRequest defines model for SendPhoneCodeRequest.
 type SendPhoneCodeRequest struct {
 	Phone string `json:"phone"`
@@ -442,11 +507,20 @@ type UpdatePropertyJSONRequestBody = PropertyUpdateRequest
 // CreateOperationJSONRequestBody defines body for CreateOperation for application/json ContentType.
 type CreateOperationJSONRequestBody = OperationCreateRequest
 
+// CreateOperationReminderJSONRequestBody defines body for CreateOperationReminder for application/json ContentType.
+type CreateOperationReminderJSONRequestBody = ReminderCreateRequest
+
 // CreateRecurringOperationJSONRequestBody defines body for CreateRecurringOperation for application/json ContentType.
 type CreateRecurringOperationJSONRequestBody = RecurringOperationCreateRequest
 
+// CreateRecurringOperationReminderJSONRequestBody defines body for CreateRecurringOperationReminder for application/json ContentType.
+type CreateRecurringOperationReminderJSONRequestBody = ReminderCreateRequest
+
 // UpdateRecurringOperationJSONRequestBody defines body for UpdateRecurringOperation for application/json ContentType.
 type UpdateRecurringOperationJSONRequestBody = RecurringOperationUpdateRequest
+
+// UpdateReminderJSONRequestBody defines body for UpdateReminder for application/json ContentType.
+type UpdateReminderJSONRequestBody = ReminderUpdateRequest
 
 // CreateTenantContactJSONRequestBody defines body for CreateTenantContact for application/json ContentType.
 type CreateTenantContactJSONRequestBody = TenantContactCreateRequest
@@ -480,6 +554,9 @@ type ServerInterface interface {
 
 	// (POST /leases/{id}/complete)
 	CompleteLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /leases/{leaseId}/reminders)
+	ListLeaseReminders(w http.ResponseWriter, r *http.Request, leaseId openapi_types.UUID)
 
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -517,11 +594,23 @@ type ServerInterface interface {
 	// (POST /properties/{propertyId}/operations)
 	CreateOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
 
+	// (GET /properties/{propertyId}/operations/{operationId}/reminders)
+	ListOperationReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID)
+
+	// (POST /properties/{propertyId}/operations/{operationId}/reminders)
+	CreateOperationReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID)
+
 	// (GET /properties/{propertyId}/recurring-operations)
 	ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
 
 	// (POST /properties/{propertyId}/recurring-operations)
 	CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+
+	// (GET /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders)
+	ListRecurringOperationReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, recurringOperationId openapi_types.UUID)
+
+	// (POST /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders)
+	CreateRecurringOperationReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, recurringOperationId openapi_types.UUID)
 
 	// (GET /recurring-operations/{id})
 	GetRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -534,6 +623,15 @@ type ServerInterface interface {
 
 	// (POST /recurring-operations/{id}/resume)
 	ResumeRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /reminders)
+	ListReminders(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /reminders/{reminderId})
+	DeleteReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID)
+
+	// (PATCH /reminders/{reminderId})
+	UpdateReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID)
 
 	// (GET /tenant-contacts)
 	ListTenantContacts(w http.ResponseWriter, r *http.Request)
@@ -589,6 +687,11 @@ func (_ Unimplemented) UpdateLease(w http.ResponseWriter, r *http.Request, id op
 
 // (POST /leases/{id}/complete)
 func (_ Unimplemented) CompleteLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /leases/{leaseId}/reminders)
+func (_ Unimplemented) ListLeaseReminders(w http.ResponseWriter, r *http.Request, leaseId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -652,6 +755,16 @@ func (_ Unimplemented) CreateOperation(w http.ResponseWriter, r *http.Request, p
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /properties/{propertyId}/operations/{operationId}/reminders)
+func (_ Unimplemented) ListOperationReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{propertyId}/operations/{operationId}/reminders)
+func (_ Unimplemented) CreateOperationReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /properties/{propertyId}/recurring-operations)
 func (_ Unimplemented) ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -659,6 +772,16 @@ func (_ Unimplemented) ListRecurringOperationsByProperty(w http.ResponseWriter, 
 
 // (POST /properties/{propertyId}/recurring-operations)
 func (_ Unimplemented) CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders)
+func (_ Unimplemented) ListRecurringOperationReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, recurringOperationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders)
+func (_ Unimplemented) CreateRecurringOperationReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, recurringOperationId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -679,6 +802,21 @@ func (_ Unimplemented) PauseRecurringOperation(w http.ResponseWriter, r *http.Re
 
 // (POST /recurring-operations/{id}/resume)
 func (_ Unimplemented) ResumeRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /reminders)
+func (_ Unimplemented) ListReminders(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /reminders/{reminderId})
+func (_ Unimplemented) DeleteReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /reminders/{reminderId})
+func (_ Unimplemented) UpdateReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -883,6 +1021,37 @@ func (siw *ServerInterfaceWrapper) CompleteLease(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CompleteLease(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListLeaseReminders operation middleware
+func (siw *ServerInterfaceWrapper) ListLeaseReminders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "leaseId" -------------
+	var leaseId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "leaseId", chi.URLParam(r, "leaseId"), &leaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "leaseId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListLeaseReminders(w, r, leaseId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1231,6 +1400,86 @@ func (siw *ServerInterfaceWrapper) CreateOperation(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// ListOperationReminders operation middleware
+func (siw *ServerInterfaceWrapper) ListOperationReminders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "operationId" -------------
+	var operationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "operationId", chi.URLParam(r, "operationId"), &operationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operationId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOperationReminders(w, r, propertyId, operationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOperationReminder operation middleware
+func (siw *ServerInterfaceWrapper) CreateOperationReminder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "operationId" -------------
+	var operationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "operationId", chi.URLParam(r, "operationId"), &operationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operationId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOperationReminder(w, r, propertyId, operationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRecurringOperationsByProperty operation middleware
 func (siw *ServerInterfaceWrapper) ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request) {
 
@@ -1284,6 +1533,86 @@ func (siw *ServerInterfaceWrapper) CreateRecurringOperation(w http.ResponseWrite
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateRecurringOperation(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRecurringOperationReminders operation middleware
+func (siw *ServerInterfaceWrapper) ListRecurringOperationReminders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "recurringOperationId" -------------
+	var recurringOperationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "recurringOperationId", chi.URLParam(r, "recurringOperationId"), &recurringOperationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "recurringOperationId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRecurringOperationReminders(w, r, propertyId, recurringOperationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateRecurringOperationReminder operation middleware
+func (siw *ServerInterfaceWrapper) CreateRecurringOperationReminder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "recurringOperationId" -------------
+	var recurringOperationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "recurringOperationId", chi.URLParam(r, "recurringOperationId"), &recurringOperationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "recurringOperationId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateRecurringOperationReminder(w, r, propertyId, recurringOperationId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1408,6 +1737,88 @@ func (siw *ServerInterfaceWrapper) ResumeRecurringOperation(w http.ResponseWrite
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ResumeRecurringOperation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListReminders operation middleware
+func (siw *ServerInterfaceWrapper) ListReminders(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListReminders(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteReminder operation middleware
+func (siw *ServerInterfaceWrapper) DeleteReminder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "reminderId" -------------
+	var reminderId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "reminderId", chi.URLParam(r, "reminderId"), &reminderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "reminderId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteReminder(w, r, reminderId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateReminder operation middleware
+func (siw *ServerInterfaceWrapper) UpdateReminder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "reminderId" -------------
+	var reminderId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "reminderId", chi.URLParam(r, "reminderId"), &reminderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "reminderId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateReminder(w, r, reminderId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1657,6 +2068,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/leases/{id}/complete", wrapper.CompleteLease)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/leases/{leaseId}/reminders", wrapper.ListLeaseReminders)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/me", wrapper.GetMe)
 	})
 	r.Group(func(r chi.Router) {
@@ -1693,10 +2107,22 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/properties/{propertyId}/operations", wrapper.CreateOperation)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/operations/{operationId}/reminders", wrapper.ListOperationReminders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/operations/{operationId}/reminders", wrapper.CreateOperationReminder)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/properties/{propertyId}/recurring-operations", wrapper.ListRecurringOperationsByProperty)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/properties/{propertyId}/recurring-operations", wrapper.CreateRecurringOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders", wrapper.ListRecurringOperationReminders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders", wrapper.CreateRecurringOperationReminder)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/recurring-operations/{id}", wrapper.GetRecurringOperation)
@@ -1709,6 +2135,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/recurring-operations/{id}/resume", wrapper.ResumeRecurringOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/reminders", wrapper.ListReminders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/reminders/{reminderId}", wrapper.DeleteReminder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/reminders/{reminderId}", wrapper.UpdateReminder)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/tenant-contacts", wrapper.ListTenantContacts)
@@ -1729,45 +2164,51 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/+xcW3PbuhH+Kxq0b2Ui2UnaE70l7rSTaXKOJ5e+eDwahFxJOCYBBgAdsxn99w4AXkXw",
-	"JpOU5OTNlkBgsfvtt7vAUj+Qy4KQUaBSoOUPxEGEjArQ/7zF3kf4FoGQ6j+XUQlU/4nD0CculoTR+Z+C",
-	"UfWZcLcQYPXXXzms0RL9ZZ5PPTffivk1Z199CNBut3OQB8LlJFTToKVabcaT5XYOumJ07RN3kqWztXYO",
-	"+p3Jf7GIelOs+zuTs7VebOegz4x9wDRONC6mWP8zY7MA0zjVu1ByfKE4klvGyf9gEiWU1lNfJ8+oKd8D",
-	"FnDFAUsoIDHkLAQuCSRKCoJEvgA/vAe6kVu0vFwsFg6ScQhoiYTkhG6QXjpkgsgVDlhE5eqOheDe6Wk8",
-	"WOPIl2i5cFBAKAmiQP+dTEGohA1wNQdQb+VhCeqpNeMBlmiJ9AeWBUMcK+lWHo4TCc3MLy4Ky1zYlkl2",
-	"Ga+IV1opiohnW4mrZar7at6LkJjL7ruRQDGVKwUJ7MpukmnRvkWEKzjdlLZVWt++g7IGb7PZ2dc/wTis",
-	"xsjHhLca4UEj38dffUBLySOwbM/VSPNWWFa08UySwKqSekT1Q06rcB1hwL5T4F0xs4fO0UD4aOAJiWWk",
-	"pwKqwHyD8HdMJKGblZ4JOQi7ktwbGGm0iZX6hFHk6BjngwQlMubultyDV8BSHb415fn+H2u0vGmmt8/6",
-	"uSvzWIbF3e2+WXcOikKvJ8b2HEgrvuxFmc0rO8g018nVarBcxknJTUr7qfXOL3pMFwYfzb36Q38sKB/I",
-	"oXbNinriIxKC8h9NCC6zaL4e5hzHVQzqKW32/tBAxRBg4nci4o5sQ3EAneYLseSMxgFxuw3fMgpWOHLm",
-	"Q5GFtOcpVvECQq2UIiLeUUyrn2tJknVt+v4jBK4TsissYcN4XJROQVjRg9wqeqAu0/QSSeITbRO1YIiJ",
-	"2oDED9lIeAhBGdC2nXy95qysbyLiFsRvwml1vzunXwroK6R3jWcsXa6Hf+sPOu7isxq8b3k9Q0ElDqoQ",
-	"8p5cjciod8gu7DaUYUZJvjpakYgVPLiQVBzZLr8y5gOmbaBolfwAkPTL0nonYW7E1T+rXLIDt3YAmIdK",
-	"cQpJTTnb6e8eewjol8GUt1dg14xQO/FlSw40pSueK0fWm2awNKhKmoenQumZR0UkD2SSCFWZigqJqVuT",
-	"fBjwvPOs3+YlUhU5kkjfPmdqiWaHTFzOTJMtVbPpZKdDmSSZMR7GInqqttzF8zgIsecqr2oOlApnWV1c",
-	"K00GiyNfvWrwkazgDTGXgcnoOGOB4r30I8V5WxYJQImjc5dgXxHhek1c9el3zCEdscEcb0CXdfxOreYg",
-	"H1NbRbynWS17RsCpmpo03ZB75Eoe6BymZIjHlhRVlnPdKMTULSXYaw5KGP0dqTlTsBxdpCcVAVY+SrXD",
-	"t51MnAAahorsdhgVjipyXfcL1Snq2mLtSfh3R1zcni41VPT/MU08z79KnOiQv+/Z0RS1ZemgsO30vWry",
-	"J1xuTnF+/7hKdNjDf+CEecQlshT0Akbl1o+tzNS3VH38NUDKmSGOREvsPLMittYPy5YpxM0+sbLquL0r",
-	"1F9cPUGNW7XTYJVVA3cfXmN9AupdbxmFK+bVgyk7YYcHHISK0dDf/vH69evFYnFxcXnZfousn7etX7qK",
-	"6946UAVVUFejd87wyrcOPW4ZCncGHQqyVi0c73J8tBufx0a+w66DWkd2v+wZIcAkZVUqQ2mb+U2SMUnO",
-	"sP2iRglXj7jWPVnvat7xYNRb0zBwMOv+FzhZx+286zJvj3YvLl+8fPV31OMW1ErFjpm6KptSuIozRMaf",
-	"1OaNHAKEUCGfsTui1yAULZFr/k1BkI5aFb0Yh+Q/EJtGMkLXTAtojjfRGw7Uw7NrH1PlT7M31++Qg+6B",
-	"C9Nqtnh+8XyRHFlTHBK0RC+eL56/ML6y1ZLNcSS3c59tWGT0x4wes1Pudx5aovfme6fcMHm5eGnOd4v9",
-	"be/ZZgPezAzfAvaA68GfQD7L95+30e1rW2305eKiDlGZAPNqI12id92+sqfxm9vdrRpjtqttOBdg2h7t",
-	"Wy4FdpSdRr9lXjxYm6A1ediVEZf00bQrXs0xE0omrcFFuwYLDa/qkcvX7Y/sd20aexW1eq9ds16ve647",
-	"kmZrCKKTbheDSVHoDrF0gr6J5BaoVFPrVq2DnaW/qfv71+Pwoat8vbMN2OiFCGn6e9CI1tjrILJYxIyY",
-	"+eRgNXWhIafGM0z2rmUYySss/cWdPOJiWAlaTTBLcjQ0Gby7hg8D5PkP4u1q0fxvkKkRQ8xxAFJ79U0S",
-	"9VXozWO+jvVl/TsFXbY1yt2O7S/ttjLXu+JwXjHBrPmh7DWFrh6Gpbutmsak8NNaZyQ3LlcjEwe2jtBI",
-	"qis0ZZQaHk17fj9P26vrc5yrZMTPRAN50/mJmc6UvnVM/QHQ0RLAq4hzoHIWCXPiOmLcyvadxy4PUhCX",
-	"lfJP/Xl2Rnoc+Frqm0yimZHcO62IUwewIytyOCxbTs2rkC4a6dzSguktNXxqUHO7NXF60BMqTydNKJ8+",
-	"1ta6edfgmMHH0ptoMUM+6rh1b9rMNFLpa++FnLj6rfZ21tojPt0aOAd5ax1cMOpZx75ehju/yDe5mcbz",
-	"76PGvV4weYpRzxTISWdvfX38xgz4Kdkha3s+cSNGtNWMX9IhP6UhMwWdtCnTNrx33q5wCNCYneadV2/j",
-	"XpbN1zr9IlZ0Kk1MTjxbMz5LN3diYb0ho+5Xzw5pvBHr2qPm7z3r2skz+MkZJXv19llHbrG0dz49kmnq",
-	"YbUAJhs+Y0+Cd6rbfwIE1Pauz8RM1NTL3AlhT4icbCTUejJxIEjJObFOX0ic38HFEa04BcUc9TDj8Xh6",
-	"OicctRQz1+9h1ZfI1+rrX1xTxUby/trZ2JmDiIIGQ3/U3/+ydNXSRnMnZ2rzu3TPkt+la65ayi9FjHln",
-	"V/P6he3HbPXIWSr/cS/vSmKPdIPX8KbbxMl3zdssbTY6TsrdoWk7/z3oA52nNdvex8dZU+Kh5j+/9Po4",
-	"ZhuZOo6aVB+KndNPpcfhGj2I36eIi7iPlmgrZbicz33mYn/LhFz+tvhtgXa3u/8HAAD//w/AkGzfXwAA",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
