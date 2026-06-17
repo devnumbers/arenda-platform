@@ -41,7 +41,6 @@ type Querier interface {
 	DeleteUneditedFutureOperationsByLease(ctx context.Context, arg DeleteUneditedFutureOperationsByLeaseParams) error
 	DeleteUneditedFutureOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedFutureOperationsByRecurringOperationParams) error
 	DeleteUneditedOperationsByLease(ctx context.Context, leaseID pgtype.UUID) error
-	ExistsSentSMSReminder(ctx context.Context, reminderID pgtype.UUID) (bool, error)
 	GetLatestSMSCodeByPhone(ctx context.Context, arg GetLatestSMSCodeByPhoneParams) (SmsCode, error)
 	GetLeaseByID(ctx context.Context, id pgtype.UUID) (Lease, error)
 	GetLeaseByIDAndOwner(ctx context.Context, arg GetLeaseByIDAndOwnerParams) (Lease, error)
@@ -74,10 +73,13 @@ type Querier interface {
 	ListOperationsByProperty(ctx context.Context, arg ListOperationsByPropertyParams) ([]Operation, error)
 	ListRecurringOperationsByProperty(ctx context.Context, arg ListRecurringOperationsByPropertyParams) ([]RecurringOperation, error)
 	ListRemindersByOwner(ctx context.Context, arg ListRemindersByOwnerParams) ([]Reminder, error)
+	ListStaleSendingReminders(ctx context.Context, arg ListStaleSendingRemindersParams) ([]Reminder, error)
 	ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]TenantContact, error)
 	MarkReminderFailed(ctx context.Context, arg MarkReminderFailedParams) (int64, error)
+	MarkReminderSending(ctx context.Context, id pgtype.UUID) (Reminder, error)
 	MarkReminderSent(ctx context.Context, arg MarkReminderSentParams) (int64, error)
 	MarkSMSCodeUsed(ctx context.Context, id pgtype.UUID) error
+	ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error)
 	SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperationParams) (Operation, error)
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
 	UpdateLease(ctx context.Context, arg UpdateLeaseParams) (Lease, error)

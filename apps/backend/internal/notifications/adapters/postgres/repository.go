@@ -31,9 +31,12 @@ func (r *ReminderRepository) q() *postgres.Queries {
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
-// It follows the existing repository convention of asserting transaction.Tx to postgres.DBTX.
 func (r *ReminderRepository) WithTx(tx transaction.Tx) application.ReminderRepository {
-	return NewReminderRepository(tx.(postgres.DBTX))
+	pgtx, ok := tx.(postgres.DBTX)
+	if !ok {
+		panic(fmt.Sprintf("notifications.ReminderRepository: expected postgres.DBTX, got %T", tx))
+	}
+	return NewReminderRepository(pgtx)
 }
 
 func eventDateToPgtype(t time.Time) pgtype.Date {
@@ -156,7 +159,36 @@ func (r *ReminderRepository) ListDue(ctx context.Context, before time.Time, limi
 	return out, nil
 }
 
-// MarkSent marks a reminder as sent.
+// MarkReminderSending transitions a pending reminder to sending and returns the updated row.
+func (r *ReminderRepository) MarkReminderSending(ctx context.Context, id uuid.UUID) (domain.Reminder, error) {
+	row, err := r.q().MarkReminderSending(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Reminder{}, application.ErrNotFound
+		}
+		return domain.Reminder{}, fmt.Errorf("mark reminder sending: %w", err)
+	}
+	return toDomain(row), nil
+}
+
+// ListStaleSendingReminders returns sending reminders whose updated_at is older than staleBefore.
+func (r *ReminderRepository) ListStaleSendingReminders(ctx context.Context, staleBefore time.Time, limit int) ([]domain.Reminder, error) {
+	rows, err := r.q().ListStaleSendingReminders(ctx, postgres.ListStaleSendingRemindersParams{
+		UpdatedAt: pgtype.Timestamptz{Time: staleBefore, Valid: true},
+		//nolint:gosec // Worker batch size is configured and bounded.
+		Limit: int32(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list stale sending reminders: %w", err)
+	}
+	out := make([]domain.Reminder, len(rows))
+	for i, row := range rows {
+		out[i] = toDomain(row)
+	}
+	return out, nil
+}
+
+// MarkSent marks a sending reminder as sent.
 func (r *ReminderRepository) MarkSent(ctx context.Context, id uuid.UUID, at time.Time) error {
 	_, err := r.q().MarkReminderSent(ctx, postgres.MarkReminderSentParams{
 		ID:     pgconv.UUIDToPgtype(id),
@@ -225,13 +257,30 @@ func (r *ReminderRepository) HasReminderForLeaseEvent(ctx context.Context, owner
 	return exists, nil
 }
 
-// ExistsSentSMSReminder reports whether a sent SMS record already exists for the reminder.
-func (r *ReminderRepository) ExistsSentSMSReminder(ctx context.Context, reminderID uuid.UUID) (bool, error) {
-	exists, err := r.q().ExistsSentSMSReminder(ctx, pgconv.UUIDToPgtype(reminderID))
+// ResetReminderSending resets a sending reminder back to pending.
+func (r *ReminderRepository) ResetReminderSending(ctx context.Context, id uuid.UUID) error {
+	_, err := r.q().ResetReminderSending(ctx, pgconv.UUIDToPgtype(id))
 	if err != nil {
-		return false, fmt.Errorf("check sent sms reminder: %w", err)
+		return fmt.Errorf("reset reminder sending: %w", err)
 	}
-	return exists, nil
+	return nil
+}
+
+// SaveSentSMSReminder records a successfully sent SMS reminder for audit.
+func (r *ReminderRepository) SaveSentSMSReminder(ctx context.Context, id, reminderID, ownerID uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error {
+	_, err := r.q().CreateSentSMSReminder(ctx, postgres.CreateSentSMSReminderParams{
+		ID:               pgconv.UUIDToPgtype(id),
+		ReminderID:       pgconv.UUIDToPgtype(reminderID),
+		OwnerID:          pgconv.UUIDToPgtype(ownerID),
+		Phone:            phone,
+		Message:          message,
+		ProviderResponse: pgtype.Text{String: providerResponse, Valid: providerResponse != ""},
+		SentAt:           pgtype.Timestamptz{Time: sentAt, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("create sent sms reminder: %w", err)
+	}
+	return nil
 }
 
 func toDomain(row postgres.Reminder) domain.Reminder {

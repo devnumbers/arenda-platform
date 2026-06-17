@@ -29,6 +29,7 @@ type ReminderStatus string
 
 const (
 	ReminderPending   ReminderStatus = "pending"
+	ReminderSending   ReminderStatus = "sending"
 	ReminderSent      ReminderStatus = "sent"
 	ReminderFailed    ReminderStatus = "failed"
 	ReminderCancelled ReminderStatus = "cancelled"

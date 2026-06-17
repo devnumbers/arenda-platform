@@ -26,6 +26,14 @@ ORDER BY scheduled_at ASC
 LIMIT $2
 FOR UPDATE SKIP LOCKED;
 
+-- name: ListStaleSendingReminders :many
+SELECT * FROM reminders
+WHERE status = 'sending'
+  AND updated_at < $1
+ORDER BY updated_at ASC
+LIMIT $2
+FOR UPDATE SKIP LOCKED;
+
 -- name: UpdateReminder :execrows
 UPDATE reminders
 SET owner_id = $2,
@@ -46,18 +54,29 @@ SET owner_id = $2,
     updated_at = $17
 WHERE id = $1;
 
+-- name: MarkReminderSending :one
+UPDATE reminders
+SET status = 'sending', updated_at = NOW()
+WHERE id = $1 AND status = 'pending'
+RETURNING *;
+
 -- name: MarkReminderSent :execrows
 UPDATE reminders
 SET status = 'sent', sent_at = $2, updated_at = NOW()
-WHERE id = $1 AND status = 'pending';
+WHERE id = $1 AND status = 'sending';
 
 -- name: MarkReminderFailed :execrows
 UPDATE reminders
 SET failed_attempts = failed_attempts + 1,
-    next_attempt_at = $2,
+    next_attempt_at = sqlc.arg('next_attempt_at')::timestamptz,
     status = CASE WHEN sqlc.arg('mark_as_failed')::boolean THEN 'failed' ELSE status END,
     updated_at = NOW()
-WHERE id = $1 AND status = 'pending';
+WHERE id = sqlc.arg('id')::uuid AND status IN ('pending', 'sending');
+
+-- name: ResetReminderSending :execrows
+UPDATE reminders
+SET status = 'pending', updated_at = NOW()
+WHERE id = $1 AND status = 'sending';
 
 -- name: CancelReminderByTarget :execrows
 UPDATE reminders
@@ -81,9 +100,6 @@ WHERE owner_id = $1
 
 -- name: HasReminderForLeaseEvent :one
 SELECT EXISTS(SELECT 1 FROM reminders WHERE owner_id = $1 AND lease_id = $2 AND event_type = $3 AND status != 'cancelled') AS exists;
-
--- name: ExistsSentSMSReminder :one
-SELECT EXISTS(SELECT 1 FROM sent_sms_reminders WHERE reminder_id = $1) AS exists;
 
 -- name: CreateSentSMSReminder :one
 INSERT INTO sent_sms_reminders (id, reminder_id, owner_id, phone, message, provider_response, sent_at)

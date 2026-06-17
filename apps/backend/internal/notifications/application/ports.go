@@ -16,18 +16,16 @@ type ReminderRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
 	ListByOwner(ctx context.Context, ownerID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	ListDue(ctx context.Context, before time.Time, limit int) ([]domain.Reminder, error)
+	ListStaleSendingReminders(ctx context.Context, staleBefore time.Time, limit int) ([]domain.Reminder, error)
+	MarkReminderSending(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
 	MarkSent(ctx context.Context, id uuid.UUID, at time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, nextAttempt *time.Time, terminal bool) error
+	SaveSentSMSReminder(ctx context.Context, id, reminderID, ownerID uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error
+	ResetReminderSending(ctx context.Context, id uuid.UUID) error
 	CancelByTarget(ctx context.Context, ownerID uuid.UUID, targetType domain.TargetType, targetID uuid.UUID, eventType domain.EventType) error
 	CancelByRecurringOperationID(ctx context.Context, ownerID, recID uuid.UUID) error
 	HasReminderForLeaseEvent(ctx context.Context, ownerID, leaseID uuid.UUID, eventType domain.EventType) (bool, error)
-	ExistsSentSMSReminder(ctx context.Context, reminderID uuid.UUID) (bool, error)
 	WithTx(tx transaction.Tx) ReminderRepository
-}
-
-// SentSMSReminderRepository tracks successfully sent SMS reminders for audit and deduplication.
-type SentSMSReminderRepository interface {
-	Save(ctx context.Context, reminderID *uuid.UUID, ownerID uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error
 }
 
 // ListFilter controls pagination and optional status filtering for ListByOwner.

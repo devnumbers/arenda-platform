@@ -61,6 +61,7 @@ const (
 	NotificationStatusSent      NotificationStatus = "sent"
 	NotificationStatusFailed    NotificationStatus = "failed"
 	NotificationStatusCancelled NotificationStatus = "cancelled"
+	NotificationStatusSending   NotificationStatus = "sending"
 )
 
 func (e *NotificationStatus) Scan(src interface{}) error {

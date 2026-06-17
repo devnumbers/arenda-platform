@@ -1,0 +1,2 @@
+-- PostgreSQL does not support removing values from an enum type.
+-- The 'sending' value cannot be rolled back without recreating the type.

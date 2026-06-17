@@ -2,15 +2,21 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
+
+// staleSendingTimeout is the age after which a sending reminder is considered stuck
+// and reset to pending so another dispatch attempt can be made.
+const staleSendingTimeout = 5 * time.Minute
 
 // Backoff computes the next retry delay for a failed dispatch attempt.
 type Backoff interface {
@@ -21,6 +27,7 @@ type Backoff interface {
 type ReminderWorker struct {
 	repo        application.ReminderRepository
 	notifier    application.Notifier
+	resolver    application.ContactResolver
 	db          transaction.Beginner
 	clock       clock.Clock
 	backoff     Backoff
@@ -33,6 +40,7 @@ type ReminderWorker struct {
 func NewReminderWorker(
 	repo application.ReminderRepository,
 	notifier application.Notifier,
+	resolver application.ContactResolver,
 	db transaction.Beginner,
 	clock clock.Clock,
 	backoff Backoff,
@@ -46,6 +54,7 @@ func NewReminderWorker(
 	return &ReminderWorker{
 		repo:        repo,
 		notifier:    notifier,
+		resolver:    resolver,
 		db:          db,
 		clock:       clock,
 		backoff:     backoff,
@@ -79,36 +88,64 @@ func (w *ReminderWorker) Run(ctx context.Context) {
 func (w *ReminderWorker) tick(ctx context.Context) error {
 	now := w.clock.Now()
 
+	if err := w.dispatchDue(ctx, now); err != nil {
+		return err
+	}
+	if err := w.recoverStaleSending(ctx, now); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (w *ReminderWorker) dispatchDue(ctx context.Context, now time.Time) error {
 	for {
-		tx, err := w.db.Begin(ctx)
+		tx1, err := w.db.Begin(ctx)
 		if err != nil {
-			return fmt.Errorf("begin transaction: %w", err)
+			return fmt.Errorf("begin claim transaction: %w", err)
 		}
 
-		txRepo := w.repo.WithTx(tx)
+		txRepo := w.repo.WithTx(tx1)
 		reminders, err := txRepo.ListDue(ctx, now, 1)
 		if err != nil {
-			_ = tx.Rollback(ctx)
+			_ = tx1.Rollback(ctx)
 			return fmt.Errorf("list due reminders: %w", err)
 		}
 		if len(reminders) == 0 {
-			_ = tx.Rollback(ctx)
+			_ = tx1.Rollback(ctx)
 			break
 		}
 
 		r := reminders[0]
-		if err := w.dispatch(ctx, r, txRepo, now); err != nil {
-			_ = tx.Rollback(ctx)
-			return err
+		if _, err := txRepo.MarkReminderSending(ctx, r.ID); err != nil {
+			_ = tx1.Rollback(ctx)
+			if errors.Is(err, application.ErrNotFound) {
+				continue
+			}
+			return fmt.Errorf("mark reminder sending: %w", err)
 		}
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("commit transaction: %w", err)
+
+		if err := tx1.Commit(ctx); err != nil {
+			return fmt.Errorf("commit claim transaction: %w", err)
+		}
+
+		if err := w.dispatchReminder(ctx, r, now); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func (w *ReminderWorker) dispatch(ctx context.Context, r domain.Reminder, repo application.ReminderRepository, now time.Time) error {
+func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder, now time.Time) error {
+	contact, err := w.resolver.Resolve(ctx, r.OwnerID)
+	if err != nil {
+		w.logger.ErrorContext(ctx, "resolve contact failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
+		return w.finalizeFailure(ctx, r, now)
+	}
+	if contact.Channel != application.ChannelSMS {
+		w.logger.ErrorContext(ctx, "unsupported contact channel", "reminder_id", r.ID, "event_type", r.EventType, "channel", contact.Channel)
+		return w.finalizeFailure(ctx, r, now)
+	}
+
 	if err := w.notifier.Notify(ctx, application.Notification{
 		RecipientID: r.OwnerID,
 		ReminderID:  r.ID,
@@ -117,16 +154,47 @@ func (w *ReminderWorker) dispatch(ctx context.Context, r domain.Reminder, repo a
 		Body:        r.MessageBody,
 	}); err != nil {
 		w.logger.ErrorContext(ctx, "notify reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
-		return w.markFailure(ctx, repo, r, now)
+		return w.finalizeFailure(ctx, r, now)
 	}
 
-	if err := repo.MarkSent(ctx, r.ID, now); err != nil {
+	return w.finalizeSuccess(ctx, r, now, contact.Address)
+}
+
+func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time, phone string) error {
+	tx2, err := w.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin finalize transaction: %w", err)
+	}
+	defer func() { _ = tx2.Rollback(ctx) }()
+
+	txRepo := w.repo.WithTx(tx2)
+
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return fmt.Errorf("generate sent sms id: %w", err)
+	}
+	if err := txRepo.SaveSentSMSReminder(ctx, id, r.ID, r.OwnerID, phone, r.MessageBody, "", now); err != nil {
+		return fmt.Errorf("save sent sms reminder: %w", err)
+	}
+	if err := txRepo.MarkSent(ctx, r.ID, now); err != nil {
 		return fmt.Errorf("mark reminder sent: %w", err)
+	}
+
+	if err := tx2.Commit(ctx); err != nil {
+		return fmt.Errorf("commit finalize transaction: %w", err)
 	}
 	return nil
 }
 
-func (w *ReminderWorker) markFailure(ctx context.Context, repo application.ReminderRepository, r domain.Reminder, now time.Time) error {
+func (w *ReminderWorker) finalizeFailure(ctx context.Context, r domain.Reminder, now time.Time) error {
+	tx2, err := w.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin finalize transaction: %w", err)
+	}
+	defer func() { _ = tx2.Rollback(ctx) }()
+
+	txRepo := w.repo.WithTx(tx2)
+
 	attempts := r.FailedAttempts + 1
 	terminal := attempts >= w.maxAttempts
 
@@ -136,8 +204,45 @@ func (w *ReminderWorker) markFailure(ctx context.Context, repo application.Remin
 		next = &n
 	}
 
-	if err := repo.MarkFailed(ctx, r.ID, next, terminal); err != nil {
+	if err := txRepo.MarkFailed(ctx, r.ID, next, terminal); err != nil {
 		return fmt.Errorf("mark reminder failed: %w", err)
+	}
+
+	if err := tx2.Commit(ctx); err != nil {
+		return fmt.Errorf("commit finalize transaction: %w", err)
+	}
+	return nil
+}
+
+func (w *ReminderWorker) recoverStaleSending(ctx context.Context, now time.Time) error {
+	staleBefore := now.Add(-staleSendingTimeout)
+
+	for {
+		tx, err := w.db.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin stale recovery transaction: %w", err)
+		}
+
+		txRepo := w.repo.WithTx(tx)
+		reminders, err := txRepo.ListStaleSendingReminders(ctx, staleBefore, 1)
+		if err != nil {
+			_ = tx.Rollback(ctx)
+			return fmt.Errorf("list stale sending reminders: %w", err)
+		}
+		if len(reminders) == 0 {
+			_ = tx.Rollback(ctx)
+			break
+		}
+
+		r := reminders[0]
+		if err := txRepo.ResetReminderSending(ctx, r.ID); err != nil {
+			_ = tx.Rollback(ctx)
+			return fmt.Errorf("reset stale sending reminder: %w", err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit stale recovery transaction: %w", err)
+		}
 	}
 	return nil
 }
