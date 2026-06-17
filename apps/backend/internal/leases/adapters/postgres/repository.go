@@ -146,6 +146,22 @@ func (r *LeaseRepository) GetOpenLeaseByProperty(ctx context.Context, propertyID
 	return leaseFromRow(row)
 }
 
+func (r *LeaseRepository) ListOpenLeasesWithPastEndDate(ctx context.Context) ([]domain.Lease, error) {
+	rows, err := r.q().ListOpenLeasesWithPastEndDate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	leases := make([]domain.Lease, 0, len(rows))
+	for _, row := range rows {
+		lease, err := leaseFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		leases = append(leases, lease)
+	}
+	return leases, nil
+}
+
 func leaseFromRow(row postgres.Lease) (domain.Lease, error) {
 	status, err := domain.ParseLeaseStatus(row.Status)
 	if err != nil {

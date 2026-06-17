@@ -63,6 +63,7 @@ type Querier interface {
 	ListFutureOperationsByLease(ctx context.Context, arg ListFutureOperationsByLeaseParams) ([]Operation, error)
 	ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Lease, error)
 	ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
+	ListOpenLeasesWithPastEndDate(ctx context.Context) ([]Lease, error)
 	ListOperationDatesByLease(ctx context.Context, leaseID pgtype.UUID) ([]pgtype.Date, error)
 	ListOperationDatesByRecurringOperation(ctx context.Context, recurringOperationID pgtype.UUID) ([]pgtype.Date, error)
 	ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID) ([]Operation, error)

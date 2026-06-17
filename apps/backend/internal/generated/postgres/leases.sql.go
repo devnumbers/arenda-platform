@@ -242,6 +242,47 @@ func (q *Queries) ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID p
 	return items, nil
 }
 
+const listOpenLeasesWithPastEndDate = `-- name: ListOpenLeasesWithPastEndDate :many
+SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
+WHERE status IN ('awaiting_start', 'active', 'requires_action')
+  AND end_date IS NOT NULL
+  AND end_date < CURRENT_DATE
+`
+
+func (q *Queries) ListOpenLeasesWithPastEndDate(ctx context.Context) ([]Lease, error) {
+	rows, err := q.db.Query(ctx, listOpenLeasesWithPastEndDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Lease{}
+	for rows.Next() {
+		var i Lease
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.TenantContactID,
+			&i.Status,
+			&i.StartDate,
+			&i.EndDate,
+			&i.RentAmountKopecks,
+			&i.DepositAmountKopecks,
+			&i.PaymentDay,
+			&i.Comment,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateLease = `-- name: UpdateLease :one
 UPDATE leases
 SET property_id = $3,

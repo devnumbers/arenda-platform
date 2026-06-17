@@ -56,3 +56,9 @@ LIMIT 1;
 SELECT DISTINCT property_id FROM leases
 WHERE owner_id = $1
   AND status IN ('awaiting_start', 'active', 'requires_action');
+
+-- name: ListOpenLeasesWithPastEndDate :many
+SELECT * FROM leases
+WHERE status IN ('awaiting_start', 'active', 'requires_action')
+  AND end_date IS NOT NULL
+  AND end_date < CURRENT_DATE;
