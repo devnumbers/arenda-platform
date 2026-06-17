@@ -372,6 +372,20 @@ func (r *RecurringOperationRepository) GetByLease(ctx context.Context, leaseID u
 	return recurringOperationFromRow(rows[0]), nil
 }
 
+func (r *RecurringOperationRepository) GetByLeaseID(ctx context.Context, ownerID, leaseID uuid.UUID) (domain.RecurringOperation, error) {
+	row, err := r.q().GetRecurringOperationByLeaseIDAndOwner(ctx, postgres.GetRecurringOperationByLeaseIDAndOwnerParams{
+		LeaseID: pgconv.UUIDToPgtype(leaseID),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.RecurringOperation{}, application.ErrNotFound
+		}
+		return domain.RecurringOperation{}, err
+	}
+	return recurringOperationFromRow(row), nil
+}
+
 func (r *RecurringOperationRepository) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.RecurringOperation, error) {
 	row, err := r.q().GetRecurringOperationByIDAndOwner(ctx, postgres.GetRecurringOperationByIDAndOwnerParams{
 		ID:      pgconv.UUIDToPgtype(id),

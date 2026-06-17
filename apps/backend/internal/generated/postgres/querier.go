@@ -51,6 +51,7 @@ type Querier interface {
 	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (Property, error)
 	GetRecurringOperationByIDAndOwner(ctx context.Context, arg GetRecurringOperationByIDAndOwnerParams) (RecurringOperation, error)
 	GetRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) ([]RecurringOperation, error)
+	GetRecurringOperationByLeaseIDAndOwner(ctx context.Context, arg GetRecurringOperationByLeaseIDAndOwnerParams) (RecurringOperation, error)
 	GetReminderByID(ctx context.Context, id pgtype.UUID) (Reminder, error)
 	GetSessionByTokenHash(ctx context.Context, arg GetSessionByTokenHashParams) (GetSessionByTokenHashRow, error)
 	GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (UserSubscription, error)

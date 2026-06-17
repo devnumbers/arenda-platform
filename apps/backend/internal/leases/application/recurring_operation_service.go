@@ -132,14 +132,18 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("create recurring operation: %w", err)
 	}
 
-	generatedOps, err := s.generateOperations(ctx, txOps, created, now, nil)
+	_, err = s.generateOperations(ctx, txOps, created, now, nil)
 	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
 	}
 
 	if s.scheduler != nil && created.ReminderOffsetDays != nil {
+		persistedOps, err := txOps.ListByRecurringOperation(ctx, created.ID)
+		if err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("list operations for scheduling: %w", err)
+		}
 		txScheduler := s.scheduler.WithTx(tx)
-		if err := s.scheduleRemindersForOperations(ctx, txScheduler, created, generatedOps, now); err != nil {
+		if err := scheduleRemindersForOperations(ctx, txScheduler, created, persistedOps, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -282,7 +286,7 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("delete future operations: %w", err)
 	}
 
-	generatedOps, err := s.generateOperations(ctx, txOps, updated, now, func(d time.Time) bool {
+	_, err = s.generateOperations(ctx, txOps, updated, now, func(d time.Time) bool {
 		return !timeutil.Date(d).Before(timeutil.Date(now))
 	})
 	if err != nil {
@@ -290,8 +294,12 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 	}
 
 	if s.scheduler != nil && updated.ReminderOffsetDays != nil {
+		persistedOps, err := txOps.ListByRecurringOperation(ctx, updated.ID)
+		if err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("list operations for scheduling: %w", err)
+		}
 		txScheduler := s.scheduler.WithTx(tx)
-		if err := s.scheduleRemindersForOperations(ctx, txScheduler, updated, generatedOps, now); err != nil {
+		if err := scheduleRemindersForOperations(ctx, txScheduler, updated, persistedOps, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -372,7 +380,7 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 	}
 
 	now := s.clock.Now()
-	generatedOps, err := s.generateOperations(ctx, txOps, rec, now, func(d time.Time) bool {
+	_, err = s.generateOperations(ctx, txOps, rec, now, func(d time.Time) bool {
 		return !timeutil.Date(d).Before(timeutil.Date(now))
 	})
 	if err != nil {
@@ -380,8 +388,12 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 	}
 
 	if s.scheduler != nil && rec.ReminderOffsetDays != nil {
+		persistedOps, err := txOps.ListByRecurringOperation(ctx, rec.ID)
+		if err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("list operations for scheduling: %w", err)
+		}
 		txScheduler := s.scheduler.WithTx(tx)
-		if err := s.scheduleRemindersForOperations(ctx, txScheduler, rec, generatedOps, now); err != nil {
+		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, persistedOps, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -438,7 +450,7 @@ func (s *RecurringOperationService) SetReminderOffset(
 		}
 		if offsetDays > 0 {
 			rec.ReminderOffsetDays = &offsetDays
-			if err := s.scheduleRemindersForOperations(ctx, txScheduler, rec, ops, now); err != nil {
+			if err := scheduleRemindersForOperations(ctx, txScheduler, rec, ops, now); err != nil {
 				return fmt.Errorf("schedule reminders: %w", err)
 			}
 		}
@@ -535,7 +547,7 @@ func (s *RecurringOperationService) extendHorizon(ctx context.Context, rec domai
 		}
 		txScheduler := s.scheduler.WithTx(tx)
 		futureOps := futureOperations(allOps, now)
-		if err := s.scheduleRemindersForOperations(ctx, txScheduler, rec, futureOps, now); err != nil {
+		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, futureOps, now); err != nil {
 			return fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -629,7 +641,7 @@ func futureOperations(ops []domain.Operation, now time.Time) []domain.Operation 
 	return out
 }
 
-func (s *RecurringOperationService) scheduleRemindersForOperations(
+func scheduleRemindersForOperations(
 	ctx context.Context,
 	scheduler ReminderScheduler,
 	rec domain.RecurringOperation,

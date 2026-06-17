@@ -40,6 +40,7 @@ type LeaseRepository interface {
 type RecurringOperationRepository interface {
 	Create(ctx context.Context, op domain.RecurringOperation) (domain.RecurringOperation, error)
 	GetByLease(ctx context.Context, leaseID uuid.UUID) (domain.RecurringOperation, error)
+	GetByLeaseID(ctx context.Context, ownerID, leaseID uuid.UUID) (domain.RecurringOperation, error)
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.RecurringOperation, error)
 	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.RecurringOperation, error)
 	ListByPropertyID(ctx context.Context, propertyID uuid.UUID) ([]domain.RecurringOperation, error)

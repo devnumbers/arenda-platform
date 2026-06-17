@@ -16,6 +16,12 @@ SELECT * FROM recurring_operations
 WHERE lease_id = $1
 ORDER BY created_at DESC;
 
+-- name: GetRecurringOperationByLeaseIDAndOwner :one
+SELECT * FROM recurring_operations
+WHERE lease_id = $1 AND owner_id = $2
+ORDER BY created_at DESC
+LIMIT 1;
+
 -- name: ListRecurringOperationsByProperty :many
 SELECT * FROM recurring_operations
 WHERE owner_id = $1 AND property_id = $2

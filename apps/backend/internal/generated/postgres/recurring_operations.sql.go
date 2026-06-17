@@ -164,6 +164,42 @@ func (q *Queries) GetRecurringOperationByLease(ctx context.Context, leaseID pgty
 	return items, nil
 }
 
+const getRecurringOperationByLeaseIDAndOwner = `-- name: GetRecurringOperationByLeaseIDAndOwner :one
+SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days FROM recurring_operations
+WHERE lease_id = $1 AND owner_id = $2
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetRecurringOperationByLeaseIDAndOwnerParams struct {
+	LeaseID pgtype.UUID `json:"lease_id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) GetRecurringOperationByLeaseIDAndOwner(ctx context.Context, arg GetRecurringOperationByLeaseIDAndOwnerParams) (RecurringOperation, error) {
+	row := q.db.QueryRow(ctx, getRecurringOperationByLeaseIDAndOwner, arg.LeaseID, arg.OwnerID)
+	var i RecurringOperation
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.LeaseID,
+		&i.Type,
+		&i.Category,
+		&i.AmountKopecks,
+		&i.StartDate,
+		&i.PaymentDay,
+		&i.EndDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Periodicity,
+		&i.Comment,
+		&i.Status,
+		&i.ReminderOffsetDays,
+	)
+	return i, err
+}
+
 const listRecurringOperationsByProperty = `-- name: ListRecurringOperationsByProperty :many
 SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days FROM recurring_operations
 WHERE owner_id = $1 AND property_id = $2

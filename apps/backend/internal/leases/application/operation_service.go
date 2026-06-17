@@ -36,13 +36,14 @@ type UpdateOperationCommand struct {
 // OperationService orchestrates manual operation use cases within the leases
 // bounded context.
 type OperationService struct {
-	operations OperationRepository
-	properties PropertyRepository
-	leases     LeaseRepository
-	scheduler  ReminderScheduler
-	db         txBeginner
-	clock      clock.Clock
-	logger     *slog.Logger
+	operations   OperationRepository
+	properties   PropertyRepository
+	leases       LeaseRepository
+	recurringOps RecurringOperationRepository
+	scheduler    ReminderScheduler
+	db           txBeginner
+	clock        clock.Clock
+	logger       *slog.Logger
 }
 
 // NewOperationService creates a new operation service.
@@ -50,6 +51,7 @@ func NewOperationService(
 	operations OperationRepository,
 	properties PropertyRepository,
 	leases LeaseRepository,
+	recurringOps RecurringOperationRepository,
 	scheduler ReminderScheduler,
 	db txBeginner,
 	clock clock.Clock,
@@ -65,13 +67,14 @@ func NewOperationService(
 		logger = slog.Default()
 	}
 	return &OperationService{
-		operations: operations,
-		properties: properties,
-		leases:     leases,
-		scheduler:  scheduler,
-		db:         db,
-		clock:      clock,
-		logger:     logger,
+		operations:   operations,
+		properties:   properties,
+		leases:       leases,
+		recurringOps: recurringOps,
+		scheduler:    scheduler,
+		db:           db,
+		clock:        clock,
+		logger:       logger,
 	}
 }
 
@@ -211,6 +214,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txOps := s.operations.WithTx(tx)
+	txRecurring := s.recurringOps.WithTx(tx)
 	updated, err := txOps.Update(ctx, op)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -223,6 +227,18 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 		txScheduler := s.scheduler.WithTx(tx)
 		if err := txScheduler.CancelByOperation(ctx, ownerID, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
+		}
+		if updated.RecurringOperationID != uuid.Nil {
+			rec, err := txRecurring.GetByIDAndOwner(ctx, updated.RecurringOperationID, ownerID)
+			if err != nil {
+				return domain.Operation{}, fmt.Errorf("get recurring operation: %w", err)
+			}
+			if rec.ReminderOffsetDays != nil {
+				reminderDate := updated.OperationDate.AddDate(0, 0, -(*rec.ReminderOffsetDays))
+				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated), reminderDate); err != nil {
+					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
+				}
+			}
 		}
 	}
 

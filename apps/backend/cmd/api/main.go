@@ -136,7 +136,7 @@ func run(fallback *slog.Logger) error {
 		logger,
 	)
 	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, logger)
-	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, reminderScheduler, platformpostgres.NewBeginner(pool), realClock{}, logger)
+	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, reminderScheduler, platformpostgres.NewBeginner(pool), realClock{}, logger)
 	recurringOperationService := leasesapp.NewRecurringOperationService(
 		recurringOpRepo,
 		operationRepo,
