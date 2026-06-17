@@ -230,6 +230,7 @@ type Reminder struct {
 	MessageBody          string                 `json:"message_body"`
 	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz     `json:"updated_at"`
+	EventDate            pgtype.Date            `json:"event_date"`
 }
 
 type SentSmsReminder struct {

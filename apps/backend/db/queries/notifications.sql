@@ -1,9 +1,9 @@
 -- name: CreateReminder :one
 INSERT INTO reminders (
     id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id,
-    event_type, status, scheduled_at, message_title, message_body, created_at, updated_at
+    event_type, status, scheduled_at, event_date, message_title, message_body, created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
 )
 RETURNING *;
 
@@ -36,12 +36,13 @@ SET owner_id = $2,
     event_type = $8,
     status = $9,
     scheduled_at = $10,
-    sent_at = $11,
-    failed_attempts = $12,
-    next_attempt_at = $13,
-    message_title = $14,
-    message_body = $15,
-    updated_at = $16
+    event_date = $11,
+    sent_at = $12,
+    failed_attempts = $13,
+    next_attempt_at = $14,
+    message_title = $15,
+    message_body = $16,
+    updated_at = $17
 WHERE id = $1;
 
 -- name: MarkReminderSent :execrows
@@ -88,6 +89,3 @@ WHERE owner_id = $1
 INSERT INTO sent_sms_reminders (id, reminder_id, owner_id, phone, message, provider_response, sent_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
-
--- name: GetUserPhoneByID :one
-SELECT phone FROM users WHERE id = $1;

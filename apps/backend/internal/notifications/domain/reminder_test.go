@@ -19,28 +19,28 @@ func TestScheduledAtForDate_UsesFixedMoscowTime(t *testing.T) {
 
 func TestReminderOffset(t *testing.T) {
 	cases := []struct {
-		name         string
+		name          string
 		operationDate time.Time
 		reminderDate  time.Time
-		want         int
+		want          int
 	}{
 		{
-			name:         "reminder three days before",
+			name:          "reminder three days before",
 			operationDate: time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
 			reminderDate:  time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
-			want:         3,
+			want:          3,
 		},
 		{
-			name:         "reminder on event date",
+			name:          "reminder on event date",
 			operationDate: time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
 			reminderDate:  time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
-			want:         0,
+			want:          0,
 		},
 		{
-			name:         "reminder after event",
+			name:          "reminder after event",
 			operationDate: time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
 			reminderDate:  time.Date(2026, 6, 16, 0, 0, 0, 0, time.UTC),
-			want:         -1,
+			want:          -1,
 		},
 	}
 
@@ -56,46 +56,46 @@ func TestReminderOffset(t *testing.T) {
 
 func TestValidatePendingDate(t *testing.T) {
 	cases := []struct {
-		name        string
-		eventDate   time.Time
+		name         string
+		eventDate    time.Time
 		reminderDate time.Time
-		now         time.Time
-		wantErr     error
+		now          time.Time
+		wantErr      error
 	}{
 		{
-			name:        "valid future reminder",
-			eventDate:   time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
+			name:         "valid future reminder",
+			eventDate:    time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
 			reminderDate: time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
-			now:         time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
-			wantErr:     nil,
+			now:          time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
+			wantErr:      nil,
 		},
 		{
-			name:        "reminder today is valid",
-			eventDate:   time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
+			name:         "reminder today is valid",
+			eventDate:    time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
 			reminderDate: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
-			now:         time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
-			wantErr:     nil,
+			now:          time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
+			wantErr:      nil,
 		},
 		{
-			name:        "past reminder rejected",
-			eventDate:   time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
+			name:         "past reminder rejected",
+			eventDate:    time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
 			reminderDate: time.Date(2026, 6, 9, 0, 0, 0, 0, time.UTC),
-			now:         time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
-			wantErr:     ErrInvalidReminderDate,
+			now:          time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
+			wantErr:      ErrInvalidReminderDate,
 		},
 		{
-			name:        "reminder after event rejected",
-			eventDate:   time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
+			name:         "reminder after event rejected",
+			eventDate:    time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
 			reminderDate: time.Date(2026, 6, 16, 0, 0, 0, 0, time.UTC),
-			now:         time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
-			wantErr:     ErrReminderAfterEvent,
+			now:          time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
+			wantErr:      ErrReminderAfterEvent,
 		},
 		{
-			name:        "zero event date is valid",
-			eventDate:   time.Time{},
+			name:         "zero event date is valid",
+			eventDate:    time.Time{},
 			reminderDate: time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
-			now:         time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
-			wantErr:     nil,
+			now:          time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
+			wantErr:      nil,
 		},
 	}
 
@@ -163,7 +163,7 @@ func TestNewOperationReminder_RejectReminderInThePast(t *testing.T) {
 	op := uuid.New()
 	prop := uuid.New()
 	_, err := NewOperationReminder(owner, op, prop, eventDate, reminderDate, "title", "body", now)
-	if err == nil {
-		t.Fatal("expected error for past reminder date")
+	if !errors.Is(err, ErrInvalidReminderDate) {
+		t.Fatalf("expected ErrInvalidReminderDate, got %v", err)
 	}
 }

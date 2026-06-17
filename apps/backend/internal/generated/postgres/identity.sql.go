@@ -283,6 +283,17 @@ func (q *Queries) GetUserByPhone(ctx context.Context, phone string) (User, error
 	return i, err
 }
 
+const getUserPhoneByID = `-- name: GetUserPhoneByID :one
+SELECT phone FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUserPhoneByID(ctx context.Context, id pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getUserPhoneByID, id)
+	var phone string
+	err := row.Scan(&phone)
+	return phone, err
+}
+
 const markSMSCodeUsed = `-- name: MarkSMSCodeUsed :exec
 UPDATE sms_codes SET used = true WHERE id = $1
 `

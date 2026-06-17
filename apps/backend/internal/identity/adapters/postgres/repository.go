@@ -54,6 +54,17 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User
 	}, nil
 }
 
+func (r *UserRepository) GetPhoneByID(ctx context.Context, id uuid.UUID) (string, error) {
+	phone, err := r.q().GetUserPhoneByID(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", application.ErrNotFound
+		}
+		return "", err
+	}
+	return phone, nil
+}
+
 func (r *UserRepository) GetByPhone(ctx context.Context, phone domain.Phone) (domain.User, error) {
 	row, err := r.q().GetUserByPhone(ctx, phone.String())
 	if err != nil {

@@ -62,3 +62,6 @@ SELECT s.id, s.token_hash, s.expires_at, s.created_at,
 FROM sessions s
 JOIN users u ON s.user_id = u.id
 WHERE s.token_hash = $1 AND s.expires_at > $2;
+
+-- name: GetUserPhoneByID :one
+SELECT phone FROM users WHERE id = $1;

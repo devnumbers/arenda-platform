@@ -2,10 +2,12 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
@@ -46,6 +48,7 @@ func (r *ReminderRepository) Save(ctx context.Context, rm domain.Reminder) error
 		EventType:            postgres.NotificationEventType(rm.EventType),
 		Status:               postgres.NotificationStatus(rm.Status),
 		ScheduledAt:          pgtype.Timestamptz{Time: rm.ScheduledAt, Valid: true},
+		EventDate:            pgconv.DateToPgtype(rm.EventDate),
 		MessageTitle:         rm.MessageTitle,
 		MessageBody:          rm.MessageBody,
 		CreatedAt:            pgtype.Timestamptz{Time: rm.CreatedAt, Valid: true},
@@ -77,13 +80,14 @@ func (r *ReminderRepository) Update(ctx context.Context, rm domain.Reminder) err
 		EventType:            postgres.NotificationEventType(rm.EventType),
 		Status:               postgres.NotificationStatus(rm.Status),
 		ScheduledAt:          pgtype.Timestamptz{Time: rm.ScheduledAt, Valid: true},
+		EventDate:            pgconv.DateToPgtype(rm.EventDate),
 		SentAt:               sentAt,
 		//nolint:gosec // FailedAttempts is bounded by retry logic in the application layer.
-		FailedAttempts:       int32(rm.FailedAttempts),
-		NextAttemptAt:        nextAttemptAt,
-		MessageTitle:         rm.MessageTitle,
-		MessageBody:          rm.MessageBody,
-		UpdatedAt:            pgtype.Timestamptz{Time: rm.UpdatedAt, Valid: true},
+		FailedAttempts: int32(rm.FailedAttempts),
+		NextAttemptAt:  nextAttemptAt,
+		MessageTitle:   rm.MessageTitle,
+		MessageBody:    rm.MessageBody,
+		UpdatedAt:      pgtype.Timestamptz{Time: rm.UpdatedAt, Valid: true},
 	})
 	if err != nil {
 		return fmt.Errorf("update reminder: %w", err)
@@ -95,6 +99,9 @@ func (r *ReminderRepository) Update(ctx context.Context, rm domain.Reminder) err
 func (r *ReminderRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Reminder, error) {
 	row, err := r.q().GetReminderByID(ctx, pgconv.UUIDToPgtype(id))
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Reminder{}, application.ErrNotFound
+		}
 		return domain.Reminder{}, fmt.Errorf("get reminder: %w", err)
 	}
 	return toDomain(row), nil
@@ -224,6 +231,7 @@ func toDomain(row postgres.Reminder) domain.Reminder {
 		EventType:            domain.EventType(row.EventType),
 		Status:               domain.ReminderStatus(row.Status),
 		ScheduledAt:          pgconv.TimestamptzToTime(row.ScheduledAt),
+		EventDate:            pgconv.DateFromPgtype(row.EventDate),
 		SentAt:               pgconv.TimestamptzToPtrTime(row.SentAt),
 		FailedAttempts:       int(row.FailedAttempts),
 		NextAttemptAt:        pgconv.TimestamptzToPtrTime(row.NextAttemptAt),

@@ -36,9 +36,19 @@ type Notifier interface {
 	Notify(ctx context.Context, n Notification) error
 }
 
+// SMSSender sends an SMS message to a phone number.
+type SMSSender interface {
+	Send(ctx context.Context, phone string, message string) error
+}
+
 // ContactResolver resolves the delivery channel and address for an owner.
 type ContactResolver interface {
 	Resolve(ctx context.Context, ownerID uuid.UUID) (Contact, error)
+}
+
+// UserContactProvider returns contact information for a user by ID.
+type UserContactProvider interface {
+	PhoneByID(ctx context.Context, userID uuid.UUID) (string, error)
 }
 
 // Notification is a channel-agnostic outbound message.

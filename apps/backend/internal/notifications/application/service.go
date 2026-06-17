@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -44,13 +45,13 @@ func (s *ReminderService) CreateForRecurringOperation(ctx context.Context, rec R
 	if len(ops) == 0 {
 		return nil
 	}
-	nextOp := ops[0]
+	earliestOp := ops[0]
 	for _, op := range ops {
-		if op.OperationDate.Before(nextOp.OperationDate) {
-			nextOp = op
+		if op.OperationDate.Before(earliestOp.OperationDate) {
+			earliestOp = op
 		}
 	}
-	offset := domain.ReminderOffset(nextOp.OperationDate, baseReminderDate)
+	offset := domain.ReminderOffset(earliestOp.OperationDate, baseReminderDate)
 	if offset < 0 {
 		offset = 0
 	}
@@ -74,7 +75,7 @@ func (s *ReminderService) CreateForLease(ctx context.Context, lease LeaseInfo) e
 	expiringTitle := "Аренда скоро заканчивается"
 	expiringBody := fmt.Sprintf("Аренда по объекту заканчивается %s", lease.EndDate.Format("02.01.2006"))
 	expiringDate := lease.EndDate.AddDate(0, 0, -leaseExpiringOffsetDays)
-	expiring, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, expiringDate, expiringTitle, expiringBody, domain.EventLeaseExpiring, s.clock.Now())
+	expiring, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, *lease.EndDate, expiringDate, expiringTitle, expiringBody, domain.EventLeaseExpiring, s.clock.Now())
 	if err != nil {
 		return fmt.Errorf("create lease expiring reminder: %w", err)
 	}
@@ -85,7 +86,7 @@ func (s *ReminderService) CreateForLease(ctx context.Context, lease LeaseInfo) e
 	requiresActionTitle := "Аренда требует действия"
 	requiresActionBody := "Срок аренды закончился. Подтвердите продление или завершение аренды."
 	requiresActionDate := lease.EndDate.AddDate(0, 0, 1)
-	requiresAction, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, requiresActionDate, requiresActionTitle, requiresActionBody, domain.EventLeaseRequiresAction, s.clock.Now())
+	requiresAction, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, time.Time{}, requiresActionDate, requiresActionTitle, requiresActionBody, domain.EventLeaseRequiresAction, s.clock.Now())
 	if err != nil {
 		return fmt.Errorf("create lease requires_action reminder: %w", err)
 	}
@@ -97,7 +98,11 @@ func (s *ReminderService) CreateForLease(ctx context.Context, lease LeaseInfo) e
 
 // ListByOwner returns reminders for an owner with optional status filter.
 func (s *ReminderService) ListByOwner(ctx context.Context, ownerID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
-	return s.repo.ListByOwner(ctx, ownerID, filter)
+	reminders, err := s.repo.ListByOwner(ctx, ownerID, filter)
+	if err != nil {
+		return nil, fmt.Errorf("list reminders: %w", err)
+	}
+	return reminders, nil
 }
 
 // GetByID returns a reminder by ID after verifying ownership.
@@ -107,7 +112,7 @@ func (s *ReminderService) GetByID(ctx context.Context, ownerID, id uuid.UUID) (d
 		return domain.Reminder{}, err
 	}
 	if r.OwnerID != ownerID {
-		return domain.Reminder{}, fmt.Errorf("reminder not found")
+		return domain.Reminder{}, ErrNotFound
 	}
 	return r, nil
 }
@@ -119,7 +124,10 @@ func (s *ReminderService) Reschedule(ctx context.Context, ownerID, id uuid.UUID,
 		return domain.Reminder{}, err
 	}
 	if r.Status != domain.ReminderPending {
-		return domain.Reminder{}, fmt.Errorf("cannot reschedule non-pending reminder")
+		return domain.Reminder{}, ErrReminderNotPending
+	}
+	if err := domain.ValidatePendingDate(r.EventDate, newDate, s.clock.Now()); err != nil {
+		return domain.Reminder{}, fmt.Errorf("%w: %w", ErrInvalidReminderDate, err)
 	}
 	r.ScheduledAt = domain.ScheduledAtForDate(newDate)
 	r.UpdatedAt = s.clock.Now()
@@ -136,19 +144,26 @@ func (s *ReminderService) Cancel(ctx context.Context, ownerID, id uuid.UUID) err
 		return err
 	}
 	if r.Status != domain.ReminderPending {
-		return fmt.Errorf("cannot cancel non-pending reminder")
+		return ErrReminderNotPending
 	}
-	return s.repo.CancelByTarget(ctx, ownerID, r.TargetType, targetIDFor(r), r.EventType)
+	targetID, err := targetIDFor(r)
+	if err != nil {
+		return err
+	}
+	return s.repo.CancelByTarget(ctx, ownerID, r.TargetType, targetID, r.EventType)
 }
 
-func targetIDFor(r domain.Reminder) uuid.UUID {
+func targetIDFor(r domain.Reminder) (uuid.UUID, error) {
 	if r.OperationID != nil {
-		return *r.OperationID
+		return *r.OperationID, nil
 	}
 	if r.RecurringOperationID != nil {
-		return *r.RecurringOperationID
+		return *r.RecurringOperationID, nil
 	}
-	return *r.LeaseID
+	if r.LeaseID != nil {
+		return *r.LeaseID, nil
+	}
+	return uuid.UUID{}, errors.New("reminder has no target id")
 }
 
 // scheduler implements ReminderScheduler and runs inside transactions.
@@ -189,8 +204,12 @@ func (s *scheduler) ScheduleForLease(ctx context.Context, lease LeaseInfo) error
 	if lease.EndDate == nil {
 		return nil
 	}
-	_ = s.repo.CancelByTarget(ctx, lease.OwnerID, domain.TargetLease, lease.ID, domain.EventLeaseExpiring)
-	_ = s.repo.CancelByTarget(ctx, lease.OwnerID, domain.TargetLease, lease.ID, domain.EventLeaseRequiresAction)
+	if err := s.repo.CancelByTarget(ctx, lease.OwnerID, domain.TargetLease, lease.ID, domain.EventLeaseExpiring); err != nil {
+		return err
+	}
+	if err := s.repo.CancelByTarget(ctx, lease.OwnerID, domain.TargetLease, lease.ID, domain.EventLeaseRequiresAction); err != nil {
+		return err
+	}
 	return s.service.CreateForLease(ctx, lease)
 }
 
@@ -206,6 +225,12 @@ func (s *scheduler) CancelByRecurringOperation(ctx context.Context, ownerID, rec
 
 // CancelByLease cancels reminders for a lease.
 func (s *scheduler) CancelByLease(ctx context.Context, ownerID, leaseID uuid.UUID) error {
-	_ = s.repo.CancelByTarget(ctx, ownerID, domain.TargetLease, leaseID, domain.EventLeaseExpiring)
-	return s.repo.CancelByTarget(ctx, ownerID, domain.TargetLease, leaseID, domain.EventLeaseRequiresAction)
+	var errs []error
+	if err := s.repo.CancelByTarget(ctx, ownerID, domain.TargetLease, leaseID, domain.EventLeaseExpiring); err != nil {
+		errs = append(errs, err)
+	}
+	if err := s.repo.CancelByTarget(ctx, ownerID, domain.TargetLease, leaseID, domain.EventLeaseRequiresAction); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }

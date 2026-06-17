@@ -83,6 +83,15 @@ func DatePtrFromPgtype(d pgtype.Date) *time.Time {
 	return new(d.Time)
 }
 
+// DateFromPgtype converts a pgtype.Date to time.Time.
+// An invalid Date returns the zero time.
+func DateFromPgtype(d pgtype.Date) time.Time {
+	if !d.Valid {
+		return time.Time{}
+	}
+	return d.Time
+}
+
 // TimestamptzToTime returns the time.Time value of a pgtype.Timestamptz.
 func TimestamptzToTime(t pgtype.Timestamptz) time.Time {
 	return t.Time

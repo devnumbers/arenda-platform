@@ -25,6 +25,7 @@ type Sender interface {
 type UserRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetByPhone(ctx context.Context, phone domain.Phone) (domain.User, error)
+	GetPhoneByID(ctx context.Context, id uuid.UUID) (string, error)
 	Create(ctx context.Context, user domain.User) (domain.User, error)
 	WithTx(tx transaction.Tx) UserRepository
 }

@@ -90,11 +90,11 @@ func (q *Queries) CancelRemindersByRecurringOperationID(ctx context.Context, arg
 const createReminder = `-- name: CreateReminder :one
 INSERT INTO reminders (
     id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id,
-    event_type, status, scheduled_at, message_title, message_body, created_at, updated_at
+    event_type, status, scheduled_at, event_date, message_title, message_body, created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
 )
-RETURNING id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at
+RETURNING id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, event_date
 `
 
 type CreateReminderParams struct {
@@ -108,6 +108,7 @@ type CreateReminderParams struct {
 	EventType            NotificationEventType  `json:"event_type"`
 	Status               NotificationStatus     `json:"status"`
 	ScheduledAt          pgtype.Timestamptz     `json:"scheduled_at"`
+	EventDate            pgtype.Date            `json:"event_date"`
 	MessageTitle         string                 `json:"message_title"`
 	MessageBody          string                 `json:"message_body"`
 	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
@@ -126,6 +127,7 @@ func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) 
 		arg.EventType,
 		arg.Status,
 		arg.ScheduledAt,
+		arg.EventDate,
 		arg.MessageTitle,
 		arg.MessageBody,
 		arg.CreatedAt,
@@ -150,6 +152,7 @@ func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) 
 		&i.MessageBody,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EventDate,
 	)
 	return i, err
 }
@@ -194,7 +197,7 @@ func (q *Queries) CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSRe
 }
 
 const getReminderByID = `-- name: GetReminderByID :one
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders WHERE id = $1
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, event_date FROM reminders WHERE id = $1
 `
 
 func (q *Queries) GetReminderByID(ctx context.Context, id pgtype.UUID) (Reminder, error) {
@@ -218,23 +221,13 @@ func (q *Queries) GetReminderByID(ctx context.Context, id pgtype.UUID) (Reminder
 		&i.MessageBody,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EventDate,
 	)
 	return i, err
 }
 
-const getUserPhoneByID = `-- name: GetUserPhoneByID :one
-SELECT phone FROM users WHERE id = $1
-`
-
-func (q *Queries) GetUserPhoneByID(ctx context.Context, id pgtype.UUID) (string, error) {
-	row := q.db.QueryRow(ctx, getUserPhoneByID, id)
-	var phone string
-	err := row.Scan(&phone)
-	return phone, err
-}
-
 const listDueReminders = `-- name: ListDueReminders :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, event_date FROM reminders
 WHERE status = 'pending'
   AND scheduled_at <= $1
   AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
@@ -274,6 +267,7 @@ func (q *Queries) ListDueReminders(ctx context.Context, arg ListDueRemindersPara
 			&i.MessageBody,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.EventDate,
 		); err != nil {
 			return nil, err
 		}
@@ -286,7 +280,7 @@ func (q *Queries) ListDueReminders(ctx context.Context, arg ListDueRemindersPara
 }
 
 const listRemindersByOwner = `-- name: ListRemindersByOwner :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, event_date FROM reminders
 WHERE owner_id = $1
   AND (NOT $2::boolean OR status = $3)
 ORDER BY scheduled_at ASC
@@ -334,6 +328,7 @@ func (q *Queries) ListRemindersByOwner(ctx context.Context, arg ListRemindersByO
 			&i.MessageBody,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.EventDate,
 		); err != nil {
 			return nil, err
 		}
@@ -398,12 +393,13 @@ SET owner_id = $2,
     event_type = $8,
     status = $9,
     scheduled_at = $10,
-    sent_at = $11,
-    failed_attempts = $12,
-    next_attempt_at = $13,
-    message_title = $14,
-    message_body = $15,
-    updated_at = $16
+    event_date = $11,
+    sent_at = $12,
+    failed_attempts = $13,
+    next_attempt_at = $14,
+    message_title = $15,
+    message_body = $16,
+    updated_at = $17
 WHERE id = $1
 `
 
@@ -418,6 +414,7 @@ type UpdateReminderParams struct {
 	EventType            NotificationEventType  `json:"event_type"`
 	Status               NotificationStatus     `json:"status"`
 	ScheduledAt          pgtype.Timestamptz     `json:"scheduled_at"`
+	EventDate            pgtype.Date            `json:"event_date"`
 	SentAt               pgtype.Timestamptz     `json:"sent_at"`
 	FailedAttempts       int32                  `json:"failed_attempts"`
 	NextAttemptAt        pgtype.Timestamptz     `json:"next_attempt_at"`
@@ -438,6 +435,7 @@ func (q *Queries) UpdateReminder(ctx context.Context, arg UpdateReminderParams) 
 		arg.EventType,
 		arg.Status,
 		arg.ScheduledAt,
+		arg.EventDate,
 		arg.SentAt,
 		arg.FailedAttempts,
 		arg.NextAttemptAt,

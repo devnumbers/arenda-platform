@@ -7,9 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
-	identitydomain "github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
 // SentSMSReminderRepository tracks successfully sent SMS reminders for audit and deduplication.
@@ -17,20 +16,21 @@ type SentSMSReminderRepository interface {
 	Save(ctx context.Context, reminderID *uuid.UUID, ownerID uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error
 }
 
-// Notifier dispatches reminders as SMS messages using identity.Sender.
+// Notifier dispatches reminders as SMS messages using an SMSSender port.
 type Notifier struct {
 	resolver application.ContactResolver
-	sender   identityapp.Sender
+	sender   application.SMSSender
 	sentRepo SentSMSReminderRepository
+	clock    clock.Clock
 	logger   *slog.Logger
 }
 
 // NewNotifier creates a new SMS notifier.
-func NewNotifier(resolver application.ContactResolver, sender identityapp.Sender, sentRepo SentSMSReminderRepository, logger *slog.Logger) *Notifier {
+func NewNotifier(resolver application.ContactResolver, sender application.SMSSender, sentRepo SentSMSReminderRepository, clock clock.Clock, logger *slog.Logger) *Notifier {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Notifier{resolver: resolver, sender: sender, sentRepo: sentRepo, logger: logger}
+	return &Notifier{resolver: resolver, sender: sender, sentRepo: sentRepo, clock: clock, logger: logger}
 }
 
 // Notify resolves the recipient contact and sends the notification via SMS.
@@ -43,17 +43,16 @@ func (n *Notifier) Notify(ctx context.Context, notification application.Notifica
 		return fmt.Errorf("unsupported channel: %s", contact.Channel)
 	}
 
-	phone := identitydomain.Phone(contact.Address)
-	if err := n.sender.Send(ctx, phone, notification.Body); err != nil {
+	if err := n.sender.Send(ctx, contact.Address, notification.Body); err != nil {
 		return fmt.Errorf("send sms: %w", err)
 	}
 
-	sentAt := time.Now().UTC()
+	sentAt := n.clock.Now().UTC()
 	var reminderID *uuid.UUID
 	if notification.ReminderID != uuid.Nil {
 		reminderID = &notification.ReminderID
 	}
-	if err := n.sentRepo.Save(ctx, reminderID, notification.RecipientID, phone.String(), notification.Body, "", sentAt); err != nil {
+	if err := n.sentRepo.Save(ctx, reminderID, notification.RecipientID, contact.Address, notification.Body, "", sentAt); err != nil {
 		return fmt.Errorf("track sent sms: %w", err)
 	}
 

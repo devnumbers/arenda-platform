@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,6 +40,22 @@ const fixedDispatchTZ = "Europe/Moscow"
 var ErrInvalidReminderDate = errors.New("reminder date must be today or in the future")
 var ErrReminderAfterEvent = errors.New("reminder date must be on or before the event date")
 
+var (
+	moscowLoc     *time.Location
+	moscowLocOnce sync.Once
+)
+
+func moscowLocation() *time.Location {
+	moscowLocOnce.Do(func() {
+		var err error
+		moscowLoc, err = time.LoadLocation(fixedDispatchTZ)
+		if err != nil {
+			moscowLoc = time.UTC
+		}
+	})
+	return moscowLoc
+}
+
 // Reminder is a concrete scheduled notification.
 type Reminder struct {
 	ID                   uuid.UUID
@@ -51,6 +68,7 @@ type Reminder struct {
 	EventType            EventType
 	Status               ReminderStatus
 	ScheduledAt          time.Time
+	EventDate            time.Time
 	SentAt               *time.Time
 	FailedAttempts       int
 	NextAttemptAt        *time.Time
@@ -62,11 +80,7 @@ type Reminder struct {
 
 // ScheduledAtForDate combines a user-selected date with the fixed dispatch time.
 func ScheduledAtForDate(date time.Time) time.Time {
-	loc, _ := time.LoadLocation(fixedDispatchTZ)
-	if loc == nil {
-		loc = time.UTC
-	}
-	d := time.Date(date.Year(), date.Month(), date.Day(), fixedDispatchHour, 0, 0, 0, loc)
+	d := time.Date(date.Year(), date.Month(), date.Day(), fixedDispatchHour, 0, 0, 0, moscowLocation())
 	return d.UTC()
 }
 
@@ -112,6 +126,7 @@ func NewOperationReminder(ownerID, operationID, propertyID uuid.UUID, eventDate,
 		EventType:    EventOperationDue,
 		Status:       ReminderPending,
 		ScheduledAt:  ScheduledAtForDate(reminderDate),
+		EventDate:    eventDate,
 		MessageTitle: title,
 		MessageBody:  body,
 		CreatedAt:    now,
@@ -122,8 +137,8 @@ func NewOperationReminder(ownerID, operationID, propertyID uuid.UUID, eventDate,
 // NewLeaseReminder creates a pending reminder for a lease event.
 // Unlike operation reminders, the reminder date may intentionally fall after the event date
 // (for example, the lease_requires_action reminder is sent one day after the lease ends).
-func NewLeaseReminder(ownerID, leaseID, propertyID uuid.UUID, reminderDate time.Time, title, body string, eventType EventType, now time.Time) (Reminder, error) {
-	if err := ValidatePendingDate(time.Time{}, reminderDate, now); err != nil {
+func NewLeaseReminder(ownerID, leaseID, propertyID uuid.UUID, eventDate, reminderDate time.Time, title, body string, eventType EventType, now time.Time) (Reminder, error) {
+	if err := ValidatePendingDate(eventDate, reminderDate, now); err != nil {
 		return Reminder{}, err
 	}
 	id, err := uuid.NewRandom()
@@ -139,6 +154,7 @@ func NewLeaseReminder(ownerID, leaseID, propertyID uuid.UUID, reminderDate time.
 		EventType:    eventType,
 		Status:       ReminderPending,
 		ScheduledAt:  ScheduledAtForDate(reminderDate),
+		EventDate:    eventDate,
 		MessageTitle: title,
 		MessageBody:  body,
 		CreatedAt:    now,
