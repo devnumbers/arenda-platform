@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -223,19 +224,25 @@ func buildLeaseReminders(lease LeaseInfo, now time.Time) ([]domain.Reminder, err
 	propertyID := lease.PropertyID
 	endDate := *lease.EndDate
 
-	expiringTitle := "Аренда скоро заканчивается"
-	expiringBody := fmt.Sprintf("Аренда по объекту заканчивается %s", endDate.Format("02.01.2006"))
+	var out []domain.Reminder
+
 	expiringDate := endDate.AddDate(0, 0, -leaseExpiringOffsetDays)
-	expiring, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, endDate, expiringDate, expiringTitle, expiringBody, domain.EventLeaseExpiring, now)
-	if err != nil {
-		return nil, fmt.Errorf("create lease expiring reminder: %w", err)
+	if !timeutil.Date(expiringDate).Before(timeutil.Date(now)) {
+		expiringTitle := "Аренда скоро заканчивается"
+		expiringBody := fmt.Sprintf("Аренда по объекту заканчивается %s", endDate.Format("02.01.2006"))
+		expiring, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, endDate, expiringDate, expiringTitle, expiringBody, domain.EventLeaseExpiring, now)
+		if err != nil {
+			return nil, fmt.Errorf("create lease expiring reminder: %w", err)
+		}
+		out = append(out, expiring)
 	}
 
 	requiresAction, err := buildLeaseRequiresActionReminder(lease, now, endDate.AddDate(0, 0, 1))
 	if err != nil {
 		return nil, fmt.Errorf("create lease requires_action reminder: %w", err)
 	}
-	return []domain.Reminder{expiring, requiresAction}, nil
+	out = append(out, requiresAction)
+	return out, nil
 }
 
 func buildLeaseRequiresActionReminder(lease LeaseInfo, now, reminderDate time.Time) (domain.Reminder, error) {
