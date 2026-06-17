@@ -60,6 +60,7 @@ DO UPDATE SET
     scheduled_at = EXCLUDED.scheduled_at,
     message_title = EXCLUDED.message_title,
     message_body = EXCLUDED.message_body,
+    status = EXCLUDED.status,
     updated_at = NOW();
 
 -- name: CancelByIDAndOwner :execrows
@@ -126,3 +127,8 @@ SELECT EXISTS(SELECT 1 FROM sent_sms_reminders WHERE reminder_id = $1) AS exists
 INSERT INTO sent_sms_reminders (id, reminder_id, owner_id, phone, message, provider_response, sent_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (reminder_id) DO NOTHING;
+
+-- name: UpdateSentSMSReminderProviderResponse :execrows
+UPDATE sent_sms_reminders
+SET provider_response = $1, updated_at = NOW()
+WHERE reminder_id = $2;

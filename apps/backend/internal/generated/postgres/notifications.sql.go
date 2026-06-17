@@ -579,6 +579,7 @@ DO UPDATE SET
     scheduled_at = EXCLUDED.scheduled_at,
     message_title = EXCLUDED.message_title,
     message_body = EXCLUDED.message_body,
+    status = EXCLUDED.status,
     updated_at = NOW()
 `
 
@@ -634,6 +635,25 @@ type UpdateReminderScheduledAtParams struct {
 
 func (q *Queries) UpdateReminderScheduledAt(ctx context.Context, arg UpdateReminderScheduledAtParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateReminderScheduledAt, arg.ScheduledAt, arg.ID, arg.OwnerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateSentSMSReminderProviderResponse = `-- name: UpdateSentSMSReminderProviderResponse :execrows
+UPDATE sent_sms_reminders
+SET provider_response = $1, updated_at = NOW()
+WHERE reminder_id = $2
+`
+
+type UpdateSentSMSReminderProviderResponseParams struct {
+	ProviderResponse pgtype.Text `json:"provider_response"`
+	ReminderID       pgtype.UUID `json:"reminder_id"`
+}
+
+func (q *Queries) UpdateSentSMSReminderProviderResponse(ctx context.Context, arg UpdateSentSMSReminderProviderResponseParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateSentSMSReminderProviderResponse, arg.ProviderResponse, arg.ReminderID)
 	if err != nil {
 		return 0, err
 	}

@@ -177,7 +177,7 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 	if err != nil {
 		return fmt.Errorf("generate sent sms id: %w", err)
 	}
-	err = w.repo.SaveSentSMSReminder(dispatchCtx, id, r.ID, r.OwnerID, contact.Address, r.MessageTitle+" "+r.MessageBody, "", now)
+	err = w.repo.SaveSentSMSReminder(dispatchCtx, id, r.ID, r.OwnerID, contact.Address, r.MessageBody, "", now)
 	if errors.Is(err, application.ErrDuplicateSMSReminder) || isUniqueViolation(err) {
 		w.logger.InfoContext(dispatchCtx, "reminder already sent, skipping notification", "reminder_id", r.ID, "event_type", r.EventType)
 		return w.finalizeAlreadySent(dispatchCtx, r, now)
@@ -186,22 +186,23 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 		return w.finalizeFailure(dispatchCtx, r, now)
 	}
 
-	if _, err := w.notifier.Notify(dispatchCtx, application.Notification{
+	providerResponse, err := w.notifier.Notify(dispatchCtx, application.Notification{
 		RecipientID: r.OwnerID,
 		ReminderID:  r.ID,
 		EventType:   r.EventType,
 		Title:       r.MessageTitle,
 		Body:        r.MessageBody,
 		Contact:     &contact,
-	}); err != nil {
+	})
+	if err != nil {
 		w.logger.ErrorContext(dispatchCtx, "notify reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
 		return w.finalizeFailure(dispatchCtx, r, now)
 	}
 
-	return w.finalizeSuccess(dispatchCtx, r, now)
+	return w.finalizeSuccess(dispatchCtx, r, now, providerResponse)
 }
 
-func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time) error {
+func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time, providerResponse string) error {
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin finalize transaction: %w", err)
@@ -212,6 +213,10 @@ func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder,
 
 	if err := txRepo.MarkSent(ctx, r.ID, now); err != nil {
 		return fmt.Errorf("mark reminder sent: %w", err)
+	}
+
+	if err := txRepo.UpdateSMSProviderResponse(ctx, r.ID, providerResponse); err != nil {
+		return fmt.Errorf("update sms provider response: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -240,13 +245,13 @@ func (w *ReminderWorker) finalizeAlreadySent(ctx context.Context, r domain.Remin
 }
 
 func (w *ReminderWorker) finalizeFailure(ctx context.Context, r domain.Reminder, now time.Time) error {
-	tx2, err := w.db.Begin(ctx)
+	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin finalize transaction: %w", err)
 	}
-	defer func() { _ = tx2.Rollback(ctx) }()
+	defer func() { _ = tx.Rollback(ctx) }()
 
-	txRepo := w.repo.WithTx(tx2)
+	txRepo := w.repo.WithTx(tx)
 
 	attempts := r.FailedAttempts + 1
 	terminal := attempts >= w.maxAttempts
@@ -261,7 +266,7 @@ func (w *ReminderWorker) finalizeFailure(ctx context.Context, r domain.Reminder,
 		return fmt.Errorf("mark reminder failed: %w", err)
 	}
 
-	if err := tx2.Commit(ctx); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit finalize transaction: %w", err)
 	}
 	return nil

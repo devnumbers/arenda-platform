@@ -24,6 +24,7 @@ type ReminderRepository interface {
 	MarkReminderSent(ctx context.Context, id uuid.UUID, sentAt time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, nextAttempt *time.Time, terminal bool) error
 	SaveSentSMSReminder(ctx context.Context, id, reminderID, ownerID uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error
+	UpdateSMSProviderResponse(ctx context.Context, reminderID uuid.UUID, response string) error
 	IsSMSReminderSent(ctx context.Context, reminderID uuid.UUID) (bool, error)
 	ResetReminderSending(ctx context.Context, id uuid.UUID) error
 	MarkSendingReminderPending(ctx context.Context, id uuid.UUID, nextAttemptAt time.Time) error

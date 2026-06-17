@@ -392,6 +392,21 @@ func isDuplicateSMSReminderError(err error) bool {
 	return false
 }
 
+// UpdateSMSProviderResponse updates the provider response for a sent SMS audit row.
+func (r *ReminderRepository) UpdateSMSProviderResponse(ctx context.Context, reminderID uuid.UUID, response string) error {
+	rows, err := r.q().UpdateSentSMSReminderProviderResponse(ctx, postgres.UpdateSentSMSReminderProviderResponseParams{
+		ProviderResponse: pgtype.Text{String: response, Valid: response != ""},
+		ReminderID:       pgconv.UUIDToPgtype(reminderID),
+	})
+	if err != nil {
+		return fmt.Errorf("update sent sms reminder provider response: %w", err)
+	}
+	if rows == 0 {
+		return application.ErrNotFound
+	}
+	return nil
+}
+
 // IsSMSReminderSent reports whether an audit row already exists for the given reminder.
 func (r *ReminderRepository) IsSMSReminderSent(ctx context.Context, reminderID uuid.UUID) (bool, error) {
 	exists, err := r.q().IsSMSReminderSent(ctx, pgconv.UUIDToPgtype(reminderID))
