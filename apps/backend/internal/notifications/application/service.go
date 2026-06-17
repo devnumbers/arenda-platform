@@ -98,11 +98,10 @@ func (s *ReminderService) Reschedule(ctx context.Context, ownerID, id uuid.UUID,
 	if err := domain.ValidatePendingDate(r.EventDate, newDate, s.clock.Now()); err != nil {
 		return domain.Reminder{}, fmt.Errorf("%w: %w", ErrInvalidReminderDate, err)
 	}
-	r.ScheduledAt = domain.ScheduledAtForDate(newDate)
-	r.UpdatedAt = s.clock.Now()
-	if err := s.repo.Update(ctx, r); err != nil {
+	if err := s.repo.UpdateScheduledAt(ctx, ownerID, id, domain.ScheduledAtForDate(newDate)); err != nil {
 		return domain.Reminder{}, fmt.Errorf("update rescheduled reminder: %w", err)
 	}
+	r.ScheduledAt = domain.ScheduledAtForDate(newDate)
 	return r, nil
 }
 

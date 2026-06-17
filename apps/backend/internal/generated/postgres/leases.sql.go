@@ -298,6 +298,7 @@ SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_dat
 WHERE status IN ('awaiting_start', 'active')
   AND end_date IS NOT NULL
   AND end_date < $1::date
+ORDER BY id
 LIMIT $2::int
 `
 

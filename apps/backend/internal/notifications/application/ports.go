@@ -13,6 +13,7 @@ import (
 type ReminderRepository interface {
 	Save(ctx context.Context, r domain.Reminder) error
 	Update(ctx context.Context, r domain.Reminder) error
+	UpdateScheduledAt(ctx context.Context, ownerID, id uuid.UUID, scheduledAt time.Time) error
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
 	ListByOwner(ctx context.Context, ownerID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	ListDue(ctx context.Context, before time.Time, limit int) ([]domain.Reminder, error)
@@ -37,12 +38,12 @@ type ListFilter struct {
 
 // Notifier dispatches a notification to a recipient.
 type Notifier interface {
-	Notify(ctx context.Context, n Notification) error
+	Notify(ctx context.Context, n Notification) (providerResponse string, err error)
 }
 
 // SMSSender sends an SMS message to a phone number.
 type SMSSender interface {
-	Send(ctx context.Context, phone string, message string) error
+	Send(ctx context.Context, phone string, message string) (providerResponse string, err error)
 }
 
 // ContactResolver resolves the delivery channel and address for an owner.
@@ -62,6 +63,7 @@ type Notification struct {
 	EventType   domain.EventType
 	Title       string
 	Body        string
+	Contact     *Contact
 }
 
 // Contact is a resolved delivery endpoint.

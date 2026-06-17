@@ -16,6 +16,10 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
+// maxReconciliationBatches limits the number of batches processed per tick to
+// prevent a single failing lease from causing the worker to spin indefinitely.
+const maxReconciliationBatches = 10
+
 // LeaseReconciliationWorker scans open leases with an end date in the past and
 // ensures their status moves to requires_action and a requires_action reminder
 // exists.
@@ -76,7 +80,7 @@ func (w *LeaseReconciliationWorker) Run(ctx context.Context) {
 
 func (w *LeaseReconciliationWorker) tick(ctx context.Context) error {
 	asOf := w.clock.Now()
-	for {
+	for batch := 0; batch < maxReconciliationBatches; batch++ {
 		leases, err := w.leases.ListOpenLeasesWithPastEndDate(ctx, asOf, w.batchSize)
 		if err != nil {
 			return fmt.Errorf("list open leases with past end date: %w", err)
@@ -127,7 +131,6 @@ func (w *LeaseReconciliationWorker) reconcile(ctx context.Context, leaseID uuid.
 
 	if lease.Status != leasedomain.LeaseStatusRequiresAction {
 		lease.Status = leasedomain.LeaseStatusRequiresAction
-		lease.UpdatedAt = w.clock.Now()
 		if _, err := txLeases.Update(ctx, lease.OwnerID, lease); err != nil {
 			return fmt.Errorf("update lease status: %w", err)
 		}

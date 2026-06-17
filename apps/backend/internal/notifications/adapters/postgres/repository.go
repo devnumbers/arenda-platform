@@ -106,6 +106,22 @@ func (r *ReminderRepository) Update(ctx context.Context, rm domain.Reminder) err
 	return nil
 }
 
+// UpdateScheduledAt updates the scheduled time of a pending reminder.
+func (r *ReminderRepository) UpdateScheduledAt(ctx context.Context, ownerID, id uuid.UUID, scheduledAt time.Time) error {
+	rows, err := r.q().UpdateReminderScheduledAt(ctx, postgres.UpdateReminderScheduledAtParams{
+		ScheduledAt: pgtype.Timestamptz{Time: scheduledAt, Valid: true},
+		ID:          pgconv.UUIDToPgtype(id),
+		OwnerID:     pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		return fmt.Errorf("update reminder scheduled at: %w", err)
+	}
+	if rows == 0 {
+		return application.ErrReminderNotPending
+	}
+	return nil
+}
+
 // GetByID returns a reminder by ID.
 func (r *ReminderRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Reminder, error) {
 	row, err := r.q().GetReminderByID(ctx, pgconv.UUIDToPgtype(id))
@@ -190,12 +206,15 @@ func (r *ReminderRepository) ListStaleSendingReminders(ctx context.Context, stal
 
 // MarkSent marks a sending reminder as sent.
 func (r *ReminderRepository) MarkSent(ctx context.Context, id uuid.UUID, at time.Time) error {
-	_, err := r.q().MarkReminderSent(ctx, postgres.MarkReminderSentParams{
+	rows, err := r.q().MarkReminderSent(ctx, postgres.MarkReminderSentParams{
 		ID:     pgconv.UUIDToPgtype(id),
 		SentAt: pgtype.Timestamptz{Time: at, Valid: true},
 	})
 	if err != nil {
 		return fmt.Errorf("mark reminder sent: %w", err)
+	}
+	if rows == 0 {
+		return application.ErrConcurrentUpdate
 	}
 	return nil
 }
@@ -206,13 +225,16 @@ func (r *ReminderRepository) MarkFailed(ctx context.Context, id uuid.UUID, nextA
 	if nextAttempt != nil {
 		next = pgtype.Timestamptz{Time: *nextAttempt, Valid: true}
 	}
-	_, err := r.q().MarkReminderFailed(ctx, postgres.MarkReminderFailedParams{
+	rows, err := r.q().MarkReminderFailed(ctx, postgres.MarkReminderFailedParams{
 		ID:            pgconv.UUIDToPgtype(id),
 		NextAttemptAt: next,
 		MarkAsFailed:  terminal,
 	})
 	if err != nil {
 		return fmt.Errorf("mark reminder failed: %w", err)
+	}
+	if rows == 0 {
+		return application.ErrConcurrentUpdate
 	}
 	return nil
 }
@@ -259,9 +281,12 @@ func (r *ReminderRepository) HasReminderForLeaseEvent(ctx context.Context, owner
 
 // ResetReminderSending resets a sending reminder back to pending.
 func (r *ReminderRepository) ResetReminderSending(ctx context.Context, id uuid.UUID) error {
-	_, err := r.q().ResetReminderSending(ctx, pgconv.UUIDToPgtype(id))
+	rows, err := r.q().ResetReminderSending(ctx, pgconv.UUIDToPgtype(id))
 	if err != nil {
 		return fmt.Errorf("reset reminder sending: %w", err)
+	}
+	if rows == 0 {
+		return application.ErrConcurrentUpdate
 	}
 	return nil
 }

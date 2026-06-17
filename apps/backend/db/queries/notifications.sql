@@ -54,6 +54,11 @@ SET owner_id = $2,
     updated_at = $17
 WHERE id = $1;
 
+-- name: UpdateReminderScheduledAt :execrows
+UPDATE reminders
+SET scheduled_at = $1, updated_at = NOW()
+WHERE id = $2 AND owner_id = $3 AND status = 'pending';
+
 -- name: MarkReminderSending :one
 UPDATE reminders
 SET status = 'sending', updated_at = NOW()
@@ -69,7 +74,7 @@ WHERE id = $1 AND status = 'sending';
 UPDATE reminders
 SET failed_attempts = failed_attempts + 1,
     next_attempt_at = sqlc.arg('next_attempt_at')::timestamptz,
-    status = CASE WHEN sqlc.arg('mark_as_failed')::boolean THEN 'failed' ELSE status END,
+    status = CASE WHEN sqlc.arg('mark_as_failed')::boolean THEN 'failed' ELSE 'pending' END,
     updated_at = NOW()
 WHERE id = sqlc.arg('id')::uuid AND status IN ('pending', 'sending');
 

@@ -129,7 +129,12 @@ func (w *ReminderWorker) dispatchDue(ctx context.Context, now time.Time) error {
 		}
 
 		if err := w.dispatchReminder(ctx, r, now); err != nil {
-			return err
+			if errors.Is(err, application.ErrConcurrentUpdate) {
+				w.logger.InfoContext(ctx, "reminder changed concurrently, skipping", "reminder_id", r.ID)
+				continue
+			}
+			w.logger.ErrorContext(ctx, "dispatch reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
+			continue
 		}
 	}
 	return nil
@@ -146,21 +151,23 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 		return w.finalizeFailure(ctx, r, now)
 	}
 
-	if err := w.notifier.Notify(ctx, application.Notification{
+	providerResponse, err := w.notifier.Notify(ctx, application.Notification{
 		RecipientID: r.OwnerID,
 		ReminderID:  r.ID,
 		EventType:   r.EventType,
 		Title:       r.MessageTitle,
 		Body:        r.MessageBody,
-	}); err != nil {
+		Contact:     &contact,
+	})
+	if err != nil {
 		w.logger.ErrorContext(ctx, "notify reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
 		return w.finalizeFailure(ctx, r, now)
 	}
 
-	return w.finalizeSuccess(ctx, r, now, contact.Address)
+	return w.finalizeSuccess(ctx, r, now, contact.Address, providerResponse)
 }
 
-func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time, phone string) error {
+func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time, phone, providerResponse string) error {
 	tx2, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin finalize transaction: %w", err)
@@ -173,7 +180,7 @@ func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder,
 	if err != nil {
 		return fmt.Errorf("generate sent sms id: %w", err)
 	}
-	if err := txRepo.SaveSentSMSReminder(ctx, id, r.ID, r.OwnerID, phone, r.MessageBody, "", now); err != nil {
+	if err := txRepo.SaveSentSMSReminder(ctx, id, r.ID, r.OwnerID, phone, r.MessageBody, providerResponse, now); err != nil {
 		return fmt.Errorf("save sent sms reminder: %w", err)
 	}
 	if err := txRepo.MarkSent(ctx, r.ID, now); err != nil {
@@ -237,6 +244,10 @@ func (w *ReminderWorker) recoverStaleSending(ctx context.Context, now time.Time)
 		r := reminders[0]
 		if err := txRepo.ResetReminderSending(ctx, r.ID); err != nil {
 			_ = tx.Rollback(ctx)
+			if errors.Is(err, application.ErrConcurrentUpdate) {
+				w.logger.InfoContext(ctx, "stale sending reminder changed concurrently, skipping", "reminder_id", r.ID)
+				continue
+			}
 			return fmt.Errorf("reset stale sending reminder: %w", err)
 		}
 

@@ -23,20 +23,25 @@ func NewNotifier(resolver application.ContactResolver, sender application.SMSSen
 	return &Notifier{resolver: resolver, sender: sender, logger: logger}
 }
 
-// Notify resolves the recipient contact and sends the notification via SMS.
-func (n *Notifier) Notify(ctx context.Context, notification application.Notification) error {
-	contact, err := n.resolver.Resolve(ctx, notification.RecipientID)
-	if err != nil {
-		return fmt.Errorf("resolve contact: %w", err)
+// Notify sends the notification via SMS using the resolved contact when provided.
+func (n *Notifier) Notify(ctx context.Context, notification application.Notification) (string, error) {
+	contact := notification.Contact
+	if contact == nil {
+		resolved, err := n.resolver.Resolve(ctx, notification.RecipientID)
+		if err != nil {
+			return "", fmt.Errorf("resolve contact: %w", err)
+		}
+		contact = &resolved
 	}
 	if contact.Channel != application.ChannelSMS {
-		return fmt.Errorf("unsupported channel: %s", contact.Channel)
+		return "", fmt.Errorf("unsupported channel: %s", contact.Channel)
 	}
 
-	if err := n.sender.Send(ctx, contact.Address, notification.Body); err != nil {
-		return fmt.Errorf("send sms: %w", err)
+	providerResponse, err := n.sender.Send(ctx, contact.Address, notification.Body)
+	if err != nil {
+		return providerResponse, fmt.Errorf("send sms: %w", err)
 	}
 
 	n.logger.InfoContext(ctx, "sms reminder sent", "reminder_id", notification.ReminderID, "event_type", notification.EventType)
-	return nil
+	return providerResponse, nil
 }

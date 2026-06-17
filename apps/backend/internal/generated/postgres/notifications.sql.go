@@ -394,7 +394,7 @@ const markReminderFailed = `-- name: MarkReminderFailed :execrows
 UPDATE reminders
 SET failed_attempts = failed_attempts + 1,
     next_attempt_at = $1::timestamptz,
-    status = CASE WHEN $2::boolean THEN 'failed' ELSE status END,
+    status = CASE WHEN $2::boolean THEN 'failed' ELSE 'pending' END,
     updated_at = NOW()
 WHERE id = $3::uuid AND status IN ('pending', 'sending')
 `
@@ -540,6 +540,26 @@ func (q *Queries) UpdateReminder(ctx context.Context, arg UpdateReminderParams) 
 		arg.MessageBody,
 		arg.UpdatedAt,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateReminderScheduledAt = `-- name: UpdateReminderScheduledAt :execrows
+UPDATE reminders
+SET scheduled_at = $1, updated_at = NOW()
+WHERE id = $2 AND owner_id = $3 AND status = 'pending'
+`
+
+type UpdateReminderScheduledAtParams struct {
+	ScheduledAt pgtype.Timestamptz `json:"scheduled_at"`
+	ID          pgtype.UUID        `json:"id"`
+	OwnerID     pgtype.UUID        `json:"owner_id"`
+}
+
+func (q *Queries) UpdateReminderScheduledAt(ctx context.Context, arg UpdateReminderScheduledAtParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateReminderScheduledAt, arg.ScheduledAt, arg.ID, arg.OwnerID)
 	if err != nil {
 		return 0, err
 	}

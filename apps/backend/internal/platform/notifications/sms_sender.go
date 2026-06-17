@@ -20,11 +20,11 @@ func NewSMSSender(sender identityapp.Sender) *SMSSender {
 }
 
 // Send sends an SMS message to the given phone number.
-func (s *SMSSender) Send(ctx context.Context, phone string, message string) error {
+func (s *SMSSender) Send(ctx context.Context, phone string, message string) (string, error) {
 	if err := s.sender.Send(ctx, identitydomain.Phone(phone), message); err != nil {
-		return fmt.Errorf("send sms: %w", err)
+		return "", fmt.Errorf("send sms: %w", err)
 	}
-	return nil
+	return "", nil
 }
 
 var _ notificationsapp.SMSSender = (*SMSSender)(nil)

@@ -69,4 +69,5 @@ SELECT * FROM leases
 WHERE status IN ('awaiting_start', 'active')
   AND end_date IS NOT NULL
   AND end_date < sqlc.arg('as_of')::date
+ORDER BY id
 LIMIT sqlc.arg('limit')::int;
