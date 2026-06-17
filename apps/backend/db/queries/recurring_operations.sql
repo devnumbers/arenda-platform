@@ -49,6 +49,15 @@ SET status = $2
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateRecurringOperationReminderOffset :execrows
+UPDATE recurring_operations
+SET reminder_offset_days = $1, updated_at = NOW()
+WHERE id = $2 AND owner_id = $3;
+
+-- name: ListRecurringOperationsByPropertyID :many
+SELECT * FROM recurring_operations
+WHERE property_id = $1;
+
 -- name: DeleteRecurringOperationByLease :exec
 DELETE FROM recurring_operations
 WHERE lease_id = $1;

@@ -23,6 +23,12 @@ WHERE lease_id = $1;
 SELECT operation_date FROM operations
 WHERE recurring_operation_id = $1;
 
+-- name: ListOperationsByRecurringOperation :many
+SELECT * FROM operations
+WHERE recurring_operation_id = $1
+  AND deleted_at IS NULL
+ORDER BY operation_date ASC;
+
 -- name: DeleteUneditedFutureOperationsByRecurringOperation :exec
 DELETE FROM operations
 WHERE recurring_operation_id = $1

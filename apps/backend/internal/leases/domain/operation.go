@@ -101,19 +101,20 @@ const (
 )
 
 type RecurringOperation struct {
-	ID            uuid.UUID
-	OwnerID       uuid.UUID
-	PropertyID    uuid.UUID
-	LeaseID       uuid.UUID
-	Type          OperationType
-	Category      OperationCategory
-	AmountKopecks int64
-	StartDate     time.Time
-	PaymentDay    int
-	EndDate       *time.Time
-	Periodicity   RecurringOperationPeriodicity
-	Status        RecurringOperationStatus
-	Comment       string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID                 uuid.UUID
+	OwnerID            uuid.UUID
+	PropertyID         uuid.UUID
+	LeaseID            uuid.UUID
+	Type               OperationType
+	Category           OperationCategory
+	AmountKopecks      int64
+	StartDate          time.Time
+	PaymentDay         int
+	EndDate            *time.Time
+	ReminderOffsetDays *int
+	Periodicity        RecurringOperationPeriodicity
+	Status             RecurringOperationStatus
+	Comment            string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }

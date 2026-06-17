@@ -391,6 +391,48 @@ func (q *Queries) ListOperationsByProperty(ctx context.Context, arg ListOperatio
 	return items, nil
 }
 
+const listOperationsByRecurringOperation = `-- name: ListOperationsByRecurringOperation :many
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at FROM operations
+WHERE recurring_operation_id = $1
+  AND deleted_at IS NULL
+ORDER BY operation_date ASC
+`
+
+func (q *Queries) ListOperationsByRecurringOperation(ctx context.Context, recurringOperationID pgtype.UUID) ([]Operation, error) {
+	rows, err := q.db.Query(ctx, listOperationsByRecurringOperation, recurringOperationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Operation{}
+	for rows.Next() {
+		var i Operation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.LeaseID,
+			&i.RecurringOperationID,
+			&i.Type,
+			&i.Category,
+			&i.AmountKopecks,
+			&i.OperationDate,
+			&i.Comment,
+			&i.IsException,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const softDeleteOperation = `-- name: SoftDeleteOperation :one
 UPDATE operations
 SET deleted_at = now(),

@@ -452,6 +452,33 @@ func (r *RecurringOperationRepository) UpdateStatusByID(ctx context.Context, id 
 	return recurringOperationFromRow(row), nil
 }
 
+// ListByPropertyID returns all recurring operations for the given property.
+func (r *RecurringOperationRepository) ListByPropertyID(ctx context.Context, propertyID uuid.UUID) ([]domain.RecurringOperation, error) {
+	rows, err := r.q().ListRecurringOperationsByPropertyID(ctx, pgconv.UUIDToPgtype(propertyID))
+	if err != nil {
+		return nil, err
+	}
+	ops := make([]domain.RecurringOperation, 0, len(rows))
+	for _, row := range rows {
+		ops = append(ops, recurringOperationFromRow(row))
+	}
+	return ops, nil
+}
+
+// SetReminderOffset stores the reminder offset for a recurring operation.
+func (r *RecurringOperationRepository) SetReminderOffset(ctx context.Context, ownerID, recID uuid.UUID, offsetDays int) error {
+	//nolint:gosec // Reminder offset is bounded by application validation.
+	_, err := r.q().UpdateRecurringOperationReminderOffset(ctx, postgres.UpdateRecurringOperationReminderOffsetParams{
+		ReminderOffsetDays: pgtype.Int4{Int32: int32(offsetDays), Valid: true},
+		ID:                 pgconv.UUIDToPgtype(recID),
+		OwnerID:            pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		return fmt.Errorf("set reminder offset: %w", err)
+	}
+	return nil
+}
+
 // UpdateStatusByPropertyID updates the status of all recurring operations for
 // the given property.
 func (r *RecurringOperationRepository) UpdateStatusByPropertyID(ctx context.Context, propertyID uuid.UUID, status string) error {
@@ -468,7 +495,7 @@ func (r *RecurringOperationRepository) DeleteByLease(ctx context.Context, leaseI
 }
 
 func recurringOperationFromRow(row postgres.RecurringOperation) domain.RecurringOperation {
-	return domain.RecurringOperation{
+	rec := domain.RecurringOperation{
 		ID:            pgconv.UUIDFromPgtype(row.ID),
 		OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
 		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
@@ -485,6 +512,11 @@ func recurringOperationFromRow(row postgres.RecurringOperation) domain.Recurring
 		CreatedAt:     row.CreatedAt.Time,
 		UpdatedAt:     row.UpdatedAt.Time,
 	}
+	if row.ReminderOffsetDays.Valid {
+		offset := int(row.ReminderOffsetDays.Int32)
+		rec.ReminderOffsetDays = &offset
+	}
+	return rec
 }
 
 // OperationRepository persists operations.
@@ -548,6 +580,18 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 
 func (r *OperationRepository) ListByLease(ctx context.Context, leaseID uuid.UUID) ([]domain.Operation, error) {
 	rows, err := r.q().ListOperationsByLease(ctx, pgconv.UUIDToPgtype(leaseID))
+	if err != nil {
+		return nil, err
+	}
+	ops := make([]domain.Operation, 0, len(rows))
+	for _, row := range rows {
+		ops = append(ops, operationFromRow(row))
+	}
+	return ops, nil
+}
+
+func (r *OperationRepository) ListByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID) ([]domain.Operation, error) {
+	rows, err := r.q().ListOperationsByRecurringOperation(ctx, pgconv.UUIDToPgtype(recurringOperationID))
 	if err != nil {
 		return nil, err
 	}

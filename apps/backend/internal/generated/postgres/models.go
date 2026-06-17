@@ -196,21 +196,22 @@ type Property struct {
 }
 
 type RecurringOperation struct {
-	ID            pgtype.UUID        `json:"id"`
-	OwnerID       pgtype.UUID        `json:"owner_id"`
-	PropertyID    pgtype.UUID        `json:"property_id"`
-	LeaseID       pgtype.UUID        `json:"lease_id"`
-	Type          string             `json:"type"`
-	Category      string             `json:"category"`
-	AmountKopecks int64              `json:"amount_kopecks"`
-	StartDate     pgtype.Date        `json:"start_date"`
-	PaymentDay    int32              `json:"payment_day"`
-	EndDate       pgtype.Date        `json:"end_date"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	Periodicity   string             `json:"periodicity"`
-	Comment       pgtype.Text        `json:"comment"`
-	Status        string             `json:"status"`
+	ID                 pgtype.UUID        `json:"id"`
+	OwnerID            pgtype.UUID        `json:"owner_id"`
+	PropertyID         pgtype.UUID        `json:"property_id"`
+	LeaseID            pgtype.UUID        `json:"lease_id"`
+	Type               string             `json:"type"`
+	Category           string             `json:"category"`
+	AmountKopecks      int64              `json:"amount_kopecks"`
+	StartDate          pgtype.Date        `json:"start_date"`
+	PaymentDay         int32              `json:"payment_day"`
+	EndDate            pgtype.Date        `json:"end_date"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	Periodicity        string             `json:"periodicity"`
+	Comment            pgtype.Text        `json:"comment"`
+	Status             string             `json:"status"`
+	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
 }
 
 type Reminder struct {
