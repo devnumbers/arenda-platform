@@ -5,8 +5,141 @@
 package postgres
 
 import (
+	"database/sql/driver"
+	"fmt"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type NotificationEventType string
+
+const (
+	NotificationEventTypeOperationDue        NotificationEventType = "operation_due"
+	NotificationEventTypeLeaseExpiring       NotificationEventType = "lease_expiring"
+	NotificationEventTypeLeaseRequiresAction NotificationEventType = "lease_requires_action"
+)
+
+func (e *NotificationEventType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = NotificationEventType(s)
+	case string:
+		*e = NotificationEventType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for NotificationEventType: %T", src)
+	}
+	return nil
+}
+
+type NullNotificationEventType struct {
+	NotificationEventType NotificationEventType `json:"notification_event_type"`
+	Valid                 bool                  `json:"valid"` // Valid is true if NotificationEventType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullNotificationEventType) Scan(value interface{}) error {
+	if value == nil {
+		ns.NotificationEventType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.NotificationEventType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullNotificationEventType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.NotificationEventType), nil
+}
+
+type NotificationStatus string
+
+const (
+	NotificationStatusPending   NotificationStatus = "pending"
+	NotificationStatusSent      NotificationStatus = "sent"
+	NotificationStatusFailed    NotificationStatus = "failed"
+	NotificationStatusCancelled NotificationStatus = "cancelled"
+)
+
+func (e *NotificationStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = NotificationStatus(s)
+	case string:
+		*e = NotificationStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for NotificationStatus: %T", src)
+	}
+	return nil
+}
+
+type NullNotificationStatus struct {
+	NotificationStatus NotificationStatus `json:"notification_status"`
+	Valid              bool               `json:"valid"` // Valid is true if NotificationStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullNotificationStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.NotificationStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.NotificationStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullNotificationStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.NotificationStatus), nil
+}
+
+type NotificationTargetType string
+
+const (
+	NotificationTargetTypeOperation          NotificationTargetType = "operation"
+	NotificationTargetTypeRecurringOperation NotificationTargetType = "recurring_operation"
+	NotificationTargetTypeLease              NotificationTargetType = "lease"
+)
+
+func (e *NotificationTargetType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = NotificationTargetType(s)
+	case string:
+		*e = NotificationTargetType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for NotificationTargetType: %T", src)
+	}
+	return nil
+}
+
+type NullNotificationTargetType struct {
+	NotificationTargetType NotificationTargetType `json:"notification_target_type"`
+	Valid                  bool                   `json:"valid"` // Valid is true if NotificationTargetType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullNotificationTargetType) Scan(value interface{}) error {
+	if value == nil {
+		ns.NotificationTargetType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.NotificationTargetType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullNotificationTargetType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.NotificationTargetType), nil
+}
 
 type Lease struct {
 	ID                   pgtype.UUID        `json:"id"`
@@ -77,6 +210,36 @@ type RecurringOperation struct {
 	Periodicity   string             `json:"periodicity"`
 	Comment       pgtype.Text        `json:"comment"`
 	Status        string             `json:"status"`
+}
+
+type Reminder struct {
+	ID                   pgtype.UUID            `json:"id"`
+	OwnerID              pgtype.UUID            `json:"owner_id"`
+	TargetType           NotificationTargetType `json:"target_type"`
+	OperationID          pgtype.UUID            `json:"operation_id"`
+	RecurringOperationID pgtype.UUID            `json:"recurring_operation_id"`
+	LeaseID              pgtype.UUID            `json:"lease_id"`
+	PropertyID           pgtype.UUID            `json:"property_id"`
+	EventType            NotificationEventType  `json:"event_type"`
+	Status               NotificationStatus     `json:"status"`
+	ScheduledAt          pgtype.Timestamptz     `json:"scheduled_at"`
+	SentAt               pgtype.Timestamptz     `json:"sent_at"`
+	FailedAttempts       int32                  `json:"failed_attempts"`
+	NextAttemptAt        pgtype.Timestamptz     `json:"next_attempt_at"`
+	MessageTitle         string                 `json:"message_title"`
+	MessageBody          string                 `json:"message_body"`
+	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz     `json:"updated_at"`
+}
+
+type SentSmsReminder struct {
+	ID               pgtype.UUID        `json:"id"`
+	ReminderID       pgtype.UUID        `json:"reminder_id"`
+	OwnerID          pgtype.UUID        `json:"owner_id"`
+	Phone            string             `json:"phone"`
+	Message          string             `json:"message"`
+	ProviderResponse pgtype.Text        `json:"provider_response"`
+	SentAt           pgtype.Timestamptz `json:"sent_at"`
 }
 
 type Session struct {
