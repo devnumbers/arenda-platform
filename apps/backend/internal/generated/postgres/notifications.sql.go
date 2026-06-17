@@ -17,26 +17,26 @@ SET status = 'cancelled', updated_at = NOW()
 WHERE owner_id = $1
   AND target_type = $2
   AND (
-      (target_type = 'operation' AND operation_id = $3) OR
-      (target_type = 'recurring_operation' AND recurring_operation_id = $3) OR
-      (target_type = 'lease' AND lease_id = $3)
+      (target_type = 'operation' AND operation_id = $3::uuid) OR
+      (target_type = 'recurring_operation' AND recurring_operation_id = $3::uuid) OR
+      (target_type = 'lease' AND lease_id = $3::uuid)
   )
   AND event_type = $4
   AND status = 'pending'
 `
 
 type CancelReminderByTargetParams struct {
-	OwnerID     pgtype.UUID            `json:"owner_id"`
-	TargetType  NotificationTargetType `json:"target_type"`
-	OperationID pgtype.UUID            `json:"operation_id"`
-	EventType   NotificationEventType  `json:"event_type"`
+	OwnerID    pgtype.UUID            `json:"owner_id"`
+	TargetType NotificationTargetType `json:"target_type"`
+	TargetID   pgtype.UUID            `json:"target_id"`
+	EventType  NotificationEventType  `json:"event_type"`
 }
 
 func (q *Queries) CancelReminderByTarget(ctx context.Context, arg CancelReminderByTargetParams) (int64, error) {
 	result, err := q.db.Exec(ctx, cancelReminderByTarget,
 		arg.OwnerID,
 		arg.TargetType,
-		arg.OperationID,
+		arg.TargetID,
 		arg.EventType,
 	)
 	if err != nil {
@@ -54,12 +54,12 @@ WHERE owner_id = $1
 `
 
 type CancelRemindersByOperationIDsParams struct {
-	OwnerID pgtype.UUID   `json:"owner_id"`
-	Column2 []pgtype.UUID `json:"column_2"`
+	OwnerID      pgtype.UUID   `json:"owner_id"`
+	OperationIds []pgtype.UUID `json:"operation_ids"`
 }
 
 func (q *Queries) CancelRemindersByOperationIDs(ctx context.Context, arg CancelRemindersByOperationIDsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, cancelRemindersByOperationIDs, arg.OwnerID, arg.Column2)
+	result, err := q.db.Exec(ctx, cancelRemindersByOperationIDs, arg.OwnerID, arg.OperationIds)
 	if err != nil {
 		return 0, err
 	}
@@ -336,11 +336,11 @@ WHERE id = $1 AND status = 'pending'
 type MarkReminderFailedParams struct {
 	ID            pgtype.UUID        `json:"id"`
 	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
-	Column3       bool               `json:"column_3"`
+	MarkAsFailed  bool               `json:"mark_as_failed"`
 }
 
 func (q *Queries) MarkReminderFailed(ctx context.Context, arg MarkReminderFailedParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markReminderFailed, arg.ID, arg.NextAttemptAt, arg.Column3)
+	result, err := q.db.Exec(ctx, markReminderFailed, arg.ID, arg.NextAttemptAt, arg.MarkAsFailed)
 	if err != nil {
 		return 0, err
 	}

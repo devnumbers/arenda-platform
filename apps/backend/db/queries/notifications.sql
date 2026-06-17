@@ -34,28 +34,28 @@ WHERE id = $1 AND status = 'pending';
 UPDATE reminders
 SET failed_attempts = failed_attempts + 1,
     next_attempt_at = $2,
-    status = CASE WHEN $3::boolean THEN 'failed' ELSE status END,
+    status = CASE WHEN sqlc.arg('mark_as_failed')::boolean THEN 'failed' ELSE status END,
     updated_at = NOW()
 WHERE id = $1 AND status = 'pending';
 
 -- name: CancelReminderByTarget :execrows
 UPDATE reminders
 SET status = 'cancelled', updated_at = NOW()
-WHERE owner_id = $1
-  AND target_type = $2
+WHERE owner_id = sqlc.arg('owner_id')
+  AND target_type = sqlc.arg('target_type')
   AND (
-      (target_type = 'operation' AND operation_id = $3) OR
-      (target_type = 'recurring_operation' AND recurring_operation_id = $3) OR
-      (target_type = 'lease' AND lease_id = $3)
+      (target_type = 'operation' AND operation_id = sqlc.arg('target_id')::uuid) OR
+      (target_type = 'recurring_operation' AND recurring_operation_id = sqlc.arg('target_id')::uuid) OR
+      (target_type = 'lease' AND lease_id = sqlc.arg('target_id')::uuid)
   )
-  AND event_type = $4
+  AND event_type = sqlc.arg('event_type')
   AND status = 'pending';
 
 -- name: CancelRemindersByOperationIDs :execrows
 UPDATE reminders
 SET status = 'cancelled', updated_at = NOW()
 WHERE owner_id = $1
-  AND operation_id = ANY($2::uuid[])
+  AND operation_id = ANY(sqlc.arg('operation_ids')::uuid[])
   AND status = 'pending';
 
 -- name: CreateSentSMSReminder :one
