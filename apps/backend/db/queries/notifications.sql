@@ -12,10 +12,10 @@ SELECT * FROM reminders WHERE id = $1;
 
 -- name: ListRemindersByOwner :many
 SELECT * FROM reminders
-WHERE owner_id = $1
-  AND ($2::notification_status IS NULL OR status = $2)
+WHERE owner_id = sqlc.arg('owner_id')
+  AND (NOT sqlc.arg('filter_by_status')::boolean OR status = sqlc.arg('status'))
 ORDER BY scheduled_at ASC
-LIMIT $3 OFFSET $4;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: ListDueReminders :many
 SELECT * FROM reminders
@@ -34,7 +34,7 @@ WHERE id = $1 AND status = 'pending';
 UPDATE reminders
 SET failed_attempts = failed_attempts + 1,
     next_attempt_at = $2,
-    status = CASE WHEN $3 THEN 'failed' ELSE status END,
+    status = CASE WHEN $3::boolean THEN 'failed' ELSE status END,
     updated_at = NOW()
 WHERE id = $1 AND status = 'pending';
 

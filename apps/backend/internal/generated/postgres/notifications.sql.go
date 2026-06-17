@@ -267,24 +267,26 @@ func (q *Queries) ListDueReminders(ctx context.Context, arg ListDueRemindersPara
 const listRemindersByOwner = `-- name: ListRemindersByOwner :many
 SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
 WHERE owner_id = $1
-  AND ($2::notification_status IS NULL OR status = $2)
+  AND (NOT $2::boolean OR status = $3)
 ORDER BY scheduled_at ASC
-LIMIT $3 OFFSET $4
+LIMIT $5 OFFSET $4
 `
 
 type ListRemindersByOwnerParams struct {
-	OwnerID pgtype.UUID        `json:"owner_id"`
-	Column2 NotificationStatus `json:"column_2"`
-	Limit   int32              `json:"limit"`
-	Offset  int32              `json:"offset"`
+	OwnerID        pgtype.UUID        `json:"owner_id"`
+	FilterByStatus bool               `json:"filter_by_status"`
+	Status         NotificationStatus `json:"status"`
+	Offset         int32              `json:"offset"`
+	Limit          int32              `json:"limit"`
 }
 
 func (q *Queries) ListRemindersByOwner(ctx context.Context, arg ListRemindersByOwnerParams) ([]Reminder, error) {
 	rows, err := q.db.Query(ctx, listRemindersByOwner,
 		arg.OwnerID,
-		arg.Column2,
-		arg.Limit,
+		arg.FilterByStatus,
+		arg.Status,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
@@ -326,7 +328,7 @@ const markReminderFailed = `-- name: MarkReminderFailed :execrows
 UPDATE reminders
 SET failed_attempts = failed_attempts + 1,
     next_attempt_at = $2,
-    status = CASE WHEN $3 THEN 'failed' ELSE status END,
+    status = CASE WHEN $3::boolean THEN 'failed' ELSE status END,
     updated_at = NOW()
 WHERE id = $1 AND status = 'pending'
 `
@@ -334,11 +336,11 @@ WHERE id = $1 AND status = 'pending'
 type MarkReminderFailedParams struct {
 	ID            pgtype.UUID        `json:"id"`
 	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
-	Status        NotificationStatus `json:"status"`
+	Column3       bool               `json:"column_3"`
 }
 
 func (q *Queries) MarkReminderFailed(ctx context.Context, arg MarkReminderFailedParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markReminderFailed, arg.ID, arg.NextAttemptAt, arg.Status)
+	result, err := q.db.Exec(ctx, markReminderFailed, arg.ID, arg.NextAttemptAt, arg.Column3)
 	if err != nil {
 		return 0, err
 	}
