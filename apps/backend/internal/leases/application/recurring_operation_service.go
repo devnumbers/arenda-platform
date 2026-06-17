@@ -651,14 +651,31 @@ func scheduleRemindersForOperations(
 	if scheduler == nil {
 		return nil
 	}
-
-	ops = futureOperations(ops, now)
 	if len(ops) == 0 || rec.ReminderOffsetDays == nil {
 		return nil
 	}
 
 	offsetDays := *rec.ReminderOffsetDays
-	baseReminderDate := ops[0].OperationDate.AddDate(0, 0, -offsetDays)
+	today := timeutil.Date(now)
+
+	filtered := make([]domain.Operation, 0, len(ops))
+	var earliestOp domain.Operation
+	for i := range ops {
+		op := ops[i]
+		reminderDate := op.OperationDate.AddDate(0, 0, -offsetDays)
+		if timeutil.Date(reminderDate).Before(today) {
+			continue
+		}
+		filtered = append(filtered, op)
+		if earliestOp.OperationDate.IsZero() || op.OperationDate.Before(earliestOp.OperationDate) {
+			earliestOp = op
+		}
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+
+	baseReminderDate := earliestOp.OperationDate.AddDate(0, 0, -offsetDays)
 
 	recInfo := notificationsapp.RecurringOperationInfo{
 		ID:         rec.ID,
@@ -667,7 +684,7 @@ func scheduleRemindersForOperations(
 		LeaseID:    leaseIDPtr(rec.LeaseID),
 	}
 
-	return scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, ToOperationInfoSlice(ops))
+	return scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, ToOperationInfoSlice(filtered))
 }
 
 func leaseIDPtr(id uuid.UUID) *uuid.UUID {
