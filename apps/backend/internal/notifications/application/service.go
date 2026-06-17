@@ -35,6 +35,9 @@ func (s *ReminderService) WithTx(tx transaction.Tx) *ReminderService {
 func (s *ReminderService) CreateForOperation(ctx context.Context, op OperationInfo, reminderDate time.Time) (domain.Reminder, error) {
 	r, err := buildOperationReminder(op, reminderDate, s.clock.Now())
 	if err != nil {
+		if errors.Is(err, domain.ErrInvalidReminderDate) || errors.Is(err, domain.ErrReminderAfterEvent) {
+			return domain.Reminder{}, fmt.Errorf("%w: %w", ErrInvalidReminderDate, err)
+		}
 		return domain.Reminder{}, err
 	}
 	if err := s.repo.Save(ctx, r); err != nil {

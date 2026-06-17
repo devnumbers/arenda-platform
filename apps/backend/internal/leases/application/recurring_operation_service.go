@@ -12,6 +12,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
+	notificationsdomain "github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 )
 
 // CreateRecurringOperationCommand carries the data needed to create a user-managed
@@ -468,7 +469,7 @@ func (s *RecurringOperationService) SetReminderOffset(
 		if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, id); err != nil {
 			return fmt.Errorf("cancel recurring reminders: %w", err)
 		}
-		if offsetDays > 0 {
+		if offsetDays >= 0 {
 			rec.ReminderOffsetDays = &offsetDays
 			if err := scheduleRemindersForOperations(ctx, txScheduler, rec, ops, now); err != nil {
 				return fmt.Errorf("schedule reminders: %w", err)
@@ -704,7 +705,13 @@ func scheduleRemindersForOperations(
 		LeaseID:    leaseIDPtr(rec.LeaseID),
 	}
 
-	return scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, ToOperationInfoSlice(filtered))
+	if err := scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, ToOperationInfoSlice(filtered)); err != nil {
+		if errors.Is(err, notificationsdomain.ErrInvalidReminderDate) {
+			return fmt.Errorf("%w: %w", ErrInvalidInput, err)
+		}
+		return err
+	}
+	return nil
 }
 
 func leaseIDPtr(id uuid.UUID) *uuid.UUID {

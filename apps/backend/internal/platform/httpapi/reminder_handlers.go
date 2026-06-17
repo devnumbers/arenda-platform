@@ -12,6 +12,7 @@ import (
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	notificationsdomain "github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
 // ReminderHandlers implements the generated reminder endpoints.
@@ -21,6 +22,7 @@ type ReminderHandlers struct {
 	recurring  *leasesapp.RecurringOperationService
 	leases     *leasesapp.LeaseService
 	logger     *slog.Logger
+	clock      clock.Clock
 }
 
 // NewReminderHandlers creates HTTP handlers for the reminders API.
@@ -30,6 +32,7 @@ func NewReminderHandlers(
 	recurring *leasesapp.RecurringOperationService,
 	leases *leasesapp.LeaseService,
 	logger *slog.Logger,
+	clock clock.Clock,
 ) *ReminderHandlers {
 	return &ReminderHandlers{
 		svc:        svc,
@@ -37,6 +40,7 @@ func NewReminderHandlers(
 		recurring:  recurring,
 		leases:     leases,
 		logger:     logger,
+		clock:      clock,
 	}
 }
 
@@ -147,7 +151,7 @@ func (h *ReminderHandlers) CreateRecurringOperationReminder(w http.ResponseWrite
 		return
 	}
 
-	futureOps := filterFutureOperations(ops, time.Now())
+	futureOps := filterFutureOperations(ops, h.clock.Now())
 	if len(futureOps) == 0 {
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "no future operations for reminder"))
 		return
