@@ -67,7 +67,9 @@ func (q *Queries) GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUI
 }
 
 const getTariffByID = `-- name: GetTariffByID :one
-SELECT id, name, active_property_limit, monthly_price, yearly_price, created_at FROM tariffs WHERE id = $1
+SELECT id, name, active_property_limit, monthly_price_kopecks, yearly_price_kopecks, created_at
+FROM tariffs
+WHERE id = $1
 `
 
 func (q *Queries) GetTariffByID(ctx context.Context, id pgtype.UUID) (Tariff, error) {
@@ -77,15 +79,17 @@ func (q *Queries) GetTariffByID(ctx context.Context, id pgtype.UUID) (Tariff, er
 		&i.ID,
 		&i.Name,
 		&i.ActivePropertyLimit,
-		&i.MonthlyPrice,
-		&i.YearlyPrice,
+		&i.MonthlyPriceKopecks,
+		&i.YearlyPriceKopecks,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getTariffByName = `-- name: GetTariffByName :one
-SELECT id, name, active_property_limit, monthly_price, yearly_price, created_at FROM tariffs WHERE name = $1
+SELECT id, name, active_property_limit, monthly_price_kopecks, yearly_price_kopecks, created_at
+FROM tariffs
+WHERE name = $1
 `
 
 func (q *Queries) GetTariffByName(ctx context.Context, name string) (Tariff, error) {
@@ -95,9 +99,42 @@ func (q *Queries) GetTariffByName(ctx context.Context, name string) (Tariff, err
 		&i.ID,
 		&i.Name,
 		&i.ActivePropertyLimit,
-		&i.MonthlyPrice,
-		&i.YearlyPrice,
+		&i.MonthlyPriceKopecks,
+		&i.YearlyPriceKopecks,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listTariffs = `-- name: ListTariffs :many
+SELECT id, name, active_property_limit, monthly_price_kopecks, yearly_price_kopecks, created_at
+FROM tariffs
+ORDER BY monthly_price_kopecks
+`
+
+func (q *Queries) ListTariffs(ctx context.Context) ([]Tariff, error) {
+	rows, err := q.db.Query(ctx, listTariffs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Tariff{}
+	for rows.Next() {
+		var i Tariff
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ActivePropertyLimit,
+			&i.MonthlyPriceKopecks,
+			&i.YearlyPriceKopecks,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

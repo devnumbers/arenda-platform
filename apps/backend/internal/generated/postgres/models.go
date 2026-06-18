@@ -266,8 +266,8 @@ type Tariff struct {
 	ID                  pgtype.UUID        `json:"id"`
 	Name                string             `json:"name"`
 	ActivePropertyLimit int32              `json:"active_property_limit"`
-	MonthlyPrice        pgtype.Numeric     `json:"monthly_price"`
-	YearlyPrice         pgtype.Numeric     `json:"yearly_price"`
+	MonthlyPriceKopecks int64              `json:"monthly_price_kopecks"`
+	YearlyPriceKopecks  int64              `json:"yearly_price_kopecks"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 

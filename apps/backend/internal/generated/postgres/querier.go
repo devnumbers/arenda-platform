@@ -84,6 +84,7 @@ type Querier interface {
 	ListRemindersByOwner(ctx context.Context, arg ListRemindersByOwnerParams) ([]Reminder, error)
 	ListRemindersByRecurringOperation(ctx context.Context, arg ListRemindersByRecurringOperationParams) ([]Reminder, error)
 	ListStaleSendingReminders(ctx context.Context, arg ListStaleSendingRemindersParams) ([]Reminder, error)
+	ListTariffs(ctx context.Context) ([]Tariff, error)
 	ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]TenantContact, error)
 	MarkReminderFailed(ctx context.Context, arg MarkReminderFailedParams) (int64, error)
 	MarkReminderSending(ctx context.Context, id pgtype.UUID) (Reminder, error)
