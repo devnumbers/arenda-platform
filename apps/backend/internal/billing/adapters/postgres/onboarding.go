@@ -25,6 +25,7 @@ func NewOnboardingService(tariffs application.TariffRepository, subscriptions ap
 }
 
 // SetupDefaultSubscription creates the default owner subscription for a new user inside the given transaction.
+// The owner starts on the free basic plan: paid source, active status, no renewal, and no expiration.
 func (s *OnboardingService) SetupDefaultSubscription(ctx context.Context, tx transaction.Tx, userID uuid.UUID) error {
 	tariff, err := s.tariffs.WithTx(tx).GetByName(ctx, domain.TariffBasic)
 	if err != nil {
@@ -34,7 +35,8 @@ func (s *OnboardingService) SetupDefaultSubscription(ctx context.Context, tx tra
 	if err != nil {
 		return fmt.Errorf("create subscription: %w", err)
 	}
-	if err := s.subscriptions.WithTx(tx).Create(ctx, sub); err != nil {
+
+	if _, err := s.subscriptions.WithTx(tx).Create(ctx, sub); err != nil {
 		return fmt.Errorf("save subscription: %w", err)
 	}
 	return nil

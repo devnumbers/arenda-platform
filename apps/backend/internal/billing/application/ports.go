@@ -16,6 +16,7 @@ type TariffRepository interface {
 }
 
 type SubscriptionRepository interface {
-	Create(ctx context.Context, sub domain.Subscription) error
+	Create(ctx context.Context, sub domain.Subscription) (domain.Subscription, error)
+	Update(ctx context.Context, sub domain.Subscription) error
 	WithTx(tx transaction.Tx) SubscriptionRepository
 }

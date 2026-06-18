@@ -297,12 +297,16 @@ type User struct {
 }
 
 type UserSubscription struct {
-	ID         pgtype.UUID        `json:"id"`
-	UserID     pgtype.UUID        `json:"user_id"`
-	TariffID   pgtype.UUID        `json:"tariff_id"`
-	Source     string             `json:"source"`
-	Status     string             `json:"status"`
-	ValidUntil pgtype.Timestamptz `json:"valid_until"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ID                    pgtype.UUID        `json:"id"`
+	UserID                pgtype.UUID        `json:"user_id"`
+	TariffID              pgtype.UUID        `json:"tariff_id"`
+	Source                string             `json:"source"`
+	Status                string             `json:"status"`
+	ValidUntil            pgtype.Timestamptz `json:"valid_until"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	AutoRenewEnabled      bool               `json:"auto_renew_enabled"`
+	PendingTariffID       pgtype.UUID        `json:"pending_tariff_id"`
+	PendingChangeAt       pgtype.Timestamptz `json:"pending_change_at"`
+	ActivePaymentMethodID pgtype.UUID        `json:"active_payment_method_id"`
 }
