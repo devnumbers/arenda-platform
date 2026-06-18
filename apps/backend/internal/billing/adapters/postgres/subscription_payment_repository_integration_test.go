@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -33,7 +34,7 @@ func setupSubscriptionPaymentTest(t *testing.T) (context.Context, pgx.Tx, func()
 	}
 
 	pmRepo := NewPaymentMethodRepository(tx, noopEncryptor(t))
-	pm, _ := domain.NewPaymentMethod(userID, domain.ProviderFake, "token", "*1")
+	pm, _ := domain.NewPaymentMethod(userID, domain.ProviderFake, "token", "*1", time.Now().UTC())
 	pm, _ = pmRepo.Create(ctx, pm)
 
 	repo := NewSubscriptionPaymentRepository(tx)
@@ -44,7 +45,7 @@ func TestSubscriptionPaymentRepositoryIntegration_CreateAndMarkSucceeded(t *test
 	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
-	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake)
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("new subscription payment: %v", err)
 	}
@@ -53,7 +54,7 @@ func TestSubscriptionPaymentRepositoryIntegration_CreateAndMarkSucceeded(t *test
 		t.Fatalf("Create error = %v", err)
 	}
 
-	if err := repo.MarkSucceeded(ctx, created.ID); err != nil {
+	if err := repo.MarkSucceeded(ctx, created.ID, time.Now().UTC()); err != nil {
 		t.Fatalf("MarkSucceeded error = %v", err)
 	}
 
@@ -70,7 +71,7 @@ func TestSubscriptionPaymentRepositoryIntegration_CreateAndMarkFailed(t *testing
 	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
-	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake)
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("new subscription payment: %v", err)
 	}
@@ -80,7 +81,7 @@ func TestSubscriptionPaymentRepositoryIntegration_CreateAndMarkFailed(t *testing
 	}
 
 	errorCode := "card_declined"
-	if err := repo.MarkFailed(ctx, created.ID, &errorCode); err != nil {
+	if err := repo.MarkFailed(ctx, created.ID, &errorCode, time.Now().UTC()); err != nil {
 		t.Fatalf("MarkFailed error = %v", err)
 	}
 
@@ -100,7 +101,7 @@ func TestSubscriptionPaymentRepositoryIntegration_MarkFailed_NilErrorCode(t *tes
 	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
-	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake)
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("new subscription payment: %v", err)
 	}
@@ -109,7 +110,7 @@ func TestSubscriptionPaymentRepositoryIntegration_MarkFailed_NilErrorCode(t *tes
 		t.Fatalf("Create error = %v", err)
 	}
 
-	if err := repo.MarkFailed(ctx, created.ID, nil); err != nil {
+	if err := repo.MarkFailed(ctx, created.ID, nil, time.Now().UTC()); err != nil {
 		t.Fatalf("MarkFailed error = %v", err)
 	}
 
@@ -129,7 +130,7 @@ func TestSubscriptionPaymentRepositoryIntegration_MarkSucceeded_GuardAlreadySucc
 	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
-	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake)
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("new subscription payment: %v", err)
 	}
@@ -138,11 +139,11 @@ func TestSubscriptionPaymentRepositoryIntegration_MarkSucceeded_GuardAlreadySucc
 		t.Fatalf("Create error = %v", err)
 	}
 
-	if err := repo.MarkSucceeded(ctx, created.ID); err != nil {
+	if err := repo.MarkSucceeded(ctx, created.ID, time.Now().UTC()); err != nil {
 		t.Fatalf("first MarkSucceeded error = %v", err)
 	}
 
-	err = repo.MarkSucceeded(ctx, created.ID)
+	err = repo.MarkSucceeded(ctx, created.ID, time.Now().UTC())
 	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
 		t.Errorf("second MarkSucceeded error = %v, want ErrInvalidPaymentStatus", err)
 	}
@@ -152,7 +153,7 @@ func TestSubscriptionPaymentRepositoryIntegration_ListByUserID(t *testing.T) {
 	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
-	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake)
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("new subscription payment: %v", err)
 	}
@@ -177,7 +178,7 @@ func TestSubscriptionPaymentRepositoryIntegration_UpdateProviderPaymentID(t *tes
 	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
-	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake)
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("new subscription payment: %v", err)
 	}
@@ -203,5 +204,42 @@ func TestSubscriptionPaymentRepositoryIntegration_GetByID_NotFound(t *testing.T)
 	_, err := repo.GetByID(ctx, id)
 	if !errors.Is(err, application.ErrNotFound) {
 		t.Errorf("GetByID error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSubscriptionPaymentRepositoryIntegration_ListPendingSubscriptionPaymentsByUserID(t *testing.T) {
+	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	defer cleanup()
+
+	pending, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new subscription payment: %v", err)
+	}
+	createdPending, err := repo.Create(ctx, pending)
+	if err != nil {
+		t.Fatalf("Create pending error = %v", err)
+	}
+
+	succeeded, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodYear, 440000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new subscription payment: %v", err)
+	}
+	createdSucceeded, err := repo.Create(ctx, succeeded)
+	if err != nil {
+		t.Fatalf("Create succeeded error = %v", err)
+	}
+	if err := repo.MarkSucceeded(ctx, createdSucceeded.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkSucceeded error = %v", err)
+	}
+
+	list, err := repo.ListPendingSubscriptionPaymentsByUserID(ctx, userID)
+	if err != nil {
+		t.Fatalf("ListPendingSubscriptionPaymentsByUserID error = %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("ListPendingSubscriptionPaymentsByUserID len = %d, want 1", len(list))
+	}
+	if list[0].ID != createdPending.ID {
+		t.Errorf("ListPendingSubscriptionPaymentsByUserID[0].ID = %v, want %v", list[0].ID, createdPending.ID)
 	}
 }

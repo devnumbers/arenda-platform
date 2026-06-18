@@ -6,6 +6,7 @@ ALTER TABLE user_subscriptions
 DROP INDEX IF EXISTS idx_subscription_payments_provider_payment_id;
 
 DROP INDEX IF EXISTS idx_subscription_payments_user_created;
+DROP INDEX IF EXISTS idx_subscription_payments_one_pending_upgrade;
 DROP TABLE IF EXISTS subscription_payments;
 
 DROP INDEX IF EXISTS idx_payment_methods_one_active_per_user;

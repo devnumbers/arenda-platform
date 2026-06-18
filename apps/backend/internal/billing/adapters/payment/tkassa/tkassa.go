@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
 
 // ErrNotImplemented is returned by all T-Kassa provider methods until they are implemented.
@@ -26,6 +27,11 @@ func NewProvider(terminalKey, password string, log *slog.Logger) *Provider {
 		password:    password,
 		log:         log,
 	}
+}
+
+// Name returns the provider identity used by the application layer.
+func (p *Provider) Name() domain.PaymentProvider {
+	return domain.ProviderTkassa
 }
 
 // Init starts a new payment through T-Kassa.

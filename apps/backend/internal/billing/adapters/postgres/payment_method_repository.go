@@ -62,10 +62,6 @@ func (r *invalidPaymentMethodRepository) SetActive(ctx context.Context, userID, 
 	return fmt.Errorf("billing: unsupported transaction type %T for PaymentMethodRepository.SetActive", r.tx)
 }
 
-func (r *invalidPaymentMethodRepository) DeactivateAllForUser(ctx context.Context, userID uuid.UUID) error {
-	return fmt.Errorf("billing: unsupported transaction type %T for PaymentMethodRepository.DeactivateAllForUser", r.tx)
-}
-
 func (r *invalidPaymentMethodRepository) Delete(ctx context.Context, userID, methodID uuid.UUID) error {
 	return fmt.Errorf("billing: unsupported transaction type %T for PaymentMethodRepository.Delete", r.tx)
 }
@@ -148,14 +144,6 @@ func (r *PaymentMethodRepository) SetActive(ctx context.Context, userID, methodI
 		IsActive: true,
 	}); err != nil {
 		return fmt.Errorf("activate payment method: %w", err)
-	}
-	return nil
-}
-
-// DeactivateAllForUser marks all payment methods for the user as inactive.
-func (r *PaymentMethodRepository) DeactivateAllForUser(ctx context.Context, userID uuid.UUID) error {
-	if err := r.q().DeactivateAllPaymentMethodsForUser(ctx, pgtype.UUID{Bytes: userID, Valid: true}); err != nil {
-		return fmt.Errorf("deactivate all payment methods for user: %w", err)
 	}
 	return nil
 }

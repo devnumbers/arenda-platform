@@ -41,7 +41,7 @@ type SubscriptionPayment struct {
 }
 
 // NewSubscriptionPayment creates a new pending subscription payment.
-func NewSubscriptionPayment(userID, subscriptionID, tariffID uuid.UUID, paymentMethodID *uuid.UUID, period SubscriptionPeriod, amountKopecks int64, provider PaymentProvider) (SubscriptionPayment, error) {
+func NewSubscriptionPayment(userID, subscriptionID, tariffID uuid.UUID, paymentMethodID *uuid.UUID, period SubscriptionPeriod, amountKopecks int64, provider PaymentProvider, now time.Time) (SubscriptionPayment, error) {
 	if amountKopecks < 0 {
 		return SubscriptionPayment{}, ErrInvalidAmount
 	}
@@ -52,7 +52,7 @@ func NewSubscriptionPayment(userID, subscriptionID, tariffID uuid.UUID, paymentM
 	if err != nil {
 		return SubscriptionPayment{}, err
 	}
-	now := time.Now().UTC()
+	now = now.UTC()
 	return SubscriptionPayment{
 		ID:              id,
 		UserID:          userID,
@@ -70,23 +70,23 @@ func NewSubscriptionPayment(userID, subscriptionID, tariffID uuid.UUID, paymentM
 
 // MarkSucceeded transitions the payment to succeeded.
 // Only pending payments can be transitioned.
-func (p *SubscriptionPayment) MarkSucceeded() error {
+func (p *SubscriptionPayment) MarkSucceeded(now time.Time) error {
 	if p.Status != PaymentStatusPending {
 		return ErrInvalidPaymentStatus
 	}
 	p.Status = PaymentStatusSucceeded
-	p.UpdatedAt = time.Now().UTC()
+	p.UpdatedAt = now.UTC()
 	return nil
 }
 
 // MarkFailed transitions the payment to failed and records an optional error code.
 // Only pending payments can be transitioned.
-func (p *SubscriptionPayment) MarkFailed(errorCode *string) error {
+func (p *SubscriptionPayment) MarkFailed(errorCode *string, now time.Time) error {
 	if p.Status != PaymentStatusPending {
 		return ErrInvalidPaymentStatus
 	}
 	p.Status = PaymentStatusFailed
 	p.ErrorCode = errorCode
-	p.UpdatedAt = time.Now().UTC()
+	p.UpdatedAt = now.UTC()
 	return nil
 }

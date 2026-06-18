@@ -23,8 +23,9 @@ const (
 )
 
 type pendingEntry struct {
-	payload   application.WebhookPayload
-	createdAt time.Time
+	payload    application.WebhookPayload
+	savedToken string
+	createdAt  time.Time
 }
 
 // Provider is a fake payment processor that keeps pending payments in memory.
@@ -34,6 +35,11 @@ type Provider struct {
 	clock   clock.Clock
 	mu      sync.Mutex
 	pending map[string]pendingEntry
+}
+
+// Name returns the provider identity used by the application layer.
+func (p *Provider) Name() domain.PaymentProvider {
+	return domain.ProviderFake
 }
 
 // NewProvider creates a fake provider for local development and Bruno tests.
@@ -47,6 +53,8 @@ func NewProvider(baseURL string, log *slog.Logger, clk clock.Clock) *Provider {
 }
 
 // Init creates a pending payment and returns a confirmation URL.
+// Calling Init twice with the same internal payment id is idempotent: the
+// existing provider payment id and confirmation URL are returned.
 func (p *Provider) Init(ctx context.Context, req application.InitRequest) (application.InitResult, error) {
 	if req.PaymentID == uuid.Nil {
 		return application.InitResult{}, errors.New("fake: payment id is required")
@@ -55,18 +63,34 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 		return application.InitResult{}, errors.New("fake: amount must be positive")
 	}
 
+	p.mu.Lock()
+	p.purgeLocked()
+
+	if entry, ok := p.pending[req.PaymentID.String()]; ok {
+		p.mu.Unlock()
+		p.log.InfoContext(ctx, "fake payment init is idempotent",
+			"provider_payment_id", entry.payload.ProviderPaymentID,
+			"internal_payment_id", req.PaymentID.String(),
+		)
+		return application.InitResult{
+			ProviderPaymentID: entry.payload.ProviderPaymentID,
+			PaymentURL:        p.confirmURL(entry.payload.InternalPaymentID),
+			SavedToken:        entry.savedToken,
+			Status:            domain.PaymentStatusPending,
+		}, nil
+	}
+
 	providerPaymentID := "fake_" + uuid.NewString()
 	savedToken := "fake_token_" + uuid.NewString()
 
-	p.mu.Lock()
-	p.purgeLocked()
-	p.pending[providerPaymentID] = pendingEntry{
+	p.pending[req.PaymentID.String()] = pendingEntry{
 		payload: application.WebhookPayload{
 			ProviderPaymentID: providerPaymentID,
 			InternalPaymentID: req.PaymentID,
 			Status:            domain.PaymentStatusPending,
 		},
-		createdAt: p.clock.Now().UTC(),
+		savedToken: savedToken,
+		createdAt:  p.clock.Now().UTC(),
 	}
 	p.mu.Unlock()
 
@@ -81,10 +105,20 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 
 	return application.InitResult{
 		ProviderPaymentID: providerPaymentID,
-		PaymentURL:        fmt.Sprintf("%s/internal/fake-subscription-payment/%s/confirm", p.baseURL, providerPaymentID),
+		PaymentURL:        p.confirmURL(req.PaymentID),
 		SavedToken:        savedToken,
 		Status:            domain.PaymentStatusPending,
 	}, nil
+}
+
+func (p *Provider) confirmURL(internalPaymentID uuid.UUID) string {
+	return fmt.Sprintf("%s/internal/fake-subscription-payment/%s/confirm", p.baseURL, internalPaymentID.String())
+}
+
+// PaymentURL returns the confirmation URL for a previously initialized fake payment.
+func (p *Provider) PaymentURL(ctx context.Context, paymentID uuid.UUID) (string, error) {
+	_ = ctx
+	return p.confirmURL(paymentID), nil
 }
 
 // Charge performs a recurrent charge using a saved token.
@@ -158,15 +192,26 @@ func (p *Provider) ParseWebhook(_ context.Context, payload []byte) (application.
 	}, nil
 }
 
-// ConfirmPayment completes a previously initialized fake payment.
-// It is used by the local fake confirmation HTTP handler and is not part of the Provider interface.
-// TODO(Task 6): the PaymentURL returned by Init is handled by POST /internal/fake-subscription-payment/{providerPaymentID}/confirm.
-func (p *Provider) ConfirmPayment(providerPaymentID string, failed bool, errorCode *string) (application.WebhookPayload, error) {
+// ConfirmPayment completes a previously initialized fake payment as succeeded.
+// It is used by the local fake confirmation HTTP handler and is not part of the
+// Provider interface.
+func (p *Provider) ConfirmPayment(ctx context.Context, internalPaymentID string) (application.WebhookPayload, error) {
+	_ = ctx
+	return p.confirm(internalPaymentID, false, nil)
+}
+
+// ConfirmPaymentFailed completes a previously initialized fake payment as failed.
+func (p *Provider) ConfirmPaymentFailed(ctx context.Context, internalPaymentID string, errorCode *string) (application.WebhookPayload, error) {
+	_ = ctx
+	return p.confirm(internalPaymentID, true, errorCode)
+}
+
+func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *string) (application.WebhookPayload, error) {
 	p.mu.Lock()
 	p.purgeLocked()
-	entry, ok := p.pending[providerPaymentID]
+	entry, ok := p.pending[internalPaymentID]
 	if ok {
-		delete(p.pending, providerPaymentID)
+		delete(p.pending, internalPaymentID)
 	}
 	p.mu.Unlock()
 	if !ok {
@@ -185,7 +230,7 @@ func (p *Provider) ConfirmPayment(providerPaymentID string, failed bool, errorCo
 	}
 
 	return application.WebhookPayload{
-		ProviderPaymentID: providerPaymentID,
+		ProviderPaymentID: entry.payload.ProviderPaymentID,
 		InternalPaymentID: entry.payload.InternalPaymentID,
 		Status:            status,
 		ErrorCode:         errorCode,

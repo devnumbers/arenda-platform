@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
@@ -42,6 +43,10 @@ type invalidTariffRepository struct {
 	tx transaction.Tx
 }
 
+func (r *invalidTariffRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Tariff, error) {
+	return domain.Tariff{}, fmt.Errorf("billing: unsupported transaction type %T for TariffRepository.GetByID", r.tx)
+}
+
 func (r *invalidTariffRepository) GetByName(ctx context.Context, name domain.TariffName) (domain.Tariff, error) {
 	return domain.Tariff{}, fmt.Errorf("billing: unsupported transaction type %T for TariffRepository.GetByName", r.tx)
 }
@@ -52,6 +57,18 @@ func (r *invalidTariffRepository) List(ctx context.Context) ([]domain.Tariff, er
 
 func (r *invalidTariffRepository) WithTx(tx transaction.Tx) application.TariffRepository {
 	return r
+}
+
+// GetByID returns a tariff by ID.
+func (r *TariffRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Tariff, error) {
+	row, err := r.q().GetTariffByID(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Tariff{}, application.ErrNotFound
+		}
+		return domain.Tariff{}, err
+	}
+	return mapTariff(row), nil
 }
 
 // GetByName returns a tariff by its unique name.

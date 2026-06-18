@@ -54,9 +54,43 @@ func TestProviderInit(t *testing.T) {
 	if !strings.HasPrefix(res.SavedToken, "fake_token_") {
 		t.Errorf("expected saved token to start with fake_token_, got %q", res.SavedToken)
 	}
-	wantURL := "http://localhost:8080/internal/fake-subscription-payment/" + res.ProviderPaymentID + "/confirm"
+	wantURL := "http://localhost:8080/internal/fake-subscription-payment/" + paymentID.String() + "/confirm"
 	if res.PaymentURL != wantURL {
 		t.Errorf("expected payment URL %q, got %q", wantURL, res.PaymentURL)
+	}
+}
+
+func TestProviderInit_IdempotentByInternalPaymentID(t *testing.T) {
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	req := application.InitRequest{
+		PaymentID:     paymentID,
+		AmountKopecks: 10000,
+		Period:        domain.PeriodMonth,
+		UserID:        userID,
+		Description:   "Test subscription",
+	}
+
+	first, err := p.Init(context.Background(), req)
+	if err != nil {
+		t.Fatalf("first Init error: %v", err)
+	}
+
+	second, err := p.Init(context.Background(), req)
+	if err != nil {
+		t.Fatalf("second Init error: %v", err)
+	}
+
+	if first.ProviderPaymentID != second.ProviderPaymentID {
+		t.Errorf("expected same provider payment id, got %q and %q", first.ProviderPaymentID, second.ProviderPaymentID)
+	}
+	if first.PaymentURL != second.PaymentURL {
+		t.Errorf("expected same confirm URL, got %q and %q", first.PaymentURL, second.PaymentURL)
+	}
+	if first.SavedToken != second.SavedToken {
+		t.Errorf("expected same saved token, got %q and %q", first.SavedToken, second.SavedToken)
 	}
 }
 
@@ -274,7 +308,7 @@ func TestProviderConfirmPayment(t *testing.T) {
 		t.Fatalf("Init error: %v", err)
 	}
 
-	wh, err := p.ConfirmPayment(initRes.ProviderPaymentID, false, nil)
+	wh, err := p.ConfirmPayment(context.Background(), paymentID.String())
 	if err != nil {
 		t.Fatalf("ConfirmPayment error: %v", err)
 	}
@@ -291,14 +325,14 @@ func TestProviderConfirmPayment(t *testing.T) {
 		t.Errorf("expected nil error code, got %q", *wh.ErrorCode)
 	}
 
-	_, err = p.ConfirmPayment(initRes.ProviderPaymentID, false, nil)
+	_, err = p.ConfirmPayment(context.Background(), paymentID.String())
 	if err == nil {
-		t.Fatal("expected error for already confirmed provider payment id")
+		t.Fatal("expected error for already confirmed internal payment id")
 	}
 
-	_, err = p.ConfirmPayment("fake_unknown", false, nil)
+	_, err = p.ConfirmPayment(context.Background(), "fake_unknown")
 	if err == nil {
-		t.Fatal("expected error for unknown provider payment id")
+		t.Fatal("expected error for unknown internal payment id")
 	}
 }
 
@@ -306,7 +340,7 @@ func TestProviderConfirmPaymentFailed(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
 	paymentID := uuid.MustParse("77777777-7777-7777-7777-777777777777")
 
-	initRes, err := p.Init(context.Background(), application.InitRequest{
+	_, err := p.Init(context.Background(), application.InitRequest{
 		PaymentID:     paymentID,
 		AmountKopecks: 20000,
 		Period:        domain.PeriodMonth,
@@ -317,9 +351,9 @@ func TestProviderConfirmPaymentFailed(t *testing.T) {
 	}
 
 	customCode := "insufficient_funds"
-	wh, err := p.ConfirmPayment(initRes.ProviderPaymentID, true, &customCode)
+	wh, err := p.ConfirmPaymentFailed(context.Background(), paymentID.String(), &customCode)
 	if err != nil {
-		t.Fatalf("ConfirmPayment error: %v", err)
+		t.Fatalf("ConfirmPaymentFailed error: %v", err)
 	}
 	if wh.Status != domain.PaymentStatusFailed {
 		t.Errorf("expected status %q, got %q", domain.PaymentStatusFailed, wh.Status)
@@ -332,8 +366,9 @@ func TestProviderConfirmPaymentFailed(t *testing.T) {
 	}
 
 	// Default error code when nil.
-	initRes2, err := p.Init(context.Background(), application.InitRequest{
-		PaymentID:     uuid.MustParse("99999999-9999-9999-9999-999999999999"),
+	paymentID2 := uuid.MustParse("99999999-9999-9999-9999-999999999999")
+	_, err = p.Init(context.Background(), application.InitRequest{
+		PaymentID:     paymentID2,
 		AmountKopecks: 30000,
 		Period:        domain.PeriodYear,
 		UserID:        uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
@@ -341,9 +376,9 @@ func TestProviderConfirmPaymentFailed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Init error: %v", err)
 	}
-	wh2, err := p.ConfirmPayment(initRes2.ProviderPaymentID, true, nil)
+	wh2, err := p.ConfirmPaymentFailed(context.Background(), paymentID2.String(), nil)
 	if err != nil {
-		t.Fatalf("ConfirmPayment error: %v", err)
+		t.Fatalf("ConfirmPaymentFailed error: %v", err)
 	}
 	if wh2.ErrorCode == nil || *wh2.ErrorCode != defaultErrorCode {
 		t.Errorf("expected default error code %q, got %v", defaultErrorCode, wh2.ErrorCode)
@@ -354,7 +389,7 @@ func TestProviderConfirmPaymentIgnoresErrorCodeOnSuccess(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
 	paymentID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 
-	initRes, err := p.Init(context.Background(), application.InitRequest{
+	_, err := p.Init(context.Background(), application.InitRequest{
 		PaymentID:     paymentID,
 		AmountKopecks: 10000,
 		Period:        domain.PeriodMonth,
@@ -364,8 +399,7 @@ func TestProviderConfirmPaymentIgnoresErrorCodeOnSuccess(t *testing.T) {
 		t.Fatalf("Init error: %v", err)
 	}
 
-	ignoredCode := "should_be_ignored"
-	wh, err := p.ConfirmPayment(initRes.ProviderPaymentID, false, &ignoredCode)
+	wh, err := p.ConfirmPayment(context.Background(), paymentID.String())
 	if err != nil {
 		t.Fatalf("ConfirmPayment error: %v", err)
 	}
@@ -382,7 +416,7 @@ func TestProviderPurgePendingTTL(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), clk)
 	paymentID := uuid.MustParse("dddddddd-dddd-dddd-dddd-dddddddddddd")
 
-	initRes, err := p.Init(context.Background(), application.InitRequest{
+	_, err := p.Init(context.Background(), application.InitRequest{
 		PaymentID:     paymentID,
 		AmountKopecks: 10000,
 		Period:        domain.PeriodMonth,
@@ -404,7 +438,7 @@ func TestProviderPurgePendingTTL(t *testing.T) {
 		t.Fatalf("second Init error: %v", err)
 	}
 
-	_, err = p.ConfirmPayment(initRes.ProviderPaymentID, false, nil)
+	_, err = p.ConfirmPayment(context.Background(), paymentID.String())
 	if err == nil {
 		t.Fatal("expected error for purged payment")
 	}

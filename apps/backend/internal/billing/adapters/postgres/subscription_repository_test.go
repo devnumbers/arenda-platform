@@ -19,6 +19,7 @@ func TestMapSubscription(t *testing.T) {
 	paymentMethodID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15")
 	validUntil := time.Date(2026, 12, 31, 23, 59, 59, 0, time.UTC)
 	pendingChangeAt := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	pendingPeriod := domain.PeriodYear
 
 	row := genpostgres.UserSubscription{
 		ID:                    pgtype.UUID{Bytes: id, Valid: true},
@@ -30,6 +31,7 @@ func TestMapSubscription(t *testing.T) {
 		AutoRenewEnabled:      true,
 		PendingTariffID:       pgtype.UUID{Bytes: pendingTariffID, Valid: true},
 		PendingChangeAt:       pgtype.Timestamptz{Time: pendingChangeAt, Valid: true},
+		PendingPeriod:         pgtype.Text{String: string(pendingPeriod), Valid: true},
 		ActivePaymentMethodID: pgtype.UUID{Bytes: paymentMethodID, Valid: true},
 	}
 
@@ -44,6 +46,7 @@ func TestMapSubscription(t *testing.T) {
 		AutoRenewEnabled:      true,
 		PendingTariffID:       &pendingTariffID,
 		PendingChangeAt:       &pendingChangeAt,
+		PendingPeriod:         &pendingPeriod,
 		ActivePaymentMethodID: &paymentMethodID,
 	}
 

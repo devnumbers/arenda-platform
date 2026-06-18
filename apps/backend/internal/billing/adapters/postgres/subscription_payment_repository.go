@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -51,20 +52,32 @@ func (r *invalidSubscriptionPaymentRepository) GetByID(ctx context.Context, id u
 	return domain.SubscriptionPayment{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.GetByID", r.tx)
 }
 
+func (r *invalidSubscriptionPaymentRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error) {
+	return domain.SubscriptionPayment{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.GetByIDForUpdate", r.tx)
+}
+
 func (r *invalidSubscriptionPaymentRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
 	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.ListByUserID", r.tx)
 }
 
-func (r *invalidSubscriptionPaymentRepository) MarkSucceeded(ctx context.Context, id uuid.UUID) error {
+func (r *invalidSubscriptionPaymentRepository) ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
+	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.ListPendingSubscriptionPaymentsByUserID", r.tx)
+}
+
+func (r *invalidSubscriptionPaymentRepository) MarkSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error {
 	return fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.MarkSucceeded", r.tx)
 }
 
-func (r *invalidSubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.UUID, errorCode *string) error {
+func (r *invalidSubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.UUID, errorCode *string, now time.Time) error {
 	return fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.MarkFailed", r.tx)
 }
 
 func (r *invalidSubscriptionPaymentRepository) UpdateProviderPaymentID(ctx context.Context, id uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error) {
 	return domain.SubscriptionPayment{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.UpdateProviderPaymentID", r.tx)
+}
+
+func (r *invalidSubscriptionPaymentRepository) UpdatePaymentMethodAndProviderID(ctx context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error) {
+	return domain.SubscriptionPayment{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.UpdatePaymentMethodAndProviderID", r.tx)
 }
 
 func (r *invalidSubscriptionPaymentRepository) WithTx(tx transaction.Tx) application.SubscriptionPaymentRepository {
@@ -92,6 +105,18 @@ func (r *SubscriptionPaymentRepository) GetByID(ctx context.Context, id uuid.UUI
 	return mapSubscriptionPayment(row), nil
 }
 
+// GetByIDForUpdate returns a subscription payment by ID, locking the row for update.
+func (r *SubscriptionPaymentRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error) {
+	row, err := r.q().GetSubscriptionPaymentByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.SubscriptionPayment{}, application.ErrNotFound
+		}
+		return domain.SubscriptionPayment{}, fmt.Errorf("get subscription payment by id for update: %w", err)
+	}
+	return mapSubscriptionPayment(row), nil
+}
+
 // ListByUserID returns all subscription payments for a user ordered by creation date descending.
 func (r *SubscriptionPaymentRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
 	rows, err := r.q().ListSubscriptionPaymentsByUserID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
@@ -101,8 +126,18 @@ func (r *SubscriptionPaymentRepository) ListByUserID(ctx context.Context, userID
 	return mapSubscriptionPayments(rows), nil
 }
 
+// ListPendingSubscriptionPaymentsByUserID returns pending subscription payments
+// for a user ordered by creation date descending.
+func (r *SubscriptionPaymentRepository) ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
+	rows, err := r.q().ListPendingSubscriptionPaymentsByUserID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
+	if err != nil {
+		return nil, fmt.Errorf("list pending subscription payments by user id: %w", err)
+	}
+	return mapSubscriptionPayments(rows), nil
+}
+
 // MarkSucceeded transitions a pending subscription payment to succeeded.
-func (r *SubscriptionPaymentRepository) MarkSucceeded(ctx context.Context, id uuid.UUID) error {
+func (r *SubscriptionPaymentRepository) MarkSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error {
 	row, err := r.q().GetSubscriptionPaymentByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -112,7 +147,7 @@ func (r *SubscriptionPaymentRepository) MarkSucceeded(ctx context.Context, id uu
 	}
 
 	payment := mapSubscriptionPayment(row)
-	if err := payment.MarkSucceeded(); err != nil {
+	if err := payment.MarkSucceeded(now); err != nil {
 		return err
 	}
 
@@ -129,7 +164,7 @@ func (r *SubscriptionPaymentRepository) MarkSucceeded(ctx context.Context, id uu
 }
 
 // MarkFailed transitions a pending subscription payment to failed and records the error code.
-func (r *SubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.UUID, errorCode *string) error {
+func (r *SubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.UUID, errorCode *string, now time.Time) error {
 	row, err := r.q().GetSubscriptionPaymentByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -139,7 +174,7 @@ func (r *SubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.
 	}
 
 	payment := mapSubscriptionPayment(row)
-	if err := payment.MarkFailed(errorCode); err != nil {
+	if err := payment.MarkFailed(errorCode, now); err != nil {
 		return err
 	}
 
@@ -167,6 +202,23 @@ func (r *SubscriptionPaymentRepository) UpdateProviderPaymentID(ctx context.Cont
 			return domain.SubscriptionPayment{}, application.ErrNotFound
 		}
 		return domain.SubscriptionPayment{}, fmt.Errorf("update subscription payment provider payment id: %w", err)
+	}
+	return mapSubscriptionPayment(row), nil
+}
+
+// UpdatePaymentMethodAndProviderID updates both the payment method and the
+// provider payment ID of a subscription payment.
+func (r *SubscriptionPaymentRepository) UpdatePaymentMethodAndProviderID(ctx context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error) {
+	row, err := r.q().UpdateSubscriptionPaymentMethodAndProviderID(ctx, postgres.UpdateSubscriptionPaymentMethodAndProviderIDParams{
+		ID:                pgtype.UUID{Bytes: id, Valid: true},
+		PaymentMethodID:   pgtype.UUID{Bytes: paymentMethodID, Valid: true},
+		ProviderPaymentID: pgtype.Text{String: providerPaymentID, Valid: true},
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.SubscriptionPayment{}, application.ErrNotFound
+		}
+		return domain.SubscriptionPayment{}, fmt.Errorf("update subscription payment method and provider payment id: %w", err)
 	}
 	return mapSubscriptionPayment(row), nil
 }

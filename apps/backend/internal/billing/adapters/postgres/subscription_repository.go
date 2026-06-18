@@ -43,6 +43,22 @@ type invalidSubscriptionRepository struct {
 	tx transaction.Tx
 }
 
+func (r *invalidSubscriptionRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Subscription, error) {
+	return domain.Subscription{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.GetByID", r.tx)
+}
+
+func (r *invalidSubscriptionRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Subscription, error) {
+	return domain.Subscription{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.GetByIDForUpdate", r.tx)
+}
+
+func (r *invalidSubscriptionRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (domain.Subscription, error) {
+	return domain.Subscription{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.GetByUserID", r.tx)
+}
+
+func (r *invalidSubscriptionRepository) GetByUserIDForUpdate(ctx context.Context, userID uuid.UUID) (domain.Subscription, error) {
+	return domain.Subscription{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.GetByUserIDForUpdate", r.tx)
+}
+
 func (r *invalidSubscriptionRepository) Create(ctx context.Context, sub domain.Subscription) (domain.Subscription, error) {
 	return domain.Subscription{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.Create", r.tx)
 }
@@ -53,6 +69,54 @@ func (r *invalidSubscriptionRepository) Update(ctx context.Context, sub domain.S
 
 func (r *invalidSubscriptionRepository) WithTx(tx transaction.Tx) application.SubscriptionRepository {
 	return r
+}
+
+// GetByID returns a subscription by ID.
+func (r *SubscriptionRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Subscription, error) {
+	row, err := r.q().GetSubscriptionByID(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Subscription{}, application.ErrNotFound
+		}
+		return domain.Subscription{}, fmt.Errorf("get subscription by id: %w", err)
+	}
+	return mapSubscription(row), nil
+}
+
+// GetByUserID returns a subscription by user ID.
+func (r *SubscriptionRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (domain.Subscription, error) {
+	row, err := r.q().GetSubscriptionByUserID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Subscription{}, application.ErrNotFound
+		}
+		return domain.Subscription{}, fmt.Errorf("get subscription by user id: %w", err)
+	}
+	return mapSubscription(row), nil
+}
+
+// GetByIDForUpdate returns a subscription by ID, locking the row for update.
+func (r *SubscriptionRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Subscription, error) {
+	row, err := r.q().GetSubscriptionByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Subscription{}, application.ErrNotFound
+		}
+		return domain.Subscription{}, fmt.Errorf("get subscription by id for update: %w", err)
+	}
+	return mapSubscription(row), nil
+}
+
+// GetByUserIDForUpdate returns a subscription by user ID, locking the row for update.
+func (r *SubscriptionRepository) GetByUserIDForUpdate(ctx context.Context, userID uuid.UUID) (domain.Subscription, error) {
+	row, err := r.q().GetSubscriptionByUserIDForUpdate(ctx, pgtype.UUID{Bytes: userID, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Subscription{}, application.ErrNotFound
+		}
+		return domain.Subscription{}, fmt.Errorf("get subscription by user id for update: %w", err)
+	}
+	return mapSubscription(row), nil
 }
 
 // Create inserts a new subscription. If a subscription already exists for the
@@ -83,6 +147,13 @@ func (r *SubscriptionRepository) Update(ctx context.Context, sub domain.Subscrip
 	return nil
 }
 
+func periodTextPtr(p *domain.SubscriptionPeriod) pgtype.Text {
+	if p == nil {
+		return pgtype.Text{Valid: false}
+	}
+	return pgtype.Text{String: string(*p), Valid: true}
+}
+
 func mapCreateSubscriptionParams(sub domain.Subscription) postgres.CreateSubscriptionParams {
 	return postgres.CreateSubscriptionParams{
 		UserID:                pgtype.UUID{Bytes: sub.UserID, Valid: true},
@@ -93,6 +164,7 @@ func mapCreateSubscriptionParams(sub domain.Subscription) postgres.CreateSubscri
 		AutoRenewEnabled:      sub.AutoRenewEnabled,
 		PendingTariffID:       uuidPtr(sub.PendingTariffID),
 		PendingChangeAt:       timestamptzPtr(sub.PendingChangeAt),
+		PendingPeriod:         periodTextPtr(sub.PendingPeriod),
 		ActivePaymentMethodID: uuidPtr(sub.ActivePaymentMethodID),
 	}
 }
@@ -107,11 +179,17 @@ func mapUpdateSubscriptionParams(sub domain.Subscription) postgres.UpdateSubscri
 		AutoRenewEnabled:      sub.AutoRenewEnabled,
 		PendingTariffID:       uuidPtr(sub.PendingTariffID),
 		PendingChangeAt:       timestamptzPtr(sub.PendingChangeAt),
+		PendingPeriod:         periodTextPtr(sub.PendingPeriod),
 		ActivePaymentMethodID: uuidPtr(sub.ActivePaymentMethodID),
 	}
 }
 
 func mapSubscription(row postgres.UserSubscription) domain.Subscription {
+	var pendingPeriod *domain.SubscriptionPeriod
+	if row.PendingPeriod.Valid {
+		p := domain.SubscriptionPeriod(row.PendingPeriod.String)
+		pendingPeriod = &p
+	}
 	return domain.Subscription{
 		ID:                    uuid.UUID(row.ID.Bytes),
 		UserID:                uuid.UUID(row.UserID.Bytes),
@@ -122,6 +200,7 @@ func mapSubscription(row postgres.UserSubscription) domain.Subscription {
 		AutoRenewEnabled:      row.AutoRenewEnabled,
 		PendingTariffID:       uuidPtrFromPgtype(row.PendingTariffID),
 		PendingChangeAt:       timePtr(row.PendingChangeAt),
+		PendingPeriod:         pendingPeriod,
 		ActivePaymentMethodID: uuidPtrFromPgtype(row.ActivePaymentMethodID),
 	}
 }

@@ -3,6 +3,7 @@ package postgres
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
@@ -19,7 +20,7 @@ func TestPaymentMethodRepositoryIntegration_Create(t *testing.T) {
 	userID := createTestUser(t, ctx, q)
 	repo := NewPaymentMethodRepository(tx, noopEncryptor(t))
 
-	pm, err := domain.NewPaymentMethod(userID, domain.ProviderFake, "token_123", "****1234")
+	pm, err := domain.NewPaymentMethod(userID, domain.ProviderFake, "token_123", "****1234", time.Now().UTC())
 	if err != nil {
 		t.Fatalf("new payment method: %v", err)
 	}
@@ -48,12 +49,12 @@ func TestPaymentMethodRepositoryIntegration_Create_DuplicateToken(t *testing.T) 
 	userID := createTestUser(t, ctx, q)
 	repo := NewPaymentMethodRepository(tx, noopEncryptor(t))
 
-	pm, _ := domain.NewPaymentMethod(userID, domain.ProviderFake, "same-token", "*1234")
+	pm, _ := domain.NewPaymentMethod(userID, domain.ProviderFake, "same-token", "*1234", time.Now().UTC())
 	if _, err := repo.Create(ctx, pm); err != nil {
 		t.Fatalf("first Create error = %v", err)
 	}
 
-	pm2, _ := domain.NewPaymentMethod(userID, domain.ProviderFake, "same-token", "*5678")
+	pm2, _ := domain.NewPaymentMethod(userID, domain.ProviderFake, "same-token", "*5678", time.Now().UTC())
 	_, err := repo.Create(ctx, pm2)
 	if !errors.Is(err, application.ErrPaymentMethodAlreadyExists) {
 		t.Errorf("second Create error = %v, want ErrPaymentMethodAlreadyExists", err)
@@ -69,8 +70,8 @@ func TestPaymentMethodRepositoryIntegration_SetActive(t *testing.T) {
 	userID := createTestUser(t, ctx, q)
 	repo := NewPaymentMethodRepository(tx, noopEncryptor(t))
 
-	pm1, _ := domain.NewPaymentMethod(userID, domain.ProviderFake, "token_1", "*1")
-	pm2, _ := domain.NewPaymentMethod(userID, domain.ProviderFake, "token_2", "*2")
+	pm1, _ := domain.NewPaymentMethod(userID, domain.ProviderFake, "token_1", "*1", time.Now().UTC())
+	pm2, _ := domain.NewPaymentMethod(userID, domain.ProviderFake, "token_2", "*2", time.Now().UTC())
 	pm1, _ = repo.Create(ctx, pm1)
 	pm2, _ = repo.Create(ctx, pm2)
 
@@ -105,7 +106,7 @@ func TestPaymentMethodRepositoryIntegration_SetActive_WrongUser(t *testing.T) {
 	userB := createTestUser(t, ctx, q)
 	repo := NewPaymentMethodRepository(tx, noopEncryptor(t))
 
-	pm, _ := domain.NewPaymentMethod(userA, domain.ProviderFake, "token", "*1")
+	pm, _ := domain.NewPaymentMethod(userA, domain.ProviderFake, "token", "*1", time.Now().UTC())
 	pm, _ = repo.Create(ctx, pm)
 
 	err := repo.SetActive(ctx, userB, pm.ID)
@@ -123,7 +124,7 @@ func TestPaymentMethodRepositoryIntegration_Delete(t *testing.T) {
 	userID := createTestUser(t, ctx, q)
 	repo := NewPaymentMethodRepository(tx, noopEncryptor(t))
 
-	pm, _ := domain.NewPaymentMethod(userID, domain.ProviderFake, "token", "*1")
+	pm, _ := domain.NewPaymentMethod(userID, domain.ProviderFake, "token", "*1", time.Now().UTC())
 	pm, _ = repo.Create(ctx, pm)
 
 	if err := repo.Delete(ctx, userID, pm.ID); err != nil {
@@ -146,7 +147,7 @@ func TestPaymentMethodRepositoryIntegration_Delete_WrongUser(t *testing.T) {
 	userB := createTestUser(t, ctx, q)
 	repo := NewPaymentMethodRepository(tx, noopEncryptor(t))
 
-	pm, _ := domain.NewPaymentMethod(userA, domain.ProviderFake, "token", "*1")
+	pm, _ := domain.NewPaymentMethod(userA, domain.ProviderFake, "token", "*1", time.Now().UTC())
 	pm, _ = repo.Create(ctx, pm)
 
 	err := repo.Delete(ctx, userB, pm.ID)
@@ -165,8 +166,8 @@ func TestPaymentMethodRepositoryIntegration_ListByUserID(t *testing.T) {
 	userB := createTestUser(t, ctx, q)
 	repo := NewPaymentMethodRepository(tx, noopEncryptor(t))
 
-	pmA, _ := domain.NewPaymentMethod(userA, domain.ProviderFake, "token_a", "*A")
-	pmB, _ := domain.NewPaymentMethod(userB, domain.ProviderFake, "token_b", "*B")
+	pmA, _ := domain.NewPaymentMethod(userA, domain.ProviderFake, "token_a", "*A", time.Now().UTC())
+	pmB, _ := domain.NewPaymentMethod(userB, domain.ProviderFake, "token_b", "*B", time.Now().UTC())
 	pmA, _ = repo.Create(ctx, pmA)
 	if _, err := repo.Create(ctx, pmB); err != nil {
 		t.Fatalf("create payment method for userB: %v", err)

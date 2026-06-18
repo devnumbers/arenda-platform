@@ -29,12 +29,12 @@ type PaymentMethod struct {
 }
 
 // NewPaymentMethod creates a new inactive payment method.
-func NewPaymentMethod(userID uuid.UUID, provider PaymentProvider, providerToken, displayMask string) (PaymentMethod, error) {
+func NewPaymentMethod(userID uuid.UUID, provider PaymentProvider, providerToken, displayMask string, now time.Time) (PaymentMethod, error) {
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return PaymentMethod{}, err
 	}
-	now := time.Now().UTC()
+	now = now.UTC()
 	return PaymentMethod{
 		ID:            id,
 		UserID:        userID,

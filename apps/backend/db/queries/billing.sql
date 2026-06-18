@@ -22,14 +22,24 @@ INSERT INTO user_subscriptions (
     auto_renew_enabled,
     pending_tariff_id,
     pending_change_at,
+    pending_period,
     active_payment_method_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 ON CONFLICT (user_id) DO NOTHING
 RETURNING *;
 
+-- name: GetSubscriptionByID :one
+SELECT * FROM user_subscriptions WHERE id = $1;
+
+-- name: GetSubscriptionByIDForUpdate :one
+SELECT * FROM user_subscriptions WHERE id = $1 FOR UPDATE;
+
 -- name: GetSubscriptionByUserID :one
 SELECT * FROM user_subscriptions WHERE user_id = $1;
+
+-- name: GetSubscriptionByUserIDForUpdate :one
+SELECT * FROM user_subscriptions WHERE user_id = $1 FOR UPDATE;
 
 -- name: UpdateSubscription :one
 UPDATE user_subscriptions
@@ -41,7 +51,8 @@ SET
     auto_renew_enabled = $6,
     pending_tariff_id = $7,
     pending_change_at = $8,
-    active_payment_method_id = $9
+    pending_period = $9,
+    active_payment_method_id = $10
 WHERE id = $1
 RETURNING *;
 
@@ -111,6 +122,9 @@ SELECT * FROM subscription_payments WHERE id = $1 FOR UPDATE;
 -- name: ListSubscriptionPaymentsByUserID :many
 SELECT * FROM subscription_payments WHERE user_id = $1 ORDER BY created_at DESC;
 
+-- name: ListPendingSubscriptionPaymentsByUserID :many
+SELECT * FROM subscription_payments WHERE user_id = $1 AND status = 'pending' ORDER BY created_at DESC;
+
 -- name: MarkSubscriptionPaymentSucceeded :one
 UPDATE subscription_payments
 SET status = 'succeeded', updated_at = $2
@@ -126,5 +140,11 @@ RETURNING *;
 -- name: UpdateSubscriptionPaymentProviderPaymentID :one
 UPDATE subscription_payments
 SET provider_payment_id = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateSubscriptionPaymentMethodAndProviderID :one
+UPDATE subscription_payments
+SET payment_method_id = $2, provider_payment_id = $3, updated_at = now()
 WHERE id = $1
 RETURNING *;

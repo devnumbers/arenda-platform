@@ -2,14 +2,16 @@ package domain
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 func TestNewPaymentMethod(t *testing.T) {
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 
-	pm, err := NewPaymentMethod(userID, ProviderFake, "fake_token_123", "*1234")
+	pm, err := NewPaymentMethod(userID, ProviderFake, "fake_token_123", "*1234", now)
 	if err != nil {
 		t.Fatalf("NewPaymentMethod() error = %v", err)
 	}
@@ -36,7 +38,8 @@ func TestNewPaymentMethod(t *testing.T) {
 
 func TestPaymentMethodActivate(t *testing.T) {
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
-	pm, _ := NewPaymentMethod(userID, ProviderFake, "fake_token_123", "*1234")
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	pm, _ := NewPaymentMethod(userID, ProviderFake, "fake_token_123", "*1234", now)
 
 	pm.Activate()
 	if !pm.IsActive {

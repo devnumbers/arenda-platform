@@ -36,6 +36,9 @@ CREATE INDEX idx_subscription_payments_user_created ON subscription_payments(use
 
 CREATE INDEX idx_subscription_payments_provider_payment_id ON subscription_payments(provider_payment_id);
 
+CREATE UNIQUE INDEX idx_subscription_payments_one_pending_upgrade
+ON subscription_payments(user_id, tariff_id, period) WHERE status = 'pending';
+
 UPDATE user_subscriptions SET active_payment_method_id = NULL
 WHERE active_payment_method_id IS NOT NULL
   AND active_payment_method_id NOT IN (SELECT id FROM payment_methods);

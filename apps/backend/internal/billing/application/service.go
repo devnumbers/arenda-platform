@@ -1,0 +1,561 @@
+package application
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sort"
+
+	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+)
+
+// BillingService orchestrates subscription, tariff and payment operations.
+type BillingService struct {
+	tariffs              TariffRepository
+	subscriptions        SubscriptionRepository
+	paymentMethods       PaymentMethodRepository
+	subscriptionPayments SubscriptionPaymentRepository
+	provider             Provider
+	beginner             transaction.Beginner
+	clock                clock.Clock
+	log                  *slog.Logger
+}
+
+// NewBillingService creates a new billing application service.
+func NewBillingService(
+	tariffs TariffRepository,
+	subscriptions SubscriptionRepository,
+	paymentMethods PaymentMethodRepository,
+	subscriptionPayments SubscriptionPaymentRepository,
+	provider Provider,
+	beginner transaction.Beginner,
+	clock clock.Clock,
+	log *slog.Logger,
+) *BillingService {
+	if log == nil {
+		log = slog.Default()
+	}
+	return &BillingService{
+		tariffs:              tariffs,
+		subscriptions:        subscriptions,
+		paymentMethods:       paymentMethods,
+		subscriptionPayments: subscriptionPayments,
+		provider:             provider,
+		beginner:             beginner,
+		clock:                clock,
+		log:                  log,
+	}
+}
+
+// ListTariffs returns all tariffs ordered by price.
+func (s *BillingService) ListTariffs(ctx context.Context) ([]domain.Tariff, error) {
+	list, err := s.tariffs.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list tariffs: %w", err)
+	}
+
+	// Ensure a stable, ascending price order even if the repository does not.
+	sort.SliceStable(list, func(i, j int) bool {
+		if list[i].MonthlyPriceKopecks != list[j].MonthlyPriceKopecks {
+			return list[i].MonthlyPriceKopecks < list[j].MonthlyPriceKopecks
+		}
+		if list[i].YearlyPriceKopecks != list[j].YearlyPriceKopecks {
+			return list[i].YearlyPriceKopecks < list[j].YearlyPriceKopecks
+		}
+		return list[i].ActivePropertyLimit < list[j].ActivePropertyLimit
+	})
+
+	return list, nil
+}
+
+// GetSubscription returns the current subscription with its active payment method.
+func (s *BillingService) GetSubscription(ctx context.Context, userID uuid.UUID) (SubscriptionView, error) {
+	sub, err := s.subscriptions.GetByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return SubscriptionView{}, ErrSubscriptionNotFound
+		}
+		return SubscriptionView{}, fmt.Errorf("get subscription: %w", err)
+	}
+
+	view := SubscriptionView{Subscription: sub}
+	if sub.ActivePaymentMethodID != nil {
+		pm, err := s.paymentMethods.GetByID(ctx, *sub.ActivePaymentMethodID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				s.log.WarnContext(ctx, "subscription references missing active payment method",
+					"user_id", userID.String(),
+					"payment_method_id", sub.ActivePaymentMethodID.String())
+				return view, nil
+			}
+			return SubscriptionView{}, fmt.Errorf("get active payment method: %w", err)
+		}
+		view.ActivePaymentMethod = &pm
+	}
+
+	return view, nil
+}
+
+// ChangeTariff starts an upgrade payment or schedules a downgrade.
+func (s *BillingService) ChangeTariff(ctx context.Context, userID uuid.UUID, req ChangeTariffRequest) (ChangeTariffResponse, error) {
+	if req.Period != domain.PeriodMonth && req.Period != domain.PeriodYear {
+		return ChangeTariffResponse{}, domain.ErrInvalidPeriod
+	}
+
+	newTariff, err := s.tariffs.GetByName(ctx, domain.TariffName(req.TariffName))
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ChangeTariffResponse{}, ErrTariffNotFound
+		}
+		return ChangeTariffResponse{}, fmt.Errorf("get tariff: %w", err)
+	}
+
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	sub, err := s.subscriptions.WithTx(tx).GetByUserIDForUpdate(ctx, userID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ChangeTariffResponse{}, ErrSubscriptionNotFound
+		}
+		return ChangeTariffResponse{}, fmt.Errorf("get subscription: %w", err)
+	}
+
+	if sub.Source != domain.SubscriptionSourcePaid {
+		return ChangeTariffResponse{}, domain.ErrInvalidSubscriptionState
+	}
+
+	if sub.TariffID == newTariff.ID {
+		return ChangeTariffResponse{}, ErrAlreadyOnTariff
+	}
+
+	currentTariff, err := s.tariffs.WithTx(tx).GetByID(ctx, sub.TariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ChangeTariffResponse{}, ErrTariffNotFound
+		}
+		return ChangeTariffResponse{}, fmt.Errorf("get current tariff: %w", err)
+	}
+
+	changeType := domain.ClassifyTariffChange(currentTariff, newTariff)
+	if changeType == domain.TariffChangeSame {
+		return ChangeTariffResponse{}, ErrInvalidTariffChange
+	}
+
+	amount := newTariff.MonthlyPriceKopecks
+	if req.Period == domain.PeriodYear {
+		amount = newTariff.YearlyPriceKopecks
+	}
+
+	now := s.clock.Now().UTC()
+	if !sub.CanInitiatePayment(now) {
+		return ChangeTariffResponse{}, domain.ErrInvalidSubscriptionState
+	}
+
+	if changeType == domain.TariffChangeUpgrade {
+		// Return an existing pending upgrade payment for the same tariff and
+		// period instead of creating a duplicate. The partial unique index on
+		// pending payments is the durable backstop for races.
+		pending, err := s.subscriptionPayments.WithTx(tx).ListPendingSubscriptionPaymentsByUserID(ctx, userID)
+		if err != nil {
+			return ChangeTariffResponse{}, fmt.Errorf("list pending subscription payments: %w", err)
+		}
+		for _, p := range pending {
+			if p.TariffID == newTariff.ID && p.Period == req.Period {
+				return ChangeTariffResponse{PaymentID: p.ID}, nil
+			}
+		}
+		return s.changeTariffUpgrade(ctx, tx, userID, sub, newTariff, req.Period, amount)
+	}
+
+	if sub.ValidUntil == nil {
+		return ChangeTariffResponse{}, ErrInvalidTariffChange
+	}
+	if err := sub.ScheduleDowngrade(currentTariff, newTariff, req.Period, *sub.ValidUntil); err != nil {
+		return ChangeTariffResponse{}, err
+	}
+	if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("schedule downgrade: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("commit schedule downgrade transaction: %w", err)
+	}
+
+	return ChangeTariffResponse{}, nil
+}
+
+func (s *BillingService) changeTariffUpgrade(
+	ctx context.Context,
+	tx transaction.Tx,
+	userID uuid.UUID,
+	sub domain.Subscription,
+	newTariff domain.Tariff,
+	period domain.SubscriptionPeriod,
+	amount int64,
+) (ChangeTariffResponse, error) {
+	if amount <= 0 {
+		return ChangeTariffResponse{}, domain.ErrInvalidAmount
+	}
+
+	now := s.clock.Now().UTC()
+	payment, err := domain.NewSubscriptionPayment(
+		userID,
+		sub.ID,
+		newTariff.ID,
+		nil,
+		period,
+		amount,
+		s.provider.Name(),
+		now,
+	)
+	if err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("create subscription payment: %w", err)
+	}
+
+	// Persist the pending payment before calling the external provider so the
+	// record survives a crash and the provider has an internal payment id to
+	// reference.
+	payment, err = s.subscriptionPayments.WithTx(tx).Create(ctx, payment)
+	if err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("save subscription payment: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	initRes, err := s.provider.Init(ctx, InitRequest{
+		PaymentID:     payment.ID,
+		AmountKopecks: amount,
+		Period:        period,
+		UserID:        userID,
+		Description:   fmt.Sprintf("Upgrade to %s (%s)", newTariff.Name, period),
+	})
+	if err != nil {
+		markTx, beginErr := s.beginner.Begin(ctx)
+		if beginErr == nil {
+			if markErr := s.subscriptionPayments.WithTx(markTx).MarkFailed(ctx, payment.ID, nil, s.clock.Now().UTC()); markErr != nil {
+				s.log.ErrorContext(ctx, "failed to mark payment failed after init error",
+					"payment_id", payment.ID,
+					"error", markErr)
+			}
+			if commitErr := markTx.Commit(ctx); commitErr != nil {
+				s.log.ErrorContext(ctx, "failed to commit payment failed mark after init error",
+					"payment_id", payment.ID,
+					"error", commitErr)
+			}
+		} else {
+			s.log.ErrorContext(ctx, "failed to begin transaction for marking payment failed after init error",
+				"payment_id", payment.ID,
+				"error", beginErr)
+		}
+		return ChangeTariffResponse{}, fmt.Errorf("init payment: %w", err)
+	}
+
+	// The provider token is only available after Init succeeds. Create an
+	// inactive payment method and attach it to the pending payment; activation
+	// is deferred until the payment is confirmed.
+	if initRes.SavedToken == "" {
+		return ChangeTariffResponse{
+			PaymentID:  payment.ID,
+			ConfirmURL: initRes.PaymentURL,
+		}, nil
+	}
+
+	pm, err := domain.NewPaymentMethod(
+		userID,
+		s.provider.Name(),
+		initRes.SavedToken,
+		maskToken(initRes.SavedToken),
+		now,
+	)
+	if err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("create payment method: %w", err)
+	}
+
+	pmTx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = pmTx.Rollback(ctx) }()
+
+	pm, err = s.paymentMethods.WithTx(pmTx).Create(ctx, pm)
+	if err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("save payment method: %w", err)
+	}
+
+	payment, err = s.subscriptionPayments.WithTx(pmTx).UpdatePaymentMethodAndProviderID(ctx, payment.ID, pm.ID, initRes.ProviderPaymentID)
+	if err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("update payment method and provider payment id: %w", err)
+	}
+
+	if err := pmTx.Commit(ctx); err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return ChangeTariffResponse{
+		PaymentID:  payment.ID,
+		ConfirmURL: initRes.PaymentURL,
+	}, nil
+}
+
+// ToggleAutoRenew enables or disables automatic subscription renewal.
+func (s *BillingService) ToggleAutoRenew(ctx context.Context, userID uuid.UUID, enabled bool) error {
+	sub, err := s.subscriptions.GetByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrSubscriptionNotFound
+		}
+		return fmt.Errorf("get subscription: %w", err)
+	}
+
+	if err := sub.SetAutoRenew(enabled); err != nil {
+		return err
+	}
+
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+		return fmt.Errorf("update subscription: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit toggle auto-renew transaction: %w", err)
+	}
+	return nil
+}
+
+// AddPaymentMethod stores a new inactive payment method for the user.
+func (s *BillingService) AddPaymentMethod(ctx context.Context, userID uuid.UUID, req AddPaymentMethodRequest) (domain.PaymentMethod, error) {
+	pm, err := domain.NewPaymentMethod(
+		userID,
+		s.provider.Name(),
+		req.ProviderToken,
+		maskToken(req.ProviderToken),
+		s.clock.Now().UTC(),
+	)
+	if err != nil {
+		return domain.PaymentMethod{}, fmt.Errorf("create payment method: %w", err)
+	}
+
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return domain.PaymentMethod{}, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	pm, err = s.paymentMethods.WithTx(tx).Create(ctx, pm)
+	if err != nil {
+		return domain.PaymentMethod{}, fmt.Errorf("save payment method: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.PaymentMethod{}, fmt.Errorf("commit add payment method transaction: %w", err)
+	}
+
+	return pm, nil
+}
+
+// SetActivePaymentMethod activates the given payment method for the user.
+func (s *BillingService) SetActivePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error {
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := s.paymentMethods.WithTx(tx).SetActive(ctx, userID, methodID); err != nil {
+		return fmt.Errorf("set active payment method: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit set active payment method transaction: %w", err)
+	}
+	return nil
+}
+
+// DeletePaymentMethod removes a payment method belonging to the user.
+func (s *BillingService) DeletePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error {
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := s.paymentMethods.WithTx(tx).Delete(ctx, userID, methodID); err != nil {
+		return fmt.Errorf("delete payment method: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit delete payment method transaction: %w", err)
+	}
+	return nil
+}
+
+// ListPaymentMethods returns all payment methods for the user.
+func (s *BillingService) ListPaymentMethods(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error) {
+	list, err := s.paymentMethods.ListByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list payment methods: %w", err)
+	}
+	return list, nil
+}
+
+// ListPayments returns all subscription payments for the user.
+func (s *BillingService) ListPayments(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
+	list, err := s.subscriptionPayments.ListByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list payments: %w", err)
+	}
+	return list, nil
+}
+
+// ConfirmFakePayment confirms a previously initialized fake payment and applies its result.
+func (s *BillingService) ConfirmFakePayment(ctx context.Context, paymentID uuid.UUID) error {
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	payment, err := s.subscriptionPayments.WithTx(tx).GetByIDForUpdate(ctx, paymentID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrPaymentNotFound
+		}
+		return fmt.Errorf("get payment: %w", err)
+	}
+
+	if payment.Status == domain.PaymentStatusSucceeded || payment.Status == domain.PaymentStatusFailed {
+		return nil
+	}
+
+	cp, ok := s.provider.(ConfirmableProvider)
+	if !ok {
+		return ErrProviderNotConfirmable
+	}
+
+	payload, err := cp.ConfirmPayment(ctx, payment.ID.String())
+	if err != nil {
+		return fmt.Errorf("confirm fake payment: %w", err)
+	}
+
+	if err := s.applyPaymentResult(ctx, tx, payment, payload); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// HandleWebhook parses and applies a provider webhook payload.
+func (s *BillingService) HandleWebhook(ctx context.Context, providerName string, payload []byte) error {
+	_ = providerName // MVP uses the same configured provider for all payments.
+
+	result, err := s.provider.ParseWebhook(ctx, payload)
+	if err != nil {
+		return fmt.Errorf("parse webhook: %w", err)
+	}
+
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	payment, err := s.subscriptionPayments.WithTx(tx).GetByIDForUpdate(ctx, result.InternalPaymentID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrPaymentNotFound
+		}
+		return fmt.Errorf("get payment: %w", err)
+	}
+
+	if payment.Status == domain.PaymentStatusSucceeded || payment.Status == domain.PaymentStatusFailed {
+		return nil
+	}
+
+	if err := s.applyPaymentResult(ctx, tx, payment, result); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (s *BillingService) applyPaymentResult(
+	ctx context.Context,
+	tx transaction.Tx,
+	payment domain.SubscriptionPayment,
+	payload WebhookPayload,
+) error {
+	now := s.clock.Now().UTC()
+	switch payload.Status {
+	case domain.PaymentStatusSucceeded:
+		if err := s.subscriptionPayments.WithTx(tx).MarkSucceeded(ctx, payment.ID, now); err != nil {
+			return fmt.Errorf("mark payment succeeded: %w", err)
+		}
+
+		sub, err := s.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, payment.SubscriptionID)
+		if err != nil {
+			return fmt.Errorf("get subscription: %w", err)
+		}
+
+		if payment.PaymentMethodID != nil {
+			if err := s.paymentMethods.WithTx(tx).SetActive(ctx, payment.UserID, *payment.PaymentMethodID); err != nil {
+				return fmt.Errorf("activate payment method: %w", err)
+			}
+			sub.ActivePaymentMethodID = payment.PaymentMethodID
+		}
+
+		if sub.TariffID == payment.TariffID {
+			// Renewal for the current tariff: extend validity from the current
+			// period end (or now) by the paid period.
+			if err := sub.ApplyRenewal(payment.Period, now); err != nil {
+				return fmt.Errorf("apply renewal: %w", err)
+			}
+		} else {
+			// Upgrade or scheduled change to a different tariff.
+			currentTariff, err := s.tariffs.WithTx(tx).GetByID(ctx, sub.TariffID)
+			if err != nil {
+				return fmt.Errorf("get current tariff: %w", err)
+			}
+			newTariff, err := s.tariffs.WithTx(tx).GetByID(ctx, payment.TariffID)
+			if err != nil {
+				return fmt.Errorf("get payment tariff: %w", err)
+			}
+			if err := sub.ApplyTariffChange(currentTariff, newTariff, payment.Period, now); err != nil {
+				return fmt.Errorf("apply tariff change: %w", err)
+			}
+		}
+
+		if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+			return fmt.Errorf("update subscription: %w", err)
+		}
+
+	case domain.PaymentStatusFailed:
+		if err := s.subscriptionPayments.WithTx(tx).MarkFailed(ctx, payment.ID, payload.ErrorCode, now); err != nil {
+			return fmt.Errorf("mark payment failed: %w", err)
+		}
+
+	default:
+		return fmt.Errorf("unsupported webhook status: %s", payload.Status)
+	}
+
+	return nil
+}
+
+func maskToken(token string) string {
+	if len(token) <= 4 {
+		return "****"
+	}
+	return "****" + token[len(token)-4:]
+}

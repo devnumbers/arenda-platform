@@ -337,4 +337,5 @@ type UserSubscription struct {
 	PendingTariffID       pgtype.UUID        `json:"pending_tariff_id"`
 	PendingChangeAt       pgtype.Timestamptz `json:"pending_change_at"`
 	ActivePaymentMethodID pgtype.UUID        `json:"active_payment_method_id"`
+	PendingPeriod         pgtype.Text        `json:"pending_period"`
 }
