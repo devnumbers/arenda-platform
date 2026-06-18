@@ -25,7 +25,7 @@ tests {
   test("should contain created reminders", function() {
     const items = res.body.items || [];
     expect(items.length).to.be.greaterThan(0);
-    const found = items.some(r => r.id === bru.getVar("recurringReminderFirstId"));
+    const found = items.some(r => r.id === bru.getEnvVar("recurringReminderFirstId") || bru.getVar("recurringReminderFirstId"));
     expect(found).to.equal(true);
   });
 }

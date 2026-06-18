@@ -29,7 +29,9 @@ script:pre-request {
 
 script:post-response {
   if (res.body && res.body.items && res.body.items.length > 0) {
+    bru.setEnvVar("recurringReminderCompleteId", res.body.items[0].id);
     bru.setVar("recurringReminderCompleteId", res.body.items[0].id);
+    console.log("saved recurringReminderCompleteId =", res.body.items[0].id);
   }
 }
 

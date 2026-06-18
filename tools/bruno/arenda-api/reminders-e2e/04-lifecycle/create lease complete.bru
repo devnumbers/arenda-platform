@@ -36,7 +36,9 @@ script:pre-request {
 
 script:post-response {
   if (res.body && res.body.id) {
+    bru.setEnvVar("leaseIdComplete", res.body.id);
     bru.setVar("leaseIdComplete", res.body.id);
+    console.log("saved leaseIdComplete =", res.body.id);
   }
 }
 

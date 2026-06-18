@@ -6,3 +6,6 @@
 *.exe
 node_modules/
 *.log
+
+# Bruno runtime environment (contains session ids and dynamic object ids)
+tools/bruno/arenda-api/environments/Local.bru

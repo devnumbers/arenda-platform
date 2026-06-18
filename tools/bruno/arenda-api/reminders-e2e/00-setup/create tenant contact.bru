@@ -37,7 +37,9 @@ script:pre-request {
 
 script:post-response {
   if (res.body && res.body.id) {
+    bru.setEnvVar("tenantContactId", res.body.id);
     bru.setVar("tenantContactId", res.body.id);
+    console.log("saved tenantContactId =", res.body.id);
   }
 }
 

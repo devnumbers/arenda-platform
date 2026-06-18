@@ -12,7 +12,7 @@ post {
 
 script:pre-request {
   // Requires an authenticated session and a propertyId. Run properties/archive first.
-  const sessionId = bru.getVar("session_id");
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
   if (sessionId) {
     req.setHeader("Cookie", `session_id=${sessionId}`);
   }

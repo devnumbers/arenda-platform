@@ -33,7 +33,9 @@ script:pre-request {
 
 script:post-response {
   if (res.body && res.body.id) {
+    bru.setEnvVar("operationIdDueToday", res.body.id);
     bru.setVar("operationIdDueToday", res.body.id);
+    console.log("saved operationIdDueToday =", res.body.id);
   }
 }
 

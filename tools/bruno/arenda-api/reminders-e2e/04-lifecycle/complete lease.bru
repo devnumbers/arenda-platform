@@ -23,6 +23,6 @@ tests {
   });
 
   test("should have matching id", function() {
-    expect(res.body.id).to.equal(bru.getVar("leaseIdComplete"));
+    expect(res.body.id).to.equal(bru.getEnvVar("leaseIdComplete") || bru.getVar("leaseIdComplete"));
   });
 }

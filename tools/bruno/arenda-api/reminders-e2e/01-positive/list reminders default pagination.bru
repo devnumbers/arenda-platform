@@ -28,8 +28,8 @@ tests {
 
   test("should include created reminders", function() {
     const items = res.body.items || [];
-    const foundMain = items.some(r => r.id === bru.getVar("reminderIdMain"));
-    const foundRecurring = items.some(r => r.id === bru.getVar("recurringReminderFirstId"));
+    const foundMain = items.some(r => r.id === bru.getEnvVar("reminderIdMain") || bru.getVar("reminderIdMain"));
+    const foundRecurring = items.some(r => r.id === bru.getEnvVar("recurringReminderFirstId") || bru.getVar("recurringReminderFirstId"));
     expect(foundMain || foundRecurring).to.equal(true);
   });
 }

@@ -19,6 +19,12 @@ mkdir -p "$(dirname "$REPORT_FILE")"
 
 rm -f "$RESULTS_FILE"
 
+ENV_FILE="${BRUNO_DIR}/environments/Local.bru"
+if [ ! -f "$ENV_FILE" ]; then
+  echo "Creating runtime Bruno environment from template..."
+  cp "${BRUNO_DIR}/environments/Local.bru.example" "$ENV_FILE"
+fi
+
 echo "=== Arenda Reminders E2E Test Run ==="
 echo "Sending auth code to ${PHONE}..."
 curl -s -X POST "${BASE_URL}/auth/phone/send" \

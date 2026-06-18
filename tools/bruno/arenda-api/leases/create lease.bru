@@ -29,7 +29,7 @@ body:json {
 
 script:pre-request {
   // Requires an authenticated session. Run auth/verify-code first.
-  const sessionId = bru.getVar("session_id");
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
   if (sessionId) {
     req.setHeader("Cookie", `session_id=${sessionId}`);
   }
@@ -38,7 +38,9 @@ script:pre-request {
 script:post-response {
   // Save the created lease id for subsequent lease requests.
   if (res.body && res.body.id) {
+    bru.setEnvVar("leaseId", res.body.id);
     bru.setVar("leaseId", res.body.id);
+    console.log("saved leaseId =", res.body.id);
   }
 }
 

@@ -29,7 +29,9 @@ script:pre-request {
 
 script:post-response {
   if (res.body && res.body.id) {
+    bru.setEnvVar("reminderIdCancelledTest", res.body.id);
     bru.setVar("reminderIdCancelledTest", res.body.id);
+    console.log("saved reminderIdCancelledTest =", res.body.id);
   }
 }
 

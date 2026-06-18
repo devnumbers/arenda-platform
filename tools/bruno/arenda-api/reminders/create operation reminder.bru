@@ -21,7 +21,7 @@ body:json {
 }
 
 script:pre-request {
-  const sessionId = bru.getVar("session_id");
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
   if (sessionId) {
     req.setHeader("Cookie", `session_id=${sessionId}`);
   }
@@ -29,7 +29,9 @@ script:pre-request {
 
 script:post-response {
   if (res.body && res.body.id) {
+    bru.setEnvVar("reminderId", res.body.id);
     bru.setVar("reminderId", res.body.id);
+    console.log("saved reminderId =", res.body.id);
   }
 }
 

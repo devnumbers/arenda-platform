@@ -21,7 +21,9 @@ script:post-response {
   if (res.body && res.body.items) {
     const expiring = res.body.items.find(r => r.event_type === "lease_expiring");
     if (expiring) {
+      bru.setEnvVar("leaseExpiringRescheduledId", expiring.id);
       bru.setVar("leaseExpiringRescheduledId", expiring.id);
+      console.log("saved leaseExpiringRescheduledId =", expiring.id);
     }
   }
 }

@@ -22,10 +22,14 @@ script:post-response {
     const expiring = res.body.items.find(r => r.event_type === "lease_expiring");
     const requiresAction = res.body.items.find(r => r.event_type === "lease_requires_action");
     if (expiring) {
+      bru.setEnvVar("leaseExpiring30Id", expiring.id);
       bru.setVar("leaseExpiring30Id", expiring.id);
+      console.log("saved leaseExpiring30Id =", expiring.id);
     }
     if (requiresAction) {
+      bru.setEnvVar("leaseRequiresAction30Id", requiresAction.id);
       bru.setVar("leaseRequiresAction30Id", requiresAction.id);
+      console.log("saved leaseRequiresAction30Id =", requiresAction.id);
     }
   }
 }

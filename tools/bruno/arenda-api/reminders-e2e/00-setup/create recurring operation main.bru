@@ -34,7 +34,9 @@ script:pre-request {
 
 script:post-response {
   if (res.body && res.body.id) {
+    bru.setEnvVar("recurringOperationIdMain", res.body.id);
     bru.setVar("recurringOperationIdMain", res.body.id);
+    console.log("saved recurringOperationIdMain =", res.body.id);
   }
 }
 

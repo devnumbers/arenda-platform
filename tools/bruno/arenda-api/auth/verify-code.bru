@@ -28,7 +28,9 @@ script:post-response {
     const raw = Array.isArray(setCookie) ? setCookie[0] : setCookie;
     const match = raw.match(/session_id=([^;]+)/);
     if (match) {
+      bru.setEnvVar("session_id", match[1]);
       bru.setVar("session_id", match[1]);
+      console.log("saved session_id =", match[1]);
       console.log("session_id saved");
     }
   }

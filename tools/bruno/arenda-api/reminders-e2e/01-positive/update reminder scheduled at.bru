@@ -33,7 +33,7 @@ tests {
   });
 
   test("should have same id", function() {
-    expect(res.body.id).to.equal(bru.getVar("reminderIdMain"));
+    expect(res.body.id).to.equal(bru.getEnvVar("reminderIdMain") || bru.getVar("reminderIdMain"));
   });
 
   test("should still be pending", function() {

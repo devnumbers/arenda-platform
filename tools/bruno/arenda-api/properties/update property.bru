@@ -23,7 +23,7 @@ body:json {
 
 script:pre-request {
   // Requires an authenticated session and a propertyId. Run properties/create first.
-  const sessionId = bru.getVar("session_id");
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
   if (sessionId) {
     req.setHeader("Cookie", `session_id=${sessionId}`);
   }
@@ -35,6 +35,6 @@ tests {
   });
   
   test("should have matching id", function() {
-    expect(res.body.id).to.equal(bru.getVar("propertyId"));
+    expect(res.body.id).to.equal(bru.getEnvVar("propertyId") || bru.getVar("propertyId"));
   });
 }

@@ -19,7 +19,9 @@ script:pre-request {
 
 script:post-response {
   if (res.body && res.body.items && res.body.items.length > 0) {
+    bru.setEnvVar("recurringOperationIdComplete", res.body.items[0].id);
     bru.setVar("recurringOperationIdComplete", res.body.items[0].id);
+    console.log("saved recurringOperationIdComplete =", res.body.items[0].id);
   }
 }
 

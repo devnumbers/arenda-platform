@@ -21,7 +21,7 @@ body:json {
 }
 
 script:pre-request {
-  const sessionId = bru.getVar("session_id");
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
   if (sessionId) {
     req.setHeader("Cookie", `session_id=${sessionId}`);
   }

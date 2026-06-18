@@ -24,7 +24,7 @@ tests {
 
   test("should not contain previous recurring reminder", function() {
     const items = res.body.items || [];
-    const found = items.some(r => r.id === bru.getVar("recurringReminderCompleteId"));
+    const found = items.some(r => r.id === bru.getEnvVar("recurringReminderCompleteId") || bru.getVar("recurringReminderCompleteId"));
     expect(found).to.equal(false);
   });
 }

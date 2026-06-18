@@ -34,7 +34,9 @@ script:pre-request {
 
 script:post-response {
   if (res.body && res.body.id) {
+    bru.setEnvVar("propertyIdLifecycle", res.body.id);
     bru.setVar("propertyIdLifecycle", res.body.id);
+    console.log("saved propertyIdLifecycle =", res.body.id);
   }
 }
 

@@ -60,7 +60,9 @@ script:pre-request {
 
 script:post-response {
   if (res.body && res.body.id) {
+    bru.setEnvVar("propertyIdMain", res.body.id);
     bru.setVar("propertyIdMain", res.body.id);
+    console.log("saved propertyIdMain =", res.body.id);
   }
 }
 

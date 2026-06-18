@@ -29,7 +29,9 @@ script:pre-request {
 
 script:post-response {
   if (res.body && res.body.items && res.body.items.length > 0) {
+    bru.setEnvVar("offsetChangeNewReminderId", res.body.items[0].id);
     bru.setVar("offsetChangeNewReminderId", res.body.items[0].id);
+    console.log("saved offsetChangeNewReminderId =", res.body.items[0].id);
   }
 }
 
@@ -44,7 +46,7 @@ tests {
   });
 
   test("old reminders should be replaced", function() {
-    const oldId = bru.getVar("offsetChangeOldReminderId");
+    const oldId = bru.getEnvVar("offsetChangeOldReminderId") || bru.getVar("offsetChangeOldReminderId");
     const found = res.body.items.some(r => r.id === oldId);
     expect(found).to.equal(false);
   });
