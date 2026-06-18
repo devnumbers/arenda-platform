@@ -1,0 +1,21 @@
+meta {
+  name: No Auth Cookie
+  type: http
+  seq: 27
+}
+
+get {
+  url: {{baseUrl}}/reminders
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  // Intentionally do not set Cookie header to test unauthenticated access.
+}
+
+tests {
+  test("should return 401", function() {
+    expect(res.status).to.equal(401);
+  });
+}

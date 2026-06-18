@@ -1,0 +1,45 @@
+meta {
+  name: Verify Lease Reminders Rescheduled
+  type: http
+  seq: 51
+}
+
+get {
+  url: {{baseUrl}}/leases/{{leaseIdLifecycle}}/reminders
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.items) {
+    const expiring = res.body.items.find(r => r.event_type === "lease_expiring");
+    if (expiring) {
+      bru.setVar("leaseExpiringRescheduledId", expiring.id);
+    }
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should contain lease_expiring reminder", function() {
+    const items = res.body.items || [];
+    const found = items.some(r => r.event_type === "lease_expiring");
+    expect(found).to.equal(true);
+  });
+
+  test("should contain requires_action reminder", function() {
+    const items = res.body.items || [];
+    const found = items.some(r => r.event_type === "lease_requires_action");
+    expect(found).to.equal(true);
+  });
+}

@@ -1,0 +1,49 @@
+meta {
+  name: Create Recurring Operation Main
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyIdMain}}/recurring-operations
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "type": "{{recurringOperationType}}",
+    "category": "{{recurringOperationCategory}}",
+    "amount_kopecks": {{recurringOperationAmountKopecks}},
+    "start_date": "{{futureDate3}}",
+    "payment_day": {{recurringPaymentDay}},
+    "comment": "E2E recurring operation main"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setVar("recurringOperationIdMain", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have recurring operation id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+}

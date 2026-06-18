@@ -16,7 +16,10 @@ SELECT * FROM reminders WHERE id = $1;
 -- name: ListRemindersByOwner :many
 SELECT * FROM reminders
 WHERE owner_id = sqlc.arg('owner_id')
-  AND (NOT sqlc.arg('filter_by_status')::boolean OR status = sqlc.arg('status'))
+  AND CASE
+        WHEN sqlc.arg('filter_by_status')::boolean THEN status::text = sqlc.arg('status')::text
+        ELSE true
+      END
 ORDER BY scheduled_at ASC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
@@ -99,7 +102,7 @@ WHERE id = $2 AND status IN ('pending', 'sending');
 UPDATE reminders
 SET failed_attempts = failed_attempts + 1,
     next_attempt_at = sqlc.arg('next_attempt_at')::timestamptz,
-    status = CASE WHEN sqlc.arg('mark_as_failed')::boolean THEN 'failed' ELSE 'pending' END
+    status = CASE WHEN sqlc.arg('mark_as_failed')::boolean THEN 'failed'::notification_status ELSE 'pending'::notification_status END
 WHERE id = sqlc.arg('id')::uuid AND status IN ('pending', 'sending');
 
 -- name: ResetReminderSending :execrows
@@ -154,5 +157,5 @@ ON CONFLICT (reminder_id) DO NOTHING;
 
 -- name: UpdateSentSMSReminderProviderResponse :execrows
 UPDATE sent_sms_reminders
-SET provider_response = $1, updated_at = NOW()
+SET provider_response = $1
 WHERE reminder_id = $2;

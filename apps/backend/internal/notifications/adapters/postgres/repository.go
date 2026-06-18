@@ -163,7 +163,7 @@ func (r *ReminderRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID,
 		Limit: int32(filter.Limit),
 	}
 	if filter.Status != nil {
-		params.Status = postgres.NotificationStatus(*filter.Status)
+		params.Status = string(postgres.NotificationStatus(*filter.Status))
 	}
 	rows, err := r.q().ListRemindersByOwner(ctx, params)
 	if err != nil {

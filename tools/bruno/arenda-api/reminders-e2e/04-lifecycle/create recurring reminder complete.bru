@@ -1,0 +1,45 @@
+meta {
+  name: Create Recurring Reminder Complete
+  type: http
+  seq: 57
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyIdComplete}}/recurring-operations/{{recurringOperationIdComplete}}/reminders
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "reminder_date": "{{todayDate}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.items && res.body.items.length > 0) {
+    bru.setVar("recurringReminderCompleteId", res.body.items[0].id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should return reminders", function() {
+    expect(res.body.items).to.be.an("array");
+    expect(res.body.items.length).to.be.greaterThan(0);
+  });
+}

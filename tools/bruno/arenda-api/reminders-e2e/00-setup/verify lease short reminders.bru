@@ -1,0 +1,36 @@
+meta {
+  name: Verify Lease Short Reminders
+  type: http
+  seq: 18
+}
+
+get {
+  url: {{baseUrl}}/leases/{{leaseIdShort}}/reminders
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should not contain lease_expiring reminder", function() {
+    const items = res.body.items || [];
+    const found = items.some(r => r.event_type === "lease_expiring");
+    expect(found).to.equal(false);
+  });
+
+  test("should contain requires_action reminder", function() {
+    const items = res.body.items || [];
+    const found = items.some(r => r.event_type === "lease_requires_action");
+    expect(found).to.equal(true);
+  });
+}

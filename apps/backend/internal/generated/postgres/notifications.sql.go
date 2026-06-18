@@ -464,17 +464,20 @@ func (q *Queries) ListRemindersByOperation(ctx context.Context, arg ListReminder
 const listRemindersByOwner = `-- name: ListRemindersByOwner :many
 SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
 WHERE owner_id = $1
-  AND (NOT $2::boolean OR status = $3)
+  AND CASE
+        WHEN $2::boolean THEN status::text = $3::text
+        ELSE true
+      END
 ORDER BY scheduled_at ASC
 LIMIT $5 OFFSET $4
 `
 
 type ListRemindersByOwnerParams struct {
-	OwnerID        pgtype.UUID        `json:"owner_id"`
-	FilterByStatus bool               `json:"filter_by_status"`
-	Status         NotificationStatus `json:"status"`
-	Offset         int32              `json:"offset"`
-	Limit          int32              `json:"limit"`
+	OwnerID        pgtype.UUID `json:"owner_id"`
+	FilterByStatus bool        `json:"filter_by_status"`
+	Status         string      `json:"status"`
+	Offset         int32       `json:"offset"`
+	Limit          int32       `json:"limit"`
 }
 
 func (q *Queries) ListRemindersByOwner(ctx context.Context, arg ListRemindersByOwnerParams) ([]Reminder, error) {
@@ -634,7 +637,7 @@ const markReminderFailed = `-- name: MarkReminderFailed :execrows
 UPDATE reminders
 SET failed_attempts = failed_attempts + 1,
     next_attempt_at = $1::timestamptz,
-    status = CASE WHEN $2::boolean THEN 'failed' ELSE 'pending' END
+    status = CASE WHEN $2::boolean THEN 'failed'::notification_status ELSE 'pending'::notification_status END
 WHERE id = $3::uuid AND status IN ('pending', 'sending')
 `
 
@@ -832,7 +835,7 @@ func (q *Queries) UpdateReminderScheduledAt(ctx context.Context, arg UpdateRemin
 
 const updateSentSMSReminderProviderResponse = `-- name: UpdateSentSMSReminderProviderResponse :execrows
 UPDATE sent_sms_reminders
-SET provider_response = $1, updated_at = NOW()
+SET provider_response = $1
 WHERE reminder_id = $2
 `
 

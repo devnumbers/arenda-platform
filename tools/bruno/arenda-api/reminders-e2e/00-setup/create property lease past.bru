@@ -1,0 +1,49 @@
+meta {
+  name: Create Property Lease Past
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/properties
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "name": "{{propertyNameLeasePast}}",
+    "type": "{{propertyType}}",
+    "address": "{{propertyAddressLeasePast}}",
+    "description": "E2E reminders lease past property"
+  }
+}
+
+script:pre-request {
+  bru.setVar("propertyNameLeasePast", "E2E Lease Past " + Date.now());
+  bru.setVar("propertyAddressLeasePast", "Lease Past St " + Date.now());
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setVar("propertyIdLeasePast", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have property id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+}

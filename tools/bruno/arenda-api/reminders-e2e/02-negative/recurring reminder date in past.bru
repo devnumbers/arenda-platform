@@ -1,0 +1,34 @@
+meta {
+  name: Recurring Reminder Date In Past
+  type: http
+  seq: 30
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyIdMain}}/recurring-operations/{{recurringOperationIdMain}}/reminders
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "reminder_date": "{{pastDate1}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 400", function() {
+    expect(res.status).to.equal(400);
+  });
+}

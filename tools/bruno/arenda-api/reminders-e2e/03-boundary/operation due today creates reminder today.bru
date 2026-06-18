@@ -1,0 +1,52 @@
+meta {
+  name: Operation Due Today Creates Reminder Today
+  type: http
+  seq: 37
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyIdMain}}/operations/{{operationIdDueToday}}/reminders
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "reminder_date": "{{todayDate}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setVar("reminderIdDueToday", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have reminder id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+
+  test("should be pending", function() {
+    expect(res.body.status).to.equal("pending");
+  });
+
+  test("should be operation_due event", function() {
+    expect(res.body.event_type).to.equal("operation_due");
+  });
+}

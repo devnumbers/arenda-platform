@@ -1,0 +1,30 @@
+meta {
+  name: Get Operation Reminders
+  type: http
+  seq: 21
+}
+
+get {
+  url: {{baseUrl}}/properties/{{propertyIdMain}}/operations/{{operationIdMain}}/reminders
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should contain created reminder", function() {
+    const items = res.body.items || [];
+    const found = items.some(r => r.id === bru.getVar("reminderIdMain"));
+    expect(found).to.equal(true);
+  });
+}

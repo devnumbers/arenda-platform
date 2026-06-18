@@ -1,0 +1,51 @@
+meta {
+  name: Create Lease 30d
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/leases
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "property_id": "{{propertyIdLease30}}",
+    "tenant_contact_id": "{{tenantContactId}}",
+    "start_date": "{{todayDate}}",
+    "end_date": "{{futureDate30}}",
+    "rent_amount_kopecks": {{leaseRentAmountKopecks}},
+    "payment_day": 1,
+    "deposit_amount_kopecks": {{leaseDepositAmountKopecks}},
+    "comment": "E2E lease 30d"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setVar("leaseId30", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have lease id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+}

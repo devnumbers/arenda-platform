@@ -32,10 +32,6 @@ BEFORE UPDATE ON reminders
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
-CREATE UNIQUE INDEX idx_reminders_active_unique
-ON reminders (owner_id, target_type, operation_id, recurring_operation_id, lease_id, event_type)
-WHERE status IN ('pending', 'sending');
-
 CREATE INDEX idx_reminders_due ON reminders (scheduled_at, next_attempt_at) WHERE status = 'pending';
 CREATE INDEX idx_reminders_owner ON reminders (owner_id, status, scheduled_at);
 CREATE INDEX idx_reminders_operation ON reminders (operation_id);

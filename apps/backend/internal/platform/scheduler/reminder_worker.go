@@ -71,6 +71,8 @@ func NewReminderWorker(
 
 // Run starts the worker loop. It stops when the provided context is cancelled.
 func (w *ReminderWorker) Run(ctx context.Context) {
+	w.logger.InfoContext(ctx, "reminder worker started", "interval", w.interval.String())
+
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
@@ -183,6 +185,7 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 		return w.finalizeAlreadySent(dispatchCtx, r, now)
 	}
 	if err != nil {
+		w.logger.ErrorContext(dispatchCtx, "save sent sms reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
 		return w.finalizeFailure(dispatchCtx, r, now)
 	}
 
