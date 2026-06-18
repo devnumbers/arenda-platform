@@ -6,7 +6,11 @@ import (
 
 type TariffName string
 
-const TariffBasic TariffName = "basic"
+const (
+	TariffBasic    TariffName = "basic"
+	TariffPro      TariffName = "pro"
+	TariffBusiness TariffName = "business"
+)
 
 type Tariff struct {
 	ID                  uuid.UUID

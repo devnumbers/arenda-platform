@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -28,7 +29,29 @@ func (r *TariffRepository) q() *postgres.Queries {
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *TariffRepository) WithTx(tx transaction.Tx) application.TariffRepository {
-	return NewTariffRepository(tx.(postgres.DBTX))
+	dbtx, ok := tx.(postgres.DBTX)
+	if !ok {
+		return &invalidTariffRepository{tx: tx}
+	}
+	return NewTariffRepository(dbtx)
+}
+
+// invalidTariffRepository returns a clear error for every method when an
+// unsupported transaction type is passed to WithTx.
+type invalidTariffRepository struct {
+	tx transaction.Tx
+}
+
+func (r *invalidTariffRepository) GetByName(ctx context.Context, name domain.TariffName) (domain.Tariff, error) {
+	return domain.Tariff{}, fmt.Errorf("billing: unsupported transaction type %T for TariffRepository.GetByName", r.tx)
+}
+
+func (r *invalidTariffRepository) List(ctx context.Context) ([]domain.Tariff, error) {
+	return nil, fmt.Errorf("billing: unsupported transaction type %T for TariffRepository.List", r.tx)
+}
+
+func (r *invalidTariffRepository) WithTx(tx transaction.Tx) application.TariffRepository {
+	return r
 }
 
 // GetByName returns a tariff by its unique name.

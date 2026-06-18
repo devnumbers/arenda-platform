@@ -108,8 +108,7 @@ func (q *Queries) GetTariffByName(ctx context.Context, name string) (Tariff, err
 
 const listTariffs = `-- name: ListTariffs :many
 SELECT id, name, active_property_limit, monthly_price_kopecks, yearly_price_kopecks, created_at
-FROM tariffs
-ORDER BY monthly_price_kopecks
+FROM tariffs ORDER BY monthly_price_kopecks, id
 `
 
 func (q *Queries) ListTariffs(ctx context.Context) ([]Tariff, error) {
