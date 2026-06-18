@@ -25,6 +25,19 @@ const (
 	SessionCookieScopes = "sessionCookie.Scopes"
 )
 
+// Defines values for ChangeTariffRequestPeriod.
+const (
+	ChangeTariffRequestPeriodMonth ChangeTariffRequestPeriod = "month"
+	ChangeTariffRequestPeriodYear  ChangeTariffRequestPeriod = "year"
+)
+
+// Defines values for ChangeTariffRequestTariffName.
+const (
+	ChangeTariffRequestTariffNameBasic    ChangeTariffRequestTariffName = "basic"
+	ChangeTariffRequestTariffNameBusiness ChangeTariffRequestTariffName = "business"
+	ChangeTariffRequestTariffNamePro      ChangeTariffRequestTariffName = "pro"
+)
+
 // Defines values for LeaseResponseStatus.
 const (
 	LeaseResponseStatusActive         LeaseResponseStatus = "active"
@@ -137,10 +150,10 @@ const (
 
 // Defines values for ReminderResponseStatus.
 const (
-	Cancelled ReminderResponseStatus = "cancelled"
-	Failed    ReminderResponseStatus = "failed"
-	Pending   ReminderResponseStatus = "pending"
-	Sent      ReminderResponseStatus = "sent"
+	ReminderResponseStatusCancelled ReminderResponseStatus = "cancelled"
+	ReminderResponseStatusFailed    ReminderResponseStatus = "failed"
+	ReminderResponseStatusPending   ReminderResponseStatus = "pending"
+	ReminderResponseStatusSent      ReminderResponseStatus = "sent"
 )
 
 // Defines values for ReminderResponseTargetType.
@@ -149,6 +162,68 @@ const (
 	Operation          ReminderResponseTargetType = "operation"
 	RecurringOperation ReminderResponseTargetType = "recurring_operation"
 )
+
+// Defines values for SubscriptionPendingPeriod.
+const (
+	SubscriptionPendingPeriodMonth SubscriptionPendingPeriod = "month"
+	SubscriptionPendingPeriodYear  SubscriptionPendingPeriod = "year"
+)
+
+// Defines values for SubscriptionStatus.
+const (
+	SubscriptionStatusActive    SubscriptionStatus = "active"
+	SubscriptionStatusBlocked   SubscriptionStatus = "blocked"
+	SubscriptionStatusCancelled SubscriptionStatus = "cancelled"
+	SubscriptionStatusGrace     SubscriptionStatus = "grace"
+)
+
+// Defines values for SubscriptionPaymentPeriod.
+const (
+	Month SubscriptionPaymentPeriod = "month"
+	Year  SubscriptionPaymentPeriod = "year"
+)
+
+// Defines values for SubscriptionPaymentStatus.
+const (
+	Failed    SubscriptionPaymentStatus = "failed"
+	Pending   SubscriptionPaymentStatus = "pending"
+	Succeeded SubscriptionPaymentStatus = "succeeded"
+)
+
+// Defines values for TariffName.
+const (
+	TariffNameBasic    TariffName = "basic"
+	TariffNameBusiness TariffName = "business"
+	TariffNamePro      TariffName = "pro"
+)
+
+// AddPaymentMethodRequest defines model for AddPaymentMethodRequest.
+type AddPaymentMethodRequest struct {
+	ProviderToken string `json:"providerToken"`
+}
+
+// AutoRenewRequest defines model for AutoRenewRequest.
+type AutoRenewRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
+// ChangeTariffRequest defines model for ChangeTariffRequest.
+type ChangeTariffRequest struct {
+	Period     ChangeTariffRequestPeriod     `json:"period"`
+	TariffName ChangeTariffRequestTariffName `json:"tariffName"`
+}
+
+// ChangeTariffRequestPeriod defines model for ChangeTariffRequest.Period.
+type ChangeTariffRequestPeriod string
+
+// ChangeTariffRequestTariffName defines model for ChangeTariffRequest.TariffName.
+type ChangeTariffRequestTariffName string
+
+// ChangeTariffResponse defines model for ChangeTariffResponse.
+type ChangeTariffResponse struct {
+	ConfirmUrl *string             `json:"confirmUrl"`
+	PaymentId  *openapi_types.UUID `json:"paymentId"`
+}
 
 // LeaseCreateRequest defines model for LeaseCreateRequest.
 type LeaseCreateRequest struct {
@@ -200,13 +275,14 @@ type LeasesResponse struct {
 
 // MeResponse defines model for MeResponse.
 type MeResponse struct {
-	Email      *string            `json:"email"`
-	Id         openapi_types.UUID `json:"id"`
-	Name       *string            `json:"name"`
-	Patronymic *string            `json:"patronymic"`
-	Phone      string             `json:"phone"`
-	Role       MeResponseRole     `json:"role"`
-	Surname    *string            `json:"surname"`
+	Email        *string            `json:"email"`
+	Id           openapi_types.UUID `json:"id"`
+	Name         *string            `json:"name"`
+	Patronymic   *string            `json:"patronymic"`
+	Phone        string             `json:"phone"`
+	Role         MeResponseRole     `json:"role"`
+	Subscription *Subscription      `json:"subscription,omitempty"`
+	Surname      *string            `json:"surname"`
 }
 
 // MeResponseRole defines model for MeResponse.Role.
@@ -258,6 +334,20 @@ type OperationUpdateRequest struct {
 // OperationsResponse defines model for OperationsResponse.
 type OperationsResponse struct {
 	Items []OperationResponse `json:"items"`
+}
+
+// PaymentMethod defines model for PaymentMethod.
+type PaymentMethod struct {
+	CreatedAt   time.Time          `json:"createdAt"`
+	DisplayMask string             `json:"displayMask"`
+	Id          openapi_types.UUID `json:"id"`
+	IsActive    bool               `json:"isActive"`
+	Provider    string             `json:"provider"`
+}
+
+// PaymentMethodsResponse defines model for PaymentMethodsResponse.
+type PaymentMethodsResponse struct {
+	Items []PaymentMethod `json:"items"`
 }
 
 // Problem defines model for Problem.
@@ -425,6 +515,62 @@ type SendPhoneCodeRequest struct {
 	Phone string `json:"phone"`
 }
 
+// Subscription defines model for Subscription.
+type Subscription struct {
+	ActivePaymentMethod *PaymentMethod             `json:"activePaymentMethod,omitempty"`
+	AutoRenewEnabled    bool                       `json:"autoRenewEnabled"`
+	PendingChangeAt     *time.Time                 `json:"pendingChangeAt"`
+	PendingPeriod       *SubscriptionPendingPeriod `json:"pendingPeriod"`
+	PendingTariff       *Tariff                    `json:"pendingTariff,omitempty"`
+	Status              SubscriptionStatus         `json:"status"`
+	Tariff              Tariff                     `json:"tariff"`
+	ValidUntil          *time.Time                 `json:"validUntil"`
+}
+
+// SubscriptionPendingPeriod defines model for Subscription.PendingPeriod.
+type SubscriptionPendingPeriod string
+
+// SubscriptionStatus defines model for Subscription.Status.
+type SubscriptionStatus string
+
+// SubscriptionPayment defines model for SubscriptionPayment.
+type SubscriptionPayment struct {
+	AmountKopecks int                       `json:"amountKopecks"`
+	CreatedAt     time.Time                 `json:"createdAt"`
+	Id            openapi_types.UUID        `json:"id"`
+	Period        SubscriptionPaymentPeriod `json:"period"`
+	Provider      string                    `json:"provider"`
+	Status        SubscriptionPaymentStatus `json:"status"`
+	Tariff        Tariff                    `json:"tariff"`
+}
+
+// SubscriptionPaymentPeriod defines model for SubscriptionPayment.Period.
+type SubscriptionPaymentPeriod string
+
+// SubscriptionPaymentStatus defines model for SubscriptionPayment.Status.
+type SubscriptionPaymentStatus string
+
+// SubscriptionPaymentsResponse defines model for SubscriptionPaymentsResponse.
+type SubscriptionPaymentsResponse struct {
+	Items []SubscriptionPayment `json:"items"`
+}
+
+// Tariff defines model for Tariff.
+type Tariff struct {
+	ActivePropertyLimit int        `json:"activePropertyLimit"`
+	MonthlyPriceKopecks int        `json:"monthlyPriceKopecks"`
+	Name                TariffName `json:"name"`
+	YearlyPriceKopecks  int        `json:"yearlyPriceKopecks"`
+}
+
+// TariffName defines model for Tariff.Name.
+type TariffName string
+
+// TariffsResponse defines model for TariffsResponse.
+type TariffsResponse struct {
+	Items []Tariff `json:"items"`
+}
+
 // TenantContactCreateRequest defines model for TenantContactCreateRequest.
 type TenantContactCreateRequest struct {
 	Comment    *string `json:"comment,omitempty"`
@@ -476,6 +622,9 @@ type BadRequest = Problem
 // Conflict defines model for Conflict.
 type Conflict = Problem
 
+// InternalServerError defines model for InternalServerError.
+type InternalServerError = Problem
+
 // NotFound defines model for NotFound.
 type NotFound = Problem
 
@@ -490,6 +639,9 @@ type ListRemindersParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
+
+// HandlePaymentWebhookJSONBody defines parameters for HandlePaymentWebhook.
+type HandlePaymentWebhookJSONBody map[string]interface{}
 
 // SendPhoneCodeJSONRequestBody defines body for SendPhoneCode for application/json ContentType.
 type SendPhoneCodeJSONRequestBody = SendPhoneCodeRequest
@@ -530,11 +682,23 @@ type UpdateRecurringOperationJSONRequestBody = RecurringOperationUpdateRequest
 // UpdateReminderJSONRequestBody defines body for UpdateReminder for application/json ContentType.
 type UpdateReminderJSONRequestBody = ReminderUpdateRequest
 
+// ToggleAutoRenewJSONRequestBody defines body for ToggleAutoRenew for application/json ContentType.
+type ToggleAutoRenewJSONRequestBody = AutoRenewRequest
+
+// ChangeTariffJSONRequestBody defines body for ChangeTariff for application/json ContentType.
+type ChangeTariffJSONRequestBody = ChangeTariffRequest
+
+// AddPaymentMethodJSONRequestBody defines body for AddPaymentMethod for application/json ContentType.
+type AddPaymentMethodJSONRequestBody = AddPaymentMethodRequest
+
 // CreateTenantContactJSONRequestBody defines body for CreateTenantContact for application/json ContentType.
 type CreateTenantContactJSONRequestBody = TenantContactCreateRequest
 
 // UpdateTenantContactJSONRequestBody defines body for UpdateTenantContact for application/json ContentType.
 type UpdateTenantContactJSONRequestBody = TenantContactUpdateRequest
+
+// HandlePaymentWebhookJSONRequestBody defines body for HandlePaymentWebhook for application/json ContentType.
+type HandlePaymentWebhookJSONRequestBody HandlePaymentWebhookJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -547,6 +711,9 @@ type ServerInterface interface {
 
 	// (POST /auth/phone/verify)
 	VerifyPhoneCode(w http.ResponseWriter, r *http.Request)
+
+	// (POST /internal/fake-subscription-payment/{id}/confirm)
+	ConfirmFakeSubscriptionPayment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /leases)
 	ListLeases(w http.ResponseWriter, r *http.Request)
@@ -641,6 +808,33 @@ type ServerInterface interface {
 	// (PATCH /reminders/{reminderId})
 	UpdateReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID)
 
+	// (GET /subscription)
+	GetSubscription(w http.ResponseWriter, r *http.Request)
+
+	// (PATCH /subscription/auto-renew)
+	ToggleAutoRenew(w http.ResponseWriter, r *http.Request)
+
+	// (POST /subscription/change)
+	ChangeTariff(w http.ResponseWriter, r *http.Request)
+
+	// (GET /subscription/payment-methods)
+	ListPaymentMethods(w http.ResponseWriter, r *http.Request)
+
+	// (POST /subscription/payment-methods)
+	AddPaymentMethod(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /subscription/payment-methods/{id})
+	DeletePaymentMethod(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /subscription/payment-methods/{id}/activate)
+	ActivatePaymentMethod(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /subscription/payments)
+	ListSubscriptionPayments(w http.ResponseWriter, r *http.Request)
+
+	// (GET /tariffs)
+	ListTariffs(w http.ResponseWriter, r *http.Request)
+
 	// (GET /tenant-contacts)
 	ListTenantContacts(w http.ResponseWriter, r *http.Request)
 
@@ -652,6 +846,9 @@ type ServerInterface interface {
 
 	// (PATCH /tenant-contacts/{id})
 	UpdateTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /webhooks/payment/{provider})
+	HandlePaymentWebhook(w http.ResponseWriter, r *http.Request, provider string)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -670,6 +867,11 @@ func (_ Unimplemented) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 
 // (POST /auth/phone/verify)
 func (_ Unimplemented) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /internal/fake-subscription-payment/{id}/confirm)
+func (_ Unimplemented) ConfirmFakeSubscriptionPayment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -828,6 +1030,51 @@ func (_ Unimplemented) UpdateReminder(w http.ResponseWriter, r *http.Request, re
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /subscription)
+func (_ Unimplemented) GetSubscription(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /subscription/auto-renew)
+func (_ Unimplemented) ToggleAutoRenew(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /subscription/change)
+func (_ Unimplemented) ChangeTariff(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /subscription/payment-methods)
+func (_ Unimplemented) ListPaymentMethods(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /subscription/payment-methods)
+func (_ Unimplemented) AddPaymentMethod(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /subscription/payment-methods/{id})
+func (_ Unimplemented) DeletePaymentMethod(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /subscription/payment-methods/{id}/activate)
+func (_ Unimplemented) ActivatePaymentMethod(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /subscription/payments)
+func (_ Unimplemented) ListSubscriptionPayments(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /tariffs)
+func (_ Unimplemented) ListTariffs(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /tenant-contacts)
 func (_ Unimplemented) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -845,6 +1092,11 @@ func (_ Unimplemented) GetTenantContact(w http.ResponseWriter, r *http.Request, 
 
 // (PATCH /tenant-contacts/{id})
 func (_ Unimplemented) UpdateTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /webhooks/payment/{provider})
+func (_ Unimplemented) HandlePaymentWebhook(w http.ResponseWriter, r *http.Request, provider string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -896,6 +1148,31 @@ func (siw *ServerInterfaceWrapper) VerifyPhoneCode(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.VerifyPhoneCode(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConfirmFakeSubscriptionPayment operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmFakeSubscriptionPayment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmFakeSubscriptionPayment(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1857,6 +2134,208 @@ func (siw *ServerInterfaceWrapper) UpdateReminder(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// GetSubscription operation middleware
+func (siw *ServerInterfaceWrapper) GetSubscription(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSubscription(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ToggleAutoRenew operation middleware
+func (siw *ServerInterfaceWrapper) ToggleAutoRenew(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ToggleAutoRenew(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ChangeTariff operation middleware
+func (siw *ServerInterfaceWrapper) ChangeTariff(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ChangeTariff(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPaymentMethods operation middleware
+func (siw *ServerInterfaceWrapper) ListPaymentMethods(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPaymentMethods(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddPaymentMethod operation middleware
+func (siw *ServerInterfaceWrapper) AddPaymentMethod(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddPaymentMethod(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePaymentMethod operation middleware
+func (siw *ServerInterfaceWrapper) DeletePaymentMethod(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePaymentMethod(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ActivatePaymentMethod operation middleware
+func (siw *ServerInterfaceWrapper) ActivatePaymentMethod(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ActivatePaymentMethod(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSubscriptionPayments operation middleware
+func (siw *ServerInterfaceWrapper) ListSubscriptionPayments(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSubscriptionPayments(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTariffs operation middleware
+func (siw *ServerInterfaceWrapper) ListTariffs(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTariffs(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListTenantContacts operation middleware
 func (siw *ServerInterfaceWrapper) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
 
@@ -1950,6 +2429,31 @@ func (siw *ServerInterfaceWrapper) UpdateTenantContact(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateTenantContact(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// HandlePaymentWebhook operation middleware
+func (siw *ServerInterfaceWrapper) HandlePaymentWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "provider" -------------
+	var provider string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "provider", chi.URLParam(r, "provider"), &provider, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "provider", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.HandlePaymentWebhook(w, r, provider)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2082,6 +2586,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/auth/phone/verify", wrapper.VerifyPhoneCode)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/internal/fake-subscription-payment/{id}/confirm", wrapper.ConfirmFakeSubscriptionPayment)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/leases", wrapper.ListLeases)
 	})
 	r.Group(func(r chi.Router) {
@@ -2175,6 +2682,33 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Patch(options.BaseURL+"/reminders/{reminderId}", wrapper.UpdateReminder)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/subscription", wrapper.GetSubscription)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/subscription/auto-renew", wrapper.ToggleAutoRenew)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/subscription/change", wrapper.ChangeTariff)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/subscription/payment-methods", wrapper.ListPaymentMethods)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/subscription/payment-methods", wrapper.AddPaymentMethod)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/subscription/payment-methods/{id}", wrapper.DeletePaymentMethod)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/subscription/payment-methods/{id}/activate", wrapper.ActivatePaymentMethod)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/subscription/payments", wrapper.ListSubscriptionPayments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tariffs", wrapper.ListTariffs)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/tenant-contacts", wrapper.ListTenantContacts)
 	})
 	r.Group(func(r chi.Router) {
@@ -2186,6 +2720,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/tenant-contacts/{id}", wrapper.UpdateTenantContact)
 	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/webhooks/payment/{provider}", wrapper.HandlePaymentWebhook)
+	})
 
 	return r
 }
@@ -2193,52 +2730,66 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

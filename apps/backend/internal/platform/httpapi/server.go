@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
@@ -18,6 +19,7 @@ import (
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
 	Auth                *identityapp.AuthService
+	Billing             *billingapp.BillingService
 	Sessions            identityapp.SessionRepository
 	Properties          *propertiesapp.PropertyService
 	Leases              *leasesapp.LeaseService
@@ -31,6 +33,7 @@ type Deps struct {
 	IPRateLimiter       *RateLimiter
 	PhoneSendLimiter    *RateLimiter
 	PhoneVerifyLimiter  *RateLimiter
+	DevMode             bool
 }
 
 func securityHeaders(next http.Handler) http.Handler {
@@ -55,12 +58,14 @@ func New(deps Deps) http.Handler {
 	r.Use(rateLimitMiddleware(deps.IPRateLimiter))
 	r.Use(SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
 
-	authHandlers := NewAuthHandlers(deps.Auth, deps.CookieSecure, deps.Logger, deps.PhoneSendLimiter, deps.PhoneVerifyLimiter)
+	authHandlers := NewAuthHandlers(deps.Auth, deps.Billing, deps.CookieSecure, deps.Logger, deps.PhoneSendLimiter, deps.PhoneVerifyLimiter)
 	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.Logger)
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger)
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Logger)
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Logger)
 	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
+	subscriptionHandlers := NewSubscriptionHandlers(deps.Billing, deps.Logger)
+	subscriptionHandlers.DevMode = deps.DevMode
 
 	handler := &composedHandler{
 		AuthHandlers:               authHandlers,
@@ -69,6 +74,7 @@ func New(deps Deps) http.Handler {
 		OperationHandlers:          operationHandlers,
 		RecurringOperationHandlers: recurringOperationHandlers,
 		ReminderHandlers:           reminderHandlers,
+		SubscriptionHandlers:       subscriptionHandlers,
 	}
 
 	return openapi.HandlerWithOptions(handler, openapi.ChiServerOptions{
@@ -106,4 +112,5 @@ type composedHandler struct {
 	*OperationHandlers
 	*RecurringOperationHandlers
 	*ReminderHandlers
+	*SubscriptionHandlers
 }

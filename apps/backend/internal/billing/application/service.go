@@ -72,7 +72,7 @@ func (s *BillingService) ListTariffs(ctx context.Context) ([]domain.Tariff, erro
 	return list, nil
 }
 
-// GetSubscription returns the current subscription with its active payment method.
+// GetSubscription returns the current subscription with its tariff and active payment method.
 func (s *BillingService) GetSubscription(ctx context.Context, userID uuid.UUID) (SubscriptionView, error) {
 	sub, err := s.subscriptions.GetByUserID(ctx, userID)
 	if err != nil {
@@ -82,7 +82,26 @@ func (s *BillingService) GetSubscription(ctx context.Context, userID uuid.UUID) 
 		return SubscriptionView{}, fmt.Errorf("get subscription: %w", err)
 	}
 
-	view := SubscriptionView{Subscription: sub}
+	tariff, err := s.tariffs.GetByID(ctx, sub.TariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return SubscriptionView{}, ErrTariffNotFound
+		}
+		return SubscriptionView{}, fmt.Errorf("get subscription tariff: %w", err)
+	}
+
+	view := SubscriptionView{Subscription: sub, Tariff: tariff}
+	if sub.PendingTariffID != nil {
+		pending, err := s.tariffs.GetByID(ctx, *sub.PendingTariffID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return SubscriptionView{}, ErrTariffNotFound
+			}
+			return SubscriptionView{}, fmt.Errorf("get pending tariff: %w", err)
+		}
+		view.PendingTariff = &pending
+	}
+
 	if sub.ActivePaymentMethodID != nil {
 		pm, err := s.paymentMethods.GetByID(ctx, *sub.ActivePaymentMethodID)
 		if err != nil {
@@ -411,13 +430,31 @@ func (s *BillingService) ListPaymentMethods(ctx context.Context, userID uuid.UUI
 	return list, nil
 }
 
-// ListPayments returns all subscription payments for the user.
-func (s *BillingService) ListPayments(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
-	list, err := s.subscriptionPayments.ListByUserID(ctx, userID)
+// ListPayments returns all subscription payments for the user with their tariffs.
+func (s *BillingService) ListPayments(ctx context.Context, userID uuid.UUID) ([]SubscriptionPaymentView, error) {
+	payments, err := s.subscriptionPayments.ListByUserID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list payments: %w", err)
 	}
-	return list, nil
+
+	tariffs, err := s.tariffs.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list tariffs: %w", err)
+	}
+	tariffByID := make(map[uuid.UUID]domain.Tariff, len(tariffs))
+	for _, t := range tariffs {
+		tariffByID[t.ID] = t
+	}
+
+	views := make([]SubscriptionPaymentView, 0, len(payments))
+	for _, p := range payments {
+		t, ok := tariffByID[p.TariffID]
+		if !ok {
+			return nil, fmt.Errorf("payment %s references unknown tariff %s", p.ID, p.TariffID)
+		}
+		views = append(views, SubscriptionPaymentView{Payment: p, Tariff: t})
+	}
+	return views, nil
 }
 
 // ConfirmFakePayment confirms a previously initialized fake payment and applies its result.

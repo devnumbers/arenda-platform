@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
@@ -24,6 +25,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 // AuthHandlers implements the generated non-strict ServerInterface.
 type AuthHandlers struct {
 	auth           *application.AuthService
+	billing        *billingapp.BillingService
 	cookieSecure   bool
 	logger         *slog.Logger
 	phoneSend      *RateLimiter
@@ -33,6 +35,7 @@ type AuthHandlers struct {
 // NewAuthHandlers creates HTTP handlers for the auth API.
 func NewAuthHandlers(
 	auth *application.AuthService,
+	billing *billingapp.BillingService,
 	cookieSecure bool,
 	logger *slog.Logger,
 	phoneSend *RateLimiter,
@@ -40,6 +43,7 @@ func NewAuthHandlers(
 ) *AuthHandlers {
 	return &AuthHandlers{
 		auth:        auth,
+		billing:     billing,
 		cookieSecure: cookieSecure,
 		logger:      logger,
 		phoneSend:   phoneSend,
@@ -155,7 +159,21 @@ func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, meResponse(user))
+	resp := meResponse(user)
+	if h.billing != nil {
+		view, err := h.billing.GetSubscription(r.Context(), userID)
+		if err != nil {
+			if !errors.Is(err, billingapp.ErrSubscriptionNotFound) {
+				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+				return
+			}
+		} else {
+			s := subscriptionResponse(view)
+			resp.Subscription = &s
+		}
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, resp)
 }
 
 func meResponse(user domain.User) openapi.MeResponse {

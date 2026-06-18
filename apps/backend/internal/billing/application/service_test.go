@@ -392,6 +392,9 @@ func TestBillingService_GetSubscriptionWithActivePaymentMethod(t *testing.T) {
 	methodID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 	tariffID := uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc")
 
+	d.addTariff(domain.Tariff{
+		ID: tariffID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
+	})
 	d.addSubscription(domain.Subscription{
 		ID:                    uuid.MustParse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
 		UserID:                userID,

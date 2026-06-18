@@ -300,7 +300,7 @@ func (h *ReminderHandlers) DeleteReminder(w http.ResponseWriter, r *http.Request
 func reminderResponse(r notificationsdomain.Reminder) openapi.ReminderResponse {
 	status := openapi.ReminderResponseStatus(r.Status)
 	if r.Status == notificationsdomain.ReminderSending {
-		status = openapi.Pending
+		status = openapi.ReminderResponseStatusPending
 	}
 
 	return openapi.ReminderResponse{

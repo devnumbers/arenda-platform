@@ -94,12 +94,22 @@ func run(fallback *slog.Logger) error {
 	var paymentProvider billingapp.Provider
 	switch cfg.PaymentProvider {
 	case "fake":
-		// TODO(Task 6): wire the fake confirmation handler POST /internal/fake-subscription-payment/{providerPaymentID}/confirm.
 		paymentProvider = paymentfake.NewProvider(cfg.AppBaseURL, logger, realClock{})
 	case "tkassa":
 		paymentProvider = paymenttkassa.NewProvider(cfg.TKassaTerminalKey, cfg.TKassaPassword, logger)
 	}
 	logger.InfoContext(ctx, "payment provider initialized", "provider", cfg.PaymentProvider, "initialized", paymentProvider != nil)
+
+	billingService := billingapp.NewBillingService(
+		tariffRepo,
+		subscriptionRepo,
+		paymentMethodRepo,
+		subscriptionPaymentRepo,
+		paymentProvider,
+		platformpostgres.NewBeginner(pool),
+		realClock{},
+		logger,
+	)
 
 	identityUserRepo := identitypg.NewUserRepository(pool)
 	identitySMSRepo := identitypg.NewSMSCodeRepository(pool)
@@ -196,6 +206,7 @@ func run(fallback *slog.Logger) error {
 
 	handler := httpapi.New(httpapi.Deps{
 		Auth:                authService,
+		Billing:             billingService,
 		Sessions:            identitySessionRepo,
 		Properties:          propertyService,
 		Leases:              leaseService,
@@ -209,6 +220,7 @@ func run(fallback *slog.Logger) error {
 		IPRateLimiter:       ipLimiter,
 		PhoneSendLimiter:    phoneSendLimiter,
 		PhoneVerifyLimiter:  phoneVerifyLimiter,
+		DevMode:             cfg.AppEnv == "local" && cfg.PaymentProvider == "fake",
 	})
 
 	server := &http.Server{

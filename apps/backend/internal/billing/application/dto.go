@@ -22,8 +22,16 @@ type AddPaymentMethodRequest struct {
 	ProviderToken string
 }
 
-// SubscriptionView is the current subscription together with its active payment method.
+// SubscriptionView is the current subscription together with its tariff and active payment method.
 type SubscriptionView struct {
 	Subscription        domain.Subscription
+	Tariff              domain.Tariff
+	PendingTariff       *domain.Tariff
 	ActivePaymentMethod *domain.PaymentMethod
+}
+
+// SubscriptionPaymentView is a subscription payment together with its tariff.
+type SubscriptionPaymentView struct {
+	Payment domain.SubscriptionPayment
+	Tariff  domain.Tariff
 }

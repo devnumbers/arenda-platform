@@ -75,6 +75,8 @@ paths:
                 $ref: '#/components/schemas/MeResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /properties:
     post:
       operationId: createProperty
@@ -936,6 +938,249 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /tariffs:
+    get:
+      operationId: listTariffs
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Tariffs list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TariffsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription:
+    get:
+      operationId: getSubscription
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Current subscription
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription/auto-renew:
+    patch:
+      operationId: toggleAutoRenew
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoRenewRequest'
+      responses:
+        '204':
+          description: Auto-renew updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription/change:
+    post:
+      operationId: changeTariff
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeTariffRequest'
+      responses:
+        '200':
+          description: Tariff change initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeTariffResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription/payments:
+    get:
+      operationId: listSubscriptionPayments
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Subscription payments list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionPaymentsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription/payment-methods:
+    get:
+      operationId: listPaymentMethods
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Payment methods list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethodsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      operationId: addPaymentMethod
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddPaymentMethodRequest'
+      responses:
+        '201':
+          description: Payment method added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethod'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription/payment-methods/{id}:
+    delete:
+      operationId: deletePaymentMethod
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Payment method deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription/payment-methods/{id}/activate:
+    post:
+      operationId: activatePaymentMethod
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Payment method activated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /internal/fake-subscription-payment/{id}/confirm:
+    post:
+      operationId: confirmFakeSubscriptionPayment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment confirmed
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /webhooks/payment/{provider}:
+    post:
+      operationId: handlePaymentWebhook
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
 components:
   securitySchemes:
     sessionCookie:
@@ -986,6 +1231,156 @@ components:
         email:
           type: string
           nullable: true
+        subscription:
+          $ref: '#/components/schemas/Subscription'
+          nullable: true
+
+    Tariff:
+      type: object
+      required: [name, activePropertyLimit, monthlyPriceKopecks, yearlyPriceKopecks]
+      properties:
+        name:
+          type: string
+          enum: [basic, pro, business]
+        activePropertyLimit:
+          type: integer
+        monthlyPriceKopecks:
+          type: integer
+        yearlyPriceKopecks:
+          type: integer
+
+    Subscription:
+      type: object
+      required: [tariff, status, autoRenewEnabled]
+      properties:
+        tariff:
+          $ref: '#/components/schemas/Tariff'
+        status:
+          type: string
+          enum: [active, grace, blocked, cancelled]
+        validUntil:
+          type: string
+          format: date-time
+          nullable: true
+        autoRenewEnabled:
+          type: boolean
+        pendingTariff:
+          $ref: '#/components/schemas/Tariff'
+          nullable: true
+        pendingChangeAt:
+          type: string
+          format: date-time
+          nullable: true
+        pendingPeriod:
+          type: string
+          enum: [month, year]
+          nullable: true
+        activePaymentMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+          nullable: true
+
+    PaymentMethod:
+      type: object
+      required: [id, provider, displayMask, isActive, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        displayMask:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    SubscriptionPayment:
+      type: object
+      required: [id, tariff, period, amountKopecks, status, provider, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tariff:
+          $ref: '#/components/schemas/Tariff'
+        period:
+          type: string
+          enum: [month, year]
+        amountKopecks:
+          type: integer
+        status:
+          type: string
+          enum: [pending, succeeded, failed]
+        provider:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ChangeTariffRequest:
+      type: object
+      required: [tariffName, period]
+      properties:
+        tariffName:
+          type: string
+          enum: [basic, pro, business]
+        period:
+          type: string
+          enum: [month, year]
+
+    ChangeTariffResponse:
+      type: object
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+          nullable: true
+        confirmUrl:
+          type: string
+          nullable: true
+
+    AutoRenewRequest:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+
+    AddPaymentMethodRequest:
+      type: object
+      required: [providerToken]
+      properties:
+        providerToken:
+          type: string
+
+    TariffsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tariff'
+
+    PaymentMethodsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentMethod'
+
+    SubscriptionPaymentsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionPayment'
 
     Problem:
       type: object
@@ -1577,6 +1972,12 @@ components:
             $ref: '#/components/schemas/Problem'
     Conflict:
       description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InternalServerError:
+      description: Internal server error
       content:
         application/json:
           schema:
