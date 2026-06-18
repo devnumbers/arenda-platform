@@ -261,8 +261,7 @@ func (w *ReminderWorker) finalizeFailure(ctx context.Context, r domain.Reminder,
 
 	var next *time.Time
 	if !terminal {
-		n := now.Add(w.backoff.Next(attempts))
-		next = &n
+		next = new(now.Add(w.backoff.Next(attempts)))
 	}
 
 	if err := txRepo.MarkFailed(ctx, r.ID, next, terminal); err != nil {
@@ -336,8 +335,7 @@ func (w *ReminderWorker) recoverStaleSending(ctx context.Context, now time.Time)
 }
 
 func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 		return pgErr.Code == pgerrcode.UniqueViolation
 	}
 	return false

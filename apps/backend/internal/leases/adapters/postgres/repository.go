@@ -541,8 +541,7 @@ func recurringOperationFromRow(row postgres.RecurringOperation) domain.Recurring
 		UpdatedAt:     row.UpdatedAt.Time,
 	}
 	if row.ReminderOffsetDays.Valid {
-		offset := int(row.ReminderOffsetDays.Int32)
-		rec.ReminderOffsetDays = &offset
+		rec.ReminderOffsetDays = new(int(row.ReminderOffsetDays.Int32))
 	}
 	return rec
 }
