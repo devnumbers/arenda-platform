@@ -1,0 +1,50 @@
+package domain
+
+import (
+	"testing"
+
+	"github.com/google/uuid"
+)
+
+func TestNewPaymentMethod(t *testing.T) {
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+
+	pm, err := NewPaymentMethod(userID, ProviderFake, "fake_token_123", "*1234")
+	if err != nil {
+		t.Fatalf("NewPaymentMethod() error = %v", err)
+	}
+
+	if pm.UserID != userID {
+		t.Errorf("UserID = %v, want %v", pm.UserID, userID)
+	}
+	if pm.Provider != ProviderFake {
+		t.Errorf("Provider = %v, want %v", pm.Provider, ProviderFake)
+	}
+	if pm.ProviderToken != "fake_token_123" {
+		t.Errorf("ProviderToken = %v, want fake_token_123", pm.ProviderToken)
+	}
+	if pm.DisplayMask != "*1234" {
+		t.Errorf("DisplayMask = %v, want *1234", pm.DisplayMask)
+	}
+	if pm.IsActive {
+		t.Error("new payment method should not be active")
+	}
+	if pm.ID == uuid.Nil {
+		t.Error("ID must be set")
+	}
+}
+
+func TestPaymentMethodActivate(t *testing.T) {
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	pm, _ := NewPaymentMethod(userID, ProviderFake, "fake_token_123", "*1234")
+
+	pm.Activate()
+	if !pm.IsActive {
+		t.Error("Activate() should set IsActive to true")
+	}
+
+	pm.Deactivate()
+	if pm.IsActive {
+		t.Error("Deactivate() should set IsActive to false")
+	}
+}

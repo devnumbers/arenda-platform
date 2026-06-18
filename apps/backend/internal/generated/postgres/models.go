@@ -183,6 +183,18 @@ type Operation struct {
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type PaymentMethod struct {
+	ID            pgtype.UUID        `json:"id"`
+	UserID        pgtype.UUID        `json:"user_id"`
+	Provider      string             `json:"provider"`
+	ProviderToken string             `json:"provider_token"`
+	TokenHash     string             `json:"token_hash"`
+	DisplayMask   pgtype.Text        `json:"display_mask"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Property struct {
 	ID          pgtype.UUID        `json:"id"`
 	OwnerID     pgtype.UUID        `json:"owner_id"`
@@ -260,6 +272,22 @@ type SmsCode struct {
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	Used      bool               `json:"used"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type SubscriptionPayment struct {
+	ID                pgtype.UUID        `json:"id"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	SubscriptionID    pgtype.UUID        `json:"subscription_id"`
+	TariffID          pgtype.UUID        `json:"tariff_id"`
+	PaymentMethodID   pgtype.UUID        `json:"payment_method_id"`
+	Period            string             `json:"period"`
+	AmountKopecks     int64              `json:"amount_kopecks"`
+	Provider          string             `json:"provider"`
+	ProviderPaymentID pgtype.Text        `json:"provider_payment_id"`
+	Status            string             `json:"status"`
+	ErrorCode         pgtype.Text        `json:"error_code"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Tariff struct {

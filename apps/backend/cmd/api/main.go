@@ -23,6 +23,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/cleaner"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
@@ -60,6 +61,17 @@ func run(fallback *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	encryptor, err := encryption.NewEncryptor(cfg.EncryptionKey)
+	if err != nil {
+		return fmt.Errorf("encryption: %w", err)
+	}
+	if cfg.EncryptionKey == "" {
+		if cfg.AppEnv != "local" {
+			return fmt.Errorf("ENCRYPTION_KEY is required for APP_ENV=%s", cfg.AppEnv)
+		}
+		logger.WarnContext(ctx, "ENCRYPTION_KEY is empty; provider tokens will be stored without encryption (local dev only)")
+	}
+
 	if err := database.MigrateUp(cfg.DatabaseURL, cfg.MigrationsDir); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
@@ -73,6 +85,11 @@ func run(fallback *slog.Logger) error {
 	tariffRepo := billingpg.NewTariffRepository(pool)
 	subscriptionRepo := billingpg.NewSubscriptionRepository(pool)
 	onboardingService := billingpg.NewOnboardingService(tariffRepo, subscriptionRepo)
+	paymentMethodRepo := billingpg.NewPaymentMethodRepository(pool, encryptor)
+	subscriptionPaymentRepo := billingpg.NewSubscriptionPaymentRepository(pool)
+	logger.InfoContext(ctx, "billing repositories initialized",
+		"payment_methods", paymentMethodRepo != nil,
+		"subscription_payments", subscriptionPaymentRepo != nil)
 
 	identityUserRepo := identitypg.NewUserRepository(pool)
 	identitySMSRepo := identitypg.NewSMSCodeRepository(pool)

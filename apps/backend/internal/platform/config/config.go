@@ -18,6 +18,7 @@ type Config struct {
 	MigrationsDir string
 	CookieSecure  bool
 	SMSSender     string
+	EncryptionKey string
 	RateLimit     RateLimit
 }
 
@@ -38,6 +39,7 @@ func Load() (Config, error) {
 		DatabaseURL:   os.Getenv("DATABASE_URL"),
 		MigrationsDir: os.Getenv("MIGRATIONS_DIR"),
 		SMSSender:     os.Getenv("SMS_SENDER"),
+		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
 	}
 
 	if cfg.AppEnv == "" {

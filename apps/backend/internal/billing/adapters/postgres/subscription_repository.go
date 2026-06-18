@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -127,31 +126,4 @@ func mapSubscription(row postgres.UserSubscription) domain.Subscription {
 	}
 }
 
-func uuidPtr(id *uuid.UUID) pgtype.UUID {
-	if id == nil {
-		return pgtype.UUID{Valid: false}
-	}
-	return pgtype.UUID{Bytes: *id, Valid: true}
-}
 
-func uuidPtrFromPgtype(u pgtype.UUID) *uuid.UUID {
-	if !u.Valid {
-		return nil
-	}
-	id := uuid.UUID(u.Bytes)
-	return &id
-}
-
-func timestamptzPtr(t *time.Time) pgtype.Timestamptz {
-	if t == nil {
-		return pgtype.Timestamptz{Valid: false}
-	}
-	return pgtype.Timestamptz{Time: *t, Valid: true}
-}
-
-func timePtr(t pgtype.Timestamptz) *time.Time {
-	if !t.Valid {
-		return nil
-	}
-	return &t.Time
-}

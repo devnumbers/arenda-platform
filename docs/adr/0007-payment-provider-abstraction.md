@@ -61,3 +61,10 @@ Introduce a single subscription payment port and hide every provider behind it.
 - Add a retry policy for transient provider errors.
 - Add polling via `GetState` as a fallback when webhooks are not received.
 - Add metrics for initiated, succeeded, and failed payments.
+
+## Notes
+
+- `payment_methods.provider_token` is encrypted at rest using the platform
+  `encryption.Encryptor` (AES-256-GCM). An empty `ENCRYPTION_KEY` falls back to
+  a pass-through encryptor for local development only; production must provide a
+  32-byte key.

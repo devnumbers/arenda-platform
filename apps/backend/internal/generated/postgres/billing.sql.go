@@ -11,6 +11,63 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countSubscriptionsByActivePaymentMethodID = `-- name: CountSubscriptionsByActivePaymentMethodID :one
+SELECT COUNT(*) FROM user_subscriptions WHERE active_payment_method_id = $1
+`
+
+func (q *Queries) CountSubscriptionsByActivePaymentMethodID(ctx context.Context, activePaymentMethodID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSubscriptionsByActivePaymentMethodID, activePaymentMethodID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createPaymentMethod = `-- name: CreatePaymentMethod :one
+INSERT INTO payment_methods (
+    user_id,
+    provider,
+    provider_token,
+    token_hash,
+    display_mask,
+    is_active
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at
+`
+
+type CreatePaymentMethodParams struct {
+	UserID        pgtype.UUID `json:"user_id"`
+	Provider      string      `json:"provider"`
+	ProviderToken string      `json:"provider_token"`
+	TokenHash     string      `json:"token_hash"`
+	DisplayMask   pgtype.Text `json:"display_mask"`
+	IsActive      bool        `json:"is_active"`
+}
+
+func (q *Queries) CreatePaymentMethod(ctx context.Context, arg CreatePaymentMethodParams) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, createPaymentMethod,
+		arg.UserID,
+		arg.Provider,
+		arg.ProviderToken,
+		arg.TokenHash,
+		arg.DisplayMask,
+		arg.IsActive,
+	)
+	var i PaymentMethod
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderToken,
+		&i.TokenHash,
+		&i.DisplayMask,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createSubscription = `-- name: CreateSubscription :one
 INSERT INTO user_subscriptions (
     user_id,
@@ -70,6 +127,130 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 	return i, err
 }
 
+const createSubscriptionPayment = `-- name: CreateSubscriptionPayment :one
+INSERT INTO subscription_payments (
+    user_id,
+    subscription_id,
+    tariff_id,
+    payment_method_id,
+    period,
+    amount_kopecks,
+    provider,
+    provider_payment_id,
+    status,
+    error_code
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at
+`
+
+type CreateSubscriptionPaymentParams struct {
+	UserID            pgtype.UUID `json:"user_id"`
+	SubscriptionID    pgtype.UUID `json:"subscription_id"`
+	TariffID          pgtype.UUID `json:"tariff_id"`
+	PaymentMethodID   pgtype.UUID `json:"payment_method_id"`
+	Period            string      `json:"period"`
+	AmountKopecks     int64       `json:"amount_kopecks"`
+	Provider          string      `json:"provider"`
+	ProviderPaymentID pgtype.Text `json:"provider_payment_id"`
+	Status            string      `json:"status"`
+	ErrorCode         pgtype.Text `json:"error_code"`
+}
+
+func (q *Queries) CreateSubscriptionPayment(ctx context.Context, arg CreateSubscriptionPaymentParams) (SubscriptionPayment, error) {
+	row := q.db.QueryRow(ctx, createSubscriptionPayment,
+		arg.UserID,
+		arg.SubscriptionID,
+		arg.TariffID,
+		arg.PaymentMethodID,
+		arg.Period,
+		arg.AmountKopecks,
+		arg.Provider,
+		arg.ProviderPaymentID,
+		arg.Status,
+		arg.ErrorCode,
+	)
+	var i SubscriptionPayment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SubscriptionID,
+		&i.TariffID,
+		&i.PaymentMethodID,
+		&i.Period,
+		&i.AmountKopecks,
+		&i.Provider,
+		&i.ProviderPaymentID,
+		&i.Status,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deactivateAllPaymentMethodsForUser = `-- name: DeactivateAllPaymentMethodsForUser :exec
+UPDATE payment_methods
+SET is_active = false, updated_at = now()
+WHERE user_id = $1
+`
+
+func (q *Queries) DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deactivateAllPaymentMethodsForUser, userID)
+	return err
+}
+
+const deletePaymentMethodByID = `-- name: DeletePaymentMethodByID :exec
+DELETE FROM payment_methods WHERE id = $1
+`
+
+func (q *Queries) DeletePaymentMethodByID(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deletePaymentMethodByID, id)
+	return err
+}
+
+const getPaymentMethodByID = `-- name: GetPaymentMethodByID :one
+SELECT id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at FROM payment_methods WHERE id = $1
+`
+
+func (q *Queries) GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, getPaymentMethodByID, id)
+	var i PaymentMethod
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderToken,
+		&i.TokenHash,
+		&i.DisplayMask,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPaymentMethodByIDForUpdate = `-- name: GetPaymentMethodByIDForUpdate :one
+SELECT id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at FROM payment_methods WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.UUID) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, getPaymentMethodByIDForUpdate, id)
+	var i PaymentMethod
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderToken,
+		&i.TokenHash,
+		&i.DisplayMask,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getSubscriptionByUserID = `-- name: GetSubscriptionByUserID :one
 SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id FROM user_subscriptions WHERE user_id = $1
 `
@@ -90,6 +271,56 @@ func (q *Queries) GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUI
 		&i.PendingTariffID,
 		&i.PendingChangeAt,
 		&i.ActivePaymentMethodID,
+	)
+	return i, err
+}
+
+const getSubscriptionPaymentByID = `-- name: GetSubscriptionPaymentByID :one
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at FROM subscription_payments WHERE id = $1
+`
+
+func (q *Queries) GetSubscriptionPaymentByID(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error) {
+	row := q.db.QueryRow(ctx, getSubscriptionPaymentByID, id)
+	var i SubscriptionPayment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SubscriptionID,
+		&i.TariffID,
+		&i.PaymentMethodID,
+		&i.Period,
+		&i.AmountKopecks,
+		&i.Provider,
+		&i.ProviderPaymentID,
+		&i.Status,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSubscriptionPaymentByIDForUpdate = `-- name: GetSubscriptionPaymentByIDForUpdate :one
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at FROM subscription_payments WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetSubscriptionPaymentByIDForUpdate(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error) {
+	row := q.db.QueryRow(ctx, getSubscriptionPaymentByIDForUpdate, id)
+	var i SubscriptionPayment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SubscriptionID,
+		&i.TariffID,
+		&i.PaymentMethodID,
+		&i.Period,
+		&i.AmountKopecks,
+		&i.Provider,
+		&i.ProviderPaymentID,
+		&i.Status,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -134,6 +365,78 @@ func (q *Queries) GetTariffByName(ctx context.Context, name string) (Tariff, err
 	return i, err
 }
 
+const listPaymentMethodsByUserID = `-- name: ListPaymentMethodsByUserID :many
+SELECT id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at FROM payment_methods WHERE user_id = $1 ORDER BY created_at DESC
+`
+
+func (q *Queries) ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error) {
+	rows, err := q.db.Query(ctx, listPaymentMethodsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PaymentMethod{}
+	for rows.Next() {
+		var i PaymentMethod
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Provider,
+			&i.ProviderToken,
+			&i.TokenHash,
+			&i.DisplayMask,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubscriptionPaymentsByUserID = `-- name: ListSubscriptionPaymentsByUserID :many
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at FROM subscription_payments WHERE user_id = $1 ORDER BY created_at DESC
+`
+
+func (q *Queries) ListSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionPaymentsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SubscriptionPayment{}
+	for rows.Next() {
+		var i SubscriptionPayment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.SubscriptionID,
+			&i.TariffID,
+			&i.PaymentMethodID,
+			&i.Period,
+			&i.AmountKopecks,
+			&i.Provider,
+			&i.ProviderPaymentID,
+			&i.Status,
+			&i.ErrorCode,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTariffs = `-- name: ListTariffs :many
 SELECT id, name, active_property_limit, monthly_price_kopecks, yearly_price_kopecks, created_at
 FROM tariffs ORDER BY monthly_price_kopecks, id
@@ -164,6 +467,126 @@ func (q *Queries) ListTariffs(ctx context.Context) ([]Tariff, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockPaymentMethodsByUserID = `-- name: LockPaymentMethodsByUserID :many
+SELECT id FROM payment_methods WHERE user_id = $1 ORDER BY id FOR UPDATE
+`
+
+func (q *Queries) LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, lockPaymentMethodsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markSubscriptionPaymentFailed = `-- name: MarkSubscriptionPaymentFailed :one
+UPDATE subscription_payments
+SET status = 'failed', error_code = $2, updated_at = $3
+WHERE id = $1 AND status = 'pending'
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at
+`
+
+type MarkSubscriptionPaymentFailedParams struct {
+	ID        pgtype.UUID        `json:"id"`
+	ErrorCode pgtype.Text        `json:"error_code"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) MarkSubscriptionPaymentFailed(ctx context.Context, arg MarkSubscriptionPaymentFailedParams) (SubscriptionPayment, error) {
+	row := q.db.QueryRow(ctx, markSubscriptionPaymentFailed, arg.ID, arg.ErrorCode, arg.UpdatedAt)
+	var i SubscriptionPayment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SubscriptionID,
+		&i.TariffID,
+		&i.PaymentMethodID,
+		&i.Period,
+		&i.AmountKopecks,
+		&i.Provider,
+		&i.ProviderPaymentID,
+		&i.Status,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const markSubscriptionPaymentSucceeded = `-- name: MarkSubscriptionPaymentSucceeded :one
+UPDATE subscription_payments
+SET status = 'succeeded', updated_at = $2
+WHERE id = $1 AND status = 'pending'
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at
+`
+
+type MarkSubscriptionPaymentSucceededParams struct {
+	ID        pgtype.UUID        `json:"id"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) MarkSubscriptionPaymentSucceeded(ctx context.Context, arg MarkSubscriptionPaymentSucceededParams) (SubscriptionPayment, error) {
+	row := q.db.QueryRow(ctx, markSubscriptionPaymentSucceeded, arg.ID, arg.UpdatedAt)
+	var i SubscriptionPayment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SubscriptionID,
+		&i.TariffID,
+		&i.PaymentMethodID,
+		&i.Period,
+		&i.AmountKopecks,
+		&i.Provider,
+		&i.ProviderPaymentID,
+		&i.Status,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updatePaymentMethodActiveByID = `-- name: UpdatePaymentMethodActiveByID :one
+UPDATE payment_methods
+SET is_active = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at
+`
+
+type UpdatePaymentMethodActiveByIDParams struct {
+	ID       pgtype.UUID `json:"id"`
+	IsActive bool        `json:"is_active"`
+}
+
+func (q *Queries) UpdatePaymentMethodActiveByID(ctx context.Context, arg UpdatePaymentMethodActiveByIDParams) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, updatePaymentMethodActiveByID, arg.ID, arg.IsActive)
+	var i PaymentMethod
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderToken,
+		&i.TokenHash,
+		&i.DisplayMask,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateSubscription = `-- name: UpdateSubscription :one
@@ -219,6 +642,39 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		&i.PendingTariffID,
 		&i.PendingChangeAt,
 		&i.ActivePaymentMethodID,
+	)
+	return i, err
+}
+
+const updateSubscriptionPaymentProviderPaymentID = `-- name: UpdateSubscriptionPaymentProviderPaymentID :one
+UPDATE subscription_payments
+SET provider_payment_id = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at
+`
+
+type UpdateSubscriptionPaymentProviderPaymentIDParams struct {
+	ID                pgtype.UUID `json:"id"`
+	ProviderPaymentID pgtype.Text `json:"provider_payment_id"`
+}
+
+func (q *Queries) UpdateSubscriptionPaymentProviderPaymentID(ctx context.Context, arg UpdateSubscriptionPaymentProviderPaymentIDParams) (SubscriptionPayment, error) {
+	row := q.db.QueryRow(ctx, updateSubscriptionPaymentProviderPaymentID, arg.ID, arg.ProviderPaymentID)
+	var i SubscriptionPayment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SubscriptionID,
+		&i.TariffID,
+		&i.PaymentMethodID,
+		&i.Period,
+		&i.AmountKopecks,
+		&i.Provider,
+		&i.ProviderPaymentID,
+		&i.Status,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
