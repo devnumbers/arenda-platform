@@ -45,3 +45,44 @@ type SubscriptionPaymentRepository interface {
 	UpdateProviderPaymentID(ctx context.Context, id uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
 	WithTx(tx transaction.Tx) SubscriptionPaymentRepository
 }
+
+// Provider abstracts the external payment processor used for subscription payments.
+type Provider interface {
+	Init(ctx context.Context, req InitRequest) (InitResult, error)
+	Charge(ctx context.Context, req ChargeRequest) (ChargeResult, error)
+	ParseWebhook(ctx context.Context, payload []byte) (WebhookPayload, error)
+}
+
+type InitRequest struct {
+	PaymentID     uuid.UUID
+	AmountKopecks int64
+	Period        domain.SubscriptionPeriod
+	UserID        uuid.UUID
+	Description   string
+	ReturnURL     string
+}
+
+type InitResult struct {
+	ProviderPaymentID string
+	PaymentURL        string
+	SavedToken        string // token to save as PaymentMethod
+	Status            domain.PaymentStatus
+}
+
+type ChargeRequest struct {
+	PaymentID     uuid.UUID
+	AmountKopecks int64
+	Token         string
+}
+
+type ChargeResult struct {
+	ProviderPaymentID string
+	Status            domain.PaymentStatus
+}
+
+type WebhookPayload struct {
+	ProviderPaymentID string
+	InternalPaymentID uuid.UUID
+	Status            domain.PaymentStatus
+	ErrorCode         *string
+}

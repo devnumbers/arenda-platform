@@ -3,23 +3,28 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 )
 
 type Config struct {
-	AppEnv        string
-	HTTPAddr      string
-	LogLevel      string
-	LogLevelValue slog.Level
-	LogFormat     string
-	DatabaseURL   string
-	MigrationsDir string
-	CookieSecure  bool
-	SMSSender     string
-	EncryptionKey string
-	RateLimit     RateLimit
+	AppEnv            string
+	HTTPAddr          string
+	LogLevel          string
+	LogLevelValue     slog.Level
+	LogFormat         string
+	DatabaseURL       string
+	MigrationsDir     string
+	CookieSecure      bool
+	SMSSender         string
+	PaymentProvider   string
+	AppBaseURL        string
+	TKassaTerminalKey string
+	TKassaPassword    string
+	EncryptionKey     string
+	RateLimit         RateLimit
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -32,14 +37,18 @@ type RateLimit struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		AppEnv:        os.Getenv("APP_ENV"),
-		HTTPAddr:      os.Getenv("HTTP_ADDR"),
-		LogLevel:      os.Getenv("LOG_LEVEL"),
-		LogFormat:     os.Getenv("LOG_FORMAT"),
-		DatabaseURL:   os.Getenv("DATABASE_URL"),
-		MigrationsDir: os.Getenv("MIGRATIONS_DIR"),
-		SMSSender:     os.Getenv("SMS_SENDER"),
-		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
+		AppEnv:            os.Getenv("APP_ENV"),
+		HTTPAddr:          os.Getenv("HTTP_ADDR"),
+		LogLevel:          os.Getenv("LOG_LEVEL"),
+		LogFormat:         os.Getenv("LOG_FORMAT"),
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		MigrationsDir:     os.Getenv("MIGRATIONS_DIR"),
+		SMSSender:         os.Getenv("SMS_SENDER"),
+		PaymentProvider:   os.Getenv("PAYMENT_PROVIDER"),
+		AppBaseURL:        os.Getenv("APP_BASE_URL"),
+		TKassaTerminalKey: os.Getenv("T_KASSA_TERMINAL_KEY"),
+		TKassaPassword:    os.Getenv("T_KASSA_PASSWORD"),
+		EncryptionKey:     os.Getenv("ENCRYPTION_KEY"),
 	}
 
 	if cfg.AppEnv == "" {
@@ -155,6 +164,45 @@ func Load() (Config, error) {
 	allowedSenders := map[string]bool{"": true, "fake": true}
 	if !allowedSenders[cfg.SMSSender] {
 		return Config{}, fmt.Errorf("invalid SMS_SENDER %q: must be empty or fake", cfg.SMSSender)
+	}
+
+	if cfg.PaymentProvider == "" {
+		if cfg.AppEnv == "local" {
+			cfg.PaymentProvider = "fake"
+		} else {
+			return Config{}, fmt.Errorf("PAYMENT_PROVIDER is required for APP_ENV=%s", cfg.AppEnv)
+		}
+	}
+	allowedPaymentProviders := map[string]bool{"fake": true, "tkassa": true}
+	if !allowedPaymentProviders[cfg.PaymentProvider] {
+		return Config{}, fmt.Errorf("invalid PAYMENT_PROVIDER %q: must be fake or tkassa", cfg.PaymentProvider)
+	}
+	if cfg.AppEnv != "local" && cfg.PaymentProvider == "fake" {
+		return Config{}, fmt.Errorf("PAYMENT_PROVIDER=fake is not allowed for APP_ENV=%s", cfg.AppEnv)
+	}
+	if cfg.PaymentProvider == "fake" {
+		if cfg.AppBaseURL == "" {
+			return Config{}, fmt.Errorf("APP_BASE_URL is required when PAYMENT_PROVIDER=fake")
+		}
+		u, err := url.Parse(cfg.AppBaseURL)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid APP_BASE_URL %q: %w", cfg.AppBaseURL, err)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return Config{}, fmt.Errorf("invalid APP_BASE_URL %q: scheme must be http or https", cfg.AppBaseURL)
+		}
+	}
+	if cfg.PaymentProvider == "tkassa" {
+		if cfg.TKassaTerminalKey == "" {
+			return Config{}, fmt.Errorf("T_KASSA_TERMINAL_KEY is required when PAYMENT_PROVIDER=tkassa")
+		}
+		if cfg.TKassaPassword == "" {
+			return Config{}, fmt.Errorf("T_KASSA_PASSWORD is required when PAYMENT_PROVIDER=tkassa")
+		}
+	}
+
+	if cfg.AppEnv != "local" && cfg.EncryptionKey == "" {
+		return Config{}, fmt.Errorf("ENCRYPTION_KEY is required for APP_ENV=%s", cfg.AppEnv)
 	}
 
 	return cfg, nil

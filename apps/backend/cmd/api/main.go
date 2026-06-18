@@ -11,20 +11,23 @@ import (
 	"syscall"
 	"time"
 
+	paymentfake "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/fake"
+	paymenttkassa "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/tkassa"
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
+	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
 	fakesms "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/sms"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leasespg "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/postgres"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
-	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	notificationsms "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/sms"
+	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/cleaner"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
 	platformnotifications "github.com/nambers/arenda-planform/apps/backend/internal/platform/notifications"
@@ -66,9 +69,6 @@ func run(fallback *slog.Logger) error {
 		return fmt.Errorf("encryption: %w", err)
 	}
 	if cfg.EncryptionKey == "" {
-		if cfg.AppEnv != "local" {
-			return fmt.Errorf("ENCRYPTION_KEY is required for APP_ENV=%s", cfg.AppEnv)
-		}
 		logger.WarnContext(ctx, "ENCRYPTION_KEY is empty; provider tokens will be stored without encryption (local dev only)")
 	}
 
@@ -90,6 +90,16 @@ func run(fallback *slog.Logger) error {
 	logger.InfoContext(ctx, "billing repositories initialized",
 		"payment_methods", paymentMethodRepo != nil,
 		"subscription_payments", subscriptionPaymentRepo != nil)
+
+	var paymentProvider billingapp.Provider
+	switch cfg.PaymentProvider {
+	case "fake":
+		// TODO(Task 6): wire the fake confirmation handler POST /internal/fake-subscription-payment/{providerPaymentID}/confirm.
+		paymentProvider = paymentfake.NewProvider(cfg.AppBaseURL, logger, realClock{})
+	case "tkassa":
+		paymentProvider = paymenttkassa.NewProvider(cfg.TKassaTerminalKey, cfg.TKassaPassword, logger)
+	}
+	logger.InfoContext(ctx, "payment provider initialized", "provider", cfg.PaymentProvider, "initialized", paymentProvider != nil)
 
 	identityUserRepo := identitypg.NewUserRepository(pool)
 	identitySMSRepo := identitypg.NewSMSCodeRepository(pool)

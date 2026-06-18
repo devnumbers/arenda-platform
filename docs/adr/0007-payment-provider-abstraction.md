@@ -20,12 +20,21 @@ specific provider's API or webhook format.
 Introduce a single subscription payment port and hide every provider behind it.
 
 - The port and provider-neutral DTOs live in `internal/billing/application` as
-  `Provider`, `InitRequest`, `InitResult`, and `WebhookPayload`. The provider
-  port has one method:
+  `Provider`, `InitRequest`, `InitResult`, `ChargeRequest`, `ChargeResult`, and
+  `WebhookPayload`. The provider port has three methods:
 
   ```go
   Init(ctx context.Context, req InitRequest) (InitResult, error)
+  Charge(ctx context.Context, req ChargeRequest) (ChargeResult, error)
+  ParseWebhook(ctx context.Context, payload []byte) (WebhookPayload, error)
   ```
+
+  `Init` is used for the first payment/redirect flow and returns a provider
+  payment identifier and a URL the user follows to complete the payment.
+  `Charge` is used for recurrent charges with a saved token after a previous
+  payment established the token. `ParseWebhook` normalizes an incoming provider
+  webhook payload into the provider-neutral `WebhookPayload` consumed by the
+  application service.
 
 - Webhook handling is decoupled from the adapter: incoming provider payloads are
   normalized into `application.WebhookPayload` and passed to

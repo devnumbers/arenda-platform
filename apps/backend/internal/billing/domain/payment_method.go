@@ -12,6 +12,8 @@ type PaymentProvider string
 const (
 	// ProviderFake is a local/dev fake provider used for manual testing.
 	ProviderFake PaymentProvider = "fake"
+	// ProviderTkassa is the T-Kassa payment provider.
+	ProviderTkassa PaymentProvider = "tkassa"
 )
 
 // PaymentMethod stores a reusable payment instrument for a user.
