@@ -204,12 +204,73 @@ func seedOwner(ctx context.Context, tx pgx.Tx, index int) (*ownerState, error) {
 }
 
 func seedEndpoint(ctx context.Context, db *pgxpool.Pool, state *seedState, endpoint string) error {
-	// Task 3 will implement per-endpoint fixtures.
-	_ = ctx
-	_ = db
-	_ = state
-	_ = endpoint
-	return nil
+	switch endpoint {
+	case "delete_reminder":
+		return seedManyReminders(ctx, db, state)
+	case "auth_verify_code":
+		return seedAuthCodes(ctx, db, state)
+	default:
+		return fmt.Errorf("unknown perfseed endpoint: %s", endpoint)
+	}
+}
+
+func seedManyReminders(ctx context.Context, db *pgxpool.Pool, state *seedState) error {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	now := time.Now().UTC()
+	batch := &pgx.Batch{}
+
+	const remindersPerOwner = 10
+	for _, owner := range state.owners {
+		for i := 0; i < remindersPerOwner; i++ {
+			scheduledAt := now.Add(time.Duration(i+1) * 24 * time.Hour)
+			batch.Queue(`
+				INSERT INTO reminders (
+					id, owner_id, target_type, operation_id, event_type, status,
+					scheduled_at, message_title, message_body, created_at, updated_at
+				)
+				VALUES ($1, $2, 'operation', $3, 'operation_due', 'pending', $4, $5, $6, $7, $7)
+			`, uuid.New(), owner.id, owner.operationID, scheduledAt,
+				fmt.Sprintf("Operation due reminder extra %d", i),
+				fmt.Sprintf("Reminder extra body %d", i),
+				now)
+		}
+	}
+
+	if err := tx.SendBatch(ctx, batch).Close(); err != nil {
+		return fmt.Errorf("insert reminders: %w", err)
+	}
+	return tx.Commit(ctx)
+}
+
+func seedAuthCodes(ctx context.Context, db *pgxpool.Pool, state *seedState) error {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	now := time.Now().UTC()
+	code := "000000"
+	codeHash := hashToken(code)
+	expiresAt := now.Add(2 * time.Hour)
+	batch := &pgx.Batch{}
+
+	for _, owner := range state.owners {
+		batch.Queue(`
+			INSERT INTO sms_codes (id, user_id, phone, code_hash, expires_at, used, created_at)
+			VALUES ($1, $2, $3, $4, $5, false, $6)
+		`, uuid.New(), owner.id, owner.phone, codeHash, expiresAt, now)
+	}
+
+	if err := tx.SendBatch(ctx, batch).Close(); err != nil {
+		return fmt.Errorf("insert sms codes: %w", err)
+	}
+	return tx.Commit(ctx)
 }
 
 func deterministicToken(index int) string {
