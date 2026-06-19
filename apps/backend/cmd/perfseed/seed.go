@@ -20,13 +20,17 @@ type seedConfig struct {
 
 type ownerState struct {
 	id                   uuid.UUID
+	subscriptionID       uuid.UUID
 	phone                string
 	propertyID           uuid.UUID
 	leaseID              uuid.UUID
 	operationID          uuid.UUID
 	recurringOperationID uuid.UUID
 	reminderID           uuid.UUID
+	extraReminderIDs     []uuid.UUID
 	tenantContactID      uuid.UUID
+	paymentMethodID      uuid.UUID
+	pendingPaymentID     uuid.UUID
 	sessionToken         string
 }
 
@@ -35,16 +39,19 @@ type seedState struct {
 }
 
 type serializableOwnerState struct {
-	Index                int    `json:"index"`
-	ID                   string `json:"id"`
-	Phone                string `json:"phone"`
-	SessionToken         string `json:"sessionToken"`
-	PropertyID           string `json:"propertyID"`
-	LeaseID              string `json:"leaseID"`
-	OperationID          string `json:"operationID"`
-	RecurringOperationID string `json:"recurringOperationID"`
-	ReminderID           string `json:"reminderID"`
-	TenantContactID      string `json:"tenantContactID"`
+	Index                int      `json:"index"`
+	ID                   string   `json:"id"`
+	Phone                string   `json:"phone"`
+	SessionToken         string   `json:"sessionToken"`
+	PropertyID           string   `json:"propertyID"`
+	LeaseID              string   `json:"leaseID"`
+	OperationID          string   `json:"operationID"`
+	RecurringOperationID string   `json:"recurringOperationID"`
+	ReminderID           string   `json:"reminderID"`
+	ExtraReminderIDs     []string `json:"extraReminderIDs"`
+	TenantContactID      string   `json:"tenantContactID"`
+	PaymentMethodID      string   `json:"paymentMethodID"`
+	PendingPaymentID     string   `json:"pendingPaymentID"`
 }
 
 type fixturesFile struct {
@@ -54,6 +61,10 @@ type fixturesFile struct {
 func writeFixtures(state *seedState) error {
 	owners := make([]serializableOwnerState, len(state.owners))
 	for i, o := range state.owners {
+		extraIDs := make([]string, len(o.extraReminderIDs))
+		for j, id := range o.extraReminderIDs {
+			extraIDs[j] = id.String()
+		}
 		owners[i] = serializableOwnerState{
 			Index:                i,
 			ID:                   o.id.String(),
@@ -64,7 +75,10 @@ func writeFixtures(state *seedState) error {
 			OperationID:          o.operationID.String(),
 			RecurringOperationID: o.recurringOperationID.String(),
 			ReminderID:           o.reminderID.String(),
+			ExtraReminderIDs:     extraIDs,
 			TenantContactID:      o.tenantContactID.String(),
+			PaymentMethodID:      o.paymentMethodID.String(),
+			PendingPaymentID:     o.pendingPaymentID.String(),
 		}
 	}
 	data, err := json.MarshalIndent(fixturesFile{Owners: owners}, "", "  ")
@@ -148,10 +162,11 @@ func seedOwner(ctx context.Context, tx pgx.Tx, index int) (*ownerState, error) {
 		return nil, fmt.Errorf("insert user: %w", err)
 	}
 
+	subscriptionID := uuid.New()
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO user_subscriptions (id, user_id, tariff_id, source, status, valid_until, created_at, updated_at)
-		VALUES ($1, $2, (SELECT id FROM tariffs WHERE name = 'basic' LIMIT 1), 'service', 'active', $3, $4, $4)
-	`, uuid.New(), ownerID, now.Add(365*24*time.Hour), now); err != nil {
+		VALUES ($1, $2, (SELECT id FROM tariffs WHERE name = 'basic' LIMIT 1), 'paid', 'active', $3, $4, $4)
+	`, subscriptionID, ownerID, now.Add(365*24*time.Hour), now); err != nil {
 		return nil, fmt.Errorf("insert subscription: %w", err)
 	}
 
@@ -235,8 +250,21 @@ func seedOwner(ctx context.Context, tx pgx.Tx, index int) (*ownerState, error) {
 		return nil, fmt.Errorf("insert reminder: %w", err)
 	}
 
+	paymentMethodID := uuid.New()
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO payment_methods (id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at)
+		VALUES ($1, $2, 'fake', $3, $4, $5, false, $6, $6)
+	`, paymentMethodID, ownerID,
+		fmt.Sprintf("fake-provider-token-%d", index),
+		fmt.Sprintf("dummy-token-hash-%d", index),
+		fmt.Sprintf("****%04d", index),
+		now); err != nil {
+		return nil, fmt.Errorf("insert payment method: %w", err)
+	}
+
 	return &ownerState{
 		id:                   ownerID,
+		subscriptionID:       subscriptionID,
 		phone:                phone,
 		propertyID:           propertyID,
 		leaseID:              leaseID,
@@ -244,6 +272,7 @@ func seedOwner(ctx context.Context, tx pgx.Tx, index int) (*ownerState, error) {
 		recurringOperationID: recID,
 		reminderID:           remID,
 		tenantContactID:      contactID,
+		paymentMethodID:      paymentMethodID,
 		sessionToken:         token,
 	}, nil
 }
@@ -254,6 +283,8 @@ func seedEndpoint(ctx context.Context, db *pgxpool.Pool, state *seedState, endpo
 		return seedManyReminders(ctx, db, state)
 	case "auth_verify_code":
 		return seedAuthCodes(ctx, db, state)
+	case "confirm_fake_subscription_payment":
+		return seedPendingPayments(ctx, db, state)
 	default:
 		return fmt.Errorf("unknown perfseed endpoint: %s", endpoint)
 	}
@@ -270,8 +301,12 @@ func seedManyReminders(ctx context.Context, db *pgxpool.Pool, state *seedState) 
 	batch := &pgx.Batch{}
 
 	const remindersPerOwner = 10
-	for _, owner := range state.owners {
+	for oi := range state.owners {
+		owner := &state.owners[oi]
+		owner.extraReminderIDs = make([]uuid.UUID, remindersPerOwner)
 		for i := 0; i < remindersPerOwner; i++ {
+			id := uuid.New()
+			owner.extraReminderIDs[i] = id
 			scheduledAt := now.Add(time.Duration(i+1) * 24 * time.Hour)
 			batch.Queue(`
 				INSERT INTO reminders (
@@ -279,7 +314,7 @@ func seedManyReminders(ctx context.Context, db *pgxpool.Pool, state *seedState) 
 					scheduled_at, message_title, message_body, created_at, updated_at
 				)
 				VALUES ($1, $2, 'operation', $3, 'operation_due', 'pending', $4, $5, $6, $7, $7)
-			`, uuid.New(), owner.id, owner.operationID, scheduledAt,
+			`, id, owner.id, owner.operationID, scheduledAt,
 				fmt.Sprintf("Operation due reminder extra %d", i),
 				fmt.Sprintf("Reminder extra body %d", i),
 				now)
@@ -314,6 +349,34 @@ func seedAuthCodes(ctx context.Context, db *pgxpool.Pool, state *seedState) erro
 
 	if err := tx.SendBatch(ctx, batch).Close(); err != nil {
 		return fmt.Errorf("insert sms codes: %w", err)
+	}
+	return tx.Commit(ctx)
+}
+
+func seedPendingPayments(ctx context.Context, db *pgxpool.Pool, state *seedState) error {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	now := time.Now().UTC()
+	batch := &pgx.Batch{}
+
+	for i := range state.owners {
+		paymentID := uuid.New()
+		state.owners[i].pendingPaymentID = paymentID
+		batch.Queue(`
+			INSERT INTO subscription_payments (
+				id, user_id, subscription_id, tariff_id, payment_method_id,
+				period, amount_kopecks, provider, status, created_at, updated_at
+			)
+			VALUES ($1, $2, $3, (SELECT id FROM tariffs WHERE name = 'basic' LIMIT 1), NULL, 'month', 0, 'fake', 'pending', $4, $4)
+		`, paymentID, state.owners[i].id, state.owners[i].subscriptionID, now)
+	}
+
+	if err := tx.SendBatch(ctx, batch).Close(); err != nil {
+		return fmt.Errorf("insert pending payments: %w", err)
 	}
 	return tx.Commit(ctx)
 }
