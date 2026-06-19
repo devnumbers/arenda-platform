@@ -1,7 +1,18 @@
+function sessionCookie(index) {
+  return `session_id=perf-session-token-${index}`;
+}
+
+function ownerIndex(ctx) {
+  return (ctx.vu + ctx.iteration) % 1000;
+}
+
 export const endpoints = {
   get_me: {
-    method: 'GET',
-    path: '/api/v1/users/me',
-    expectedStatuses: [200, 401],
+    request: (ctx) => ({
+      method: 'GET',
+      url: `${ctx.baseUrl}/me`,
+      headers: { Cookie: sessionCookie(ownerIndex(ctx)) },
+    }),
+    expectedStatuses: [200],
   },
 };

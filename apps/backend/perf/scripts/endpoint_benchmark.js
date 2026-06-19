@@ -36,15 +36,19 @@ export default function () {
     throw new Error(`Unknown endpoint: ${ENDPOINT}`);
   }
 
-  const url = `${API_BASE_URL}${endpoint.path}`;
-  const params = {
-    tags: {
-      name: ENDPOINT,
-      endpoint: ENDPOINT,
-    },
+  const ctx = {
+    baseUrl: API_BASE_URL,
+    vu: __VU,
+    iteration: __ITER,
   };
 
-  const response = http.request(endpoint.method, url, null, params);
+  const req = endpoint.request(ctx);
+  const params = {
+    headers: req.headers || {},
+    tags: { name: ENDPOINT },
+  };
+
+  const response = http.request(req.method, req.url, req.body || null, params);
 
   check(response, {
     'status is expected': (r) => endpoint.expectedStatuses.includes(r.status),
