@@ -13,3 +13,5 @@ tools/bruno/arenda-api/environments/Local.bru
 
 # Generated perf fixtures
 apps/backend/perf/fixtures.json
+apps/backend/perfseed
+apps/backend/perfmaxrps
