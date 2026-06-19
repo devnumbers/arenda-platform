@@ -148,3 +148,57 @@ UPDATE subscription_payments
 SET payment_method_id = $2, provider_payment_id = $3, updated_at = now()
 WHERE id = $1
 RETURNING *;
+
+-- name: ListSubscriptionsUpForRenewal :many
+SELECT * FROM user_subscriptions
+WHERE status = 'active'
+  AND auto_renew_enabled = true
+  AND valid_until IS NOT NULL
+  AND valid_until <= $1
+ORDER BY valid_until ASC
+LIMIT $2
+FOR UPDATE SKIP LOCKED;
+
+-- name: ListSubscriptionsInExpiredGrace :many
+SELECT * FROM user_subscriptions
+WHERE status = 'grace'
+  AND valid_until IS NOT NULL
+  AND valid_until <= $1
+ORDER BY valid_until ASC
+LIMIT $2
+FOR UPDATE SKIP LOCKED;
+
+-- name: ListExpiredNonRenewingSubscriptions :many
+SELECT * FROM user_subscriptions
+WHERE status = 'active'
+  AND auto_renew_enabled = false
+  AND valid_until IS NOT NULL
+  AND valid_until <= $1
+ORDER BY valid_until ASC
+LIMIT $2
+FOR UPDATE SKIP LOCKED;
+
+-- name: ListExpiredCancelledSubscriptions :many
+SELECT * FROM user_subscriptions
+WHERE status = 'cancelled'
+  AND valid_until IS NOT NULL
+  AND valid_until <= $1
+ORDER BY valid_until ASC
+LIMIT $2
+FOR UPDATE SKIP LOCKED;
+
+-- name: ListSubscriptionsWithPendingChange :many
+SELECT * FROM user_subscriptions
+WHERE status = 'active'
+  AND pending_tariff_id IS NOT NULL
+  AND pending_change_at IS NOT NULL
+  AND pending_change_at <= $1
+ORDER BY pending_change_at ASC
+LIMIT $2
+FOR UPDATE SKIP LOCKED;
+
+-- name: GetLastSucceededSubscriptionPaymentBySubscriptionID :one
+SELECT * FROM subscription_payments
+WHERE subscription_id = $1 AND status = 'succeeded'
+ORDER BY created_at DESC
+LIMIT 1;

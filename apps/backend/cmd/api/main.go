@@ -100,17 +100,6 @@ func run(fallback *slog.Logger) error {
 	}
 	logger.InfoContext(ctx, "payment provider initialized", "provider", cfg.PaymentProvider, "initialized", paymentProvider != nil)
 
-	billingService := billingapp.NewBillingService(
-		tariffRepo,
-		subscriptionRepo,
-		paymentMethodRepo,
-		subscriptionPaymentRepo,
-		paymentProvider,
-		platformpostgres.NewBeginner(pool),
-		realClock{},
-		logger,
-	)
-
 	identityUserRepo := identitypg.NewUserRepository(pool)
 	identitySMSRepo := identitypg.NewSMSCodeRepository(pool)
 	identityAttemptRepo := identitypg.NewAttemptRepository(pool)
@@ -157,6 +146,18 @@ func run(fallback *slog.Logger) error {
 		logger,
 	)
 
+	billingService := billingapp.NewBillingService(
+		tariffRepo,
+		subscriptionRepo,
+		paymentMethodRepo,
+		subscriptionPaymentRepo,
+		paymentProvider,
+		platformpostgres.NewBeginner(pool),
+		realClock{},
+		logger,
+		propertyService,
+	)
+
 	leaseRepo := leasespg.NewLeaseRepository(pool)
 	leasePropertyRepo := leasespg.NewPropertyRepository(pool)
 	tenantContactRepo := leasespg.NewTenantContactRepository(pool)
@@ -191,11 +192,13 @@ func run(fallback *slog.Logger) error {
 	smsNotifier := notificationsms.NewNotifier(contactResolver, smsSenderAdapter, logger)
 	reminderWorker := scheduler.NewReminderWorker(reminderRepo, smsNotifier, contactResolver, platformpostgres.NewBeginner(pool), realClock{}, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, logger)
 	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, realClock{}, 1*time.Hour, 100, logger)
+	billingWorker := scheduler.NewBillingWorker(billingService, pool, realClock{}, cfg.BillingWorkerInterval, logger)
 
 	dataCleaner := cleaner.New(identitySessionRepo, identitySMSRepo, identityAttemptRepo, 1*time.Hour, 7*24*time.Hour, logger)
 	go dataCleaner.Run(ctx)
 	go reminderWorker.Run(ctx)
 	go leaseReconciliationWorker.Run(ctx)
+	go billingWorker.Run(ctx)
 
 	ipLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.IPRPS), cfg.RateLimit.IPBurst, 1*time.Hour)
 	defer ipLimiter.Stop()

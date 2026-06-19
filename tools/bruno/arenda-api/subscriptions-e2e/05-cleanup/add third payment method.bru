@@ -1,0 +1,45 @@
+meta {
+  name: Add Third Payment Method
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/subscription/payment-methods
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "providerToken": "fake_visa_9999"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setVar("thirdPaymentMethodId", res.body.id);
+    console.log("saved thirdPaymentMethodId =", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should return payment method id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+}

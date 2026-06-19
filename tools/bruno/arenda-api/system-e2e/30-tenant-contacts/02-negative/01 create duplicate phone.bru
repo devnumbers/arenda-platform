@@ -1,0 +1,43 @@
+meta {
+  name: Create Duplicate Phone Tenant Contact
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/tenant-contacts
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "name": "Сергей",
+    "surname": "Сергеев",
+    "patronymic": "Сергеевич",
+    "phone": "{{tenantContactPhone}}",
+    "email": "{{duplicateTenantEmail}}",
+    "comment": "{{duplicateTenantComment}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+
+  bru.setVar("duplicateTenantEmail", "e2e.duplicate." + Date.now() + "@example.com");
+  bru.setVar("duplicateTenantComment", "E2E duplicate phone " + Date.now());
+}
+
+tests {
+  test("should return 409", function() {
+    expect(res.status).to.equal(409);
+  });
+}

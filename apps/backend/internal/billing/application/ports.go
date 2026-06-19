@@ -37,6 +37,11 @@ type SubscriptionRepository interface {
 	GetByUserIDForUpdate(ctx context.Context, userID uuid.UUID) (domain.Subscription, error)
 	Create(ctx context.Context, sub domain.Subscription) (domain.Subscription, error)
 	Update(ctx context.Context, sub domain.Subscription) error
+	ListUpForRenewal(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error)
+	ListInExpiredGrace(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error)
+	ListExpiredNonRenewing(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error)
+	ListExpiredCancelled(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error)
+	ListPendingChanges(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error)
 	WithTx(tx transaction.Tx) SubscriptionRepository
 }
 
@@ -55,6 +60,7 @@ type SubscriptionPaymentRepository interface {
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
 	ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
+	GetLastSucceededBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) (domain.SubscriptionPayment, error)
 	MarkSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, errorCode *string, now time.Time) error
 	UpdateProviderPaymentID(ctx context.Context, id uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
@@ -62,10 +68,23 @@ type SubscriptionPaymentRepository interface {
 	WithTx(tx transaction.Tx) SubscriptionPaymentRepository
 }
 
+// PropertyArchiver archives properties when a subscription is downgraded to a
+// lower-limit tariff. It is implemented by the properties application service.
+type PropertyArchiver interface {
+	ArchiveExcessProperties(ctx context.Context, userID uuid.UUID, limit int) error
+}
+
 // ConfirmableProvider is implemented by providers that support an explicit
 // confirmation step. In the MVP only the fake provider does.
 type ConfirmableProvider interface {
 	ConfirmPayment(ctx context.Context, internalPaymentID string) (WebhookPayload, error)
+}
+
+// PaymentURLProvider is implemented by providers that can reconstruct a payment
+// confirmation URL from an internal payment id. This lets the API return a
+// confirmation link for an already-pending payment.
+type PaymentURLProvider interface {
+	PaymentURL(ctx context.Context, paymentID uuid.UUID) (string, error)
 }
 
 // Provider abstracts the external payment processor used for subscription payments.

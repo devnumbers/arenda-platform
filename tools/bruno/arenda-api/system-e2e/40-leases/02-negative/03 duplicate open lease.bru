@@ -1,0 +1,44 @@
+meta {
+  name: Duplicate Open Lease
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/leases
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "property_id": "{{duplicatePropertyId}}",
+    "tenant_contact_id": "{{leaseTenantContactId}}",
+    "start_date": "{{duplicateLeaseStart}}",
+    "end_date": "{{duplicateLeaseEnd}}",
+    "rent_amount_kopecks": 11000000,
+    "deposit_amount_kopecks": 2200000,
+    "payment_day": 15,
+    "comment": "{{duplicateOpenLeaseComment}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+
+  bru.setVar("duplicateOpenLeaseComment", "E2E duplicate open lease " + Date.now());
+}
+
+tests {
+  test("should return 409", function() {
+    expect(res.status).to.equal(409);
+  });
+}

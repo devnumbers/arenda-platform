@@ -1,0 +1,52 @@
+meta {
+  name: Verify Phone Code
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/auth/phone/verify
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "phone": "{{phone}}",
+    "code": "{{code}}"
+  }
+}
+
+script:post-response {
+  const setCookie = res.getHeader("set-cookie");
+  if (setCookie) {
+    const raw = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+    const match = raw.match(/(__Host-session_id|session_id)=([^;]+)/);
+    if (match) {
+      bru.setEnvVar("cookieName", match[1]);
+      bru.setVar("cookieName", match[1]);
+      bru.setEnvVar("session_id", match[2]);
+      bru.setVar("session_id", match[2]);
+      console.log("saved cookieName =", match[1]);
+      console.log("saved session_id =", match[2]);
+    }
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have user id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+
+  test("should set session cookie", function() {
+    expect(res.getHeader("set-cookie")).to.exist;
+  });
+}

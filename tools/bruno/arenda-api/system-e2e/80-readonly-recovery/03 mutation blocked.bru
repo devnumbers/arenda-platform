@@ -1,0 +1,40 @@
+meta {
+  name: Mutation Blocked
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/properties
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "name": "{{blockedPropertyName}}",
+    "type": "apartment",
+    "address": "{{blockedPropertyAddress}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+
+  bru.setVar("blockedPropertyName", "E2E Blocked Prop " + Date.now());
+  bru.setVar("blockedPropertyAddress", "E2E Blocked St " + Date.now());
+}
+
+tests {
+  test("should return 403", function() {
+    expect(res.status).to.equal(403);
+  });
+}

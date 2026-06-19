@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -65,6 +66,26 @@ func (r *invalidSubscriptionRepository) Create(ctx context.Context, sub domain.S
 
 func (r *invalidSubscriptionRepository) Update(ctx context.Context, sub domain.Subscription) error {
 	return fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.Update", r.tx)
+}
+
+func (r *invalidSubscriptionRepository) ListUpForRenewal(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
+	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.ListUpForRenewal", r.tx)
+}
+
+func (r *invalidSubscriptionRepository) ListInExpiredGrace(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
+	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.ListInExpiredGrace", r.tx)
+}
+
+func (r *invalidSubscriptionRepository) ListExpiredNonRenewing(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
+	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.ListExpiredNonRenewing", r.tx)
+}
+
+func (r *invalidSubscriptionRepository) ListExpiredCancelled(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
+	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.ListExpiredCancelled", r.tx)
+}
+
+func (r *invalidSubscriptionRepository) ListPendingChanges(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
+	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.ListPendingChanges", r.tx)
 }
 
 func (r *invalidSubscriptionRepository) WithTx(tx transaction.Tx) application.SubscriptionRepository {
@@ -145,6 +166,90 @@ func (r *SubscriptionRepository) Update(ctx context.Context, sub domain.Subscrip
 		return fmt.Errorf("update subscription: %w", err)
 	}
 	return nil
+}
+
+// ListUpForRenewal returns active subscriptions with auto-renew enabled whose
+// validity period has ended.
+func (r *SubscriptionRepository) ListUpForRenewal(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
+	rows, err := r.q().ListSubscriptionsUpForRenewal(ctx, postgres.ListSubscriptionsUpForRenewalParams{
+		ValidUntil: pgtype.Timestamptz{Time: now.UTC(), Valid: true},
+		Limit:      limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list subscriptions up for renewal: %w", err)
+	}
+	subs := make([]domain.Subscription, 0, len(rows))
+	for _, row := range rows {
+		subs = append(subs, mapSubscription(row))
+	}
+	return subs, nil
+}
+
+// ListInExpiredGrace returns subscriptions whose grace period has ended.
+func (r *SubscriptionRepository) ListInExpiredGrace(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
+	rows, err := r.q().ListSubscriptionsInExpiredGrace(ctx, postgres.ListSubscriptionsInExpiredGraceParams{
+		ValidUntil: pgtype.Timestamptz{Time: now.UTC(), Valid: true},
+		Limit:      limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list subscriptions in expired grace: %w", err)
+	}
+	subs := make([]domain.Subscription, 0, len(rows))
+	for _, row := range rows {
+		subs = append(subs, mapSubscription(row))
+	}
+	return subs, nil
+}
+
+// ListExpiredNonRenewing returns active paid subscriptions whose validity period
+// has ended and that have auto-renew disabled. They must be downgraded to basic.
+func (r *SubscriptionRepository) ListExpiredNonRenewing(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
+	rows, err := r.q().ListExpiredNonRenewingSubscriptions(ctx, postgres.ListExpiredNonRenewingSubscriptionsParams{
+		ValidUntil: pgtype.Timestamptz{Time: now.UTC(), Valid: true},
+		Limit:      limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list expired non-renewing subscriptions: %w", err)
+	}
+	subs := make([]domain.Subscription, 0, len(rows))
+	for _, row := range rows {
+		subs = append(subs, mapSubscription(row))
+	}
+	return subs, nil
+}
+
+// ListExpiredCancelled returns cancelled subscriptions whose retained validity
+// period has ended. They must be downgraded to basic.
+func (r *SubscriptionRepository) ListExpiredCancelled(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
+	rows, err := r.q().ListExpiredCancelledSubscriptions(ctx, postgres.ListExpiredCancelledSubscriptionsParams{
+		ValidUntil: pgtype.Timestamptz{Time: now.UTC(), Valid: true},
+		Limit:      limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list expired cancelled subscriptions: %w", err)
+	}
+	subs := make([]domain.Subscription, 0, len(rows))
+	for _, row := range rows {
+		subs = append(subs, mapSubscription(row))
+	}
+	return subs, nil
+}
+
+// ListPendingChanges returns active subscriptions whose scheduled tariff change
+// is due. They are locked with SKIP LOCKED for worker processing.
+func (r *SubscriptionRepository) ListPendingChanges(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
+	rows, err := r.q().ListSubscriptionsWithPendingChange(ctx, postgres.ListSubscriptionsWithPendingChangeParams{
+		PendingChangeAt: pgtype.Timestamptz{Time: now.UTC(), Valid: true},
+		Limit:           limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list subscriptions with pending change: %w", err)
+	}
+	subs := make([]domain.Subscription, 0, len(rows))
+	for _, row := range rows {
+		subs = append(subs, mapSubscription(row))
+	}
+	return subs, nil
 }
 
 func periodTextPtr(p *domain.SubscriptionPeriod) pgtype.Text {

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log/slog"
@@ -20,18 +21,17 @@ type SubscriptionHandlers struct {
 }
 
 // NewSubscriptionHandlers creates HTTP handlers for the billing API.
-func NewSubscriptionHandlers(billing *billingapp.BillingService, logger *slog.Logger) *SubscriptionHandlers {
-	return &SubscriptionHandlers{billing: billing, logger: logger}
+func NewSubscriptionHandlers(billing *billingapp.BillingService, logger *slog.Logger, devMode bool) *SubscriptionHandlers {
+	return &SubscriptionHandlers{billing: billing, logger: logger, DevMode: devMode}
 }
 
 // ListTariffs implements GET /tariffs.
 func (h *SubscriptionHandlers) ListTariffs(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := ownerIDFromContext(r)
+	_, ok := ownerIDFromContext(r)
 	if !ok {
 		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
-	_ = ownerID
 
 	tariffs, err := h.billing.ListTariffs(r.Context())
 	if err != nil {
@@ -79,6 +79,22 @@ func (h *SubscriptionHandlers) ToggleAutoRenew(w http.ResponseWriter, r *http.Re
 	}
 
 	if err := h.billing.ToggleAutoRenew(r.Context(), ownerID, body.Enabled); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// CancelSubscription implements POST /subscription/cancel.
+func (h *SubscriptionHandlers) CancelSubscription(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	if err := h.billing.CancelSubscription(r.Context(), ownerID); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -227,23 +243,23 @@ func (h *SubscriptionHandlers) ConfirmFakeSubscriptionPayment(w http.ResponseWri
 	}
 
 	if err := h.billing.ConfirmFakePayment(r.Context(), id); err != nil {
-		switch {
-		case errors.Is(err, billingapp.ErrPaymentNotFound):
-			writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "payment not found"))
-		default:
-			h.handleBillingError(w, r, err)
-		}
+		h.handleBillingError(w, r, err)
 		return
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
+const maxWebhookBody = 256 * 1024
+
 // HandlePaymentWebhook implements POST /webhooks/payment/{provider}.
 // Webhooks always return 200 OK to avoid leaking payload validity to attackers.
 func (h *SubscriptionHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *http.Request, provider string) {
-	r.Body = http.MaxBytesReader(w, r.Body, 256*1024)
-	payload, err := io.ReadAll(r.Body)
+	defer func() { _ = r.Body.Close() }()
+
+	// Read with a hard size cap, but do not use http.MaxBytesReader because it
+	// writes a 413 response and prevents us from returning 200.
+	payload, err := io.ReadAll(io.LimitReader(r.Body, maxWebhookBody+1))
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to read webhook body",
 			slog.String("provider", provider),
@@ -251,7 +267,13 @@ func (h *SubscriptionHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *ht
 		writeJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
 		return
 	}
-	defer func() { _ = r.Body.Close() }()
+	if len(payload) > maxWebhookBody {
+		h.logger.ErrorContext(r.Context(), "webhook body exceeds size limit",
+			slog.String("provider", provider),
+			slog.Int("size", len(payload)))
+		writeJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
+		return
+	}
 
 	if err := h.billing.HandleWebhook(r.Context(), provider, payload); err != nil {
 		h.logger.ErrorContext(r.Context(), "webhook handling failed",
@@ -280,6 +302,10 @@ func (h *SubscriptionHandlers) handleBillingError(w http.ResponseWriter, r *http
 	case errors.Is(err, domain.ErrInvalidPeriod),
 		errors.Is(err, domain.ErrInvalidAmount):
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", err.Error()))
+	case errors.Is(err, context.DeadlineExceeded):
+		writeProblem(w, http.StatusGatewayTimeout, problem(r.Context(), "Gateway timeout", err.Error()))
+	case errors.Is(err, context.Canceled):
+		writeProblem(w, 499, problem(r.Context(), "Client closed request", err.Error()))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 	}

@@ -47,6 +47,7 @@ type Querier interface {
 	DeleteUneditedFutureOperationsByLease(ctx context.Context, arg DeleteUneditedFutureOperationsByLeaseParams) error
 	DeleteUneditedFutureOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedFutureOperationsByRecurringOperationParams) error
 	DeleteUneditedOperationsByLease(ctx context.Context, leaseID pgtype.UUID) error
+	GetLastSucceededSubscriptionPaymentBySubscriptionID(ctx context.Context, subscriptionID pgtype.UUID) (SubscriptionPayment, error)
 	GetLatestSMSCodeByPhone(ctx context.Context, arg GetLatestSMSCodeByPhoneParams) (SmsCode, error)
 	GetLeaseByID(ctx context.Context, id pgtype.UUID) (Lease, error)
 	GetLeaseByIDAndOwner(ctx context.Context, arg GetLeaseByIDAndOwnerParams) (Lease, error)
@@ -80,6 +81,8 @@ type Querier interface {
 	IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Property, error)
 	ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error)
+	ListExpiredCancelledSubscriptions(ctx context.Context, arg ListExpiredCancelledSubscriptionsParams) ([]UserSubscription, error)
+	ListExpiredNonRenewingSubscriptions(ctx context.Context, arg ListExpiredNonRenewingSubscriptionsParams) ([]UserSubscription, error)
 	ListFutureOperationsByLease(ctx context.Context, arg ListFutureOperationsByLeaseParams) ([]Operation, error)
 	ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Lease, error)
 	ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
@@ -99,6 +102,9 @@ type Querier interface {
 	ListRemindersByRecurringOperation(ctx context.Context, arg ListRemindersByRecurringOperationParams) ([]Reminder, error)
 	ListStaleSendingReminders(ctx context.Context, arg ListStaleSendingRemindersParams) ([]Reminder, error)
 	ListSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
+	ListSubscriptionsInExpiredGrace(ctx context.Context, arg ListSubscriptionsInExpiredGraceParams) ([]UserSubscription, error)
+	ListSubscriptionsUpForRenewal(ctx context.Context, arg ListSubscriptionsUpForRenewalParams) ([]UserSubscription, error)
+	ListSubscriptionsWithPendingChange(ctx context.Context, arg ListSubscriptionsWithPendingChangeParams) ([]UserSubscription, error)
 	ListTariffs(ctx context.Context) ([]Tariff, error)
 	ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]TenantContact, error)
 	LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)

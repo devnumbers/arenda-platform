@@ -1,5 +1,6 @@
 vars {
   baseUrl: http://localhost:8080
+  code: REPLACE_WITH_CODE_FROM_LOGS
   phone: +79150380663
   propertyName: My Rental Property
   propertyType: apartment

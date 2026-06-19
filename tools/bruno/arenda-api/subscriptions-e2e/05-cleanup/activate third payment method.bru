@@ -1,0 +1,24 @@
+meta {
+  name: Activate Third Payment Method
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/subscription/payment-methods/{{thirdPaymentMethodId}}/activate
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 204", function() {
+    expect(res.status).to.equal(204);
+  });
+}

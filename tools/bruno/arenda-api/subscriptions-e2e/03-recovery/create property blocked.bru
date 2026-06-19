@@ -1,0 +1,37 @@
+meta {
+  name: Create Property Blocked
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/properties
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "name": "Blocked Test Property " + Date.now(),
+    "type": "{{propertyType}}",
+    "address": "Blocked St " + Date.now(),
+    "description": "Should be rejected while subscription is cancelled"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 403", function() {
+    expect(res.status).to.equal(403);
+  });
+}

@@ -55,9 +55,21 @@ func NewOwnerSubscription(userID, tariffID uuid.UUID) (Subscription, error) {
 	}, nil
 }
 
-// CanMutateData reports whether the subscription allows the user to mutate property and finance data.
-func (s *Subscription) CanMutateData() bool {
-	return s.Status == SubscriptionStatusActive || s.Status == SubscriptionStatusGrace
+// CanMutateData reports whether the subscription allows the user to mutate
+// property and finance data at the given moment. Active subscriptions whose
+// paid period has already expired are treated as non-mutable until the worker
+// transitions them to grace or basic.
+func (s *Subscription) CanMutateData(now time.Time) bool {
+	if s.Status == SubscriptionStatusGrace {
+		return s.IsInGrace(now)
+	}
+	if s.Status != SubscriptionStatusActive {
+		return false
+	}
+	if s.ValidUntil != nil && now.After(*s.ValidUntil) {
+		return false
+	}
+	return true
 }
 
 // IsPaidSource reports whether the subscription is paid for by the owner.
@@ -116,7 +128,6 @@ func (s *Subscription) ScheduleDowngrade(currentTariff, newTariff Tariff, period
 	s.PendingTariffID = &newTariff.ID
 	s.PendingChangeAt = &changeAt
 	s.PendingPeriod = &period
-	s.AutoRenewEnabled = true
 	return nil
 }
 
@@ -174,6 +185,18 @@ func (s *Subscription) SetAutoRenew(enabled bool) error {
 		return ErrCannotEnableAutoRenew
 	}
 	s.AutoRenewEnabled = enabled
+	return nil
+}
+
+// Cancel terminates the paid subscription at the end of the already paid period.
+// The validity date is retained so the worker can downgrade the subscription to
+// basic once the period expires. Auto-renew is disabled immediately.
+func (s *Subscription) Cancel() error {
+	if s.Status != SubscriptionStatusActive && s.Status != SubscriptionStatusGrace {
+		return ErrInvalidSubscriptionState
+	}
+	s.Status = SubscriptionStatusCancelled
+	s.AutoRenewEnabled = false
 	return nil
 }
 

@@ -1,0 +1,29 @@
+meta {
+  name: Archive Recurring Property
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/properties/{{recurringPropertyId}}/archive
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should be archived", function() {
+    expect(res.body.status).to.equal("archived");
+  });
+}

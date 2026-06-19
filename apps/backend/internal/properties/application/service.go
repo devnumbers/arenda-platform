@@ -285,6 +285,37 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 	return archived, nil
 }
 
+// ArchiveExcessProperties archives active properties beyond the given limit,
+// keeping the most recently updated properties. Properties that cannot be
+// archived because they have an open lease are logged and skipped.
+func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, ownerID uuid.UUID, limit int) error {
+	if limit < 0 {
+		return nil
+	}
+	properties, err := s.repo.ListActiveByOwner(ctx, ownerID)
+	if err != nil {
+		return fmt.Errorf("list active properties: %w", err)
+	}
+	if len(properties) <= limit {
+		return nil
+	}
+
+	for _, p := range properties[limit:] {
+		_, err := s.ArchiveProperty(ctx, ownerID, p.ID)
+		if err != nil {
+			if errors.Is(err, ErrPropertyHasOpenLease) || errors.Is(err, ErrAlreadyArchived) {
+				s.logger.WarnContext(ctx, "skipping auto-archive of property",
+					"property_id", p.ID.String(),
+					"owner_id", ownerID.String(),
+					"error", err.Error())
+				continue
+			}
+			return fmt.Errorf("archive property %s: %w", p.ID, err)
+		}
+	}
+	return nil
+}
+
 func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uuid.UUID) (domain.Property, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -334,6 +365,16 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 	unarchived, err := txRepo.GetByIDAndOwner(ctx, id, ownerID)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("reload unarchived property: %w", err)
+	}
+
+	occupied, err := s.occupancyProvider.IsOccupied(ctx, ownerID, unarchived.ID)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
+	}
+	if occupied {
+		unarchived.Occupancy = domain.OccupancyOccupied
+	} else {
+		unarchived.Occupancy = domain.OccupancyFree
 	}
 
 	if err := tx.Commit(ctx); err != nil {

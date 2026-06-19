@@ -7,24 +7,26 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
-	AppEnv            string
-	HTTPAddr          string
-	LogLevel          string
-	LogLevelValue     slog.Level
-	LogFormat         string
-	DatabaseURL       string
-	MigrationsDir     string
-	CookieSecure      bool
-	SMSSender         string
-	PaymentProvider   string
-	AppBaseURL        string
-	TKassaTerminalKey string
-	TKassaPassword    string
-	EncryptionKey     string
-	RateLimit         RateLimit
+	AppEnv               string
+	HTTPAddr             string
+	LogLevel             string
+	LogLevelValue        slog.Level
+	LogFormat            string
+	DatabaseURL          string
+	MigrationsDir        string
+	CookieSecure         bool
+	SMSSender            string
+	PaymentProvider      string
+	AppBaseURL           string
+	TKassaTerminalKey    string
+	TKassaPassword       string
+	EncryptionKey        string
+	BillingWorkerInterval time.Duration
+	RateLimit            RateLimit
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -203,6 +205,18 @@ func Load() (Config, error) {
 
 	if cfg.AppEnv != "local" && cfg.EncryptionKey == "" {
 		return Config{}, fmt.Errorf("ENCRYPTION_KEY is required for APP_ENV=%s", cfg.AppEnv)
+	}
+
+	cfg.BillingWorkerInterval = time.Hour
+	if v := os.Getenv("BILLING_WORKER_INTERVAL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid BILLING_WORKER_INTERVAL %q: %w", v, err)
+		}
+		if d <= 0 {
+			return Config{}, fmt.Errorf("BILLING_WORKER_INTERVAL must be positive")
+		}
+		cfg.BillingWorkerInterval = d
 	}
 
 	return cfg, nil

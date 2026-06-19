@@ -1,0 +1,44 @@
+meta {
+  name: Change Tariff Basic
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/subscription/change
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "tariffName": "basic",
+    "period": "month"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  console.log("downgrade response status =", res.status);
+  console.log("pending payment id =", res.body.paymentId);
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should not require payment for downgrade", function() {
+    expect(res.body.paymentId).to.equal(null);
+  });
+}

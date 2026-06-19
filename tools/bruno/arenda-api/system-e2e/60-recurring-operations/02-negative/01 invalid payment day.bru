@@ -1,0 +1,50 @@
+meta {
+  name: Invalid Payment Day
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/properties/{{recurringPropertyId}}/recurring-operations
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "type": "expense",
+    "category": "utilities",
+    "amount_kopecks": 10000,
+    "start_date": "{{recurringStartDate}}",
+    "payment_day": 32,
+    "end_date": "{{recurringEndDate}}",
+    "comment": "{{invalidPaymentDayComment}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+
+  bru.setVar("invalidPaymentDayComment", "E2E invalid payment day " + Date.now());
+
+  const today = new Date();
+  bru.setVar("recurringStartDate", today.toISOString().slice(0, 10));
+
+  const end = new Date();
+  end.setFullYear(end.getFullYear() + 1);
+  bru.setVar("recurringEndDate", end.toISOString().slice(0, 10));
+}
+
+tests {
+  test("should return 400", function() {
+    expect(res.status).to.equal(400);
+  });
+}

@@ -1,0 +1,55 @@
+meta {
+  name: Create Operation Reminder
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/properties/{{reminderPropertyId}}/operations/{{reminderOperationId}}/reminders
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "reminder_date": "{{reminderDate}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  bru.setVar("reminderDate", d.toISOString().slice(0, 10));
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("reminderId", res.body.id);
+    bru.setVar("reminderId", res.body.id);
+    console.log("saved reminderId =", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have reminder id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+
+  test("should match reminder date", function() {
+    expect(res.body.scheduled_at.slice(0, 10)).to.equal(bru.getVar("reminderDate"));
+  });
+}

@@ -1,0 +1,64 @@
+meta {
+  name: Create Tenant Contact
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/tenant-contacts
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "name": "Иван",
+    "surname": "Иванов",
+    "patronymic": "Иванович",
+    "phone": "{{tenantContactPhone}}",
+    "email": "{{tenantContactEmail}}",
+    "comment": "{{tenantComment}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+
+  const suffix = Date.now().toString().slice(-7).padStart(7, "0");
+  const phone = `+7915${suffix}`;
+  const email = `e2e.tenant.${Date.now()}@example.com`;
+  bru.setVar("tenantContactPhone", phone);
+  bru.setVar("tenantContactEmail", email);
+  bru.setVar("tenantComment", "E2E tenant contact " + Date.now());
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("tenantContactId", res.body.id);
+    bru.setVar("tenantContactId", res.body.id);
+    console.log("saved tenantContactId =", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have tenant contact id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+
+  test("should match generated phone and email", function() {
+    expect(res.body.phone).to.equal(bru.getVar("tenantContactPhone"));
+    expect(res.body.email).to.equal(bru.getVar("tenantContactEmail"));
+  });
+}

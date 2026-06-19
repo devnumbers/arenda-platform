@@ -3,6 +3,9 @@ DROP INDEX IF EXISTS idx_user_subscriptions_active_payment_method_id;
 ALTER TABLE user_subscriptions
     DROP CONSTRAINT IF EXISTS user_subscriptions_active_payment_method_id_fkey;
 
+-- Clear dangling references before dropping the payment_methods table.
+UPDATE user_subscriptions SET active_payment_method_id = NULL;
+
 DROP INDEX IF EXISTS idx_subscription_payments_provider_payment_id;
 
 DROP INDEX IF EXISTS idx_subscription_payments_user_created;

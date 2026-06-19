@@ -40,7 +40,7 @@ func (l *SubscriptionLimiter) ActivePropertyLimit(ctx context.Context, userID uu
 		return 0, fmt.Errorf("get subscription by user id: %w", err)
 	}
 
-	if sub.Status != string(domain.SubscriptionStatusActive) {
+	if sub.Status != string(domain.SubscriptionStatusActive) && sub.Status != string(domain.SubscriptionStatusGrace) {
 		return 0, nil
 	}
 

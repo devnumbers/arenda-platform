@@ -1,0 +1,43 @@
+meta {
+  name: Update Reminder Date
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/reminders/{{reminderId}}
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "reminder_date": "{{updatedReminderDate}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+
+  const d = new Date();
+  d.setDate(d.getDate() + 3);
+  bru.setVar("updatedReminderDate", d.toISOString().slice(0, 10));
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should return updated reminder date", function() {
+    expect(res.body.scheduled_at.slice(0, 10)).to.equal(bru.getVar("updatedReminderDate"));
+  });
+}

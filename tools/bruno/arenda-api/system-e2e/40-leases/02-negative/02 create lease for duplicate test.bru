@@ -1,0 +1,66 @@
+meta {
+  name: Create Lease For Duplicate Test
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/leases
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "property_id": "{{duplicatePropertyId}}",
+    "tenant_contact_id": "{{leaseTenantContactId}}",
+    "start_date": "{{duplicateLeaseStart}}",
+    "end_date": "{{duplicateLeaseEnd}}",
+    "rent_amount_kopecks": 11000000,
+    "deposit_amount_kopecks": 2200000,
+    "payment_day": 15,
+    "comment": "{{duplicateLeaseComment}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+
+  bru.setVar("duplicateLeaseComment", "E2E lease for duplicate test " + Date.now());
+
+  const today = new Date();
+  const start = new Date(today.getFullYear() - 1, today.getMonth(), 1);
+  const end = new Date(today.getFullYear() + 1, today.getMonth(), 1);
+  bru.setVar("duplicateLeaseStart", start.toISOString().slice(0, 10));
+  bru.setVar("duplicateLeaseEnd", end.toISOString().slice(0, 10));
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("duplicateLeaseId", res.body.id);
+    bru.setVar("duplicateLeaseId", res.body.id);
+    console.log("saved duplicateLeaseId =", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have lease id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+
+  test("should be active", function() {
+    expect(res.body.status).to.equal("active");
+  });
+}

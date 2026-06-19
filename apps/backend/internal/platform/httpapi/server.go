@@ -57,6 +57,7 @@ func New(deps Deps) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(rateLimitMiddleware(deps.IPRateLimiter))
 	r.Use(SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
+	r.Use(readonlyMiddleware(deps.Billing, deps.Logger))
 
 	authHandlers := NewAuthHandlers(deps.Auth, deps.Billing, deps.CookieSecure, deps.Logger, deps.PhoneSendLimiter, deps.PhoneVerifyLimiter)
 	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.Logger)
@@ -64,8 +65,7 @@ func New(deps Deps) http.Handler {
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Logger)
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Logger)
 	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
-	subscriptionHandlers := NewSubscriptionHandlers(deps.Billing, deps.Logger)
-	subscriptionHandlers.DevMode = deps.DevMode
+	subscriptionHandlers := NewSubscriptionHandlers(deps.Billing, deps.Logger, deps.DevMode)
 
 	handler := &composedHandler{
 		AuthHandlers:               authHandlers,

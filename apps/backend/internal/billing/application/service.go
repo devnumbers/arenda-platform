@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
@@ -19,6 +20,7 @@ type BillingService struct {
 	subscriptions        SubscriptionRepository
 	paymentMethods       PaymentMethodRepository
 	subscriptionPayments SubscriptionPaymentRepository
+	propertyArchiver     PropertyArchiver
 	provider             Provider
 	beginner             transaction.Beginner
 	clock                clock.Clock
@@ -35,6 +37,7 @@ func NewBillingService(
 	beginner transaction.Beginner,
 	clock clock.Clock,
 	log *slog.Logger,
+	propertyArchiver PropertyArchiver,
 ) *BillingService {
 	if log == nil {
 		log = slog.Default()
@@ -44,6 +47,7 @@ func NewBillingService(
 		subscriptions:        subscriptions,
 		paymentMethods:       paymentMethods,
 		subscriptionPayments: subscriptionPayments,
+		propertyArchiver:     propertyArchiver,
 		provider:             provider,
 		beginner:             beginner,
 		clock:                clock,
@@ -119,6 +123,16 @@ func (s *BillingService) GetSubscription(ctx context.Context, userID uuid.UUID) 
 	return view, nil
 }
 
+func (s *BillingService) existingUpgradeResponse(ctx context.Context, paymentID uuid.UUID) ChangeTariffResponse {
+	res := ChangeTariffResponse{PaymentID: paymentID}
+	if urlProvider, ok := s.provider.(PaymentURLProvider); ok {
+		if url, err := urlProvider.PaymentURL(ctx, paymentID); err == nil {
+			res.ConfirmURL = url
+		}
+	}
+	return res
+}
+
 // ChangeTariff starts an upgrade payment or schedules a downgrade.
 func (s *BillingService) ChangeTariff(ctx context.Context, userID uuid.UUID, req ChangeTariffRequest) (ChangeTariffResponse, error) {
 	if req.Period != domain.PeriodMonth && req.Period != domain.PeriodYear {
@@ -174,7 +188,10 @@ func (s *BillingService) ChangeTariff(ctx context.Context, userID uuid.UUID, req
 	}
 
 	now := s.clock.Now().UTC()
-	if !sub.CanInitiatePayment(now) {
+	canInitiate := sub.CanInitiatePayment(now)
+	isRecoveryUpgrade := changeType == domain.TariffChangeUpgrade &&
+		(sub.Status == domain.SubscriptionStatusBlocked || sub.Status == domain.SubscriptionStatusCancelled)
+	if !canInitiate && !isRecoveryUpgrade {
 		return ChangeTariffResponse{}, domain.ErrInvalidSubscriptionState
 	}
 
@@ -188,7 +205,7 @@ func (s *BillingService) ChangeTariff(ctx context.Context, userID uuid.UUID, req
 		}
 		for _, p := range pending {
 			if p.TariffID == newTariff.ID && p.Period == req.Period {
-				return ChangeTariffResponse{PaymentID: p.ID}, nil
+				return s.existingUpgradeResponse(ctx, p.ID), nil
 			}
 		}
 		return s.changeTariffUpgrade(ctx, tx, userID, sub, newTariff, req.Period, amount)
@@ -281,6 +298,19 @@ func (s *BillingService) changeTariffUpgrade(
 	// inactive payment method and attach it to the pending payment; activation
 	// is deferred until the payment is confirmed.
 	if initRes.SavedToken == "" {
+		providerTx, err := s.beginner.Begin(ctx)
+		if err != nil {
+			return ChangeTariffResponse{}, fmt.Errorf("begin transaction: %w", err)
+		}
+		defer func() { _ = providerTx.Rollback(ctx) }()
+
+		if _, err := s.subscriptionPayments.WithTx(providerTx).UpdateProviderPaymentID(ctx, payment.ID, initRes.ProviderPaymentID); err != nil {
+			return ChangeTariffResponse{}, fmt.Errorf("update provider payment id: %w", err)
+		}
+		if err := providerTx.Commit(ctx); err != nil {
+			return ChangeTariffResponse{}, fmt.Errorf("commit provider payment id update: %w", err)
+		}
+
 		return ChangeTariffResponse{
 			PaymentID:  payment.ID,
 			ConfirmURL: initRes.PaymentURL,
@@ -324,9 +354,51 @@ func (s *BillingService) changeTariffUpgrade(
 	}, nil
 }
 
+// CancelSubscription terminates the paid subscription. The current tariff remains
+// valid until valid_until, after which the worker downgrades the subscription to
+// basic.
+func (s *BillingService) CancelSubscription(ctx context.Context, userID uuid.UUID) error {
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	sub, err := s.subscriptions.WithTx(tx).GetByUserIDForUpdate(ctx, userID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrSubscriptionNotFound
+		}
+		return fmt.Errorf("get subscription: %w", err)
+	}
+
+	if sub.Source != domain.SubscriptionSourcePaid {
+		return domain.ErrInvalidSubscriptionState
+	}
+
+	if err := sub.Cancel(); err != nil {
+		return err
+	}
+
+	if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+		return fmt.Errorf("update subscription: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit cancel subscription transaction: %w", err)
+	}
+	return nil
+}
+
 // ToggleAutoRenew enables or disables automatic subscription renewal.
 func (s *BillingService) ToggleAutoRenew(ctx context.Context, userID uuid.UUID, enabled bool) error {
-	sub, err := s.subscriptions.GetByUserID(ctx, userID)
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	sub, err := s.subscriptions.WithTx(tx).GetByUserIDForUpdate(ctx, userID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrSubscriptionNotFound
@@ -337,12 +409,6 @@ func (s *BillingService) ToggleAutoRenew(ctx context.Context, userID uuid.UUID, 
 	if err := sub.SetAutoRenew(enabled); err != nil {
 		return err
 	}
-
-	tx, err := s.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 
 	if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
 		return fmt.Errorf("update subscription: %w", err)
@@ -385,7 +451,8 @@ func (s *BillingService) AddPaymentMethod(ctx context.Context, userID uuid.UUID,
 	return pm, nil
 }
 
-// SetActivePaymentMethod activates the given payment method for the user.
+// SetActivePaymentMethod activates the given payment method for the user and
+// makes it the active method for subscription renewals.
 func (s *BillingService) SetActivePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error {
 	tx, err := s.beginner.Begin(ctx)
 	if err != nil {
@@ -395,6 +462,18 @@ func (s *BillingService) SetActivePaymentMethod(ctx context.Context, userID, met
 
 	if err := s.paymentMethods.WithTx(tx).SetActive(ctx, userID, methodID); err != nil {
 		return fmt.Errorf("set active payment method: %w", err)
+	}
+
+	sub, err := s.subscriptions.WithTx(tx).GetByUserIDForUpdate(ctx, userID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrSubscriptionNotFound
+		}
+		return fmt.Errorf("get subscription: %w", err)
+	}
+	sub.ActivePaymentMethodID = &methodID
+	if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+		return fmt.Errorf("update subscription active payment method: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -496,7 +575,9 @@ func (s *BillingService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 
 // HandleWebhook parses and applies a provider webhook payload.
 func (s *BillingService) HandleWebhook(ctx context.Context, providerName string, payload []byte) error {
-	_ = providerName // MVP uses the same configured provider for all payments.
+	if providerName != string(s.provider.Name()) {
+		return fmt.Errorf("unexpected provider %q, expected %q", providerName, s.provider.Name())
+	}
 
 	result, err := s.provider.ParseWebhook(ctx, payload)
 	if err != nil {
@@ -534,6 +615,10 @@ func (s *BillingService) applyPaymentResult(
 	payment domain.SubscriptionPayment,
 	payload WebhookPayload,
 ) error {
+	if payment.ProviderPaymentID != nil && *payment.ProviderPaymentID != payload.ProviderPaymentID {
+		return fmt.Errorf("provider payment id mismatch: expected %q, got %q", *payment.ProviderPaymentID, payload.ProviderPaymentID)
+	}
+
 	now := s.clock.Now().UTC()
 	switch payload.Status {
 	case domain.PaymentStatusSucceeded:
@@ -595,4 +680,508 @@ func maskToken(token string) string {
 		return "****"
 	}
 	return "****" + token[len(token)-4:]
+}
+
+const (
+	renewalBatchSize = 100
+	graceBatchSize   = 100
+	gracePeriod      = 7 * 24 * time.Hour
+)
+
+// ProcessRenewals processes all subscriptions whose validity period has ended.
+// For subscriptions with auto-renew enabled it attempts to charge and renew them;
+// failed charges move the subscription to a grace period. For subscriptions with
+// auto-renew disabled it downgrades them to the free basic tariff. Returns the
+// total number of subscriptions processed.
+func (s *BillingService) ProcessRenewals(ctx context.Context, now time.Time) (int, error) {
+	processed := 0
+
+	for {
+		subs, err := s.subscriptions.ListUpForRenewal(ctx, now.UTC(), renewalBatchSize)
+		if err != nil {
+			return processed, fmt.Errorf("list subscriptions up for renewal: %w", err)
+		}
+		if len(subs) == 0 {
+			break
+		}
+		for _, sub := range subs {
+			if err := s.renewSubscription(ctx, sub, now.UTC()); err != nil {
+				s.log.ErrorContext(ctx, "renew subscription failed",
+					slog.String("subscription_id", sub.ID.String()),
+					slog.String("user_id", sub.UserID.String()),
+					slog.String("error", err.Error()))
+				continue
+			}
+			processed++
+		}
+		if len(subs) < renewalBatchSize {
+			break
+		}
+	}
+
+	basicTariff, err := s.tariffs.GetByName(ctx, domain.TariffBasic)
+	if err != nil {
+		return processed, fmt.Errorf("get basic tariff for non-renewing cleanup: %w", err)
+	}
+
+	for {
+		subs, err := s.subscriptions.ListExpiredNonRenewing(ctx, now.UTC(), renewalBatchSize)
+		if err != nil {
+			return processed, fmt.Errorf("list expired non-renewing subscriptions: %w", err)
+		}
+		if len(subs) == 0 {
+			break
+		}
+		for _, sub := range subs {
+			if err := s.expireNonRenewingSubscription(ctx, sub, basicTariff, now.UTC()); err != nil {
+				s.log.ErrorContext(ctx, "expire non-renewing subscription failed",
+					slog.String("subscription_id", sub.ID.String()),
+					slog.String("user_id", sub.UserID.String()),
+					slog.String("error", err.Error()))
+				continue
+			}
+			processed++
+		}
+		if len(subs) < renewalBatchSize {
+			break
+		}
+	}
+
+	for {
+		subs, err := s.subscriptions.ListExpiredCancelled(ctx, now.UTC(), renewalBatchSize)
+		if err != nil {
+			return processed, fmt.Errorf("list expired cancelled subscriptions: %w", err)
+		}
+		if len(subs) == 0 {
+			break
+		}
+		for _, sub := range subs {
+			if err := s.expireNonRenewingSubscription(ctx, sub, basicTariff, now.UTC()); err != nil {
+				s.log.ErrorContext(ctx, "expire cancelled subscription failed",
+					slog.String("subscription_id", sub.ID.String()),
+					slog.String("user_id", sub.UserID.String()),
+					slog.String("error", err.Error()))
+				continue
+			}
+			processed++
+		}
+		if len(subs) < renewalBatchSize {
+			break
+		}
+	}
+
+	return processed, nil
+}
+
+func (s *BillingService) renewSubscription(ctx context.Context, sub domain.Subscription, now time.Time) error {
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	sub, err = s.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, sub.ID)
+	if err != nil {
+		return fmt.Errorf("get subscription for update: %w", err)
+	}
+
+	if sub.Status != domain.SubscriptionStatusActive || !sub.AutoRenewEnabled || sub.ValidUntil == nil || sub.ValidUntil.After(now) {
+		return nil
+	}
+
+	renewalTariff, period, amount, err := s.resolveRenewalTariffAndAmount(ctx, tx, sub)
+	if err != nil {
+		return err
+	}
+
+	// Free tariff changes (e.g. downgrade to basic) do not require a charge.
+	if amount <= 0 {
+		if err := s.applyFreeRenewalOrDowngrade(ctx, tx, &sub, renewalTariff, period, now); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
+
+	if sub.ActivePaymentMethodID == nil {
+		s.transitionToGrace(&sub, now)
+		if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+			return fmt.Errorf("transition to grace: %w", err)
+		}
+		return tx.Commit(ctx)
+	}
+
+	pm, err := s.paymentMethods.WithTx(tx).GetByID(ctx, *sub.ActivePaymentMethodID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			s.transitionToGrace(&sub, now)
+			if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+				return fmt.Errorf("transition to grace: %w", err)
+			}
+			return tx.Commit(ctx)
+		}
+		return fmt.Errorf("get active payment method: %w", err)
+	}
+
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID,
+		sub.ID,
+		renewalTariff.ID,
+		&pm.ID,
+		period,
+		amount,
+		s.provider.Name(),
+		now,
+	)
+	if err != nil {
+		return fmt.Errorf("create renewal payment: %w", err)
+	}
+
+	payment, err = s.subscriptionPayments.WithTx(tx).Create(ctx, payment)
+	if err != nil {
+		return fmt.Errorf("save renewal payment: %w", err)
+	}
+
+	chargeResult, err := s.provider.Charge(ctx, ChargeRequest{
+		PaymentID:     payment.ID,
+		AmountKopecks: amount,
+		Token:         pm.ProviderToken,
+	})
+	if err != nil {
+		// Provider errors (network, timeout) are treated like a failed charge so
+		// the subscription enters grace instead of staying active indefinitely.
+		if markErr := s.subscriptionPayments.WithTx(tx).MarkFailed(ctx, payment.ID, nil, now); markErr != nil {
+			return fmt.Errorf("mark renewal payment failed after provider error: %w", markErr)
+		}
+		s.transitionToGrace(&sub, now)
+		if updateErr := s.subscriptions.WithTx(tx).Update(ctx, sub); updateErr != nil {
+			return fmt.Errorf("transition to grace after provider error: %w", updateErr)
+		}
+		return tx.Commit(ctx)
+	}
+
+	if chargeResult.ProviderPaymentID != "" {
+		if _, updateErr := s.subscriptionPayments.WithTx(tx).UpdateProviderPaymentID(ctx, payment.ID, chargeResult.ProviderPaymentID); updateErr != nil {
+			return fmt.Errorf("update renewal provider payment id: %w", updateErr)
+		}
+	}
+
+	switch chargeResult.Status {
+	case domain.PaymentStatusSucceeded:
+		if err := s.subscriptionPayments.WithTx(tx).MarkSucceeded(ctx, payment.ID, now); err != nil {
+			return fmt.Errorf("mark renewal payment succeeded: %w", err)
+		}
+		if err := s.applySuccessfulRenewal(ctx, tx, sub, renewalTariff, period, now); err != nil {
+			return err
+		}
+	case domain.PaymentStatusFailed:
+		if err := s.subscriptionPayments.WithTx(tx).MarkFailed(ctx, payment.ID, nil, now); err != nil {
+			return fmt.Errorf("mark renewal payment failed: %w", err)
+		}
+		s.transitionToGrace(&sub, now)
+		if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+			return fmt.Errorf("transition to grace after failed renewal: %w", err)
+		}
+	case domain.PaymentStatusPending:
+		// The provider will finalize the charge asynchronously via a webhook.
+		// The pending payment is already persisted; leave the subscription active
+		// and wait for the webhook.
+		return tx.Commit(ctx)
+	default:
+		return fmt.Errorf("unexpected charge status: %s", chargeResult.Status)
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (s *BillingService) resolveRenewalTariffAndAmount(ctx context.Context, tx transaction.Tx, sub domain.Subscription) (domain.Tariff, domain.SubscriptionPeriod, int64, error) {
+	if sub.PendingTariffID != nil && sub.PendingPeriod != nil {
+		pendingTariff, err := s.tariffs.WithTx(tx).GetByID(ctx, *sub.PendingTariffID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return domain.Tariff{}, "", 0, ErrTariffNotFound
+			}
+			return domain.Tariff{}, "", 0, fmt.Errorf("get pending tariff: %w", err)
+		}
+		amount := pendingTariff.MonthlyPriceKopecks
+		if *sub.PendingPeriod == domain.PeriodYear {
+			amount = pendingTariff.YearlyPriceKopecks
+		}
+		return pendingTariff, *sub.PendingPeriod, amount, nil
+	}
+
+	currentTariff, err := s.tariffs.WithTx(tx).GetByID(ctx, sub.TariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Tariff{}, "", 0, ErrTariffNotFound
+		}
+		return domain.Tariff{}, "", 0, fmt.Errorf("get current tariff: %w", err)
+	}
+
+	period := domain.PeriodMonth
+	lastPayment, err := s.subscriptionPayments.WithTx(tx).GetLastSucceededBySubscriptionID(ctx, sub.ID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return domain.Tariff{}, "", 0, fmt.Errorf("get last succeeded payment: %w", err)
+	}
+	if err == nil {
+		period = lastPayment.Period
+	}
+
+	amount := currentTariff.MonthlyPriceKopecks
+	if period == domain.PeriodYear {
+		amount = currentTariff.YearlyPriceKopecks
+	}
+	return currentTariff, period, amount, nil
+}
+
+func (s *BillingService) applySuccessfulRenewal(ctx context.Context, tx transaction.Tx, sub domain.Subscription, renewalTariff domain.Tariff, period domain.SubscriptionPeriod, now time.Time) error {
+	if sub.TariffID == renewalTariff.ID {
+		if err := sub.ApplyRenewal(period, now); err != nil {
+			return fmt.Errorf("apply renewal: %w", err)
+		}
+	} else {
+		currentTariff, err := s.tariffs.WithTx(tx).GetByID(ctx, sub.TariffID)
+		if err != nil {
+			return fmt.Errorf("get current tariff for change: %w", err)
+		}
+		if err := sub.ApplyTariffChange(currentTariff, renewalTariff, period, now); err != nil {
+			return fmt.Errorf("apply tariff change: %w", err)
+		}
+		if s.propertyArchiver != nil {
+			if err := s.propertyArchiver.ArchiveExcessProperties(ctx, sub.UserID, renewalTariff.ActivePropertyLimit); err != nil {
+				return fmt.Errorf("archive excess properties after downgrade: %w", err)
+			}
+		}
+	}
+
+	if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+		return fmt.Errorf("update subscription after renewal: %w", err)
+	}
+	return nil
+}
+
+func (s *BillingService) applyFreeRenewalOrDowngrade(ctx context.Context, tx transaction.Tx, sub *domain.Subscription, renewalTariff domain.Tariff, period domain.SubscriptionPeriod, now time.Time) error {
+	// The free basic tariff has no validity period and cannot be auto-renewed.
+	if renewalTariff.Name == domain.TariffBasic {
+		applyBasicDowngrade(sub, renewalTariff.ID)
+		if err := s.subscriptions.WithTx(tx).Update(ctx, *sub); err != nil {
+			return fmt.Errorf("update subscription after free downgrade to basic: %w", err)
+		}
+		if s.propertyArchiver != nil {
+			if err := s.propertyArchiver.ArchiveExcessProperties(ctx, sub.UserID, renewalTariff.ActivePropertyLimit); err != nil {
+				return fmt.Errorf("archive excess properties after free downgrade to basic: %w", err)
+			}
+		}
+		return nil
+	}
+
+	if sub.TariffID == renewalTariff.ID {
+		if err := sub.ApplyRenewal(period, now); err != nil {
+			return fmt.Errorf("apply free renewal: %w", err)
+		}
+	} else {
+		currentTariff, err := s.tariffs.WithTx(tx).GetByID(ctx, sub.TariffID)
+		if err != nil {
+			return fmt.Errorf("get current tariff for free change: %w", err)
+		}
+		if err := sub.ApplyTariffChange(currentTariff, renewalTariff, period, now); err != nil {
+			return fmt.Errorf("apply free tariff change: %w", err)
+		}
+		if s.propertyArchiver != nil {
+			if err := s.propertyArchiver.ArchiveExcessProperties(ctx, sub.UserID, renewalTariff.ActivePropertyLimit); err != nil {
+				return fmt.Errorf("archive excess properties after free downgrade: %w", err)
+			}
+		}
+	}
+	if err := s.subscriptions.WithTx(tx).Update(ctx, *sub); err != nil {
+		return fmt.Errorf("update subscription after free renewal: %w", err)
+	}
+	return nil
+}
+
+func applyBasicDowngrade(sub *domain.Subscription, basicTariffID uuid.UUID) {
+	sub.TariffID = basicTariffID
+	sub.Status = domain.SubscriptionStatusActive
+	sub.ValidUntil = nil
+	sub.AutoRenewEnabled = false
+	sub.PendingTariffID = nil
+	sub.PendingChangeAt = nil
+	sub.PendingPeriod = nil
+}
+
+func (s *BillingService) transitionToGrace(sub *domain.Subscription, now time.Time) {
+	sub.Status = domain.SubscriptionStatusGrace
+	graceUntil := now.Add(gracePeriod)
+	sub.ValidUntil = &graceUntil
+}
+
+func (s *BillingService) expireNonRenewingSubscription(ctx context.Context, sub domain.Subscription, basicTariff domain.Tariff, now time.Time) error {
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	sub, err = s.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, sub.ID)
+	if err != nil {
+		return fmt.Errorf("get subscription for update: %w", err)
+	}
+
+	if sub.Status != domain.SubscriptionStatusActive || sub.AutoRenewEnabled || sub.ValidUntil == nil || sub.ValidUntil.After(now) {
+		return nil
+	}
+
+	applyBasicDowngrade(&sub, basicTariff.ID)
+	if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+		return fmt.Errorf("update subscription after non-renewing expiry: %w", err)
+	}
+
+	if s.propertyArchiver != nil {
+		if err := s.propertyArchiver.ArchiveExcessProperties(ctx, sub.UserID, basicTariff.ActivePropertyLimit); err != nil {
+			return fmt.Errorf("archive excess properties after non-renewing expiry: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+// ProcessScheduledChanges applies scheduled tariff changes (usually downgrades to
+// the free basic tariff) whose pending_change_at has been reached. Returns the
+// number of subscriptions processed.
+func (s *BillingService) ProcessScheduledChanges(ctx context.Context, now time.Time) (int, error) {
+	processed := 0
+	for {
+		subs, err := s.subscriptions.ListPendingChanges(ctx, now.UTC(), renewalBatchSize)
+		if err != nil {
+			return processed, fmt.Errorf("list subscriptions with pending change: %w", err)
+		}
+		if len(subs) == 0 {
+			break
+		}
+		for _, sub := range subs {
+			if err := s.applyScheduledChange(ctx, sub, now.UTC()); err != nil {
+				s.log.ErrorContext(ctx, "apply scheduled change failed",
+					slog.String("subscription_id", sub.ID.String()),
+					slog.String("user_id", sub.UserID.String()),
+					slog.String("error", err.Error()))
+				continue
+			}
+			processed++
+		}
+		if len(subs) < renewalBatchSize {
+			break
+		}
+	}
+	return processed, nil
+}
+
+func (s *BillingService) applyScheduledChange(ctx context.Context, sub domain.Subscription, now time.Time) error {
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	sub, err = s.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, sub.ID)
+	if err != nil {
+		return fmt.Errorf("get subscription for update: %w", err)
+	}
+
+	if sub.Status != domain.SubscriptionStatusActive || sub.PendingTariffID == nil || sub.PendingChangeAt == nil || sub.PendingChangeAt.After(now) {
+		return nil
+	}
+
+	pendingTariff, err := s.tariffs.WithTx(tx).GetByID(ctx, *sub.PendingTariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrTariffNotFound
+		}
+		return fmt.Errorf("get pending tariff: %w", err)
+	}
+
+	period := domain.PeriodMonth
+	if sub.PendingPeriod != nil {
+		period = *sub.PendingPeriod
+	}
+
+	amount := pendingTariff.MonthlyPriceKopecks
+	if period == domain.PeriodYear {
+		amount = pendingTariff.YearlyPriceKopecks
+	}
+
+	// Only free scheduled changes are applied automatically. Paid scheduled
+	// changes are not supported in the MVP and are left for manual handling.
+	if amount > 0 {
+		return nil
+	}
+
+	if err := s.applyFreeRenewalOrDowngrade(ctx, tx, &sub, pendingTariff, period, now); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// ProcessExpiredGrace downgrades subscriptions whose grace period has ended to
+// the free basic tariff and archives properties that exceed the basic limit.
+// Returns the number of subscriptions processed.
+func (s *BillingService) ProcessExpiredGrace(ctx context.Context, now time.Time) (int, error) {
+	basicTariff, err := s.tariffs.GetByName(ctx, domain.TariffBasic)
+	if err != nil {
+		return 0, fmt.Errorf("get basic tariff: %w", err)
+	}
+
+	processed := 0
+	for {
+		subs, err := s.subscriptions.ListInExpiredGrace(ctx, now.UTC(), graceBatchSize)
+		if err != nil {
+			return processed, fmt.Errorf("list subscriptions in expired grace: %w", err)
+		}
+		if len(subs) == 0 {
+			break
+		}
+		for _, sub := range subs {
+			if err := s.downgradeToBasic(ctx, sub, basicTariff, now.UTC()); err != nil {
+				s.log.ErrorContext(ctx, "downgrade to basic after grace failed",
+					slog.String("subscription_id", sub.ID.String()),
+					slog.String("user_id", sub.UserID.String()),
+					slog.String("error", err.Error()))
+				continue
+			}
+			processed++
+		}
+		if len(subs) < graceBatchSize {
+			break
+		}
+	}
+	return processed, nil
+}
+
+func (s *BillingService) downgradeToBasic(ctx context.Context, sub domain.Subscription, basicTariff domain.Tariff, now time.Time) error {
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	sub, err = s.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, sub.ID)
+	if err != nil {
+		return fmt.Errorf("get subscription for update: %w", err)
+	}
+
+	if sub.Status != domain.SubscriptionStatusGrace || sub.ValidUntil == nil || sub.ValidUntil.After(now) {
+		return nil
+	}
+
+	applyBasicDowngrade(&sub, basicTariff.ID)
+	if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+		return fmt.Errorf("update subscription after grace downgrade: %w", err)
+	}
+
+	if s.propertyArchiver != nil {
+		if err := s.propertyArchiver.ArchiveExcessProperties(ctx, sub.UserID, basicTariff.ActivePropertyLimit); err != nil {
+			return fmt.Errorf("archive excess properties after grace downgrade: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
 }

@@ -99,6 +99,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
     get:
       operationId: listProperties
       security:
@@ -165,6 +167,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /properties/{id}/archive:
     post:
       operationId: archiveProperty
@@ -188,6 +192,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /properties/{id}/unarchive:
     post:
       operationId: unarchiveProperty
@@ -211,7 +217,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /properties/{propertyId}/operations:
     get:
       operationId: listOperationsByProperty
@@ -265,7 +272,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /properties/{propertyId}/operations/{operationId}/reminders:
     post:
       operationId: createOperationReminder
@@ -303,6 +311,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
     get:
       operationId: listOperationReminders
       security:
@@ -385,6 +395,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
     delete:
       operationId: deleteOperation
       security:
@@ -403,7 +415,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /properties/{propertyId}/recurring-operations:
     get:
       operationId: listRecurringOperationsByProperty
@@ -457,7 +470,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders:
     post:
       operationId: createRecurringOperationReminder
@@ -495,6 +509,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
     get:
       operationId: listRecurringOperationReminders
       security:
@@ -577,7 +593,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /recurring-operations/{id}/pause:
     post:
       operationId: pauseRecurringOperation
@@ -601,7 +618,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /recurring-operations/{id}/resume:
     post:
       operationId: resumeRecurringOperation
@@ -625,7 +643,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /leases:
     post:
       operationId: createLease
@@ -648,6 +667,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
     get:
       operationId: listLeases
       security:
@@ -714,6 +735,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /leases/{id}/complete:
     post:
       operationId: completeLease
@@ -737,7 +760,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /leases/{leaseId}/reminders:
     get:
       operationId: listLeaseReminders
@@ -786,6 +810,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '409':
           $ref: '#/components/responses/Conflict'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
     get:
       operationId: listTenantContacts
       security:
@@ -854,7 +880,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /reminders:
     get:
       operationId: listReminders
@@ -919,6 +946,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
     delete:
       operationId: deleteReminder
       security:
@@ -937,7 +966,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /tariffs:
     get:
       operationId: listTariffs
@@ -990,6 +1020,23 @@ paths:
           description: Auto-renew updated
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription/cancel:
+    post:
+      operationId: cancelSubscription
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: Subscription cancelled
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1106,6 +1153,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -1972,6 +2021,12 @@ components:
             $ref: '#/components/schemas/Problem'
     Conflict:
       description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    SubscriptionBlocked:
+      description: Subscription is blocked; renew to continue mutating data
       content:
         application/json:
           schema:

@@ -1,0 +1,34 @@
+meta {
+  name: Toggle Auto Renew On
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{baseUrl}}/subscription/auto-renew
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "enabled": true
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 204", function() {
+    expect(res.status).to.equal(204);
+  });
+}

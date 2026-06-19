@@ -2,6 +2,7 @@ ALTER TABLE user_subscriptions
     DROP COLUMN IF EXISTS auto_renew_enabled,
     DROP COLUMN IF EXISTS pending_tariff_id,
     DROP COLUMN IF EXISTS pending_change_at,
+    DROP COLUMN IF EXISTS valid_until,
     DROP COLUMN IF EXISTS active_payment_method_id;
 
 ALTER TABLE user_subscriptions

@@ -64,6 +64,10 @@ func (r *invalidSubscriptionPaymentRepository) ListPendingSubscriptionPaymentsBy
 	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.ListPendingSubscriptionPaymentsByUserID", r.tx)
 }
 
+func (r *invalidSubscriptionPaymentRepository) GetLastSucceededBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) (domain.SubscriptionPayment, error) {
+	return domain.SubscriptionPayment{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.GetLastSucceededBySubscriptionID", r.tx)
+}
+
 func (r *invalidSubscriptionPaymentRepository) MarkSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error {
 	return fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.MarkSucceeded", r.tx)
 }
@@ -134,6 +138,19 @@ func (r *SubscriptionPaymentRepository) ListPendingSubscriptionPaymentsByUserID(
 		return nil, fmt.Errorf("list pending subscription payments by user id: %w", err)
 	}
 	return mapSubscriptionPayments(rows), nil
+}
+
+// GetLastSucceededBySubscriptionID returns the most recent succeeded payment
+// for a subscription, or ErrNotFound if there is none.
+func (r *SubscriptionPaymentRepository) GetLastSucceededBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) (domain.SubscriptionPayment, error) {
+	row, err := r.q().GetLastSucceededSubscriptionPaymentBySubscriptionID(ctx, pgtype.UUID{Bytes: subscriptionID, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.SubscriptionPayment{}, application.ErrNotFound
+		}
+		return domain.SubscriptionPayment{}, fmt.Errorf("get last succeeded subscription payment: %w", err)
+	}
+	return mapSubscriptionPayment(row), nil
 }
 
 // MarkSucceeded transitions a pending subscription payment to succeeded.

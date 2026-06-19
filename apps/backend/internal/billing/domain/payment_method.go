@@ -48,13 +48,13 @@ func NewPaymentMethod(userID uuid.UUID, provider PaymentProvider, providerToken,
 }
 
 // Activate marks the payment method as active.
-func (pm *PaymentMethod) Activate() {
+func (pm *PaymentMethod) Activate(now time.Time) {
 	pm.IsActive = true
-	pm.UpdatedAt = time.Now().UTC()
+	pm.UpdatedAt = now.UTC()
 }
 
 // Deactivate marks the payment method as inactive.
-func (pm *PaymentMethod) Deactivate() {
+func (pm *PaymentMethod) Deactivate(now time.Time) {
 	pm.IsActive = false
-	pm.UpdatedAt = time.Now().UTC()
+	pm.UpdatedAt = now.UTC()
 }

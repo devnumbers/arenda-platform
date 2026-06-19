@@ -38,21 +38,29 @@ func TestNewOwnerSubscription(t *testing.T) {
 }
 
 func TestSubscriptionCanMutateData(t *testing.T) {
+	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
+	future := now.Add(24 * time.Hour)
+	past := now.Add(-24 * time.Hour)
+
 	tests := []struct {
-		name   string
-		status SubscriptionStatus
-		want   bool
+		name       string
+		status     SubscriptionStatus
+		validUntil *time.Time
+		want       bool
 	}{
-		{"active", SubscriptionStatusActive, true},
-		{"grace", SubscriptionStatusGrace, true},
-		{"blocked", SubscriptionStatusBlocked, false},
-		{"cancelled", SubscriptionStatusCancelled, false},
+		{"active with future valid_until", SubscriptionStatusActive, &future, true},
+		{"active without valid_until", SubscriptionStatusActive, nil, true},
+		{"active with expired valid_until", SubscriptionStatusActive, &past, false},
+		{"grace within grace period", SubscriptionStatusGrace, &future, true},
+		{"grace after grace period", SubscriptionStatusGrace, &past, false},
+		{"blocked", SubscriptionStatusBlocked, nil, false},
+		{"cancelled", SubscriptionStatusCancelled, nil, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sub := Subscription{Status: tt.status}
-			if got := sub.CanMutateData(); got != tt.want {
+			sub := Subscription{Status: tt.status, ValidUntil: tt.validUntil}
+			if got := sub.CanMutateData(now); got != tt.want {
 				t.Errorf("CanMutateData() = %v, want %v", got, tt.want)
 			}
 		})
@@ -161,8 +169,8 @@ func TestSubscriptionScheduleDowngrade(t *testing.T) {
 	if sub.PendingPeriod == nil || *sub.PendingPeriod != PeriodMonth {
 		t.Errorf("PendingPeriod = %v, want %s", sub.PendingPeriod, PeriodMonth)
 	}
-	if !sub.AutoRenewEnabled {
-		t.Error("expected auto-renew enabled")
+	if sub.AutoRenewEnabled {
+		t.Error("ScheduleDowngrade should not change auto-renew")
 	}
 
 	if err := sub.ScheduleDowngrade(currentTariff, Tariff{ID: currentTariffID}, PeriodMonth, validUntil); !errors.Is(err, ErrAlreadyOnTariff) {

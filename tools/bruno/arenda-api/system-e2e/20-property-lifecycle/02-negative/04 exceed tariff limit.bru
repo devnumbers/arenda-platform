@@ -1,0 +1,40 @@
+meta {
+  name: Exceed Tariff Limit
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/properties
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "name": "{{exceedPropertyName}}",
+    "type": "apartment",
+    "address": "{{exceedPropertyAddress}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+
+  bru.setVar("exceedPropertyName", "E2E Exceed Prop " + Date.now());
+  bru.setVar("exceedPropertyAddress", "E2E Exceed St " + Date.now());
+}
+
+tests {
+  test("should return 402", function() {
+    expect(res.status).to.equal(402);
+  });
+}

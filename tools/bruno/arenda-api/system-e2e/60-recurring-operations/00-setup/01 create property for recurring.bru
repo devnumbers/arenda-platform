@@ -1,0 +1,57 @@
+meta {
+  name: Create Property For Recurring
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/properties
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "name": "{{recurringPropertyName}}",
+    "type": "apartment",
+    "address": "{{recurringPropertyAddress}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+
+  bru.setVar("recurringPropertyName", "E2E Recurring Prop " + Date.now());
+  bru.setVar("recurringPropertyAddress", "E2E Recurring St " + Date.now());
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("recurringPropertyId", res.body.id);
+    bru.setVar("recurringPropertyId", res.body.id);
+    console.log("saved recurringPropertyId =", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have property id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+
+  test("should be active and free", function() {
+    expect(res.body.status).to.equal("active");
+    expect(res.body.occupancy).to.equal("free");
+  });
+}

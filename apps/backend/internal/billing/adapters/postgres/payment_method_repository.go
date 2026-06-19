@@ -163,6 +163,10 @@ func (r *PaymentMethodRepository) Delete(ctx context.Context, userID, methodID u
 		return application.ErrNotFound
 	}
 
+	if pm.IsActive {
+		return application.ErrPaymentMethodInUse
+	}
+
 	count, err := r.q().CountSubscriptionsByActivePaymentMethodID(ctx, pgtype.UUID{Bytes: methodID, Valid: true})
 	if err != nil {
 		return fmt.Errorf("check active payment method usage: %w", err)

@@ -1,0 +1,37 @@
+meta {
+  name: Send Phone Code
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/auth/phone/send
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "phone": "{{phone}}"
+  }
+}
+
+script:pre-request {
+  const skipSend = bru.getEnvVar("skipSend") === "true";
+  console.log("skipSend =", skipSend);
+}
+
+tests {
+  const skipSend = bru.getEnvVar("skipSend") === "true";
+  test("should return expected status", function() {
+    if (skipSend) {
+      expect([204, 429]).to.include(res.status);
+    } else {
+      expect(res.status).to.equal(204);
+    }
+  });
+}

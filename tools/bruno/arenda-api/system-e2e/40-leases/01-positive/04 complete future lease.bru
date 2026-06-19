@@ -1,0 +1,33 @@
+meta {
+  name: Complete Future Lease
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/leases/{{futureLeaseId}}/complete
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have matching id", function() {
+    expect(res.body.id).to.equal(bru.getEnvVar("futureLeaseId") || bru.getVar("futureLeaseId"));
+  });
+
+  test("should be completed", function() {
+    expect(res.body.status).to.equal("completed");
+  });
+}
