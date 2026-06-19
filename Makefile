@@ -2,7 +2,8 @@ COMPOSE_LOCAL := docker compose -f docker-compose.local.yml
 BACKEND_DIR := apps/backend
 GOLANGCI_LINT_VERSION := v2.12.2
 
-.PHONY: local-infra-up local-infra-down local-infra-reset backend-run backend-lint check-backend-env check-migrate-env migrate-up migrate-down bruno-run
+.PHONY: local-infra-up local-infra-down local-infra-reset backend-run backend-lint check-backend-env check-migrate-env migrate-up migrate-down bruno-run \
+        perf-db-up perf-db-down perf-db-reset perf-backend-run perf-seed perf-endpoint-max-rps perf-endpoints-max-rps perf-results-clean
 
 local-infra-up:
 	$(COMPOSE_LOCAL) up -d
@@ -36,3 +37,49 @@ migrate-up: check-migrate-env
 
 migrate-down: check-migrate-env
 	set -a; . ./.env; set +a; go run -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1 -database "$$DATABASE_URL" -path "$$MIGRATIONS_DIR" down 1
+
+PERF_HTTP_ADDR ?= :8081
+PERF_APP_BASE_URL ?= http://localhost:8081
+PERF_BASE_URL ?= http://localhost:8081
+PERF_DATABASE_URL ?= postgres://arenda:arenda@localhost:5434/arenda?sslmode=disable
+PERF_POSTGRES_PORT ?= 5434
+
+PERF_ENV ?= \
+	HTTP_ADDR=$(PERF_HTTP_ADDR) \
+	APP_BASE_URL=$(PERF_APP_BASE_URL) \
+	DATABASE_URL=$(PERF_DATABASE_URL) \
+	MIGRATIONS_DIR=db/migrations \
+	SMS_SENDER=fake \
+	PAYMENT_PROVIDER=fake \
+	COOKIE_SECURE=false \
+	RATE_LIMIT_IP_RPS=100000 \
+	RATE_LIMIT_IP_BURST=100000 \
+	RATE_LIMIT_PHONE_SEND_PER_HOUR=100000 \
+	RATE_LIMIT_PHONE_VERIFY_PER_15MIN=100000
+
+COMPOSE_PERF := docker compose -p arenda-perf -f docker-compose.perf.yml
+
+perf-db-up:
+	PERF_POSTGRES_PORT=$(PERF_POSTGRES_PORT) $(COMPOSE_PERF) up -d
+
+perf-db-down:
+	$(COMPOSE_PERF) down
+
+perf-db-reset:
+	$(COMPOSE_PERF) down -v
+	PERF_POSTGRES_PORT=$(PERF_POSTGRES_PORT) $(COMPOSE_PERF) up -d
+
+perf-backend-run:
+	cd $(BACKEND_DIR) && $(PERF_ENV) go run ./cmd/api
+
+perf-seed:
+	cd $(BACKEND_DIR) && $(PERF_ENV) go run ./cmd/perfseed
+
+perf-endpoint-max-rps:
+	cd $(BACKEND_DIR) && $(PERF_ENV) API_BASE_URL=$(PERF_BASE_URL) go run ./cmd/perfmaxrps -endpoint=$(ENDPOINT)
+
+perf-endpoints-max-rps:
+	cd $(BACKEND_DIR) && $(PERF_ENV) API_BASE_URL=$(PERF_BASE_URL) go run ./cmd/perfmaxrps -suite
+
+perf-results-clean:
+	rm -rf $(BACKEND_DIR)/perf/results/endpoints/*

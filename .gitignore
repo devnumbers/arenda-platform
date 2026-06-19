@@ -3,6 +3,7 @@
 .env
 .env.*
 !.env.example
+!.env.perf.example
 *.exe
 node_modules/
 *.log
