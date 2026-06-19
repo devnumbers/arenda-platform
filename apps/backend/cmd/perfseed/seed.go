@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,6 +32,49 @@ type ownerState struct {
 
 type seedState struct {
 	owners []ownerState
+}
+
+type serializableOwnerState struct {
+	Index                int    `json:"index"`
+	ID                   string `json:"id"`
+	Phone                string `json:"phone"`
+	SessionToken         string `json:"sessionToken"`
+	PropertyID           string `json:"propertyID"`
+	LeaseID              string `json:"leaseID"`
+	OperationID          string `json:"operationID"`
+	RecurringOperationID string `json:"recurringOperationID"`
+	ReminderID           string `json:"reminderID"`
+	TenantContactID      string `json:"tenantContactID"`
+}
+
+type fixturesFile struct {
+	Owners []serializableOwnerState `json:"owners"`
+}
+
+func writeFixtures(state *seedState) error {
+	owners := make([]serializableOwnerState, len(state.owners))
+	for i, o := range state.owners {
+		owners[i] = serializableOwnerState{
+			Index:                i,
+			ID:                   o.id.String(),
+			Phone:                o.phone,
+			SessionToken:         o.sessionToken,
+			PropertyID:           o.propertyID.String(),
+			LeaseID:              o.leaseID.String(),
+			OperationID:          o.operationID.String(),
+			RecurringOperationID: o.recurringOperationID.String(),
+			ReminderID:           o.reminderID.String(),
+			TenantContactID:      o.tenantContactID.String(),
+		}
+	}
+	data, err := json.MarshalIndent(fixturesFile{Owners: owners}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal fixtures: %w", err)
+	}
+	if err := os.WriteFile("perf/fixtures.json", data, 0600); err != nil {
+		return fmt.Errorf("write fixtures: %w", err)
+	}
+	return nil
 }
 
 func resetDB(ctx context.Context, db *pgxpool.Pool) error {
