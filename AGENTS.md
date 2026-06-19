@@ -15,6 +15,7 @@ Repository-level instructions only. Backend development rules live in `apps/back
 
 - Before changing behavior, read `CONTEXT.md`, relevant docs under `docs/`, and relevant ADRs.
 - Check `git status` before edits and do not overwrite unrelated user changes.
+- Every feature, bug fix, or meaningful change must be recorded in `CHANGELOG.md` under the current date before merging to the main branch. Write briefly and in product-friendly language, without technical details.
 - For non-trivial work, use a multi-agent workflow: explorer for read-only research, worker for bounded implementation, and separate spec/code/security/test review passes. If subagents are unavailable, perform those roles sequentially and state the fallback.
 - The orchestrator owns integration, verification, and the final answer.
 
