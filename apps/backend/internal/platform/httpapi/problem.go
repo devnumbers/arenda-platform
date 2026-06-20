@@ -120,7 +120,7 @@ func UserFacingDetail(err error) (string, bool) {
 		return "not found", true
 	}
 
-	return "An unexpected error occurred.", false
+	return "", false
 }
 
 // writeProblem writes an RFC 7807 problem response and records the problem title

@@ -298,11 +298,19 @@ func (h *SubscriptionHandlers) handleBillingError(w http.ResponseWriter, r *http
 		errors.Is(err, billingapp.ErrPaymentMethodAlreadyExists),
 		errors.Is(err, domain.ErrCannotEnableAutoRenew),
 		errors.Is(err, domain.ErrInvalidSubscriptionState):
-		detail, _ := UserFacingDetail(err)
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
 	case errors.Is(err, domain.ErrInvalidPeriod),
 		errors.Is(err, domain.ErrInvalidAmount):
-		detail, _ := UserFacingDetail(err)
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, context.DeadlineExceeded):
 		writeProblem(w, http.StatusGatewayTimeout, problem(r.Context(), "Gateway timeout", "request timed out"))

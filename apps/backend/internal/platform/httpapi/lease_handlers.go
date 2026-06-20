@@ -33,7 +33,11 @@ func NewLeaseHandlers(leaseSvc *leasesapp.LeaseService, tenantContactSvc *leases
 func (h *LeaseHandlers) handleLeaseError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, leasesapp.ErrInvalidInput):
-		detail, _ := UserFacingDetail(err)
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
 		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "lease not found"))
@@ -45,10 +49,18 @@ func (h *LeaseHandlers) handleLeaseError(w http.ResponseWriter, r *http.Request,
 		errors.Is(err, leasesapp.ErrArchivedLease),
 		errors.Is(err, leasesapp.ErrInvalidTransition),
 		isLeaseInvalidStatusTransition(err):
-		detail, _ := UserFacingDetail(err)
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
 	case errors.Is(err, leasesapp.ErrTenantContactNotFound):
-		detail, _ := UserFacingDetail(err)
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
@@ -327,12 +339,20 @@ func (h *LeaseHandlers) UpdateTenantContact(w http.ResponseWriter, r *http.Reque
 func handleTenantContactError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, leasesapp.ErrInvalidInput):
-		detail, _ := UserFacingDetail(err)
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
 		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "tenant contact not found"))
 	case errors.Is(err, leasesapp.ErrDuplicatePhone):
-		detail, _ := UserFacingDetail(err)
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))

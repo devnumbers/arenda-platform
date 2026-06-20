@@ -75,7 +75,11 @@ func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 	if err := h.auth.SendCode(r.Context(), phone); err != nil {
 		switch {
 		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
-			detail, _ := UserFacingDetail(err)
+			detail, ok := UserFacingDetail(err)
+			if !ok {
+				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+				return
+			}
 			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
@@ -112,7 +116,11 @@ func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, application.ErrUserBlocked),
 			errors.Is(err, domain.ErrTooManyAttempts):
-			detail, _ := UserFacingDetail(err)
+			detail, ok := UserFacingDetail(err)
+			if !ok {
+				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+				return
+			}
 			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
 		case errors.Is(err, domain.ErrSMSCodeInvalid),
 			errors.Is(err, application.ErrNotFound):

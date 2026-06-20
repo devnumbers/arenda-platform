@@ -26,7 +26,11 @@ func NewRecurringOperationHandlers(svc *leasesapp.RecurringOperationService, log
 func (h *RecurringOperationHandlers) handleRecurringOperationError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, leasesapp.ErrInvalidInput):
-		detail, _ := UserFacingDetail(err)
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
 		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "recurring operation not found"))
@@ -45,7 +49,7 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 
 	var body openapi.RecurringOperationCreateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode create recurring operation request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode create recurring operation request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
@@ -123,7 +127,7 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 
 	var body openapi.RecurringOperationUpdateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode update recurring operation request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode update recurring operation request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}

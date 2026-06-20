@@ -26,7 +26,11 @@ func NewOperationHandlers(svc *leasesapp.OperationService, logger *slog.Logger) 
 func (h *OperationHandlers) handleOperationError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, leasesapp.ErrInvalidInput):
-		detail, _ := UserFacingDetail(err)
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
 		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "operation not found"))

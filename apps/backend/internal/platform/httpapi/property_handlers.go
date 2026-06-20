@@ -25,7 +25,11 @@ func NewPropertyHandlers(svc *propertiesapp.PropertyService, logger *slog.Logger
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, propertiesapp.ErrInvalidInput):
-		detail, _ := UserFacingDetail(err)
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, propertiesapp.ErrNotFound):
 		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "property not found"))
@@ -40,7 +44,11 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 	case errors.Is(err, propertiesapp.ErrPropertyHasOpenLease):
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property has an open lease"))
 	case isInvalidStatusTransition(err), errors.Is(err, propertiesapp.ErrInvalidTransition):
-		detail, _ := UserFacingDetail(err)
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))

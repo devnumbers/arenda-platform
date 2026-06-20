@@ -46,7 +46,11 @@ func (h *ReminderHandlers) handleReminderError(w http.ResponseWriter, r *http.Re
 	case errors.Is(err, notificationsapp.ErrInvalidReminderDate),
 		errors.Is(err, notificationsapp.ErrReminderNotPending),
 		errors.Is(err, leasesapp.ErrInvalidInput):
-		detail, _ := UserFacingDetail(err)
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, notificationsapp.ErrConcurrentUpdate):
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "reminder changed concurrently"))
