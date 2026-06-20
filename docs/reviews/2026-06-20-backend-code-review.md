@@ -3,7 +3,7 @@
 **Date:** 2026-06-20  
 **Scope:** Full backend review (`apps/backend`) with focus on recent perf-testing and server changes.  
 **Review HEAD:** `c83e0273496888fc5759a1d2b9ea00e756db059d`  
-**Fixes HEAD:** `c2129c5`  
+**Fixes HEAD:** `db2bfb9`  
 **Base:** `1ff94170b97d3a95241908fc7a1508c48a635d10`  
 **Method:** Domain-oriented swarm review (5 independent agents: Architecture/DDD, Go idioms, PostgreSQL/persistence, Performance/observability, Security), followed by sequential subagent-driven implementation with spec/code review after each task.  
 **Verification run (review):** `go test ./...` ✅, `go vet ./...` ✅, `make backend-lint` ✅.  
