@@ -167,7 +167,7 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 }
 
 // ListRecurringOperationsByProperty returns the recurring operations for a
-// property and maintains the 12-month operation horizon for active templates.
+// property.
 func (s *RecurringOperationService) ListRecurringOperationsByProperty(
 	ctx context.Context,
 	ownerID, propertyID uuid.UUID,
@@ -181,20 +181,11 @@ func (s *RecurringOperationService) ListRecurringOperationsByProperty(
 		return nil, fmt.Errorf("list recurring operations: %w", err)
 	}
 
-	for i := range recs {
-		if recs[i].Status != domain.RecurringOperationStatusActive {
-			continue
-		}
-		if err := s.extendHorizon(ctx, recs[i]); err != nil {
-			return nil, fmt.Errorf("extend horizon: %w", err)
-		}
-	}
-
 	return recs, nil
 }
 
 // GetRecurringOperation returns a single recurring operation owned by the given
-// owner and extends its operation horizon when active.
+// owner.
 func (s *RecurringOperationService) GetRecurringOperation(
 	ctx context.Context,
 	ownerID, id uuid.UUID,
@@ -205,12 +196,6 @@ func (s *RecurringOperationService) GetRecurringOperation(
 			return domain.RecurringOperation{}, ErrNotFound
 		}
 		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
-	}
-
-	if rec.Status == domain.RecurringOperationStatusActive {
-		if err := s.extendHorizon(ctx, rec); err != nil {
-			return domain.RecurringOperation{}, fmt.Errorf("extend horizon: %w", err)
-		}
 	}
 
 	return rec, nil
@@ -608,72 +593,6 @@ func (s *RecurringOperationService) existingOperationDates(ctx context.Context, 
 		dates[timeutil.Date(d)] = struct{}{}
 	}
 	return dates, nil
-}
-
-// extendHorizon generates additional operations when the furthest generated date
-// is less than 12 months from now (and the template has no end_date or the end
-// date is further out).
-func (s *RecurringOperationService) extendHorizon(ctx context.Context, rec domain.RecurringOperation) error {
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	now := s.clock.Now()
-
-	txOps := s.operations.WithTx(tx)
-	existing, err := s.existingOperationDates(ctx, txOps, rec.ID)
-	if err != nil {
-		return fmt.Errorf("list existing dates: %w", err)
-	}
-
-	maxDate := timeutil.Date(rec.StartDate)
-	for d := range existing {
-		if d.After(maxDate) {
-			maxDate = d
-		}
-	}
-
-	horizon := timeutil.Date(now).AddDate(0, 12, 0)
-	if !maxDate.Before(horizon) {
-		return nil
-	}
-	if rec.EndDate != nil && timeutil.Date(*rec.EndDate).Before(horizon) {
-		return nil
-	}
-
-	ops, err := s.buildOperations(rec, now, existing, func(d time.Time) bool {
-		return d.After(maxDate)
-	})
-	if err != nil {
-		return err
-	}
-	if len(ops) == 0 {
-		return nil
-	}
-
-	if err := txOps.BulkCreate(ctx, ops); err != nil {
-		return fmt.Errorf("bulk create operations: %w", err)
-	}
-
-	if s.scheduler != nil && rec.ReminderOffsetDays != nil {
-		allOps, err := txOps.ListByRecurringOperation(ctx, rec.ID)
-		if err != nil {
-			return fmt.Errorf("list operations for scheduling: %w", err)
-		}
-		txScheduler := s.scheduler.WithTx(tx)
-		futureOps := futureOperations(allOps, now)
-		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, futureOps, now); err != nil {
-			return fmt.Errorf("schedule reminders: %w", err)
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-
-	return nil
 }
 
 func (s *RecurringOperationService) generateOperations(
