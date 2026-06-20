@@ -357,7 +357,7 @@ type fakeArchiveCall struct {
 	limit  int
 }
 
-func (a *fakePropertyArchiver) ArchiveExcessProperties(_ context.Context, userID uuid.UUID, limit int) error {
+func (a *fakePropertyArchiver) ArchiveExcessProperties(_ context.Context, _ transaction.Tx, userID uuid.UUID, limit int) error {
 	if a.calls == nil {
 		a.calls = make([]fakeArchiveCall, 0)
 	}

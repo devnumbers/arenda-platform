@@ -71,7 +71,7 @@ type SubscriptionPaymentRepository interface {
 // PropertyArchiver archives properties when a subscription is downgraded to a
 // lower-limit tariff. It is implemented by the properties application service.
 type PropertyArchiver interface {
-	ArchiveExcessProperties(ctx context.Context, userID uuid.UUID, limit int) error
+	ArchiveExcessProperties(ctx context.Context, tx transaction.Tx, ownerID uuid.UUID, limit int) error
 }
 
 // ConfirmableProvider is implemented by providers that support an explicit

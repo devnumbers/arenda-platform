@@ -233,49 +233,16 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	txRepo := s.repo.WithTx(tx)
-
-	property, err := txRepo.GetByIDAndOwner(ctx, id, ownerID)
+	archived, err := s.archivePropertyInTx(
+		ctx,
+		s.repo.WithTx(tx),
+		s.occupancyProvider.WithTx(tx),
+		s.billingLifecycle.WithTx(tx),
+		ownerID,
+		id,
+	)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Property{}, ErrNotFound
-		}
-		return domain.Property{}, fmt.Errorf("get property: %w", err)
-	}
-
-	if property.Status == domain.PropertyStatusArchived {
-		_ = tx.Rollback(ctx)
-		return domain.Property{}, ErrAlreadyArchived
-	}
-
-	occupied, err := s.occupancyProvider.IsOccupied(ctx, ownerID, property.ID)
-	if err != nil {
-		_ = tx.Rollback(ctx)
-		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
-	}
-	if occupied {
-		_ = tx.Rollback(ctx)
-		return domain.Property{}, ErrPropertyHasOpenLease
-	}
-
-	if err := s.billingLifecycle.WithTx(tx).Suspend(ctx, id, timeutil.Date(s.clock.Now())); err != nil {
-		_ = tx.Rollback(ctx)
-		return domain.Property{}, fmt.Errorf("suspend billing: %w", err)
-	}
-
-	if err := txRepo.Archive(ctx, id, ownerID); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			_ = tx.Rollback(ctx)
-			return domain.Property{}, ErrNotFound
-		}
-		_ = tx.Rollback(ctx)
-		return domain.Property{}, fmt.Errorf("archive property: %w", err)
-	}
-
-	archived, err := txRepo.GetByIDAndOwner(ctx, id, ownerID)
-	if err != nil {
-		_ = tx.Rollback(ctx)
-		return domain.Property{}, fmt.Errorf("reload archived property: %w", err)
+		return domain.Property{}, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -285,14 +252,64 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 	return archived, nil
 }
 
+// archivePropertyInTx performs the core archive logic inside an existing
+// transaction. The caller is responsible for committing or rolling back tx.
+func (s *PropertyService) archivePropertyInTx(
+	ctx context.Context,
+	repo PropertyRepository,
+	occupancy OccupancyProvider,
+	billing PropertyBillingLifecycle,
+	ownerID, id uuid.UUID,
+) (domain.Property, error) {
+	property, err := repo.GetByIDAndOwner(ctx, id, ownerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Property{}, ErrNotFound
+		}
+		return domain.Property{}, fmt.Errorf("get property: %w", err)
+	}
+
+	if property.Status == domain.PropertyStatusArchived {
+		return domain.Property{}, ErrAlreadyArchived
+	}
+
+	occupied, err := occupancy.IsOccupied(ctx, ownerID, property.ID)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
+	}
+	if occupied {
+		return domain.Property{}, ErrPropertyHasOpenLease
+	}
+
+	if err := billing.Suspend(ctx, id, timeutil.Date(s.clock.Now())); err != nil {
+		return domain.Property{}, fmt.Errorf("suspend billing: %w", err)
+	}
+
+	if err := repo.Archive(ctx, id, ownerID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Property{}, ErrNotFound
+		}
+		return domain.Property{}, fmt.Errorf("archive property: %w", err)
+	}
+
+	archived, err := repo.GetByIDAndOwner(ctx, id, ownerID)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("reload archived property: %w", err)
+	}
+
+	return archived, nil
+}
+
 // ArchiveExcessProperties archives active properties beyond the given limit,
 // keeping the most recently updated properties. Properties that cannot be
 // archived because they have an open lease are logged and skipped.
-func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, ownerID uuid.UUID, limit int) error {
+func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transaction.Tx, ownerID uuid.UUID, limit int) error {
 	if limit < 0 {
 		return nil
 	}
-	properties, err := s.repo.ListActiveByOwner(ctx, ownerID)
+
+	txRepo := s.repo.WithTx(tx)
+	properties, err := txRepo.ListActiveByOwner(ctx, ownerID)
 	if err != nil {
 		return fmt.Errorf("list active properties: %w", err)
 	}
@@ -300,8 +317,11 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, ownerID u
 		return nil
 	}
 
+	txOccupancy := s.occupancyProvider.WithTx(tx)
+	txBillingLifecycle := s.billingLifecycle.WithTx(tx)
+
 	for _, p := range properties[limit:] {
-		_, err := s.ArchiveProperty(ctx, ownerID, p.ID)
+		_, err := s.archivePropertyInTx(ctx, txRepo, txOccupancy, txBillingLifecycle, ownerID, p.ID)
 		if err != nil {
 			if errors.Is(err, ErrPropertyHasOpenLease) || errors.Is(err, ErrAlreadyArchived) {
 				s.logger.WarnContext(ctx, "skipping auto-archive of property",

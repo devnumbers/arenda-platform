@@ -17,6 +17,7 @@ type SubscriptionLimiter interface {
 type OccupancyProvider interface {
 	IsOccupied(ctx context.Context, ownerID, propertyID uuid.UUID) (bool, error)
 	OccupiedPropertyIDs(ctx context.Context, ownerID uuid.UUID) (map[uuid.UUID]bool, error)
+	WithTx(tx transaction.Tx) OccupancyProvider
 }
 
 // PropertyBillingLifecycle manages the billing side effects of archiving and

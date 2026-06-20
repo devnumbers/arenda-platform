@@ -2,11 +2,13 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // OccupancyProvider reports which properties have an open lease.
@@ -21,6 +23,15 @@ func NewOccupancyProvider(db postgres.DBTX) *OccupancyProvider {
 
 func (p *OccupancyProvider) q() *postgres.Queries {
 	return postgres.New(p.db)
+}
+
+// WithTx returns an instance bound to the provided transaction.
+func (p *OccupancyProvider) WithTx(tx transaction.Tx) application.OccupancyProvider {
+	dbx, ok := tx.(postgres.DBTX)
+	if !ok {
+		panic(fmt.Sprintf("transaction.Tx does not implement postgres.DBTX: %T", tx))
+	}
+	return NewOccupancyProvider(dbx)
 }
 
 // IsOccupied reports whether the given property currently has an open lease.

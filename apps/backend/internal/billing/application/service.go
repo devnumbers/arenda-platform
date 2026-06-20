@@ -1047,7 +1047,7 @@ func (s *BillingService) applySuccessfulRenewal(ctx context.Context, tx transact
 			return fmt.Errorf("apply tariff change: %w", err)
 		}
 		if s.propertyArchiver != nil {
-			if err := s.propertyArchiver.ArchiveExcessProperties(ctx, sub.UserID, renewalTariff.ActivePropertyLimit); err != nil {
+			if err := s.propertyArchiver.ArchiveExcessProperties(ctx, tx, sub.UserID, renewalTariff.ActivePropertyLimit); err != nil {
 				return fmt.Errorf("archive excess properties after downgrade: %w", err)
 			}
 		}
@@ -1067,7 +1067,7 @@ func (s *BillingService) applyFreeRenewalOrDowngrade(ctx context.Context, tx tra
 			return fmt.Errorf("update subscription after free downgrade to basic: %w", err)
 		}
 		if s.propertyArchiver != nil {
-			if err := s.propertyArchiver.ArchiveExcessProperties(ctx, sub.UserID, renewalTariff.ActivePropertyLimit); err != nil {
+			if err := s.propertyArchiver.ArchiveExcessProperties(ctx, tx, sub.UserID, renewalTariff.ActivePropertyLimit); err != nil {
 				return fmt.Errorf("archive excess properties after free downgrade to basic: %w", err)
 			}
 		}
@@ -1087,7 +1087,7 @@ func (s *BillingService) applyFreeRenewalOrDowngrade(ctx context.Context, tx tra
 			return fmt.Errorf("apply free tariff change: %w", err)
 		}
 		if s.propertyArchiver != nil {
-			if err := s.propertyArchiver.ArchiveExcessProperties(ctx, sub.UserID, renewalTariff.ActivePropertyLimit); err != nil {
+			if err := s.propertyArchiver.ArchiveExcessProperties(ctx, tx, sub.UserID, renewalTariff.ActivePropertyLimit); err != nil {
 				return fmt.Errorf("archive excess properties after free downgrade: %w", err)
 			}
 		}
@@ -1136,7 +1136,7 @@ func (s *BillingService) expireNonRenewingSubscription(ctx context.Context, sub 
 	}
 
 	if s.propertyArchiver != nil {
-		if err := s.propertyArchiver.ArchiveExcessProperties(ctx, sub.UserID, basicTariff.ActivePropertyLimit); err != nil {
+		if err := s.propertyArchiver.ArchiveExcessProperties(ctx, tx, sub.UserID, basicTariff.ActivePropertyLimit); err != nil {
 			return fmt.Errorf("archive excess properties after non-renewing expiry: %w", err)
 		}
 	}
@@ -1278,7 +1278,7 @@ func (s *BillingService) downgradeToBasic(ctx context.Context, sub domain.Subscr
 	}
 
 	if s.propertyArchiver != nil {
-		if err := s.propertyArchiver.ArchiveExcessProperties(ctx, sub.UserID, basicTariff.ActivePropertyLimit); err != nil {
+		if err := s.propertyArchiver.ArchiveExcessProperties(ctx, tx, sub.UserID, basicTariff.ActivePropertyLimit); err != nil {
 			return fmt.Errorf("archive excess properties after grace downgrade: %w", err)
 		}
 	}
