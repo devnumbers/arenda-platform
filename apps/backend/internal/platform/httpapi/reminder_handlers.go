@@ -65,7 +65,7 @@ func (h *ReminderHandlers) CreateOperationReminder(w http.ResponseWriter, r *htt
 
 	var body openapi.ReminderCreateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode create operation reminder request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode create operation reminder request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
@@ -130,7 +130,7 @@ func (h *ReminderHandlers) CreateRecurringOperationReminder(w http.ResponseWrite
 
 	var body openapi.ReminderCreateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode create recurring operation reminder request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode create recurring operation reminder request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
@@ -266,7 +266,7 @@ func (h *ReminderHandlers) UpdateReminder(w http.ResponseWriter, r *http.Request
 
 	var body openapi.ReminderUpdateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode update reminder request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode update reminder request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}

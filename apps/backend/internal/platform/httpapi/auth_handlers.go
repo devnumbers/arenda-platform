@@ -55,14 +55,14 @@ func NewAuthHandlers(
 func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 	var body openapi.SendPhoneCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode request body", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
 
 	phone, err := domain.NewPhone(body.Phone)
 	if err != nil {
-		h.logger.ErrorContext(r.Context(), "invalid phone in request body", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "invalid phone"))
 		return
 	}
@@ -90,14 +90,14 @@ func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 	var body openapi.VerifyPhoneCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode request body", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
 
 	phone, err := domain.NewPhone(body.Phone)
 	if err != nil {
-		h.logger.ErrorContext(r.Context(), "invalid phone in request body", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "invalid phone"))
 		return
 	}
@@ -136,7 +136,7 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.auth.Logout(r.Context(), hashSessionToken(token)); err != nil {
-		h.logger.ErrorContext(r.Context(), "logout failed", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "logout failed", slog.String("error", sanitizeError(err)))
 	}
 
 	clearSessionCookie(w, h.cookieSecure)
@@ -198,6 +198,6 @@ func writeJSON(ctx context.Context, w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		loggerFromContext(ctx).ErrorContext(ctx, "failed to encode JSON response", slog.String("error", err.Error()))
+		loggerFromContext(ctx).ErrorContext(ctx, "failed to encode JSON response", slog.String("error", sanitizeError(err)))
 	}
 }

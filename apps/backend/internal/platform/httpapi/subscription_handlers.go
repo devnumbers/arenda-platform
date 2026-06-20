@@ -73,7 +73,7 @@ func (h *SubscriptionHandlers) ToggleAutoRenew(w http.ResponseWriter, r *http.Re
 
 	var body openapi.AutoRenewRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode auto-renew request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode auto-renew request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
@@ -112,7 +112,7 @@ func (h *SubscriptionHandlers) ChangeTariff(w http.ResponseWriter, r *http.Reque
 
 	var body openapi.ChangeTariffRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode change tariff request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode change tariff request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
@@ -189,7 +189,7 @@ func (h *SubscriptionHandlers) AddPaymentMethod(w http.ResponseWriter, r *http.R
 
 	var body openapi.AddPaymentMethodRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode add payment method request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode add payment method request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
@@ -263,7 +263,7 @@ func (h *SubscriptionHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *ht
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to read webhook body",
 			slog.String("provider", provider),
-			slog.String("error", err.Error()))
+			slog.String("error", sanitizeError(err)))
 		writeJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
 		return
 	}
@@ -278,7 +278,7 @@ func (h *SubscriptionHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *ht
 	if err := h.billing.HandleWebhook(r.Context(), provider, payload); err != nil {
 		h.logger.ErrorContext(r.Context(), "webhook handling failed",
 			slog.String("provider", provider),
-			slog.String("error", err.Error()))
+			slog.String("error", sanitizeError(err)))
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})

@@ -65,7 +65,7 @@ func (h *LeaseHandlers) CreateLease(w http.ResponseWriter, r *http.Request) {
 
 	var body openapi.LeaseCreateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode create lease request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode create lease request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
@@ -160,7 +160,7 @@ func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id u
 
 	var body openapi.LeaseUpdateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode update lease request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode update lease request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
@@ -229,7 +229,7 @@ func (h *LeaseHandlers) CreateTenantContact(w http.ResponseWriter, r *http.Reque
 
 	var body openapi.TenantContactCreateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode create tenant contact request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode create tenant contact request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
@@ -301,7 +301,7 @@ func (h *LeaseHandlers) UpdateTenantContact(w http.ResponseWriter, r *http.Reque
 
 	var body openapi.TenantContactUpdateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode update tenant contact request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode update tenant contact request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}

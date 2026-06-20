@@ -57,7 +57,7 @@ func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request
 
 	var body openapi.PropertyCreateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode create property request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode create property request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
@@ -132,7 +132,7 @@ func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request
 
 	var body openapi.PropertyUpdateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode update property request", slog.String("error", err.Error()))
+		h.logger.ErrorContext(r.Context(), "failed to decode update property request", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}

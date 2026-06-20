@@ -178,7 +178,7 @@ func Load() (Config, error) {
 	if !allowedPaymentProviders[cfg.PaymentProvider] {
 		return Config{}, fmt.Errorf("invalid PAYMENT_PROVIDER %q: must be fake or tkassa", cfg.PaymentProvider)
 	}
-	if cfg.AppEnv != "local" && cfg.PaymentProvider == "fake" {
+	if cfg.AppEnv != "local" && cfg.AppEnv != "dev" && cfg.PaymentProvider == "fake" {
 		return Config{}, fmt.Errorf("PAYMENT_PROVIDER=fake is not allowed for APP_ENV=%s", cfg.AppEnv)
 	}
 	if cfg.PaymentProvider == "fake" {

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	billingdomain "github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	identitydomain "github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
@@ -101,6 +102,10 @@ func UserFacingDetail(err error) (string, bool) {
 		return "invalid subscription state", true
 	case errors.Is(err, billingdomain.ErrCannotEnableAutoRenew):
 		return "cannot enable auto-renew without a validity period", true
+	case errors.Is(err, billingapp.ErrPaymentMethodInUse):
+		return "payment method is in use", true
+	case errors.Is(err, billingapp.ErrPaymentMethodAlreadyExists):
+		return "payment method already exists", true
 
 	// Notifications / reminders.
 	case errors.Is(err, notificationsapp.ErrInvalidReminderDate):
@@ -115,7 +120,7 @@ func UserFacingDetail(err error) (string, bool) {
 		return "not found", true
 	}
 
-	return "", false
+	return "An unexpected error occurred.", false
 }
 
 // writeProblem writes an RFC 7807 problem response and records the problem title
