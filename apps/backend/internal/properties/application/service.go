@@ -88,10 +88,10 @@ func (s *PropertyService) CreateProperty(ctx context.Context, ownerID uuid.UUID,
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txRepo := s.repo.WithTx(tx)
+	txLimiter := s.limiter.WithTx(tx)
 
-	limit, err := s.limiter.ActivePropertyLimit(ctx, ownerID)
+	limit, err := txLimiter.ActivePropertyLimit(ctx, ownerID)
 	if err != nil {
-		_ = tx.Rollback(ctx)
 		return domain.Property{}, fmt.Errorf("get active property limit: %w", err)
 	}
 
@@ -100,7 +100,6 @@ func (s *PropertyService) CreateProperty(ctx context.Context, ownerID uuid.UUID,
 		return domain.Property{}, fmt.Errorf("count active properties: %w", err)
 	}
 	if count >= limit {
-		_ = tx.Rollback(ctx)
 		return domain.Property{}, ErrLimitExceeded
 	}
 
@@ -351,6 +350,7 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txRepo := s.repo.WithTx(tx)
+	txLimiter := s.limiter.WithTx(tx)
 
 	property, err := txRepo.GetByIDAndOwner(ctx, id, ownerID)
 	if err != nil {
@@ -361,13 +361,11 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 	}
 
 	if property.Status != domain.PropertyStatusArchived {
-		_ = tx.Rollback(ctx)
 		return domain.Property{}, ErrNotArchived
 	}
 
-	limit, err := s.limiter.ActivePropertyLimit(ctx, ownerID)
+	limit, err := txLimiter.ActivePropertyLimit(ctx, ownerID)
 	if err != nil {
-		_ = tx.Rollback(ctx)
 		return domain.Property{}, fmt.Errorf("get active property limit: %w", err)
 	}
 
@@ -376,7 +374,6 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 		return domain.Property{}, fmt.Errorf("count active properties: %w", err)
 	}
 	if count >= limit {
-		_ = tx.Rollback(ctx)
 		return domain.Property{}, ErrLimitExceeded
 	}
 
@@ -385,7 +382,6 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 	}
 
 	if err := s.billingLifecycle.WithTx(tx).Resume(ctx, id, ownerID, timeutil.Date(s.clock.Now())); err != nil {
-		_ = tx.Rollback(ctx)
 		return domain.Property{}, fmt.Errorf("resume billing: %w", err)
 	}
 

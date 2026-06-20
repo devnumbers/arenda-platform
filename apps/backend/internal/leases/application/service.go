@@ -93,14 +93,6 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		return domain.Lease{}, ErrPropertyNotAvailable
 	}
 
-	hasOpen, err := s.properties.HasOpenLease(ctx, cmd.PropertyID)
-	if err != nil {
-		return domain.Lease{}, fmt.Errorf("check open lease: %w", err)
-	}
-	if hasOpen {
-		return domain.Lease{}, ErrOpenLeaseExists
-	}
-
 	if cmd.TenantContactID != nil {
 		if _, err := s.tenantContacts.GetByIDAndOwner(ctx, *cmd.TenantContactID, ownerID); err != nil {
 			if errors.Is(err, ErrNotFound) {
@@ -138,7 +130,16 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 	txLeases := s.leases.WithTx(tx)
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
+	txProperties := s.properties.WithTx(tx)
 	txRentService := NewRentService(txOps, txRecurring, s.clock)
+
+	hasOpen, err := txProperties.HasOpenLease(ctx, cmd.PropertyID)
+	if err != nil {
+		return domain.Lease{}, fmt.Errorf("check open lease: %w", err)
+	}
+	if hasOpen {
+		return domain.Lease{}, ErrOpenLeaseExists
+	}
 
 	created, err := txLeases.Create(ctx, ownerID, lease)
 	if err != nil {
@@ -228,7 +229,19 @@ func (s *LeaseService) applyEffectiveStatus(lease domain.Lease) domain.Lease {
 }
 
 func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, cmd UpdateLeaseCommand) (domain.Lease, error) {
-	lease, err := s.leases.GetByIDAndOwner(ctx, id, ownerID)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.Lease{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txLeases := s.leases.WithTx(tx)
+	txTenantContacts := s.tenantContacts.WithTx(tx)
+	txRecurring := s.recurringOps.WithTx(tx)
+	txOps := s.operations.WithTx(tx)
+	txRentService := NewRentService(txOps, txRecurring, s.clock)
+
+	lease, err := txLeases.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Lease{}, ErrNotFound
@@ -244,7 +257,7 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 	}
 
 	if cmd.TenantContactID != nil {
-		if _, err := s.tenantContacts.GetByIDAndOwner(ctx, *cmd.TenantContactID, ownerID); err != nil {
+		if _, err := txTenantContacts.GetByIDAndOwner(ctx, *cmd.TenantContactID, ownerID); err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return domain.Lease{}, ErrTenantContactNotFound
 			}
@@ -287,17 +300,6 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 	now := s.clock.Now()
 	lease.Status = lease.CalculateStatus(now)
 	lease.UpdatedAt = now
-
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Lease{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txLeases := s.leases.WithTx(tx)
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
-	txRentService := NewRentService(txOps, txRecurring, s.clock)
 
 	updated, err := txLeases.Update(ctx, ownerID, lease)
 	if err != nil {
@@ -383,7 +385,17 @@ func endDatesEqual(a, b *time.Time) bool {
 }
 
 func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID) (domain.Lease, error) {
-	lease, err := s.leases.GetByIDAndOwner(ctx, id, ownerID)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.Lease{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txLeases := s.leases.WithTx(tx)
+	txRecurring := s.recurringOps.WithTx(tx)
+	txOps := s.operations.WithTx(tx)
+
+	lease, err := txLeases.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Lease{}, ErrNotFound
@@ -400,16 +412,6 @@ func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID)
 	if !lease.IsOpen() {
 		return domain.Lease{}, &InvalidStatusTransitionError{From: lease.Status, To: domain.LeaseStatusCompleted}
 	}
-
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Lease{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txLeases := s.leases.WithTx(tx)
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
 
 	completed, err := txLeases.Complete(ctx, id, ownerID)
 	if err != nil {

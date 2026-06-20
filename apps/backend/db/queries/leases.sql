@@ -15,6 +15,11 @@ RETURNING *;
 SELECT * FROM leases
 WHERE id = $1 AND owner_id = $2;
 
+-- name: GetLeaseByIDAndOwnerForUpdate :one
+SELECT * FROM leases
+WHERE id = $1 AND owner_id = $2
+FOR UPDATE;
+
 -- name: GetLeaseByID :one
 SELECT * FROM leases
 WHERE id = $1;

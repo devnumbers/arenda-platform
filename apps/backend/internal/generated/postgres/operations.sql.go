@@ -206,9 +206,44 @@ func (q *Queries) GetOperationByIDAndOwner(ctx context.Context, arg GetOperation
 	return i, err
 }
 
+const getOperationByIDAndOwnerForUpdate = `-- name: GetOperationByIDAndOwnerForUpdate :one
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at FROM operations
+WHERE id = $1 AND owner_id = $2
+  AND deleted_at IS NULL
+FOR UPDATE
+`
+
+type GetOperationByIDAndOwnerForUpdateParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) GetOperationByIDAndOwnerForUpdate(ctx context.Context, arg GetOperationByIDAndOwnerForUpdateParams) (Operation, error) {
+	row := q.db.QueryRow(ctx, getOperationByIDAndOwnerForUpdate, arg.ID, arg.OwnerID)
+	var i Operation
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.LeaseID,
+		&i.RecurringOperationID,
+		&i.Type,
+		&i.Category,
+		&i.AmountKopecks,
+		&i.OperationDate,
+		&i.Comment,
+		&i.IsException,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const listFutureOperationsByLease = `-- name: ListFutureOperationsByLease :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at FROM operations
 WHERE lease_id = $1 AND operation_date > $2
+  AND deleted_at IS NULL
 ORDER BY operation_date ASC
 `
 
@@ -255,6 +290,7 @@ func (q *Queries) ListFutureOperationsByLease(ctx context.Context, arg ListFutur
 const listOperationDatesByLease = `-- name: ListOperationDatesByLease :many
 SELECT operation_date FROM operations
 WHERE lease_id = $1
+  AND deleted_at IS NULL
 `
 
 func (q *Queries) ListOperationDatesByLease(ctx context.Context, leaseID pgtype.UUID) ([]pgtype.Date, error) {
@@ -280,6 +316,7 @@ func (q *Queries) ListOperationDatesByLease(ctx context.Context, leaseID pgtype.
 const listOperationDatesByRecurringOperation = `-- name: ListOperationDatesByRecurringOperation :many
 SELECT operation_date FROM operations
 WHERE recurring_operation_id = $1
+  AND deleted_at IS NULL
 `
 
 func (q *Queries) ListOperationDatesByRecurringOperation(ctx context.Context, recurringOperationID pgtype.UUID) ([]pgtype.Date, error) {

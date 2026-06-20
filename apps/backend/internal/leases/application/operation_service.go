@@ -160,7 +160,16 @@ func (s *OperationService) GetOperation(ctx context.Context, ownerID, id uuid.UU
 
 // UpdateOperation updates an operation owned by the given owner.
 func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid.UUID, cmd UpdateOperationCommand) (domain.Operation, error) {
-	op, err := s.operations.GetByIDAndOwner(ctx, id, ownerID)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txOps := s.operations.WithTx(tx)
+	txRecurring := s.recurringOps.WithTx(tx)
+
+	op, err := txOps.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Operation{}, ErrNotFound
@@ -209,14 +218,6 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	op.IsException = true
 	op.UpdatedAt = s.clock.Now()
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txOps := s.operations.WithTx(tx)
-	txRecurring := s.recurringOps.WithTx(tx)
 	updated, err := txOps.Update(ctx, op)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {

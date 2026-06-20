@@ -14,6 +14,7 @@ type PropertyRepository interface {
 	ExistsActiveByOwner(ctx context.Context, id, ownerID uuid.UUID) (bool, error)
 	ExistsByOwner(ctx context.Context, id, ownerID uuid.UUID) (bool, error)
 	HasOpenLease(ctx context.Context, id uuid.UUID) (bool, error)
+	WithTx(tx transaction.Tx) PropertyRepository
 }
 
 type TenantContactRepository interface {
@@ -21,6 +22,7 @@ type TenantContactRepository interface {
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.TenantContact, error)
 	Update(ctx context.Context, ownerID uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error)
 	ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.TenantContact, error)
+	WithTx(tx transaction.Tx) TenantContactRepository
 }
 
 type LeaseRepository interface {
@@ -28,6 +30,7 @@ type LeaseRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Lease, error)
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Lease, error)
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Lease, error)
+	GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Lease, error)
 	ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Lease, error)
 	Update(ctx context.Context, ownerID uuid.UUID, lease domain.Lease) (domain.Lease, error)
 	Complete(ctx context.Context, id, ownerID uuid.UUID) (domain.Lease, error)
@@ -64,6 +67,7 @@ type OperationRepository interface {
 	ListOperationDatesByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID) ([]time.Time, error)
 	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.Operation, error)
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Operation, error)
+	GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Operation, error)
 	Update(ctx context.Context, op domain.Operation) (domain.Operation, error)
 	SoftDeleteOperation(ctx context.Context, id, ownerID uuid.UUID) error
 	DeleteUneditedFutureOperationsByLease(ctx context.Context, leaseID uuid.UUID, after time.Time) error

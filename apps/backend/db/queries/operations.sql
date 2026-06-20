@@ -17,11 +17,13 @@ ORDER BY operation_date DESC;
 
 -- name: ListOperationDatesByLease :many
 SELECT operation_date FROM operations
-WHERE lease_id = $1;
+WHERE lease_id = $1
+  AND deleted_at IS NULL;
 
 -- name: ListOperationDatesByRecurringOperation :many
 SELECT operation_date FROM operations
-WHERE recurring_operation_id = $1;
+WHERE recurring_operation_id = $1
+  AND deleted_at IS NULL;
 
 -- name: ListOperationsByRecurringOperation :many
 SELECT * FROM operations
@@ -39,6 +41,7 @@ WHERE recurring_operation_id = $1
 -- name: ListFutureOperationsByLease :many
 SELECT * FROM operations
 WHERE lease_id = $1 AND operation_date > $2
+  AND deleted_at IS NULL
 ORDER BY operation_date ASC;
 
 -- name: DeleteFutureOperationsByLease :exec
@@ -79,6 +82,12 @@ ORDER BY operation_date DESC;
 SELECT * FROM operations
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL;
+
+-- name: GetOperationByIDAndOwnerForUpdate :one
+SELECT * FROM operations
+WHERE id = $1 AND owner_id = $2
+  AND deleted_at IS NULL
+FOR UPDATE;
 
 -- name: UpdateOperation :one
 UPDATE operations

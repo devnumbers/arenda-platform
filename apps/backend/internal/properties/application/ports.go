@@ -11,6 +11,7 @@ import (
 
 type SubscriptionLimiter interface {
 	ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error)
+	WithTx(tx transaction.Tx) SubscriptionLimiter
 }
 
 // OccupancyProvider reports which properties have an open lease.

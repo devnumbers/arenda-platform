@@ -173,6 +173,38 @@ func (q *Queries) GetLeaseByIDAndOwner(ctx context.Context, arg GetLeaseByIDAndO
 	return i, err
 }
 
+const getLeaseByIDAndOwnerForUpdate = `-- name: GetLeaseByIDAndOwnerForUpdate :one
+SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
+WHERE id = $1 AND owner_id = $2
+FOR UPDATE
+`
+
+type GetLeaseByIDAndOwnerForUpdateParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) GetLeaseByIDAndOwnerForUpdate(ctx context.Context, arg GetLeaseByIDAndOwnerForUpdateParams) (Lease, error) {
+	row := q.db.QueryRow(ctx, getLeaseByIDAndOwnerForUpdate, arg.ID, arg.OwnerID)
+	var i Lease
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.TenantContactID,
+		&i.Status,
+		&i.StartDate,
+		&i.EndDate,
+		&i.RentAmountKopecks,
+		&i.DepositAmountKopecks,
+		&i.PaymentDay,
+		&i.Comment,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getLeaseByIDForUpdate = `-- name: GetLeaseByIDForUpdate :one
 SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases WHERE id = $1 FOR UPDATE
 `

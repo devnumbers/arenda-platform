@@ -1,0 +1,1 @@
+ALTER TABLE recurring_operations DROP CONSTRAINT chk_recurring_operations_payment_day;

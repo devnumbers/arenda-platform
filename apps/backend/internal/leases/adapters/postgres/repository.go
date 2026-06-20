@@ -54,6 +54,9 @@ func (r *LeaseRepository) Create(ctx context.Context, ownerID uuid.UUID, lease d
 		Comment:    pgtype.Text{String: lease.Comment, Valid: true},
 	})
 	if err != nil {
+		if isOpenLeaseUniqueViolation(err) {
+			return domain.Lease{}, application.ErrOpenLeaseExists
+		}
 		return domain.Lease{}, err
 	}
 	return leaseFromRow(row)
@@ -83,6 +86,20 @@ func (r *LeaseRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (d
 
 func (r *LeaseRepository) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Lease, error) {
 	row, err := r.q().GetLeaseByIDAndOwner(ctx, postgres.GetLeaseByIDAndOwnerParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Lease{}, application.ErrNotFound
+		}
+		return domain.Lease{}, err
+	}
+	return leaseFromRow(row)
+}
+
+func (r *LeaseRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Lease, error) {
+	row, err := r.q().GetLeaseByIDAndOwnerForUpdate(ctx, postgres.GetLeaseByIDAndOwnerForUpdateParams{
 		ID:      pgconv.UUIDToPgtype(id),
 		OwnerID: pgconv.UUIDToPgtype(ownerID),
 	})
@@ -301,6 +318,14 @@ func isDuplicatePhoneError(err error) bool {
 	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 		return pgErr.Code == pgerrcode.UniqueViolation &&
 			strings.Contains(pgErr.ConstraintName, "tenant_contacts_owner_phone")
+	}
+	return false
+}
+
+func isOpenLeaseUniqueViolation(err error) bool {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		return pgErr.Code == pgerrcode.UniqueViolation &&
+			strings.Contains(pgErr.ConstraintName, "idx_leases_one_open_per_property")
 	}
 	return false
 }
@@ -719,6 +744,20 @@ func (r *OperationRepository) GetByIDAndOwner(ctx context.Context, id, ownerID u
 	return operationFromRow(row), nil
 }
 
+func (r *OperationRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Operation, error) {
+	row, err := r.q().GetOperationByIDAndOwnerForUpdate(ctx, postgres.GetOperationByIDAndOwnerForUpdateParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Operation{}, application.ErrNotFound
+		}
+		return domain.Operation{}, err
+	}
+	return operationFromRow(row), nil
+}
+
 func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (domain.Operation, error) {
 	row, err := r.q().UpdateOperation(ctx, postgres.UpdateOperationParams{
 		ID:            pgconv.UUIDToPgtype(op.ID),
@@ -787,6 +826,11 @@ func NewPropertyRepository(db postgres.DBTX) *PropertyRepository {
 
 func (r *PropertyRepository) q() *postgres.Queries {
 	return postgres.New(r.db)
+}
+
+// WithTx returns a repository instance bound to the provided transaction.
+func (r *PropertyRepository) WithTx(tx transaction.Tx) application.PropertyRepository {
+	return NewPropertyRepository(tx.(postgres.DBTX))
 }
 
 // ExistsActiveByOwner reports whether an active property exists for the owner.
