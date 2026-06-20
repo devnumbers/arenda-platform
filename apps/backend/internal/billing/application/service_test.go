@@ -87,10 +87,7 @@ func (r *fakeTariffRepo) List(_ context.Context) ([]domain.Tariff, error) {
 		if out[i].MonthlyPriceKopecks != out[j].MonthlyPriceKopecks {
 			return out[i].MonthlyPriceKopecks < out[j].MonthlyPriceKopecks
 		}
-		if out[i].YearlyPriceKopecks != out[j].YearlyPriceKopecks {
-			return out[i].YearlyPriceKopecks < out[j].YearlyPriceKopecks
-		}
-		return out[i].ActivePropertyLimit < out[j].ActivePropertyLimit
+		return out[i].ID.String() < out[j].ID.String()
 	})
 	return out, nil
 }
