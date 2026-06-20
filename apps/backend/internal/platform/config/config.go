@@ -11,22 +11,22 @@ import (
 )
 
 type Config struct {
-	AppEnv               string
-	HTTPAddr             string
-	LogLevel             string
-	LogLevelValue        slog.Level
-	LogFormat            string
-	DatabaseURL          string
-	MigrationsDir        string
-	CookieSecure         bool
-	SMSSender            string
-	PaymentProvider      string
-	AppBaseURL           string
-	TKassaTerminalKey    string
-	TKassaPassword       string
-	EncryptionKey        string
+	AppEnv                string
+	HTTPAddr              string
+	LogLevel              string
+	LogLevelValue         slog.Level
+	LogFormat             string
+	DatabaseURL           string
+	MigrationsDir         string
+	CookieSecure          bool
+	SMSSender             string
+	PaymentProvider       string
+	AppBaseURL            string
+	TKassaTerminalKey     string
+	TKassaPassword        string
+	EncryptionKey         string
 	BillingWorkerInterval time.Duration
-	RateLimit            RateLimit
+	RateLimit             RateLimit
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -54,7 +54,7 @@ func Load() (Config, error) {
 	}
 
 	if cfg.AppEnv == "" {
-		cfg.AppEnv = "local"
+		return Config{}, fmt.Errorf("APP_ENV is required")
 	}
 	allowedEnvs := map[string]bool{"local": true, "dev": true, "staging": true, "production": true}
 	if !allowedEnvs[cfg.AppEnv] {
@@ -83,7 +83,6 @@ func Load() (Config, error) {
 	if !allowedFormats[cfg.LogFormat] {
 		return Config{}, fmt.Errorf("invalid LOG_FORMAT %q: must be json or pretty", cfg.LogFormat)
 	}
-
 	cookieSecure := os.Getenv("COOKIE_SECURE")
 	cookieSecureExplicit := false
 	if cookieSecure != "" {

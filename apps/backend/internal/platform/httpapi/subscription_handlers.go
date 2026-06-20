@@ -291,21 +291,23 @@ func (h *SubscriptionHandlers) handleBillingError(w http.ResponseWriter, r *http
 		errors.Is(err, billingapp.ErrSubscriptionNotFound),
 		errors.Is(err, billingapp.ErrPaymentNotFound),
 		errors.Is(err, billingapp.ErrPaymentMethodNotFound):
-		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", err.Error()))
+		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "resource not found"))
 	case errors.Is(err, billingapp.ErrAlreadyOnTariff),
 		errors.Is(err, billingapp.ErrInvalidTariffChange),
 		errors.Is(err, billingapp.ErrPaymentMethodInUse),
 		errors.Is(err, billingapp.ErrPaymentMethodAlreadyExists),
 		errors.Is(err, domain.ErrCannotEnableAutoRenew),
 		errors.Is(err, domain.ErrInvalidSubscriptionState):
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", err.Error()))
+		detail, _ := UserFacingDetail(err)
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
 	case errors.Is(err, domain.ErrInvalidPeriod),
 		errors.Is(err, domain.ErrInvalidAmount):
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", err.Error()))
+		detail, _ := UserFacingDetail(err)
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, context.DeadlineExceeded):
-		writeProblem(w, http.StatusGatewayTimeout, problem(r.Context(), "Gateway timeout", err.Error()))
+		writeProblem(w, http.StatusGatewayTimeout, problem(r.Context(), "Gateway timeout", "request timed out"))
 	case errors.Is(err, context.Canceled):
-		writeProblem(w, 499, problem(r.Context(), "Client closed request", err.Error()))
+		writeProblem(w, 499, problem(r.Context(), "Client closed request", "client closed request"))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 	}

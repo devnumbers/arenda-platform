@@ -24,12 +24,12 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 
 // AuthHandlers implements the generated non-strict ServerInterface.
 type AuthHandlers struct {
-	auth           *application.AuthService
-	billing        *billingapp.BillingService
-	cookieSecure   bool
-	logger         *slog.Logger
-	phoneSend      *RateLimiter
-	phoneVerify    *RateLimiter
+	auth         *application.AuthService
+	billing      *billingapp.BillingService
+	cookieSecure bool
+	logger       *slog.Logger
+	phoneSend    *RateLimiter
+	phoneVerify  *RateLimiter
 }
 
 // NewAuthHandlers creates HTTP handlers for the auth API.
@@ -42,12 +42,12 @@ func NewAuthHandlers(
 	phoneVerify *RateLimiter,
 ) *AuthHandlers {
 	return &AuthHandlers{
-		auth:        auth,
-		billing:     billing,
+		auth:         auth,
+		billing:      billing,
 		cookieSecure: cookieSecure,
-		logger:      logger,
-		phoneSend:   phoneSend,
-		phoneVerify: phoneVerify,
+		logger:       logger,
+		phoneSend:    phoneSend,
+		phoneVerify:  phoneVerify,
 	}
 }
 
@@ -75,7 +75,8 @@ func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 	if err := h.auth.SendCode(r.Context(), phone); err != nil {
 		switch {
 		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", err.Error()))
+			detail, _ := UserFacingDetail(err)
+			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -111,7 +112,8 @@ func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, application.ErrUserBlocked),
 			errors.Is(err, domain.ErrTooManyAttempts):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", err.Error()))
+			detail, _ := UserFacingDetail(err)
+			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
 		case errors.Is(err, domain.ErrSMSCodeInvalid),
 			errors.Is(err, application.ErrNotFound):
 			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "invalid phone or code"))
@@ -149,14 +151,18 @@ func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.auth.Me(r.Context(), userID)
-	if err != nil {
-		if errors.Is(err, application.ErrNotFound) {
-			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session invalid"))
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		var err error
+		user, err = h.auth.Me(r.Context(), userID)
+		if err != nil {
+			if errors.Is(err, application.ErrNotFound) {
+				writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session invalid"))
+				return
+			}
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 			return
 		}
-		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-		return
 	}
 
 	resp := meResponse(user)

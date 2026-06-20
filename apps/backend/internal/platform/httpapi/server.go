@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -33,17 +34,28 @@ type Deps struct {
 	IPRateLimiter       *RateLimiter
 	PhoneSendLimiter    *RateLimiter
 	PhoneVerifyLimiter  *RateLimiter
+	DBPoolStats         func() DBPoolSnapshot
 	DevMode             bool
 }
 
-func securityHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'")
-		next.ServeHTTP(w, r)
-	})
+const (
+	logSuccessfulRequests = false
+	slowRequestThreshold  = 500 * time.Millisecond
+)
+
+func securityHeaders(secure bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			w.Header().Set("Content-Security-Policy", "default-src 'none'")
+			if secure {
+				w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // New builds the HTTP handler with routing and middleware wired.
@@ -51,13 +63,23 @@ func New(deps Deps) http.Handler {
 	r := chi.NewRouter()
 	r.Use(RequestIDMiddleware)
 	//nolint:staticcheck // middleware.RealIP is used here as the project-wide IP extraction strategy.
+	// TODO: configure trusted proxies (e.g., via TRUSTED_PROXIES env) before
+	// relying on X-Forwarded-For in production. The deployment must terminate
+	// untrusted client traffic at a proxy that sanitises this header.
 	r.Use(middleware.RealIP)
-	r.Use(RequestLogger(deps.Logger))
-	r.Use(securityHeaders)
+	r.Use(RequestLoggerWithOptions(deps.Logger, RequestLoggerOptions{
+		LogSuccessfulRequests: logSuccessfulRequests,
+		SlowRequestThreshold:  slowRequestThreshold,
+	}))
 	r.Use(middleware.Recoverer)
 	r.Use(rateLimitMiddleware(deps.IPRateLimiter))
+	r.Use(securityHeaders(deps.CookieSecure))
 	r.Use(SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
 	r.Use(readonlyMiddleware(deps.Billing, deps.Logger))
+
+	if deps.DBPoolStats != nil {
+		r.Get("/internal/perf/db-pool", dbPoolDiagnosticsHandler(deps.DBPoolStats))
+	}
 
 	authHandlers := NewAuthHandlers(deps.Auth, deps.Billing, deps.CookieSecure, deps.Logger, deps.PhoneSendLimiter, deps.PhoneVerifyLimiter)
 	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.Logger)

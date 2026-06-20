@@ -25,7 +25,8 @@ func NewPropertyHandlers(svc *propertiesapp.PropertyService, logger *slog.Logger
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, propertiesapp.ErrInvalidInput):
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", err.Error()))
+		detail, _ := UserFacingDetail(err)
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, propertiesapp.ErrNotFound):
 		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "property not found"))
 	case errors.Is(err, propertiesapp.ErrLimitExceeded):
@@ -38,10 +39,9 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property is not archived"))
 	case errors.Is(err, propertiesapp.ErrPropertyHasOpenLease):
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property has an open lease"))
-	case isInvalidStatusTransition(err):
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", err.Error()))
-	case errors.Is(err, propertiesapp.ErrInvalidTransition):
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", err.Error()))
+	case isInvalidStatusTransition(err), errors.Is(err, propertiesapp.ErrInvalidTransition):
+		detail, _ := UserFacingDetail(err)
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 	}

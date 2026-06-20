@@ -26,7 +26,8 @@ func NewRecurringOperationHandlers(svc *leasesapp.RecurringOperationService, log
 func (h *RecurringOperationHandlers) handleRecurringOperationError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, leasesapp.ErrInvalidInput):
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", err.Error()))
+		detail, _ := UserFacingDetail(err)
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
 		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "recurring operation not found"))
 	default:

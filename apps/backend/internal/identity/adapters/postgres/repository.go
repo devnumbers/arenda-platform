@@ -17,6 +17,11 @@ import (
 )
 
 // UserRepository persists users.
+//
+// TODO(security): phone numbers are currently stored plaintext. Encrypting
+// them is a breaking data change that requires a migration for existing rows
+// and decryption on read. Defer to a dedicated ADR/task before enabling in
+// production-like environments.
 type UserRepository struct {
 	db postgres.DBTX
 }

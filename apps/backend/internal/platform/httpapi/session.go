@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
@@ -24,6 +25,7 @@ func sessionCookieName(secure bool) string {
 type contextKey int
 
 const userIDKey contextKey = 0
+const userKey contextKey = 1
 
 // UserIDFromContext returns the authenticated user ID from the request context.
 func UserIDFromContext(ctx context.Context) (uuid.UUID, bool) {
@@ -31,17 +33,28 @@ func UserIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 	return id, ok
 }
 
+// UserFromContext returns the authenticated user loaded by the session middleware.
+func UserFromContext(ctx context.Context) (domain.User, bool) {
+	user, ok := ctx.Value(userKey).(domain.User)
+	return user, ok
+}
+
 func setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time, secure bool) {
 	sameSite := http.SameSiteLaxMode
 	if secure {
 		sameSite = http.SameSiteStrictMode
+	}
+	maxAge := int(time.Until(expiresAt).Seconds())
+	if maxAge < 1 {
+		maxAge = 1
 	}
 	//nolint:gosec // Secure/HttpOnly/SameSite are configured dynamically based on APP_ENV.
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName(secure),
 		Value:    token,
 		Path:     "/",
-		MaxAge:   int(time.Until(expiresAt).Seconds()),
+		Expires:  expiresAt,
+		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   secure,
 		SameSite: sameSite,
@@ -100,18 +113,24 @@ func SessionMiddleware(logger *slog.Logger, sessions application.SessionReposito
 			session, user, err := sessions.GetByTokenHash(r.Context(), hashSessionToken(token), now)
 			if err != nil {
 				if errors.Is(err, application.ErrNotFound) {
+					clearSessionCookie(w, secure)
 					next.ServeHTTP(w, r)
 					return
 				}
 				if logger != nil {
-					logger.ErrorContext(r.Context(), "session lookup failed", slog.String("error", err.Error()))
+					logger.ErrorContext(r.Context(), "session lookup failed", slog.String("error", sanitizeError(err)))
 				}
 				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 				return
 			}
-			if !session.IsExpired(now) {
-				r = r.WithContext(context.WithValue(r.Context(), userIDKey, user.ID))
+			if session.IsExpired(now) {
+				clearSessionCookie(w, secure)
+				next.ServeHTTP(w, r)
+				return
 			}
+			ctx := context.WithValue(r.Context(), userIDKey, user.ID)
+			ctx = context.WithValue(ctx, userKey, user)
+			r = r.WithContext(ctx)
 			next.ServeHTTP(w, r)
 		})
 	}

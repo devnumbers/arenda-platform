@@ -6,29 +6,46 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/requestctx"
 )
 
 // RequestIDHeader is the header used to correlate requests and responses.
 const RequestIDHeader = "X-Request-ID"
 
-type requestIDKey struct{}
+const maxRequestIDLength = 64
+
+// requestIDPattern allows UUIDs or alphanumeric/hyphen identifiers.
+var requestIDPattern = regexp.MustCompile(`^[0-9a-fA-F-]+$|^[a-zA-Z0-9-]+$`)
+
+func isValidRequestID(id string) bool {
+	if id == "" || len(id) > maxRequestIDLength {
+		return false
+	}
+	return requestIDPattern.MatchString(id)
+}
 
 // RequestIDFromContext returns the request ID stored in the context, if any.
 func RequestIDFromContext(ctx context.Context) string {
-	id, _ := ctx.Value(requestIDKey{}).(string)
-	return id
+	return requestctx.RequestIDFromContext(ctx)
+}
+
+// TraceIDFromContext returns the local trace ID stored in the context, if any.
+func TraceIDFromContext(ctx context.Context) string {
+	return requestctx.TraceIDFromContext(ctx)
 }
 
 // RequestIDMiddleware ensures every request has a request ID.
 // It preserves an incoming X-Request-ID when present and echoes it back in the response.
+// Untrusted or malformed values are replaced with a generated ID.
 func RequestIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get(RequestIDHeader)
-		if id == "" {
+		if !isValidRequestID(id) {
 			uid, err := uuid.NewRandom()
 			if err == nil {
 				id = uid.String()
@@ -37,7 +54,9 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 			}
 		}
 		w.Header().Set(RequestIDHeader, id)
-		r = r.WithContext(context.WithValue(r.Context(), requestIDKey{}, id))
+		ctx := requestctx.WithRequestID(r.Context(), id)
+		ctx = requestctx.WithTraceID(ctx, id)
+		r = r.WithContext(ctx)
 		next.ServeHTTP(w, r)
 	})
 }
