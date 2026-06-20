@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
@@ -313,6 +314,12 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 	if err != nil {
 		return fmt.Errorf("list active properties: %w", err)
 	}
+
+	// Keep the most recently updated properties; archive the rest.
+	sort.SliceStable(properties, func(i, j int) bool {
+		return properties[i].UpdatedAt.After(properties[j].UpdatedAt)
+	})
+
 	if len(properties) <= limit {
 		return nil
 	}
@@ -387,7 +394,7 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 		return domain.Property{}, fmt.Errorf("reload unarchived property: %w", err)
 	}
 
-	occupied, err := s.occupancyProvider.IsOccupied(ctx, ownerID, unarchived.ID)
+	occupied, err := s.occupancyProvider.WithTx(tx).IsOccupied(ctx, ownerID, unarchived.ID)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
 	}
