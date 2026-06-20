@@ -101,9 +101,8 @@ func (fallbackClock) Now() time.Time { return time.Now().UTC() }
 // They are explicitly public endpoints; authenticated handlers on these paths
 // must validate session themselves if they need it.
 var publicSessionSkippedPaths = []string{
-	"/auth/verify-code",
-	"/auth/request-code",
-	"/auth/webhook/",
+	"/auth/phone/send",
+	"/auth/phone/verify",
 	"/webhooks/",
 	"/internal/perf/",
 }

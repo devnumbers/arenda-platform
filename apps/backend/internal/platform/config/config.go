@@ -236,6 +236,16 @@ func Load() (Config, error) {
 		}
 		cfg.DBPool.IdleInTransactionSessionTimeout = d
 	}
+	if v := os.Getenv("DB_HEALTH_CHECK_PERIOD"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid DB_HEALTH_CHECK_PERIOD %q: %w", v, err)
+		}
+		if d <= 0 {
+			return Config{}, fmt.Errorf("DB_HEALTH_CHECK_PERIOD must be positive")
+		}
+		cfg.DBPool.HealthCheckPeriod = d
+	}
 	if cfg.DBPool.MaxConns <= 0 {
 		return Config{}, fmt.Errorf("DB_MAX_CONNS must be positive")
 	}

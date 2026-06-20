@@ -56,15 +56,14 @@ func (c *Cleaner) Run(ctx context.Context) {
 func (c *Cleaner) clean(ctx context.Context) {
 	before := c.clock.Now().UTC().Add(-c.retention)
 
-	c.deleteInBatches(ctx, "sms codes", c.codes.DeleteExpiredBeforeBatch)
-	c.deleteInBatches(ctx, "sessions", c.sessions.DeleteExpiredBeforeBatch)
-	c.deleteInBatches(ctx, "login attempts", c.attempts.DeleteStaleBeforeBatch)
+	c.deleteInBatches(ctx, "sms codes", before, c.codes.DeleteExpiredBeforeBatch)
+	c.deleteInBatches(ctx, "sessions", before, c.sessions.DeleteExpiredBeforeBatch)
+	c.deleteInBatches(ctx, "login attempts", before, c.attempts.DeleteStaleBeforeBatch)
 
 	c.logger.Info("cleanup completed", slog.Time("before", before))
 }
 
-func (c *Cleaner) deleteInBatches(ctx context.Context, name string, deleteBatch func(context.Context, time.Time, int32) (int64, error)) {
-	before := c.clock.Now().UTC().Add(-c.retention)
+func (c *Cleaner) deleteInBatches(ctx context.Context, name string, before time.Time, deleteBatch func(context.Context, time.Time, int32) (int64, error)) {
 	for {
 		n, err := deleteBatch(ctx, before, defaultDeleteBatchSize)
 		if err != nil {
