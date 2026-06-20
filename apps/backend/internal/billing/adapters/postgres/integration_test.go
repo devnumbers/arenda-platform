@@ -17,8 +17,8 @@ import (
 )
 
 var (
-	migrateOnce  sync.Once
-	errMigrate error
+	migrateOnce sync.Once
+	errMigrate  error
 )
 
 func setupIntegrationDB(t *testing.T) *pgxpool.Pool {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -16,12 +17,20 @@ import (
 
 // TariffRepository persists tariffs.
 type TariffRepository struct {
-	db postgres.DBTX
+	db     postgres.DBTX
+	mu     sync.RWMutex
+	byID   map[uuid.UUID]domain.Tariff
+	byName map[domain.TariffName]domain.Tariff
+	list   []domain.Tariff
 }
 
 // NewTariffRepository creates a new tariff repository.
 func NewTariffRepository(db postgres.DBTX) *TariffRepository {
-	return &TariffRepository{db: db}
+	return &TariffRepository{
+		db:     db,
+		byID:   make(map[uuid.UUID]domain.Tariff),
+		byName: make(map[domain.TariffName]domain.Tariff),
+	}
 }
 
 func (r *TariffRepository) q() *postgres.Queries {
@@ -61,6 +70,10 @@ func (r *invalidTariffRepository) WithTx(tx transaction.Tx) application.TariffRe
 
 // GetByID returns a tariff by ID.
 func (r *TariffRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Tariff, error) {
+	if tariff, ok := r.cachedByID(id); ok {
+		return tariff, nil
+	}
+
 	row, err := r.q().GetTariffByID(ctx, pgtype.UUID{Bytes: id, Valid: true})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -68,11 +81,17 @@ func (r *TariffRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Ta
 		}
 		return domain.Tariff{}, err
 	}
-	return mapTariff(row), nil
+	tariff := mapTariff(row)
+	r.store(tariff)
+	return tariff, nil
 }
 
 // GetByName returns a tariff by its unique name.
 func (r *TariffRepository) GetByName(ctx context.Context, name domain.TariffName) (domain.Tariff, error) {
+	if tariff, ok := r.cachedByName(name); ok {
+		return tariff, nil
+	}
+
 	row, err := r.q().GetTariffByName(ctx, string(name))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -80,16 +99,64 @@ func (r *TariffRepository) GetByName(ctx context.Context, name domain.TariffName
 		}
 		return domain.Tariff{}, err
 	}
-	return mapTariff(row), nil
+	tariff := mapTariff(row)
+	r.store(tariff)
+	return tariff, nil
 }
 
 // List returns all tariffs ordered by price.
 func (r *TariffRepository) List(ctx context.Context) ([]domain.Tariff, error) {
+	if list, ok := r.cachedList(); ok {
+		return list, nil
+	}
+
 	rows, err := r.q().ListTariffs(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return mapTariffs(rows), nil
+	list := mapTariffs(rows)
+	r.storeList(list)
+	return copyTariffs(list), nil
+}
+
+func (r *TariffRepository) cachedByID(id uuid.UUID) (domain.Tariff, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	tariff, ok := r.byID[id]
+	return tariff, ok
+}
+
+func (r *TariffRepository) cachedByName(name domain.TariffName) (domain.Tariff, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	tariff, ok := r.byName[name]
+	return tariff, ok
+}
+
+func (r *TariffRepository) cachedList() ([]domain.Tariff, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.list == nil {
+		return nil, false
+	}
+	return copyTariffs(r.list), true
+}
+
+func (r *TariffRepository) store(tariff domain.Tariff) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byID[tariff.ID] = tariff
+	r.byName[tariff.Name] = tariff
+}
+
+func (r *TariffRepository) storeList(list []domain.Tariff) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.list = copyTariffs(list)
+	for _, tariff := range list {
+		r.byID[tariff.ID] = tariff
+		r.byName[tariff.Name] = tariff
+	}
 }
 
 func mapTariff(row postgres.Tariff) domain.Tariff {
@@ -108,4 +175,10 @@ func mapTariffs(rows []postgres.Tariff) []domain.Tariff {
 		result[i] = mapTariff(row)
 	}
 	return result
+}
+
+func copyTariffs(src []domain.Tariff) []domain.Tariff {
+	dst := make([]domain.Tariff, len(src))
+	copy(dst, src)
+	return dst
 }

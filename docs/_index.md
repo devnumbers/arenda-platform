@@ -37,3 +37,4 @@ order: 1
 * [Функционал сервиса](./service-functionality)
 * [PRD MVP](./prd-mvp)
 * [Правила реализации MVP](./mvp-implementation-rules)
+* [Локальное нагрузочное тестирование read endpoint'ов](./perf-testing)

@@ -7,11 +7,13 @@
 *.exe
 node_modules/
 *.log
+.tmp
 
 # Bruno runtime environment (contains session ids and dynamic object ids)
 tools/bruno/arenda-api/environments/Local.bru
 
 # Generated perf fixtures
 apps/backend/perf/fixtures.json
-apps/backend/perfseed
-apps/backend/perfmaxrps
+apps/backend/perf/results/
+# Compiled perf binaries
+apps/backend/perfvegeta
