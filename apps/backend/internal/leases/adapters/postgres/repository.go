@@ -631,48 +631,22 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 	}
 
 	copier, ok := r.db.(copyFromer)
-	if ok {
-		_, err := copier.CopyFrom(ctx, pgx.Identifier{"operations"}, []string{
-			"owner_id", "property_id", "lease_id", "recurring_operation_id",
-			"type", "category", "amount_kopecks", "operation_date", "comment", "is_exception",
-		}, pgx.CopyFromRows(rows))
-		if err == nil {
-			return nil
-		}
+	if !ok {
+		return fmt.Errorf("bulk create operations: CopyFrom not supported by %T", r.db)
 	}
 
-	return r.bulkCreateWithInsert(ctx, ops)
+	_, err := copier.CopyFrom(ctx, pgx.Identifier{"operations"}, []string{
+		"owner_id", "property_id", "lease_id", "recurring_operation_id",
+		"type", "category", "amount_kopecks", "operation_date", "comment", "is_exception",
+	}, pgx.CopyFromRows(rows))
+	if err != nil {
+		return fmt.Errorf("copy from failed: %w", err)
+	}
+	return nil
 }
 
 type copyFromer interface {
 	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
-}
-
-func (r *OperationRepository) bulkCreateWithInsert(ctx context.Context, ops []domain.Operation) error {
-	const columns = 10
-	values := make([]any, 0, len(ops)*columns)
-	placeholders := make([]string, 0, len(ops))
-	for i, op := range ops {
-		values = append(values,
-			pgconv.UUIDToPgtype(op.OwnerID),
-			pgconv.UUIDToPgtype(op.PropertyID),
-			pgconv.UUIDToPgtype(op.LeaseID),
-			pgconv.UUIDToPgtype(op.RecurringOperationID),
-			string(op.Type),
-			string(op.Category),
-			op.AmountKopecks,
-			pgconv.DateToPgtype(op.OperationDate),
-			pgtype.Text{String: op.Comment, Valid: true},
-			op.IsException,
-		)
-		base := i * columns
-		placeholders = append(placeholders, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
-			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10))
-	}
-
-	query := "INSERT INTO operations (owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception) VALUES " + strings.Join(placeholders, ", ")
-	_, err := r.db.Exec(ctx, query, values...)
-	return err
 }
 
 func (r *OperationRepository) ListByLease(ctx context.Context, leaseID uuid.UUID) ([]domain.Operation, error) {

@@ -30,6 +30,7 @@ type queryExecutor interface {
 
 type transactionExecutor interface {
 	queryExecutor
+	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
 	Commit(context.Context) error
 	Rollback(context.Context) error
 }
@@ -137,6 +138,10 @@ func (db *InstrumentedPool) QueryRow(ctx context.Context, sql string, args ...in
 	}
 }
 
+func (db *InstrumentedPool) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
+	return db.pool.CopyFrom(ctx, tableName, columnNames, rowSrc)
+}
+
 func (tx *InstrumentedTx) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
 	queryStart := time.Now()
 	tag, err := tx.tx.Exec(ctx, sql, args...)
@@ -165,6 +170,10 @@ func (tx *InstrumentedTx) QueryRow(ctx context.Context, sql string, args ...inte
 		sql:        sql,
 		queryStart: queryStart,
 	}
+}
+
+func (tx *InstrumentedTx) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
+	return tx.tx.CopyFrom(ctx, tableName, columnNames, rowSrc)
 }
 
 func (tx *InstrumentedTx) Commit(ctx context.Context) error {
