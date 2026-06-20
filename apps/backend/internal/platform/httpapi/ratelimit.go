@@ -1,22 +1,30 @@
 package httpapi
 
 import (
+	"hash/fnv"
 	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
 )
 
+const shardCount = 256
+
 // RateLimiter is an in-memory per-key token bucket rate limiter.
+// Buckets are sharded by key hash to reduce lock contention.
 type RateLimiter struct {
 	limit           rate.Limit
 	burst           int
 	cleanupInterval time.Duration
 
-	mu       sync.Mutex
-	buckets  map[string]*bucket
+	shards   [shardCount]*rateLimiterShard
 	stop     chan struct{}
 	stopOnce sync.Once
+}
+
+type rateLimiterShard struct {
+	mu      sync.Mutex
+	buckets map[string]*bucket
 }
 
 type bucket struct {
@@ -31,8 +39,10 @@ func NewRateLimiter(limit rate.Limit, burst int, cleanupInterval time.Duration) 
 		limit:           limit,
 		burst:           burst,
 		cleanupInterval: cleanupInterval,
-		buckets:         make(map[string]*bucket),
 		stop:            make(chan struct{}),
+	}
+	for i := range rl.shards {
+		rl.shards[i] = &rateLimiterShard{buckets: make(map[string]*bucket)}
 	}
 	go rl.cleanup()
 	return rl
@@ -40,14 +50,15 @@ func NewRateLimiter(limit rate.Limit, burst int, cleanupInterval time.Duration) 
 
 // Allow reports whether the request for the given key is allowed.
 func (rl *RateLimiter) Allow(key string) bool {
-	rl.mu.Lock()
-	b, ok := rl.buckets[key]
+	shard := rl.shardFor(key)
+	shard.mu.Lock()
+	b, ok := shard.buckets[key]
 	if !ok {
 		b = &bucket{Limiter: rate.NewLimiter(rl.limit, rl.burst)}
-		rl.buckets[key] = b
+		shard.buckets[key] = b
 	}
 	b.lastUsed = time.Now()
-	rl.mu.Unlock()
+	shard.mu.Unlock()
 
 	return b.Allow()
 }
@@ -59,6 +70,12 @@ func (rl *RateLimiter) Stop() {
 	})
 }
 
+func (rl *RateLimiter) shardFor(key string) *rateLimiterShard {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(key))
+	return rl.shards[h.Sum32()%shardCount]
+}
+
 func (rl *RateLimiter) cleanup() {
 	ticker := time.NewTicker(rl.cleanupInterval)
 	defer ticker.Stop()
@@ -68,13 +85,15 @@ func (rl *RateLimiter) cleanup() {
 		case <-rl.stop:
 			return
 		case <-ticker.C:
-			rl.mu.Lock()
-			for key, b := range rl.buckets {
-				if time.Since(b.lastUsed) > rl.cleanupInterval {
-					delete(rl.buckets, key)
+			for _, shard := range rl.shards {
+				shard.mu.Lock()
+				for key, b := range shard.buckets {
+					if time.Since(b.lastUsed) > rl.cleanupInterval {
+						delete(shard.buckets, key)
+					}
 				}
+				shard.mu.Unlock()
 			}
-			rl.mu.Unlock()
 		}
 	}
 }

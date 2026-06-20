@@ -171,6 +171,13 @@ func (r *SMSCodeRepository) DeleteExpiredBefore(ctx context.Context, before time
 	return r.q().DeleteExpiredSMSCodes(ctx, pgtype.Timestamptz{Time: before, Valid: true})
 }
 
+func (r *SMSCodeRepository) DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error) {
+	return r.q().DeleteExpiredSMSCodesBatch(ctx, postgres.DeleteExpiredSMSCodesBatchParams{
+		ExpiresAt: pgtype.Timestamptz{Time: before, Valid: true},
+		Limit:     batchSize,
+	})
+}
+
 // AttemptRepository persists login attempt windows.
 type AttemptRepository struct {
 	db postgres.DBTX
@@ -229,6 +236,13 @@ func (r *AttemptRepository) DeleteStaleBefore(ctx context.Context, before time.T
 	return r.q().DeleteStaleLoginAttempts(ctx, pgtype.Timestamptz{Time: before, Valid: true})
 }
 
+func (r *AttemptRepository) DeleteStaleBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error) {
+	return r.q().DeleteStaleLoginAttemptsBatch(ctx, postgres.DeleteStaleLoginAttemptsBatchParams{
+		LastFailureAt: pgtype.Timestamptz{Time: before, Valid: true},
+		Limit:         batchSize,
+	})
+}
+
 // SessionRepository persists sessions.
 type SessionRepository struct {
 	db postgres.DBTX
@@ -263,6 +277,13 @@ func (r *SessionRepository) DeleteByTokenHash(ctx context.Context, tokenHash str
 
 func (r *SessionRepository) DeleteExpiredBefore(ctx context.Context, before time.Time) error {
 	return r.q().DeleteExpiredSessions(ctx, pgtype.Timestamptz{Time: before, Valid: true})
+}
+
+func (r *SessionRepository) DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error) {
+	return r.q().DeleteExpiredSessionsBatch(ctx, postgres.DeleteExpiredSessionsBatchParams{
+		ExpiresAt: pgtype.Timestamptz{Time: before, Valid: true},
+		Limit:     batchSize,
+	})
 }
 
 func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string, now time.Time) (domain.Session, domain.User, error) {

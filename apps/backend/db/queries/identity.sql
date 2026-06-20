@@ -29,6 +29,11 @@ DELETE FROM sms_codes WHERE id = $1;
 -- name: DeleteExpiredSMSCodes :exec
 DELETE FROM sms_codes WHERE expires_at < $1;
 
+-- name: DeleteExpiredSMSCodesBatch :execrows
+DELETE FROM sms_codes t WHERE t.ctid IN (
+    SELECT s.ctid FROM sms_codes s WHERE s.expires_at < $1 LIMIT $2
+);
+
 -- name: GetLoginAttemptByPhone :one
 SELECT * FROM login_attempts WHERE phone = $1;
 
@@ -46,6 +51,11 @@ DELETE FROM login_attempts WHERE phone = $1;
 -- name: DeleteStaleLoginAttempts :exec
 DELETE FROM login_attempts WHERE last_failure_at < $1;
 
+-- name: DeleteStaleLoginAttemptsBatch :execrows
+DELETE FROM login_attempts t WHERE t.ctid IN (
+    SELECT a.ctid FROM login_attempts a WHERE a.last_failure_at < $1 LIMIT $2
+);
+
 -- name: CreateSession :one
 INSERT INTO sessions (user_id, token_hash, expires_at)
 VALUES ($1, $2, $3) RETURNING *;
@@ -55,6 +65,11 @@ DELETE FROM sessions WHERE token_hash = $1;
 
 -- name: DeleteExpiredSessions :exec
 DELETE FROM sessions WHERE expires_at < $1;
+
+-- name: DeleteExpiredSessionsBatch :execrows
+DELETE FROM sessions t WHERE t.ctid IN (
+    SELECT s.ctid FROM sessions s WHERE s.expires_at < $1 LIMIT $2
+);
 
 -- name: GetSessionByTokenHash :one
 SELECT s.id, s.token_hash, s.expires_at, s.created_at,

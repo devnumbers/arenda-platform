@@ -36,6 +36,7 @@ type SMSCodeRepository interface {
 	MarkUsedByID(ctx context.Context, id uuid.UUID) error
 	DeleteByID(ctx context.Context, id uuid.UUID) error
 	DeleteExpiredBefore(ctx context.Context, before time.Time) error
+	DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	WithTx(tx transaction.Tx) SMSCodeRepository
 }
 
@@ -44,6 +45,7 @@ type AttemptRepository interface {
 	Save(ctx context.Context, phone domain.Phone, window domain.AttemptWindow) error
 	DeleteByPhone(ctx context.Context, phone domain.Phone) error
 	DeleteStaleBefore(ctx context.Context, before time.Time) error
+	DeleteStaleBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	WithTx(tx transaction.Tx) AttemptRepository
 }
 
@@ -52,6 +54,7 @@ type SessionRepository interface {
 	GetByTokenHash(ctx context.Context, tokenHash string, now time.Time) (domain.Session, domain.User, error)
 	DeleteByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteExpiredBefore(ctx context.Context, before time.Time) error
+	DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	WithTx(tx transaction.Tx) SessionRepository
 }
 

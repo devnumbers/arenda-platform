@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -96,6 +97,26 @@ type fallbackClock struct{}
 
 func (fallbackClock) Now() time.Time { return time.Now().UTC() }
 
+// publicSessionSkippedPaths are paths that never require a session lookup.
+// They are explicitly public endpoints; authenticated handlers on these paths
+// must validate session themselves if they need it.
+var publicSessionSkippedPaths = []string{
+	"/auth/verify-code",
+	"/auth/request-code",
+	"/auth/webhook/",
+	"/webhooks/",
+	"/internal/perf/",
+}
+
+func isPublicSessionSkippedPath(path string) bool {
+	for _, prefix := range publicSessionSkippedPaths {
+		if path == prefix || strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // SessionMiddleware loads the authenticated user from the session cookie into the request context.
 func SessionMiddleware(logger *slog.Logger, sessions application.SessionRepository, secure bool, clock clock.Clock) func(http.Handler) http.Handler {
 	if clock == nil {
@@ -103,6 +124,11 @@ func SessionMiddleware(logger *slog.Logger, sessions application.SessionReposito
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isPublicSessionSkippedPath(r.URL.Path) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			token := sessionTokenFromRequest(r, secure)
 			if token == "" {
 				next.ServeHTTP(w, r)

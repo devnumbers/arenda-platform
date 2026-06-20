@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -99,7 +100,15 @@ func run(fallback *slog.Logger) error {
 		return fmt.Errorf("migrate: %w", err)
 	}
 
-	poolConfig := database.DefaultPoolConfig()
+	poolConfig := database.PoolConfig{
+		MaxConns:                        cfg.DBPool.MaxConns,
+		MinConns:                        cfg.DBPool.MinConns,
+		MaxConnLifetime:                 cfg.DBPool.MaxConnLifetime,
+		MaxConnIdleTime:                 cfg.DBPool.MaxConnIdleTime,
+		HealthCheckPeriod:               cfg.DBPool.HealthCheckPeriod,
+		StatementTimeout:                cfg.DBPool.StatementTimeout,
+		IdleInTransactionSessionTimeout: cfg.DBPool.IdleInTransactionSessionTimeout,
+	}
 	pool, err := database.NewPoolWithConfig(ctx, cfg.DatabaseURL, poolConfig)
 	if err != nil {
 		return fmt.Errorf("database pool: %w", err)
@@ -112,6 +121,8 @@ func run(fallback *slog.Logger) error {
 		"max_conn_lifetime", poolConfig.MaxConnLifetime.String(),
 		"max_conn_idle_time", poolConfig.MaxConnIdleTime.String(),
 		"health_check_period", poolConfig.HealthCheckPeriod.String(),
+		"statement_timeout", poolConfig.StatementTimeout.String(),
+		"idle_in_transaction_session_timeout", poolConfig.IdleInTransactionSessionTimeout.String(),
 	)
 
 	tariffRepo := billingpg.NewTariffRepository(db)
@@ -226,11 +237,13 @@ func run(fallback *slog.Logger) error {
 	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, realClock{}, 1*time.Hour, 100, logger)
 	billingWorker := scheduler.NewBillingWorker(billingService, pool, realClock{}, cfg.BillingWorkerInterval, logger)
 
-	dataCleaner := cleaner.New(identitySessionRepo, identitySMSRepo, identityAttemptRepo, 1*time.Hour, 7*24*time.Hour, logger)
-	go dataCleaner.Run(ctx)
-	go reminderWorker.Run(ctx)
-	go leaseReconciliationWorker.Run(ctx)
-	go billingWorker.Run(ctx)
+	dataCleaner := cleaner.New(identitySessionRepo, identitySMSRepo, identityAttemptRepo, realClock{}, 1*time.Hour, 7*24*time.Hour, logger)
+	var workers sync.WaitGroup
+	workers.Add(4)
+	go func() { defer workers.Done(); dataCleaner.Run(ctx) }()
+	go func() { defer workers.Done(); reminderWorker.Run(ctx) }()
+	go func() { defer workers.Done(); leaseReconciliationWorker.Run(ctx) }()
+	go func() { defer workers.Done(); billingWorker.Run(ctx) }()
 
 	ipLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.IPRPS), cfg.RateLimit.IPBurst, 1*time.Hour)
 	defer ipLimiter.Stop()
@@ -254,9 +267,10 @@ func run(fallback *slog.Logger) error {
 		Operations:          operationService,
 		RecurringOperations: recurringOperationService,
 		Reminders:           reminderService,
-		CookieSecure:        cfg.CookieSecure,
-		Logger:              logger,
-		Clock:               realClock{},
+		CookieSecure:          cfg.CookieSecure,
+		Logger:                logger,
+		Clock:                 realClock{},
+		LogSuccessfulRequests: cfg.LogSuccessfulRequests,
 		IPRateLimiter:       ipLimiter,
 		PhoneSendLimiter:    phoneSendLimiter,
 		PhoneVerifyLimiter:  phoneVerifyLimiter,
@@ -283,7 +297,11 @@ func run(fallback *slog.Logger) error {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		return server.Shutdown(shutdownCtx)
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+		workers.Wait()
+		return nil
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil

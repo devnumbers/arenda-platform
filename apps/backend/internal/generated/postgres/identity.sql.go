@@ -105,6 +105,25 @@ func (q *Queries) DeleteExpiredSMSCodes(ctx context.Context, expiresAt pgtype.Ti
 	return err
 }
 
+const deleteExpiredSMSCodesBatch = `-- name: DeleteExpiredSMSCodesBatch :execrows
+DELETE FROM sms_codes t WHERE t.ctid IN (
+    SELECT s.ctid FROM sms_codes s WHERE s.expires_at < $1 LIMIT $2
+)
+`
+
+type DeleteExpiredSMSCodesBatchParams struct {
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	Limit     int32              `json:"limit"`
+}
+
+func (q *Queries) DeleteExpiredSMSCodesBatch(ctx context.Context, arg DeleteExpiredSMSCodesBatchParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredSMSCodesBatch, arg.ExpiresAt, arg.Limit)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredSessions = `-- name: DeleteExpiredSessions :exec
 DELETE FROM sessions WHERE expires_at < $1
 `
@@ -112,6 +131,25 @@ DELETE FROM sessions WHERE expires_at < $1
 func (q *Queries) DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error {
 	_, err := q.db.Exec(ctx, deleteExpiredSessions, expiresAt)
 	return err
+}
+
+const deleteExpiredSessionsBatch = `-- name: DeleteExpiredSessionsBatch :execrows
+DELETE FROM sessions t WHERE t.ctid IN (
+    SELECT s.ctid FROM sessions s WHERE s.expires_at < $1 LIMIT $2
+)
+`
+
+type DeleteExpiredSessionsBatchParams struct {
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	Limit     int32              `json:"limit"`
+}
+
+func (q *Queries) DeleteExpiredSessionsBatch(ctx context.Context, arg DeleteExpiredSessionsBatchParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredSessionsBatch, arg.ExpiresAt, arg.Limit)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteLoginAttemptByPhone = `-- name: DeleteLoginAttemptByPhone :exec
@@ -148,6 +186,25 @@ DELETE FROM login_attempts WHERE last_failure_at < $1
 func (q *Queries) DeleteStaleLoginAttempts(ctx context.Context, lastFailureAt pgtype.Timestamptz) error {
 	_, err := q.db.Exec(ctx, deleteStaleLoginAttempts, lastFailureAt)
 	return err
+}
+
+const deleteStaleLoginAttemptsBatch = `-- name: DeleteStaleLoginAttemptsBatch :execrows
+DELETE FROM login_attempts t WHERE t.ctid IN (
+    SELECT a.ctid FROM login_attempts a WHERE a.last_failure_at < $1 LIMIT $2
+)
+`
+
+type DeleteStaleLoginAttemptsBatchParams struct {
+	LastFailureAt pgtype.Timestamptz `json:"last_failure_at"`
+	Limit         int32              `json:"limit"`
+}
+
+func (q *Queries) DeleteStaleLoginAttemptsBatch(ctx context.Context, arg DeleteStaleLoginAttemptsBatchParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStaleLoginAttemptsBatch, arg.LastFailureAt, arg.Limit)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getLatestSMSCodeByPhone = `-- name: GetLatestSMSCodeByPhone :one

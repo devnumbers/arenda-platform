@@ -31,6 +31,7 @@ type Deps struct {
 	CookieSecure        bool
 	Logger              *slog.Logger
 	Clock               clock.Clock
+	LogSuccessfulRequests bool
 	IPRateLimiter       *RateLimiter
 	PhoneSendLimiter    *RateLimiter
 	PhoneVerifyLimiter  *RateLimiter
@@ -38,10 +39,7 @@ type Deps struct {
 	DevMode             bool
 }
 
-const (
-	logSuccessfulRequests = false
-	slowRequestThreshold  = 500 * time.Millisecond
-)
+const slowRequestThreshold = 500 * time.Millisecond
 
 func securityHeaders(secure bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -68,14 +66,14 @@ func New(deps Deps) http.Handler {
 	// untrusted client traffic at a proxy that sanitises this header.
 	r.Use(middleware.RealIP)
 	r.Use(RequestLoggerWithOptions(deps.Logger, RequestLoggerOptions{
-		LogSuccessfulRequests: logSuccessfulRequests,
+		LogSuccessfulRequests: deps.LogSuccessfulRequests,
 		SlowRequestThreshold:  slowRequestThreshold,
 	}))
 	r.Use(middleware.Recoverer)
 	r.Use(rateLimitMiddleware(deps.IPRateLimiter))
 	r.Use(securityHeaders(deps.CookieSecure))
 	r.Use(SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
-	r.Use(readonlyMiddleware(deps.Billing, deps.Logger))
+	r.Use(readonlyMiddleware(deps.Billing, deps.Logger, deps.Clock))
 
 	if deps.DBPoolStats != nil {
 		r.Get("/internal/perf/db-pool", dbPoolDiagnosticsHandler(deps.DBPoolStats))

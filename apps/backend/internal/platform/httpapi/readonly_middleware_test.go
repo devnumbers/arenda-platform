@@ -39,7 +39,7 @@ func newReadonlyMiddleware(t *testing.T, status domain.SubscriptionStatus) http.
 		_, _ = w.Write([]byte("next"))
 	})
 
-	return readonlyMiddleware(d.service, slog.New(slog.DiscardHandler))(next)
+	return readonlyMiddleware(d.service, slog.New(slog.DiscardHandler), fakeClock{})(next)
 }
 
 func TestReadonlyMiddleware_AllowsReadWhenBlocked(t *testing.T) {

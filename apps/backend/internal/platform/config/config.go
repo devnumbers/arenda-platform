@@ -26,7 +26,9 @@ type Config struct {
 	TKassaPassword        string
 	EncryptionKey         string
 	BillingWorkerInterval time.Duration
+	LogSuccessfulRequests bool
 	RateLimit             RateLimit
+	DBPool                DBPoolConfig
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -35,6 +37,17 @@ type RateLimit struct {
 	IPBurst             int
 	PhoneSendPerHour    int
 	PhoneVerifyPer15Min int
+}
+
+// DBPoolConfig holds PostgreSQL connection pool settings.
+type DBPoolConfig struct {
+	MaxConns                        int32
+	MinConns                        int32
+	MaxConnLifetime                 time.Duration
+	MaxConnIdleTime                 time.Duration
+	HealthCheckPeriod               time.Duration
+	StatementTimeout                time.Duration
+	IdleInTransactionSessionTimeout time.Duration
 }
 
 func Load() (Config, error) {
@@ -83,6 +96,16 @@ func Load() (Config, error) {
 	if !allowedFormats[cfg.LogFormat] {
 		return Config{}, fmt.Errorf("invalid LOG_FORMAT %q: must be json or pretty", cfg.LogFormat)
 	}
+
+	cfg.LogSuccessfulRequests = true
+	if v := os.Getenv("LOG_SUCCESSFUL_REQUESTS"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid LOG_SUCCESSFUL_REQUESTS %q: %w", v, err)
+		}
+		cfg.LogSuccessfulRequests = b
+	}
+
 	cookieSecure := os.Getenv("COOKIE_SECURE")
 	cookieSecureExplicit := false
 	if cookieSecure != "" {
@@ -160,6 +183,67 @@ func Load() (Config, error) {
 	}
 	if cfg.MigrationsDir == "" {
 		return Config{}, fmt.Errorf("MIGRATIONS_DIR is required")
+	}
+
+	cfg.DBPool = DBPoolConfig{
+		MaxConns:                        64,
+		MinConns:                        16,
+		MaxConnLifetime:                 30 * time.Minute,
+		MaxConnIdleTime:                 5 * time.Minute,
+		HealthCheckPeriod:               30 * time.Second,
+		StatementTimeout:                30 * time.Second,
+		IdleInTransactionSessionTimeout: 60 * time.Second,
+	}
+	if v := os.Getenv("DB_MAX_CONNS"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid DB_MAX_CONNS %q: %w", v, err)
+		}
+		cfg.DBPool.MaxConns = int32(n)
+	}
+	if v := os.Getenv("DB_MIN_CONNS"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid DB_MIN_CONNS %q: %w", v, err)
+		}
+		cfg.DBPool.MinConns = int32(n)
+	}
+	if v := os.Getenv("DB_MAX_CONN_LIFETIME"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid DB_MAX_CONN_LIFETIME %q: %w", v, err)
+		}
+		cfg.DBPool.MaxConnLifetime = d
+	}
+	if v := os.Getenv("DB_MAX_CONN_IDLE_TIME"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid DB_MAX_CONN_IDLE_TIME %q: %w", v, err)
+		}
+		cfg.DBPool.MaxConnIdleTime = d
+	}
+	if v := os.Getenv("DB_STATEMENT_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid DB_STATEMENT_TIMEOUT %q: %w", v, err)
+		}
+		cfg.DBPool.StatementTimeout = d
+	}
+	if v := os.Getenv("DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT %q: %w", v, err)
+		}
+		cfg.DBPool.IdleInTransactionSessionTimeout = d
+	}
+	if cfg.DBPool.MaxConns <= 0 {
+		return Config{}, fmt.Errorf("DB_MAX_CONNS must be positive")
+	}
+	if cfg.DBPool.MinConns < 0 {
+		return Config{}, fmt.Errorf("DB_MIN_CONNS must be non-negative")
+	}
+	if cfg.DBPool.MinConns > cfg.DBPool.MaxConns {
+		return Config{}, fmt.Errorf("DB_MIN_CONNS must not exceed DB_MAX_CONNS")
 	}
 
 	allowedSenders := map[string]bool{"": true, "fake": true}

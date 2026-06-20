@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
 var mutatingMethods = map[string]struct{}{
@@ -42,10 +42,28 @@ func isReadonlyExempt(path string) bool {
 	return false
 }
 
+const canMutateDataKey contextKey = 2
+
+// canMutateDataFromContext returns the cached per-request subscription mutation
+// flag, if any middleware or handler has already computed it.
+func canMutateDataFromContext(ctx context.Context) (bool, bool) {
+	v, ok := ctx.Value(canMutateDataKey).(bool)
+	return v, ok
+}
+
+// withCanMutateData caches the subscription mutation flag on the request context
+// so that later middleware or handlers can reuse it without another DB lookup.
+func withCanMutateData(ctx context.Context, canMutate bool) context.Context {
+	return context.WithValue(ctx, canMutateDataKey, canMutate)
+}
+
 // readonlyMiddleware blocks mutating requests when the authenticated user's
 // subscription does not allow data mutations. Read operations and the recovery
 // paths listed above are always allowed.
-func readonlyMiddleware(billing *billingapp.BillingService, logger *slog.Logger) func(http.Handler) http.Handler {
+func readonlyMiddleware(billing *billingapp.BillingService, logger *slog.Logger, clk clock.Clock) func(http.Handler) http.Handler {
+	if clk == nil {
+		clk = fallbackClock{}
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if _, ok := mutatingMethods[r.Method]; !ok {
@@ -66,10 +84,15 @@ func readonlyMiddleware(billing *billingapp.BillingService, logger *slog.Logger)
 				return
 			}
 
-			canMutate, err := canMutateData(r.Context(), billing, userID)
-			if err != nil {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
+			canMutate, ok := canMutateDataFromContext(r.Context())
+			if !ok {
+				var err error
+				canMutate, err = canMutateData(r.Context(), billing, userID, clk)
+				if err != nil {
+					writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+					return
+				}
+				r = r.WithContext(withCanMutateData(r.Context(), canMutate))
 			}
 			if !canMutate {
 				logger.WarnContext(r.Context(), "blocked mutating request due to subscription status",
@@ -85,7 +108,7 @@ func readonlyMiddleware(billing *billingapp.BillingService, logger *slog.Logger)
 	}
 }
 
-func canMutateData(ctx context.Context, billing *billingapp.BillingService, userID uuid.UUID) (bool, error) {
+func canMutateData(ctx context.Context, billing *billingapp.BillingService, userID uuid.UUID, clk clock.Clock) (bool, error) {
 	view, err := billing.GetSubscription(ctx, userID)
 	if err != nil {
 		if errors.Is(err, billingapp.ErrSubscriptionNotFound) {
@@ -93,5 +116,5 @@ func canMutateData(ctx context.Context, billing *billingapp.BillingService, user
 		}
 		return false, err
 	}
-	return view.Subscription.CanMutateData(time.Now().UTC()), nil
+	return view.Subscription.CanMutateData(clk.Now().UTC()), nil
 }

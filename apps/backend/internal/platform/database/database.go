@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
@@ -13,8 +14,57 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// PoolConfig contains the runtime pgxpool settings controlled by app config.
+type PoolConfig struct {
+	MaxConns                        int32
+	MinConns                        int32
+	MaxConnLifetime                 time.Duration
+	MaxConnIdleTime                 time.Duration
+	HealthCheckPeriod               time.Duration
+	StatementTimeout                time.Duration
+	IdleInTransactionSessionTimeout time.Duration
+}
+
+// DefaultPoolConfig is the local/perf baseline. PostgreSQL max_connections must
+// stay higher than MaxConns to leave diagnostic and maintenance headroom.
+func DefaultPoolConfig() PoolConfig {
+	return PoolConfig{
+		MaxConns:                        64,
+		MinConns:                        16,
+		MaxConnLifetime:                 30 * time.Minute,
+		MaxConnIdleTime:                 5 * time.Minute,
+		HealthCheckPeriod:               30 * time.Second,
+		StatementTimeout:                30 * time.Second,
+		IdleInTransactionSessionTimeout: 60 * time.Second,
+	}
+}
+
 func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
+	return NewPoolWithConfig(ctx, databaseURL, DefaultPoolConfig())
+}
+
+func NewPoolWithConfig(ctx context.Context, databaseURL string, poolConfig PoolConfig) (*pgxpool.Pool, error) {
+	cfg, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse database url: %w", err)
+	}
+
+	cfg.MaxConns = poolConfig.MaxConns
+	cfg.MinConns = poolConfig.MinConns
+	cfg.MaxConnLifetime = poolConfig.MaxConnLifetime
+	cfg.MaxConnIdleTime = poolConfig.MaxConnIdleTime
+	cfg.HealthCheckPeriod = poolConfig.HealthCheckPeriod
+	if cfg.ConnConfig.RuntimeParams == nil {
+		cfg.ConnConfig.RuntimeParams = make(map[string]string)
+	}
+	if poolConfig.StatementTimeout > 0 {
+		cfg.ConnConfig.RuntimeParams["statement_timeout"] = fmt.Sprintf("%.0f", poolConfig.StatementTimeout.Seconds()*1000)
+	}
+	if poolConfig.IdleInTransactionSessionTimeout > 0 {
+		cfg.ConnConfig.RuntimeParams["idle_in_transaction_session_timeout"] = fmt.Sprintf("%.0f", poolConfig.IdleInTransactionSessionTimeout.Seconds()*1000)
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
 	}
