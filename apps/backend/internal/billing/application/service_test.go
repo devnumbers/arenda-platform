@@ -23,17 +23,36 @@ func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 // --- transaction fake ---
 
-type fakeTx struct{ b *fakeBeginner }
+type fakeTx struct {
+	b   *fakeBeginner
+	done bool
+}
 
-func (tx *fakeTx) Commit(context.Context) error   { tx.b.committed++; return nil }
-func (tx *fakeTx) Rollback(context.Context) error { tx.b.rolledBack++; return nil }
+func (tx *fakeTx) Commit(context.Context) error {
+	if !tx.done {
+		tx.b.committed++
+		tx.b.open--
+		tx.done = true
+	}
+	return nil
+}
+
+func (tx *fakeTx) Rollback(context.Context) error {
+	if !tx.done {
+		tx.b.rolledBack++
+		tx.b.open--
+		tx.done = true
+	}
+	return nil
+}
 
 type fakeBeginner struct {
-	begun, committed, rolledBack int
+	begun, committed, rolledBack, open int
 }
 
 func (b *fakeBeginner) Begin(context.Context) (transaction.Tx, error) {
 	b.begun++
+	b.open++
 	return &fakeTx{b: b}, nil
 }
 
@@ -358,6 +377,7 @@ type stubProvider struct {
 
 	chargeRes    ChargeResult
 	chargeErr    error
+	chargeFunc   func(ChargeRequest)
 	parseWebhook func([]byte) (WebhookPayload, error)
 
 	confirmPaymentRes        WebhookPayload
@@ -397,7 +417,10 @@ func (p *stubProvider) Init(_ context.Context, req InitRequest) (InitResult, err
 	return res, nil
 }
 
-func (p *stubProvider) Charge(_ context.Context, _ ChargeRequest) (ChargeResult, error) {
+func (p *stubProvider) Charge(_ context.Context, req ChargeRequest) (ChargeResult, error) {
+	if p.chargeFunc != nil {
+		p.chargeFunc(req)
+	}
 	return p.chargeRes, p.chargeErr
 }
 
@@ -1493,5 +1516,52 @@ func TestBillingService_ProcessExpiredGrace_DowngradesToBasic(t *testing.T) {
 	}
 	if len(d.propertyArchiver.calls) != 1 || d.propertyArchiver.calls[0].limit != 5 {
 		t.Errorf("expected property archive call with limit 5, got %v", d.propertyArchiver.calls)
+	}
+}
+
+
+func TestBillingService_renewSubscription_ChargeCalledOutsideTransaction(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	validUntil := fixedNow
+
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	subID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	d.addSubscription(domain.Subscription{
+		ID:                    subID,
+		UserID:                userID,
+		TariffID:              proID,
+		Source:                domain.SubscriptionSourcePaid,
+		Status:                domain.SubscriptionStatusActive,
+		ValidUntil:            &validUntil,
+		AutoRenewEnabled:      true,
+		ActivePaymentMethodID: &methodID,
+	})
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:            methodID,
+		UserID:        userID,
+		Provider:      domain.ProviderFake,
+		ProviderToken: "fake_token_1234",
+		IsActive:      true,
+	}
+	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_1", Status: domain.PaymentStatusSucceeded}
+	d.provider.chargeFunc = func(_ ChargeRequest) {
+		if d.beginner.open != 0 {
+			t.Errorf("provider.Charge called with %d open transaction(s); expected none", d.beginner.open)
+		}
+	}
+
+	if err := d.service.renewSubscription(context.Background(), d.subscriptions.subs[userID], fixedNow); err != nil {
+		t.Fatalf("renewSubscription error: %v", err)
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected status active, got %s", sub.Status)
+	}
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(fixedNow.AddDate(0, 1, 0)) {
+		t.Errorf("expected valid_until extended by one month, got %v", sub.ValidUntil)
 	}
 }
