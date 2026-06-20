@@ -874,9 +874,17 @@ func (s *BillingService) renewSubscription(ctx context.Context, sub domain.Subsc
 	}
 	defer func() { _ = resultTx.Rollback(ctx) }()
 
+	// Recovery opens its own transaction, so it must never run while resultTx
+	// is still open. This helper rolls back resultTx first; the deferred
+	// rollback will then return ErrTxDone, which is safely ignored.
+	recoverWithClosedTx := func() error {
+		_ = resultTx.Rollback(ctx)
+		return s.recoverRenewalFailure(ctx, payment.ID, sub.ID, now)
+	}
+
 	payment, err = s.subscriptionPayments.WithTx(resultTx).GetByIDForUpdate(ctx, payment.ID)
 	if err != nil {
-		if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, now); recErr != nil {
+		if recErr := recoverWithClosedTx(); recErr != nil {
 			return fmt.Errorf("get payment for update after charge: %w; recovery failed: %w", err, recErr)
 		}
 		return fmt.Errorf("get payment for update after charge: %w", err)
@@ -890,7 +898,7 @@ func (s *BillingService) renewSubscription(ctx context.Context, sub domain.Subsc
 
 	if chargeResult.ProviderPaymentID != "" {
 		if _, updateErr := s.subscriptionPayments.WithTx(resultTx).UpdateProviderPaymentID(ctx, payment.ID, chargeResult.ProviderPaymentID); updateErr != nil {
-			if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, now); recErr != nil {
+			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("update renewal provider payment id: %w; recovery failed: %w", updateErr, recErr)
 			}
 			return fmt.Errorf("update renewal provider payment id: %w", updateErr)
@@ -900,41 +908,41 @@ func (s *BillingService) renewSubscription(ctx context.Context, sub domain.Subsc
 	switch chargeResult.Status {
 	case domain.PaymentStatusSucceeded:
 		if err := s.subscriptionPayments.WithTx(resultTx).MarkSucceeded(ctx, payment.ID, now); err != nil {
-			if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, now); recErr != nil {
+			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("mark renewal payment succeeded: %w; recovery failed: %w", err, recErr)
 			}
 			return fmt.Errorf("mark renewal payment succeeded: %w", err)
 		}
 		sub, err = s.subscriptions.WithTx(resultTx).GetByIDForUpdate(ctx, sub.ID)
 		if err != nil {
-			if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, now); recErr != nil {
+			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("get subscription for update after charge: %w; recovery failed: %w", err, recErr)
 			}
 			return fmt.Errorf("get subscription for update after charge: %w", err)
 		}
 		if err := s.applySuccessfulRenewal(ctx, resultTx, sub, renewalTariff, period, now); err != nil {
-			if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, now); recErr != nil {
+			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("apply successful renewal: %w; recovery failed: %w", err, recErr)
 			}
 			return fmt.Errorf("apply successful renewal: %w", err)
 		}
 	case domain.PaymentStatusFailed:
 		if err := s.subscriptionPayments.WithTx(resultTx).MarkFailed(ctx, payment.ID, nil, now); err != nil {
-			if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, now); recErr != nil {
+			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("mark renewal payment failed: %w; recovery failed: %w", err, recErr)
 			}
 			return fmt.Errorf("mark renewal payment failed: %w", err)
 		}
 		sub, err = s.subscriptions.WithTx(resultTx).GetByIDForUpdate(ctx, sub.ID)
 		if err != nil {
-			if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, now); recErr != nil {
+			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("get subscription for update after failed charge: %w; recovery failed: %w", err, recErr)
 			}
 			return fmt.Errorf("get subscription for update after failed charge: %w", err)
 		}
 		s.transitionToGrace(&sub, now)
 		if err := s.subscriptions.WithTx(resultTx).Update(ctx, sub); err != nil {
-			if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, now); recErr != nil {
+			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("transition to grace after failed renewal: %w; recovery failed: %w", err, recErr)
 			}
 			return fmt.Errorf("transition to grace after failed renewal: %w", err)
@@ -945,7 +953,7 @@ func (s *BillingService) renewSubscription(ctx context.Context, sub domain.Subsc
 		// and wait for the webhook.
 		return resultTx.Commit(ctx)
 	default:
-		if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, now); recErr != nil {
+		if recErr := recoverWithClosedTx(); recErr != nil {
 			return fmt.Errorf("unexpected charge status %s; recovery failed: %w", chargeResult.Status, recErr)
 		}
 		return fmt.Errorf("unexpected charge status: %s", chargeResult.Status)
@@ -957,6 +965,9 @@ func (s *BillingService) renewSubscription(ctx context.Context, sub domain.Subsc
 // recoverRenewalFailure transitions a subscription to grace after a provider
 // error or a post-charge processing failure. It marks the pending payment as
 // failed when it is still pending so the record stays consistent.
+//
+// The caller must not hold an open transaction: this function begins its own
+// transaction and will briefly need a dedicated database connection.
 func (s *BillingService) recoverRenewalFailure(ctx context.Context, paymentID, subscriptionID uuid.UUID, now time.Time) error {
 	tx, err := s.beginner.Begin(ctx)
 	if err != nil {
