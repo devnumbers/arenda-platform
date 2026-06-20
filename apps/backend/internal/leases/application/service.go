@@ -206,11 +206,7 @@ func (s *LeaseService) ListLeases(ctx context.Context, ownerID uuid.UUID) ([]dom
 
 	result := make([]domain.Lease, 0, len(leases))
 	for _, lease := range leases {
-		lease, err = s.recalculateStatus(ctx, lease)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, lease)
+		result = append(result, s.applyEffectiveStatus(lease))
 	}
 	return result, nil
 }
@@ -223,27 +219,12 @@ func (s *LeaseService) GetLease(ctx context.Context, ownerID, id uuid.UUID) (dom
 		}
 		return domain.Lease{}, fmt.Errorf("get lease: %w", err)
 	}
-	return s.recalculateStatus(ctx, lease)
+	return s.applyEffectiveStatus(lease), nil
 }
 
-func (s *LeaseService) recalculateStatus(ctx context.Context, lease domain.Lease) (domain.Lease, error) {
-	if !lease.Status.IsOpen() {
-		return lease, nil
-	}
-
-	now := s.clock.Now()
-	calculated := lease.CalculateStatus(now)
-	if calculated == lease.Status {
-		return lease, nil
-	}
-
-	lease.Status = calculated
-	lease.UpdatedAt = now
-	updated, err := s.leases.Update(ctx, lease.OwnerID, lease)
-	if err != nil {
-		return domain.Lease{}, fmt.Errorf("update lease status: %w", err)
-	}
-	return updated, nil
+func (s *LeaseService) applyEffectiveStatus(lease domain.Lease) domain.Lease {
+	lease.Status = lease.EffectiveStatus(s.clock.Now())
+	return lease
 }
 
 func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, cmd UpdateLeaseCommand) (domain.Lease, error) {

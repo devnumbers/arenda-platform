@@ -136,6 +136,16 @@ func (l Lease) CalculateStatus(now time.Time) LeaseStatus {
 	return LeaseStatusActive
 }
 
+// EffectiveStatus returns the status that should be observed for the lease at
+// the given moment. Terminal statuses (completed, archived) are preserved; open
+// statuses are recomputed from the current date.
+func (l Lease) EffectiveStatus(now time.Time) LeaseStatus {
+	if !l.Status.IsOpen() {
+		return l.Status
+	}
+	return l.CalculateStatus(now)
+}
+
 func (l Lease) IsOpen() bool {
 	return l.Status.IsOpen()
 }
