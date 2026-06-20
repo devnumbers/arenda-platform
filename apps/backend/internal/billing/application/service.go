@@ -1125,6 +1125,9 @@ func (s *BillingService) transitionToGrace(sub *domain.Subscription, now time.Ti
 	sub.ValidUntil = &graceUntil
 }
 
+// expireNonRenewingSubscription downgrades an expired subscription to the free
+// basic tariff. It handles both active non-renewing subscriptions and cancelled
+// subscriptions whose retained validity period has ended.
 func (s *BillingService) expireNonRenewingSubscription(ctx context.Context, sub domain.Subscription, basicTariff domain.Tariff, now time.Time) error {
 	tx, err := s.beginner.Begin(ctx)
 	if err != nil {
@@ -1137,7 +1140,13 @@ func (s *BillingService) expireNonRenewingSubscription(ctx context.Context, sub 
 		return fmt.Errorf("get subscription for update: %w", err)
 	}
 
-	if sub.Status != domain.SubscriptionStatusActive || sub.AutoRenewEnabled || sub.ValidUntil == nil || sub.ValidUntil.After(now) {
+	if sub.ValidUntil == nil || sub.ValidUntil.After(now) {
+		return nil
+	}
+	if sub.Status != domain.SubscriptionStatusActive && sub.Status != domain.SubscriptionStatusCancelled {
+		return nil
+	}
+	if sub.Status == domain.SubscriptionStatusActive && sub.AutoRenewEnabled {
 		return nil
 	}
 
