@@ -461,7 +461,7 @@ func (r *ReminderRepository) SaveSentSMSReminder(ctx context.Context, id, remind
 
 func isDuplicateSMSReminderError(err error) bool {
 	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
-		return pgErr.Code == pgerrcode.UniqueViolation
+		return pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "uq_sent_sms_reminders_reminder_id"
 	}
 	return false
 }

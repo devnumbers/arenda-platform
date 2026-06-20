@@ -61,9 +61,10 @@ func New(deps Deps) http.Handler {
 	r := chi.NewRouter()
 	r.Use(RequestIDMiddleware)
 	//nolint:staticcheck // middleware.RealIP is used here as the project-wide IP extraction strategy.
-	// TODO: configure trusted proxies (e.g., via TRUSTED_PROXIES env) before
-	// relying on X-Forwarded-For in production. The deployment must terminate
-	// untrusted client traffic at a proxy that sanitises this header.
+	// TODO: migrate from chi's deprecated middleware.RealIP to an explicit,
+	// proxy-aware IP extraction strategy (e.g., via TRUSTED_PROXIES env).
+	// Until then, client traffic must be terminated at a trusted proxy that
+	// sanitises X-Forwarded-For before it reaches this middleware.
 	r.Use(middleware.RealIP)
 	r.Use(RequestLoggerWithOptions(deps.Logger, RequestLoggerOptions{
 		LogSuccessfulRequests: deps.LogSuccessfulRequests,

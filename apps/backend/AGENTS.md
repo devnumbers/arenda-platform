@@ -25,7 +25,7 @@ Rules for the Go backend in `apps/backend`. Also follow the root `AGENTS.md`, `C
 
 - Use DDD, Clean Architecture, layered architecture, clean code, and idiomatic Go.
 - Keep the backend a DDD modular monolith until an ADR records a real reason to split services.
-- Current bounded contexts under `internal` include `identity`, `properties`, `billing`, and `platform`. Add new contexts according to docs, glossary, and ADR boundaries.
+- Current bounded contexts under `internal` include `identity`, `leases`, `billing`, `notifications`, and `platform`. Add new contexts according to docs, glossary, and ADR boundaries.
 - Layer direction is inward only: transport/adapters -> application -> domain.
 - Domain packages contain business language and rules only. They must not import HTTP, OpenAPI generated types, `pgx`, `sqlc`, `database/sql`, config, or adapters.
 - Application packages own use cases, ports, orchestration, transaction boundaries, and calls into domain code.

@@ -23,7 +23,11 @@ type ReminderRepository interface {
 	ListDue(ctx context.Context, before time.Time, limit int) ([]domain.Reminder, error)
 	ListStaleSendingReminders(ctx context.Context, staleBefore time.Time, limit int) ([]domain.Reminder, error)
 	MarkReminderSending(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
+	// MarkSent marks a reminder that is currently sending as sent. It is used
+	// after a notification has been dispatched successfully.
 	MarkSent(ctx context.Context, id uuid.UUID, at time.Time) error
+	// MarkReminderSent marks any pending or sending reminder as sent. It is
+	// used when the sent SMS audit row already exists (idempotent success path).
 	MarkReminderSent(ctx context.Context, id uuid.UUID, sentAt time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, nextAttempt *time.Time, terminal bool) error
 	SaveSentSMSReminder(ctx context.Context, id, reminderID, ownerID uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error

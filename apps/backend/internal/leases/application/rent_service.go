@@ -69,7 +69,7 @@ func (r *RentService) RegenerateFutureOperations(
 	lease domain.Lease,
 	fromDate time.Time,
 ) error {
-	rec, err := r.recurringOps.GetByLease(ctx, lease.ID)
+	rec, err := r.recurringOps.GetByLeaseID(ctx, lease.OwnerID, lease.ID)
 	if err != nil {
 		return fmt.Errorf("get recurring operation: %w", err)
 	}
@@ -118,7 +118,7 @@ func (r *RentService) RebuildSchedule(
 	ctx context.Context,
 	lease domain.Lease,
 ) error {
-	rec, err := r.recurringOps.GetByLease(ctx, lease.ID)
+	rec, err := r.recurringOps.GetByLeaseID(ctx, lease.OwnerID, lease.ID)
 	if err != nil {
 		return fmt.Errorf("get recurring operation: %w", err)
 	}

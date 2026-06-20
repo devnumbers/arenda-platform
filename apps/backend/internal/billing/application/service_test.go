@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sort"
 	"testing"
 	"time"
 
@@ -81,7 +82,17 @@ func (r *fakeTariffRepo) GetByName(_ context.Context, name domain.TariffName) (d
 }
 
 func (r *fakeTariffRepo) List(_ context.Context) ([]domain.Tariff, error) {
-	return append([]domain.Tariff(nil), r.list...), nil
+	out := append([]domain.Tariff(nil), r.list...)
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].MonthlyPriceKopecks != out[j].MonthlyPriceKopecks {
+			return out[i].MonthlyPriceKopecks < out[j].MonthlyPriceKopecks
+		}
+		if out[i].YearlyPriceKopecks != out[j].YearlyPriceKopecks {
+			return out[i].YearlyPriceKopecks < out[j].YearlyPriceKopecks
+		}
+		return out[i].ActivePropertyLimit < out[j].ActivePropertyLimit
+	})
+	return out, nil
 }
 
 func (r *fakeTariffRepo) WithTx(transaction.Tx) TariffRepository { return r }

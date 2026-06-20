@@ -78,7 +78,6 @@ func (s *AuthService) SendCode(ctx context.Context, phone domain.Phone) error {
 		return fmt.Errorf("get attempts: %w", err)
 	}
 	if reload.Blocked(now) {
-		_ = tx.Rollback(ctx)
 		return ErrUserBlocked
 	}
 
@@ -89,23 +88,19 @@ func (s *AuthService) SendCode(ctx context.Context, phone domain.Phone) error {
 		return fmt.Errorf("get latest code: %w", err)
 	}
 	if !errors.Is(err, ErrNotFound) && !latest.Used && latest.ExpiresAt.After(now) && now.Sub(latest.CreatedAt) < minSendInterval {
-		_ = tx.Rollback(ctx)
 		return ErrCodeSentTooRecently
 	}
 
 	code, err := generateCode()
 	if err != nil {
-		_ = tx.Rollback(ctx)
 		return fmt.Errorf("generate code: %w", err)
 	}
 	sms, err := domain.NewSMSCode(phone, code, now)
 	if err != nil {
-		_ = tx.Rollback(ctx)
 		return fmt.Errorf("create sms code: %w", err)
 	}
 
 	if err := txCodes.Save(ctx, sms); err != nil {
-		_ = tx.Rollback(ctx)
 		return fmt.Errorf("save code: %w", err)
 	}
 

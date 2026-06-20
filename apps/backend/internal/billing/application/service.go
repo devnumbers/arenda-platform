@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -61,17 +60,6 @@ func (s *BillingService) ListTariffs(ctx context.Context) ([]domain.Tariff, erro
 	if err != nil {
 		return nil, fmt.Errorf("list tariffs: %w", err)
 	}
-
-	// Ensure a stable, ascending price order even if the repository does not.
-	sort.SliceStable(list, func(i, j int) bool {
-		if list[i].MonthlyPriceKopecks != list[j].MonthlyPriceKopecks {
-			return list[i].MonthlyPriceKopecks < list[j].MonthlyPriceKopecks
-		}
-		if list[i].YearlyPriceKopecks != list[j].YearlyPriceKopecks {
-			return list[i].YearlyPriceKopecks < list[j].YearlyPriceKopecks
-		}
-		return list[i].ActivePropertyLimit < list[j].ActivePropertyLimit
-	})
 
 	return list, nil
 }

@@ -75,14 +75,32 @@ func (w *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return nil, nil, errors.New("response writer does not support hijacking")
 }
 
+type RequestLoggerOptions struct {
+	LogSuccessfulRequests bool
+	SlowRequestThreshold  time.Duration
+}
+
 // RequestLogger logs the outcome of every HTTP request.
 // It captures method, route, status, duration, request ID and problem error code.
 // It never logs bodies, cookies, or phone numbers.
 func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
+	return RequestLoggerWithOptions(logger, RequestLoggerOptions{LogSuccessfulRequests: true})
+}
+
+// RequestLoggerWithOptions logs request outcomes with optional suppression of
+// successful fast requests for local performance runs.
+func RequestLoggerWithOptions(logger *slog.Logger, opts RequestLoggerOptions) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
-			ctx := withLogger(r.Context(), logger)
+			ctx := r.Context()
+			requestID := RequestIDFromContext(ctx)
+			traceID := TraceIDFromContext(ctx)
+			requestLogger := logger.With(
+				slog.String("request_id", requestID),
+				slog.String("trace_id", traceID),
+			)
+			ctx = withLogger(ctx, requestLogger)
 			r = r.WithContext(ctx)
 
 			lw := &loggingResponseWriter{ResponseWriter: w}
@@ -91,15 +109,20 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			duration := time.Since(start)
 			route := chi.RouteContext(ctx).RoutePattern()
 			if route == "" {
-				route = r.URL.Path
+				route = "unmatched"
 			}
 
 			if lw.status == 0 {
 				lw.status = http.StatusOK
 			}
 
+			if !opts.LogSuccessfulRequests && lw.status < 400 {
+				if opts.SlowRequestThreshold <= 0 || duration < opts.SlowRequestThreshold {
+					return
+				}
+			}
+
 			attrs := []slog.Attr{
-				slog.String("request_id", RequestIDFromContext(ctx)),
 				slog.String("method", r.Method),
 				slog.String("route", route),
 				slog.Int("status", lw.status),

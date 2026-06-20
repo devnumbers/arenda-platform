@@ -24,9 +24,6 @@ type Cleaner struct {
 
 // New creates a Cleaner with the given repositories and schedule.
 func New(sessions identityapp.SessionRepository, codes identityapp.SMSCodeRepository, attempts identityapp.AttemptRepository, clock clock.Clock, interval, retention time.Duration, logger *slog.Logger) *Cleaner {
-	if clock == nil {
-		clock = realClock{}
-	}
 	return &Cleaner{
 		sessions:  sessions,
 		codes:     codes,
@@ -75,7 +72,3 @@ func (c *Cleaner) deleteInBatches(ctx context.Context, name string, before time.
 		}
 	}
 }
-
-type realClock struct{}
-
-func (realClock) Now() time.Time { return time.Now().UTC() }

@@ -132,7 +132,9 @@ func writeProblem(w http.ResponseWriter, status int, p openapi.Problem) {
 	p.Status = status
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(p)
+	if err := json.NewEncoder(w).Encode(p); err != nil {
+		slog.Error("failed to encode problem response", slog.String("error", sanitizeError(err)))
+	}
 }
 
 func stringPtr(s string) *string {

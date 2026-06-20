@@ -55,14 +55,14 @@ func NewAuthHandlers(
 func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 	var body openapi.SendPhoneCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
+		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
 
 	phone, err := domain.NewPhone(body.Phone)
 	if err != nil {
-		h.logger.ErrorContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
+		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "invalid phone"))
 		return
 	}

@@ -386,17 +386,6 @@ func (r *RecurringOperationRepository) Create(ctx context.Context, op domain.Rec
 	return recurringOperationFromRow(row), nil
 }
 
-func (r *RecurringOperationRepository) GetByLease(ctx context.Context, leaseID uuid.UUID) (domain.RecurringOperation, error) {
-	rows, err := r.q().GetRecurringOperationByLease(ctx, pgconv.UUIDToPgtype(leaseID))
-	if err != nil {
-		return domain.RecurringOperation{}, err
-	}
-	if len(rows) == 0 {
-		return domain.RecurringOperation{}, application.ErrNotFound
-	}
-	return recurringOperationFromRow(rows[0]), nil
-}
-
 func (r *RecurringOperationRepository) GetByLeaseID(ctx context.Context, ownerID, leaseID uuid.UUID) (domain.RecurringOperation, error) {
 	row, err := r.q().GetRecurringOperationByLeaseIDAndOwner(ctx, postgres.GetRecurringOperationByLeaseIDAndOwnerParams{
 		LeaseID: pgconv.UUIDToPgtype(leaseID),
