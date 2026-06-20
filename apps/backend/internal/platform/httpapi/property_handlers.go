@@ -217,7 +217,8 @@ func ptrString[T ~string](v *T) *string {
 	if v == nil {
 		return nil
 	}
-	return new(string(*v))
+	s := string(*v)
+	return &s
 }
 
 func isInvalidStatusTransition(err error) bool {

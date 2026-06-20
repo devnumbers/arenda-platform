@@ -23,20 +23,18 @@ func sessionCookieName(secure bool) string {
 	return "session_id"
 }
 
-type contextKey int
-
-const userIDKey contextKey = 0
-const userKey contextKey = 1
+type userIDKey struct{}
+type userKey struct{}
 
 // UserIDFromContext returns the authenticated user ID from the request context.
 func UserIDFromContext(ctx context.Context) (uuid.UUID, bool) {
-	id, ok := ctx.Value(userIDKey).(uuid.UUID)
+	id, ok := ctx.Value(userIDKey{}).(uuid.UUID)
 	return id, ok
 }
 
 // UserFromContext returns the authenticated user loaded by the session middleware.
 func UserFromContext(ctx context.Context) (domain.User, bool) {
-	user, ok := ctx.Value(userKey).(domain.User)
+	user, ok := ctx.Value(userKey{}).(domain.User)
 	return user, ok
 }
 
@@ -153,8 +151,8 @@ func SessionMiddleware(logger *slog.Logger, sessions application.SessionReposito
 				next.ServeHTTP(w, r)
 				return
 			}
-			ctx := context.WithValue(r.Context(), userIDKey, user.ID)
-			ctx = context.WithValue(ctx, userKey, user)
+			ctx := context.WithValue(r.Context(), userIDKey{}, user.ID)
+			ctx = context.WithValue(ctx, userKey{}, user)
 			r = r.WithContext(ctx)
 			next.ServeHTTP(w, r)
 		})

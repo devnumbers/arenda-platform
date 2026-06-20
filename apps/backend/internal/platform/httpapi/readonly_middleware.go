@@ -42,19 +42,19 @@ func isReadonlyExempt(path string) bool {
 	return false
 }
 
-const canMutateDataKey contextKey = 2
+type canMutateDataKey struct{}
 
 // canMutateDataFromContext returns the cached per-request subscription mutation
 // flag, if any middleware or handler has already computed it.
 func canMutateDataFromContext(ctx context.Context) (bool, bool) {
-	v, ok := ctx.Value(canMutateDataKey).(bool)
+	v, ok := ctx.Value(canMutateDataKey{}).(bool)
 	return v, ok
 }
 
 // withCanMutateData caches the subscription mutation flag on the request context
 // so that later middleware or handlers can reuse it without another DB lookup.
 func withCanMutateData(ctx context.Context, canMutate bool) context.Context {
-	return context.WithValue(ctx, canMutateDataKey, canMutate)
+	return context.WithValue(ctx, canMutateDataKey{}, canMutate)
 }
 
 // readonlyMiddleware blocks mutating requests when the authenticated user's

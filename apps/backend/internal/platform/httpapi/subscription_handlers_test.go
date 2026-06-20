@@ -374,7 +374,7 @@ func newHandlerTestDeps(t *testing.T) *handlerTestDeps {
 }
 
 func withUserID(r *http.Request, userID uuid.UUID) *http.Request {
-	return r.WithContext(context.WithValue(r.Context(), userIDKey, userID))
+	return r.WithContext(context.WithValue(r.Context(), userIDKey{}, userID))
 }
 
 func assertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {

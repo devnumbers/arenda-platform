@@ -610,24 +610,69 @@ func (r *OperationRepository) Create(ctx context.Context, op domain.Operation) (
 }
 
 func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Operation) error {
-	for _, op := range ops {
-		_, err := r.q().CreateOperation(ctx, postgres.CreateOperationParams{
-			OwnerID:              pgconv.UUIDToPgtype(op.OwnerID),
-			PropertyID:           pgconv.UUIDToPgtype(op.PropertyID),
-			LeaseID:              pgconv.UUIDToPgtype(op.LeaseID),
-			RecurringOperationID: pgconv.UUIDToPgtype(op.RecurringOperationID),
-			Type:                 string(op.Type),
-			Category:             string(op.Category),
-			AmountKopecks:        op.AmountKopecks,
-			OperationDate:        pgconv.DateToPgtype(op.OperationDate),
-			Comment:              pgtype.Text{String: op.Comment, Valid: true},
-			IsException:          op.IsException,
-		})
-		if err != nil {
-			return err
+	if len(ops) == 0 {
+		return nil
+	}
+
+	rows := make([][]any, len(ops))
+	for i, op := range ops {
+		rows[i] = []any{
+			pgconv.UUIDToPgtype(op.OwnerID),
+			pgconv.UUIDToPgtype(op.PropertyID),
+			pgconv.UUIDToPgtype(op.LeaseID),
+			pgconv.UUIDToPgtype(op.RecurringOperationID),
+			string(op.Type),
+			string(op.Category),
+			op.AmountKopecks,
+			pgconv.DateToPgtype(op.OperationDate),
+			pgtype.Text{String: op.Comment, Valid: true},
+			op.IsException,
 		}
 	}
-	return nil
+
+	copier, ok := r.db.(copyFromer)
+	if ok {
+		_, err := copier.CopyFrom(ctx, pgx.Identifier{"operations"}, []string{
+			"owner_id", "property_id", "lease_id", "recurring_operation_id",
+			"type", "category", "amount_kopecks", "operation_date", "comment", "is_exception",
+		}, pgx.CopyFromRows(rows))
+		if err == nil {
+			return nil
+		}
+	}
+
+	return r.bulkCreateWithInsert(ctx, ops)
+}
+
+type copyFromer interface {
+	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
+}
+
+func (r *OperationRepository) bulkCreateWithInsert(ctx context.Context, ops []domain.Operation) error {
+	const columns = 10
+	values := make([]any, 0, len(ops)*columns)
+	placeholders := make([]string, 0, len(ops))
+	for i, op := range ops {
+		values = append(values,
+			pgconv.UUIDToPgtype(op.OwnerID),
+			pgconv.UUIDToPgtype(op.PropertyID),
+			pgconv.UUIDToPgtype(op.LeaseID),
+			pgconv.UUIDToPgtype(op.RecurringOperationID),
+			string(op.Type),
+			string(op.Category),
+			op.AmountKopecks,
+			pgconv.DateToPgtype(op.OperationDate),
+			pgtype.Text{String: op.Comment, Valid: true},
+			op.IsException,
+		)
+		base := i * columns
+		placeholders = append(placeholders, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10))
+	}
+
+	query := "INSERT INTO operations (owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception) VALUES " + strings.Join(placeholders, ", ")
+	_, err := r.db.Exec(ctx, query, values...)
+	return err
 }
 
 func (r *OperationRepository) ListByLease(ctx context.Context, leaseID uuid.UUID) ([]domain.Operation, error) {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -88,7 +89,7 @@ func (r *PaymentMethodRepository) Create(ctx context.Context, pm domain.PaymentM
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return domain.PaymentMethod{}, application.ErrPaymentMethodAlreadyExists
 		}
 		return domain.PaymentMethod{}, fmt.Errorf("create payment method: %w", err)
