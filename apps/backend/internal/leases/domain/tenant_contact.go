@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	sharedphone "github.com/nambers/arenda-planform/apps/backend/internal/shared/phone"
 )
 
 // TenantContact mirrors the minimal contact information needed by the leases
@@ -27,19 +26,26 @@ type TenantContact struct {
 }
 
 var (
-	emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+	ErrInvalidPhone = errors.New("invalid Russian phone number")
+	emailRegex      = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+	phoneRegex      = regexp.MustCompile(`^(?:\+7|7|8)(9\d{9})$`)
 )
 
 // ValidatePhone validates a Russian mobile phone number.
 // Accepted inputs are +7XXXXXXXXXX, 7XXXXXXXXXX and 8XXXXXXXXXX.
 func ValidatePhone(phone string) error {
-	return sharedphone.Validate(phone)
+	_, err := NormalizePhone(phone)
+	return err
 }
 
 // NormalizePhone converts a Russian mobile phone number to the canonical
 // +7XXXXXXXXXX format.
 func NormalizePhone(phone string) (string, error) {
-	return sharedphone.Normalize(phone)
+	digits := phoneRegex.FindStringSubmatch(strings.TrimSpace(phone))
+	if digits == nil {
+		return "", ErrInvalidPhone
+	}
+	return "+7" + digits[1], nil
 }
 
 // ValidateEmail validates an email address using a simple regex.

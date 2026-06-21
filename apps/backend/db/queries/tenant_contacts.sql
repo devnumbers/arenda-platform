@@ -22,3 +22,7 @@ RETURNING *;
 SELECT * FROM tenant_contacts
 WHERE owner_id = $1
 ORDER BY updated_at DESC;
+
+-- name: ListTenantContactsByIDs :many
+SELECT * FROM tenant_contacts
+WHERE owner_id = $1 AND id = ANY(@ids::uuid[]);

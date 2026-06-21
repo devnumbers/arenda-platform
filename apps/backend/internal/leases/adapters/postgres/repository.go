@@ -12,11 +12,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
-	propertiesdomain "github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -291,6 +290,25 @@ func (r *TenantContactRepository) ListByOwner(ctx context.Context, ownerID uuid.
 	return contacts, nil
 }
 
+func (r *TenantContactRepository) ListByIDs(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID) ([]domain.TenantContact, error) {
+	pgIDs := make([]pgtype.UUID, 0, len(ids))
+	for _, id := range ids {
+		pgIDs = append(pgIDs, pgconv.UUIDToPgtype(id))
+	}
+	rows, err := r.q().ListTenantContactsByIDs(ctx, postgres.ListTenantContactsByIDsParams{
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		Ids:     pgIDs,
+	})
+	if err != nil {
+		return nil, err
+	}
+	contacts := make([]domain.TenantContact, 0, len(rows))
+	for _, row := range rows {
+		contacts = append(contacts, tenantContactFromRow(row))
+	}
+	return contacts, nil
+}
+
 func (r *TenantContactRepository) Update(ctx context.Context, ownerID uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error) {
 	row, err := r.q().UpdateTenantContact(ctx, postgres.UpdateTenantContactParams{
 		ID:         pgconv.UUIDToPgtype(contact.ID),
@@ -414,6 +432,20 @@ func (r *RecurringOperationRepository) GetByIDAndOwner(ctx context.Context, id, 
 	return recurringOperationFromRow(row), nil
 }
 
+func (r *RecurringOperationRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.RecurringOperation, error) {
+	row, err := r.q().GetRecurringOperationByIDAndOwnerForUpdate(ctx, postgres.GetRecurringOperationByIDAndOwnerForUpdateParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.RecurringOperation{}, application.ErrNotFound
+		}
+		return domain.RecurringOperation{}, err
+	}
+	return recurringOperationFromRow(row), nil
+}
+
 func (r *RecurringOperationRepository) ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.RecurringOperation, error) {
 	rows, err := r.q().ListRecurringOperationsByProperty(ctx, postgres.ListRecurringOperationsByPropertyParams{
 		OwnerID:    pgconv.UUIDToPgtype(ownerID),
@@ -524,12 +556,10 @@ func (r *RecurringOperationRepository) SetReminderOffset(ctx context.Context, ow
 // UpdateStatusByPropertyID updates the status of all recurring operations for
 // the given property.
 func (r *RecurringOperationRepository) UpdateStatusByPropertyID(ctx context.Context, propertyID uuid.UUID, status string) error {
-	_, err := r.db.Exec(ctx, `
-		UPDATE recurring_operations
-		SET status = $1
-		WHERE property_id = $2
-	`, status, pgconv.UUIDToPgtype(propertyID))
-	return err
+	return r.q().UpdateRecurringOperationStatusByPropertyID(ctx, postgres.UpdateRecurringOperationStatusByPropertyIDParams{
+		Status:     status,
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
 }
 
 func (r *RecurringOperationRepository) DeleteByLease(ctx context.Context, leaseID uuid.UUID) error {
@@ -719,8 +749,11 @@ func (r *OperationRepository) DeleteOperationsOutsideLeaseRange(ctx context.Cont
 	})
 }
 
-func (r *OperationRepository) DeleteUneditedOperationsByLease(ctx context.Context, leaseID uuid.UUID) error {
-	return r.q().DeleteUneditedOperationsByLease(ctx, pgconv.UUIDToPgtype(leaseID))
+func (r *OperationRepository) DeleteUneditedOperationsByLease(ctx context.Context, leaseID uuid.UUID, from time.Time) error {
+	return r.q().DeleteUneditedOperationsByLease(ctx, postgres.DeleteUneditedOperationsByLeaseParams{
+		LeaseID:       pgconv.UUIDToPgtype(leaseID),
+		OperationDate: pgconv.DateToPgtype(from),
+	})
 }
 
 func (r *OperationRepository) ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.Operation, error) {
@@ -853,7 +886,7 @@ func (r *PropertyRepository) ExistsActiveByOwner(ctx context.Context, id, ownerI
 		}
 		return false, err
 	}
-	return row.Status == string(propertiesdomain.PropertyStatusActive), nil
+	return row.Status == "active", nil
 }
 
 // ExistsByOwner reports whether a property exists for the owner regardless of status.

@@ -13,6 +13,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -77,7 +78,7 @@ func (w *ReminderWorker) Run(ctx context.Context) {
 	defer ticker.Stop()
 
 	if err := w.tick(ctx); err != nil {
-		w.logger.ErrorContext(ctx, "reminder worker tick failed", "error", err)
+		w.logger.ErrorContext(ctx, "reminder worker tick failed", "error", sanitize.Error(err))
 	}
 
 	for {
@@ -86,7 +87,7 @@ func (w *ReminderWorker) Run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := w.tick(ctx); err != nil {
-				w.logger.ErrorContext(ctx, "reminder worker tick failed", "error", err)
+				w.logger.ErrorContext(ctx, "reminder worker tick failed", "error", sanitize.Error(err))
 			}
 		}
 	}
@@ -140,9 +141,9 @@ func (w *ReminderWorker) dispatchDue(ctx context.Context, now time.Time) error {
 				w.logger.InfoContext(ctx, "reminder changed concurrently, skipping", "reminder_id", r.ID)
 				continue
 			}
-			w.logger.ErrorContext(ctx, "dispatch reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
+			w.logger.ErrorContext(ctx, "dispatch reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
 			if recErr := w.recoverFinalizeFailure(ctx, r.ID); recErr != nil {
-				w.logger.ErrorContext(ctx, "reminder finalize recovery failed", "reminder_id", r.ID, "error", recErr)
+				w.logger.ErrorContext(ctx, "reminder finalize recovery failed", "reminder_id", r.ID, "error", sanitize.Error(recErr))
 			}
 			continue
 		}
@@ -165,7 +166,7 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 
 	contact, err := w.resolver.Resolve(dispatchCtx, r.OwnerID)
 	if err != nil {
-		w.logger.ErrorContext(dispatchCtx, "resolve contact failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
+		w.logger.ErrorContext(dispatchCtx, "resolve contact failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
 		return w.finalizeFailure(dispatchCtx, r, now)
 	}
 	if contact.Channel != application.ChannelSMS {
@@ -185,7 +186,7 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 		return w.finalizeAlreadySent(dispatchCtx, r, now)
 	}
 	if err != nil {
-		w.logger.ErrorContext(dispatchCtx, "save sent sms reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
+		w.logger.ErrorContext(dispatchCtx, "save sent sms reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
 		return w.finalizeFailure(dispatchCtx, r, now)
 	}
 
@@ -198,7 +199,7 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 		Contact:     &contact,
 	})
 	if err != nil {
-		w.logger.ErrorContext(dispatchCtx, "notify reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", err)
+		w.logger.ErrorContext(dispatchCtx, "notify reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
 		return w.finalizeFailure(dispatchCtx, r, now)
 	}
 

@@ -159,3 +159,19 @@ func (s *TenantContactService) ListTenantContacts(ctx context.Context, ownerID u
 	}
 	return contacts, nil
 }
+
+// ListTenantContactsByIDs returns the tenant contacts for the given owner and IDs.
+func (s *TenantContactService) ListTenantContactsByIDs(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]domain.TenantContact, error) {
+	if len(ids) == 0 {
+		return map[uuid.UUID]domain.TenantContact{}, nil
+	}
+	contacts, err := s.repo.ListByIDs(ctx, ownerID, ids)
+	if err != nil {
+		return nil, fmt.Errorf("list tenant contacts by ids: %w", err)
+	}
+	result := make(map[uuid.UUID]domain.TenantContact, len(contacts))
+	for _, contact := range contacts {
+		result[contact.ID] = contact
+	}
+	return result, nil
+}

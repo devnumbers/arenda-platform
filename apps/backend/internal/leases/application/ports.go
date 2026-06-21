@@ -20,6 +20,7 @@ type PropertyRepository interface {
 type TenantContactRepository interface {
 	Create(ctx context.Context, ownerID uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error)
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.TenantContact, error)
+	ListByIDs(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID) ([]domain.TenantContact, error)
 	Update(ctx context.Context, ownerID uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error)
 	ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.TenantContact, error)
 	WithTx(tx transaction.Tx) TenantContactRepository
@@ -44,6 +45,7 @@ type RecurringOperationRepository interface {
 	Create(ctx context.Context, op domain.RecurringOperation) (domain.RecurringOperation, error)
 	GetByLeaseID(ctx context.Context, ownerID, leaseID uuid.UUID) (domain.RecurringOperation, error)
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.RecurringOperation, error)
+	GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.RecurringOperation, error)
 	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.RecurringOperation, error)
 	ListByPropertyID(ctx context.Context, propertyID uuid.UUID) ([]domain.RecurringOperation, error)
 	Update(ctx context.Context, op domain.RecurringOperation) (domain.RecurringOperation, error)
@@ -72,6 +74,6 @@ type OperationRepository interface {
 	DeleteUneditedFutureOperationsByLease(ctx context.Context, leaseID uuid.UUID, after time.Time) error
 	DeleteUneditedFutureOperationsByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID, after time.Time) error
 	DeleteOperationsOutsideLeaseRange(ctx context.Context, leaseID uuid.UUID, start time.Time, end *time.Time) error
-	DeleteUneditedOperationsByLease(ctx context.Context, leaseID uuid.UUID) error
+	DeleteUneditedOperationsByLease(ctx context.Context, leaseID uuid.UUID, from time.Time) error
 	WithTx(tx transaction.Tx) OperationRepository
 }

@@ -1,0 +1,217 @@
+package httpapi
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+)
+
+type fakeLeaseRepo struct {
+	leases []domain.Lease
+}
+
+type fakeLeaseClock struct{}
+
+func (fakeLeaseClock) Now() time.Time { return time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC) }
+
+type fakeLeaseBeginner struct{}
+
+func (fakeLeaseBeginner) Begin(context.Context) (transaction.Tx, error) { return testTx{}, nil }
+
+func (r *fakeLeaseRepo) Create(ctx context.Context, ownerID uuid.UUID, lease domain.Lease) (domain.Lease, error) {
+	return lease, nil
+}
+
+func (r *fakeLeaseRepo) GetByID(ctx context.Context, id uuid.UUID) (domain.Lease, error) {
+	return domain.Lease{}, nil
+}
+
+func (r *fakeLeaseRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Lease, error) {
+	return domain.Lease{}, nil
+}
+
+func (r *fakeLeaseRepo) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Lease, error) {
+	return domain.Lease{}, nil
+}
+
+func (r *fakeLeaseRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Lease, error) {
+	return domain.Lease{}, nil
+}
+
+func (r *fakeLeaseRepo) ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Lease, error) {
+	return r.leases, nil
+}
+
+func (r *fakeLeaseRepo) Update(ctx context.Context, ownerID uuid.UUID, lease domain.Lease) (domain.Lease, error) {
+	return lease, nil
+}
+
+func (r *fakeLeaseRepo) Complete(ctx context.Context, id, ownerID uuid.UUID) (domain.Lease, error) {
+	return domain.Lease{}, nil
+}
+
+func (r *fakeLeaseRepo) CountOpenLeasesByProperty(ctx context.Context, propertyID uuid.UUID) (int, error) {
+	return 0, nil
+}
+
+func (r *fakeLeaseRepo) GetOpenLeaseByProperty(ctx context.Context, propertyID uuid.UUID) (domain.Lease, error) {
+	return domain.Lease{}, nil
+}
+
+func (r *fakeLeaseRepo) ListOpenLeasesWithPastEndDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Lease, error) {
+	return nil, nil
+}
+
+func (r *fakeLeaseRepo) WithTx(tx transaction.Tx) leasesapp.LeaseRepository {
+	return r
+}
+
+type fakeTenantContactRepo struct {
+	contacts        []domain.TenantContact
+	listByIDsCalls  int
+	getByIDCalls    int
+	listByIDsInputs [][]uuid.UUID
+}
+
+func (r *fakeTenantContactRepo) Create(ctx context.Context, ownerID uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error) {
+	return contact, nil
+}
+
+func (r *fakeTenantContactRepo) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.TenantContact, error) {
+	r.getByIDCalls++
+	for _, c := range r.contacts {
+		if c.ID == id && c.OwnerID == ownerID {
+			return c, nil
+		}
+	}
+	return domain.TenantContact{}, leasesapp.ErrNotFound
+}
+
+func (r *fakeTenantContactRepo) ListByIDs(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID) ([]domain.TenantContact, error) {
+	r.listByIDsCalls++
+	r.listByIDsInputs = append(r.listByIDsInputs, ids)
+	result := make([]domain.TenantContact, 0, len(ids))
+	for _, c := range r.contacts {
+		if c.OwnerID != ownerID {
+			continue
+		}
+		for _, id := range ids {
+			if c.ID == id {
+				result = append(result, c)
+			}
+		}
+	}
+	return result, nil
+}
+
+func (r *fakeTenantContactRepo) Update(ctx context.Context, ownerID uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error) {
+	return contact, nil
+}
+
+func (r *fakeTenantContactRepo) ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.TenantContact, error) {
+	return r.contacts, nil
+}
+
+func (r *fakeTenantContactRepo) WithTx(tx transaction.Tx) leasesapp.TenantContactRepository {
+	return r
+}
+
+func TestListLeasesFetchesContactsInBatch(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	propertyID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	contactID1 := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03")
+	contactID2 := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a04")
+
+	leases := []domain.Lease{
+		{ID: uuid.New(), OwnerID: ownerID, PropertyID: propertyID, Status: domain.LeaseStatusActive, TenantContactID: &contactID1, StartDate: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), PaymentDay: 1},
+		{ID: uuid.New(), OwnerID: ownerID, PropertyID: propertyID, Status: domain.LeaseStatusActive, TenantContactID: &contactID2, StartDate: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), PaymentDay: 1},
+	}
+
+	contactRepo := &fakeTenantContactRepo{
+		contacts: []domain.TenantContact{
+			{ID: contactID1, OwnerID: ownerID, Name: "Alice"},
+			{ID: contactID2, OwnerID: ownerID, Name: "Bob"},
+		},
+	}
+	leaseRepo := &fakeLeaseRepo{leases: leases}
+
+	leaseSvc := leasesapp.NewLeaseService(leaseRepo, nil, contactRepo, nil, nil, nil, fakeLeaseBeginner{}, fakeLeaseClock{}, slog.Default())
+	tenantSvc := leasesapp.NewTenantContactService(contactRepo, slog.Default())
+	handlers := NewLeaseHandlers(leaseSvc, tenantSvc, slog.Default())
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/leases", nil)
+	req = req.WithContext(withOwnerID(req.Context(), ownerID))
+	rr := httptest.NewRecorder()
+
+	handlers.ListLeases(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	if contactRepo.listByIDsCalls != 1 {
+		t.Fatalf("expected 1 ListByIDs call, got %d", contactRepo.listByIDsCalls)
+	}
+	if contactRepo.getByIDCalls != 0 {
+		t.Fatalf("expected 0 GetByIDAndOwner calls, got %d", contactRepo.getByIDCalls)
+	}
+	if len(contactRepo.listByIDsInputs) != 1 || len(contactRepo.listByIDsInputs[0]) != 2 {
+		t.Fatalf("expected batch with 2 contact ids, got %v", contactRepo.listByIDsInputs)
+	}
+
+	var resp openapi.LeasesResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(resp.Items) != 2 {
+		t.Fatalf("expected 2 leases, got %d", len(resp.Items))
+	}
+	for _, item := range resp.Items {
+		if item.TenantContact == nil {
+			t.Fatal("expected tenant contact in response")
+		}
+	}
+}
+
+func TestListLeasesNoContacts(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	propertyID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+
+	leases := []domain.Lease{
+		{ID: uuid.New(), OwnerID: ownerID, PropertyID: propertyID, Status: domain.LeaseStatusActive, StartDate: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), PaymentDay: 1},
+	}
+
+	contactRepo := &fakeTenantContactRepo{}
+	leaseRepo := &fakeLeaseRepo{leases: leases}
+
+	leaseSvc := leasesapp.NewLeaseService(leaseRepo, nil, contactRepo, nil, nil, nil, fakeLeaseBeginner{}, fakeLeaseClock{}, slog.Default())
+	tenantSvc := leasesapp.NewTenantContactService(contactRepo, slog.Default())
+	handlers := NewLeaseHandlers(leaseSvc, tenantSvc, slog.Default())
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/leases", nil)
+	req = req.WithContext(withOwnerID(req.Context(), ownerID))
+	rr := httptest.NewRecorder()
+
+	handlers.ListLeases(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if contactRepo.listByIDsCalls != 0 {
+		t.Fatalf("expected 0 ListByIDs calls when no contacts, got %d", contactRepo.listByIDsCalls)
+	}
+}
+
+func withOwnerID(ctx context.Context, ownerID uuid.UUID) context.Context {
+	return context.WithValue(ctx, userIDKey{}, ownerID)
+}

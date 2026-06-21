@@ -268,6 +268,7 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 
 	scheduleChanged := false
 	scheduleRebuilt := false
+	originalStartDate := lease.StartDate
 	originalEndDate := lease.EndDate
 
 	if cmd.StartDate != nil {
@@ -311,7 +312,7 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 	endDateChanged := !endDatesEqual(originalEndDate, updated.EndDate)
 
 	if scheduleRebuilt {
-		if err := txRentService.RebuildSchedule(ctx, updated); err != nil {
+		if err := txRentService.RebuildSchedule(ctx, updated, originalStartDate); err != nil {
 			return domain.Lease{}, fmt.Errorf("rebuild schedule: %w", err)
 		}
 	} else if scheduleChanged {

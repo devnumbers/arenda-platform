@@ -92,6 +92,7 @@ type Provider interface {
 	Name() domain.PaymentProvider
 	Init(ctx context.Context, req InitRequest) (InitResult, error)
 	Charge(ctx context.Context, req ChargeRequest) (ChargeResult, error)
+	Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error)
 	ParseWebhook(ctx context.Context, payload []byte) (WebhookPayload, error)
 }
 

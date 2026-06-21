@@ -81,6 +81,47 @@ func (q *Queries) GetTenantContactByIDAndOwner(ctx context.Context, arg GetTenan
 	return i, err
 }
 
+const listTenantContactsByIDs = `-- name: ListTenantContactsByIDs :many
+SELECT id, owner_id, name, surname, patronymic, phone, email, comment, created_at, updated_at FROM tenant_contacts
+WHERE owner_id = $1 AND id = ANY($2::uuid[])
+`
+
+type ListTenantContactsByIDsParams struct {
+	OwnerID pgtype.UUID   `json:"owner_id"`
+	Ids     []pgtype.UUID `json:"ids"`
+}
+
+func (q *Queries) ListTenantContactsByIDs(ctx context.Context, arg ListTenantContactsByIDsParams) ([]TenantContact, error) {
+	rows, err := q.db.Query(ctx, listTenantContactsByIDs, arg.OwnerID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TenantContact{}
+	for rows.Next() {
+		var i TenantContact
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Name,
+			&i.Surname,
+			&i.Patronymic,
+			&i.Phone,
+			&i.Email,
+			&i.Comment,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTenantContactsByOwner = `-- name: ListTenantContactsByOwner :many
 SELECT id, owner_id, name, surname, patronymic, phone, email, comment, created_at, updated_at FROM tenant_contacts
 WHERE owner_id = $1

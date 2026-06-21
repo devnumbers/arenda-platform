@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log/slog"
-	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/requestctx"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
 
 const (
@@ -127,7 +128,10 @@ func (db *InstrumentedPool) QueryRow(ctx context.Context, sql string, args ...in
 
 	queryStart := time.Now()
 	row := conn.QueryRow(ctx, sql, args...)
-	return instrumentedRow{
+	// instrumentedRow acquires a connection from the pool. Callers must either
+	// Scan the row or Close it to release the connection. A runtime finalizer
+	// provides a best-effort fallback if the row is discarded without Scan/Close.
+	ir := &instrumentedRow{
 		row:             row,
 		inst:            db.inst,
 		ctx:             ctx,
@@ -136,6 +140,8 @@ func (db *InstrumentedPool) QueryRow(ctx context.Context, sql string, args ...in
 		queryStart:      queryStart,
 		release:         conn.Release,
 	}
+	runtime.SetFinalizer(ir, (*instrumentedRow).Close)
+	return ir
 }
 
 func (db *InstrumentedPool) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
@@ -163,7 +169,7 @@ func (tx *InstrumentedTx) Query(ctx context.Context, sql string, args ...interfa
 func (tx *InstrumentedTx) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
 	queryStart := time.Now()
 	row := tx.tx.QueryRow(ctx, sql, args...)
-	return instrumentedRow{
+	return &instrumentedRow{
 		row:        row,
 		inst:       tx.inst,
 		ctx:        ctx,
@@ -270,15 +276,29 @@ type instrumentedRow struct {
 	acquireDuration time.Duration
 	queryStart      time.Time
 	release         func()
+	closeOnce       sync.Once
 }
 
-func (r instrumentedRow) Scan(dest ...any) error {
+// Scan copies column values into dest and releases the acquired connection.
+// It is safe to call multiple times, but the connection is released on the
+// first call.
+func (r *instrumentedRow) Scan(dest ...any) error {
 	err := r.row.Scan(dest...)
 	r.inst.log(r.ctx, r.sql, r.acquireDuration, time.Since(r.queryStart), err)
-	if r.release != nil {
-		r.release()
-	}
+	r.Close()
 	return err
+}
+
+// Close releases the connection acquired for this row without reading its
+// values. It is idempotent and safe to call after Scan. Callers must invoke
+// either Scan or Close; a runtime finalizer provides a best-effort fallback
+// when the row is discarded.
+func (r *instrumentedRow) Close() {
+	r.closeOnce.Do(func() {
+		if r.release != nil {
+			r.release()
+		}
+	})
 }
 
 type errRow struct {
@@ -315,7 +335,7 @@ func (i dbInstrumenter) log(ctx context.Context, sql string, acquireDuration, qu
 		attrs = append(attrs, slog.String("trace_id", traceID))
 	}
 	if err != nil {
-		attrs = append(attrs, slog.String("error", sanitizeError(err)))
+		attrs = append(attrs, slog.String("error", sanitize.Error(err)))
 	}
 
 	i.logger.LogAttrs(ctx, level, message, attrs...)
@@ -476,30 +496,4 @@ func sanitizeSQLIdent(value string) string {
 
 func normalizeSQL(sql string) string {
 	return strings.Join(strings.Fields(sql), " ")
-}
-
-var (
-	// Redact common credential patterns (case-insensitive, optional surrounding quotes).
-	instTokenPattern    = regexp.MustCompile(`(?i)(token|password|secret|key)\s*[:=]\s*["']?[^\s"'&]+["']?`)
-	instHexTokenPattern = regexp.MustCompile(`\b[0-9a-fA-F]{32,}\b`)
-	instB64TokenPattern = regexp.MustCompile(`\b[A-Za-z0-9+/]{40,}={0,2}\b`)
-)
-
-const maxSanitizedErrorLength = 1024
-
-// sanitizeError redacts likely secrets and truncates an error string before
-// logging. It is defined locally in the database package to avoid an import
-// cycle with the httpapi package.
-func sanitizeError(err error) string {
-	if err == nil {
-		return ""
-	}
-	s := err.Error()
-	s = instTokenPattern.ReplaceAllString(s, "${1}=[REDACTED]")
-	s = instHexTokenPattern.ReplaceAllString(s, "[REDACTED]")
-	s = instB64TokenPattern.ReplaceAllString(s, "[REDACTED]")
-	if len(s) > maxSanitizedErrorLength {
-		s = s[:maxSanitizedErrorLength] + " [truncated]"
-	}
-	return strings.TrimSpace(s)
 }

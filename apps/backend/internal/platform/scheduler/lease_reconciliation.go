@@ -8,18 +8,27 @@ import (
 
 	"github.com/google/uuid"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
+	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
 
 // maxReconciliationBatches limits the number of batches processed per tick to
 // prevent a single failing lease from causing the worker to spin indefinitely.
 const maxReconciliationBatches = 10
 
+// leaseService is the subset of the leases application service used by the
+// worker. It keeps the worker decoupled from the concrete service type.
+type leaseService interface {
+	ListOpenLeasesWithPastEndDate(ctx context.Context, asOf time.Time, limit int) ([]leasesdomain.Lease, error)
+	ReconcileRequiresAction(ctx context.Context, leaseID uuid.UUID, asOf time.Time) error
+}
+
 // LeaseReconciliationWorker scans open leases with an end date in the past and
 // ensures their status moves to requires_action and a requires_action reminder
 // exists.
 type LeaseReconciliationWorker struct {
-	leaseService *leasesapp.LeaseService
+	leaseService leaseService
 	clock        clock.Clock
 	interval     time.Duration
 	batchSize    int
@@ -52,7 +61,7 @@ func (w *LeaseReconciliationWorker) Run(ctx context.Context) {
 	defer ticker.Stop()
 
 	if err := w.tick(ctx); err != nil {
-		w.logger.ErrorContext(ctx, "lease reconciliation tick failed", "error", err)
+		w.logger.ErrorContext(ctx, "lease reconciliation tick failed", "error", sanitize.Error(err))
 	}
 
 	for {
@@ -61,7 +70,7 @@ func (w *LeaseReconciliationWorker) Run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := w.tick(ctx); err != nil {
-				w.logger.ErrorContext(ctx, "lease reconciliation tick failed", "error", err)
+				w.logger.ErrorContext(ctx, "lease reconciliation tick failed", "error", sanitize.Error(err))
 			}
 		}
 	}
@@ -80,7 +89,7 @@ func (w *LeaseReconciliationWorker) tick(ctx context.Context) error {
 
 		for _, lease := range leases {
 			if err := w.reconcile(ctx, lease.ID, asOf); err != nil {
-				w.logger.ErrorContext(ctx, "reconcile lease failed", "lease_id", lease.ID, "error", err)
+				w.logger.ErrorContext(ctx, "reconcile lease failed", "lease_id", lease.ID, "error", sanitize.Error(err))
 			}
 		}
 

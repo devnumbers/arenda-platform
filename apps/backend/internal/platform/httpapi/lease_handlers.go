@@ -103,7 +103,7 @@ func (h *LeaseHandlers) CreateLease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.leaseResponse(r.Context(), ownerID, lease)
+	resp, err := h.leaseResponse(r.Context(), ownerID, lease, nil)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -126,9 +126,15 @@ func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	contacts, err := h.tenantContactIDs(r.Context(), ownerID, leases)
+	if err != nil {
+		h.handleLeaseError(w, r, err)
+		return
+	}
+
 	items := make([]openapi.LeaseResponse, 0, len(leases))
 	for _, lease := range leases {
-		resp, err := h.leaseResponse(r.Context(), ownerID, lease)
+		resp, err := h.leaseResponse(r.Context(), ownerID, lease, contacts)
 		if err != nil {
 			h.handleLeaseError(w, r, err)
 			return
@@ -137,6 +143,19 @@ func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, openapi.LeasesResponse{Items: items})
+}
+
+func (h *LeaseHandlers) tenantContactIDs(ctx context.Context, ownerID uuid.UUID, leases []domain.Lease) (map[uuid.UUID]domain.TenantContact, error) {
+	ids := make([]uuid.UUID, 0, len(leases))
+	for _, lease := range leases {
+		if lease.TenantContactID != nil && *lease.TenantContactID != uuid.Nil {
+			ids = append(ids, *lease.TenantContactID)
+		}
+	}
+	if len(ids) == 0 {
+		return map[uuid.UUID]domain.TenantContact{}, nil
+	}
+	return h.tenantContactSvc.ListTenantContactsByIDs(ctx, ownerID, ids)
 }
 
 // GetLease implements GET /leases/{id}.
@@ -153,7 +172,7 @@ func (h *LeaseHandlers) GetLease(w http.ResponseWriter, r *http.Request, id uuid
 		return
 	}
 
-	resp, err := h.leaseResponse(r.Context(), ownerID, lease)
+	resp, err := h.leaseResponse(r.Context(), ownerID, lease, nil)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -199,7 +218,7 @@ func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id u
 		return
 	}
 
-	resp, err := h.leaseResponse(r.Context(), ownerID, lease)
+	resp, err := h.leaseResponse(r.Context(), ownerID, lease, nil)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -222,7 +241,7 @@ func (h *LeaseHandlers) CompleteLease(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 
-	resp, err := h.leaseResponse(r.Context(), ownerID, lease)
+	resp, err := h.leaseResponse(r.Context(), ownerID, lease, nil)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -359,7 +378,7 @@ func handleTenantContactError(w http.ResponseWriter, r *http.Request, err error)
 	}
 }
 
-func (h *LeaseHandlers) leaseResponse(ctx context.Context, ownerID uuid.UUID, lease domain.Lease) (openapi.LeaseResponse, error) {
+func (h *LeaseHandlers) leaseResponse(ctx context.Context, ownerID uuid.UUID, lease domain.Lease, contacts map[uuid.UUID]domain.TenantContact) (openapi.LeaseResponse, error) {
 	resp := openapi.LeaseResponse{
 		Id:                   lease.ID,
 		OwnerId:              lease.OwnerID,
@@ -377,11 +396,19 @@ func (h *LeaseHandlers) leaseResponse(ctx context.Context, ownerID uuid.UUID, le
 		resp.Comment = &lease.Comment
 	}
 	if lease.TenantContactID != nil && *lease.TenantContactID != uuid.Nil {
-		contact, err := h.tenantContactSvc.GetTenantContact(ctx, ownerID, *lease.TenantContactID)
-		if err != nil {
-			return openapi.LeaseResponse{}, err
+		if contacts != nil {
+			contact, ok := contacts[*lease.TenantContactID]
+			if !ok {
+				return openapi.LeaseResponse{}, leasesapp.ErrTenantContactNotFound
+			}
+			resp.TenantContact = new(tenantContactResponse(contact))
+		} else {
+			contact, err := h.tenantContactSvc.GetTenantContact(ctx, ownerID, *lease.TenantContactID)
+			if err != nil {
+				return openapi.LeaseResponse{}, err
+			}
+			resp.TenantContact = new(tenantContactResponse(contact))
 		}
-		resp.TenantContact = new(tenantContactResponse(contact))
 	}
 	return resp, nil
 }

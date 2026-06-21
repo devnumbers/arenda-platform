@@ -1,16 +1,44 @@
 package domain
 
 import (
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/phone"
+	"errors"
+	"regexp"
+	"strings"
 )
 
-// ErrInvalidPhone is re-exported from the shared phone package for convenience.
-var ErrInvalidPhone = phone.ErrInvalidPhone
+var ErrInvalidPhone = errors.New("invalid Russian phone number")
 
-// Phone is a canonical Russian mobile phone number.
-type Phone = phone.Phone
+var phoneRegex = regexp.MustCompile(`^(?:\+7|7|8)(9\d{9})$`)
+
+// Phone is a canonical Russian mobile phone number in +7XXXXXXXXXX format.
+type Phone string
 
 // NewPhone parses and normalizes a raw phone string into a Phone value.
 func NewPhone(raw string) (Phone, error) {
-	return phone.NewPhone(raw)
+	normalized, err := NormalizePhone(raw)
+	if err != nil {
+		return "", err
+	}
+	return Phone(normalized), nil
+}
+
+// String returns the canonical phone string.
+func (p Phone) String() string {
+	return string(p)
+}
+
+// NormalizePhone converts a Russian mobile phone number to the canonical
+// +7XXXXXXXXXX format.
+func NormalizePhone(raw string) (string, error) {
+	digits := phoneRegex.FindStringSubmatch(strings.TrimSpace(raw))
+	if digits == nil {
+		return "", ErrInvalidPhone
+	}
+	return "+7" + digits[1], nil
+}
+
+// ValidatePhone reports whether the raw phone string is a valid Russian mobile number.
+func ValidatePhone(raw string) error {
+	_, err := NormalizePhone(raw)
+	return err
 }

@@ -27,6 +27,7 @@ type Config struct {
 	EncryptionKey         string
 	BillingWorkerInterval time.Duration
 	LogSuccessfulRequests bool
+	TariffCacheTTL        time.Duration
 	RateLimit             RateLimit
 	DBPool                DBPoolConfig
 }
@@ -310,6 +311,18 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("BILLING_WORKER_INTERVAL must be positive")
 		}
 		cfg.BillingWorkerInterval = d
+	}
+
+	cfg.TariffCacheTTL = 5 * time.Minute
+	if v := os.Getenv("TARIFF_CACHE_TTL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid TARIFF_CACHE_TTL %q: %w", v, err)
+		}
+		if d <= 0 {
+			return Config{}, fmt.Errorf("TARIFF_CACHE_TTL must be positive")
+		}
+		cfg.TariffCacheTTL = d
 	}
 
 	return cfg, nil

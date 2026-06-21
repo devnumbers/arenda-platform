@@ -31,6 +31,11 @@ ORDER BY created_at DESC;
 SELECT * FROM recurring_operations
 WHERE id = $1 AND owner_id = $2;
 
+-- name: GetRecurringOperationByIDAndOwnerForUpdate :one
+SELECT * FROM recurring_operations
+WHERE id = $1 AND owner_id = $2
+FOR UPDATE;
+
 -- name: UpdateRecurringOperation :one
 UPDATE recurring_operations
 SET type = $2,
@@ -69,6 +74,11 @@ WHERE id = $2 AND owner_id = $3;
 -- name: ListRecurringOperationsByPropertyID :many
 SELECT * FROM recurring_operations
 WHERE property_id = $1;
+
+-- name: UpdateRecurringOperationStatusByPropertyID :exec
+UPDATE recurring_operations
+SET status = $1, updated_at = NOW()
+WHERE property_id = $2;
 
 -- name: DeleteRecurringOperationByLease :exec
 DELETE FROM recurring_operations

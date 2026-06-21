@@ -5,31 +5,44 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // TariffRepository persists tariffs.
 type TariffRepository struct {
-	db     postgres.DBTX
-	mu     sync.RWMutex
-	byID   map[uuid.UUID]domain.Tariff
-	byName map[domain.TariffName]domain.Tariff
-	list   []domain.Tariff
+	db       postgres.DBTX
+	mu       sync.RWMutex
+	byID     map[uuid.UUID]domain.Tariff
+	byName   map[domain.TariffName]domain.Tariff
+	list     []domain.Tariff
+	cachedAt time.Time
+	ttl      time.Duration
+	clock    clock.Clock
 }
 
 // NewTariffRepository creates a new tariff repository.
-func NewTariffRepository(db postgres.DBTX) *TariffRepository {
+func NewTariffRepository(db postgres.DBTX, ttl time.Duration, clk clock.Clock) *TariffRepository {
+	if ttl <= 0 {
+		ttl = 5 * time.Minute
+	}
+	if clk == nil {
+		clk = clock.Real{}
+	}
 	return &TariffRepository{
 		db:     db,
 		byID:   make(map[uuid.UUID]domain.Tariff),
 		byName: make(map[domain.TariffName]domain.Tariff),
+		ttl:    ttl,
+		clock:  clk,
 	}
 }
 
@@ -41,31 +54,9 @@ func (r *TariffRepository) q() *postgres.Queries {
 func (r *TariffRepository) WithTx(tx transaction.Tx) application.TariffRepository {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		return &invalidTariffRepository{tx: tx}
+		panic(fmt.Sprintf("billing.TariffRepository.WithTx: %T is not a postgres.DBTX", tx))
 	}
-	return NewTariffRepository(dbtx)
-}
-
-// invalidTariffRepository returns a clear error for every method when an
-// unsupported transaction type is passed to WithTx.
-type invalidTariffRepository struct {
-	tx transaction.Tx
-}
-
-func (r *invalidTariffRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Tariff, error) {
-	return domain.Tariff{}, fmt.Errorf("billing: unsupported transaction type %T for TariffRepository.GetByID", r.tx)
-}
-
-func (r *invalidTariffRepository) GetByName(ctx context.Context, name domain.TariffName) (domain.Tariff, error) {
-	return domain.Tariff{}, fmt.Errorf("billing: unsupported transaction type %T for TariffRepository.GetByName", r.tx)
-}
-
-func (r *invalidTariffRepository) List(ctx context.Context) ([]domain.Tariff, error) {
-	return nil, fmt.Errorf("billing: unsupported transaction type %T for TariffRepository.List", r.tx)
-}
-
-func (r *invalidTariffRepository) WithTx(tx transaction.Tx) application.TariffRepository {
-	return r
+	return NewTariffRepository(dbtx, r.ttl, r.clock)
 }
 
 // GetByID returns a tariff by ID.
@@ -122,6 +113,9 @@ func (r *TariffRepository) List(ctx context.Context) ([]domain.Tariff, error) {
 func (r *TariffRepository) cachedByID(id uuid.UUID) (domain.Tariff, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	if r.staleLocked() {
+		return domain.Tariff{}, false
+	}
 	tariff, ok := r.byID[id]
 	return tariff, ok
 }
@@ -129,6 +123,9 @@ func (r *TariffRepository) cachedByID(id uuid.UUID) (domain.Tariff, bool) {
 func (r *TariffRepository) cachedByName(name domain.TariffName) (domain.Tariff, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	if r.staleLocked() {
+		return domain.Tariff{}, false
+	}
 	tariff, ok := r.byName[name]
 	return tariff, ok
 }
@@ -136,10 +133,14 @@ func (r *TariffRepository) cachedByName(name domain.TariffName) (domain.Tariff, 
 func (r *TariffRepository) cachedList() ([]domain.Tariff, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if r.list == nil {
+	if r.staleLocked() || r.list == nil {
 		return nil, false
 	}
 	return copyTariffs(r.list), true
+}
+
+func (r *TariffRepository) staleLocked() bool {
+	return r.cachedAt.IsZero() || r.clock.Now().Sub(r.cachedAt) >= r.ttl
 }
 
 func (r *TariffRepository) store(tariff domain.Tariff) {
@@ -147,6 +148,7 @@ func (r *TariffRepository) store(tariff domain.Tariff) {
 	defer r.mu.Unlock()
 	r.byID[tariff.ID] = tariff
 	r.byName[tariff.Name] = tariff
+	r.cachedAt = r.clock.Now()
 }
 
 func (r *TariffRepository) storeList(list []domain.Tariff) {
@@ -157,6 +159,7 @@ func (r *TariffRepository) storeList(list []domain.Tariff) {
 		r.byID[tariff.ID] = tariff
 		r.byName[tariff.Name] = tariff
 	}
+	r.cachedAt = r.clock.Now()
 }
 
 func mapTariff(row postgres.Tariff) domain.Tariff {

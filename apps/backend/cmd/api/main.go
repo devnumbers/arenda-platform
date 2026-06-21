@@ -28,6 +28,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/cleaner"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpapi"
@@ -125,7 +126,7 @@ func run(fallback *slog.Logger) error {
 		"idle_in_transaction_session_timeout", poolConfig.IdleInTransactionSessionTimeout.String(),
 	)
 
-	tariffRepo := billingpg.NewTariffRepository(db)
+	tariffRepo := billingpg.NewTariffRepository(db, cfg.TariffCacheTTL, clock.Real{})
 	subscriptionRepo := billingpg.NewSubscriptionRepository(db)
 	onboardingService := billingpg.NewOnboardingService(tariffRepo, subscriptionRepo)
 	paymentMethodRepo := billingpg.NewPaymentMethodRepository(db, encryptor)

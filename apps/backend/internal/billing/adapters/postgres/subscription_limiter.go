@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -33,7 +33,7 @@ func NewSubscriptionLimiter(db postgres.DBTX) *SubscriptionLimiter {
 func (l *SubscriptionLimiter) WithTx(tx transaction.Tx) propertiesapp.SubscriptionLimiter {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		return &invalidSubscriptionLimiter{tx: tx}
+		panic(fmt.Sprintf("billing.SubscriptionLimiter.WithTx: %T is not a postgres.DBTX", tx))
 	}
 	return &SubscriptionLimiter{db: dbtx, lock: true}
 }
@@ -78,20 +78,6 @@ func (l *SubscriptionLimiter) ActivePropertyLimit(ctx context.Context, userID uu
 		return math.MaxInt32, nil
 	}
 	return limit, nil
-}
-
-// invalidSubscriptionLimiter returns a clear error when an unsupported
-// transaction type is passed to WithTx.
-type invalidSubscriptionLimiter struct {
-	tx transaction.Tx
-}
-
-func (l *invalidSubscriptionLimiter) ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error) {
-	return 0, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionLimiter.ActivePropertyLimit", l.tx)
-}
-
-func (l *invalidSubscriptionLimiter) WithTx(tx transaction.Tx) propertiesapp.SubscriptionLimiter {
-	return l
 }
 
 // Compile-time check that SubscriptionLimiter implements the properties port.

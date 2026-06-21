@@ -49,7 +49,7 @@ type Querier interface {
 	DeleteStaleLoginAttemptsBatch(ctx context.Context, arg DeleteStaleLoginAttemptsBatchParams) (int64, error)
 	DeleteUneditedFutureOperationsByLease(ctx context.Context, arg DeleteUneditedFutureOperationsByLeaseParams) error
 	DeleteUneditedFutureOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedFutureOperationsByRecurringOperationParams) error
-	DeleteUneditedOperationsByLease(ctx context.Context, leaseID pgtype.UUID) error
+	DeleteUneditedOperationsByLease(ctx context.Context, arg DeleteUneditedOperationsByLeaseParams) error
 	GetLastSucceededSubscriptionPaymentBySubscriptionID(ctx context.Context, subscriptionID pgtype.UUID) (SubscriptionPayment, error)
 	GetLatestSMSCodeByPhone(ctx context.Context, arg GetLatestSMSCodeByPhoneParams) (SmsCode, error)
 	GetLeaseByID(ctx context.Context, id pgtype.UUID) (Lease, error)
@@ -63,7 +63,9 @@ type Querier interface {
 	GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (Property, error)
+	GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetPropertyByIDAndOwnerForUpdateParams) (Property, error)
 	GetRecurringOperationByIDAndOwner(ctx context.Context, arg GetRecurringOperationByIDAndOwnerParams) (RecurringOperation, error)
+	GetRecurringOperationByIDAndOwnerForUpdate(ctx context.Context, arg GetRecurringOperationByIDAndOwnerForUpdateParams) (RecurringOperation, error)
 	GetRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) ([]RecurringOperation, error)
 	GetRecurringOperationByLeaseIDAndOwner(ctx context.Context, arg GetRecurringOperationByLeaseIDAndOwnerParams) (RecurringOperation, error)
 	GetReminderByIDAndOwner(ctx context.Context, arg GetReminderByIDAndOwnerParams) (Reminder, error)
@@ -111,6 +113,7 @@ type Querier interface {
 	ListSubscriptionsUpForRenewal(ctx context.Context, arg ListSubscriptionsUpForRenewalParams) ([]UserSubscription, error)
 	ListSubscriptionsWithPendingChange(ctx context.Context, arg ListSubscriptionsWithPendingChangeParams) ([]UserSubscription, error)
 	ListTariffs(ctx context.Context) ([]Tariff, error)
+	ListTenantContactsByIDs(ctx context.Context, arg ListTenantContactsByIDsParams) ([]TenantContact, error)
 	ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]TenantContact, error)
 	LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
 	MarkReminderFailed(ctx context.Context, arg MarkReminderFailedParams) (int64, error)
@@ -134,6 +137,7 @@ type Querier interface {
 	UpdateRecurringOperationStatus(ctx context.Context, arg UpdateRecurringOperationStatusParams) (RecurringOperation, error)
 	UpdateRecurringOperationStatusByID(ctx context.Context, arg UpdateRecurringOperationStatusByIDParams) (RecurringOperation, error)
 	UpdateRecurringOperationStatusByLeaseID(ctx context.Context, arg UpdateRecurringOperationStatusByLeaseIDParams) ([]RecurringOperation, error)
+	UpdateRecurringOperationStatusByPropertyID(ctx context.Context, arg UpdateRecurringOperationStatusByPropertyIDParams) error
 	UpdateReminderScheduledAt(ctx context.Context, arg UpdateReminderScheduledAtParams) (int64, error)
 	UpdateSentSMSReminderProviderResponse(ctx context.Context, arg UpdateSentSMSReminderProviderResponseParams) (int64, error)
 	UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (UserSubscription, error)

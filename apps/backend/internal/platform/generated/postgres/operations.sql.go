@@ -165,11 +165,17 @@ const deleteUneditedOperationsByLease = `-- name: DeleteUneditedOperationsByLeas
 DELETE FROM operations
 WHERE lease_id = $1
   AND is_exception = false
+  AND operation_date >= $2
   AND deleted_at IS NULL
 `
 
-func (q *Queries) DeleteUneditedOperationsByLease(ctx context.Context, leaseID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteUneditedOperationsByLease, leaseID)
+type DeleteUneditedOperationsByLeaseParams struct {
+	LeaseID       pgtype.UUID `json:"lease_id"`
+	OperationDate pgtype.Date `json:"operation_date"`
+}
+
+func (q *Queries) DeleteUneditedOperationsByLease(ctx context.Context, arg DeleteUneditedOperationsByLeaseParams) error {
+	_, err := q.db.Exec(ctx, deleteUneditedOperationsByLease, arg.LeaseID, arg.OperationDate)
 	return err
 }
 

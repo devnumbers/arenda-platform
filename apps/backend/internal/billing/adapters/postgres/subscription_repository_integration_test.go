@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
-	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
+	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 )
 
 func setupSubscriptionRepositoryIntegrationTest(t *testing.T) (context.Context, pgx.Tx, func(), *SubscriptionRepository, uuid.UUID, uuid.UUID) {

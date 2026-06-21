@@ -6,8 +6,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"regexp"
-	"strings"
 
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	billingdomain "github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
@@ -17,6 +15,7 @@ import (
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
 
 // problem builds an RFC 7807 problem detail with request ID from the context.
@@ -137,6 +136,12 @@ func writeProblem(w http.ResponseWriter, status int, p openapi.Problem) {
 	}
 }
 
+// sanitizeError is a thin wrapper around the shared sanitizer so the rest of
+// the httpapi package can keep using the local helper.
+func sanitizeError(err error) string {
+	return sanitize.Error(err)
+}
+
 func stringPtr(s string) *string {
 	if s == "" {
 		return nil
@@ -166,30 +171,4 @@ func openAPIErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
 	default:
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request parameter"))
 	}
-}
-
-var (
-	// Redact common credential patterns (case-insensitive, optional surrounding quotes).
-	tokenPattern    = regexp.MustCompile(`(?i)(token|password|secret|key)\s*[:=]\s*["']?[^\s"'&]+["']?`)
-	hexTokenPattern = regexp.MustCompile(`\b[0-9a-fA-F]{32,}\b`)
-	b64TokenPattern = regexp.MustCompile(`\b[A-Za-z0-9+/]{40,}={0,2}\b`)
-)
-
-const maxSanitizedErrorLength = 1024
-
-// sanitizeError redacts likely secrets and truncates an error string before
-// logging. It keeps enough detail for debugging while reducing the risk of
-// leaking credentials or raw upstream responses.
-func sanitizeError(err error) string {
-	if err == nil {
-		return ""
-	}
-	s := err.Error()
-	s = tokenPattern.ReplaceAllString(s, "${1}=[REDACTED]")
-	s = hexTokenPattern.ReplaceAllString(s, "[REDACTED]")
-	s = b64TokenPattern.ReplaceAllString(s, "[REDACTED]")
-	if len(s) > maxSanitizedErrorLength {
-		s = s[:maxSanitizedErrorLength] + " [truncated]"
-	}
-	return strings.TrimSpace(s)
 }

@@ -121,6 +121,41 @@ func (q *Queries) GetRecurringOperationByIDAndOwner(ctx context.Context, arg Get
 	return i, err
 }
 
+const getRecurringOperationByIDAndOwnerForUpdate = `-- name: GetRecurringOperationByIDAndOwnerForUpdate :one
+SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days FROM recurring_operations
+WHERE id = $1 AND owner_id = $2
+FOR UPDATE
+`
+
+type GetRecurringOperationByIDAndOwnerForUpdateParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) GetRecurringOperationByIDAndOwnerForUpdate(ctx context.Context, arg GetRecurringOperationByIDAndOwnerForUpdateParams) (RecurringOperation, error) {
+	row := q.db.QueryRow(ctx, getRecurringOperationByIDAndOwnerForUpdate, arg.ID, arg.OwnerID)
+	var i RecurringOperation
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.LeaseID,
+		&i.Type,
+		&i.Category,
+		&i.AmountKopecks,
+		&i.StartDate,
+		&i.PaymentDay,
+		&i.EndDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Periodicity,
+		&i.Comment,
+		&i.Status,
+		&i.ReminderOffsetDays,
+	)
+	return i, err
+}
+
 const getRecurringOperationByLease = `-- name: GetRecurringOperationByLease :many
 SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days FROM recurring_operations
 WHERE lease_id = $1
@@ -490,4 +525,20 @@ func (q *Queries) UpdateRecurringOperationStatusByLeaseID(ctx context.Context, a
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateRecurringOperationStatusByPropertyID = `-- name: UpdateRecurringOperationStatusByPropertyID :exec
+UPDATE recurring_operations
+SET status = $1, updated_at = NOW()
+WHERE property_id = $2
+`
+
+type UpdateRecurringOperationStatusByPropertyIDParams struct {
+	Status     string      `json:"status"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+func (q *Queries) UpdateRecurringOperationStatusByPropertyID(ctx context.Context, arg UpdateRecurringOperationStatusByPropertyIDParams) error {
+	_, err := q.db.Exec(ctx, updateRecurringOperationStatusByPropertyID, arg.Status, arg.PropertyID)
+	return err
 }

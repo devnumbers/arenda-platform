@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -34,63 +34,9 @@ func (r *SubscriptionRepository) q() *postgres.Queries {
 func (r *SubscriptionRepository) WithTx(tx transaction.Tx) application.SubscriptionRepository {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		return &invalidSubscriptionRepository{tx: tx}
+		panic(fmt.Sprintf("billing.SubscriptionRepository.WithTx: %T is not a postgres.DBTX", tx))
 	}
 	return NewSubscriptionRepository(dbtx)
-}
-
-// invalidSubscriptionRepository returns a clear error for every method when an
-// unsupported transaction type is passed to WithTx.
-type invalidSubscriptionRepository struct {
-	tx transaction.Tx
-}
-
-func (r *invalidSubscriptionRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Subscription, error) {
-	return domain.Subscription{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.GetByID", r.tx)
-}
-
-func (r *invalidSubscriptionRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Subscription, error) {
-	return domain.Subscription{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.GetByIDForUpdate", r.tx)
-}
-
-func (r *invalidSubscriptionRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (domain.Subscription, error) {
-	return domain.Subscription{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.GetByUserID", r.tx)
-}
-
-func (r *invalidSubscriptionRepository) GetByUserIDForUpdate(ctx context.Context, userID uuid.UUID) (domain.Subscription, error) {
-	return domain.Subscription{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.GetByUserIDForUpdate", r.tx)
-}
-
-func (r *invalidSubscriptionRepository) Create(ctx context.Context, sub domain.Subscription) (domain.Subscription, error) {
-	return domain.Subscription{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.Create", r.tx)
-}
-
-func (r *invalidSubscriptionRepository) Update(ctx context.Context, sub domain.Subscription) error {
-	return fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.Update", r.tx)
-}
-
-func (r *invalidSubscriptionRepository) ListUpForRenewal(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
-	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.ListUpForRenewal", r.tx)
-}
-
-func (r *invalidSubscriptionRepository) ListInExpiredGrace(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
-	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.ListInExpiredGrace", r.tx)
-}
-
-func (r *invalidSubscriptionRepository) ListExpiredNonRenewing(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
-	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.ListExpiredNonRenewing", r.tx)
-}
-
-func (r *invalidSubscriptionRepository) ListExpiredCancelled(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
-	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.ListExpiredCancelled", r.tx)
-}
-
-func (r *invalidSubscriptionRepository) ListPendingChanges(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
-	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionRepository.ListPendingChanges", r.tx)
-}
-
-func (r *invalidSubscriptionRepository) WithTx(tx transaction.Tx) application.SubscriptionRepository {
-	return r
 }
 
 // GetByID returns a subscription by ID.

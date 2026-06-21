@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -33,59 +33,9 @@ func (r *SubscriptionPaymentRepository) q() *postgres.Queries {
 func (r *SubscriptionPaymentRepository) WithTx(tx transaction.Tx) application.SubscriptionPaymentRepository {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		return &invalidSubscriptionPaymentRepository{tx: tx}
+		panic(fmt.Sprintf("billing.SubscriptionPaymentRepository.WithTx: %T is not a postgres.DBTX", tx))
 	}
 	return NewSubscriptionPaymentRepository(dbtx)
-}
-
-// invalidSubscriptionPaymentRepository returns a clear error for every method when an
-// unsupported transaction type is passed to WithTx.
-type invalidSubscriptionPaymentRepository struct {
-	tx transaction.Tx
-}
-
-func (r *invalidSubscriptionPaymentRepository) Create(ctx context.Context, payment domain.SubscriptionPayment) (domain.SubscriptionPayment, error) {
-	return domain.SubscriptionPayment{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.Create", r.tx)
-}
-
-func (r *invalidSubscriptionPaymentRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error) {
-	return domain.SubscriptionPayment{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.GetByID", r.tx)
-}
-
-func (r *invalidSubscriptionPaymentRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error) {
-	return domain.SubscriptionPayment{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.GetByIDForUpdate", r.tx)
-}
-
-func (r *invalidSubscriptionPaymentRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
-	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.ListByUserID", r.tx)
-}
-
-func (r *invalidSubscriptionPaymentRepository) ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
-	return nil, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.ListPendingSubscriptionPaymentsByUserID", r.tx)
-}
-
-func (r *invalidSubscriptionPaymentRepository) GetLastSucceededBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) (domain.SubscriptionPayment, error) {
-	return domain.SubscriptionPayment{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.GetLastSucceededBySubscriptionID", r.tx)
-}
-
-func (r *invalidSubscriptionPaymentRepository) MarkSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error {
-	return fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.MarkSucceeded", r.tx)
-}
-
-func (r *invalidSubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.UUID, errorCode *string, now time.Time) error {
-	return fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.MarkFailed", r.tx)
-}
-
-func (r *invalidSubscriptionPaymentRepository) UpdateProviderPaymentID(ctx context.Context, id uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error) {
-	return domain.SubscriptionPayment{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.UpdateProviderPaymentID", r.tx)
-}
-
-func (r *invalidSubscriptionPaymentRepository) UpdatePaymentMethodAndProviderID(ctx context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error) {
-	return domain.SubscriptionPayment{}, fmt.Errorf("billing: unsupported transaction type %T for SubscriptionPaymentRepository.UpdatePaymentMethodAndProviderID", r.tx)
-}
-
-func (r *invalidSubscriptionPaymentRepository) WithTx(tx transaction.Tx) application.SubscriptionPaymentRepository {
-	return r
 }
 
 // Create inserts a new subscription payment.

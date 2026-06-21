@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
@@ -46,6 +47,14 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 	_ = ctx
 	_ = req
 	return application.ChargeResult{}, ErrNotImplemented
+}
+
+// Status queries the current status of a payment through T-Kassa.
+func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error) {
+	_ = ctx
+	_ = paymentID
+	_ = providerPaymentID
+	return "", ErrNotImplemented
 }
 
 // ParseWebhook parses a T-Kassa webhook payload.

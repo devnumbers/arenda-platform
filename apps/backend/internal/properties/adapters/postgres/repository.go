@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
@@ -50,6 +50,20 @@ func (r *PropertyRepository) Create(ctx context.Context, ownerID uuid.UUID, prop
 
 func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Property, error) {
 	row, err := r.q().GetPropertyByIDAndOwner(ctx, postgres.GetPropertyByIDAndOwnerParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Property{}, application.ErrNotFound
+		}
+		return domain.Property{}, err
+	}
+	return propertyFromRow(row), nil
+}
+
+func (r *PropertyRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Property, error) {
+	row, err := r.q().GetPropertyByIDAndOwnerForUpdate(ctx, postgres.GetPropertyByIDAndOwnerForUpdateParams{
 		ID:      pgconv.UUIDToPgtype(id),
 		OwnerID: pgconv.UUIDToPgtype(ownerID),
 	})

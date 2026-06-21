@@ -70,6 +70,7 @@ WHERE lease_id = $1
 DELETE FROM operations
 WHERE lease_id = $1
   AND is_exception = false
+  AND operation_date >= $2
   AND deleted_at IS NULL;
 
 -- name: ListOperationsByProperty :many

@@ -6,6 +6,10 @@ RETURNING *;
 -- name: GetPropertyByIDAndOwner :one
 SELECT * FROM properties WHERE id = $1 AND owner_id = $2;
 
+-- name: GetPropertyByIDAndOwnerForUpdate :one
+SELECT * FROM properties WHERE id = $1 AND owner_id = $2
+FOR UPDATE;
+
 -- name: ListActivePropertiesByOwner :many
 SELECT * FROM properties
 WHERE owner_id = $1 AND status = 'active'

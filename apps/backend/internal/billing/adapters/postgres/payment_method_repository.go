@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -36,39 +36,9 @@ func (r *PaymentMethodRepository) q() *postgres.Queries {
 func (r *PaymentMethodRepository) WithTx(tx transaction.Tx) application.PaymentMethodRepository {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		return &invalidPaymentMethodRepository{tx: tx}
+		panic(fmt.Sprintf("billing.PaymentMethodRepository.WithTx: %T is not a postgres.DBTX", tx))
 	}
 	return NewPaymentMethodRepository(dbtx, r.encryptor)
-}
-
-// invalidPaymentMethodRepository returns a clear error for every method when an
-// unsupported transaction type is passed to WithTx.
-type invalidPaymentMethodRepository struct {
-	tx transaction.Tx
-}
-
-func (r *invalidPaymentMethodRepository) Create(ctx context.Context, pm domain.PaymentMethod) (domain.PaymentMethod, error) {
-	return domain.PaymentMethod{}, fmt.Errorf("billing: unsupported transaction type %T for PaymentMethodRepository.Create", r.tx)
-}
-
-func (r *invalidPaymentMethodRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.PaymentMethod, error) {
-	return domain.PaymentMethod{}, fmt.Errorf("billing: unsupported transaction type %T for PaymentMethodRepository.GetByID", r.tx)
-}
-
-func (r *invalidPaymentMethodRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error) {
-	return nil, fmt.Errorf("billing: unsupported transaction type %T for PaymentMethodRepository.ListByUserID", r.tx)
-}
-
-func (r *invalidPaymentMethodRepository) SetActive(ctx context.Context, userID, methodID uuid.UUID) error {
-	return fmt.Errorf("billing: unsupported transaction type %T for PaymentMethodRepository.SetActive", r.tx)
-}
-
-func (r *invalidPaymentMethodRepository) Delete(ctx context.Context, userID, methodID uuid.UUID) error {
-	return fmt.Errorf("billing: unsupported transaction type %T for PaymentMethodRepository.Delete", r.tx)
-}
-
-func (r *invalidPaymentMethodRepository) WithTx(tx transaction.Tx) application.PaymentMethodRepository {
-	return r
 }
 
 // Create inserts a new payment method. The provider token is encrypted at rest
@@ -178,7 +148,7 @@ func (r *PaymentMethodRepository) Delete(ctx context.Context, userID, methodID u
 
 	if err := r.q().DeletePaymentMethodByID(ctx, pgtype.UUID{Bytes: methodID, Valid: true}); err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
 			return application.ErrPaymentMethodInUse
 		}
 		return fmt.Errorf("delete payment method: %w", err)

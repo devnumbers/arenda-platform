@@ -116,6 +116,33 @@ func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyBy
 	return i, err
 }
 
+const getPropertyByIDAndOwnerForUpdate = `-- name: GetPropertyByIDAndOwnerForUpdate :one
+SELECT id, owner_id, name, type, address, description, status, created_at, updated_at FROM properties WHERE id = $1 AND owner_id = $2
+FOR UPDATE
+`
+
+type GetPropertyByIDAndOwnerForUpdateParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetPropertyByIDAndOwnerForUpdateParams) (Property, error) {
+	row := q.db.QueryRow(ctx, getPropertyByIDAndOwnerForUpdate, arg.ID, arg.OwnerID)
+	var i Property
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Type,
+		&i.Address,
+		&i.Description,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listActivePropertiesByOwner = `-- name: ListActivePropertiesByOwner :many
 SELECT id, owner_id, name, type, address, description, status, created_at, updated_at FROM properties
 WHERE owner_id = $1 AND status = 'active'

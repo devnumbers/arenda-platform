@@ -1,0 +1,422 @@
+package application
+
+import (
+	"context"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+)
+
+type fakeClock struct {
+	now time.Time
+}
+
+func (c fakeClock) Now() time.Time { return c.now }
+
+type fakeOperationRepo struct {
+	mu  sync.Mutex
+	ops []domain.Operation
+}
+
+func (r *fakeOperationRepo) Create(_ context.Context, op domain.Operation) (domain.Operation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if op.ID == uuid.Nil {
+		id, _ := uuid.NewRandom()
+		op.ID = id
+	}
+	r.ops = append(r.ops, op)
+	return op, nil
+}
+
+func (r *fakeOperationRepo) BulkCreate(_ context.Context, ops []domain.Operation) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, op := range ops {
+		if op.ID == uuid.Nil {
+			id, _ := uuid.NewRandom()
+			op.ID = id
+		}
+		r.ops = append(r.ops, op)
+	}
+	return nil
+}
+
+func (r *fakeOperationRepo) ListByLease(_ context.Context, leaseID uuid.UUID) ([]domain.Operation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []domain.Operation
+	for _, op := range r.ops {
+		if op.LeaseID == leaseID && op.DeletedAt == nil {
+			out = append(out, op)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeOperationRepo) ListByRecurringOperation(_ context.Context, recurringOperationID uuid.UUID) ([]domain.Operation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []domain.Operation
+	for _, op := range r.ops {
+		if op.RecurringOperationID == recurringOperationID && op.DeletedAt == nil {
+			out = append(out, op)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeOperationRepo) ListOperationDatesByLease(_ context.Context, leaseID uuid.UUID) ([]time.Time, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	dates := make(map[time.Time]struct{})
+	for _, op := range r.ops {
+		if op.LeaseID == leaseID && op.DeletedAt == nil {
+			dates[timeutil.Date(op.OperationDate)] = struct{}{}
+		}
+	}
+	out := make([]time.Time, 0, len(dates))
+	for d := range dates {
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+func (r *fakeOperationRepo) ListOperationDatesByRecurringOperation(_ context.Context, recurringOperationID uuid.UUID) ([]time.Time, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	dates := make(map[time.Time]struct{})
+	for _, op := range r.ops {
+		if op.RecurringOperationID == recurringOperationID && op.DeletedAt == nil {
+			dates[timeutil.Date(op.OperationDate)] = struct{}{}
+		}
+	}
+	out := make([]time.Time, 0, len(dates))
+	for d := range dates {
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+func (r *fakeOperationRepo) ListByProperty(_ context.Context, ownerID, propertyID uuid.UUID) ([]domain.Operation, error) {
+	return nil, nil
+}
+
+func (r *fakeOperationRepo) GetByIDAndOwner(_ context.Context, id, _ uuid.UUID) (domain.Operation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, op := range r.ops {
+		if op.ID == id && op.DeletedAt == nil {
+			return op, nil
+		}
+	}
+	return domain.Operation{}, ErrNotFound
+}
+
+func (r *fakeOperationRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Operation, error) {
+	return r.GetByIDAndOwner(ctx, id, ownerID)
+}
+
+func (r *fakeOperationRepo) Update(_ context.Context, op domain.Operation) (domain.Operation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.ops {
+		if r.ops[i].ID == op.ID {
+			r.ops[i] = op
+			return op, nil
+		}
+	}
+	return domain.Operation{}, ErrNotFound
+}
+
+func (r *fakeOperationRepo) SoftDeleteOperation(_ context.Context, id, _ uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	for i := range r.ops {
+		if r.ops[i].ID == id {
+			r.ops[i].DeletedAt = &now
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *fakeOperationRepo) DeleteUneditedFutureOperationsByLease(_ context.Context, leaseID uuid.UUID, after time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	after = timeutil.Date(after)
+	filtered := r.ops[:0]
+	for _, op := range r.ops {
+		keep := true
+		if op.LeaseID == leaseID && !op.IsException && timeutil.Date(op.OperationDate).After(after) {
+			keep = false
+		}
+		if keep {
+			filtered = append(filtered, op)
+		}
+	}
+	r.ops = filtered
+	return nil
+}
+
+func (r *fakeOperationRepo) DeleteUneditedFutureOperationsByRecurringOperation(_ context.Context, recurringOperationID uuid.UUID, after time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	after = timeutil.Date(after)
+	filtered := r.ops[:0]
+	for _, op := range r.ops {
+		keep := true
+		if op.RecurringOperationID == recurringOperationID && !op.IsException && timeutil.Date(op.OperationDate).After(after) {
+			keep = false
+		}
+		if keep {
+			filtered = append(filtered, op)
+		}
+	}
+	r.ops = filtered
+	return nil
+}
+
+func (r *fakeOperationRepo) DeleteOperationsOutsideLeaseRange(_ context.Context, leaseID uuid.UUID, start time.Time, end *time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	start = timeutil.Date(start)
+	filtered := r.ops[:0]
+	for _, op := range r.ops {
+		keep := true
+		if op.LeaseID == leaseID {
+			d := timeutil.Date(op.OperationDate)
+			if d.Before(start) || (end != nil && d.After(timeutil.Date(*end))) {
+				keep = false
+			}
+		}
+		if keep {
+			filtered = append(filtered, op)
+		}
+	}
+	r.ops = filtered
+	return nil
+}
+
+func (r *fakeOperationRepo) DeleteUneditedOperationsByLease(_ context.Context, leaseID uuid.UUID, from time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	from = timeutil.Date(from)
+	filtered := r.ops[:0]
+	for _, op := range r.ops {
+		keep := true
+		if op.LeaseID == leaseID && !op.IsException && !timeutil.Date(op.OperationDate).Before(from) {
+			keep = false
+		}
+		if keep {
+			filtered = append(filtered, op)
+		}
+	}
+	r.ops = filtered
+	return nil
+}
+
+func (r *fakeOperationRepo) WithTx(_ transaction.Tx) OperationRepository {
+	return r
+}
+
+type fakeRecurringOperationRepo struct {
+	mu   sync.Mutex
+	recs map[uuid.UUID]domain.RecurringOperation
+}
+
+func (r *fakeRecurringOperationRepo) Create(_ context.Context, rec domain.RecurringOperation) (domain.RecurringOperation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.recs == nil {
+		r.recs = make(map[uuid.UUID]domain.RecurringOperation)
+	}
+	r.recs[rec.ID] = rec
+	return rec, nil
+}
+
+func (r *fakeRecurringOperationRepo) GetByLeaseID(_ context.Context, _, leaseID uuid.UUID) (domain.RecurringOperation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, rec := range r.recs {
+		if rec.LeaseID == leaseID {
+			return rec, nil
+		}
+	}
+	return domain.RecurringOperation{}, ErrNotFound
+}
+
+func (r *fakeRecurringOperationRepo) GetByIDAndOwner(_ context.Context, id, _ uuid.UUID) (domain.RecurringOperation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rec, ok := r.recs[id]
+	if !ok {
+		return domain.RecurringOperation{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+func (r *fakeRecurringOperationRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.RecurringOperation, error) {
+	return r.GetByIDAndOwner(ctx, id, ownerID)
+}
+
+func (r *fakeRecurringOperationRepo) ListByProperty(_ context.Context, _, _ uuid.UUID) ([]domain.RecurringOperation, error) {
+	return nil, nil
+}
+
+func (r *fakeRecurringOperationRepo) ListByPropertyID(_ context.Context, _ uuid.UUID) ([]domain.RecurringOperation, error) {
+	return nil, nil
+}
+
+func (r *fakeRecurringOperationRepo) Update(_ context.Context, rec domain.RecurringOperation) (domain.RecurringOperation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.recs == nil {
+		return domain.RecurringOperation{}, ErrNotFound
+	}
+	if _, ok := r.recs[rec.ID]; !ok {
+		return domain.RecurringOperation{}, ErrNotFound
+	}
+	r.recs[rec.ID] = rec
+	return rec, nil
+}
+
+func (r *fakeRecurringOperationRepo) UpdateStatus(_ context.Context, _, _ uuid.UUID, _ string) (domain.RecurringOperation, error) {
+	return domain.RecurringOperation{}, nil
+}
+
+func (r *fakeRecurringOperationRepo) UpdateStatusByLeaseID(_ context.Context, _, _ uuid.UUID, _ string) error {
+	return nil
+}
+
+func (r *fakeRecurringOperationRepo) SetReminderOffset(_ context.Context, _, _ uuid.UUID, _ int) error {
+	return nil
+}
+
+func (r *fakeRecurringOperationRepo) DeleteByLease(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+
+func (r *fakeRecurringOperationRepo) WithTx(_ transaction.Tx) RecurringOperationRepository {
+	return r
+}
+
+func TestRebuildSchedule_EarlierStartDatePreservesPastOperations(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	leaseID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	recID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+
+	originalStart := date(2024, 3, 1)
+	newStart := date(2024, 1, 1)
+	now := date(2024, 6, 1)
+
+	lease := domain.Lease{
+		ID:                leaseID,
+		OwnerID:           ownerID,
+		PropertyID:        propertyID,
+		StartDate:         newStart,
+		RentAmountKopecks: 10000,
+		PaymentDay:        1,
+	}
+
+	rec := domain.RecurringOperation{
+		ID:            recID,
+		OwnerID:       ownerID,
+		PropertyID:    propertyID,
+		LeaseID:       leaseID,
+		Type:          domain.OperationTypeIncome,
+		Category:      domain.OperationCategoryRent,
+		AmountKopecks: 10000,
+		StartDate:     originalStart,
+		PaymentDay:    1,
+		Periodicity:   domain.RecurringOperationPeriodicityMonthly,
+		Status:        domain.RecurringOperationStatusActive,
+	}
+
+	opsRepo := &fakeOperationRepo{}
+	recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{recID: rec}}
+
+	// Seed generated rent operations for the original schedule.
+	for _, d := range []time.Time{date(2024, 3, 1), date(2024, 4, 1), date(2024, 5, 1)} {
+		_, _ = opsRepo.Create(ctx, domain.Operation{
+			OwnerID:              ownerID,
+			PropertyID:           propertyID,
+			LeaseID:              leaseID,
+			RecurringOperationID: recID,
+			Type:                 domain.OperationTypeIncome,
+			Category:             domain.OperationCategoryRent,
+			AmountKopecks:        10000,
+			OperationDate:        d,
+			IsException:          false,
+		})
+	}
+
+	// Seed a manual exception that should survive the rebuild.
+	exceptionID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	_, _ = opsRepo.Create(ctx, domain.Operation{
+		ID:            exceptionID,
+		OwnerID:       ownerID,
+		PropertyID:    propertyID,
+		LeaseID:       leaseID,
+		Type:          domain.OperationTypeIncome,
+		Category:      domain.OperationCategoryRent,
+		AmountKopecks: 5000,
+		OperationDate: date(2024, 4, 1),
+		IsException:   true,
+	})
+
+	svc := NewRentService(opsRepo, recRepo, fakeClock{now: now})
+	if err := svc.RebuildSchedule(ctx, lease, originalStart); err != nil {
+		t.Fatalf("RebuildSchedule failed: %v", err)
+	}
+
+	finalOps, err := opsRepo.ListByLease(ctx, leaseID)
+	if err != nil {
+		t.Fatalf("list operations: %v", err)
+	}
+
+	// The exception must still exist.
+	if _, err := opsRepo.GetByIDAndOwner(ctx, exceptionID, ownerID); err != nil {
+		t.Fatalf("historical exception operation was deleted: %v", err)
+	}
+
+	// Historical generated dates must still be present in the rebuilt schedule.
+	hasDate := func(want time.Time) bool {
+		for _, op := range finalOps {
+			if timeutil.Date(op.OperationDate).Equal(want) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, d := range []time.Time{date(2024, 3, 1), date(2024, 4, 1), date(2024, 5, 1)} {
+		if !hasDate(d) {
+			t.Errorf("missing historical operation date %s after rebuilding schedule", d.Format("2006-01-02"))
+		}
+	}
+
+	// New dates introduced by the earlier start must be present.
+	for _, d := range []time.Time{date(2024, 1, 1), date(2024, 2, 1)} {
+		if !hasDate(d) {
+			t.Errorf("missing new operation date %s after rebuilding schedule", d.Format("2006-01-02"))
+		}
+	}
+}
+
+func date(year, month, day int) time.Time {
+	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+}
+
+// Compile-time interface checks.
+var _ OperationRepository = (*fakeOperationRepo)(nil)
+var _ RecurringOperationRepository = (*fakeRecurringOperationRepo)(nil)
+var _ clock.Clock = fakeClock{}

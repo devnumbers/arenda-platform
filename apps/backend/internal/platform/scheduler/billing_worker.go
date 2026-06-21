@@ -10,17 +10,26 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
 
 // billingWorkerLockKey is a stable application-level key for the PostgreSQL
 // advisory lock used to ensure only one billing worker runs at a time.
 const billingWorkerLockKey int64 = 0xB111
 
+// billingService is the subset of the billing application service used by the
+// worker. It keeps the worker decoupled from the concrete service type.
+type billingService interface {
+	ProcessScheduledChanges(ctx context.Context, now time.Time) (int, error)
+	ProcessRenewals(ctx context.Context, now time.Time) (int, error)
+	ProcessExpiredGrace(ctx context.Context, now time.Time) (int, error)
+}
+
 // BillingWorker periodically processes subscription renewals and expired grace
 // periods. It delegates the actual billing decisions to BillingService so the
 // worker stays a thin scheduling shell.
 type BillingWorker struct {
-	billing  *billingapp.BillingService
+	billing  billingService
 	pool     *pgxpool.Pool
 	clock    clock.Clock
 	interval time.Duration
@@ -52,7 +61,7 @@ func (w *BillingWorker) Run(ctx context.Context) {
 	defer ticker.Stop()
 
 	if err := w.tick(ctx); err != nil {
-		w.logger.ErrorContext(ctx, "billing worker tick failed", "error", err)
+		w.logger.ErrorContext(ctx, "billing worker tick failed", "error", sanitize.Error(err))
 	}
 
 	for {
@@ -61,7 +70,7 @@ func (w *BillingWorker) Run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := w.tick(ctx); err != nil {
-				w.logger.ErrorContext(ctx, "billing worker tick failed", "error", err)
+				w.logger.ErrorContext(ctx, "billing worker tick failed", "error", sanitize.Error(err))
 			}
 		}
 	}
@@ -69,44 +78,38 @@ func (w *BillingWorker) Run(ctx context.Context) {
 
 func (w *BillingWorker) tick(ctx context.Context) error {
 	if w.pool != nil {
-		conn, err := w.pool.Acquire(ctx)
+		acquired, release, err := w.acquireTickLock(ctx)
 		if err != nil {
-			return fmt.Errorf("acquire db connection for lock: %w", err)
-		}
-		defer conn.Release()
-
-		var acquired bool
-		if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", billingWorkerLockKey).Scan(&acquired); err != nil {
-			return fmt.Errorf("acquire advisory lock: %w", err)
+			return err
 		}
 		if !acquired {
 			w.logger.InfoContext(ctx, "billing worker tick skipped, another instance holds the lock")
 			return nil
 		}
-		defer func() {
-			_, _ = conn.Exec(ctx, "SELECT pg_advisory_unlock($1)", billingWorkerLockKey)
-		}()
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		defer release(releaseCtx)
 	}
 
 	now := w.clock.Now().UTC()
 
 	scheduled, scheduledErr := w.billing.ProcessScheduledChanges(ctx, now)
 	if scheduledErr != nil {
-		w.logger.ErrorContext(ctx, "billing worker scheduled changes processing failed", "error", scheduledErr)
+		w.logger.ErrorContext(ctx, "billing worker scheduled changes processing failed", "error", sanitize.Error(scheduledErr))
 	} else if scheduled > 0 {
 		w.logger.InfoContext(ctx, "billing worker applied scheduled changes", "count", scheduled)
 	}
 
 	renewed, renewalErr := w.billing.ProcessRenewals(ctx, now)
 	if renewalErr != nil {
-		w.logger.ErrorContext(ctx, "billing worker renewal processing failed", "error", renewalErr)
+		w.logger.ErrorContext(ctx, "billing worker renewal processing failed", "error", sanitize.Error(renewalErr))
 	} else if renewed > 0 {
 		w.logger.InfoContext(ctx, "billing worker processed renewals", "count", renewed)
 	}
 
 	downgraded, graceErr := w.billing.ProcessExpiredGrace(ctx, now)
 	if graceErr != nil {
-		w.logger.ErrorContext(ctx, "billing worker expired grace processing failed", "error", graceErr)
+		w.logger.ErrorContext(ctx, "billing worker expired grace processing failed", "error", sanitize.Error(graceErr))
 	} else if downgraded > 0 {
 		w.logger.InfoContext(ctx, "billing worker downgraded expired grace subscriptions", "count", downgraded)
 	}
@@ -125,4 +128,37 @@ func (w *BillingWorker) tick(ctx context.Context) error {
 		return errors.Join(errs...)
 	}
 	return nil
+}
+
+// acquireTickLock elects a single leader for the current tick using a PostgreSQL
+// advisory lock. The returned release function releases the lock and returns
+// the dedicated connection to the pool; it must be called exactly once when the
+// caller no longer needs the lock.
+func (w *BillingWorker) acquireTickLock(ctx context.Context) (bool, func(context.Context), error) {
+	conn, err := w.pool.Acquire(ctx)
+	if err != nil {
+		return false, nil, fmt.Errorf("acquire db connection for lock: %w", err)
+	}
+
+	release := func(releaseCtx context.Context) {
+		if _, unlockErr := conn.Exec(releaseCtx, "SELECT pg_advisory_unlock($1)", billingWorkerLockKey); unlockErr != nil {
+			w.logger.ErrorContext(releaseCtx, "billing worker failed to release advisory lock", "error", sanitize.Error(unlockErr))
+		}
+		conn.Release()
+	}
+
+	var acquired bool
+	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", billingWorkerLockKey).Scan(&acquired); err != nil {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		release(releaseCtx)
+		return false, nil, fmt.Errorf("acquire advisory lock: %w", err)
+	}
+	if !acquired {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		release(releaseCtx)
+		return false, nil, nil
+	}
+	return true, release, nil
 }

@@ -107,16 +107,18 @@ func (r *RentService) RegenerateFutureOperations(
 	return nil
 }
 
-// RebuildSchedule re-creates the entire rent schedule for a lease.
+// RebuildSchedule re-creates the rent schedule for a lease.
 // It updates the recurring operation template, removes operations that fall
-// outside the lease date range (including manual exceptions), and regenerates
-// all operations according to the current lease terms. Manual exception
-// operations inside the lease range are preserved.
+// outside the lease date range (including manual exceptions), deletes
+// unedited generated operations on or after the earlier of the original and
+// current lease start dates, and regenerates the schedule. Manual exception
+// operations are preserved.
 // The service instance must be constructed with transaction-bound repositories
 // when this method is called inside a transaction.
 func (r *RentService) RebuildSchedule(
 	ctx context.Context,
 	lease domain.Lease,
+	originalStartDate time.Time,
 ) error {
 	rec, err := r.recurringOps.GetByLeaseID(ctx, lease.OwnerID, lease.ID)
 	if err != nil {
@@ -137,7 +139,12 @@ func (r *RentService) RebuildSchedule(
 		return fmt.Errorf("delete out-of-range operations: %w", err)
 	}
 
-	if err := r.ops.DeleteUneditedOperationsByLease(ctx, lease.ID); err != nil {
+	cutoff := timeutil.Date(originalStartDate)
+	if timeutil.Date(lease.StartDate).Before(cutoff) {
+		cutoff = timeutil.Date(lease.StartDate)
+	}
+
+	if err := r.ops.DeleteUneditedOperationsByLease(ctx, lease.ID, cutoff); err != nil {
 		return fmt.Errorf("delete unedited operations: %w", err)
 	}
 

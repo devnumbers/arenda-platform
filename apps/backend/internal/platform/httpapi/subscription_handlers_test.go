@@ -323,6 +323,10 @@ func (p *testProvider) Charge(_ context.Context, _ billingapp.ChargeRequest) (bi
 	return billingapp.ChargeResult{}, nil
 }
 
+func (p *testProvider) Status(_ context.Context, _ uuid.UUID, _ string) (domain.PaymentStatus, error) {
+	return domain.PaymentStatusSucceeded, nil
+}
+
 func (p *testProvider) ParseWebhook(_ context.Context, _ []byte) (billingapp.WebhookPayload, error) {
 	p.parseCalled = true
 	return billingapp.WebhookPayload{}, nil

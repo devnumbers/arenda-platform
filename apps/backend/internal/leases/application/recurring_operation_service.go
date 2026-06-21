@@ -208,7 +208,16 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 	ownerID, id uuid.UUID,
 	cmd UpdateRecurringOperationCommand,
 ) (domain.RecurringOperation, error) {
-	rec, err := s.recurringOps.GetByIDAndOwner(ctx, id, ownerID)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRecurring := s.recurringOps.WithTx(tx)
+	txOps := s.operations.WithTx(tx)
+
+	rec, err := txRecurring.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.RecurringOperation{}, ErrNotFound
@@ -252,15 +261,6 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 	}
 
 	rec.UpdatedAt = s.clock.Now()
-
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
 
 	updated, err := txRecurring.Update(ctx, rec)
 	if err != nil {
@@ -318,6 +318,17 @@ func (s *RecurringOperationService) PauseRecurringOperation(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	txRecurring := s.recurringOps.WithTx(tx)
+	var rec domain.RecurringOperation
+
+	_, err = txRecurring.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.RecurringOperation{}, ErrNotFound
+		}
+		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
+	}
+
 	if s.scheduler != nil {
 		txScheduler := s.scheduler.WithTx(tx)
 		if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, id); err != nil {
@@ -325,7 +336,7 @@ func (s *RecurringOperationService) PauseRecurringOperation(
 		}
 	}
 
-	rec, err := s.recurringOps.WithTx(tx).UpdateStatus(ctx, id, ownerID, string(domain.RecurringOperationStatusPaused))
+	rec, err = txRecurring.UpdateStatus(ctx, id, ownerID, string(domain.RecurringOperationStatusPaused))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.RecurringOperation{}, ErrNotFound
@@ -346,18 +357,6 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 	ctx context.Context,
 	ownerID, id uuid.UUID,
 ) (domain.RecurringOperation, error) {
-	rec, err := s.recurringOps.GetByIDAndOwner(ctx, id, ownerID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.RecurringOperation{}, ErrNotFound
-		}
-		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
-	}
-
-	if rec.Status == domain.RecurringOperationStatusActive {
-		return rec, nil
-	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("begin tx: %w", err)
@@ -366,6 +365,21 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
+
+	rec, err := txRecurring.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.RecurringOperation{}, ErrNotFound
+		}
+		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
+	}
+
+	if rec.Status == domain.RecurringOperationStatusActive {
+		if err := tx.Commit(ctx); err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("commit tx: %w", err)
+		}
+		return rec, nil
+	}
 
 	rec, err = txRecurring.UpdateStatus(ctx, id, ownerID, string(domain.RecurringOperationStatusActive))
 	if err != nil {
@@ -432,7 +446,16 @@ func (s *RecurringOperationService) SetReminderOffset(
 		return newInvalidInputError("offset_days must be non-negative")
 	}
 
-	rec, err := s.recurringOps.GetByIDAndOwner(ctx, id, ownerID)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRecurring := s.recurringOps.WithTx(tx)
+	txOps := s.operations.WithTx(tx)
+
+	rec, err := txRecurring.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
@@ -440,13 +463,6 @@ func (s *RecurringOperationService) SetReminderOffset(
 		return fmt.Errorf("get recurring operation: %w", err)
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txOps := s.operations.WithTx(tx)
 	ops, err := txOps.ListByRecurringOperation(ctx, id)
 	if err != nil {
 		return fmt.Errorf("list operations: %w", err)
@@ -508,7 +524,21 @@ func (s *RecurringOperationService) CreateReminder(
 		return nil, fmt.Errorf("reminder lister is required")
 	}
 
-	rec, err := s.recurringOps.GetByIDAndOwner(ctx, recurringOperationID, ownerID)
+	now := s.clock.Now()
+	if err := notificationsdomain.ValidateReminderDate(reminderDate, now); err != nil {
+		return nil, newInvalidInputError("reminder date must be today or in the future")
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRecurring := s.recurringOps.WithTx(tx)
+	txOps := s.operations.WithTx(tx)
+
+	rec, err := txRecurring.GetByIDAndOwnerForUpdate(ctx, recurringOperationID, ownerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil, ErrNotFound
@@ -516,12 +546,7 @@ func (s *RecurringOperationService) CreateReminder(
 		return nil, fmt.Errorf("get recurring operation: %w", err)
 	}
 
-	now := s.clock.Now()
-	if err := notificationsdomain.ValidateReminderDate(reminderDate, now); err != nil {
-		return nil, newInvalidInputError("reminder date must be today or in the future")
-	}
-
-	ops, err := s.operations.ListByRecurringOperation(ctx, recurringOperationID)
+	ops, err := txOps.ListByRecurringOperation(ctx, recurringOperationID)
 	if err != nil {
 		return nil, fmt.Errorf("list operations: %w", err)
 	}
@@ -542,12 +567,6 @@ func (s *RecurringOperationService) CreateReminder(
 	if offsetDays < 0 {
 		return nil, newInvalidInputError("reminder date must be on or before the earliest future operation date")
 	}
-
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 
 	if err := s.applyReminderOffsetInTx(ctx, tx, ownerID, rec, futureOps, offsetDays, now); err != nil {
 		return nil, err

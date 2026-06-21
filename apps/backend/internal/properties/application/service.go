@@ -161,7 +161,16 @@ func (s *PropertyService) GetProperty(ctx context.Context, ownerID, id uuid.UUID
 }
 
 func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.UUID, cmd UpdatePropertyCommand) (domain.Property, error) {
-	property, err := s.repo.GetByIDAndOwner(ctx, id, ownerID)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := s.repo.WithTx(tx)
+	txOccupancy := s.occupancyProvider.WithTx(tx)
+
+	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
@@ -198,7 +207,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 			return domain.Property{}, &InvalidStatusTransitionError{From: property.Status, To: status}
 		}
 		if status == domain.PropertyStatusMaintenance && property.Status == domain.PropertyStatusActive {
-			occupied, err := s.occupancyProvider.IsOccupied(ctx, ownerID, property.ID)
+			occupied, err := txOccupancy.IsOccupied(ctx, ownerID, property.ID)
 			if err != nil {
 				return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
 			}
@@ -215,12 +224,16 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 
 	property.UpdatedAt = s.clock.Now()
 
-	updated, err := s.repo.Update(ctx, ownerID, property)
+	updated, err := txRepo.Update(ctx, ownerID, property)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
 		}
 		return domain.Property{}, fmt.Errorf("update property: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Property{}, fmt.Errorf("commit tx: %w", err)
 	}
 
 	return updated, nil
@@ -261,7 +274,7 @@ func (s *PropertyService) archivePropertyInTx(
 	billing PropertyBillingLifecycle,
 	ownerID, id uuid.UUID,
 ) (domain.Property, error) {
-	property, err := repo.GetByIDAndOwner(ctx, id, ownerID)
+	property, err := repo.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
@@ -352,7 +365,7 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 	txRepo := s.repo.WithTx(tx)
 	txLimiter := s.limiter.WithTx(tx)
 
-	property, err := txRepo.GetByIDAndOwner(ctx, id, ownerID)
+	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound

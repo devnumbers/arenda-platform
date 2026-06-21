@@ -18,8 +18,10 @@ import (
 )
 
 const (
-	pendingTTL       = 24 * time.Hour
-	defaultErrorCode = "fake_error"
+	pendingTTL                  = 24 * time.Hour
+	defaultErrorCode            = "fake_error"
+	fakeFailTokenPrefix         = "fake_fail_"
+	fakeProviderPaymentIDPrefix = "fake_"
 )
 
 type pendingEntry struct {
@@ -80,7 +82,7 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 		}, nil
 	}
 
-	providerPaymentID := "fake_" + uuid.NewString()
+	providerPaymentID := fakeProviderPaymentIDPrefix + uuid.NewString()
 	savedToken := "fake_token_" + uuid.NewString()
 
 	p.pending[req.PaymentID.String()] = pendingEntry{
@@ -121,6 +123,21 @@ func (p *Provider) PaymentURL(ctx context.Context, paymentID uuid.UUID) (string,
 	return p.confirmURL(paymentID), nil
 }
 
+// Status returns the provider-side status of a payment. If the payment is not
+// found in the pending map it is assumed to have been completed and succeeded.
+func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error) {
+	_ = ctx
+	_ = providerPaymentID
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.purgeLocked()
+
+	if entry, ok := p.pending[paymentID.String()]; ok {
+		return entry.payload.Status, nil
+	}
+	return domain.PaymentStatusSucceeded, nil
+}
+
 // Charge performs a recurrent charge using a saved token.
 func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (application.ChargeResult, error) {
 	if req.PaymentID == uuid.Nil {
@@ -130,9 +147,9 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 		return application.ChargeResult{}, errors.New("fake: amount must be positive")
 	}
 
-	providerPaymentID := "fake_" + uuid.NewString()
+	providerPaymentID := fakeProviderPaymentIDPrefix + uuid.NewString()
 
-	if strings.HasPrefix(req.Token, "fake_fail_") {
+	if strings.HasPrefix(req.Token, fakeFailTokenPrefix) {
 		p.log.InfoContext(ctx, "fake charge failed",
 			"provider_payment_id", providerPaymentID,
 			"internal_payment_id", req.PaymentID.String(),
