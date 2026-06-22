@@ -34,6 +34,7 @@ type SubscriptionPayment struct {
 	AmountKopecks     int64
 	Provider          PaymentProvider
 	ProviderPaymentID *string
+	PaymentURL        *string
 	Status            PaymentStatus
 	ErrorCode         *string
 	CreatedAt         time.Time

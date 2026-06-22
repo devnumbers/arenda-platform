@@ -29,19 +29,23 @@ INSERT INTO payment_methods (
     provider_token,
     token_hash,
     display_mask,
+    provider_card_id,
+    exp_date,
     is_active
 )
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at, provider_card_id, exp_date
 `
 
 type CreatePaymentMethodParams struct {
-	UserID        pgtype.UUID `json:"user_id"`
-	Provider      string      `json:"provider"`
-	ProviderToken string      `json:"provider_token"`
-	TokenHash     string      `json:"token_hash"`
-	DisplayMask   pgtype.Text `json:"display_mask"`
-	IsActive      bool        `json:"is_active"`
+	UserID         pgtype.UUID `json:"user_id"`
+	Provider       string      `json:"provider"`
+	ProviderToken  string      `json:"provider_token"`
+	TokenHash      string      `json:"token_hash"`
+	DisplayMask    pgtype.Text `json:"display_mask"`
+	ProviderCardID pgtype.Text `json:"provider_card_id"`
+	ExpDate        pgtype.Text `json:"exp_date"`
+	IsActive       bool        `json:"is_active"`
 }
 
 func (q *Queries) CreatePaymentMethod(ctx context.Context, arg CreatePaymentMethodParams) (PaymentMethod, error) {
@@ -51,6 +55,8 @@ func (q *Queries) CreatePaymentMethod(ctx context.Context, arg CreatePaymentMeth
 		arg.ProviderToken,
 		arg.TokenHash,
 		arg.DisplayMask,
+		arg.ProviderCardID,
+		arg.ExpDate,
 		arg.IsActive,
 	)
 	var i PaymentMethod
@@ -64,6 +70,8 @@ func (q *Queries) CreatePaymentMethod(ctx context.Context, arg CreatePaymentMeth
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProviderCardID,
+		&i.ExpDate,
 	)
 	return i, err
 }
@@ -141,11 +149,12 @@ INSERT INTO subscription_payments (
     amount_kopecks,
     provider,
     provider_payment_id,
+    payment_url,
     status,
     error_code
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url
 `
 
 type CreateSubscriptionPaymentParams struct {
@@ -157,6 +166,7 @@ type CreateSubscriptionPaymentParams struct {
 	AmountKopecks     int64       `json:"amount_kopecks"`
 	Provider          string      `json:"provider"`
 	ProviderPaymentID pgtype.Text `json:"provider_payment_id"`
+	PaymentUrl        pgtype.Text `json:"payment_url"`
 	Status            string      `json:"status"`
 	ErrorCode         pgtype.Text `json:"error_code"`
 }
@@ -171,6 +181,7 @@ func (q *Queries) CreateSubscriptionPayment(ctx context.Context, arg CreateSubsc
 		arg.AmountKopecks,
 		arg.Provider,
 		arg.ProviderPaymentID,
+		arg.PaymentUrl,
 		arg.Status,
 		arg.ErrorCode,
 	)
@@ -189,6 +200,7 @@ func (q *Queries) CreateSubscriptionPayment(ctx context.Context, arg CreateSubsc
 		&i.ErrorCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PaymentUrl,
 	)
 	return i, err
 }
@@ -214,7 +226,7 @@ func (q *Queries) DeletePaymentMethodByID(ctx context.Context, id pgtype.UUID) e
 }
 
 const getLastSucceededSubscriptionPaymentBySubscriptionID = `-- name: GetLastSucceededSubscriptionPaymentBySubscriptionID :one
-SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at FROM subscription_payments
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url FROM subscription_payments
 WHERE subscription_id = $1 AND status = 'succeeded'
 ORDER BY created_at DESC
 LIMIT 1
@@ -237,12 +249,13 @@ func (q *Queries) GetLastSucceededSubscriptionPaymentBySubscriptionID(ctx contex
 		&i.ErrorCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PaymentUrl,
 	)
 	return i, err
 }
 
 const getPaymentMethodByID = `-- name: GetPaymentMethodByID :one
-SELECT id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at FROM payment_methods WHERE id = $1
+SELECT id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at, provider_card_id, exp_date FROM payment_methods WHERE id = $1
 `
 
 func (q *Queries) GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (PaymentMethod, error) {
@@ -258,12 +271,14 @@ func (q *Queries) GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (Pay
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProviderCardID,
+		&i.ExpDate,
 	)
 	return i, err
 }
 
 const getPaymentMethodByIDForUpdate = `-- name: GetPaymentMethodByIDForUpdate :one
-SELECT id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at FROM payment_methods WHERE id = $1 FOR UPDATE
+SELECT id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at, provider_card_id, exp_date FROM payment_methods WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.UUID) (PaymentMethod, error) {
@@ -279,6 +294,8 @@ func (q *Queries) GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.U
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProviderCardID,
+		&i.ExpDate,
 	)
 	return i, err
 }
@@ -384,7 +401,7 @@ func (q *Queries) GetSubscriptionByUserIDForUpdate(ctx context.Context, userID p
 }
 
 const getSubscriptionPaymentByID = `-- name: GetSubscriptionPaymentByID :one
-SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at FROM subscription_payments WHERE id = $1
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url FROM subscription_payments WHERE id = $1
 `
 
 func (q *Queries) GetSubscriptionPaymentByID(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error) {
@@ -404,12 +421,13 @@ func (q *Queries) GetSubscriptionPaymentByID(ctx context.Context, id pgtype.UUID
 		&i.ErrorCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PaymentUrl,
 	)
 	return i, err
 }
 
 const getSubscriptionPaymentByIDForUpdate = `-- name: GetSubscriptionPaymentByIDForUpdate :one
-SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at FROM subscription_payments WHERE id = $1 FOR UPDATE
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url FROM subscription_payments WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetSubscriptionPaymentByIDForUpdate(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error) {
@@ -429,6 +447,7 @@ func (q *Queries) GetSubscriptionPaymentByIDForUpdate(ctx context.Context, id pg
 		&i.ErrorCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PaymentUrl,
 	)
 	return i, err
 }
@@ -573,7 +592,7 @@ func (q *Queries) ListExpiredNonRenewingSubscriptions(ctx context.Context, arg L
 }
 
 const listPaymentMethodsByUserID = `-- name: ListPaymentMethodsByUserID :many
-SELECT id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at FROM payment_methods WHERE user_id = $1 ORDER BY created_at DESC
+SELECT id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at, provider_card_id, exp_date FROM payment_methods WHERE user_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error) {
@@ -595,6 +614,8 @@ func (q *Queries) ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ProviderCardID,
+			&i.ExpDate,
 		); err != nil {
 			return nil, err
 		}
@@ -607,7 +628,7 @@ func (q *Queries) ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.
 }
 
 const listPendingSubscriptionPaymentsByUserID = `-- name: ListPendingSubscriptionPaymentsByUserID :many
-SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at FROM subscription_payments WHERE user_id = $1 AND status = 'pending' ORDER BY created_at DESC
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url FROM subscription_payments WHERE user_id = $1 AND status = 'pending' ORDER BY created_at DESC
 `
 
 func (q *Queries) ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error) {
@@ -633,6 +654,7 @@ func (q *Queries) ListPendingSubscriptionPaymentsByUserID(ctx context.Context, u
 			&i.ErrorCode,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PaymentUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -645,7 +667,7 @@ func (q *Queries) ListPendingSubscriptionPaymentsByUserID(ctx context.Context, u
 }
 
 const listSubscriptionPaymentsByUserID = `-- name: ListSubscriptionPaymentsByUserID :many
-SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at FROM subscription_payments WHERE user_id = $1 ORDER BY created_at DESC
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url FROM subscription_payments WHERE user_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error) {
@@ -671,6 +693,7 @@ func (q *Queries) ListSubscriptionPaymentsByUserID(ctx context.Context, userID p
 			&i.ErrorCode,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PaymentUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -891,7 +914,7 @@ const markSubscriptionPaymentFailed = `-- name: MarkSubscriptionPaymentFailed :o
 UPDATE subscription_payments
 SET status = 'failed', error_code = $2, updated_at = $3
 WHERE id = $1 AND status = 'pending'
-RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url
 `
 
 type MarkSubscriptionPaymentFailedParams struct {
@@ -917,6 +940,7 @@ func (q *Queries) MarkSubscriptionPaymentFailed(ctx context.Context, arg MarkSub
 		&i.ErrorCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PaymentUrl,
 	)
 	return i, err
 }
@@ -925,7 +949,7 @@ const markSubscriptionPaymentSucceeded = `-- name: MarkSubscriptionPaymentSuccee
 UPDATE subscription_payments
 SET status = 'succeeded', updated_at = $2
 WHERE id = $1 AND status = 'pending'
-RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url
 `
 
 type MarkSubscriptionPaymentSucceededParams struct {
@@ -950,6 +974,7 @@ func (q *Queries) MarkSubscriptionPaymentSucceeded(ctx context.Context, arg Mark
 		&i.ErrorCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PaymentUrl,
 	)
 	return i, err
 }
@@ -958,7 +983,7 @@ const updatePaymentMethodActiveByID = `-- name: UpdatePaymentMethodActiveByID :o
 UPDATE payment_methods
 SET is_active = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at
+RETURNING id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at, provider_card_id, exp_date
 `
 
 type UpdatePaymentMethodActiveByIDParams struct {
@@ -979,6 +1004,8 @@ func (q *Queries) UpdatePaymentMethodActiveByID(ctx context.Context, arg UpdateP
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProviderCardID,
+		&i.ExpDate,
 	)
 	return i, err
 }
@@ -1048,7 +1075,7 @@ const updateSubscriptionPaymentMethodAndProviderID = `-- name: UpdateSubscriptio
 UPDATE subscription_payments
 SET payment_method_id = $2, provider_payment_id = $3, updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url
 `
 
 type UpdateSubscriptionPaymentMethodAndProviderIDParams struct {
@@ -1074,6 +1101,41 @@ func (q *Queries) UpdateSubscriptionPaymentMethodAndProviderID(ctx context.Conte
 		&i.ErrorCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PaymentUrl,
+	)
+	return i, err
+}
+
+const updateSubscriptionPaymentPaymentURL = `-- name: UpdateSubscriptionPaymentPaymentURL :one
+UPDATE subscription_payments
+SET payment_url = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url
+`
+
+type UpdateSubscriptionPaymentPaymentURLParams struct {
+	ID         pgtype.UUID `json:"id"`
+	PaymentUrl pgtype.Text `json:"payment_url"`
+}
+
+func (q *Queries) UpdateSubscriptionPaymentPaymentURL(ctx context.Context, arg UpdateSubscriptionPaymentPaymentURLParams) (SubscriptionPayment, error) {
+	row := q.db.QueryRow(ctx, updateSubscriptionPaymentPaymentURL, arg.ID, arg.PaymentUrl)
+	var i SubscriptionPayment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SubscriptionID,
+		&i.TariffID,
+		&i.PaymentMethodID,
+		&i.Period,
+		&i.AmountKopecks,
+		&i.Provider,
+		&i.ProviderPaymentID,
+		&i.Status,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PaymentUrl,
 	)
 	return i, err
 }
@@ -1082,7 +1144,7 @@ const updateSubscriptionPaymentProviderPaymentID = `-- name: UpdateSubscriptionP
 UPDATE subscription_payments
 SET provider_payment_id = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url
 `
 
 type UpdateSubscriptionPaymentProviderPaymentIDParams struct {
@@ -1107,6 +1169,68 @@ func (q *Queries) UpdateSubscriptionPaymentProviderPaymentID(ctx context.Context
 		&i.ErrorCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PaymentUrl,
+	)
+	return i, err
+}
+
+const upsertPaymentMethodByTokenHash = `-- name: UpsertPaymentMethodByTokenHash :one
+INSERT INTO payment_methods (
+    user_id,
+    provider,
+    provider_token,
+    token_hash,
+    display_mask,
+    provider_card_id,
+    exp_date,
+    is_active
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (user_id, token_hash)
+DO UPDATE SET
+    provider_token = EXCLUDED.provider_token,
+    provider_card_id = EXCLUDED.provider_card_id,
+    display_mask = EXCLUDED.display_mask,
+    exp_date = EXCLUDED.exp_date,
+    updated_at = now()
+RETURNING id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at, provider_card_id, exp_date
+`
+
+type UpsertPaymentMethodByTokenHashParams struct {
+	UserID         pgtype.UUID `json:"user_id"`
+	Provider       string      `json:"provider"`
+	ProviderToken  string      `json:"provider_token"`
+	TokenHash      string      `json:"token_hash"`
+	DisplayMask    pgtype.Text `json:"display_mask"`
+	ProviderCardID pgtype.Text `json:"provider_card_id"`
+	ExpDate        pgtype.Text `json:"exp_date"`
+	IsActive       bool        `json:"is_active"`
+}
+
+func (q *Queries) UpsertPaymentMethodByTokenHash(ctx context.Context, arg UpsertPaymentMethodByTokenHashParams) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, upsertPaymentMethodByTokenHash,
+		arg.UserID,
+		arg.Provider,
+		arg.ProviderToken,
+		arg.TokenHash,
+		arg.DisplayMask,
+		arg.ProviderCardID,
+		arg.ExpDate,
+		arg.IsActive,
+	)
+	var i PaymentMethod
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderToken,
+		&i.TokenHash,
+		&i.DisplayMask,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ProviderCardID,
+		&i.ExpDate,
 	)
 	return i, err
 }

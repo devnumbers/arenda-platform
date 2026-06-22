@@ -229,6 +229,22 @@ func (r *fakePaymentMethodRepo) Create(_ context.Context, pm domain.PaymentMetho
 	return pm, nil
 }
 
+func (r *fakePaymentMethodRepo) UpsertByTokenHash(_ context.Context, pm domain.PaymentMethod) (domain.PaymentMethod, error) {
+	for id, existing := range r.methods {
+		if existing.UserID == pm.UserID && existing.ProviderToken == pm.ProviderToken {
+			existing.ProviderToken = pm.ProviderToken
+			existing.ProviderCardID = pm.ProviderCardID
+			existing.DisplayMask = pm.DisplayMask
+			existing.ExpDate = pm.ExpDate
+			existing.UpdatedAt = pm.UpdatedAt
+			r.methods[id] = existing
+			return existing, nil
+		}
+	}
+	r.methods[pm.ID] = pm
+	return pm, nil
+}
+
 func (r *fakePaymentMethodRepo) GetByID(_ context.Context, id uuid.UUID) (domain.PaymentMethod, error) {
 	pm, ok := r.methods[id]
 	if !ok {
@@ -365,6 +381,16 @@ func (r *fakeSubscriptionPaymentRepo) UpdateProviderPaymentID(_ context.Context,
 	return p, nil
 }
 
+func (r *fakeSubscriptionPaymentRepo) UpdatePaymentURL(_ context.Context, id uuid.UUID, paymentURL string) (domain.SubscriptionPayment, error) {
+	p, ok := r.payments[id]
+	if !ok {
+		return domain.SubscriptionPayment{}, ErrNotFound
+	}
+	p.PaymentURL = &paymentURL
+	r.payments[id] = p
+	return p, nil
+}
+
 func (r *fakeSubscriptionPaymentRepo) UpdatePaymentMethodAndProviderID(_ context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error) {
 	p, ok := r.payments[id]
 	if !ok {
@@ -413,6 +439,7 @@ type stubProvider struct {
 
 	chargeRes  ChargeResult
 	chargeErr  error
+	chargeReq  ChargeRequest
 	chargeFunc func(ChargeRequest)
 
 	statusRes  domain.PaymentStatus
@@ -420,6 +447,16 @@ type stubProvider struct {
 	statusFunc func(uuid.UUID, string)
 
 	parseWebhook func([]byte) (WebhookPayload, error)
+
+	initAddCardRes  InitAddCardResult
+	initAddCardErr  error
+	initAddCardReq  InitAddCardRequest
+	initAddCardCalled bool
+
+	removeCardErr      error
+	removeCardCalled   bool
+	removeCardCustomer string
+	removeCardCardID   string
 
 	confirmPaymentRes        WebhookPayload
 	confirmPaymentErr        error
@@ -446,7 +483,7 @@ func (p *stubProvider) Init(_ context.Context, req InitRequest) (InitResult, err
 	if res.ProviderPaymentID == "" {
 		res.ProviderPaymentID = "stub_" + uuid.NewString()
 	}
-	if res.SavedToken == "" {
+	if res.SavedToken == "" && p.Name() == domain.ProviderFake {
 		res.SavedToken = "stub_token_" + uuid.NewString()
 	}
 	if res.PaymentURL == "" {
@@ -459,6 +496,7 @@ func (p *stubProvider) Init(_ context.Context, req InitRequest) (InitResult, err
 }
 
 func (p *stubProvider) Charge(_ context.Context, req ChargeRequest) (ChargeResult, error) {
+	p.chargeReq = req
 	if p.chargeFunc != nil {
 		p.chargeFunc(req)
 	}
@@ -477,6 +515,30 @@ func (p *stubProvider) ParseWebhook(_ context.Context, payload []byte) (WebhookP
 		return p.parseWebhook(payload)
 	}
 	return WebhookPayload{}, nil
+}
+
+func (p *stubProvider) InitAddCard(_ context.Context, req InitAddCardRequest) (InitAddCardResult, error) {
+	p.initAddCardCalled = true
+	p.initAddCardReq = req
+	if p.initAddCardErr != nil {
+		return InitAddCardResult{}, p.initAddCardErr
+	}
+	res := p.initAddCardRes
+	if res.PaymentURL == "" {
+		res.PaymentURL = "http://localhost/add-card/confirm"
+	}
+	return res, nil
+}
+
+func (p *stubProvider) RemoveCard(_ context.Context, customerKey, cardID string) error {
+	p.removeCardCalled = true
+	p.removeCardCustomer = customerKey
+	p.removeCardCardID = cardID
+	return p.removeCardErr
+}
+
+func (p *stubProvider) WebhookResponse() []byte {
+	return []byte(`{"status":"ok"}`)
 }
 
 func (p *stubProvider) ConfirmPayment(_ context.Context, internalPaymentID string) (WebhookPayload, error) {
@@ -519,6 +581,7 @@ func newTestDeps(t *testing.T) *testDeps {
 		d.beginner,
 		d.clock,
 		discardLogger(),
+		"http://localhost",
 		d.propertyArchiver,
 	)
 	return d
@@ -851,12 +914,19 @@ func TestBillingService_AddPaymentMethod(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccd")
 
-	pm, err := d.service.AddPaymentMethod(context.Background(), userID, AddPaymentMethodRequest{
+	resp, err := d.service.AddPaymentMethod(context.Background(), userID, AddPaymentMethodRequest{
 		ProviderToken: "raw_token_1234",
 	})
 	if err != nil {
 		t.Fatalf("AddPaymentMethod error: %v", err)
 	}
+	if resp.ConfirmURL != "" {
+		t.Errorf("expected no confirm url for fake provider, got %q", resp.ConfirmURL)
+	}
+	if resp.PaymentMethod == nil {
+		t.Fatal("expected payment method")
+	}
+	pm := *resp.PaymentMethod
 	if pm.UserID != userID {
 		t.Errorf("expected user id %s, got %s", userID, pm.UserID)
 	}
@@ -1634,6 +1704,7 @@ func newTestDepsWithLogger(t *testing.T, log *slog.Logger) *testDeps {
 		d.beginner,
 		d.clock,
 		log,
+		"http://localhost",
 		d.propertyArchiver,
 	)
 	return d
@@ -2350,5 +2421,526 @@ func TestBillingService_ProcessRenewals_ProviderErrorSanitizedInLogs(t *testing.
 	}
 	if !strings.Contains(logs, "provider charge failed") {
 		t.Errorf("expected provider charge failure log, got:\n%s", logs)
+	}
+}
+
+// --- T-Kassa flow tests ---
+
+func TestBillingService_AddPaymentMethod_TkassaReturnsConfirmURL(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccd")
+
+	d.provider.initAddCardRes = InitAddCardResult{PaymentURL: "https://bank.example/add-card"}
+
+	resp, err := d.service.AddPaymentMethod(context.Background(), userID, AddPaymentMethodRequest{
+		ProviderToken: "ignored_for_tkassa",
+	})
+	if err != nil {
+		t.Fatalf("AddPaymentMethod error: %v", err)
+	}
+	if resp.PaymentMethod != nil {
+		t.Error("expected no payment method for tkassa add card flow")
+	}
+	if resp.ConfirmURL != "https://bank.example/add-card" {
+		t.Errorf("expected confirm url https://bank.example/add-card, got %q", resp.ConfirmURL)
+	}
+	if !d.provider.initAddCardCalled {
+		t.Error("expected provider.InitAddCard to be called")
+	}
+	if d.provider.initAddCardReq.CustomerKey != userID.String() {
+		t.Errorf("expected customer key %s, got %s", userID.String(), d.provider.initAddCardReq.CustomerKey)
+	}
+	if d.provider.initAddCardReq.CheckType != "3DSHOLD" {
+		t.Errorf("expected check type 3DSHOLD, got %s", d.provider.initAddCardReq.CheckType)
+	}
+}
+
+func TestBillingService_ChangeTariff_TkassaFirstPaymentInitFields(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
+	})
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               uuid.MustParse("44444444-4444-4444-4444-444444444444"),
+		UserID:           userID,
+		TariffID:         basicID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: false,
+	})
+
+	d.provider.initRes = InitResult{
+		ProviderPaymentID: "tkassa_payment_1",
+		PaymentURL:        "https://bank.example/pay",
+		SavedToken:        "",
+	}
+
+	resp, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: string(domain.TariffPro),
+		Period:     domain.PeriodMonth,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff error: %v", err)
+	}
+	if resp.ConfirmURL != "https://bank.example/pay" {
+		t.Errorf("expected confirm url https://bank.example/pay, got %q", resp.ConfirmURL)
+	}
+
+	req := d.provider.initReq
+	if req.CustomerKey != userID.String() {
+		t.Errorf("expected customer key %s, got %s", userID.String(), req.CustomerKey)
+	}
+	if !req.Recurrent {
+		t.Error("expected recurrent true")
+	}
+	if req.OperationInitiatorType != "2" {
+		t.Errorf("expected initiator type 2, got %s", req.OperationInitiatorType)
+	}
+	if req.NotificationURL == "" || req.SuccessURL == "" || req.FailURL == "" {
+		t.Errorf("expected callback urls set, got notification=%q success=%q fail=%q", req.NotificationURL, req.SuccessURL, req.FailURL)
+	}
+	if !strings.Contains(req.SuccessURL, resp.PaymentID.String()) {
+		t.Errorf("expected success url to contain payment id, got %q", req.SuccessURL)
+	}
+
+	payment := d.subscriptionPayments.payments[resp.PaymentID]
+	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID != "tkassa_payment_1" {
+		t.Errorf("expected provider payment id set, got %v", payment.ProviderPaymentID)
+	}
+	if payment.PaymentMethodID != nil {
+		t.Errorf("expected no local payment method until webhook, got %v", payment.PaymentMethodID)
+	}
+}
+
+func TestBillingService_ChangeTariff_TkassaReturnsExistingPendingPaymentURL(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	existingPaymentID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	validUntil := fixedNow.AddDate(0, 1, 0)
+	providerPaymentID := "existing_tkassa_payment_1"
+	paymentURL := "https://bank.example/pay-existing"
+
+	d.addTariff(domain.Tariff{
+		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
+	})
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               uuid.MustParse("55555555-5555-5555-5555-555555555555"),
+		UserID:           userID,
+		TariffID:         basicID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: false,
+	})
+	d.subscriptionPayments.payments[existingPaymentID] = domain.SubscriptionPayment{
+		ID:                existingPaymentID,
+		UserID:            userID,
+		SubscriptionID:    uuid.MustParse("55555555-5555-5555-5555-555555555555"),
+		TariffID:          proID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderTkassa,
+		ProviderPaymentID: &providerPaymentID,
+		PaymentURL:        &paymentURL,
+		Status:            domain.PaymentStatusPending,
+	}
+
+	resp, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: string(domain.TariffPro),
+		Period:     domain.PeriodMonth,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff error: %v", err)
+	}
+	if resp.PaymentID != existingPaymentID {
+		t.Errorf("expected existing payment id %s, got %s", existingPaymentID, resp.PaymentID)
+	}
+	if resp.ConfirmURL != paymentURL {
+		t.Errorf("expected confirm url %q, got %q", paymentURL, resp.ConfirmURL)
+	}
+	if d.provider.initCalled {
+		t.Error("expected no provider call when reusing existing pending payment with provider reference")
+	}
+}
+
+func TestBillingService_ProcessRenewals_TkassaInitChargeFlow(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	validUntil := fixedNow
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(domain.Subscription{
+		ID:                    uuid.MustParse("55555555-5555-5555-5555-555555555555"),
+		UserID:                userID,
+		TariffID:              proID,
+		Source:                domain.SubscriptionSourcePaid,
+		Status:                domain.SubscriptionStatusActive,
+		ValidUntil:            &validUntil,
+		AutoRenewEnabled:      true,
+		ActivePaymentMethodID: &methodID,
+	})
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:            methodID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: "rebill_1234",
+		IsActive:      true,
+	}
+	d.provider.initRes = InitResult{
+		ProviderPaymentID: "tkassa_renewal_1",
+		PaymentURL:        "https://bank.example/pay",
+		SavedToken:        "",
+	}
+	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "tkassa_renewal_1", Status: domain.PaymentStatusSucceeded}
+
+	count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	if err != nil {
+		t.Fatalf("ProcessRenewals error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 renewal, got %d", count)
+	}
+
+	initReq := d.provider.initReq
+	if initReq.OperationInitiatorType != "R" {
+		t.Errorf("expected initiator type R, got %s", initReq.OperationInitiatorType)
+	}
+	if initReq.CustomerKey != userID.String() {
+		t.Errorf("expected customer key %s, got %s", userID.String(), initReq.CustomerKey)
+	}
+	if initReq.AmountKopecks != 5000 {
+		t.Errorf("expected amount 5000, got %d", initReq.AmountKopecks)
+	}
+
+	if d.provider.chargeReq.ProviderPaymentID != "tkassa_renewal_1" {
+		t.Errorf("expected charge provider payment id tkassa_renewal_1, got %q", d.provider.chargeReq.ProviderPaymentID)
+	}
+	if d.provider.chargeReq.Token != "rebill_1234" {
+		t.Errorf("expected charge token rebill_1234, got %q", d.provider.chargeReq.Token)
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected status active, got %s", sub.Status)
+	}
+	if sub.ValidUntil == nil || !sub.ValidUntil.After(fixedNow) {
+		t.Errorf("expected valid_until extended, got %v", sub.ValidUntil)
+	}
+}
+
+func TestBillingService_ProcessRenewals_TkassaInitFailureMovesToGrace(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	validUntil := fixedNow
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(domain.Subscription{
+		ID:                    uuid.MustParse("55555555-5555-5555-5555-555555555555"),
+		UserID:                userID,
+		TariffID:              proID,
+		Source:                domain.SubscriptionSourcePaid,
+		Status:                domain.SubscriptionStatusActive,
+		ValidUntil:            &validUntil,
+		AutoRenewEnabled:      true,
+		ActivePaymentMethodID: &methodID,
+	})
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:            methodID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: "rebill_1234",
+		IsActive:      true,
+	}
+	d.provider.initErr = errors.New("tkassa init failed")
+
+	count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	if err != nil {
+		t.Fatalf("ProcessRenewals error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 renewal processed, got %d", count)
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("expected status grace, got %s", sub.Status)
+	}
+}
+
+func TestBillingService_HandleWebhook_TkassaAuthorizedThenConfirmed(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777778")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888889")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab")
+	tariffID := uuid.MustParse("99999999-9999-9999-9999-99999999999a")
+	providerPaymentID := "tkassa_webhook_1"
+	existingValidUntil := fixedNow.AddDate(0, 0, 15)
+
+	d.addTariff(domain.Tariff{
+		ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         tariffID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &existingValidUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:             paymentID,
+		UserID:         userID,
+		SubscriptionID: subscriptionID,
+		TariffID:       tariffID,
+		Period:         domain.PeriodMonth,
+		AmountKopecks:  5000,
+		Provider:       domain.ProviderTkassa,
+		Status:         domain.PaymentStatusPending,
+	}
+
+	// AUTHORIZED webhook: creates inactive payment method, keeps payment pending.
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			ProviderPaymentID: providerPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusPending,
+			RebillID:          "rebill_auth",
+			CardID:            "card_1",
+			Pan:               "430000******0777",
+			ExpDate:           "12/30",
+			CustomerKey:       userID.String(),
+		}, nil
+	}
+
+	if err := d.service.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook authorized error: %v", err)
+	}
+
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusPending {
+		t.Errorf("expected payment still pending, got %s", payment.Status)
+	}
+	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID != providerPaymentID {
+		t.Errorf("expected provider payment id %s, got %v", providerPaymentID, payment.ProviderPaymentID)
+	}
+	if payment.PaymentMethodID == nil {
+		t.Fatal("expected payment method id set by authorized webhook")
+	}
+	pm := d.paymentMethods.methods[*payment.PaymentMethodID]
+	if pm.ProviderToken != "rebill_auth" {
+		t.Errorf("expected rebill auth, got %s", pm.ProviderToken)
+	}
+	if pm.ProviderCardID != "card_1" {
+		t.Errorf("expected card id card_1, got %s", pm.ProviderCardID)
+	}
+	if pm.DisplayMask != "430000******0777" {
+		t.Errorf("expected display mask 430000******0777, got %s", pm.DisplayMask)
+	}
+	if pm.IsActive {
+		t.Error("expected payment method to remain inactive after authorized webhook")
+	}
+
+	// CONFIRMED webhook: activates method and extends subscription.
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			ProviderPaymentID: providerPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusSucceeded,
+			RebillID:          "rebill_auth",
+			CardID:            "card_1",
+			Pan:               "430000******0777",
+			ExpDate:           "12/30",
+			CustomerKey:       userID.String(),
+		}, nil
+	}
+
+	if err := d.service.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook confirmed error: %v", err)
+	}
+
+	payment = d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("expected payment succeeded, got %s", payment.Status)
+	}
+	if !d.paymentMethods.methods[*payment.PaymentMethodID].IsActive {
+		t.Error("expected payment method active after confirmed webhook")
+	}
+
+	sub := d.subscriptions.subs[userID]
+	wantValidUntil := existingValidUntil.AddDate(0, 1, 0)
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+		t.Errorf("expected valid until extended to %v, got %v", wantValidUntil, sub.ValidUntil)
+	}
+}
+
+func TestBillingService_HandleWebhook_TkassaAddCard(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777778")
+
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			NotificationType: "AddCard",
+			CustomerKey:      userID.String(),
+			RequestKey:       "req_1",
+			RebillID:         "rebill_addcard",
+			CardID:           "card_add",
+			Pan:              "430000******0777",
+			ExpDate:          "12/30",
+		}, nil
+	}
+
+	if err := d.service.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook AddCard error: %v", err)
+	}
+
+	var found bool
+	for _, pm := range d.paymentMethods.methods {
+		if pm.UserID == userID && pm.ProviderToken == "rebill_addcard" {
+			found = true
+			if pm.ProviderCardID != "card_add" {
+				t.Errorf("expected card id card_add, got %s", pm.ProviderCardID)
+			}
+			if pm.DisplayMask != "430000******0777" {
+				t.Errorf("expected display mask 430000******0777, got %s", pm.DisplayMask)
+			}
+			if pm.IsActive {
+				t.Error("expected add card payment method to be inactive")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected payment method created from AddCard webhook")
+	}
+}
+
+func TestBillingService_HandleWebhook_DuplicateConfirmedIsIdempotent(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777778")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888889")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab")
+	tariffID := uuid.MustParse("99999999-9999-9999-9999-99999999999a")
+	providerPaymentID := "tkassa_webhook_dup"
+	existingValidUntil := fixedNow.AddDate(0, 0, 15)
+
+	d.addTariff(domain.Tariff{
+		ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         tariffID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &existingValidUntil,
+		AutoRenewEnabled: true,
+	})
+	methodID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:            methodID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: "rebill_dup",
+		ProviderCardID: "card_dup",
+		IsActive:      false,
+	}
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:              paymentID,
+		UserID:          userID,
+		SubscriptionID:  subscriptionID,
+		TariffID:        tariffID,
+		PaymentMethodID: &methodID,
+		Period:          domain.PeriodMonth,
+		AmountKopecks:   5000,
+		Provider:        domain.ProviderTkassa,
+		ProviderPaymentID: &providerPaymentID,
+		Status:          domain.PaymentStatusPending,
+	}
+
+	webhook := func() WebhookPayload {
+		return WebhookPayload{
+			ProviderPaymentID: providerPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusSucceeded,
+			RebillID:          "rebill_dup",
+			CardID:            "card_dup",
+			Pan:               "430000******0777",
+			ExpDate:           "12/30",
+			CustomerKey:       userID.String(),
+		}
+	}
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) { return webhook(), nil }
+
+	if err := d.service.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
+		t.Fatalf("first HandleWebhook error: %v", err)
+	}
+	firstValidUntil := d.subscriptions.subs[userID].ValidUntil
+
+	if err := d.service.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
+		t.Fatalf("second HandleWebhook error: %v", err)
+	}
+	if !d.subscriptions.subs[userID].ValidUntil.Equal(*firstValidUntil) {
+		t.Error("expected duplicate webhook to be idempotent")
+	}
+}
+
+func TestBillingService_DeletePaymentMethod_TkassaRemoveCardFailurePreventsDelete(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+	methodID := uuid.MustParse("11111111-1111-1111-1111-111111111113")
+
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:             methodID,
+		UserID:         userID,
+		Provider:       domain.ProviderTkassa,
+		ProviderCardID: "card_123",
+	}
+	d.provider.removeCardErr = errors.New("provider remove failed")
+
+	if err := d.service.DeletePaymentMethod(context.Background(), userID, methodID); err == nil {
+		t.Fatal("expected error when RemoveCard fails")
+	}
+	if !d.provider.removeCardCalled {
+		t.Error("expected provider.RemoveCard to be called")
+	}
+	if d.provider.removeCardCustomer != userID.String() {
+		t.Errorf("expected customer key %s, got %s", userID.String(), d.provider.removeCardCustomer)
+	}
+	if d.provider.removeCardCardID != "card_123" {
+		t.Errorf("expected card id card_123, got %s", d.provider.removeCardCardID)
+	}
+	if _, ok := d.paymentMethods.methods[methodID]; !ok {
+		t.Error("expected local payment method to remain when provider remove fails")
 	}
 }

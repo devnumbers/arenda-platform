@@ -22,6 +22,14 @@ type AddPaymentMethodRequest struct {
 	ProviderToken string
 }
 
+// AddPaymentMethodResponse is the result of adding a payment method.
+// For providers that require confirmation (e.g. T-Kassa) ConfirmURL is set.
+// For synchronous providers (e.g. fake) PaymentMethod is set.
+type AddPaymentMethodResponse struct {
+	ConfirmURL    string
+	PaymentMethod *domain.PaymentMethod
+}
+
 // SubscriptionView is the current subscription together with its tariff and active payment method.
 type SubscriptionView struct {
 	Subscription        domain.Subscription

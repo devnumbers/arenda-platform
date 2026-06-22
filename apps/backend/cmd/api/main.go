@@ -28,7 +28,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/cleaner"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpapi"
@@ -37,6 +36,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"golang.org/x/time/rate"
 )
 
@@ -140,7 +140,7 @@ func run(fallback *slog.Logger) error {
 	case "fake":
 		paymentProvider = paymentfake.NewProvider(cfg.AppBaseURL, appLogger, realClock{})
 	case "tkassa":
-		paymentProvider = paymenttkassa.NewProvider(cfg.TKassaTerminalKey, cfg.TKassaPassword, appLogger)
+		paymentProvider = paymenttkassa.NewProvider(cfg.TKassaBaseURL, cfg.TKassaTerminalKey, cfg.TKassaPassword, cfg.TKassaTimeout, appLogger)
 	}
 	appLogger.InfoContext(ctx, "payment provider initialized", "provider", cfg.PaymentProvider, "initialized", paymentProvider != nil)
 
@@ -199,6 +199,7 @@ func run(fallback *slog.Logger) error {
 		platformpostgres.NewBeginner(pool, appLogger),
 		realClock{},
 		appLogger,
+		cfg.AppBaseURL,
 		propertyService,
 	)
 
@@ -259,24 +260,24 @@ func run(fallback *slog.Logger) error {
 	}
 
 	handler := httpapi.New(httpapi.Deps{
-		Auth:                authService,
-		Billing:             billingService,
-		Sessions:            identitySessionRepo,
-		Properties:          propertyService,
-		Leases:              leaseService,
-		TenantContacts:      tenantContactService,
-		Operations:          operationService,
-		RecurringOperations: recurringOperationService,
-		Reminders:           reminderService,
+		Auth:                  authService,
+		Billing:               billingService,
+		Sessions:              identitySessionRepo,
+		Properties:            propertyService,
+		Leases:                leaseService,
+		TenantContacts:        tenantContactService,
+		Operations:            operationService,
+		RecurringOperations:   recurringOperationService,
+		Reminders:             reminderService,
 		CookieSecure:          cfg.CookieSecure,
 		Logger:                appLogger,
 		Clock:                 realClock{},
 		LogSuccessfulRequests: cfg.LogSuccessfulRequests,
-		IPRateLimiter:       ipLimiter,
-		PhoneSendLimiter:    phoneSendLimiter,
-		PhoneVerifyLimiter:  phoneVerifyLimiter,
-		DBPoolStats:         poolStats,
-		DevMode:             cfg.AppEnv == "local" && cfg.PaymentProvider == "fake",
+		IPRateLimiter:         ipLimiter,
+		PhoneSendLimiter:      phoneSendLimiter,
+		PhoneVerifyLimiter:    phoneVerifyLimiter,
+		DBPoolStats:           poolStats,
+		DevMode:               cfg.AppEnv == "local" && cfg.PaymentProvider == "fake",
 	})
 
 	server := &http.Server{

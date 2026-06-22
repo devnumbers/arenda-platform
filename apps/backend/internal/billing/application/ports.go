@@ -47,6 +47,7 @@ type SubscriptionRepository interface {
 
 type PaymentMethodRepository interface {
 	Create(ctx context.Context, pm domain.PaymentMethod) (domain.PaymentMethod, error)
+	UpsertByTokenHash(ctx context.Context, pm domain.PaymentMethod) (domain.PaymentMethod, error)
 	GetByID(ctx context.Context, id uuid.UUID) (domain.PaymentMethod, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error)
 	SetActive(ctx context.Context, userID, methodID uuid.UUID) error
@@ -64,6 +65,7 @@ type SubscriptionPaymentRepository interface {
 	MarkSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, errorCode *string, now time.Time) error
 	UpdateProviderPaymentID(ctx context.Context, id uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
+	UpdatePaymentURL(ctx context.Context, id uuid.UUID, paymentURL string) (domain.SubscriptionPayment, error)
 	UpdatePaymentMethodAndProviderID(ctx context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
 	WithTx(tx transaction.Tx) SubscriptionPaymentRepository
 }
@@ -94,28 +96,39 @@ type Provider interface {
 	Charge(ctx context.Context, req ChargeRequest) (ChargeResult, error)
 	Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error)
 	ParseWebhook(ctx context.Context, payload []byte) (WebhookPayload, error)
+	InitAddCard(ctx context.Context, req InitAddCardRequest) (InitAddCardResult, error)
+	RemoveCard(ctx context.Context, customerKey, cardID string) error
+	WebhookResponse() []byte
 }
 
 type InitRequest struct {
-	PaymentID     uuid.UUID
-	AmountKopecks int64
-	Period        domain.SubscriptionPeriod
-	UserID        uuid.UUID
-	Description   string
-	ReturnURL     string
+	PaymentID              uuid.UUID
+	AmountKopecks          int64
+	Period                 domain.SubscriptionPeriod
+	UserID                 uuid.UUID
+	CustomerKey            string
+	Description            string
+	ReturnURL              string
+	NotificationURL        string
+	SuccessURL             string
+	FailURL                string
+	Recurrent              bool
+	OperationInitiatorType string
 }
 
 type InitResult struct {
 	ProviderPaymentID string
 	PaymentURL        string
-	SavedToken        string // token to save as PaymentMethod
+	SavedToken        string // token to save as PaymentMethod (RebillId for T-Kassa)
+	CustomerKey       string
 	Status            domain.PaymentStatus
 }
 
 type ChargeRequest struct {
-	PaymentID     uuid.UUID
-	AmountKopecks int64
-	Token         string
+	PaymentID         uuid.UUID
+	ProviderPaymentID string // T-Kassa PaymentId from Init
+	AmountKopecks     int64
+	Token             string // saved token / RebillId
 }
 
 type ChargeResult struct {
@@ -128,4 +141,28 @@ type WebhookPayload struct {
 	InternalPaymentID uuid.UUID
 	Status            domain.PaymentStatus
 	ErrorCode         *string
+	RebillID          string
+	CardID            string
+	Pan               string
+	ExpDate           string
+	CustomerKey       string
+	RequestKey        string
+	NotificationType  string
+}
+
+// InitAddCardRequest starts a T-Kassa "AddCard" initialization.
+type InitAddCardRequest struct {
+	UserID          uuid.UUID
+	CustomerKey     string
+	CheckType       string
+	SuccessURL      string
+	FailURL         string
+	NotificationURL string
+}
+
+// InitAddCardResult carries the T-Kassa response for AddCard initialization.
+type InitAddCardResult struct {
+	PaymentURL  string
+	RequestKey  string
+	CustomerKey string
 }

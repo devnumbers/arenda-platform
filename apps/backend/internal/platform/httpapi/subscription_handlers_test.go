@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -151,6 +152,22 @@ func (r *testPaymentMethodRepo) Create(_ context.Context, pm domain.PaymentMetho
 	return pm, nil
 }
 
+func (r *testPaymentMethodRepo) UpsertByTokenHash(_ context.Context, pm domain.PaymentMethod) (domain.PaymentMethod, error) {
+	for id, existing := range r.methods {
+		if existing.UserID == pm.UserID && existing.ProviderToken == pm.ProviderToken {
+			existing.ProviderToken = pm.ProviderToken
+			existing.ProviderCardID = pm.ProviderCardID
+			existing.DisplayMask = pm.DisplayMask
+			existing.ExpDate = pm.ExpDate
+			existing.UpdatedAt = pm.UpdatedAt
+			r.methods[id] = existing
+			return existing, nil
+		}
+	}
+	r.methods[pm.ID] = pm
+	return pm, nil
+}
+
 func (r *testPaymentMethodRepo) GetByID(_ context.Context, id uuid.UUID) (domain.PaymentMethod, error) {
 	if pm, ok := r.methods[id]; ok {
 		return pm, nil
@@ -280,6 +297,15 @@ func (r *testSubscriptionPaymentRepo) UpdateProviderPaymentID(_ context.Context,
 	return domain.SubscriptionPayment{}, billingapp.ErrNotFound
 }
 
+func (r *testSubscriptionPaymentRepo) UpdatePaymentURL(_ context.Context, id uuid.UUID, paymentURL string) (domain.SubscriptionPayment, error) {
+	if p, ok := r.payments[id]; ok {
+		p.PaymentURL = &paymentURL
+		r.payments[id] = p
+		return p, nil
+	}
+	return domain.SubscriptionPayment{}, billingapp.ErrNotFound
+}
+
 func (r *testSubscriptionPaymentRepo) UpdatePaymentMethodAndProviderID(_ context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error) {
 	if p, ok := r.payments[id]; ok {
 		p.PaymentMethodID = &paymentMethodID
@@ -303,6 +329,7 @@ type testProvider struct {
 	confirmErr      error
 	confirmCalledID string
 	parseCalled     bool
+	webhookResponse []byte
 }
 
 func (p *testProvider) Name() domain.PaymentProvider { return p.name }
@@ -330,6 +357,21 @@ func (p *testProvider) Status(_ context.Context, _ uuid.UUID, _ string) (domain.
 func (p *testProvider) ParseWebhook(_ context.Context, _ []byte) (billingapp.WebhookPayload, error) {
 	p.parseCalled = true
 	return billingapp.WebhookPayload{}, nil
+}
+
+func (p *testProvider) InitAddCard(_ context.Context, _ billingapp.InitAddCardRequest) (billingapp.InitAddCardResult, error) {
+	return billingapp.InitAddCardResult{}, errors.New("test provider: InitAddCard not supported")
+}
+
+func (p *testProvider) RemoveCard(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (p *testProvider) WebhookResponse() []byte {
+	if len(p.webhookResponse) > 0 {
+		return p.webhookResponse
+	}
+	return []byte(`{"status":"ok"}`)
 }
 
 func (p *testProvider) ConfirmPayment(_ context.Context, internalPaymentID string) (billingapp.WebhookPayload, error) {
@@ -371,6 +413,7 @@ func newHandlerTestDeps(t *testing.T) *handlerTestDeps {
 		testBeginner{},
 		fakeClock{},
 		nil,
+		"http://localhost",
 		nil,
 	)
 	d.handlers = NewSubscriptionHandlers(d.service, slog.New(slog.DiscardHandler), true)
@@ -659,14 +702,20 @@ func TestSubscriptionHandlers_AddPaymentMethod(t *testing.T) {
 	rec := httptest.NewRecorder()
 	d.handlers.AddPaymentMethod(rec, req)
 
-	assertStatus(t, rec, http.StatusCreated)
+	assertStatus(t, rec, http.StatusOK)
 
-	var resp openapi.PaymentMethod
+	var resp openapi.AddPaymentMethodResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp.Provider != string(domain.ProviderFake) {
-		t.Errorf("expected provider fake, got %s", resp.Provider)
+	if resp.ConfirmUrl != nil {
+		t.Errorf("expected no confirm url, got %v", resp.ConfirmUrl)
+	}
+	if resp.PaymentMethod == nil {
+		t.Fatal("expected payment method in response")
+	}
+	if resp.PaymentMethod.Provider != string(domain.ProviderFake) {
+		t.Errorf("expected provider fake, got %s", resp.PaymentMethod.Provider)
 	}
 }
 
@@ -764,6 +813,26 @@ func TestSubscriptionHandlers_HandlePaymentWebhook_Oversized(t *testing.T) {
 	assertStatus(t, rec, http.StatusOK)
 	if d.provider.parseCalled {
 		t.Errorf("expected provider ParseWebhook not to be called for oversized body")
+	}
+}
+
+func TestSubscriptionHandlers_HandlePaymentWebhook_TkassaResponseBody(t *testing.T) {
+	d := newHandlerTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	d.provider.webhookResponse = []byte("OK")
+
+	body := `{"test":"payload"}`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/webhooks/payment/tkassa", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	d.handlers.HandlePaymentWebhook(rec, req, "tkassa")
+
+	assertStatus(t, rec, http.StatusOK)
+	if rec.Header().Get("Content-Type") != "text/plain; charset=utf-8" {
+		t.Errorf("expected content-type text/plain; charset=utf-8, got %s", rec.Header().Get("Content-Type"))
+	}
+	if rec.Body.String() != "OK" {
+		t.Errorf("expected response body OK, got %q", rec.Body.String())
 	}
 }
 

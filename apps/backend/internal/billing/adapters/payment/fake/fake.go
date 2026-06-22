@@ -170,6 +170,27 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 	}, nil
 }
 
+// InitAddCard is not supported by the fake provider.
+func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (application.InitAddCardResult, error) {
+	_ = ctx
+	_ = req
+	return application.InitAddCardResult{}, errors.New("fake: add card flow is not supported")
+}
+
+// RemoveCard is a no-op for the fake provider.
+func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) error {
+	_ = ctx
+	_ = customerKey
+	_ = cardID
+	return nil
+}
+
+// WebhookResponse returns the fixed success response the fake provider expects
+// HTTP handlers to send back after receiving a webhook.
+func (p *Provider) WebhookResponse() []byte {
+	return []byte(`{"status":"ok"}`)
+}
+
 // ParseWebhook parses the fake provider webhook JSON payload.
 func (p *Provider) ParseWebhook(_ context.Context, payload []byte) (application.WebhookPayload, error) {
 	var raw struct {

@@ -24,6 +24,8 @@ type Config struct {
 	AppBaseURL            string
 	TKassaTerminalKey     string
 	TKassaPassword        string
+	TKassaBaseURL         string
+	TKassaTimeout         time.Duration
 	EncryptionKey         string
 	BillingWorkerInterval time.Duration
 	LogSuccessfulRequests bool
@@ -64,6 +66,7 @@ func Load() (Config, error) {
 		AppBaseURL:        os.Getenv("APP_BASE_URL"),
 		TKassaTerminalKey: os.Getenv("T_KASSA_TERMINAL_KEY"),
 		TKassaPassword:    os.Getenv("T_KASSA_PASSWORD"),
+		TKassaBaseURL:     os.Getenv("T_KASSA_BASE_URL"),
 		EncryptionKey:     os.Getenv("ENCRYPTION_KEY"),
 	}
 
@@ -294,6 +297,17 @@ func Load() (Config, error) {
 		}
 		if cfg.TKassaPassword == "" {
 			return Config{}, fmt.Errorf("T_KASSA_PASSWORD is required when PAYMENT_PROVIDER=tkassa")
+		}
+		cfg.TKassaTimeout = 30 * time.Second
+		if v := os.Getenv("T_KASSA_TIMEOUT"); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid T_KASSA_TIMEOUT %q: %w", v, err)
+			}
+			if d <= 0 {
+				return Config{}, fmt.Errorf("T_KASSA_TIMEOUT must be positive")
+			}
+			cfg.TKassaTimeout = d
 		}
 	}
 

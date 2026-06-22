@@ -194,13 +194,20 @@ func (h *SubscriptionHandlers) AddPaymentMethod(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	pm, err := h.billing.AddPaymentMethod(r.Context(), ownerID, billingapp.AddPaymentMethodRequest{ProviderToken: body.ProviderToken})
+	resp, err := h.billing.AddPaymentMethod(r.Context(), ownerID, billingapp.AddPaymentMethodRequest{ProviderToken: body.ProviderToken})
 	if err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusCreated, paymentMethodResponse(pm))
+	apiResp := openapi.AddPaymentMethodResponse{}
+	if resp.PaymentMethod != nil {
+		apiResp.PaymentMethod = paymentMethodResponse(*resp.PaymentMethod)
+	}
+	if resp.ConfirmURL != "" {
+		apiResp.ConfirmUrl = &resp.ConfirmURL
+	}
+	writeJSON(r.Context(), w, http.StatusOK, apiResp)
 }
 
 // DeletePaymentMethod implements DELETE /subscription/payment-methods/{id}.
@@ -279,6 +286,13 @@ func (h *SubscriptionHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *ht
 		h.logger.ErrorContext(r.Context(), "webhook handling failed",
 			slog.String("provider", provider),
 			slog.String("error", sanitizeError(err)))
+	}
+
+	if responseBody := h.billing.WebhookResponse(); len(responseBody) > 0 {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(responseBody)
+		return
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})

@@ -50,12 +50,14 @@ func (r *PaymentMethodRepository) Create(ctx context.Context, pm domain.PaymentM
 	}
 
 	row, err := r.q().CreatePaymentMethod(ctx, postgres.CreatePaymentMethodParams{
-		UserID:        pgtype.UUID{Bytes: pm.UserID, Valid: true},
-		Provider:      string(pm.Provider),
-		ProviderToken: encryptedToken,
-		TokenHash:     r.encryptor.HashToken(pm.ProviderToken),
-		DisplayMask:   pgtype.Text{String: pm.DisplayMask, Valid: pm.DisplayMask != ""},
-		IsActive:      pm.IsActive,
+		UserID:         pgtype.UUID{Bytes: pm.UserID, Valid: true},
+		Provider:       string(pm.Provider),
+		ProviderToken:  encryptedToken,
+		TokenHash:      r.encryptor.HashToken(pm.ProviderToken),
+		DisplayMask:    pgtype.Text{String: pm.DisplayMask, Valid: pm.DisplayMask != ""},
+		ProviderCardID: pgtype.Text{String: pm.ProviderCardID, Valid: pm.ProviderCardID != ""},
+		ExpDate:        pgtype.Text{String: pm.ExpDate, Valid: pm.ExpDate != ""},
+		IsActive:       pm.IsActive,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -63,6 +65,31 @@ func (r *PaymentMethodRepository) Create(ctx context.Context, pm domain.PaymentM
 			return domain.PaymentMethod{}, application.ErrPaymentMethodAlreadyExists
 		}
 		return domain.PaymentMethod{}, fmt.Errorf("create payment method: %w", err)
+	}
+	return mapPaymentMethod(ctx, row, r.encryptor)
+}
+
+// UpsertByTokenHash inserts a payment method or updates the mutable fields when
+// a row with the same (user_id, token_hash) already exists. The provider token
+// is encrypted at rest before persistence.
+func (r *PaymentMethodRepository) UpsertByTokenHash(ctx context.Context, pm domain.PaymentMethod) (domain.PaymentMethod, error) {
+	encryptedToken, err := r.encryptor.Encrypt(ctx, pm.ProviderToken)
+	if err != nil {
+		return domain.PaymentMethod{}, fmt.Errorf("encrypt provider token: %w", err)
+	}
+
+	row, err := r.q().UpsertPaymentMethodByTokenHash(ctx, postgres.UpsertPaymentMethodByTokenHashParams{
+		UserID:         pgtype.UUID{Bytes: pm.UserID, Valid: true},
+		Provider:       string(pm.Provider),
+		ProviderToken:  encryptedToken,
+		TokenHash:      r.encryptor.HashToken(pm.ProviderToken),
+		DisplayMask:    pgtype.Text{String: pm.DisplayMask, Valid: pm.DisplayMask != ""},
+		ProviderCardID: pgtype.Text{String: pm.ProviderCardID, Valid: pm.ProviderCardID != ""},
+		ExpDate:        pgtype.Text{String: pm.ExpDate, Valid: pm.ExpDate != ""},
+		IsActive:       pm.IsActive,
+	})
+	if err != nil {
+		return domain.PaymentMethod{}, fmt.Errorf("upsert payment method by token hash: %w", err)
 	}
 	return mapPaymentMethod(ctx, row, r.encryptor)
 }
@@ -162,14 +189,16 @@ func mapPaymentMethod(ctx context.Context, row postgres.PaymentMethod, encryptor
 		return domain.PaymentMethod{}, fmt.Errorf("decrypt provider token: %w", err)
 	}
 	return domain.PaymentMethod{
-		ID:            uuid.UUID(row.ID.Bytes),
-		UserID:        uuid.UUID(row.UserID.Bytes),
-		Provider:      domain.PaymentProvider(row.Provider),
-		ProviderToken: providerToken,
-		DisplayMask:   textString(row.DisplayMask),
-		IsActive:      row.IsActive,
-		CreatedAt:     row.CreatedAt.Time,
-		UpdatedAt:     row.UpdatedAt.Time,
+		ID:             uuid.UUID(row.ID.Bytes),
+		UserID:         uuid.UUID(row.UserID.Bytes),
+		Provider:       domain.PaymentProvider(row.Provider),
+		ProviderToken:  providerToken,
+		ProviderCardID: textString(row.ProviderCardID),
+		DisplayMask:    textString(row.DisplayMask),
+		ExpDate:        textString(row.ExpDate),
+		IsActive:       row.IsActive,
+		CreatedAt:      row.CreatedAt.Time,
+		UpdatedAt:      row.UpdatedAt.Time,
 	}, nil
 }
 

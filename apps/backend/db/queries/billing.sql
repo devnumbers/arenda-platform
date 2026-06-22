@@ -63,9 +63,32 @@ INSERT INTO payment_methods (
     provider_token,
     token_hash,
     display_mask,
+    provider_card_id,
+    exp_date,
     is_active
 )
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING *;
+
+-- name: UpsertPaymentMethodByTokenHash :one
+INSERT INTO payment_methods (
+    user_id,
+    provider,
+    provider_token,
+    token_hash,
+    display_mask,
+    provider_card_id,
+    exp_date,
+    is_active
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (user_id, token_hash)
+DO UPDATE SET
+    provider_token = EXCLUDED.provider_token,
+    provider_card_id = EXCLUDED.provider_card_id,
+    display_mask = EXCLUDED.display_mask,
+    exp_date = EXCLUDED.exp_date,
+    updated_at = now()
 RETURNING *;
 
 -- name: GetPaymentMethodByID :one
@@ -107,10 +130,11 @@ INSERT INTO subscription_payments (
     amount_kopecks,
     provider,
     provider_payment_id,
+    payment_url,
     status,
     error_code
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *;
 
 -- name: GetSubscriptionPaymentByID :one
@@ -140,6 +164,12 @@ RETURNING *;
 -- name: UpdateSubscriptionPaymentProviderPaymentID :one
 UPDATE subscription_payments
 SET provider_payment_id = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateSubscriptionPaymentPaymentURL :one
+UPDATE subscription_payments
+SET payment_url = $2, updated_at = now()
 WHERE id = $1
 RETURNING *;
 

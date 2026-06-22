@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,7 @@ type BillingService struct {
 	beginner             transaction.Beginner
 	clock                clock.Clock
 	log                  *slog.Logger
+	callbackBaseURL      string
 }
 
 // NewBillingService creates a new billing application service.
@@ -37,6 +39,7 @@ func NewBillingService(
 	beginner transaction.Beginner,
 	clock clock.Clock,
 	log *slog.Logger,
+	callbackBaseURL string,
 	propertyArchiver PropertyArchiver,
 ) *BillingService {
 	if log == nil {
@@ -52,11 +55,26 @@ func NewBillingService(
 		beginner:             beginner,
 		clock:                clock,
 		log:                  log,
+		callbackBaseURL:      callbackBaseURL,
 	}
 }
 
 func upgradePaymentDescription(name domain.TariffName, period domain.SubscriptionPeriod) string {
 	return fmt.Sprintf("Upgrade to %s (%s)", name, period)
+}
+
+func renewalPaymentDescription(name domain.TariffName, period domain.SubscriptionPeriod) string {
+	return fmt.Sprintf("Subscription renewal %s (%s)", name, period)
+}
+
+func tkassaCallbackURLs(baseURL string, paymentID uuid.UUID) (notification, success, fail, addCardSuccess, addCardFail string) {
+	baseURL = strings.TrimRight(baseURL, "/")
+	notification = baseURL + "/webhooks/payment/tkassa"
+	success = fmt.Sprintf("%s/subscription/payments/%s/success", baseURL, paymentID.String())
+	fail = fmt.Sprintf("%s/subscription/payments/%s/fail", baseURL, paymentID.String())
+	addCardSuccess = baseURL + "/subscription/payment-methods/add-card/success"
+	addCardFail = baseURL + "/subscription/payment-methods/add-card/fail"
+	return
 }
 
 // ListTariffs returns all tariffs ordered by price.
@@ -116,12 +134,16 @@ func (s *BillingService) GetSubscription(ctx context.Context, userID uuid.UUID) 
 	return view, nil
 }
 
-func (s *BillingService) existingUpgradeResponse(ctx context.Context, paymentID uuid.UUID) ChangeTariffResponse {
-	res := ChangeTariffResponse{PaymentID: paymentID}
+func (s *BillingService) existingUpgradeResponse(ctx context.Context, payment domain.SubscriptionPayment) ChangeTariffResponse {
+	res := ChangeTariffResponse{PaymentID: payment.ID}
 	if urlProvider, ok := s.provider.(PaymentURLProvider); ok {
-		if url, err := urlProvider.PaymentURL(ctx, paymentID); err == nil {
+		if url, err := urlProvider.PaymentURL(ctx, payment.ID); err == nil {
 			res.ConfirmURL = url
 		}
+		return res
+	}
+	if payment.PaymentURL != nil && *payment.PaymentURL != "" {
+		res.ConfirmURL = *payment.PaymentURL
 	}
 	return res
 }
@@ -205,7 +227,7 @@ func (s *BillingService) ChangeTariff(ctx context.Context, userID uuid.UUID, req
 					_ = tx.Rollback(ctx)
 					return s.recoverUpgradeProviderReference(ctx, p, newTariff, amount, req.Period, userID, now)
 				}
-				return s.existingUpgradeResponse(ctx, p.ID), nil
+				return s.existingUpgradeResponse(ctx, p), nil
 			}
 		}
 		return s.changeTariffUpgrade(ctx, tx, userID, sub, newTariff, req.Period, amount)
@@ -266,12 +288,19 @@ func (s *BillingService) changeTariffUpgrade(
 		return ChangeTariffResponse{}, fmt.Errorf("commit transaction: %w", err)
 	}
 
+	notification, successURL, failURL, _, _ := tkassaCallbackURLs(s.callbackBaseURL, payment.ID)
 	initRes, err := s.provider.Init(ctx, InitRequest{
-		PaymentID:     payment.ID,
-		AmountKopecks: amount,
-		Period:        period,
-		UserID:        userID,
-		Description:   upgradePaymentDescription(newTariff.Name, period),
+		PaymentID:              payment.ID,
+		AmountKopecks:          amount,
+		Period:                 period,
+		UserID:                 userID,
+		CustomerKey:            userID.String(),
+		Recurrent:              true,
+		OperationInitiatorType: "2",
+		NotificationURL:        notification,
+		SuccessURL:             successURL,
+		FailURL:                failURL,
+		Description:            upgradePaymentDescription(newTariff.Name, period),
 	})
 	if err != nil {
 		s.markPaymentFailedBestEffort(ctx, payment.ID, now)
@@ -360,34 +389,53 @@ func (s *BillingService) ToggleAutoRenew(ctx context.Context, userID uuid.UUID, 
 }
 
 // AddPaymentMethod stores a new inactive payment method for the user.
-func (s *BillingService) AddPaymentMethod(ctx context.Context, userID uuid.UUID, req AddPaymentMethodRequest) (domain.PaymentMethod, error) {
-	pm, err := domain.NewPaymentMethod(
-		userID,
-		s.provider.Name(),
-		req.ProviderToken,
-		maskToken(req.ProviderToken),
-		s.clock.Now().UTC(),
-	)
+// For the fake provider the method is created synchronously from the raw token.
+// For T-Kassa a bank-form flow is initiated and the confirmation URL is returned.
+func (s *BillingService) AddPaymentMethod(ctx context.Context, userID uuid.UUID, req AddPaymentMethodRequest) (AddPaymentMethodResponse, error) {
+	if s.provider.Name() == domain.ProviderFake {
+		pm, err := domain.NewPaymentMethod(
+			userID,
+			s.provider.Name(),
+			req.ProviderToken,
+			maskToken(req.ProviderToken),
+			s.clock.Now().UTC(),
+		)
+		if err != nil {
+			return AddPaymentMethodResponse{}, fmt.Errorf("create payment method: %w", err)
+		}
+
+		tx, err := s.beginner.Begin(ctx)
+		if err != nil {
+			return AddPaymentMethodResponse{}, fmt.Errorf("begin transaction: %w", err)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		pm, err = s.paymentMethods.WithTx(tx).Create(ctx, pm)
+		if err != nil {
+			return AddPaymentMethodResponse{}, fmt.Errorf("save payment method: %w", err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return AddPaymentMethodResponse{}, fmt.Errorf("commit add payment method transaction: %w", err)
+		}
+
+		return AddPaymentMethodResponse{PaymentMethod: &pm}, nil
+	}
+
+	notification, _, _, addCardSuccess, addCardFail := tkassaCallbackURLs(s.callbackBaseURL, uuid.Nil)
+	result, err := s.provider.InitAddCard(ctx, InitAddCardRequest{
+		UserID:          userID,
+		CustomerKey:     userID.String(),
+		CheckType:       "3DSHOLD",
+		SuccessURL:      addCardSuccess,
+		FailURL:         addCardFail,
+		NotificationURL: notification,
+	})
 	if err != nil {
-		return domain.PaymentMethod{}, fmt.Errorf("create payment method: %w", err)
+		return AddPaymentMethodResponse{}, sanitize.Wrap(err, "init add card")
 	}
 
-	tx, err := s.beginner.Begin(ctx)
-	if err != nil {
-		return domain.PaymentMethod{}, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	pm, err = s.paymentMethods.WithTx(tx).Create(ctx, pm)
-	if err != nil {
-		return domain.PaymentMethod{}, fmt.Errorf("save payment method: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.PaymentMethod{}, fmt.Errorf("commit add payment method transaction: %w", err)
-	}
-
-	return pm, nil
+	return AddPaymentMethodResponse{ConfirmURL: result.PaymentURL}, nil
 }
 
 // SetActivePaymentMethod activates the given payment method for the user and
@@ -422,7 +470,26 @@ func (s *BillingService) SetActivePaymentMethod(ctx context.Context, userID, met
 }
 
 // DeletePaymentMethod removes a payment method belonging to the user.
+// For T-Kassa, the card is detached from the provider first; local deletion is
+// skipped if the provider call fails.
 func (s *BillingService) DeletePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error {
+	pm, err := s.paymentMethods.GetByID(ctx, methodID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrPaymentMethodNotFound
+		}
+		return fmt.Errorf("get payment method: %w", err)
+	}
+	if pm.UserID != userID {
+		return ErrPaymentMethodNotFound
+	}
+
+	if s.provider.Name() == domain.ProviderTkassa && pm.ProviderCardID != "" {
+		if err := s.provider.RemoveCard(ctx, userID.String(), pm.ProviderCardID); err != nil {
+			return fmt.Errorf("remove provider card: %w", err)
+		}
+	}
+
 	tx, err := s.beginner.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -520,6 +587,12 @@ func (s *BillingService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 	return nil
 }
 
+// WebhookResponse returns the provider-specific response body that must be sent
+// back after a webhook is handled.
+func (s *BillingService) WebhookResponse() []byte {
+	return s.provider.WebhookResponse()
+}
+
 // HandleWebhook parses and applies a provider webhook payload.
 func (s *BillingService) HandleWebhook(ctx context.Context, providerName string, payload []byte) error {
 	if providerName != string(s.provider.Name()) {
@@ -529,6 +602,31 @@ func (s *BillingService) HandleWebhook(ctx context.Context, providerName string,
 	result, err := s.provider.ParseWebhook(ctx, payload)
 	if err != nil {
 		return fmt.Errorf("parse webhook: %w", err)
+	}
+
+	// Standalone card binding webhook: upsert the saved card and exit.
+	if result.NotificationType == "AddCard" {
+		userID, err := uuid.Parse(result.CustomerKey)
+		if err != nil {
+			return fmt.Errorf("invalid customer key: %w", err)
+		}
+
+		pm, err := s.buildPaymentMethodFromWebhook(userID, result)
+		if err != nil {
+			return err
+		}
+
+		tx, err := s.beginner.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin transaction: %w", err)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		if _, err := s.paymentMethods.WithTx(tx).UpsertByTokenHash(ctx, pm); err != nil {
+			return fmt.Errorf("upsert add card payment method: %w", err)
+		}
+
+		return tx.Commit(ctx)
 	}
 
 	tx, err := s.beginner.Begin(ctx)
@@ -552,16 +650,45 @@ func (s *BillingService) HandleWebhook(ctx context.Context, providerName string,
 		return nil
 	}
 
-	if err := s.applyPaymentResult(ctx, tx, payment, result); err != nil {
-		return err
-	}
+	switch result.Status {
+	case domain.PaymentStatusPending:
+		// AUTHORIZED: credentials received, payment stays pending until CONFIRMED.
+		pm, err := s.upsertPaymentMethodFromWebhook(ctx, tx, payment.UserID, result)
+		if err != nil {
+			return err
+		}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit webhook transaction: %w", err)
-	}
+		if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
+			if _, updateErr := s.subscriptionPayments.WithTx(tx).UpdateProviderPaymentID(ctx, payment.ID, result.ProviderPaymentID); updateErr != nil {
+				return fmt.Errorf("update provider payment id: %w", updateErr)
+			}
+		}
 
-	s.applySubscriptionRenewalAndArchive(ctx, payment)
-	return nil
+		if payment.PaymentMethodID == nil {
+			if _, updateErr := s.subscriptionPayments.WithTx(tx).UpdatePaymentMethodAndProviderID(ctx, payment.ID, pm.ID, result.ProviderPaymentID); updateErr != nil {
+				return fmt.Errorf("update payment method id: %w", updateErr)
+			}
+		}
+
+		return tx.Commit(ctx)
+
+	case domain.PaymentStatusSucceeded, domain.PaymentStatusFailed:
+		if err := s.applyPaymentResult(ctx, tx, payment, result); err != nil {
+			return err
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit webhook transaction: %w", err)
+		}
+
+		if result.Status == domain.PaymentStatusSucceeded {
+			s.applySubscriptionRenewalAndArchive(ctx, payment)
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("unsupported webhook status: %s", result.Status)
+	}
 }
 
 func (s *BillingService) applyPaymentResult(
@@ -585,8 +712,22 @@ func (s *BillingService) applyPaymentResult(
 		// succeeded payment means the saved token is valid and should become the
 		// active method. Subscription renewal/tariff change runs afterwards as a
 		// best-effort step so a domain failure cannot roll back the charge.
-		if payment.PaymentMethodID != nil {
-			if err := s.paymentMethods.WithTx(tx).SetActive(ctx, payment.UserID, *payment.PaymentMethodID); err != nil {
+		methodID := payment.PaymentMethodID
+		if payload.RebillID != "" {
+			pm, err := s.upsertPaymentMethodFromWebhook(ctx, tx, payment.UserID, payload)
+			if err != nil {
+				return err
+			}
+			methodID = &pm.ID
+			if payment.PaymentMethodID == nil {
+				if _, updateErr := s.subscriptionPayments.WithTx(tx).UpdatePaymentMethodAndProviderID(ctx, payment.ID, pm.ID, payload.ProviderPaymentID); updateErr != nil {
+					return fmt.Errorf("update payment method id: %w", updateErr)
+				}
+			}
+		}
+
+		if methodID != nil {
+			if err := s.paymentMethods.WithTx(tx).SetActive(ctx, payment.UserID, *methodID); err != nil {
 				return fmt.Errorf("activate payment method: %w", err)
 			}
 		}
@@ -608,6 +749,34 @@ func maskToken(token string) string {
 		return "****"
 	}
 	return "****" + token[len(token)-4:]
+}
+
+func (s *BillingService) buildPaymentMethodFromWebhook(userID uuid.UUID, payload WebhookPayload) (domain.PaymentMethod, error) {
+	pm, err := domain.NewPaymentMethod(
+		userID,
+		s.provider.Name(),
+		payload.RebillID,
+		payload.Pan,
+		s.clock.Now().UTC(),
+	)
+	if err != nil {
+		return domain.PaymentMethod{}, fmt.Errorf("create payment method from webhook: %w", err)
+	}
+	pm.ProviderCardID = payload.CardID
+	pm.ExpDate = payload.ExpDate
+	return pm, nil
+}
+
+func (s *BillingService) upsertPaymentMethodFromWebhook(ctx context.Context, tx transaction.Tx, userID uuid.UUID, payload WebhookPayload) (domain.PaymentMethod, error) {
+	pm, err := s.buildPaymentMethodFromWebhook(userID, payload)
+	if err != nil {
+		return domain.PaymentMethod{}, err
+	}
+	pm, err = s.paymentMethods.WithTx(tx).UpsertByTokenHash(ctx, pm)
+	if err != nil {
+		return domain.PaymentMethod{}, fmt.Errorf("upsert payment method from webhook: %w", err)
+	}
+	return pm, nil
 }
 
 // saveProviderInitResult persists the provider reference and any newly created
@@ -652,6 +821,14 @@ func (s *BillingService) saveProviderInitResult(ctx context.Context, payment dom
 		}
 	}
 
+	if initRes.PaymentURL != "" {
+		payment, err = s.subscriptionPayments.WithTx(tx).UpdatePaymentURL(ctx, payment.ID, initRes.PaymentURL)
+		if err != nil {
+			s.markPaymentFailedBestEffort(ctx, payment.ID, now)
+			return domain.SubscriptionPayment{}, fmt.Errorf("update payment url: %w", err)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		s.markPaymentFailedBestEffort(ctx, payment.ID, now)
 		return domain.SubscriptionPayment{}, fmt.Errorf("commit provider result transaction: %w", err)
@@ -691,12 +868,19 @@ func (s *BillingService) markPaymentFailedBestEffort(ctx context.Context, paymen
 // pending upgrade payment whose provider_payment_id was lost after a crash.
 // It relies on the provider's idempotent Init to reconstruct the reference.
 func (s *BillingService) recoverUpgradeProviderReference(ctx context.Context, payment domain.SubscriptionPayment, newTariff domain.Tariff, amount int64, period domain.SubscriptionPeriod, userID uuid.UUID, now time.Time) (ChangeTariffResponse, error) {
+	notification, successURL, failURL, _, _ := tkassaCallbackURLs(s.callbackBaseURL, payment.ID)
 	initRes, err := s.provider.Init(ctx, InitRequest{
-		PaymentID:     payment.ID,
-		AmountKopecks: amount,
-		Period:        period,
-		UserID:        userID,
-		Description:   upgradePaymentDescription(newTariff.Name, period),
+		PaymentID:              payment.ID,
+		AmountKopecks:          amount,
+		Period:                 period,
+		UserID:                 userID,
+		CustomerKey:            userID.String(),
+		Recurrent:              true,
+		OperationInitiatorType: "2",
+		NotificationURL:        notification,
+		SuccessURL:             successURL,
+		FailURL:                failURL,
+		Description:            upgradePaymentDescription(newTariff.Name, period),
 	})
 	if err != nil {
 		s.markPaymentFailedBestEffort(ctx, payment.ID, now)
@@ -894,14 +1078,50 @@ func (s *BillingService) renewSubscription(ctx context.Context, sub domain.Subsc
 		return fmt.Errorf("commit pending renewal payment transaction: %w", err)
 	}
 
-	// External provider call happens outside any database transaction.
-	chargeResult, err := s.provider.Charge(ctx, ChargeRequest{
-		PaymentID:     payment.ID,
-		AmountKopecks: amount,
-		Token:         pm.ProviderToken,
+	// External provider calls happen outside any database transaction.
+	notification, successURL, failURL, _, _ := tkassaCallbackURLs(s.callbackBaseURL, payment.ID)
+	initRes, err := s.provider.Init(ctx, InitRequest{
+		PaymentID:              payment.ID,
+		AmountKopecks:          amount,
+		Period:                 period,
+		UserID:                 sub.UserID,
+		CustomerKey:            sub.UserID.String(),
+		Recurrent:              true,
+		OperationInitiatorType: "R",
+		NotificationURL:        notification,
+		SuccessURL:             successURL,
+		FailURL:                failURL,
+		Description:            renewalPaymentDescription(renewalTariff.Name, period),
 	})
 	if err != nil {
-		if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, chargeResult.ProviderPaymentID, now); recErr != nil {
+		if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, "", now); recErr != nil {
+			return fmt.Errorf("provider init error: %w; recovery failed: %w", err, recErr)
+		}
+		s.log.ErrorContext(ctx, "provider init failed; subscription moved to grace",
+			slog.String("subscription_id", sub.ID.String()),
+			slog.String("payment_id", payment.ID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return nil
+	}
+
+	payment, err = s.saveProviderInitResult(ctx, payment, initRes, sub.UserID, now)
+	if err != nil {
+		return fmt.Errorf("save provider init result: %w", err)
+	}
+
+	chargeProviderPaymentID := initRes.ProviderPaymentID
+	chargeResult, err := s.provider.Charge(ctx, ChargeRequest{
+		PaymentID:         payment.ID,
+		AmountKopecks:     amount,
+		Token:             pm.ProviderToken,
+		ProviderPaymentID: chargeProviderPaymentID,
+	})
+	if err != nil {
+		hint := chargeResult.ProviderPaymentID
+		if hint == "" {
+			hint = initRes.ProviderPaymentID
+		}
+		if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, hint, now); recErr != nil {
 			return fmt.Errorf("provider charge error: %w; recovery failed: %w", err, recErr)
 		}
 		s.log.ErrorContext(ctx, "provider charge failed; subscription moved to grace",
@@ -1039,7 +1259,7 @@ func (s *BillingService) recoverRenewalFailure(ctx context.Context, paymentID, s
 
 	// If the provider returned a provider_payment_id together with the error,
 	// persist it now so the status query (and future retries) can use it.
-	if payment.ProviderPaymentID == nil && providerPaymentIDHint != "" {
+	if providerPaymentIDHint != "" && (payment.ProviderPaymentID == nil || *payment.ProviderPaymentID != providerPaymentIDHint) {
 		payment.ProviderPaymentID = &providerPaymentIDHint
 		if _, updateErr := s.subscriptionPayments.WithTx(tx).UpdateProviderPaymentID(ctx, paymentID, providerPaymentIDHint); updateErr != nil {
 			return fmt.Errorf("update provider payment id in recovery: %w", updateErr)

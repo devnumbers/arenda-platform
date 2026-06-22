@@ -1119,12 +1119,12 @@ paths:
             schema:
               $ref: '#/components/schemas/AddPaymentMethodRequest'
       responses:
-        '201':
-          description: Payment method added
+        '200':
+          description: Payment method added or confirmation URL returned
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaymentMethod'
+                $ref: '#/components/schemas/AddPaymentMethodResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1221,14 +1221,15 @@ paths:
               additionalProperties: true
       responses:
         '200':
-          description: Webhook processed
+          description: Webhook processed; response body is provider-specific
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties: true
-        '400':
-          $ref: '#/components/responses/BadRequest'
+            text/plain:
+              schema:
+                type: string
 
 components:
   securitySchemes:
@@ -1403,6 +1404,16 @@ components:
       properties:
         providerToken:
           type: string
+
+    AddPaymentMethodResponse:
+      type: object
+      properties:
+        confirmUrl:
+          type: string
+          nullable: true
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+          nullable: true
 
     TariffsResponse:
       type: object

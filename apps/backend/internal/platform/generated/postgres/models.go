@@ -184,15 +184,17 @@ type Operation struct {
 }
 
 type PaymentMethod struct {
-	ID            pgtype.UUID        `json:"id"`
-	UserID        pgtype.UUID        `json:"user_id"`
-	Provider      string             `json:"provider"`
-	ProviderToken string             `json:"provider_token"`
-	TokenHash     string             `json:"token_hash"`
-	DisplayMask   pgtype.Text        `json:"display_mask"`
-	IsActive      bool               `json:"is_active"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	ID             pgtype.UUID        `json:"id"`
+	UserID         pgtype.UUID        `json:"user_id"`
+	Provider       string             `json:"provider"`
+	ProviderToken  string             `json:"provider_token"`
+	TokenHash      string             `json:"token_hash"`
+	DisplayMask    pgtype.Text        `json:"display_mask"`
+	IsActive       bool               `json:"is_active"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ProviderCardID pgtype.Text        `json:"provider_card_id"`
+	ExpDate        pgtype.Text        `json:"exp_date"`
 }
 
 type Property struct {
@@ -288,6 +290,7 @@ type SubscriptionPayment struct {
 	ErrorCode         pgtype.Text        `json:"error_code"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	PaymentUrl        pgtype.Text        `json:"payment_url"`
 }
 
 type Tariff struct {

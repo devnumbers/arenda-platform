@@ -173,6 +173,21 @@ func (r *SubscriptionPaymentRepository) UpdateProviderPaymentID(ctx context.Cont
 	return mapSubscriptionPayment(row), nil
 }
 
+// UpdatePaymentURL updates the provider payment URL of a subscription payment.
+func (r *SubscriptionPaymentRepository) UpdatePaymentURL(ctx context.Context, id uuid.UUID, paymentURL string) (domain.SubscriptionPayment, error) {
+	row, err := r.q().UpdateSubscriptionPaymentPaymentURL(ctx, postgres.UpdateSubscriptionPaymentPaymentURLParams{
+		ID:         pgtype.UUID{Bytes: id, Valid: true},
+		PaymentUrl: pgtype.Text{String: paymentURL, Valid: true},
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.SubscriptionPayment{}, application.ErrNotFound
+		}
+		return domain.SubscriptionPayment{}, fmt.Errorf("update subscription payment confirm url: %w", err)
+	}
+	return mapSubscriptionPayment(row), nil
+}
+
 // UpdatePaymentMethodAndProviderID updates both the payment method and the
 // provider payment ID of a subscription payment.
 func (r *SubscriptionPaymentRepository) UpdatePaymentMethodAndProviderID(ctx context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error) {
@@ -200,6 +215,7 @@ func mapCreateSubscriptionPaymentParams(payment domain.SubscriptionPayment) post
 		AmountKopecks:     payment.AmountKopecks,
 		Provider:          string(payment.Provider),
 		ProviderPaymentID: textPtr(payment.ProviderPaymentID),
+		PaymentUrl:        textPtr(payment.PaymentURL),
 		Status:            string(payment.Status),
 		ErrorCode:         textPtr(payment.ErrorCode),
 	}
@@ -216,6 +232,7 @@ func mapSubscriptionPayment(row postgres.SubscriptionPayment) domain.Subscriptio
 		AmountKopecks:     row.AmountKopecks,
 		Provider:          domain.PaymentProvider(row.Provider),
 		ProviderPaymentID: stringPtrFromPgtype(row.ProviderPaymentID),
+		PaymentURL:        stringPtrFromPgtype(row.PaymentUrl),
 		Status:            domain.PaymentStatus(row.Status),
 		ErrorCode:         stringPtrFromPgtype(row.ErrorCode),
 		CreatedAt:         row.CreatedAt.Time,

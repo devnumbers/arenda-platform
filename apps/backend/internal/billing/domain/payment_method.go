@@ -18,14 +18,16 @@ const (
 
 // PaymentMethod stores a reusable payment instrument for a user.
 type PaymentMethod struct {
-	ID            uuid.UUID
-	UserID        uuid.UUID
-	Provider      PaymentProvider
-	ProviderToken string
-	DisplayMask   string
-	IsActive      bool
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	Provider       PaymentProvider
+	ProviderToken  string
+	ProviderCardID string
+	DisplayMask    string
+	ExpDate        string
+	IsActive       bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 // NewPaymentMethod creates a new inactive payment method.
