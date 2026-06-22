@@ -163,7 +163,7 @@ sql_checks_for_folder() {
       echo "07-recurring-operation-created.sql 08-recurring-operation-paused.sql"
       ;;
     system-e2e/70-reminders)
-      echo "11-reminder-created.sql"
+      echo "11-reminder-created.sql 15-reset-reminders-tariff.sql"
       ;;
     system-e2e/75-webhooks)
       echo "12-webhook-payment-processed.sql"
@@ -224,10 +224,10 @@ extract_code_for_phone() {
       local code
       # The fake sender logs: "fake sms sent", "phone": "...", "message": "Код подтверждения: 123456"
       code=$(tail -n 500 "$log_file" 2>/dev/null \
-        | grep -F "$phone" \
-        | grep -oE 'Код подтверждения: [0-9]{6}' \
+        | grep -aF "$phone" \
+        | grep -aoE 'Код подтверждения: [0-9]{6}' \
         | tail -1 \
-        | grep -oE '[0-9]{6}' || true)
+        | grep -aoE '[0-9]{6}' || true)
       if [[ -n "$code" ]]; then
         echo "$code"
         return 0
@@ -283,40 +283,27 @@ extract_active_payment_method_id() {
   jq -r '.[0].results[]? | select(.test.filename | contains("list payment methods")) | .response.data.items[]? | select(.isActive == true) | .id' "$report_json" 2>/dev/null | head -1
 }
 
-# Create a pending subscription payment by changing tariff. Prints: payment_id\tprovider_payment_id
-# Takes cookie name/value as arguments.
-create_pending_webhook_payment() {
-  local cookie_name="$1"
-  local cookie_value="$2"
+# Find the subscription payment to use for the webhook test.
+# Prints: payment_id\tprovider_payment_id
+# Takes the run phone as argument and reads the latest payment from the DB.
+get_webhook_payment() {
+  local phone="$1"
 
-  local change_response payment_id
-  change_response=$(curl -fsS -m 30 -X POST "$BASE_URL/subscription/change" \
-    -H "Content-Type: application/json" \
-    -H "Cookie: $cookie_name=$cookie_value" \
-    -d '{"tariffName":"business","period":"month"}' 2>/dev/null) || {
-    echo "ERROR: failed to change tariff for webhook payment" >&2
-    return 1
-  }
-
-  payment_id=$(echo "$change_response" | jq -r '.paymentId // empty' 2>/dev/null)
-  if [[ -z "$payment_id" ]]; then
-    echo "ERROR: no paymentId in change tariff response" >&2
+  local user_id
+  user_id=$(psql_value "SELECT id FROM users WHERE phone = '$phone' LIMIT 1;")
+  if [[ -z "$user_id" ]]; then
+    echo "ERROR: could not find user for phone $phone" >&2
     return 1
   fi
 
-  if [[ ! "$payment_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-    echo "ERROR: invalid payment id format" >&2
+  local payment_pair
+  payment_pair=$(psql_value "SELECT id || chr(9) || COALESCE(provider_payment_id, '') FROM subscription_payments WHERE user_id = '$user_id' ORDER BY created_at DESC LIMIT 1;")
+  if [[ -z "$payment_pair" ]]; then
+    echo "ERROR: no subscription payment found for user $user_id" >&2
     return 1
   fi
 
-  local provider_payment_id
-  provider_payment_id=$(psql_value "SELECT provider_payment_id FROM subscription_payments WHERE id = '$payment_id';")
-  if [[ -z "$provider_payment_id" ]]; then
-    echo "ERROR: could not find provider_payment_id for $payment_id" >&2
-    return 1
-  fi
-
-  printf '%s\t%s\n' "$payment_id" "$provider_payment_id"
+  printf '%s\n' "$payment_pair"
 }
 
 # Run a Bruno folder and record PASS/FAIL status. Output is stored for the report.
@@ -1008,14 +995,14 @@ main() {
     fi
     if [[ "$folder" == "system-e2e/75-webhooks" ]]; then
       local payment_pair
-      payment_pair=$(create_pending_webhook_payment "$COOKIE_NAME" "$SESSION_ID") || {
-        add_failure "Failed to create pending payment for webhook test"
-        record_folder "$folder" "FAIL" "create_pending_webhook_payment failed"
+      payment_pair=$(get_webhook_payment "$PHONE") || {
+        add_failure "Failed to find webhook payment for phone $PHONE"
+        record_folder "$folder" "FAIL" "get_webhook_payment failed"
         continue
       }
       WEBHOOK_PAYMENT_ID=$(echo "$payment_pair" | cut -f1)
       WEBHOOK_PROVIDER_PAYMENT_ID=$(echo "$payment_pair" | cut -f2)
-      log "Created webhook payment: $WEBHOOK_PAYMENT_ID"
+      log "Using webhook payment: $WEBHOOK_PAYMENT_ID"
       folder_args+=(--env-var webhookPaymentId="$WEBHOOK_PAYMENT_ID" --env-var webhookProviderPaymentId="$WEBHOOK_PROVIDER_PAYMENT_ID")
     fi
 

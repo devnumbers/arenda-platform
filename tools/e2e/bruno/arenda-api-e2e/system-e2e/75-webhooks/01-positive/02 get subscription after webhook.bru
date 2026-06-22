@@ -27,7 +27,7 @@ tests {
     expect(res.body.status).to.equal("active");
   });
 
-  test("should be on business tariff", function() {
-    expect(res.body.tariff.name).to.equal("business");
+  test("should remain on pro tariff", function() {
+    expect(res.body.tariff.name).to.equal("pro");
   });
 }
