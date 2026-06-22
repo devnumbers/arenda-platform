@@ -1,0 +1,33 @@
+meta {
+  name: Payment Webhook Succeeded
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/webhooks/payment/fake
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "provider_payment_id": "fake-webhook-e2e-payment-id",
+    "internal_payment_id": "{{webhookPaymentId}}",
+    "status": "succeeded"
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should return ok status", function() {
+    expect(res.body.status).to.equal("ok");
+  });
+}

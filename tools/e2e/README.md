@@ -76,6 +76,7 @@ Folders are numbered and run in order:
 7. `60-recurring-operations`
 8. `70-reminders`
 9. `80-readonly-recovery`
-10. `99-final-cleanup`
+10. `85-webhooks`
+11. `99-final-cleanup`
 
 See `bruno/arenda-api-e2e/system-e2e/README.md` for details.

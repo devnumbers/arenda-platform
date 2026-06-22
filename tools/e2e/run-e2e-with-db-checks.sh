@@ -165,6 +165,9 @@ sql_checks_for_folder() {
     system-e2e/70-reminders)
       echo "11-reminder-created.sql"
       ;;
+    system-e2e/85-webhooks)
+      echo "12-webhook-payment-processed.sql"
+      ;;
     *)
       echo ""
       ;;
@@ -278,6 +281,15 @@ extract_active_payment_method_id() {
     return 1
   fi
   jq -r '.[0].results[]? | select(.test.filename | contains("list payment methods")) | .response.data.items[]? | select(.isActive == true) | .id' "$report_json" 2>/dev/null | head -1
+}
+
+# Extract the payment id created by the webhook setup request.
+extract_webhook_payment_id() {
+  local report_json="$1"
+  if [[ ! -f "$report_json" ]] || ! command -v jq >/dev/null 2>&1; then
+    return 1
+  fi
+  jq -r '.[0].results[]? | select(.test.filename | contains("change tariff business")) | .response.data.paymentId // empty' "$report_json" 2>/dev/null | head -1
 }
 
 # Run a Bruno folder and record PASS/FAIL status. Output is stored for the report.
@@ -514,6 +526,9 @@ derive_sql_vars() {
     11-reminder-created.sql)
       user_id=$(user_id_by_phone "$PHONE")
       echo "-v user_id=$user_id"
+      ;;
+    12-webhook-payment-processed.sql)
+      echo "-v phone=$PHONE -v payment_id=${WEBHOOK_PAYMENT_ID:-}"
       ;;
     *)
       echo ""
@@ -774,6 +789,7 @@ EOF
     "system-e2e/60-recurring-operations"
     "system-e2e/70-reminders"
     "system-e2e/80-readonly-recovery"
+    "system-e2e/85-webhooks"
     "system-e2e/99-final-cleanup"
   )
 
@@ -918,6 +934,7 @@ main() {
     "system-e2e/60-recurring-operations"
     "system-e2e/70-reminders"
     "system-e2e/80-readonly-recovery"
+    "system-e2e/85-webhooks"
   )
 
   local SESSION_ID=""
@@ -948,6 +965,7 @@ main() {
   fi
 
   local active_payment_method_id=""
+  local WEBHOOK_PAYMENT_ID=""
 
   for folder in "${feature_folders[@]}"; do
     # Seed the pro tariff limit before the reminder deep-dive so it can create
@@ -966,6 +984,13 @@ main() {
         active_payment_method_id=$(extract_active_payment_method_id "${BRUNO_REPORT_BASE}-system-e2e-10-subscription.json") || true
         if [[ -n "$active_payment_method_id" ]]; then
           log "Active payment method extracted: $active_payment_method_id"
+        fi
+      fi
+
+      if [[ "$folder" == "system-e2e/85-webhooks" ]]; then
+        WEBHOOK_PAYMENT_ID=$(extract_webhook_payment_id "${BRUNO_REPORT_BASE}-system-e2e-85-webhooks.json") || true
+        if [[ -n "$WEBHOOK_PAYMENT_ID" ]]; then
+          log "Webhook payment id extracted: $WEBHOOK_PAYMENT_ID"
         fi
       fi
 

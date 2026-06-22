@@ -1,0 +1,32 @@
+meta {
+  name: Get Recurring Operation
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/recurring-operations/{{recurringOperationId}}
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+
+  const recurringOpId = bru.getEnvVar("recurringOpId") || bru.getVar("recurringOpId");
+  bru.setVar("recurringOperationId", recurringOpId);
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have matching id", function() {
+    expect(res.body.id).to.equal(bru.getVar("recurringOperationId"));
+  });
+}
