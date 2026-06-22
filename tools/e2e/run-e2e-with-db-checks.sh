@@ -871,6 +871,13 @@ main() {
   log "Phone: $PHONE"
   log "=============================================="
 
+  # Coverage gate: fail fast if collections drift from the backend.
+  if ! "$SCRIPT_DIR/check-bruno-coverage.sh"; then
+    add_failure "Bruno/E2E coverage gate failed"
+    write_report
+    exit 1
+  fi
+
   # Health checks
   if ! check_backend; then
     add_failure "Backend is not reachable at $BASE_URL/tariffs"
