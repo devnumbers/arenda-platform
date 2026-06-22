@@ -1,0 +1,37 @@
+meta {
+  name: Payment Webhook
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/webhooks/payment/{{provider}}
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "provider_payment_id": "fake-webhook-payment-id",
+    "internal_payment_id": "{{paymentId}}",
+    "status": "succeeded"
+  }
+}
+
+script:pre-request {
+  bru.setVar("provider", "fake");
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should return ok status", function() {
+    expect(res.body.status).to.equal("ok");
+  });
+}
