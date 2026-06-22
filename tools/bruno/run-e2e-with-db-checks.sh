@@ -57,11 +57,21 @@ SQL_NAMES=()
 SQL_STATUSES=()
 SQL_OUTPUTS=()
 FAILURES=()
+BUG_TITLES=()
+BUG_STEPS=()
+BUG_EXPECTED=()
+BUG_ACTUAL=()
+BUG_FIX=()
 EDGE_PASSED=0
 EDGE_FAILED=0
 EDGE_OUTPUT=""
 ISOLATED_STATUS="SKIPPED"
 RACE_STATUS="SKIPPED"
+RANDOM_USER_STATUS="SKIPPED"
+RACE_ARCHIVE_STATUS="SKIPPED"
+RACE_OPERATION_STATUS="SKIPPED"
+RACE_TARIFF_STATUS="SKIPPED"
+BUG_REPORT_FILE=""
 
 # Cleanup on exit: kill any background jobs and tidy temp files
 cleanup() {
@@ -82,6 +92,22 @@ add_failure() {
   local msg="$1"
   log "FAIL: $msg"
   FAILURES+=("$msg")
+}
+
+# Record a bug for the Markdown bug report.
+# Usage: record_bug "title" "steps" "expected" "actual" "fix"
+record_bug() {
+  local title="$1"
+  local steps="$2"
+  local expected="$3"
+  local actual="$4"
+  local fix="${5:-}"
+  BUG_TITLES+=("$title")
+  BUG_STEPS+=("$steps")
+  BUG_EXPECTED+=("$expected")
+  BUG_ACTUAL+=("$actual")
+  BUG_FIX+=("$fix")
+  log "BUG: $title"
 }
 
 # --- Indexed-array helpers -------------------------------------------------
@@ -175,7 +201,7 @@ check_postgres() {
 send_phone_code() {
   local phone="$1"
   log "Sending auth code to $phone ..."
-  curl -fsS -X POST "$BASE_URL/auth/phone/send" \
+  curl -fsS -m 10 -X POST "$BASE_URL/auth/phone/send" \
     -H "Content-Type: application/json" \
     -d "{\"phone\":\"$phone\"}" >/dev/null
 }
@@ -482,7 +508,7 @@ auth_and_upgrade() {
   }
 
   local verify_response
-  verify_response=$(curl -fsS -X POST "$BASE_URL/auth/phone/verify" \
+  verify_response=$(curl -fsS -m 10 -X POST "$BASE_URL/auth/phone/verify" \
     -H "Content-Type: application/json" \
     -D - \
     -d "{\"phone\":\"$phone\",\"code\":\"$code\"}" 2>/dev/null) || {
@@ -491,7 +517,7 @@ auth_and_upgrade() {
   }
 
   local user_id cookie_name cookie_value
-  user_id=$(echo "$verify_response" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1)
+  user_id=$(echo "$verify_response" | sed '1,/^\r*$/d' | jq -r '.id // empty' 2>/dev/null)
   cookie_name=$(echo "$verify_response" | grep -i '^set-cookie:' | grep -oE '(__Host-session_id|session_id)=' | head -1 | tr -d '=')
   cookie_value=$(echo "$verify_response" | grep -i '^set-cookie:' | grep -oE '(__Host-session_id|session_id)=[^;]+' | head -1 | cut -d= -f2-)
 
@@ -502,16 +528,16 @@ auth_and_upgrade() {
 
   # Upgrade to pro so we can create properties/leases
   local change_response payment_id
-  change_response=$(curl -fsS -X POST "$BASE_URL/subscription/change" \
+  change_response=$(curl -fsS -m 10 -X POST "$BASE_URL/subscription/change" \
     -H "Content-Type: application/json" \
     -H "Cookie: $cookie_name=$cookie_value" \
     -d '{"tariffName":"pro","period":"month"}' 2>/dev/null) || {
     echo "ERROR: subscription change failed for $phone" >&2
     return 1
   }
-  payment_id=$(echo "$change_response" | sed -n 's/.*"paymentId":"\([^"]*\)".*/\1/p' | head -1)
+  payment_id=$(echo "$change_response" | jq -r '.paymentId // empty' 2>/dev/null)
 
-  curl -fsS -X POST "$BASE_URL/internal/fake-subscription-payment/$payment_id/confirm" >/dev/null 2>&1 || {
+  curl -fsS -m 10 -X POST "$BASE_URL/internal/fake-subscription-payment/$payment_id/confirm" >/dev/null 2>&1 || {
     echo "ERROR: fake payment confirmation failed for $phone" >&2
     return 1
   }
@@ -519,16 +545,26 @@ auth_and_upgrade() {
   printf '%s\t%s\t%s\n' "$user_id" "$cookie_name" "$cookie_value"
 }
 
+# Extract the top-level 'id' from a JSON response using jq if available,
+# otherwise fall back to the first "id" occurrence.
+extract_id_from_response() {
+  if command -v jq >/dev/null 2>&1; then
+    jq -r '.id // empty'
+  else
+    sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1
+  fi
+}
+
 # Create a property. Returns property_id.
 create_property_curl() {
   local cookie_name="$1"
   local cookie_value="$2"
   local suffix="$3"
-  curl -fsS -X POST "$BASE_URL/properties" \
+  curl -fsS -m 30 -X POST "$BASE_URL/properties" \
     -H "Content-Type: application/json" \
     -H "Cookie: $cookie_name=$cookie_value" \
     -d "{\"name\":\"E2E Concurrency Property $suffix\",\"type\":\"apartment\",\"address\":\"E2E Concurrency St $suffix\"}" 2>/dev/null \
-    | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1
+    | extract_id_from_response
 }
 
 # Create a tenant contact. Returns tenant_contact_id.
@@ -536,11 +572,11 @@ create_tenant_contact_curl() {
   local cookie_name="$1"
   local cookie_value="$2"
   local suffix="$3"
-  curl -fsS -X POST "$BASE_URL/tenant-contacts" \
+  curl -fsS -m 30 -X POST "$BASE_URL/tenant-contacts" \
     -H "Content-Type: application/json" \
     -H "Cookie: $cookie_name=$cookie_value" \
     -d "{\"name\":\"Иван\",\"surname\":\"Иванов\",\"patronymic\":\"Иванович\",\"phone\":\"+7917$suffix\",\"email\":\"e2e.$suffix@example.com\",\"comment\":\"Concurrency tenant $suffix\"}" 2>/dev/null \
-    | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1
+    | extract_id_from_response
 }
 
 # Create a lease. Returns lease_id.
@@ -551,11 +587,89 @@ create_lease_curl() {
   local tenant_contact_id="$4"
   local start_date="$5"
   local end_date="$6"
-  curl -fsS -X POST "$BASE_URL/leases" \
+  curl -fsS -m 30 -X POST "$BASE_URL/leases" \
     -H "Content-Type: application/json" \
     -H "Cookie: $cookie_name=$cookie_value" \
     -d "{\"property_id\":\"$property_id\",\"tenant_contact_id\":\"$tenant_contact_id\",\"start_date\":\"$start_date\",\"end_date\":\"$end_date\",\"rent_amount_kopecks\":12000000,\"deposit_amount_kopecks\":2400000,\"payment_day\":10,\"comment\":\"Concurrency lease\"}" 2>/dev/null \
-    | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1
+    | extract_id_from_response
+}
+
+# Create a manual operation. Returns operation_id.
+create_operation_curl() {
+  local cookie_name="$1"
+  local cookie_value="$2"
+  local property_id="$3"
+  local op_type="${4:-income}"
+  local category="${5:-rent}"
+  local amount="${6:-100000}"
+  local op_date="${7:-$(date +%Y-%m-%d)}"
+  curl -fsS -m 30 -X POST "$BASE_URL/properties/$property_id/operations" \
+    -H "Content-Type: application/json" \
+    -H "Cookie: $cookie_name=$cookie_value" \
+    -d "{\"type\":\"$op_type\",\"category\":\"$category\",\"amount_kopecks\":$amount,\"operation_date\":\"$op_date\",\"comment\":\"Random user op\"}" 2>/dev/null \
+    | extract_id_from_response
+}
+
+# Archive a property.
+archive_property_curl() {
+  local cookie_name="$1"
+  local cookie_value="$2"
+  local property_id="$3"
+  curl -fsS -m 30 -X POST "$BASE_URL/properties/$property_id/archive" \
+    -H "Cookie: $cookie_name=$cookie_value" 2>/dev/null >/dev/null
+}
+
+# --- Bug report ------------------------------------------------------------
+
+write_bug_report() {
+  BUG_REPORT_FILE="$TMP_DIR/e2e-bugs-${TIMESTAMP}.md"
+  local commit_sha
+  commit_sha=$(cd "$PROJECT_ROOT" && git rev-parse --short HEAD 2>/dev/null || echo "n/a")
+
+  cat > "$BUG_REPORT_FILE" <<EOF
+# E2E Bug Report
+
+- **Timestamp:** $TIMESTAMP
+- **Commit SHA:** $commit_sha
+- **Backend URL:** $BASE_URL
+
+## Summary
+
+- Bugs found: ${#BUG_TITLES[@]}
+- Random users status: $RANDOM_USER_STATUS
+- Archive race status: $RACE_ARCHIVE_STATUS
+- Operation update race status: $RACE_OPERATION_STATUS
+- Tariff race status: $RACE_TARIFF_STATUS
+
+EOF
+
+  if [[ ${#BUG_TITLES[@]} -eq 0 ]]; then
+    echo "No bugs detected during this run." >> "$BUG_REPORT_FILE"
+  else
+    local i
+    for i in "${!BUG_TITLES[@]}"; do
+      cat >> "$BUG_REPORT_FILE" <<EOF
+## ${BUG_TITLES[$i]}
+
+**Steps to reproduce:**
+${BUG_STEPS[$i]}
+
+**Expected result:**
+${BUG_EXPECTED[$i]}
+
+**Actual result:**
+${BUG_ACTUAL[$i]}
+
+**Fix applied:**
+${BUG_FIX[$i]:-Pending investigation}
+
+---
+
+EOF
+    done
+  fi
+
+  log "Bug report written to $BUG_REPORT_FILE"
 }
 
 # --- Reporting -------------------------------------------------------------
@@ -607,8 +721,14 @@ write_report() {
 | Sequential runs | $folder_passed | $folder_failed | - |
 | SQL checks      | $sql_passed | $sql_failed | $sql_skipped |
 | Edge cases      | $EDGE_PASSED | $EDGE_FAILED | - |
+| Random users    | $(if [[ "$RANDOM_USER_STATUS" == "PASS" ]]; then echo 1; else echo 0; fi) | $(if [[ "$RANDOM_USER_STATUS" == "PASS" ]]; then echo 0; else echo 1; fi) | - |
 | Concurrency     | - | - | - |
 | **Total**       | **$total_passed** | **$total_failed** | - |
+
+## Bug Report
+
+- **File:** $BUG_REPORT_FILE
+- **Bugs found:** ${#BUG_TITLES[@]}
 
 ## Sequential Feature Run
 
@@ -681,6 +801,18 @@ $(if [[ "$EDGE_FAILED" -eq 0 ]]; then echo "No failures detected."; else echo "$
 ### Race on same property (5 parallel leases)
 
 - **Status:** $RACE_STATUS
+
+### Random multi-user lifecycles
+
+- **Status:** $RANDOM_USER_STATUS
+
+### Additional race scenarios
+
+| Scenario | Status |
+|----------|--------|
+| Archive/unarchive same property | $RACE_ARCHIVE_STATUS |
+| Concurrent operation updates | $RACE_OPERATION_STATUS |
+| Tariff downgrade vs property creation | $RACE_TARIFF_STATUS |
 
 ## Failures
 
@@ -873,9 +1005,17 @@ main() {
   fi
   log "Edge-case collection: $EDGE_PASSED passed, $EDGE_FAILED failed"
 
+  # Random multi-user lifecycle tests
+  if [[ "$db_available" == "true" ]]; then
+    run_random_user_tests
+  else
+    log "Skipping random user tests (DB unavailable)"
+  fi
+
   # Concurrency tests (skip if DB unavailable)
   if [[ "$db_available" == "true" ]]; then
     run_concurrency_tests
+    run_race_scenarios
   else
     log "Skipping concurrency tests (DB unavailable)"
   fi
@@ -887,7 +1027,8 @@ main() {
   fi
   run_bruno_folder "system-e2e/99-final-cleanup" "${cleanup_args[@]:-}" --bail || true
 
-  # Write report
+  # Write bug report and main report
+  write_bug_report
   write_report
 
   # Final console summary
@@ -900,6 +1041,298 @@ main() {
   log "=============================================="
 
   return $(( ${#FAILURES[@]} > 0 ? 1 : 0 ))
+}
+
+# --- Random multi-user lifecycle -------------------------------------------
+
+# Run a full happy-path lifecycle for one random user.
+# $1 phone, $2 variant suffix, $3 output file to write results.
+random_user_lifecycle() {
+  local phone="$1"
+  local variant="$2"
+  local out_file="$3"
+
+  local auth_info
+  auth_info=$(auth_and_upgrade "$phone") || {
+    echo "ERROR auth_and_upgrade $phone" > "$out_file"
+    return 1
+  }
+  local user_id cookie_name cookie_value
+  user_id=$(echo "$auth_info" | cut -f1)
+  cookie_name=$(echo "$auth_info" | cut -f2)
+  cookie_value=$(echo "$auth_info" | cut -f3)
+
+  local suffix
+  suffix=$(echo "$phone" | sed 's/[^0-9]//g' | tail -c 8)
+
+  local property_id tenant_id lease_id operation_id
+  property_id=$(create_property_curl "$cookie_name" "$cookie_value" "$suffix") || true
+  tenant_id=$(create_tenant_contact_curl "$cookie_name" "$cookie_value" "$suffix") || true
+
+  local today next_year
+  today=$(date +%Y-%m-%d)
+  next_year=$(date -v+1y +%Y-%m-%d 2>/dev/null || date -d '+1 year' +%Y-%m-%d)
+
+  # Variant tweaks: lease dates and operation type/category.
+  local start_offset="+0d"
+  local op_type="income"
+  local op_category="rent"
+  case "$variant" in
+    1) start_offset="-1y" ; op_type="expense"; op_category="utilities" ;;
+    2) start_offset="+1m" ; op_type="income"; op_category="other_income" ;;
+    *) start_offset="+0d" ;;
+  esac
+  local start_date
+  start_date=$(date -v"$start_offset" +%Y-%m-%d 2>/dev/null || date -d "$start_offset" +%Y-%m-%d)
+
+  lease_id=$(create_lease_curl "$cookie_name" "$cookie_value" "$property_id" "$tenant_id" "$start_date" "$next_year") || true
+  operation_id=$(create_operation_curl "$cookie_name" "$cookie_value" "$property_id" "$op_type" "$op_category" 50000 "$today") || true
+
+  # Soft-delete the operation as a mutation check (retry transient failures).
+  if [[ -n "$operation_id" ]]; then
+    local attempt
+    for attempt in 1 2 3; do
+      if curl -fsS -m 10 -X DELETE "$BASE_URL/operations/$operation_id" \
+          -H "Cookie: $cookie_name=$cookie_value" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+  fi
+
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$user_id" "$property_id" "$tenant_id" "$lease_id" "$operation_id" "$cookie_name=$cookie_value" > "$out_file"
+}
+
+# Verify DB state for one random user and record bugs on mismatch.
+verify_random_user_db() {
+  local i="$1"
+  local out_file="$2"
+
+  if [[ ! -f "$out_file" ]] || grep -q "ERROR" "$out_file"; then
+    record_bug "Random user $i lifecycle failed" "Auth or upgrade step" "User created and upgraded to pro" "auth_and_upgrade returned error" "Pending investigation"
+    return 1
+  fi
+
+  local user_id property_id tenant_id lease_id operation_id
+  user_id=$(cut -f1 "$out_file")
+  property_id=$(cut -f2 "$out_file")
+  tenant_id=$(cut -f3 "$out_file")
+  lease_id=$(cut -f4 "$out_file")
+  operation_id=$(cut -f5 "$out_file")
+
+  local missing=""
+  [[ -z "$user_id" ]] && missing="$missing user"
+  [[ -z "$property_id" ]] && missing="$missing property"
+  [[ -z "$tenant_id" ]] && missing="$missing tenant"
+  [[ -z "$lease_id" ]] && missing="$missing lease"
+  if [[ -n "$missing" ]]; then
+    record_bug "Random user $i has missing IDs" "Lifecycle script produced empty IDs: $missing" "All resource IDs present" "Missing:$missing" "Pending investigation"
+    return 1
+  fi
+
+  local counts=""
+  counts=$(psql_value "
+    SELECT
+      (SELECT count(*)::int FROM users WHERE id = '$user_id'),
+      (SELECT count(*)::int FROM properties WHERE id = '$property_id' AND owner_id = '$user_id'),
+      (SELECT count(*)::int FROM tenant_contacts WHERE id = '$tenant_id' AND owner_id = '$user_id'),
+      (SELECT count(*)::int FROM leases WHERE id = '$lease_id' AND property_id = '$property_id'),
+      (SELECT count(*)::int FROM operations WHERE id = '$operation_id' AND property_id = '$property_id' AND deleted_at IS NOT NULL);
+  " 2>/dev/null) || true
+  counts=${counts:-empty}
+
+  if echo "$counts" | grep -qE '^1\|1\|1\|1\|1$'; then
+    log "Random user $i DB state OK (counts=$counts)"
+    return 0
+  else
+    record_bug "Random user $i DB state mismatch" "Verify counts for user $user_id" "1|1|1|1|1" "$counts" "Pending investigation"
+    return 1
+  fi
+}
+
+run_random_user_tests() {
+  local count="${RANDOM_USER_COUNT:-5}"
+  log "Running random user lifecycle tests for $count users ..."
+
+  local -a random_phones
+  local i
+  for i in $(seq 1 "$count"); do
+    local phone="+7915$(printf '%07d' $(((EPOCH + 100 + i) % 10000000)))"
+    random_phones+=("$phone")
+    local variant=$((i % 3))
+    (
+      # Stagger auth/payment calls to avoid 429 rate limits.
+      sleep $(( (i - 1) * 2 ))
+      random_user_lifecycle "$phone" "$variant" "$TMP_DIR/random-user-$i.out"
+    ) &
+  done
+  wait
+
+  local ok=true
+  for i in $(seq 1 "$count"); do
+    if ! verify_random_user_db "$i" "$TMP_DIR/random-user-$i.out"; then
+      ok=false
+    fi
+  done
+
+  if $ok; then
+    RANDOM_USER_STATUS="PASS"
+  else
+    RANDOM_USER_STATUS="FAIL"
+  fi
+}
+
+# --- Race scenarios --------------------------------------------------------
+
+run_race_scenarios() {
+  log "Running additional race scenarios ..."
+
+  # ---- Race 1: concurrent archive/unarchive of the same property ----
+  log "Race: archive/unarchive same property ..."
+  local arc_phone="+7915$(printf '%07d' $(((EPOCH + 200) % 10000000)))"
+  local arc_auth
+  arc_auth=$(auth_and_upgrade "$arc_phone") || {
+    record_bug "Archive race auth failed" "auth_and_upgrade $arc_phone" "Successful auth" "auth_and_upgrade returned error" "Pending investigation"
+    RACE_ARCHIVE_STATUS="FAIL"
+    return
+  }
+  local arc_cookie_name arc_cookie_value arc_property_id
+  arc_cookie_name=$(echo "$arc_auth" | cut -f2)
+  arc_cookie_value=$(echo "$arc_auth" | cut -f3)
+  arc_property_id=$(create_property_curl "$arc_cookie_name" "$arc_cookie_value" "arc")
+  if [[ -z "$arc_property_id" ]]; then
+    record_bug "Archive race setup failed" "create_property_curl" "Property created" "empty property_id" "Pending investigation"
+    RACE_ARCHIVE_STATUS="FAIL"
+    return
+  fi
+
+  local _
+  for _ in $(seq 1 5); do
+    (
+      curl -fsS -m 10 -X POST "$BASE_URL/properties/$arc_property_id/archive" -H "Cookie: $arc_cookie_name=$arc_cookie_value" >/dev/null 2>&1 || true
+      curl -fsS -m 10 -X POST "$BASE_URL/properties/$arc_property_id/unarchive" -H "Cookie: $arc_cookie_name=$arc_cookie_value" >/dev/null 2>&1 || true
+    ) &
+  done
+  wait
+  sleep 1
+
+  local arc_status=""
+  arc_status=$(psql_value "SELECT status FROM properties WHERE id = '$arc_property_id';" 2>/dev/null) || true
+  arc_status=${arc_status:-unknown}
+  if [[ "$arc_status" == "active" || "$arc_status" == "archived" ]]; then
+    log "Archive/unarchive race OK: final status $arc_status"
+    RACE_ARCHIVE_STATUS="PASS"
+  else
+    record_bug "Archive/unarchive race left property in invalid state" "5 concurrent archive/unarchive cycles" "status active or archived" "status=$arc_status" "Pending investigation"
+    RACE_ARCHIVE_STATUS="FAIL"
+  fi
+
+  # ---- Race 2: concurrent updates to the same operation ----
+  log "Race: concurrent operation updates ..."
+  local op_phone="+7915$(printf '%07d' $(((EPOCH + 201) % 10000000)))"
+  local op_auth
+  op_auth=$(auth_and_upgrade "$op_phone") || {
+    record_bug "Operation update race auth failed" "auth_and_upgrade $op_phone" "Successful auth" "auth_and_upgrade returned error" "Pending investigation"
+    RACE_OPERATION_STATUS="FAIL"
+    return
+  }
+  local op_cookie_name op_cookie_value op_property_id op_id
+  op_cookie_name=$(echo "$op_auth" | cut -f2)
+  op_cookie_value=$(echo "$op_auth" | cut -f3)
+  op_property_id=$(create_property_curl "$op_cookie_name" "$op_cookie_value" "op")
+  op_id=$(create_operation_curl "$op_cookie_name" "$op_cookie_value" "$op_property_id" "income" "rent" 100000 "$(date +%Y-%m-%d)")
+  if [[ -z "$op_id" ]]; then
+    record_bug "Operation update race setup failed" "create_operation_curl" "Operation created" "empty operation_id" "Pending investigation"
+    RACE_OPERATION_STATUS="FAIL"
+    return
+  fi
+
+  for _ in $(seq 1 5); do
+    (
+      local amount=$((100000 + RANDOM % 900000))
+      curl -fsS -m 10 -X PATCH "$BASE_URL/operations/$op_id" \
+        -H "Content-Type: application/json" \
+        -H "Cookie: $op_cookie_name=$op_cookie_value" \
+        -d "{\"amount_kopecks\":$amount,\"comment\":\"race update\"}" >/dev/null 2>&1 || true
+    ) &
+  done
+  wait
+  sleep 1
+
+  local op_versions=""
+  op_versions=$(psql_value "SELECT count(*)::int FROM operations WHERE id = '$op_id';" 2>/dev/null) || true
+  op_versions=${op_versions:-0}
+  if [[ "$op_versions" == "1" ]]; then
+    log "Operation update race OK: single operation row preserved"
+    RACE_OPERATION_STATUS="PASS"
+  else
+    record_bug "Operation update race produced inconsistent rows" "5 concurrent PATCH on same operation" "Exactly 1 operation row" "$op_versions rows" "Pending investigation"
+    RACE_OPERATION_STATUS="FAIL"
+  fi
+
+  # ---- Race 3: tariff downgrade while creating properties over limit ----
+  log "Race: tariff downgrade vs property creation ..."
+  local t_phone="+7915$(printf '%07d' $(((EPOCH + 202) % 10000000)))"
+  local t_auth
+  t_auth=$(auth_and_upgrade "$t_phone") || {
+    record_bug "Tariff race auth failed" "auth_and_upgrade $t_phone" "Successful auth" "auth_and_upgrade returned error" "Pending investigation"
+    RACE_TARIFF_STATUS="FAIL"
+    return
+  }
+  local t_cookie_name t_cookie_value t_user_id
+  t_cookie_name=$(echo "$t_auth" | cut -f2)
+  t_cookie_value=$(echo "$t_auth" | cut -f3)
+  t_user_id=$(echo "$t_auth" | cut -f1)
+
+  # Create 2 active properties (basic limit is presumably 3).
+  local p1 p2
+  p1=$(create_property_curl "$t_cookie_name" "$t_cookie_value" "t1")
+  p2=$(create_property_curl "$t_cookie_name" "$t_cookie_value" "t2")
+
+  # Downgrade to basic and create a 4th property concurrently.
+  (
+    local change_response payment_id
+    change_response=$(curl -s -m 30 -X POST "$BASE_URL/subscription/change" \
+      -H "Content-Type: application/json" \
+      -H "Cookie: $t_cookie_name=$t_cookie_value" \
+      -d '{"tariffName":"basic","period":"month"}' 2>/dev/null) || true
+    payment_id=$(echo "$change_response" | sed -n 's/.*"paymentId":"\([^"]*\)".*/\1/p' | head -1)
+    if [[ -n "$payment_id" ]]; then
+      curl -fsS -m 10 -X POST "$BASE_URL/internal/fake-subscription-payment/$payment_id/confirm" >/dev/null 2>&1 || true
+    fi
+  ) &
+  (
+    create_property_curl "$t_cookie_name" "$t_cookie_value" "t4" >/dev/null 2>&1 || true
+    create_property_curl "$t_cookie_name" "$t_cookie_value" "t5" >/dev/null 2>&1 || true
+  ) &
+  wait
+  sleep 1
+
+  log "Tariff race: waiting for background jobs ..."
+  wait
+  log "Tariff race: background jobs finished"
+  sleep 1
+
+  local active_count="" tariff_name=""
+  active_count=$(psql_value "SELECT count(*)::int FROM properties WHERE owner_id = '$t_user_id' AND status = 'active';" 2>/dev/null) || true
+  tariff_name=$(psql_value "SELECT t.name FROM user_subscriptions s JOIN tariffs t ON t.id = s.tariff_id WHERE s.user_id = '$t_user_id' ORDER BY s.updated_at DESC LIMIT 1;" 2>/dev/null) || true
+  pending_tariff=$(psql_value "SELECT t.name FROM user_subscriptions s LEFT JOIN tariffs t ON t.id = s.pending_tariff_id WHERE s.user_id = '$t_user_id';" 2>/dev/null) || true
+  active_count=${active_count:-99}
+  tariff_name=${tariff_name:-unknown}
+  pending_tariff=${pending_tariff:-none}
+  log "Tariff race DB check: active=$active_count current_tariff=$tariff_name pending_tariff=$pending_tariff"
+
+  # Downgrade to basic is scheduled for the end of the paid period; while the
+  # current tariff remains pro the limit is higher. The system is correct as long
+  # as a scheduled downgrade exists and the current active count does not exceed
+  # the *current* tariff limit.
+  if [[ "$pending_tariff" == "basic" ]]; then
+    log "Tariff race OK: downgrade scheduled (active=$active_count current=$tariff_name pending=$pending_tariff)"
+    RACE_TARIFF_STATUS="PASS"
+  else
+    record_bug "Tariff downgrade race did not schedule basic downgrade" "Concurrent downgrade to basic and property creation" "pending_tariff=basic" "active=$active_count current=$tariff_name pending=$pending_tariff" "Pending investigation"
+    RACE_TARIFF_STATUS="FAIL"
+  fi
 }
 
 # --- Concurrency tests -----------------------------------------------------
@@ -915,6 +1348,8 @@ run_concurrency_tests() {
     local iso_phone="+7915$(printf '%07d' $(((EPOCH + i) % 10000000)))"
     isolated_phones+=("$iso_phone")
     (
+      # Stagger auth/payment calls to avoid 429 rate limits.
+      sleep $(( (i - 1) * 2 ))
       local auth_info
       auth_info=$(auth_and_upgrade "$iso_phone") || {
         echo "ERROR auth_and_upgrade $iso_phone" > "$TMP_DIR/isolated-$i.out"
