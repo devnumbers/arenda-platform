@@ -284,7 +284,7 @@ extract_active_payment_method_id() {
 }
 
 # Create a pending subscription payment by changing tariff. Prints: payment_id\tprovider_payment_id
-# Uses the global SESSION_ID, COOKIE_NAME, BASE_URL.
+# Takes cookie name/value as arguments.
 create_pending_webhook_payment() {
   local cookie_name="$1"
   local cookie_value="$2"
@@ -301,6 +301,11 @@ create_pending_webhook_payment() {
   payment_id=$(echo "$change_response" | jq -r '.paymentId // empty' 2>/dev/null)
   if [[ -z "$payment_id" ]]; then
     echo "ERROR: no paymentId in change tariff response" >&2
+    return 1
+  fi
+
+  if [[ ! "$payment_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+    echo "ERROR: invalid payment id format" >&2
     return 1
   fi
 
@@ -997,7 +1002,7 @@ main() {
       run_sql_check "00-seed-reminders-tariff.sql" || true
     fi
 
-    local folder_args=("${session_args[@]:-}")
+    local folder_args=(${session_args[@]+"${session_args[@]}"})
     if [[ "$folder" == "system-e2e/99-final-cleanup" && -n "$active_payment_method_id" ]]; then
       folder_args+=(--env-var activePaymentMethodId="$active_payment_method_id")
     fi
@@ -1010,11 +1015,11 @@ main() {
       }
       WEBHOOK_PAYMENT_ID=$(echo "$payment_pair" | cut -f1)
       WEBHOOK_PROVIDER_PAYMENT_ID=$(echo "$payment_pair" | cut -f2)
-      log "Created webhook payment: $WEBHOOK_PAYMENT_ID / $WEBHOOK_PROVIDER_PAYMENT_ID"
+      log "Created webhook payment: $WEBHOOK_PAYMENT_ID"
       folder_args+=(--env-var webhookPaymentId="$WEBHOOK_PAYMENT_ID" --env-var webhookProviderPaymentId="$WEBHOOK_PROVIDER_PAYMENT_ID")
     fi
 
-    if run_bruno_folder "$folder" "${folder_args[@]:-}" --bail; then
+    if run_bruno_folder "$folder" ${folder_args[@]+"${folder_args[@]}"} --bail; then
       if [[ "$folder" == "system-e2e/10-subscription" ]]; then
         active_payment_method_id=$(extract_active_payment_method_id "${BRUNO_REPORT_BASE}-system-e2e-10-subscription.json") || true
         if [[ -n "$active_payment_method_id" ]]; then
