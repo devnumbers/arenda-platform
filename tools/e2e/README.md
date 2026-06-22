@@ -44,14 +44,19 @@ From the repository root:
 ```
 
 The runner will:
-1. Check backend and PostgreSQL health.
-2. Send a fake SMS code and extract it from the backend log.
-3. Run `system-e2e` sequentially with SQL checks after each folder.
-4. Run `system-e2e-edge` (expected non-2xx responses are counted separately).
-5. Run random-user lifecycles and concurrency/race scenarios.
-6. Write reports to:
+1. Run the coverage gate to ensure every public backend endpoint is covered by
+   at least one Bruno request.
+2. Check backend and PostgreSQL health.
+3. Send a fake SMS code and extract it from the backend log.
+4. Run `system-e2e` sequentially with SQL checks after each folder.
+5. Run `system-e2e-edge` (expected non-2xx responses are counted separately).
+6. Run random-user lifecycles and concurrency/race scenarios.
+7. Write reports to:
    - `.tmp/e2e-report-*.md`
    - `.tmp/e2e-bugs-*.md`
+
+Test phone numbers are randomized per run so repeated local executions don't
+reuse leftover users/subscriptions from earlier runs.
 
 ## Run a single Bruno folder manually
 

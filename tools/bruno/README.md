@@ -13,9 +13,15 @@ Arenda backend endpoints.
   - `recurring-operations`
   - `tenant-contacts`
   - `reminders`
+  - `subscription`
+  - `webhooks`
 
 Each request has a minimal assertion so it can be run on its own from the
 Bruno app or the Bruno CLI.
+
+A separate coverage gate (`tools/e2e/check-bruno-coverage.sh`) verifies that
+every public backend endpoint has a matching request in at least one of the
+Bruno collections.
 
 ## E2E tests
 

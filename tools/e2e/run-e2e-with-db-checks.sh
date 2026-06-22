@@ -45,7 +45,10 @@ PGDATABASE="${POSTGRES_DB:-arenda}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 EPOCH=$(date +%s)
 # Russian mobile numbers must match ^\+79\d{9}$ (12 chars total).
-PHONE="+7915$(printf '%07d' $((EPOCH % 10000000)))"
+# Use a random 7-digit base per run so repeated local runs don't collide with
+# leftover users/subscriptions in the persistent Docker database.
+PHONE_BASE=$(( (RANDOM * 1000 + RANDOM) % 9000000 + 1000000 ))
+PHONE="+7915$(printf '%07d' $PHONE_BASE)"
 REPORT_FILE="$TMP_DIR/e2e-report-${TIMESTAMP}.md"
 BRUNO_REPORT_BASE="$TMP_DIR/bruno-report-${TIMESTAMP}"
 
@@ -1035,7 +1038,7 @@ main() {
   done
 
   # Edge-case collection uses a fresh user so its auth flow gets a valid unused code.
-  local EDGE_PHONE="+7915$(printf '%07d' $(((EPOCH + 100) % 10000000)))"
+  local EDGE_PHONE="+7915$(printf '%07d' $(((PHONE_BASE + 100) % 10000000)))"
   local EDGE_CODE=""
   log "Sending auth code for edge-case user: $EDGE_PHONE ..."
   if send_phone_code "$EDGE_PHONE"; then
@@ -1239,7 +1242,7 @@ run_random_user_tests() {
   local -a random_phones
   local i
   for i in $(seq 1 "$count"); do
-    local phone="+7915$(printf '%07d' $(((EPOCH + 100 + i) % 10000000)))"
+    local phone="+7915$(printf '%07d' $(((PHONE_BASE + 100 + i) % 10000000)))"
     random_phones+=("$phone")
     local variant=$((i % 3))
     (
@@ -1271,7 +1274,7 @@ run_race_scenarios() {
 
   # ---- Race 1: concurrent archive/unarchive of the same property ----
   log "Race: archive/unarchive same property ..."
-  local arc_phone="+7915$(printf '%07d' $(((EPOCH + 200) % 10000000)))"
+  local arc_phone="+7915$(printf '%07d' $(((PHONE_BASE + 200) % 10000000)))"
   local arc_auth
   arc_auth=$(auth_and_upgrade "$arc_phone") || {
     record_bug "Archive race auth failed" "auth_and_upgrade $arc_phone" "Successful auth" "auth_and_upgrade returned error" "Pending investigation"
@@ -1311,7 +1314,7 @@ run_race_scenarios() {
 
   # ---- Race 2: concurrent updates to the same operation ----
   log "Race: concurrent operation updates ..."
-  local op_phone="+7915$(printf '%07d' $(((EPOCH + 201) % 10000000)))"
+  local op_phone="+7915$(printf '%07d' $(((PHONE_BASE + 201) % 10000000)))"
   local op_auth
   op_auth=$(auth_and_upgrade "$op_phone") || {
     record_bug "Operation update race auth failed" "auth_and_upgrade $op_phone" "Successful auth" "auth_and_upgrade returned error" "Pending investigation"
@@ -1354,7 +1357,7 @@ run_race_scenarios() {
 
   # ---- Race 3: tariff downgrade while creating properties over limit ----
   log "Race: tariff downgrade vs property creation ..."
-  local t_phone="+7915$(printf '%07d' $(((EPOCH + 202) % 10000000)))"
+  local t_phone="+7915$(printf '%07d' $(((PHONE_BASE + 202) % 10000000)))"
   local t_auth
   t_auth=$(auth_and_upgrade "$t_phone") || {
     record_bug "Tariff race auth failed" "auth_and_upgrade $t_phone" "Successful auth" "auth_and_upgrade returned error" "Pending investigation"
@@ -1427,7 +1430,7 @@ run_concurrency_tests() {
   local -a isolated_phones
   local i
   for i in 1 2 3; do
-    local iso_phone="+7915$(printf '%07d' $(((EPOCH + i) % 10000000)))"
+    local iso_phone="+7915$(printf '%07d' $(((PHONE_BASE + i) % 10000000)))"
     isolated_phones+=("$iso_phone")
     (
       # Stagger auth/payment calls to avoid 429 rate limits.
@@ -1503,7 +1506,7 @@ run_concurrency_tests() {
 
   # ---- Race on same property ----
   log "Launching race test: 5 parallel leases on the same property ..."
-  local race_phone="+7915$(printf '%07d' $(((EPOCH + 10) % 10000000)))"
+  local race_phone="+7915$(printf '%07d' $(((PHONE_BASE + 10) % 10000000)))"
   local race_auth
   race_auth=$(auth_and_upgrade "$race_phone") || {
     add_failure "Race test auth/upgrade failed"
