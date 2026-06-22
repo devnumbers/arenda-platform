@@ -1,0 +1,39 @@
+meta {
+  name: Add Valid Payment Method
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/subscription/payment-methods
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "providerToken": "{{edgeValidToken}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:pre-request {
+  bru.setVar("edgeValidToken", "fake_token_" + Date.now());
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+}

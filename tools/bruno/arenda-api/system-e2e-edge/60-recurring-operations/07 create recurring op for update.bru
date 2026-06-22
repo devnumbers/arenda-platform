@@ -1,0 +1,56 @@
+meta {
+  name: Create Recurring Op For Update
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/properties/{{edgeRecurringPropertyId}}/recurring-operations
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "type": "expense",
+    "category": "repair",
+    "amount_kopecks": 20000,
+    "start_date": "{{edgeRecurringStart}}",
+    "payment_day": 5,
+    "end_date": "{{edgeRecurringEnd}}",
+    "comment": "Edge recurring for update"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:pre-request {
+  const today = new Date();
+  bru.setVar("edgeRecurringStart", today.toISOString().slice(0, 10));
+  const end = new Date();
+  end.setFullYear(end.getFullYear() + 1);
+  bru.setVar("edgeRecurringEnd", end.toISOString().slice(0, 10));
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("edgeRecurringOpId", res.body.id);
+    bru.setVar("edgeRecurringOpId", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+}

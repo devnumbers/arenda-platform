@@ -1,0 +1,40 @@
+meta {
+  name: Create Operation With Negative Amount
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/properties/{{edgeOperationsPropertyId}}/operations
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "type": "expense",
+    "category": "repair",
+    "amount_kopecks": -100,
+    "operation_date": "{{edgeOpDate}}",
+    "comment": "Edge negative amount"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+
+tests {
+  test("should return 400", function() {
+    expect(res.status).to.equal(400);
+  });
+}

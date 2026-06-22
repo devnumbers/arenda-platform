@@ -1,0 +1,37 @@
+meta {
+  name: Change Tariff To Same Tariff
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/subscription/change
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "tariffName": "pro",
+    "period": "month"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+
+tests {
+  test("should return 400 or 409 when already on tariff", function() {
+    expect(res.status).to.be.oneOf([400, 409]);
+  });
+}

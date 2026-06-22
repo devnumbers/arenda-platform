@@ -1,0 +1,41 @@
+meta {
+  name: List Generated Operations
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/properties/{{edgeRecurringPropertyId}}/operations
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:post-response {
+  const items = (res.body && res.body.items) || [];
+  const start = bru.getVar("edgeLeaseStart");
+  const op = items.find(function(item) {
+    return item.operation_date === start;
+  });
+  if (op && op.id) {
+    bru.setEnvVar("edgeHistoricalOperationId", op.id);
+    bru.setVar("edgeHistoricalOperationId", op.id);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have at least one generated operation", function() {
+    expect(res.body.items.length).to.be.at.least(1);
+  });
+}

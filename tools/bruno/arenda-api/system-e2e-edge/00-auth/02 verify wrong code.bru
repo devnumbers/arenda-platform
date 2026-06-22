@@ -1,0 +1,28 @@
+meta {
+  name: Verify With Wrong Code
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/auth/phone/verify
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "phone": "{{phone}}",
+    "code": "000000"
+  }
+}
+
+tests {
+  test("should return 400 or 401", function() {
+    expect(res.status).to.be.oneOf([400, 401]);
+  });
+}

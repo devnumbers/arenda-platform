@@ -1,0 +1,51 @@
+meta {
+  name: Create Lease Start In Past
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/leases
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "property_id": "{{edgeProp3Id}}",
+    "tenant_contact_id": "{{edgeTenantContactId}}",
+    "start_date": "{{edgePastStart}}",
+    "end_date": "{{edgePastEnd}}",
+    "rent_amount_kopecks": 10000000,
+    "deposit_amount_kopecks": 2000000,
+    "payment_day": 20,
+    "comment": "Edge past start"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:pre-request {
+  const today = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - 1);
+  const end = new Date(today.getFullYear() + 1, today.getMonth(), 1);
+  bru.setVar("edgePastStart", start.toISOString().slice(0, 10));
+  bru.setVar("edgePastEnd", end.toISOString().slice(0, 10));
+}
+
+tests {
+  test("should return 400", function() {
+    expect(res.status).to.equal(400);
+  });
+}

@@ -1,0 +1,37 @@
+meta {
+  name: Update Deleted Operation
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{baseUrl}}/operations/{{edgeOperationId}}
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "amount_kopecks": 200000,
+    "comment": "Edge update deleted"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+
+tests {
+  test("should return 404", function() {
+    expect(res.status).to.equal(404);
+  });
+}

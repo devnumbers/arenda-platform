@@ -1,0 +1,43 @@
+meta {
+  name: Change Tariff Pro Setup
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/subscription/change
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "tariffName": "pro",
+    "period": "month"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.paymentId) {
+    bru.setEnvVar("edgePaymentId", res.body.paymentId);
+    bru.setVar("edgePaymentId", res.body.paymentId);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+}

@@ -1,0 +1,41 @@
+meta {
+  name: Update Recurring Op End Date Before Start
+  type: http
+  seq: 8
+}
+
+patch {
+  url: {{baseUrl}}/recurring-operations/{{edgeRecurringOpId}}
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "end_date": "{{edgeInvalidRecurringEnd}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:pre-request {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  bru.setVar("edgeInvalidRecurringEnd", d.toISOString().slice(0, 10));
+}
+
+tests {
+  test("should return 400", function() {
+    expect(res.status).to.equal(400);
+  });
+}

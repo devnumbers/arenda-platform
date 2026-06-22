@@ -1,0 +1,41 @@
+meta {
+  name: Create Reminder For Completed Operation
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/properties/{{edgeRemindersPropertyId}}/operations/{{edgePastOperationId}}/reminders
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "reminder_date": "{{edgeFutureReminderDate}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:pre-request {
+  const d = new Date();
+  d.setDate(d.getDate() + 3);
+  bru.setVar("edgeFutureReminderDate", d.toISOString().slice(0, 10));
+}
+
+tests {
+  test("should return 400 or 409", function() {
+    expect(res.status).to.be.oneOf([400, 409]);
+  });
+}

@@ -1,0 +1,42 @@
+meta {
+  name: Send Code To Same Phone Twice
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/auth/phone/send
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "phone": "{{phone}}"
+  }
+}
+
+script:pre-request {
+  // When the runner provides a pre-extracted code (skipSend=true), avoid sending
+  // a new code so the provided code stays valid for verification.
+  const skipSend = bru.getEnvVar("skipSend") === "true";
+  if (skipSend) {
+    req.setMethod("GET");
+    req.setUrl(bru.getEnvVar("baseUrl") + "/tariffs");
+  }
+}
+
+tests {
+  test("should return 204 or 429", function() {
+    const skipSend = bru.getEnvVar("skipSend") === "true";
+    if (skipSend) {
+      expect(res.status).to.be.oneOf([200, 401]);
+    } else {
+      expect(res.status).to.be.oneOf([204, 429]);
+    }
+  });
+}

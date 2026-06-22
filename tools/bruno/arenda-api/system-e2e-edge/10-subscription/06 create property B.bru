@@ -1,0 +1,49 @@
+meta {
+  name: Create Property B
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/properties
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "name": "{{edgePropBName}}",
+    "type": "apartment",
+    "address": "{{edgePropBAddress}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:pre-request {
+  bru.setVar("edgePropBName", "Edge Prop B " + Date.now());
+  bru.setVar("edgePropBAddress", "Edge St B " + Date.now());
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("edgePropBId", res.body.id);
+    bru.setVar("edgePropBId", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+}

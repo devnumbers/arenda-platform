@@ -1,0 +1,50 @@
+meta {
+  name: Create Active Lease
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/leases
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "property_id": "{{edgePropertyId}}",
+    "tenant_contact_id": "{{edgeTenantContactId}}",
+    "start_date": "{{edgeLeaseStart}}",
+    "end_date": "{{edgeLeaseEnd}}",
+    "rent_amount_kopecks": 12000000,
+    "deposit_amount_kopecks": 2400000,
+    "payment_day": 10,
+    "comment": "Edge active lease"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:pre-request {
+  const today = new Date();
+  const start = new Date(today.getFullYear() - 1, today.getMonth(), 1);
+  const end = new Date(today.getFullYear() + 1, today.getMonth(), 1);
+  bru.setVar("edgeLeaseStart", start.toISOString().slice(0, 10));
+  bru.setVar("edgeLeaseEnd", end.toISOString().slice(0, 10));
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+}

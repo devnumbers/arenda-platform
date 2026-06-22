@@ -1,0 +1,41 @@
+meta {
+  name: Change Lease Start Date Preserve Historical Operations
+  type: http
+  seq: 9
+}
+
+patch {
+  url: {{baseUrl}}/leases/{{edgeHistoricalLeaseId}}
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "start_date": "{{edgeNewLeaseStart}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:pre-request {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth() - 6, 1);
+  bru.setVar("edgeNewLeaseStart", start.toISOString().slice(0, 10));
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+}

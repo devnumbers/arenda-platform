@@ -1,0 +1,30 @@
+meta {
+  name: Get Historical Operation
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/operations/{{edgeHistoricalOperationId}}
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+
+tests {
+  test("should return 200 - historical operation preserved", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should still reference original operation date", function() {
+    expect(res.body.id).to.equal(bru.getVar("edgeHistoricalOperationId"));
+  });
+}

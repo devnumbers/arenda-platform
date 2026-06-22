@@ -1,0 +1,57 @@
+meta {
+  name: Create Future Lease B
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/leases
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "property_id": "{{edgeProp4Id}}",
+    "tenant_contact_id": "{{edgeTenantContactId}}",
+    "start_date": "{{edgeFutureBStart}}",
+    "end_date": "{{edgeFutureBEnd}}",
+    "rent_amount_kopecks": 10000000,
+    "deposit_amount_kopecks": 2000000,
+    "payment_day": 15,
+    "comment": "Edge future lease B"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:pre-request {
+  const today = new Date();
+  const start = new Date(today.getFullYear() + 4, today.getMonth(), 1);
+  const end = new Date(today.getFullYear() + 5, today.getMonth(), 1);
+  bru.setVar("edgeFutureBStart", start.toISOString().slice(0, 10));
+  bru.setVar("edgeFutureBEnd", end.toISOString().slice(0, 10));
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("edgeFutureLeaseBId", res.body.id);
+    bru.setVar("edgeFutureLeaseBId", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+}
