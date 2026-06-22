@@ -38,3 +38,4 @@ order: 1
 * [PRD MVP](./prd-mvp)
 * [Правила реализации MVP](./mvp-implementation-rules)
 * [Локальное нагрузочное тестирование read endpoint'ов](./perf-testing)
+* [План миграции старого Nambers-сервера](./migration/2026-06-22-nambers-server-migration-runbook)
