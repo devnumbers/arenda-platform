@@ -14,7 +14,9 @@ headers {
   content-type: application/json
 }
 
-// paymentId must come from subscription/change tariff
+script:pre-request {
+  // paymentId must come from subscription/change tariff.
+}
 
 body:json {
   {
