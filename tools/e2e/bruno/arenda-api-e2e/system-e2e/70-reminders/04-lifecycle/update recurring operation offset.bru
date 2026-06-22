@@ -1,0 +1,53 @@
+meta {
+  name: Update Recurring Operation Offset
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyIdMain}}/recurring-operations/{{recurringOperationIdOffset}}/reminders
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "reminder_date": "{{futureDate3}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.items && res.body.items.length > 0) {
+    bru.setEnvVar("offsetChangeNewReminderId", res.body.items[0].id);
+    bru.setVar("offsetChangeNewReminderId", res.body.items[0].id);
+    console.log("saved offsetChangeNewReminderId =", res.body.items[0].id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should return new reminders", function() {
+    expect(res.body.items).to.be.an("array");
+    expect(res.body.items.length).to.be.greaterThan(0);
+  });
+
+  test("old reminders should be replaced", function() {
+    const oldId = bru.getEnvVar("offsetChangeOldReminderId") || bru.getVar("offsetChangeOldReminderId");
+    const found = res.body.items.some(r => r.id === oldId);
+    expect(found).to.equal(false);
+  });
+}

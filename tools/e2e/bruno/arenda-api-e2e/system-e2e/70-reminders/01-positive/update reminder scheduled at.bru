@@ -1,0 +1,42 @@
+meta {
+  name: Update Reminder Scheduled At
+  type: http
+  seq: 11
+}
+
+patch {
+  url: {{baseUrl}}/reminders/{{reminderIdMain}}
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "reminder_date": "{{futureDate10}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have same id", function() {
+    expect(res.body.id).to.equal(bru.getEnvVar("reminderIdMain") || bru.getVar("reminderIdMain"));
+  });
+
+  test("should still be pending", function() {
+    expect(res.body.status).to.equal("pending");
+  });
+}

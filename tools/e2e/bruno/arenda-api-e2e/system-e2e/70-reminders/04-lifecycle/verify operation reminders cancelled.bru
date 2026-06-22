@@ -1,0 +1,24 @@
+meta {
+  name: Verify Operation Reminders Cancelled
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/properties/{{propertyIdMain}}/operations/{{operationIdToDelete}}/reminders
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 404 (operation deleted)", function() {
+    expect(res.status).to.equal(404);
+  });
+}

@@ -1,0 +1,39 @@
+meta {
+  name: Update Lease End Date
+  type: http
+  seq: 8
+}
+
+patch {
+  url: {{baseUrl}}/leases/{{leaseIdLifecycle}}
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "end_date": "{{futureDate45}}",
+    "comment": "E2E lease lifecycle updated"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have updated end date", function() {
+    expect(res.body.end_date).to.equal(bru.getVar("futureDate45"));
+  });
+}

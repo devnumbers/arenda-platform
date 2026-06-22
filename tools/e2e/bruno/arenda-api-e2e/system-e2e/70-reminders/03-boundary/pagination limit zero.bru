@@ -1,0 +1,29 @@
+meta {
+  name: Pagination Limit Zero
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/reminders?limit=0&offset=0
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should return array with at most one item", function() {
+    expect(res.body.items).to.be.an("array");
+    expect(res.body.items.length).to.be.at.most(1);
+  });
+}

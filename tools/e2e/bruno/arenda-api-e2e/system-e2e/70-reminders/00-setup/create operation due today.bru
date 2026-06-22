@@ -1,0 +1,50 @@
+meta {
+  name: Create Operation Due Today
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyIdMain}}/operations
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "type": "{{operationType}}",
+    "category": "{{operationCategory}}",
+    "amount_kopecks": {{operationAmountKopecks}},
+    "operation_date": "{{todayDate}}",
+    "comment": "E2E operation due today"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("operationIdDueToday", res.body.id);
+    bru.setVar("operationIdDueToday", res.body.id);
+    console.log("saved operationIdDueToday =", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have operation id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+}

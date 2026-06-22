@@ -1,0 +1,46 @@
+meta {
+  name: Create Reminder To Delete Operation
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyIdMain}}/operations/{{operationIdToDelete}}/reminders
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "reminder_date": "{{futureDate5}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("reminderIdToDeleteOp", res.body.id);
+    bru.setVar("reminderIdToDeleteOp", res.body.id);
+    console.log("saved reminderIdToDeleteOp =", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have reminder id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+}

@@ -1,0 +1,39 @@
+meta {
+  name: Update Manual Operation Date
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/operations/{{operationIdMain}}
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "operation_date": "{{futureDate10}}",
+    "comment": "E2E manual operation main updated"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have updated date", function() {
+    expect(res.body.operation_date).to.equal(bru.getVar("futureDate10"));
+  });
+}

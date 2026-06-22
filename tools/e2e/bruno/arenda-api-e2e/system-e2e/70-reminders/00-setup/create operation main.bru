@@ -1,0 +1,54 @@
+meta {
+  name: Create Operation Main
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyIdMain}}/operations
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "type": "{{operationType}}",
+    "category": "{{operationCategory}}",
+    "amount_kopecks": {{operationAmountKopecks}},
+    "operation_date": "{{futureDate7}}",
+    "comment": "E2E manual operation main"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("operationIdMain", res.body.id);
+    bru.setVar("operationIdMain", res.body.id);
+    console.log("saved operationIdMain =", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have operation id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+
+  test("should match operation date", function() {
+    expect(res.body.operation_date).to.equal(bru.getVar("futureDate7"));
+  });
+}

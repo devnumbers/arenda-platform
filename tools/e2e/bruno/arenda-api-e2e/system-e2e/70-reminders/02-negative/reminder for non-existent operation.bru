@@ -1,0 +1,34 @@
+meta {
+  name: Reminder For Non Existent Operation
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyIdMain}}/operations/00000000-0000-0000-0000-000000000000/reminders
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "reminder_date": "{{futureDate5}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 404", function() {
+    expect(res.status).to.equal(404);
+  });
+}

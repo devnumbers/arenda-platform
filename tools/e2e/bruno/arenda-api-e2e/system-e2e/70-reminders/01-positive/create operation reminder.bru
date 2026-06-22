@@ -1,0 +1,55 @@
+meta {
+  name: Create Operation Reminder
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyIdMain}}/operations/{{operationIdMain}}/reminders
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "reminder_date": "{{futureDate5}}"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("reminderIdMain", res.body.id);
+    bru.setVar("reminderIdMain", res.body.id);
+    console.log("saved reminderIdMain =", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have reminder id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+
+  test("should be pending", function() {
+    expect(res.body.status).to.equal("pending");
+  });
+
+  test("should be operation target", function() {
+    expect(res.body.target_type).to.equal("operation");
+    expect(res.body.event_type).to.equal("operation_due");
+  });
+}

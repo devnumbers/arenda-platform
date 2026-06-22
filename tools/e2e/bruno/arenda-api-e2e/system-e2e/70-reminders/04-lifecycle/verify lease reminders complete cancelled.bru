@@ -1,0 +1,29 @@
+meta {
+  name: Verify Lease Reminders Complete Cancelled
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/leases/{{leaseIdComplete}}/reminders
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have no lease reminders", function() {
+    const items = res.body.items || [];
+    expect(items.length).to.equal(0);
+  });
+}
