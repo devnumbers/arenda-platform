@@ -75,8 +75,10 @@ Folders are numbered and run in order:
 6. `50-operations`
 7. `60-recurring-operations`
 8. `70-reminders`
-9. `80-readonly-recovery`
-10. `85-webhooks`
+9. `75-webhooks` — fake provider payment webhook (succeeded + invalid body). A pending payment
+   for the positive webhook is created by the runner, which queries Postgres for `provider_payment_id`
+   and passes both ids into the folder as environment variables.
+10. `80-readonly-recovery`
 11. `99-final-cleanup`
 
 See `bruno/arenda-api-e2e/system-e2e/README.md` for details.

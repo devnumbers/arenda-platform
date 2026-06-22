@@ -165,7 +165,7 @@ sql_checks_for_folder() {
     system-e2e/70-reminders)
       echo "11-reminder-created.sql"
       ;;
-    system-e2e/85-webhooks)
+    system-e2e/75-webhooks)
       echo "12-webhook-payment-processed.sql"
       ;;
     *)
@@ -283,13 +283,35 @@ extract_active_payment_method_id() {
   jq -r '.[0].results[]? | select(.test.filename | contains("list payment methods")) | .response.data.items[]? | select(.isActive == true) | .id' "$report_json" 2>/dev/null | head -1
 }
 
-# Extract the payment id created by the webhook setup request.
-extract_webhook_payment_id() {
-  local report_json="$1"
-  if [[ ! -f "$report_json" ]] || ! command -v jq >/dev/null 2>&1; then
+# Create a pending subscription payment by changing tariff. Prints: payment_id\tprovider_payment_id
+# Uses the global SESSION_ID, COOKIE_NAME, BASE_URL.
+create_pending_webhook_payment() {
+  local cookie_name="$1"
+  local cookie_value="$2"
+
+  local change_response payment_id
+  change_response=$(curl -fsS -m 30 -X POST "$BASE_URL/subscription/change" \
+    -H "Content-Type: application/json" \
+    -H "Cookie: $cookie_name=$cookie_value" \
+    -d '{"tariffName":"business","period":"month"}' 2>/dev/null) || {
+    echo "ERROR: failed to change tariff for webhook payment" >&2
+    return 1
+  }
+
+  payment_id=$(echo "$change_response" | jq -r '.paymentId // empty' 2>/dev/null)
+  if [[ -z "$payment_id" ]]; then
+    echo "ERROR: no paymentId in change tariff response" >&2
     return 1
   fi
-  jq -r '.[0].results[]? | select(.test.filename | contains("change tariff business")) | .response.data.paymentId // empty' "$report_json" 2>/dev/null | head -1
+
+  local provider_payment_id
+  provider_payment_id=$(psql_value "SELECT provider_payment_id FROM subscription_payments WHERE id = '$payment_id';")
+  if [[ -z "$provider_payment_id" ]]; then
+    echo "ERROR: could not find provider_payment_id for $payment_id" >&2
+    return 1
+  fi
+
+  printf '%s\t%s\n' "$payment_id" "$provider_payment_id"
 }
 
 # Run a Bruno folder and record PASS/FAIL status. Output is stored for the report.
@@ -788,8 +810,8 @@ EOF
     "system-e2e/50-operations"
     "system-e2e/60-recurring-operations"
     "system-e2e/70-reminders"
+    "system-e2e/75-webhooks"
     "system-e2e/80-readonly-recovery"
-    "system-e2e/85-webhooks"
     "system-e2e/99-final-cleanup"
   )
 
@@ -933,8 +955,8 @@ main() {
     "system-e2e/50-operations"
     "system-e2e/60-recurring-operations"
     "system-e2e/70-reminders"
+    "system-e2e/75-webhooks"
     "system-e2e/80-readonly-recovery"
-    "system-e2e/85-webhooks"
   )
 
   local SESSION_ID=""
@@ -966,6 +988,7 @@ main() {
 
   local active_payment_method_id=""
   local WEBHOOK_PAYMENT_ID=""
+  local WEBHOOK_PROVIDER_PAYMENT_ID=""
 
   for folder in "${feature_folders[@]}"; do
     # Seed the pro tariff limit before the reminder deep-dive so it can create
@@ -978,6 +1001,18 @@ main() {
     if [[ "$folder" == "system-e2e/99-final-cleanup" && -n "$active_payment_method_id" ]]; then
       folder_args+=(--env-var activePaymentMethodId="$active_payment_method_id")
     fi
+    if [[ "$folder" == "system-e2e/75-webhooks" ]]; then
+      local payment_pair
+      payment_pair=$(create_pending_webhook_payment "$COOKIE_NAME" "$SESSION_ID") || {
+        add_failure "Failed to create pending payment for webhook test"
+        record_folder "$folder" "FAIL" "create_pending_webhook_payment failed"
+        continue
+      }
+      WEBHOOK_PAYMENT_ID=$(echo "$payment_pair" | cut -f1)
+      WEBHOOK_PROVIDER_PAYMENT_ID=$(echo "$payment_pair" | cut -f2)
+      log "Created webhook payment: $WEBHOOK_PAYMENT_ID / $WEBHOOK_PROVIDER_PAYMENT_ID"
+      folder_args+=(--env-var webhookPaymentId="$WEBHOOK_PAYMENT_ID" --env-var webhookProviderPaymentId="$WEBHOOK_PROVIDER_PAYMENT_ID")
+    fi
 
     if run_bruno_folder "$folder" "${folder_args[@]:-}" --bail; then
       if [[ "$folder" == "system-e2e/10-subscription" ]]; then
@@ -987,12 +1022,6 @@ main() {
         fi
       fi
 
-      if [[ "$folder" == "system-e2e/85-webhooks" ]]; then
-        WEBHOOK_PAYMENT_ID=$(extract_webhook_payment_id "${BRUNO_REPORT_BASE}-system-e2e-85-webhooks.json") || true
-        if [[ -n "$WEBHOOK_PAYMENT_ID" ]]; then
-          log "Webhook payment id extracted: $WEBHOOK_PAYMENT_ID"
-        fi
-      fi
 
       if [[ "$db_available" == "true" ]]; then
         local scripts

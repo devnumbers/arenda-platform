@@ -2,7 +2,7 @@
 
 This Bruno collection exercises the entire Arenda backend API from registration to
 subscription management, property lifecycle, leases, tenant contacts, operations,
-recurring operations, reminders, and readonly recovery.
+recurring operations, reminders, webhooks, and readonly recovery.
 
 It now also includes the deep reminder and subscription coverage that previously
 lived in separate `reminders-e2e` and `subscriptions-e2e` collections.
@@ -19,8 +19,11 @@ The folders are numbered so they run sequentially when invoked recursively:
 6. `50-operations` — income/expense operations, update, delete, validation negatives.
 7. `60-recurring-operations` — recurring operation lifecycle and generated concrete operations.
 8. `70-reminders` — operation/lease/recurring reminders, pagination, lifecycle rescheduling/cancellation.
-9. `80-readonly-recovery` — cancel subscription, verify mutation block, recover to Business.
-10. `99-final-cleanup` — downgrade, remove payment methods, logout.
+9. `75-webhooks` — fake provider payment webhook (succeeded + invalid body). A pending payment
+   for the positive webhook is created by the runner, which queries Postgres for `provider_payment_id`
+   and passes both ids into the folder as environment variables.
+10. `80-readonly-recovery` — cancel subscription, verify mutation block, recover to Business.
+11. `99-final-cleanup` — downgrade, remove payment methods, logout.
 
 ## Requirements
 

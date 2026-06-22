@@ -16,7 +16,7 @@ headers {
 
 body:json {
   {
-    "provider_payment_id": "fake-webhook-e2e-payment-id",
+    "provider_payment_id": "{{webhookProviderPaymentId}}",
     "internal_payment_id": "{{webhookPaymentId}}",
     "status": "succeeded"
   }
