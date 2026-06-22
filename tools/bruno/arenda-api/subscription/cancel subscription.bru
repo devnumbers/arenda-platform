@@ -11,10 +11,10 @@ post {
 }
 
 script:pre-request {
+  // Requires an authenticated session. Run auth/verify-code first.
   const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
-  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
   if (sessionId) {
-    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+    req.setHeader("Cookie", `session_id=${sessionId}`);
   }
 }
 
