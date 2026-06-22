@@ -5,7 +5,7 @@ meta {
 }
 
 post {
-  url: {{baseUrl}}/webhooks/payment/{{provider}}
+  url: {{baseUrl}}/webhooks/payment/fake
   body: json
   auth: none
 }
@@ -14,16 +14,14 @@ headers {
   content-type: application/json
 }
 
+// paymentId must come from subscription/change tariff
+
 body:json {
   {
     "provider_payment_id": "fake-webhook-payment-id",
     "internal_payment_id": "{{paymentId}}",
     "status": "succeeded"
   }
-}
-
-script:pre-request {
-  bru.setVar("provider", "fake");
 }
 
 tests {

@@ -47,6 +47,7 @@ extract_bru_endpoints() {
         sub(/^[[:space:]]*url:[[:space:]]*/, "")
         gsub(/\{\{baseUrl\}\}/, "")
         gsub(/\{\{[^}]+\}\}/, "{}")
+        sub(/^\/webhooks\/payment\/[^\/]+$/, "/webhooks/payment/{}")
         sub(/\?.*/, "")
         print method, $0
         method = ""
