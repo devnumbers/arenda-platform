@@ -1,0 +1,45 @@
+:root {
+  /* Primary */
+  --color-primary: #2b7fff;
+  --color-primary-hover: #2175f5;
+  --color-primary-pressed: #176beb;
+
+  /* Secondary */
+  --color-secondary-bg: #f1f3f6;
+  --color-secondary-hover: #e7e9ec;
+  --color-secondary-pressed: #dddfe2;
+
+  /* Clear */
+  --color-clear-hover: rgba(43, 127, 255, 0.08);
+  --color-clear-pressed: rgba(43, 127, 255, 0.16);
+
+  /* Text */
+  --color-text: #1e1e1e;
+  --color-text-muted: rgba(30, 30, 30, 0.4);
+
+  /* Utility */
+  --color-white: #ffffff;
+  --color-error: #ff4646;
+  --color-error-bg: #ffdfdf;
+  --color-black-icon-hover: rgba(30, 30, 30, 0.08);
+  --color-black-icon-pressed: rgba(30, 30, 30, 0.16);
+
+  /* Radius */
+  --radius-button: 16px;
+  --radius-button-small: 10px;
+  --radius-input: 16px;
+  --radius-round: 100px;
+
+  /* Focus */
+  --focus-ring: 0 0 0 4px rgba(43, 127, 255, 1), 0 0 0 2px rgba(255, 255, 255, 1);
+
+  /* Typography */
+  --font-size-text-l: 1rem;
+  --line-height-text-l: 1.25rem;
+
+  --font-size-text-m: 0.875rem;
+  --line-height-text-m: 1.125rem;
+
+  --font-size-text-s: 0.75rem;
+  --line-height-text-s: 1rem;
+}

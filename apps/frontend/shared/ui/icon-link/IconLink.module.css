@@ -1,0 +1,144 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--color-text);
+  background-color: transparent;
+  transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.button.loading {
+  opacity: 0.6;
+}
+
+.button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Sizes */
+
+.large {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-button);
+}
+
+.medium {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-button);
+}
+
+.small {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-button-small);
+}
+
+.tiny {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-button-small);
+}
+
+.rounded {
+  border-radius: var(--radius-round);
+}
+
+/* Variants */
+
+.primary {
+  background-color: var(--color-primary);
+  color: var(--color-white);
+}
+
+.primary:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.primary:active {
+  background-color: var(--color-primary-pressed);
+}
+
+.secondary {
+  background-color: var(--color-secondary-bg);
+  color: var(--color-text);
+}
+
+.secondary:hover {
+  background-color: var(--color-secondary-hover);
+}
+
+.secondary:active {
+  background-color: var(--color-secondary-pressed);
+}
+
+.clear {
+  background-color: transparent;
+  color: var(--color-primary);
+}
+
+.clear:hover {
+  background-color: var(--color-clear-hover);
+}
+
+.clear:active {
+  background-color: var(--color-clear-pressed);
+}
+
+.icon-black {
+  background-color: transparent;
+  color: var(--color-text);
+}
+
+.icon-black:hover {
+  background-color: var(--color-black-icon-hover);
+}
+
+.icon-black:active {
+  background-color: var(--color-black-icon-pressed);
+}
+
+.white-icon {
+  background-color: transparent;
+  color: var(--color-white);
+}
+
+.white-icon:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.white-icon:active {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+
+.primary-icon {
+  background-color: transparent;
+  color: var(--color-primary);
+}
+
+.primary-icon:hover {
+  background-color: var(--color-clear-hover);
+}
+
+.primary-icon:active {
+  background-color: var(--color-clear-pressed);
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -1,0 +1,32 @@
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+}
+
+.icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.xs {
+  width: 12px;
+  height: 12px;
+}
+
+.s {
+  width: 16px;
+  height: 16px;
+}
+
+.m {
+  width: 20px;
+  height: 20px;
+}
+
+.l {
+  width: 24px;
+  height: 24px;
+}

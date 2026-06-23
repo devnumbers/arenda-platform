@@ -1,0 +1,169 @@
+.root {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--color-text);
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.label {
+  display: block;
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  font-weight: 500;
+}
+
+.required {
+  color: var(--color-error);
+}
+
+.field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background-color: var(--color-secondary-bg);
+  border: 2px solid transparent;
+  border-radius: var(--radius-input);
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field:hover:not(.disabled):not(.error) {
+  border-color: var(--color-secondary-hover);
+}
+
+.field.error:hover:not(.disabled) {
+  border-color: var(--color-error);
+}
+
+.field:focus-within:not(.disabled) {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.field.error {
+  background-color: var(--color-error-bg);
+  border-color: var(--color-error);
+}
+
+.field.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.field.multiline {
+  align-items: flex-start;
+}
+
+.withIcon .input,
+.withIcon .textarea {
+  padding-left: 48px;
+}
+
+.icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+  pointer-events: none;
+}
+
+.multiline .icon {
+  top: 12px;
+  transform: translateY(0);
+}
+
+.input,
+.textarea {
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  outline: none;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+.textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.input:disabled,
+.textarea:disabled {
+  cursor: not-allowed;
+}
+
+.floatingLabel {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  color: var(--color-text-muted);
+  pointer-events: none;
+  transition: top 0.15s ease, transform 0.15s ease, font-size 0.15s ease, line-height 0.15s ease;
+}
+
+.withIcon .floatingLabel {
+  left: 48px;
+}
+
+.multiline .floatingLabel {
+  top: 12px;
+  transform: translateY(0);
+}
+
+.field:focus-within .floatingLabel,
+.input:not(:placeholder-shown) + .floatingLabel,
+.textarea:not(:placeholder-shown) + .floatingLabel {
+  top: 8px;
+  transform: translateY(0);
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+}
+
+.footer {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.hint {
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+  color: var(--color-text-muted);
+}
+
+.hintError {
+  color: var(--color-error);
+}
+
+.counter {
+  flex-shrink: 0;
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+  color: var(--color-text-muted);
+  margin-left: auto;
+}
+
+.counterExceeded {
+  color: var(--color-error);
+}
