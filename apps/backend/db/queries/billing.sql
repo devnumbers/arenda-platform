@@ -151,7 +151,7 @@ SELECT * FROM subscription_payments WHERE user_id = $1 AND status = 'pending' OR
 
 -- name: MarkSubscriptionPaymentSucceeded :one
 UPDATE subscription_payments
-SET status = 'succeeded', updated_at = $2
+SET status = 'succeeded', updated_at = $2, succeeded_at = $2
 WHERE id = $1 AND status = 'pending'
 RETURNING *;
 
@@ -176,6 +176,12 @@ RETURNING *;
 -- name: UpdateSubscriptionPaymentMethodAndProviderID :one
 UPDATE subscription_payments
 SET payment_method_id = $2, provider_payment_id = $3, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateSubscriptionPaymentMethodID :one
+UPDATE subscription_payments
+SET payment_method_id = $2, updated_at = now()
 WHERE id = $1
 RETURNING *;
 

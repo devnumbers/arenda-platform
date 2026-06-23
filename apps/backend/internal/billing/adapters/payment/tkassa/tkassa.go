@@ -4,6 +4,7 @@ package tkassa
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -24,14 +25,17 @@ import (
 )
 
 const (
-	defaultBaseURL            = "https://rest-api-test.tinkoff.ru/rest/"
-	defaultTimeout            = 30 * time.Second
-	webhookOK                 = "OK"
-	recurrentYes              = "Y"
-	payTypeOneStage           = "O"
-	checkType3DSHold          = "3DSHOLD"
-	firstPaymentInitiatorType = "2"
-	notificationTypeAddCard   = "AddCard"
+	defaultBaseURL              = "https://rest-api-test.tinkoff.ru/v2/"
+	defaultTimeout              = 30 * time.Second
+	webhookOK                   = "OK"
+	recurrentYes                = "Y"
+	payTypeOneStage             = "O"
+	checkType3DSHold            = "3DSHOLD"
+	firstPaymentInitiatorType   = "1" // CIT CC (customer-initiated credential-on-file first payment)
+	renewalInitiatorType        = "R" // MIT COF recurring
+	notificationTypeAddCard     = "AddCard"
+	maxResponseBytes            = 1 << 20 // 1 MiB
+	maxDescriptionLength        = 140     // T-Kassa limit for Description field
 )
 
 // ProviderError is returned when T-Kassa responds with Success=false and a non-zero ErrorCode.
@@ -80,7 +84,7 @@ type responseWithBase interface {
 
 type initResponse struct {
 	baseResponse
-	PaymentID  int64  `json:"PaymentId"`
+	PaymentID  string `json:"PaymentId"`
 	PaymentURL string `json:"PaymentURL"`
 	OrderID    string `json:"OrderId"`
 	Amount     int64  `json:"Amount"`
@@ -88,14 +92,14 @@ type initResponse struct {
 
 type chargeResponse struct {
 	baseResponse
-	PaymentID int64  `json:"PaymentId"`
+	PaymentID string `json:"PaymentId"`
 	OrderID   string `json:"OrderId"`
 	Amount    int64  `json:"Amount"`
 }
 
 type getStateResponse struct {
 	baseResponse
-	PaymentID int64  `json:"PaymentId"`
+	PaymentID string `json:"PaymentId"`
 	OrderID   string `json:"OrderId"`
 	Amount    int64  `json:"Amount"`
 }
@@ -153,7 +157,6 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 		"Amount":          req.AmountKopecks,
 		"OrderId":         req.PaymentID.String(),
 		"CustomerKey":     req.CustomerKey,
-		"Recurrent":       recurrentYes,
 		"PayType":         payTypeOneStage,
 		"NotificationURL": req.NotificationURL,
 		"SuccessURL":      req.SuccessURL,
@@ -162,8 +165,11 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 			"OperationInitiatorType": operationInitiatorType,
 		},
 	}
+	if req.Recurrent {
+		body["Recurrent"] = recurrentYes
+	}
 	if req.Description != "" {
-		body["Description"] = req.Description
+		body["Description"] = truncateDescription(req.Description, maxDescriptionLength)
 	}
 
 	p.log.InfoContext(ctx, "tkassa init",
@@ -178,7 +184,7 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 	}
 
 	return application.InitResult{
-		ProviderPaymentID: strconv.FormatInt(resp.PaymentID, 10),
+		ProviderPaymentID: resp.PaymentID,
 		PaymentURL:        resp.PaymentURL,
 		SavedToken:        "",
 		CustomerKey:       req.CustomerKey,
@@ -188,14 +194,9 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 
 // Charge performs a recurrent charge through T-Kassa.
 func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (application.ChargeResult, error) {
-	paymentIDInt, err := strconv.ParseInt(req.ProviderPaymentID, 10, 64)
-	if err != nil {
-		return application.ChargeResult{}, fmt.Errorf("tkassa: invalid provider payment id: %w", err)
-	}
-
 	body := map[string]any{
 		"TerminalKey": p.terminalKey,
-		"PaymentId":   paymentIDInt,
+		"PaymentId":   req.ProviderPaymentID,
 		"RebillId":    req.Token,
 	}
 
@@ -211,21 +212,16 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 	}
 
 	return application.ChargeResult{
-		ProviderPaymentID: strconv.FormatInt(resp.PaymentID, 10),
+		ProviderPaymentID: resp.PaymentID,
 		Status:            mapStatus(resp.Status),
 	}, nil
 }
 
 // Status queries the current status of a payment through T-Kassa.
 func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error) {
-	paymentIDInt, err := strconv.ParseInt(providerPaymentID, 10, 64)
-	if err != nil {
-		return "", fmt.Errorf("tkassa: invalid provider payment id: %w", err)
-	}
-
 	body := map[string]any{
 		"TerminalKey": p.terminalKey,
-		"PaymentId":   paymentIDInt,
+		"PaymentId":   providerPaymentID,
 	}
 
 	p.log.InfoContext(ctx, "tkassa get state",
@@ -243,8 +239,9 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 
 // InitAddCard initializes attaching a new card to a T-Kassa customer.
 func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (application.InitAddCardResult, error) {
-	// AddCustomer is idempotent. Any HTTP-successful response is treated as success
-	// (including "customer already exists" API errors) and we proceed to AddCard.
+	// AddCustomer is idempotent. Some API-level errors simply mean the customer
+	// already exists; in that case we can continue to AddCard. All other errors
+	// are propagated so they cannot mask real problems.
 	customerBody := map[string]any{
 		"TerminalKey": p.terminalKey,
 		"CustomerKey": req.CustomerKey,
@@ -252,10 +249,9 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 	var customerResp addCustomerResponse
 	if err := p.post(ctx, "AddCustomer", customerBody, &customerResp); err != nil {
 		var providerErr *ProviderError
-		if !errors.As(err, &providerErr) {
+		if !errors.As(err, &providerErr) || !isDuplicateCustomerError(providerErr) {
 			return application.InitAddCardResult{}, fmt.Errorf("tkassa: add customer failed: %w", err)
 		}
-		// API-level errors from AddCustomer are non-fatal; continue to AddCard.
 	}
 
 	checkType := req.CheckType
@@ -263,19 +259,12 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 		checkType = checkType3DSHold
 	}
 
+	// The AddCard schema only supports TerminalKey, CustomerKey, CheckType, IP and
+	// ResidentState. Return URLs are configured in the terminal, not in the request.
 	cardBody := map[string]any{
 		"TerminalKey": p.terminalKey,
 		"CustomerKey": req.CustomerKey,
 		"CheckType":   checkType,
-	}
-	if req.SuccessURL != "" {
-		cardBody["SuccessURL"] = req.SuccessURL
-	}
-	if req.FailURL != "" {
-		cardBody["FailURL"] = req.FailURL
-	}
-	if req.NotificationURL != "" {
-		cardBody["NotificationURL"] = req.NotificationURL
 	}
 
 	p.log.InfoContext(ctx, "tkassa add card",
@@ -308,6 +297,9 @@ func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) e
 
 	var resp removeCardResponse
 	if err := p.post(ctx, "RemoveCard", body, &resp); err != nil {
+		if isCardNotFoundError(err) {
+			return application.ErrProviderCardNotFound
+		}
 		return err
 	}
 	return nil
@@ -330,6 +322,10 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 	data, err := unmarshalWebhook(payload)
 	if err != nil {
 		return application.WebhookPayload{}, err
+	}
+
+	if getString(data, "TerminalKey") != p.terminalKey {
+		return application.WebhookPayload{}, errors.New("tkassa: webhook terminal key mismatch")
 	}
 
 	if notificationType := getString(data, "NotificationType"); notificationType == notificationTypeAddCard {
@@ -372,10 +368,11 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 
 // post sends a signed JSON POST request to a T-Kassa method and decodes the response.
 func (p *Provider) post(ctx context.Context, method string, body map[string]any, out any) error {
-	body["Token"] = sign(body, p.password)
+	reqBody := cloneBody(body)
+	reqBody["Token"] = sign(body, p.password)
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(body); err != nil {
+	if err := json.NewEncoder(&buf).Encode(reqBody); err != nil {
 		return fmt.Errorf("tkassa: encode %s request: %w", method, err)
 	}
 
@@ -396,7 +393,7 @@ func (p *Provider) post(ctx context.Context, method string, body map[string]any,
 		return fmt.Errorf("tkassa: %s returned HTTP %d", method, resp.StatusCode)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(out); err != nil {
 		return fmt.Errorf("tkassa: decode %s response: %w", method, err)
 	}
 
@@ -416,12 +413,12 @@ func (p *Provider) post(ctx context.Context, method string, body map[string]any,
 }
 
 // sign computes the T-Kassa request/webhook token.
-// It excludes the keys Token, DATA and Receipt, adds the password, sorts keys
+// It excludes the keys Token, DATA, Data and Receipt, adds the password, sorts keys
 // lexicographically and concatenates the stringified values before SHA-256 hashing.
 func sign(data map[string]any, password string) string {
 	keys := make([]string, 0, len(data)+1)
 	for k := range data {
-		if k == "Token" || k == "DATA" || k == "Receipt" {
+		if k == "Token" || k == "DATA" || k == "Data" || k == "Receipt" {
 			continue
 		}
 		keys = append(keys, k)
@@ -449,7 +446,9 @@ func shouldSkipValue(v any) bool {
 	if v == nil {
 		return true
 	}
-	switch v.(type) {
+	switch val := v.(type) {
+	case string:
+		return val == ""
 	case map[string]any, []any:
 		return true
 	}
@@ -502,6 +501,14 @@ func stringifyValue(v any) string {
 	}
 }
 
+func cloneBody(body map[string]any) map[string]any {
+	cloned := make(map[string]any, len(body)+1)
+	for k, v := range body {
+		cloned[k] = v
+	}
+	return cloned
+}
+
 func verifyToken(payload []byte, password string) error {
 	data, err := unmarshalWebhook(payload)
 	if err != nil {
@@ -510,7 +517,8 @@ func verifyToken(payload []byte, password string) error {
 
 	expected := sign(data, password)
 	actual, _ := data["Token"].(string)
-	if expected != actual {
+
+	if !hmac.Equal([]byte(expected), []byte(actual)) {
 		return errors.New("tkassa: invalid webhook token")
 	}
 	return nil
@@ -543,17 +551,71 @@ func isAddCardSuccessful(data map[string]any) bool {
 }
 
 // mapStatus maps T-Kassa payment statuses to the domain status model.
-// Unknown statuses are treated as pending so the application can reconcile
-// them asynchronously via Status() or webhooks.
 func mapStatus(status string) domain.PaymentStatus {
 	switch status {
-	case "AUTHORIZED", "NEW":
+	case statusNew, statusAuthorized, statusAuthorizing, status3DSChecking,
+		status3DSChecked, statusConfirming, statusFormShowed, statusAsyncRefunding:
 		return domain.PaymentStatusPending
-	case "CONFIRMED":
+	case statusConfirmed:
 		return domain.PaymentStatusSucceeded
-	case "REJECTED", "AUTH_FAIL":
+	case statusRejected, statusAuthFail, statusCanceled, statusDeadlineExpired,
+		statusReversed, statusPartialReversed, statusRefunded, statusPartialRefunded,
+		status3DSFailed:
 		return domain.PaymentStatusFailed
 	default:
 		return domain.PaymentStatusPending
 	}
+}
+
+// T-Kassa payment status constants.
+const (
+	statusNew             = "NEW"
+	statusFormShowed      = "FORM_SHOWED"
+	statusAuthorizing     = "AUTHORIZING"
+	statusAuthorized      = "AUTHORIZED"
+	statusAuthFail        = "AUTH_FAIL"
+	statusRejected        = "REJECTED"
+	status3DSChecking     = "3DS_CHECKING"
+	status3DSChecked      = "3DS_CHECKED"
+	status3DSFailed       = "3DS_FAILED"
+	statusConfirming      = "CONFIRMING"
+	statusConfirmed       = "CONFIRMED"
+	statusReversing       = "REVERSING"
+	statusReversed        = "REVERSED"
+	statusPartialReversed = "PARTIAL_REVERSED"
+	statusRefunding       = "REFUNDING"
+	statusAsyncRefunding  = "ASYNC_REFUNDING"
+	statusRefunded        = "REFUNDED"
+	statusPartialRefunded = "PARTIAL_REFUNDED"
+	statusDeadlineExpired = "DEADLINE_EXPIRED"
+	statusCanceled        = "CANCELED"
+)
+
+func isDuplicateCustomerError(err *ProviderError) bool {
+	// A duplicate customer usually comes back with code "7" (invalid customer
+	// status). Code "0" means success and must not be treated as duplicate.
+	switch err.ErrorCode {
+	case "7":
+		return true
+	}
+	return false
+}
+
+func isCardNotFoundError(err error) bool {
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		return false
+	}
+	switch providerErr.ErrorCode {
+	case "502", "231":
+		return true
+	}
+	return false
+}
+
+func truncateDescription(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen]
 }

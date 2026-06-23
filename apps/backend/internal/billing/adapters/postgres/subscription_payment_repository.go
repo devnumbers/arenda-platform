@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
@@ -42,6 +44,10 @@ func (r *SubscriptionPaymentRepository) WithTx(tx transaction.Tx) application.Su
 func (r *SubscriptionPaymentRepository) Create(ctx context.Context, payment domain.SubscriptionPayment) (domain.SubscriptionPayment, error) {
 	row, err := r.q().CreateSubscriptionPayment(ctx, mapCreateSubscriptionPaymentParams(payment))
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return domain.SubscriptionPayment{}, application.ErrAlreadyExists
+		}
 		return domain.SubscriptionPayment{}, fmt.Errorf("create subscription payment: %w", err)
 	}
 	return mapSubscriptionPayment(row), nil
@@ -205,6 +211,23 @@ func (r *SubscriptionPaymentRepository) UpdatePaymentMethodAndProviderID(ctx con
 	return mapSubscriptionPayment(row), nil
 }
 
+// UpdatePaymentMethodID updates only the payment method reference of a
+// subscription payment. It is used when a pending renewal is reused but the
+// active card has changed since the payment was created.
+func (r *SubscriptionPaymentRepository) UpdatePaymentMethodID(ctx context.Context, id, paymentMethodID uuid.UUID) (domain.SubscriptionPayment, error) {
+	row, err := r.q().UpdateSubscriptionPaymentMethodID(ctx, postgres.UpdateSubscriptionPaymentMethodIDParams{
+		ID:              pgtype.UUID{Bytes: id, Valid: true},
+		PaymentMethodID: pgtype.UUID{Bytes: paymentMethodID, Valid: true},
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.SubscriptionPayment{}, application.ErrNotFound
+		}
+		return domain.SubscriptionPayment{}, fmt.Errorf("update subscription payment method id: %w", err)
+	}
+	return mapSubscriptionPayment(row), nil
+}
+
 func mapCreateSubscriptionPaymentParams(payment domain.SubscriptionPayment) postgres.CreateSubscriptionPaymentParams {
 	return postgres.CreateSubscriptionPaymentParams{
 		UserID:            pgtype.UUID{Bytes: payment.UserID, Valid: true},
@@ -222,7 +245,7 @@ func mapCreateSubscriptionPaymentParams(payment domain.SubscriptionPayment) post
 }
 
 func mapSubscriptionPayment(row postgres.SubscriptionPayment) domain.SubscriptionPayment {
-	return domain.SubscriptionPayment{
+	payment := domain.SubscriptionPayment{
 		ID:                uuid.UUID(row.ID.Bytes),
 		UserID:            uuid.UUID(row.UserID.Bytes),
 		SubscriptionID:    uuid.UUID(row.SubscriptionID.Bytes),
@@ -238,6 +261,10 @@ func mapSubscriptionPayment(row postgres.SubscriptionPayment) domain.Subscriptio
 		CreatedAt:         row.CreatedAt.Time,
 		UpdatedAt:         row.UpdatedAt.Time,
 	}
+	if row.SucceededAt.Valid {
+		payment.SucceededAt = &row.SucceededAt.Time
+	}
+	return payment
 }
 
 func mapSubscriptionPayments(rows []postgres.SubscriptionPayment) []domain.SubscriptionPayment {

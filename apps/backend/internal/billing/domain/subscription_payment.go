@@ -39,6 +39,7 @@ type SubscriptionPayment struct {
 	ErrorCode         *string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+	SucceededAt       *time.Time
 }
 
 // NewSubscriptionPayment creates a new pending subscription payment.
@@ -75,8 +76,10 @@ func (p *SubscriptionPayment) MarkSucceeded(now time.Time) error {
 	if p.Status != PaymentStatusPending {
 		return ErrInvalidPaymentStatus
 	}
+	now = now.UTC()
 	p.Status = PaymentStatusSucceeded
-	p.UpdatedAt = now.UTC()
+	p.UpdatedAt = now
+	p.SucceededAt = &now
 	return nil
 }
 
@@ -90,4 +93,9 @@ func (p *SubscriptionPayment) MarkFailed(errorCode *string, now time.Time) error
 	p.ErrorCode = errorCode
 	p.UpdatedAt = now.UTC()
 	return nil
+}
+
+// IsFinalized reports whether the payment has reached a terminal state.
+func (p *SubscriptionPayment) IsFinalized() bool {
+	return p.Status == PaymentStatusSucceeded || p.Status == PaymentStatusFailed
 }

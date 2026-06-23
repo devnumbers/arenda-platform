@@ -12,6 +12,7 @@ import (
 
 var (
 	ErrNotFound                   = errors.New("not found")
+	ErrAlreadyExists              = errors.New("already exists")
 	ErrPaymentMethodInUse         = errors.New("payment method is in use")
 	ErrPaymentMethodAlreadyExists = errors.New("payment method already exists")
 	ErrTariffNotFound             = errors.New("tariff not found")
@@ -21,6 +22,9 @@ var (
 	ErrAlreadyOnTariff            = domain.ErrAlreadyOnTariff
 	ErrInvalidTariffChange        = domain.ErrInvalidTariffChange
 	ErrProviderNotConfirmable     = errors.New("provider does not support confirmation")
+	// ErrProviderCardNotFound is returned when a provider reports that the card
+	// has already been removed or does not exist.
+	ErrProviderCardNotFound = errors.New("provider card not found")
 )
 
 type TariffRepository interface {
@@ -67,6 +71,7 @@ type SubscriptionPaymentRepository interface {
 	UpdateProviderPaymentID(ctx context.Context, id uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
 	UpdatePaymentURL(ctx context.Context, id uuid.UUID, paymentURL string) (domain.SubscriptionPayment, error)
 	UpdatePaymentMethodAndProviderID(ctx context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
+	UpdatePaymentMethodID(ctx context.Context, id, paymentMethodID uuid.UUID) (domain.SubscriptionPayment, error)
 	WithTx(tx transaction.Tx) SubscriptionPaymentRepository
 }
 

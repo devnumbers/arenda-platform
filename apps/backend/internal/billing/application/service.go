@@ -67,6 +67,15 @@ func renewalPaymentDescription(name domain.TariffName, period domain.Subscriptio
 	return fmt.Sprintf("Subscription renewal %s (%s)", name, period)
 }
 
+const tkassaDescriptionLimit = 140
+
+func truncateTkassaDescription(s string) string {
+	if len(s) <= tkassaDescriptionLimit {
+		return s
+	}
+	return s[:tkassaDescriptionLimit]
+}
+
 func tkassaCallbackURLs(baseURL string, paymentID uuid.UUID) (notification, success, fail, addCardSuccess, addCardFail string) {
 	baseURL = strings.TrimRight(baseURL, "/")
 	notification = baseURL + "/webhooks/payment/tkassa"
@@ -282,6 +291,20 @@ func (s *BillingService) changeTariffUpgrade(
 	// reference.
 	payment, err = s.subscriptionPayments.WithTx(tx).Create(ctx, payment)
 	if err != nil {
+		if errors.Is(err, ErrAlreadyExists) {
+			// A concurrent request created the pending payment first. Return the
+			// existing one instead of failing.
+			pending, listErr := s.subscriptionPayments.WithTx(tx).ListPendingSubscriptionPaymentsByUserID(ctx, userID)
+			if listErr != nil {
+				return ChangeTariffResponse{}, fmt.Errorf("save subscription payment: %w", err)
+			}
+			for _, p := range pending {
+				if p.TariffID == newTariff.ID && p.Period == period {
+					_ = tx.Rollback(ctx)
+					return s.existingUpgradeResponse(ctx, p), nil
+				}
+			}
+		}
 		return ChangeTariffResponse{}, fmt.Errorf("save subscription payment: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -296,11 +319,11 @@ func (s *BillingService) changeTariffUpgrade(
 		UserID:                 userID,
 		CustomerKey:            userID.String(),
 		Recurrent:              true,
-		OperationInitiatorType: "2",
+		OperationInitiatorType: "1",
 		NotificationURL:        notification,
 		SuccessURL:             successURL,
 		FailURL:                failURL,
-		Description:            upgradePaymentDescription(newTariff.Name, period),
+		Description:            truncateTkassaDescription(upgradePaymentDescription(newTariff.Name, period)),
 	})
 	if err != nil {
 		s.markPaymentFailedBestEffort(ctx, payment.ID, now)
@@ -483,10 +506,19 @@ func (s *BillingService) DeletePaymentMethod(ctx context.Context, userID, method
 	if pm.UserID != userID {
 		return ErrPaymentMethodNotFound
 	}
+	if pm.IsActive {
+		return ErrPaymentMethodInUse
+	}
 
 	if s.provider.Name() == domain.ProviderTkassa && pm.ProviderCardID != "" {
 		if err := s.provider.RemoveCard(ctx, userID.String(), pm.ProviderCardID); err != nil {
-			return fmt.Errorf("remove provider card: %w", err)
+			if errors.Is(err, ErrProviderCardNotFound) {
+				s.log.WarnContext(ctx, "provider card already removed; continuing local deletion",
+					slog.String("payment_method_id", methodID.String()),
+					slog.String("provider_card_id", maskCardID(pm.ProviderCardID)))
+			} else {
+				return fmt.Errorf("remove provider card: %w", err)
+			}
 		}
 	}
 
@@ -575,7 +607,7 @@ func (s *BillingService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 		return fmt.Errorf("confirm fake payment: %w", err)
 	}
 
-	if err := s.applyPaymentResult(ctx, tx, payment, payload); err != nil {
+	if err := s.applyPaymentResult(ctx, tx, &payment, payload); err != nil {
 		return err
 	}
 
@@ -622,8 +654,15 @@ func (s *BillingService) HandleWebhook(ctx context.Context, providerName string,
 		}
 		defer func() { _ = tx.Rollback(ctx) }()
 
-		if _, err := s.paymentMethods.WithTx(tx).UpsertByTokenHash(ctx, pm); err != nil {
+		pm, err = s.paymentMethods.WithTx(tx).UpsertByTokenHash(ctx, pm)
+		if err != nil {
 			return fmt.Errorf("upsert add card payment method: %w", err)
+		}
+
+		// A successful AddCard webhook means the saved token is valid and should
+		// become the active payment method for future renewals.
+		if err = s.paymentMethods.WithTx(tx).SetActive(ctx, userID, pm.ID); err != nil {
+			return fmt.Errorf("activate add card payment method: %w", err)
 		}
 
 		return tx.Commit(ctx)
@@ -673,8 +712,21 @@ func (s *BillingService) HandleWebhook(ctx context.Context, providerName string,
 		return tx.Commit(ctx)
 
 	case domain.PaymentStatusSucceeded, domain.PaymentStatusFailed:
-		if err := s.applyPaymentResult(ctx, tx, payment, result); err != nil {
+		if err := s.applyPaymentResult(ctx, tx, &payment, result); err != nil {
 			return err
+		}
+
+		if result.Status == domain.PaymentStatusFailed {
+			sub, err := s.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, payment.SubscriptionID)
+			if err != nil {
+				return fmt.Errorf("get subscription for failed webhook: %w", err)
+			}
+			if sub.TariffID == payment.TariffID {
+				s.transitionToGrace(&sub, s.clock.Now().UTC())
+				if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+					return fmt.Errorf("transition subscription to grace after failed webhook: %w", err)
+				}
+			}
 		}
 
 		if err := tx.Commit(ctx); err != nil {
@@ -694,11 +746,22 @@ func (s *BillingService) HandleWebhook(ctx context.Context, providerName string,
 func (s *BillingService) applyPaymentResult(
 	ctx context.Context,
 	tx transaction.Tx,
-	payment domain.SubscriptionPayment,
+	payment *domain.SubscriptionPayment,
 	payload WebhookPayload,
 ) error {
 	if payment.ProviderPaymentID != nil && *payment.ProviderPaymentID != payload.ProviderPaymentID {
 		return fmt.Errorf("provider payment id mismatch: expected %q, got %q", *payment.ProviderPaymentID, payload.ProviderPaymentID)
+	}
+
+	// If the provider payment id was not persisted during Init (e.g. recovery
+	// path or concurrent webhook), store it from the webhook payload before
+	// finalizing the payment.
+	if payment.ProviderPaymentID == nil && payload.ProviderPaymentID != "" {
+		updated, err := s.subscriptionPayments.WithTx(tx).UpdateProviderPaymentID(ctx, payment.ID, payload.ProviderPaymentID)
+		if err != nil {
+			return fmt.Errorf("persist provider payment id from webhook: %w", err)
+		}
+		payment.ProviderPaymentID = updated.ProviderPaymentID
 	}
 
 	now := s.clock.Now().UTC()
@@ -707,6 +770,9 @@ func (s *BillingService) applyPaymentResult(
 		if err := s.subscriptionPayments.WithTx(tx).MarkSucceeded(ctx, payment.ID, now); err != nil {
 			return fmt.Errorf("mark payment succeeded: %w", err)
 		}
+		payment.Status = domain.PaymentStatusSucceeded
+		payment.UpdatedAt = now
+		payment.SucceededAt = &now
 
 		// Payment method activation is part of the critical transaction: a
 		// succeeded payment means the saved token is valid and should become the
@@ -736,6 +802,9 @@ func (s *BillingService) applyPaymentResult(
 		if err := s.subscriptionPayments.WithTx(tx).MarkFailed(ctx, payment.ID, payload.ErrorCode, now); err != nil {
 			return fmt.Errorf("mark payment failed: %w", err)
 		}
+		payment.Status = domain.PaymentStatusFailed
+		payment.ErrorCode = payload.ErrorCode
+		payment.UpdatedAt = now
 
 	default:
 		return fmt.Errorf("unsupported webhook status: %s", payload.Status)
@@ -749,6 +818,13 @@ func maskToken(token string) string {
 		return "****"
 	}
 	return "****" + token[len(token)-4:]
+}
+
+func maskCardID(cardID string) string {
+	if len(cardID) <= 4 {
+		return "****"
+	}
+	return cardID[:2] + "****" + cardID[len(cardID)-4:]
 }
 
 func (s *BillingService) buildPaymentMethodFromWebhook(userID uuid.UUID, payload WebhookPayload) (domain.PaymentMethod, error) {
@@ -784,12 +860,31 @@ func (s *BillingService) upsertPaymentMethodFromWebhook(ctx context.Context, tx 
 // be committed, the pending payment is marked failed so it does not stay
 // unfinished.
 func (s *BillingService) saveProviderInitResult(ctx context.Context, payment domain.SubscriptionPayment, initRes InitResult, userID uuid.UUID, now time.Time) (domain.SubscriptionPayment, error) {
+	paymentID := payment.ID
+
 	tx, err := s.beginner.Begin(ctx)
 	if err != nil {
-		s.markPaymentFailedBestEffort(ctx, payment.ID, now)
+		s.markPaymentFailedBestEffort(ctx, paymentID, now)
 		return domain.SubscriptionPayment{}, fmt.Errorf("begin provider result transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Reload the payment under lock: the provider call happened outside of a
+	// transaction, so the row must be locked before the reference is persisted.
+	payment, err = s.subscriptionPayments.WithTx(tx).GetByIDForUpdate(ctx, paymentID)
+	if err != nil {
+		s.markPaymentFailedBestEffort(ctx, paymentID, now)
+		return domain.SubscriptionPayment{}, fmt.Errorf("get payment for provider result: %w", err)
+	}
+	if payment.IsFinalized() {
+		// The payment was already finalized by a concurrent webhook or another
+		// request. Return the current state without overwriting it.
+		return payment, nil
+	}
+	if payment.Status != domain.PaymentStatusPending {
+		s.markPaymentFailedBestEffort(ctx, paymentID, now)
+		return domain.SubscriptionPayment{}, domain.ErrInvalidPaymentStatus
+	}
 
 	if initRes.SavedToken != "" {
 		pm, err := domain.NewPaymentMethod(
@@ -800,37 +895,37 @@ func (s *BillingService) saveProviderInitResult(ctx context.Context, payment dom
 			now,
 		)
 		if err != nil {
-			s.markPaymentFailedBestEffort(ctx, payment.ID, now)
+			s.markPaymentFailedBestEffort(ctx, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("create payment method: %w", err)
 		}
 		pm, err = s.paymentMethods.WithTx(tx).Create(ctx, pm)
 		if err != nil {
-			s.markPaymentFailedBestEffort(ctx, payment.ID, now)
+			s.markPaymentFailedBestEffort(ctx, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("save payment method: %w", err)
 		}
-		payment, err = s.subscriptionPayments.WithTx(tx).UpdatePaymentMethodAndProviderID(ctx, payment.ID, pm.ID, initRes.ProviderPaymentID)
+		payment, err = s.subscriptionPayments.WithTx(tx).UpdatePaymentMethodAndProviderID(ctx, paymentID, pm.ID, initRes.ProviderPaymentID)
 		if err != nil {
-			s.markPaymentFailedBestEffort(ctx, payment.ID, now)
+			s.markPaymentFailedBestEffort(ctx, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update payment method and provider payment id: %w", err)
 		}
 	} else {
-		payment, err = s.subscriptionPayments.WithTx(tx).UpdateProviderPaymentID(ctx, payment.ID, initRes.ProviderPaymentID)
+		payment, err = s.subscriptionPayments.WithTx(tx).UpdateProviderPaymentID(ctx, paymentID, initRes.ProviderPaymentID)
 		if err != nil {
-			s.markPaymentFailedBestEffort(ctx, payment.ID, now)
+			s.markPaymentFailedBestEffort(ctx, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update provider payment id: %w", err)
 		}
 	}
 
 	if initRes.PaymentURL != "" {
-		payment, err = s.subscriptionPayments.WithTx(tx).UpdatePaymentURL(ctx, payment.ID, initRes.PaymentURL)
+		payment, err = s.subscriptionPayments.WithTx(tx).UpdatePaymentURL(ctx, paymentID, initRes.PaymentURL)
 		if err != nil {
-			s.markPaymentFailedBestEffort(ctx, payment.ID, now)
+			s.markPaymentFailedBestEffort(ctx, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update payment url: %w", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		s.markPaymentFailedBestEffort(ctx, payment.ID, now)
+		s.markPaymentFailedBestEffort(ctx, paymentID, now)
 		return domain.SubscriptionPayment{}, fmt.Errorf("commit provider result transaction: %w", err)
 	}
 
@@ -876,11 +971,11 @@ func (s *BillingService) recoverUpgradeProviderReference(ctx context.Context, pa
 		UserID:                 userID,
 		CustomerKey:            userID.String(),
 		Recurrent:              true,
-		OperationInitiatorType: "2",
+		OperationInitiatorType: "1",
 		NotificationURL:        notification,
 		SuccessURL:             successURL,
 		FailURL:                failURL,
-		Description:            upgradePaymentDescription(newTariff.Name, period),
+		Description:            truncateTkassaDescription(upgradePaymentDescription(newTariff.Name, period)),
 	})
 	if err != nil {
 		s.markPaymentFailedBestEffort(ctx, payment.ID, now)
@@ -1021,7 +1116,7 @@ func (s *BillingService) renewSubscription(ctx context.Context, sub domain.Subsc
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("get last succeeded payment: %w", err)
 	}
-	if err == nil && lastSucceeded.TariffID == renewalTariff.ID && !s.isSubscriptionRenewalApplied(sub, lastSucceeded, now) {
+	if err == nil && lastSucceeded.TariffID == renewalTariff.ID && !s.isSubscriptionRenewalApplied(sub, lastSucceeded) {
 		_ = tx.Rollback(ctx)
 		s.applySubscriptionRenewalBestEffort(ctx, sub.ID, lastSucceeded, now)
 		return nil
@@ -1055,61 +1150,93 @@ func (s *BillingService) renewSubscription(ctx context.Context, sub domain.Subsc
 		return fmt.Errorf("get active payment method: %w", err)
 	}
 
-	payment, err := domain.NewSubscriptionPayment(
-		sub.UserID,
-		sub.ID,
-		renewalTariff.ID,
-		&pm.ID,
-		period,
-		amount,
-		s.provider.Name(),
-		now,
-	)
+	// Look for an existing pending renewal payment for the same terms. If a
+	// previous run created the pending row but crashed before saving the provider
+	// reference, recover it idempotently instead of creating a duplicate.
+	var payment domain.SubscriptionPayment
+	pendingPayments, err := s.subscriptionPayments.WithTx(tx).ListPendingSubscriptionPaymentsByUserID(ctx, sub.UserID)
 	if err != nil {
-		return fmt.Errorf("create renewal payment: %w", err)
+		return fmt.Errorf("list pending renewal payments: %w", err)
+	}
+	for _, p := range pendingPayments {
+		if p.SubscriptionID == sub.ID && p.TariffID == renewalTariff.ID && p.Period == period {
+			payment = p
+			break
+		}
 	}
 
-	payment, err = s.subscriptionPayments.WithTx(tx).Create(ctx, payment)
-	if err != nil {
-		return fmt.Errorf("save renewal payment: %w", err)
+	// If we reuse a pending renewal payment but the active card has changed,
+	// update the payment method reference so the payment record matches the
+	// token that will actually be charged.
+	if payment.ID != uuid.Nil && (payment.PaymentMethodID == nil || *payment.PaymentMethodID != pm.ID) {
+		payment, err = s.subscriptionPayments.WithTx(tx).UpdatePaymentMethodID(ctx, payment.ID, pm.ID)
+		if err != nil {
+			return fmt.Errorf("update pending renewal payment method: %w", err)
+		}
+	}
+
+	if payment.ID == uuid.Nil {
+		payment, err = domain.NewSubscriptionPayment(
+			sub.UserID,
+			sub.ID,
+			renewalTariff.ID,
+			&pm.ID,
+			period,
+			amount,
+			s.provider.Name(),
+			now,
+		)
+		if err != nil {
+			return fmt.Errorf("create renewal payment: %w", err)
+		}
+
+		payment, err = s.subscriptionPayments.WithTx(tx).Create(ctx, payment)
+		if err != nil {
+			return fmt.Errorf("save renewal payment: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit pending renewal payment transaction: %w", err)
 	}
 
-	// External provider calls happen outside any database transaction.
-	notification, successURL, failURL, _, _ := tkassaCallbackURLs(s.callbackBaseURL, payment.ID)
-	initRes, err := s.provider.Init(ctx, InitRequest{
-		PaymentID:              payment.ID,
-		AmountKopecks:          amount,
-		Period:                 period,
-		UserID:                 sub.UserID,
-		CustomerKey:            sub.UserID.String(),
-		Recurrent:              true,
-		OperationInitiatorType: "R",
-		NotificationURL:        notification,
-		SuccessURL:             successURL,
-		FailURL:                failURL,
-		Description:            renewalPaymentDescription(renewalTariff.Name, period),
-	})
-	if err != nil {
-		if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, "", now); recErr != nil {
-			return fmt.Errorf("provider init error: %w; recovery failed: %w", err, recErr)
+	// Recover a missing provider reference idempotently before charging.
+	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
+		notification, successURL, failURL, _, _ := tkassaCallbackURLs(s.callbackBaseURL, payment.ID)
+		initRes, err := s.provider.Init(ctx, InitRequest{
+			PaymentID:              payment.ID,
+			AmountKopecks:          amount,
+			Period:                 period,
+			UserID:                 sub.UserID,
+			CustomerKey:            sub.UserID.String(),
+			Recurrent:              false,
+			OperationInitiatorType: "R",
+			NotificationURL:        notification,
+			SuccessURL:             successURL,
+			FailURL:                failURL,
+			Description:            truncateTkassaDescription(renewalPaymentDescription(renewalTariff.Name, period)),
+		})
+		if err != nil {
+			if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, "", now); recErr != nil {
+				return fmt.Errorf("provider init error: %w; recovery failed: %w", err, recErr)
+			}
+			s.log.ErrorContext(ctx, "provider init failed; subscription moved to grace",
+				slog.String("subscription_id", sub.ID.String()),
+				slog.String("payment_id", payment.ID.String()),
+				slog.String("error", sanitize.Error(err)))
+			return nil
 		}
-		s.log.ErrorContext(ctx, "provider init failed; subscription moved to grace",
-			slog.String("subscription_id", sub.ID.String()),
-			slog.String("payment_id", payment.ID.String()),
-			slog.String("error", sanitize.Error(err)))
-		return nil
+
+		payment, err = s.saveProviderInitResult(ctx, payment, initRes, sub.UserID, now)
+		if err != nil {
+			return fmt.Errorf("save provider init result: %w", err)
+		}
 	}
 
-	payment, err = s.saveProviderInitResult(ctx, payment, initRes, sub.UserID, now)
-	if err != nil {
-		return fmt.Errorf("save provider init result: %w", err)
+	chargeProviderPaymentID := ""
+	if payment.ProviderPaymentID != nil {
+		chargeProviderPaymentID = *payment.ProviderPaymentID
 	}
-
-	chargeProviderPaymentID := initRes.ProviderPaymentID
 	chargeResult, err := s.provider.Charge(ctx, ChargeRequest{
 		PaymentID:         payment.ID,
 		AmountKopecks:     amount,
@@ -1119,7 +1246,7 @@ func (s *BillingService) renewSubscription(ctx context.Context, sub domain.Subsc
 	if err != nil {
 		hint := chargeResult.ProviderPaymentID
 		if hint == "" {
-			hint = initRes.ProviderPaymentID
+			hint = chargeProviderPaymentID
 		}
 		if recErr := s.recoverRenewalFailure(ctx, payment.ID, sub.ID, hint, now); recErr != nil {
 			return fmt.Errorf("provider charge error: %w; recovery failed: %w", err, recErr)
@@ -1178,6 +1305,9 @@ func (s *BillingService) renewSubscription(ctx context.Context, sub domain.Subsc
 			}
 			return fmt.Errorf("mark renewal payment succeeded: %w", err)
 		}
+		payment.Status = domain.PaymentStatusSucceeded
+		payment.UpdatedAt = now
+		payment.SucceededAt = &now
 		if err := resultTx.Commit(ctx); err != nil {
 			return fmt.Errorf("commit post-charge transaction: %w", err)
 		}
@@ -1225,59 +1355,39 @@ func (s *BillingService) renewSubscription(ctx context.Context, sub domain.Subsc
 	return resultTx.Commit(ctx)
 }
 
-// recoverRenewalFailure resolves an uncertain renewal outcome. It reloads the
-// payment under lock and, when it is still pending, queries the provider for
-// the payment status before deciding whether to apply a successful renewal or
-// move the subscription to grace.
-//
-// The caller must not hold an open transaction: this function begins its own
-// transaction and will briefly need a dedicated database connection.
+// recoverRenewalFailure resolves an uncertain renewal outcome. It persists any
+// provider payment id hint, reloads the payment, and then queries the provider
+// for the payment status *outside* of a database transaction. Only after the
+// status is known does it open a short transaction to finalize the payment and,
+// if necessary, move the subscription to grace.
 func (s *BillingService) recoverRenewalFailure(ctx context.Context, paymentID, subscriptionID uuid.UUID, providerPaymentIDHint string, now time.Time) error {
-	tx, err := s.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin recovery transaction: %w", err)
+	// Persist the hint in a dedicated transaction so the status query can use it,
+	// even if the payment row is currently locked by another request.
+	if providerPaymentIDHint != "" {
+		if err := s.persistProviderPaymentIDHint(ctx, paymentID, providerPaymentIDHint); err != nil {
+			return err
+		}
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
 
-	payment, err := s.subscriptionPayments.WithTx(tx).GetByIDForUpdate(ctx, paymentID)
+	payment, err := s.subscriptionPayments.GetByID(ctx, paymentID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return s.transitionSubscriptionToGrace(ctx, tx, subscriptionID, now)
+			return s.transitionSubscriptionToGrace(ctx, subscriptionID, now)
 		}
 		return fmt.Errorf("get payment for recovery: %w", err)
 	}
 
-	if payment.Status == domain.PaymentStatusSucceeded {
-		// A concurrent webhook or a previous recovery already finalized the
-		// payment; the subscription must not be touched.
+	if payment.Status == domain.PaymentStatusSucceeded || payment.Status != domain.PaymentStatusPending {
+		// Nothing more to do for finalized or unexpected statuses.
 		return nil
-	}
-	if payment.Status != domain.PaymentStatusPending {
-		// Nothing more to do for failed or unexpected statuses.
-		return nil
-	}
-
-	// If the provider returned a provider_payment_id together with the error,
-	// persist it now so the status query (and future retries) can use it.
-	if providerPaymentIDHint != "" && (payment.ProviderPaymentID == nil || *payment.ProviderPaymentID != providerPaymentIDHint) {
-		payment.ProviderPaymentID = &providerPaymentIDHint
-		if _, updateErr := s.subscriptionPayments.WithTx(tx).UpdateProviderPaymentID(ctx, paymentID, providerPaymentIDHint); updateErr != nil {
-			return fmt.Errorf("update provider payment id in recovery: %w", updateErr)
-		}
 	}
 
 	if payment.ProviderPaymentID == nil {
-		return s.markRenewalFailedAndGrace(ctx, tx, paymentID, subscriptionID, now)
+		return s.markRenewalFailedAndGrace(ctx, paymentID, subscriptionID, now)
 	}
 
 	status, err := s.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
 	if err != nil || status == domain.PaymentStatusPending {
-		// Unknown outcome: the charge may still succeed asynchronously. Do not
-		// mark the payment failed or move the subscription to grace. Commit any
-		// provider reference we persisted and wait for a later retry/webhook.
-		if commitErr := tx.Commit(ctx); commitErr != nil {
-			return fmt.Errorf("commit recovery transaction: %w", commitErr)
-		}
 		statusStr := string(status)
 		if statusStr == "" {
 			statusStr = "unknown"
@@ -1295,14 +1405,10 @@ func (s *BillingService) recoverRenewalFailure(ctx context.Context, paymentID, s
 	}
 
 	if status == domain.PaymentStatusFailed {
-		return s.markRenewalFailedAndGrace(ctx, tx, paymentID, subscriptionID, now)
+		return s.markRenewalFailedAndGrace(ctx, paymentID, subscriptionID, now)
 	}
 
 	if status != domain.PaymentStatusSucceeded {
-		// Unexpected status; treat as unknown to avoid an incorrect grace transition.
-		if commitErr := tx.Commit(ctx); commitErr != nil {
-			return fmt.Errorf("commit recovery transaction: %w", commitErr)
-		}
 		s.log.WarnContext(ctx, "unexpected provider status during renewal recovery; leaving subscription active and payment pending",
 			slog.String("subscription_id", subscriptionID.String()),
 			slog.String("payment_id", paymentID.String()),
@@ -1310,24 +1416,41 @@ func (s *BillingService) recoverRenewalFailure(ctx context.Context, paymentID, s
 		return nil
 	}
 
-	// Provider confirmed the charge succeeded: finalize the payment in the
-	// critical transaction, then apply the subscription renewal as a best-effort
-	// compensating step.
-	if err := s.subscriptionPayments.WithTx(tx).MarkSucceeded(ctx, paymentID, now); err != nil {
-		return fmt.Errorf("mark payment succeeded in recovery: %w", err)
+	return s.markRenewalSucceededAndApply(ctx, payment, subscriptionID, now)
+}
+
+func (s *BillingService) persistProviderPaymentIDHint(ctx context.Context, paymentID uuid.UUID, providerPaymentIDHint string) error {
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin provider payment id hint transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	payment, err := s.subscriptionPayments.WithTx(tx).GetByIDForUpdate(ctx, paymentID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("get payment for provider payment id hint: %w", err)
+	}
+	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID != providerPaymentIDHint {
+		if _, updateErr := s.subscriptionPayments.WithTx(tx).UpdateProviderPaymentID(ctx, paymentID, providerPaymentIDHint); updateErr != nil {
+			return fmt.Errorf("update provider payment id hint: %w", updateErr)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit recovery transaction: %w", err)
-	}
-
-	sub, renewalTariff, oldTariffID, ok := s.applySubscriptionRenewalBestEffort(ctx, subscriptionID, payment, now)
-	if ok && oldTariffID != sub.TariffID {
-		s.archiveExcessPropertiesBestEffort(ctx, sub.UserID, renewalTariff.ActivePropertyLimit)
+		return fmt.Errorf("commit provider payment id hint transaction: %w", err)
 	}
 	return nil
 }
 
-func (s *BillingService) markRenewalFailedAndGrace(ctx context.Context, tx transaction.Tx, paymentID, subscriptionID uuid.UUID, now time.Time) error {
+func (s *BillingService) markRenewalFailedAndGrace(ctx context.Context, paymentID, subscriptionID uuid.UUID, now time.Time) error {
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin recovery transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	if err := s.subscriptionPayments.WithTx(tx).MarkFailed(ctx, paymentID, nil, now); err != nil {
 		return fmt.Errorf("mark payment failed in recovery: %w", err)
 	}
@@ -1351,7 +1474,37 @@ func (s *BillingService) markRenewalFailedAndGrace(ctx context.Context, tx trans
 	return nil
 }
 
-func (s *BillingService) transitionSubscriptionToGrace(ctx context.Context, tx transaction.Tx, subscriptionID uuid.UUID, now time.Time) error {
+func (s *BillingService) markRenewalSucceededAndApply(ctx context.Context, payment domain.SubscriptionPayment, subscriptionID uuid.UUID, now time.Time) error {
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin recovery transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := s.subscriptionPayments.WithTx(tx).MarkSucceeded(ctx, payment.ID, now); err != nil {
+		return fmt.Errorf("mark payment succeeded in recovery: %w", err)
+	}
+	payment.Status = domain.PaymentStatusSucceeded
+	payment.UpdatedAt = now
+	payment.SucceededAt = &now
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit recovery transaction: %w", err)
+	}
+
+	sub, renewalTariff, oldTariffID, ok := s.applySubscriptionRenewalBestEffort(ctx, subscriptionID, payment, now)
+	if ok && oldTariffID != sub.TariffID {
+		s.archiveExcessPropertiesBestEffort(ctx, sub.UserID, renewalTariff.ActivePropertyLimit)
+	}
+	return nil
+}
+
+func (s *BillingService) transitionSubscriptionToGrace(ctx context.Context, subscriptionID uuid.UUID, now time.Time) error {
+	tx, err := s.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin recovery transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	sub, err := s.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, subscriptionID)
 	if err != nil {
 		return fmt.Errorf("get subscription for recovery: %w", err)
@@ -1468,7 +1621,7 @@ func (s *BillingService) applySubscriptionRenewalBestEffort(ctx context.Context,
 	oldTariffID := sub.TariffID
 
 	// Idempotency: if the subscription already reflects this payment, skip.
-	if s.isSubscriptionRenewalApplied(sub, payment, now) {
+	if s.isSubscriptionRenewalApplied(sub, payment) {
 		return sub, domain.Tariff{}, oldTariffID, true
 	}
 
@@ -1514,13 +1667,19 @@ func (s *BillingService) applySubscriptionRenewalAndArchive(ctx context.Context,
 
 // isSubscriptionRenewalApplied reports whether the subscription already reflects
 // the given successful payment. It is used to make best-effort renewal idempotent.
-func (s *BillingService) isSubscriptionRenewalApplied(sub domain.Subscription, payment domain.SubscriptionPayment, now time.Time) bool {
+func (s *BillingService) isSubscriptionRenewalApplied(sub domain.Subscription, payment domain.SubscriptionPayment) bool {
 	if sub.TariffID != payment.TariffID {
 		return false
 	}
-	expectedValidUntil := now.AddDate(0, 1, 0)
+	base := payment.SucceededAt
+	if base == nil {
+		// Backward compatibility for payments created before the succeeded_at
+		// column was introduced; use creation time as a conservative fallback.
+		base = &payment.CreatedAt
+	}
+	expectedValidUntil := base.AddDate(0, 1, 0)
 	if payment.Period == domain.PeriodYear {
-		expectedValidUntil = now.AddDate(1, 0, 0)
+		expectedValidUntil = base.AddDate(1, 0, 0)
 	}
 	return sub.ValidUntil != nil && !sub.ValidUntil.Before(expectedValidUntil)
 }
@@ -1605,7 +1764,11 @@ func applyBasicDowngrade(sub *domain.Subscription, basicTariffID uuid.UUID) {
 func (s *BillingService) transitionToGrace(sub *domain.Subscription, now time.Time) {
 	sub.Status = domain.SubscriptionStatusGrace
 	graceUntil := now.Add(gracePeriod)
-	sub.ValidUntil = &graceUntil
+	// Never shorten an already-paid validity period. This protects against
+	// races or failed renewals overwriting a future valid_until.
+	if sub.ValidUntil == nil || graceUntil.After(*sub.ValidUntil) {
+		sub.ValidUntil = &graceUntil
+	}
 }
 
 // expireNonRenewingSubscription downgrades an expired subscription to the free

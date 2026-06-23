@@ -1400,10 +1400,12 @@ components:
 
     AddPaymentMethodRequest:
       type: object
-      required: [providerToken]
       properties:
         providerToken:
           type: string
+          description: |
+            Raw provider token for synchronous providers (e.g. fake).
+            Ignored for providers that use a bank-form flow such as T-Kassa.
 
     AddPaymentMethodResponse:
       type: object

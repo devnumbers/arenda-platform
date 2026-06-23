@@ -298,6 +298,44 @@ func Load() (Config, error) {
 		if cfg.TKassaPassword == "" {
 			return Config{}, fmt.Errorf("T_KASSA_PASSWORD is required when PAYMENT_PROVIDER=tkassa")
 		}
+		if cfg.AppBaseURL == "" {
+			return Config{}, fmt.Errorf("APP_BASE_URL is required when PAYMENT_PROVIDER=tkassa")
+		}
+		u, err := url.Parse(cfg.AppBaseURL)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid APP_BASE_URL %q: %w", cfg.AppBaseURL, err)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return Config{}, fmt.Errorf("invalid APP_BASE_URL %q: scheme must be http or https", cfg.AppBaseURL)
+		}
+		if cfg.AppEnv != "local" && cfg.AppEnv != "dev" && u.Scheme != "https" {
+			return Config{}, fmt.Errorf("invalid APP_BASE_URL %q: non-local/dev environments must use https", cfg.AppBaseURL)
+		}
+		if cfg.TKassaBaseURL == "" {
+			if cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
+				return Config{}, fmt.Errorf("T_KASSA_BASE_URL is required when PAYMENT_PROVIDER=tkassa for APP_ENV=%s", cfg.AppEnv)
+			}
+		} else {
+			tku, err := url.Parse(cfg.TKassaBaseURL)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: %w", cfg.TKassaBaseURL, err)
+			}
+			if tku.Scheme != "http" && tku.Scheme != "https" {
+				return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: scheme must be http or https", cfg.TKassaBaseURL)
+			}
+			if cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
+				if tku.Scheme != "https" {
+					return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: non-local/dev environments must use https", cfg.TKassaBaseURL)
+				}
+				host := strings.ToLower(tku.Hostname())
+				if host != "securepay.tinkoff.ru" {
+					return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: production T-Kassa base URL must be https://securepay.tinkoff.ru/v2/", cfg.TKassaBaseURL)
+				}
+				if strings.TrimSuffix(tku.Path, "/") != "/v2" {
+					return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: path must be /v2/", cfg.TKassaBaseURL)
+				}
+			}
+		}
 		cfg.TKassaTimeout = 30 * time.Second
 		if v := os.Getenv("T_KASSA_TIMEOUT"); v != "" {
 			d, err := time.ParseDuration(v)

@@ -291,6 +291,7 @@ type SubscriptionPayment struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	PaymentUrl        pgtype.Text        `json:"payment_url"`
+	SucceededAt       pgtype.Timestamptz `json:"succeeded_at"`
 }
 
 type Tariff struct {

@@ -194,7 +194,11 @@ func (h *SubscriptionHandlers) AddPaymentMethod(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	resp, err := h.billing.AddPaymentMethod(r.Context(), ownerID, billingapp.AddPaymentMethodRequest{ProviderToken: body.ProviderToken})
+	req := billingapp.AddPaymentMethodRequest{}
+	if body.ProviderToken != nil {
+		req.ProviderToken = *body.ProviderToken
+	}
+	resp, err := h.billing.AddPaymentMethod(r.Context(), ownerID, req)
 	if err != nil {
 		h.handleBillingError(w, r, err)
 		return

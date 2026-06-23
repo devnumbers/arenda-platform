@@ -316,6 +316,15 @@ func (r *testSubscriptionPaymentRepo) UpdatePaymentMethodAndProviderID(_ context
 	return domain.SubscriptionPayment{}, billingapp.ErrNotFound
 }
 
+func (r *testSubscriptionPaymentRepo) UpdatePaymentMethodID(_ context.Context, id, paymentMethodID uuid.UUID) (domain.SubscriptionPayment, error) {
+	if p, ok := r.payments[id]; ok {
+		p.PaymentMethodID = &paymentMethodID
+		r.payments[id] = p
+		return p, nil
+	}
+	return domain.SubscriptionPayment{}, billingapp.ErrNotFound
+}
+
 func (r *testSubscriptionPaymentRepo) WithTx(transaction.Tx) billingapp.SubscriptionPaymentRepository { return r }
 
 // --- provider stub ---

@@ -80,7 +80,7 @@ func TestSign(t *testing.T) {
 	}
 }
 
-func TestSignSkipsNullAndNested(t *testing.T) {
+func TestSignSkipsNullBlankAndNested(t *testing.T) {
 	data := map[string]any{
 		"TerminalKey": "Term",
 		"Amount":      int64(1),
@@ -93,8 +93,8 @@ func TestSignSkipsNullAndNested(t *testing.T) {
 
 	got := sign(data, testPassword)
 	// Sorted keys: Amount, Blank, NullValue, OrderId, Password, TerminalKey.
-	// NullValue (nil), DATA and Receipt are skipped; Blank (empty string) is included.
-	wantConcat := "1" + "" + "o" + testPassword + "Term"
+	// NullValue (nil), Blank (empty string), DATA and Receipt are all skipped.
+	wantConcat := "1" + "o" + testPassword + "Term"
 	hash := sha256.Sum256([]byte(wantConcat))
 	want := hex.EncodeToString(hash[:])
 	if got != want {
@@ -190,7 +190,7 @@ func TestProviderInit(t *testing.T) {
 
 		resp := initResponse{
 			baseResponse: baseResponse{Success: true, Status: "NEW"},
-			PaymentID:    123456,
+			PaymentID:    "123456",
 			PaymentURL:   "https://securepayments.tinkoff.ru/rest/show/123456",
 			OrderID:      paymentID.String(),
 		}
@@ -208,6 +208,7 @@ func TestProviderInit(t *testing.T) {
 		NotificationURL: "https://example.com/webhook",
 		SuccessURL:      "https://example.com/success",
 		FailURL:         "https://example.com/fail",
+		Recurrent:       true,
 	})
 	if err != nil {
 		t.Fatalf("Init failed: %v", err)
@@ -226,13 +227,47 @@ func TestProviderInit(t *testing.T) {
 	}
 }
 
+func TestProviderInitDescriptionTruncated(t *testing.T) {
+	var captured map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = verifyRequestToken(t, r, testPassword)
+		_ = json.NewEncoder(w).Encode(initResponse{
+			baseResponse: baseResponse{Success: true, Status: "NEW"},
+			PaymentID:    "1",
+			PaymentURL:   "https://pay",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	longDesc := strings.Repeat("a", maxDescriptionLength+10)
+	_, err := p.Init(context.Background(), application.InitRequest{
+		PaymentID:     uuid.New(),
+		AmountKopecks: 100,
+		UserID:        uuid.New(),
+		CustomerKey:   "ck",
+		Description:   longDesc,
+	})
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+
+	got, ok := captured["Description"].(string)
+	if !ok {
+		t.Fatalf("Description missing or not string")
+	}
+	if len(got) != maxDescriptionLength {
+		t.Fatalf("Description length: got %d, want %d", len(got), maxDescriptionLength)
+	}
+}
+
 func TestProviderInitOperationInitiatorTypeDefault(t *testing.T) {
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = verifyRequestToken(t, r, testPassword)
 		_ = json.NewEncoder(w).Encode(initResponse{
 			baseResponse: baseResponse{Success: true, Status: "NEW"},
-			PaymentID:    1,
+			PaymentID:    "1",
 			PaymentURL:   "https://pay",
 		})
 	}))
@@ -250,6 +285,38 @@ func TestProviderInitOperationInitiatorTypeDefault(t *testing.T) {
 	dataObj := captured["DATA"].(map[string]any)
 	if got, want := dataObj["OperationInitiatorType"], firstPaymentInitiatorType; got != want {
 		t.Fatalf("default OperationInitiatorType: got %v, want %v", got, want)
+	}
+}
+
+func TestProviderInitRenewal(t *testing.T) {
+	var captured map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = verifyRequestToken(t, r, testPassword)
+		_ = json.NewEncoder(w).Encode(initResponse{
+			baseResponse: baseResponse{Success: true, Status: "NEW"},
+			PaymentID:    "123",
+			PaymentURL:   "https://pay.example.com/123",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	paymentID := uuid.New()
+	_, _ = p.Init(context.Background(), application.InitRequest{
+		PaymentID:              paymentID,
+		AmountKopecks:          100,
+		UserID:                 uuid.New(),
+		CustomerKey:            "ck",
+		Recurrent:              false,
+		OperationInitiatorType: renewalInitiatorType,
+	})
+
+	if _, ok := captured["Recurrent"]; ok {
+		t.Fatal("expected Recurrent field omitted for renewal")
+	}
+	dataObj := captured["DATA"].(map[string]any)
+	if got, want := dataObj["OperationInitiatorType"], renewalInitiatorType; got != want {
+		t.Fatalf("renewal OperationInitiatorType: got %v, want %v", got, want)
 	}
 }
 
@@ -293,7 +360,7 @@ func TestProviderCharge(t *testing.T) {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		data := verifyRequestToken(t, r, testPassword)
-		if got, want := data["PaymentId"], float64(123); got != want {
+		if got, want := data["PaymentId"], "123"; got != want {
 			t.Fatalf("PaymentId: got %v, want %v", got, want)
 		}
 		if got, want := data["RebillId"], "rebill-token"; got != want {
@@ -302,7 +369,7 @@ func TestProviderCharge(t *testing.T) {
 
 		_ = json.NewEncoder(w).Encode(chargeResponse{
 			baseResponse: baseResponse{Success: true, Status: "CONFIRMED"},
-			PaymentID:    123,
+			PaymentID:    "123",
 		})
 	}))
 	defer server.Close()
@@ -365,7 +432,7 @@ func TestProviderStatus(t *testing.T) {
 		_ = verifyRequestToken(t, r, testPassword)
 		_ = json.NewEncoder(w).Encode(getStateResponse{
 			baseResponse: baseResponse{Success: true, Status: "AUTHORIZED"},
-			PaymentID:    999,
+			PaymentID:    "999",
 		})
 	}))
 	defer server.Close()
@@ -437,8 +504,14 @@ func TestProviderInitAddCard(t *testing.T) {
 			if got, want := data["CheckType"], "3DSHOLD"; got != want {
 				t.Fatalf("CheckType: got %v, want %v", got, want)
 			}
-			if got, want := data["SuccessURL"], "https://example.com/success"; got != want {
-				t.Fatalf("SuccessURL: got %v, want %v", got, want)
+			if _, ok := data["SuccessURL"]; ok {
+				t.Fatalf("AddCard must not contain SuccessURL")
+			}
+			if _, ok := data["FailURL"]; ok {
+				t.Fatalf("AddCard must not contain FailURL")
+			}
+			if _, ok := data["NotificationURL"]; ok {
+				t.Fatalf("AddCard must not contain NotificationURL")
 			}
 			_ = json.NewEncoder(w).Encode(addCardResponse{
 				baseResponse: baseResponse{Success: true},
@@ -477,7 +550,7 @@ func TestProviderInitAddCardCustomerAPIErrorContinues(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(addCustomerResponse{
 				baseResponse: baseResponse{
 					Success:   false,
-					ErrorCode: "8",
+					ErrorCode: "7",
 					Message:   "Customer already exists",
 				},
 				CustomerKey: "customer-1",
@@ -576,6 +649,26 @@ func TestProviderRemoveCardError(t *testing.T) {
 	var providerErr *ProviderError
 	if !errors.As(err, &providerErr) || providerErr.ErrorCode != "9" {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestProviderRemoveCardNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = verifyRequestToken(t, r, testPassword)
+		_ = json.NewEncoder(w).Encode(removeCardResponse{
+			baseResponse: baseResponse{
+				Success:   false,
+				ErrorCode: "502",
+				Message:   "Card not found",
+			},
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	err := p.RemoveCard(context.Background(), "customer-1", "card-1")
+	if !errors.Is(err, application.ErrProviderCardNotFound) {
+		t.Fatalf("expected ErrProviderCardNotFound, got %v", err)
 	}
 }
 
