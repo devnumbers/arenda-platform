@@ -1,0 +1,19 @@
+.bottomNav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 80px;
+  border-top: 1px solid var(--color-secondary-hover, #e7e9ec);
+  background: #ffffff;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  z-index: 100;
+}
+
+@media (min-width: 1200px) {
+  .bottomNav {
+    display: none;
+  }
+}

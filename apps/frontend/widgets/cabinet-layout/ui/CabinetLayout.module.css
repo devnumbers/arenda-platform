@@ -1,0 +1,22 @@
+.root {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.content {
+  width: 100%;
+  max-width: 560px;
+  padding: 24px 20px 100px;
+}
+
+@media (min-width: 1200px) {
+  .content {
+    padding: 40px 0;
+  }
+}
