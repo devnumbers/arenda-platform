@@ -5,14 +5,23 @@ export async function apiClient<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const headers = new Headers(options.headers);
-  if (options.body && !headers.has('Content-Type')) {
+  if (!headers.has('Accept')) {
+    headers.set('Accept', 'application/json');
+  }
+  if (typeof options.body === 'string' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(`/api${path}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`/api${path}`, {
+      ...options,
+      headers,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Network request failed';
+    throw new ApiError('network_error', message, undefined, undefined, error);
+  }
 
   const requestId = response.headers.get('X-Request-ID') ?? undefined;
 
@@ -22,9 +31,13 @@ export async function apiClient<T>(
 
     const contentType = response.headers.get('Content-Type');
     if (contentType?.includes('application/problem+json')) {
-      const problem = (await response.json()) as Record<string, unknown>;
-      code = String(problem.code ?? problem.type ?? code);
-      detail = String(problem.detail ?? problem.title ?? detail);
+      try {
+        const problem = (await response.json()) as Record<string, unknown>;
+        code = String(problem.code ?? problem.type ?? code);
+        detail = String(problem.detail ?? problem.title ?? detail);
+      } catch {
+        detail = `Request failed with status ${response.status}`;
+      }
     }
 
     throw new ApiError(code, detail, requestId, response.status);

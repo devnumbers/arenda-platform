@@ -4,8 +4,9 @@ export class ApiError extends Error {
     public detail: string,
     public requestId?: string,
     public status?: number,
+    public cause?: unknown,
   ) {
-    super(detail);
+    super(detail, { cause });
     this.name = 'ApiError';
   }
 }
