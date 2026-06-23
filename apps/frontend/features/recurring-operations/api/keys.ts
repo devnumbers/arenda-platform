@@ -4,8 +4,10 @@ export const recurringOperationKeys = {
   detail: (id: string) => ['recurring-operations', id] as const,
   reminders: (propertyId: string, recurringOperationId: string) =>
     [
-      ...recurringOperationKeys.detail(recurringOperationId),
-      'reminders',
+      'properties',
       propertyId,
+      'recurring-operations',
+      recurringOperationId,
+      'reminders',
     ] as const,
 };

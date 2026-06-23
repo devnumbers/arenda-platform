@@ -1,7 +1,14 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseMutationResult,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
+import { ApiError } from '@/shared/api/errors';
 import { authKeys } from './keys';
 import type { components } from '@/shared/api/generated';
 
@@ -9,7 +16,7 @@ type MeResponse = components['schemas']['MeResponse'];
 type SendPhoneCodeRequest = components['schemas']['SendPhoneCodeRequest'];
 type VerifyPhoneCodeRequest = components['schemas']['VerifyPhoneCodeRequest'];
 
-export function useMe() {
+export function useMe(): UseQueryResult<MeResponse, ApiError> {
   return useQuery({
     queryKey: authKeys.me,
     queryFn: () => apiClient<MeResponse>('/me'),
@@ -17,7 +24,11 @@ export function useMe() {
   });
 }
 
-export function useSendPhoneCode() {
+export function useSendPhoneCode(): UseMutationResult<
+  void,
+  ApiError,
+  SendPhoneCodeRequest
+> {
   return useMutation({
     mutationFn: (data: SendPhoneCodeRequest) =>
       apiClient<void>('/auth/phone/send', {
@@ -27,7 +38,11 @@ export function useSendPhoneCode() {
   });
 }
 
-export function useVerifyPhoneCode() {
+export function useVerifyPhoneCode(): UseMutationResult<
+  MeResponse,
+  ApiError,
+  VerifyPhoneCodeRequest
+> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: VerifyPhoneCodeRequest) =>
@@ -41,7 +56,7 @@ export function useVerifyPhoneCode() {
   });
 }
 
-export function useLogout() {
+export function useLogout(): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => apiClient<void>('/auth/logout', { method: 'POST' }),

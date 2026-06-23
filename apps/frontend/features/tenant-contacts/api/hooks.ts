@@ -1,7 +1,14 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseMutationResult,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
+import { ApiError } from '@/shared/api/errors';
 import { tenantContactKeys } from './keys';
 import type { components } from '@/shared/api/generated';
 
@@ -12,14 +19,19 @@ type TenantContactUpdateRequest =
   components['schemas']['TenantContactUpdateRequest'];
 type TenantContactsResponse = components['schemas']['TenantContactsResponse'];
 
-export function useTenantContacts() {
+export function useTenantContacts(): UseQueryResult<
+  TenantContactsResponse,
+  ApiError
+> {
   return useQuery({
     queryKey: tenantContactKeys.all,
     queryFn: () => apiClient<TenantContactsResponse>('/tenant-contacts'),
   });
 }
 
-export function useTenantContact(id: string) {
+export function useTenantContact(
+  id: string,
+): UseQueryResult<TenantContactResponse, ApiError> {
   return useQuery({
     queryKey: tenantContactKeys.detail(id),
     queryFn: () => apiClient<TenantContactResponse>(`/tenant-contacts/${id}`),
@@ -27,7 +39,11 @@ export function useTenantContact(id: string) {
   });
 }
 
-export function useCreateTenantContact() {
+export function useCreateTenantContact(): UseMutationResult<
+  TenantContactResponse,
+  ApiError,
+  TenantContactCreateRequest
+> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: TenantContactCreateRequest) =>
@@ -41,23 +57,23 @@ export function useCreateTenantContact() {
   });
 }
 
-export function useUpdateTenantContact() {
+export function useUpdateTenantContact(): UseMutationResult<
+  TenantContactResponse,
+  ApiError,
+  { id: string; data: TenantContactUpdateRequest }
+> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      data,
-    }: {
-      id: string;
-      data: TenantContactUpdateRequest;
-    }) =>
+    mutationFn: ({ id, data }) =>
       apiClient<TenantContactResponse>(`/tenant-contacts/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
       }),
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: tenantContactKeys.all });
-      queryClient.invalidateQueries({ queryKey: tenantContactKeys.detail(id) });
+      queryClient.invalidateQueries({
+        queryKey: tenantContactKeys.detail(id),
+      });
     },
   });
 }

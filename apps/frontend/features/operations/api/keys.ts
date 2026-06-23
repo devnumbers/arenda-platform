@@ -3,5 +3,11 @@ export const operationKeys = {
     ['properties', propertyId, 'operations'] as const,
   detail: (id: string) => ['operations', id] as const,
   reminders: (propertyId: string, operationId: string) =>
-    [...operationKeys.detail(operationId), 'reminders', propertyId] as const,
+    [
+      'properties',
+      propertyId,
+      'operations',
+      operationId,
+      'reminders',
+    ] as const,
 };

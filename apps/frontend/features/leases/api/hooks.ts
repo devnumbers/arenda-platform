@@ -1,7 +1,14 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseMutationResult,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
+import { ApiError } from '@/shared/api/errors';
 import { leaseKeys } from './keys';
 import type { components } from '@/shared/api/generated';
 
@@ -12,14 +19,14 @@ type ReminderCreateRequest = components['schemas']['ReminderCreateRequest'];
 type ReminderResponse = components['schemas']['ReminderResponse'];
 type RemindersResponse = components['schemas']['RemindersResponse'];
 
-export function useLeases() {
+export function useLeases(): UseQueryResult<LeaseResponse[], ApiError> {
   return useQuery({
     queryKey: leaseKeys.all,
     queryFn: () => apiClient<LeaseResponse[]>('/leases'),
   });
 }
 
-export function useLease(id: string) {
+export function useLease(id: string): UseQueryResult<LeaseResponse, ApiError> {
   return useQuery({
     queryKey: leaseKeys.detail(id),
     queryFn: () => apiClient<LeaseResponse>(`/leases/${id}`),
@@ -27,7 +34,11 @@ export function useLease(id: string) {
   });
 }
 
-export function useCreateLease() {
+export function useCreateLease(): UseMutationResult<
+  LeaseResponse,
+  ApiError,
+  LeaseCreateRequest
+> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: LeaseCreateRequest) =>
@@ -41,10 +52,14 @@ export function useCreateLease() {
   });
 }
 
-export function useUpdateLease() {
+export function useUpdateLease(): UseMutationResult<
+  LeaseResponse,
+  ApiError,
+  { id: string; data: LeaseUpdateRequest }
+> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: LeaseUpdateRequest }) =>
+    mutationFn: ({ id, data }) =>
       apiClient<LeaseResponse>(`/leases/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
@@ -56,10 +71,14 @@ export function useUpdateLease() {
   });
 }
 
-export function useCompleteLease() {
+export function useCompleteLease(): UseMutationResult<
+  LeaseResponse,
+  ApiError,
+  string
+> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
+    mutationFn: (id) =>
       apiClient<LeaseResponse>(`/leases/${id}/complete`, {
         method: 'POST',
       }),
@@ -70,7 +89,9 @@ export function useCompleteLease() {
   });
 }
 
-export function useLeaseReminders(id: string) {
+export function useLeaseReminders(
+  id: string,
+): UseQueryResult<RemindersResponse, ApiError> {
   return useQuery({
     queryKey: leaseKeys.reminders(id),
     queryFn: () => apiClient<RemindersResponse>(`/leases/${id}/reminders`),
@@ -78,10 +99,14 @@ export function useLeaseReminders(id: string) {
   });
 }
 
-export function useCreateLeaseReminder() {
+export function useCreateLeaseReminder(): UseMutationResult<
+  ReminderResponse,
+  ApiError,
+  { id: string; data: ReminderCreateRequest }
+> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: ReminderCreateRequest }) =>
+    mutationFn: ({ id, data }) =>
       apiClient<ReminderResponse>(`/leases/${id}/reminders`, {
         method: 'POST',
         body: JSON.stringify(data),
