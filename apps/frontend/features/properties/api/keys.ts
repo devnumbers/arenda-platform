@@ -1,4 +1,5 @@
 export const propertyKeys = {
   all: ['properties'] as const,
-  detail: (id: string) => [...propertyKeys.all, id] as const,
+  list: ['properties', 'list'] as const,
+  detail: (id: string) => ['properties', 'detail', id] as const,
 };

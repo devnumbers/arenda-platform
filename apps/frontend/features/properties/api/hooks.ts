@@ -18,7 +18,7 @@ type PropertyUpdateRequest = components['schemas']['PropertyUpdateRequest'];
 
 export function useProperties(): UseQueryResult<PropertyResponse[], ApiError> {
   return useQuery({
-    queryKey: propertyKeys.all,
+    queryKey: propertyKeys.list,
     queryFn: () => apiClient<PropertyResponse[]>('/properties'),
   });
 }
@@ -46,7 +46,7 @@ export function useCreateProperty(): UseMutationResult<
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.all });
+      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
     },
   });
 }
@@ -64,7 +64,7 @@ export function useUpdateProperty(): UseMutationResult<
         body: JSON.stringify(data),
       }),
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.all });
+      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
     },
   });
@@ -82,7 +82,7 @@ export function useArchiveProperty(): UseMutationResult<
         method: 'POST',
       }),
     onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.all });
+      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
     },
   });
@@ -100,7 +100,7 @@ export function useUnarchiveProperty(): UseMutationResult<
         method: 'POST',
       }),
     onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.all });
+      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
     },
   });

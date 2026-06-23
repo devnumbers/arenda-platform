@@ -91,10 +91,11 @@ export function useDeleteOperation(): UseMutationResult<
   return useMutation({
     mutationFn: ({ id }) =>
       apiClient<void>(`/operations/${id}`, { method: 'DELETE' }),
-    onSuccess: (_, { propertyId }) => {
+    onSuccess: (_, { id, propertyId }) => {
       queryClient.invalidateQueries({
         queryKey: operationKeys.byProperty(propertyId),
       });
+      queryClient.invalidateQueries({ queryKey: operationKeys.detail(id) });
     },
   });
 }
