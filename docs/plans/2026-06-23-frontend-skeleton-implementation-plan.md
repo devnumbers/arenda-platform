@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Создать каркас фронтенда Arenda Platform на Next.js: сгенерировать TypeScript-типы из OpenAPI, настроить прокси к бэкенду через cookie, подготовить TanStack Query hooks для всех бэкенд-ресурсов и базовые UI-компоненты на CSS Modules.
+**Goal:** Создать каркас фронтенда Arenda Platform на Next.js: сгенерировать TypeScript-типы из OpenAPI, настроить прокси к бэкенду через cookie, подготовить TanStack Query hooks для всех бэкенд-ресурсов. Базовые UI-компоненты и feature placeholder-компоненты реализуются следующим шагом.
 
 **Architecture:** Feature-based структура в `apps/frontend/features/`. Shared слой содержит сгенерированные типы, API-клиент и провайдеры. Next.js API Route Handler в `app/api/[...path]/route.ts` проксирует запросы на бэкенд, сохраняя session cookie. Каждая feature экспортирует свои TanStack Query hooks.
 
@@ -59,7 +59,7 @@ git commit -m "deps(frontend): add react-query, openapi-typescript, clsx"
 
 **Files:**
 - Modify: `apps/frontend/package.json`
-- Create: `apps/frontend/features/shared/api/generated.ts`
+- Create: `apps/frontend/shared/api/generated.ts`
 
 **Step 1: Add generate script**
 
@@ -70,7 +70,7 @@ git commit -m "deps(frontend): add react-query, openapi-typescript, clsx"
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "generate:api": "openapi-typescript ../../backend/api/openapi/openapi.yaml -o features/shared/api/generated.ts"
+    "generate:api": "openapi-typescript ../backend/api/openapi/openapi.yaml -o shared/api/generated.ts"
   }
 }
 ```
@@ -79,12 +79,12 @@ git commit -m "deps(frontend): add react-query, openapi-typescript, clsx"
 
 Run: `cd apps/frontend && npm run generate:api`
 
-Expected: файл `features/shared/api/generated.ts` создан и содержит типы `components`/`operations`/`paths`.
+Expected: файл `shared/api/generated.ts` создан и содержит типы `components`/`operations`/`paths`.
 
 **Step 3: Commit**
 
 ```bash
-git add apps/frontend/package.json apps/frontend/features/shared/api/generated.ts
+git add apps/frontend/package.json apps/frontend/shared/api/generated.ts
 git commit -m "feat(frontend): add openapi-typescript generation script and generated types"
 ```
 
@@ -93,13 +93,13 @@ git commit -m "feat(frontend): add openapi-typescript generation script and gene
 ### Task 3: Create shared API client
 
 **Files:**
-- Create: `apps/frontend/features/shared/api/errors.ts`
-- Create: `apps/frontend/features/shared/api/client.ts`
+- Create: `apps/frontend/shared/api/errors.ts`
+- Create: `apps/frontend/shared/api/client.ts`
 
 **Step 1: Write error class**
 
 ```ts
-// apps/frontend/features/shared/api/errors.ts
+// apps/frontend/shared/api/errors.ts
 export class ApiError extends Error {
   constructor(
     public code: string,
@@ -116,7 +116,7 @@ export class ApiError extends Error {
 **Step 2: Write fetch wrapper**
 
 ```ts
-// apps/frontend/features/shared/api/client.ts
+// apps/frontend/shared/api/client.ts
 import { ApiError } from './errors';
 
 export async function apiClient<T>(
@@ -166,7 +166,7 @@ Expected: no errors.
 **Step 4: Commit**
 
 ```bash
-git add apps/frontend/features/shared/api/
+git add apps/frontend/shared/api/
 git commit -m "feat(frontend): add shared api client with problem details error handling"
 ```
 
@@ -175,13 +175,13 @@ git commit -m "feat(frontend): add shared api client with problem details error 
 ### Task 4: Setup TanStack Query provider
 
 **Files:**
-- Create: `apps/frontend/features/shared/providers/query-provider.tsx`
+- Create: `apps/frontend/shared/providers/query-provider.tsx`
 - Modify: `apps/frontend/app/layout.tsx`
 
 **Step 1: Create provider**
 
 ```tsx
-// apps/frontend/features/shared/providers/query-provider.tsx
+// apps/frontend/shared/providers/query-provider.tsx
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -212,7 +212,7 @@ export function QueryProvider({ children }: { children: ReactNode }) {
 // apps/frontend/app/layout.tsx
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
-import { QueryProvider } from '@/features/shared/providers/query-provider';
+import { QueryProvider } from '@/shared/providers/query-provider';
 import './globals.css';
 
 const geistSans = Geist({
@@ -254,7 +254,7 @@ Expected: no errors.
 **Step 4: Commit**
 
 ```bash
-git add apps/frontend/features/shared/providers/query-provider.tsx apps/frontend/app/layout.tsx
+git add apps/frontend/shared/providers/query-provider.tsx apps/frontend/app/layout.tsx
 git commit -m "feat(frontend): add tanstack query provider and wire into layout"
 ```
 
@@ -353,9 +353,9 @@ export const authKeys = {
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/features/shared/api/client';
+import { apiClient } from '@/shared/api/client';
 import { authKeys } from './keys';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type MeResponse = components['schemas']['MeResponse'];
 type SendPhoneCodeRequest = components['schemas']['SendPhoneCodeRequest'];
@@ -437,9 +437,9 @@ export const propertyKeys = {
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/features/shared/api/client';
+import { apiClient } from '@/shared/api/client';
 import { propertyKeys } from './keys';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
 type PropertyCreateRequest = components['schemas']['PropertyCreateRequest'];
@@ -551,9 +551,9 @@ export const leaseKeys = {
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/features/shared/api/client';
+import { apiClient } from '@/shared/api/client';
 import { leaseKeys } from './keys';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type LeaseResponse = components['schemas']['LeaseResponse'];
 type LeaseCreateRequest = components['schemas']['LeaseCreateRequest'];
@@ -679,9 +679,9 @@ export const operationKeys = {
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/features/shared/api/client';
+import { apiClient } from '@/shared/api/client';
 import { operationKeys } from './keys';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type OperationResponse = components['schemas']['OperationResponse'];
 type OperationCreateRequest = components['schemas']['OperationCreateRequest'];
@@ -838,9 +838,9 @@ export const recurringOperationKeys = {
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/features/shared/api/client';
+import { apiClient } from '@/shared/api/client';
 import { recurringOperationKeys } from './keys';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type RecurringOperationResponse =
   components['schemas']['RecurringOperationResponse'];
@@ -1031,9 +1031,9 @@ export const reminderKeys = {
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/features/shared/api/client';
+import { apiClient } from '@/shared/api/client';
 import { reminderKeys } from './keys';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type ReminderResponse = components['schemas']['ReminderResponse'];
 type ReminderUpdateRequest = components['schemas']['ReminderUpdateRequest'];
@@ -1122,9 +1122,9 @@ export const tenantContactKeys = {
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/features/shared/api/client';
+import { apiClient } from '@/shared/api/client';
 import { tenantContactKeys } from './keys';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type TenantContactResponse = components['schemas']['TenantContactResponse'];
 type TenantContactCreateRequest =
@@ -1216,9 +1216,9 @@ export const billingKeys = {
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/features/shared/api/client';
+import { apiClient } from '@/shared/api/client';
 import { billingKeys } from './keys';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type TariffsResponse = components['schemas']['TariffsResponse'];
 type Subscription = components['schemas']['Subscription'];
@@ -1251,24 +1251,26 @@ git commit -m "feat(frontend): add billing feature read hooks"
 
 ### Task 14: Create shared UI components
 
+> **Status:** skipped for this iteration; will be implemented as the next step after the core skeleton is verified.
+
 **Files:**
-- Create: `apps/frontend/features/shared/ui/button/button.tsx`
-- Create: `apps/frontend/features/shared/ui/button/button.module.css`
-- Create: `apps/frontend/features/shared/ui/input/input.tsx`
-- Create: `apps/frontend/features/shared/ui/input/input.module.css`
-- Create: `apps/frontend/features/shared/ui/label/label.tsx`
-- Create: `apps/frontend/features/shared/ui/label/label.module.css`
-- Create: `apps/frontend/features/shared/ui/card/card.tsx`
-- Create: `apps/frontend/features/shared/ui/card/card.module.css`
-- Create: `apps/frontend/features/shared/ui/spinner/spinner.tsx`
-- Create: `apps/frontend/features/shared/ui/spinner/spinner.module.css`
-- Create: `apps/frontend/features/shared/ui/error-message/error-message.tsx`
-- Create: `apps/frontend/features/shared/ui/error-message/error-message.module.css`
+- Create: `apps/frontend/shared/ui/button/button.tsx`
+- Create: `apps/frontend/shared/ui/button/button.module.css`
+- Create: `apps/frontend/shared/ui/input/input.tsx`
+- Create: `apps/frontend/shared/ui/input/input.module.css`
+- Create: `apps/frontend/shared/ui/label/label.tsx`
+- Create: `apps/frontend/shared/ui/label/label.module.css`
+- Create: `apps/frontend/shared/ui/card/card.tsx`
+- Create: `apps/frontend/shared/ui/card/card.module.css`
+- Create: `apps/frontend/shared/ui/spinner/spinner.tsx`
+- Create: `apps/frontend/shared/ui/spinner/spinner.module.css`
+- Create: `apps/frontend/shared/ui/error-message/error-message.tsx`
+- Create: `apps/frontend/shared/ui/error-message/error-message.module.css`
 
 **Step 1: Button component**
 
 ```tsx
-// apps/frontend/features/shared/ui/button/button.tsx
+// apps/frontend/shared/ui/button/button.tsx
 import { ButtonHTMLAttributes, ReactNode } from 'react';
 import styles from './button.module.css';
 
@@ -1295,7 +1297,7 @@ export function Button({
 ```
 
 ```css
-/* apps/frontend/features/shared/ui/button/button.module.css */
+/* apps/frontend/shared/ui/button/button.module.css */
 .button {
   padding: 0.5rem 1rem;
   border: 1px solid transparent;
@@ -1324,7 +1326,7 @@ export function Button({
 **Step 2: Input component**
 
 ```tsx
-// apps/frontend/features/shared/ui/input/input.tsx
+// apps/frontend/shared/ui/input/input.tsx
 import { InputHTMLAttributes, forwardRef } from 'react';
 import styles from './input.module.css';
 
@@ -1336,7 +1338,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
 ```
 
 ```css
-/* apps/frontend/features/shared/ui/input/input.module.css */
+/* apps/frontend/shared/ui/input/input.module.css */
 .input {
   padding: 0.5rem;
   border: 1px solid #ccc;
@@ -1349,7 +1351,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
 **Step 3: Label component**
 
 ```tsx
-// apps/frontend/features/shared/ui/label/label.tsx
+// apps/frontend/shared/ui/label/label.tsx
 import { LabelHTMLAttributes, ReactNode } from 'react';
 import styles from './label.module.css';
 
@@ -1367,7 +1369,7 @@ export function Label({
 ```
 
 ```css
-/* apps/frontend/features/shared/ui/label/label.module.css */
+/* apps/frontend/shared/ui/label/label.module.css */
 .label {
   display: block;
   margin-bottom: 0.25rem;
@@ -1379,7 +1381,7 @@ export function Label({
 **Step 4: Card component**
 
 ```tsx
-// apps/frontend/features/shared/ui/card/card.tsx
+// apps/frontend/shared/ui/card/card.tsx
 import { ReactNode } from 'react';
 import styles from './card.module.css';
 
@@ -1395,7 +1397,7 @@ export function Card({
 ```
 
 ```css
-/* apps/frontend/features/shared/ui/card/card.module.css */
+/* apps/frontend/shared/ui/card/card.module.css */
 .card {
   padding: 1rem;
   border: 1px solid #e5e5e5;
@@ -1406,7 +1408,7 @@ export function Card({
 **Step 5: Spinner component**
 
 ```tsx
-// apps/frontend/features/shared/ui/spinner/spinner.tsx
+// apps/frontend/shared/ui/spinner/spinner.tsx
 import styles from './spinner.module.css';
 
 export function Spinner({ className = '' }: { className?: string }) {
@@ -1415,7 +1417,7 @@ export function Spinner({ className = '' }: { className?: string }) {
 ```
 
 ```css
-/* apps/frontend/features/shared/ui/spinner/spinner.module.css */
+/* apps/frontend/shared/ui/spinner/spinner.module.css */
 .spinner {
   display: inline-block;
   width: 1rem;
@@ -1436,7 +1438,7 @@ export function Spinner({ className = '' }: { className?: string }) {
 **Step 6: ErrorMessage component**
 
 ```tsx
-// apps/frontend/features/shared/ui/error-message/error-message.tsx
+// apps/frontend/shared/ui/error-message/error-message.tsx
 import styles from './error-message.module.css';
 
 export function ErrorMessage({ message }: { message: string }) {
@@ -1445,7 +1447,7 @@ export function ErrorMessage({ message }: { message: string }) {
 ```
 
 ```css
-/* apps/frontend/features/shared/ui/error-message/error-message.module.css */
+/* apps/frontend/shared/ui/error-message/error-message.module.css */
 .error {
   color: #c00;
   font-size: 0.875rem;
@@ -1461,13 +1463,15 @@ Expected: no errors.
 **Step 8: Commit**
 
 ```bash
-git add apps/frontend/features/shared/ui/
+git add apps/frontend/shared/ui/
 git commit -m "feat(frontend): add shared base ui components"
 ```
 
 ---
 
 ### Task 15: Create feature placeholder components
+
+> **Status:** skipped for this iteration; will be implemented alongside shared UI components as the next step.
 
 **Files:**
 - Create: `apps/frontend/features/properties/components/property-card/property-card.tsx`
@@ -1489,9 +1493,9 @@ git commit -m "feat(frontend): add shared base ui components"
 
 ```tsx
 // apps/frontend/features/properties/components/property-card/property-card.tsx
-import { Card } from '@/features/shared/ui/card/card';
+import { Card } from '@/shared/ui/card/card';
 import styles from './property-card.module.css';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type Property = components['schemas']['PropertyResponse'];
 
@@ -1522,7 +1526,7 @@ export function PropertyCard({ property }: { property: Property }) {
 ```tsx
 // apps/frontend/features/leases/components/lease-list/lease-list.tsx
 import styles from './lease-list.module.css';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type Lease = components['schemas']['LeaseResponse'];
 
@@ -1558,7 +1562,7 @@ export function LeaseList({ leases }: { leases: Lease[] }) {
 ```tsx
 // apps/frontend/features/operations/components/operation-row/operation-row.tsx
 import styles from './operation-row.module.css';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type Operation = components['schemas']['OperationResponse'];
 
@@ -1587,7 +1591,7 @@ export function OperationRow({ operation }: { operation: Operation }) {
 ```tsx
 // apps/frontend/features/recurring-operations/components/recurring-operation-item/recurring-operation-item.tsx
 import styles from './recurring-operation-item.module.css';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type RecurringOperation = components['schemas']['RecurringOperationResponse'];
 
@@ -1619,7 +1623,7 @@ export function RecurringOperationItem({
 ```tsx
 // apps/frontend/features/reminders/components/reminder-row/reminder-row.tsx
 import styles from './reminder-row.module.css';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type Reminder = components['schemas']['ReminderResponse'];
 
@@ -1646,9 +1650,9 @@ export function ReminderRow({ reminder }: { reminder: Reminder }) {
 
 ```tsx
 // apps/frontend/features/tenant-contacts/components/tenant-contact-card/tenant-contact-card.tsx
-import { Card } from '@/features/shared/ui/card/card';
+import { Card } from '@/shared/ui/card/card';
 import styles from './tenant-contact-card.module.css';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type TenantContact = components['schemas']['TenantContactResponse'];
 
@@ -1679,7 +1683,7 @@ export function TenantContactCard({ contact }: { contact: TenantContact }) {
 ```tsx
 // apps/frontend/features/billing/components/subscription-info/subscription-info.tsx
 import styles from './subscription-info.module.css';
-import type { components } from '@/features/shared/api/generated';
+import type { components } from '@/shared/api/generated';
 
 type Subscription = components['schemas']['Subscription'];
 
@@ -1745,9 +1749,8 @@ Expected: build succeeds.
 **Step 4: Final commit**
 
 ```bash
-git commit -m "feat(frontend): complete frontend skeleton" --allow-empty
-git add docs/plans/2026-06-23-frontend-skeleton-implementation-plan.md
-git commit -m "docs: add frontend skeleton implementation plan"
+git add CHANGELOG.md docs/plans/2026-06-23-frontend-skeleton-design.md docs/plans/2026-06-23-frontend-skeleton-implementation-plan.md
+git commit -m "docs: update frontend skeleton docs to reflect delivered scope"
 ```
 
 ---
@@ -1756,7 +1759,8 @@ git commit -m "docs: add frontend skeleton implementation plan"
 
 - `npm run generate:api` создаёт актуальные типы из `openapi.yaml`.
 - `npx tsc --noEmit`, `npm run lint` и `npm run build` проходят без ошибок.
-- Все feature-папки содержат `api/keys.ts`, `api/hooks.ts` и хотя бы один placeholder-компонент.
-- Shared UI содержит базовые компоненты.
+- Все feature-папки содержат `api/keys.ts` и `api/hooks.ts`.
 - Прокси-роут пересылает запросы на бэкенд.
+- QueryProvider оборачивает приложение.
+- Shared UI-компоненты и feature placeholder-компоненты реализуются следующим шагом.
 - QueryProvider оборачивает приложение.

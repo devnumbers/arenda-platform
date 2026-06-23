@@ -5,7 +5,7 @@
 - Бэкенд готов, API описан в `apps/backend/api/openapi/openapi.yaml` (OpenAPI 3.0).
 - Аутентификация через HttpOnly session cookie.
 - Фронтенд уже инициализирован: Next.js 16, React 19, TypeScript, CSS Modules.
-- Цель этого этапа — только каркас: типы, API-запросы, обработчики и базовые UI-компоненты. Страницы пока не делаем, дизайн из Figma подключается позже.
+- Цель этого этапа — каркас: типы, API-запросы, обработчики и FSD-структура. Базовые UI-компоненты и страницы делаем следующим шагом; дизайн из Figma подключается позже.
 
 ## Решения
 
@@ -31,22 +31,25 @@ apps/frontend/
     reminders/                      # напоминания
     tenant-contacts/                # контакты арендаторов
     billing/                        # тарифы, подписка, способы оплаты
-    shared/                         # сгенерированные типы, API-клиент, базовые UI-компоненты, провайдеры
+  shared/
+    api/                            # сгенерированные типы, API-клиент
+    providers/                      # QueryProvider
+    ui/                             # базовые UI-компоненты (следующий шаг)
 ```
 
 Каждая feature содержит:
 
 - `api/hooks.ts` — TanStack Query hooks (queries и mutations).
 - `api/keys.ts` — query keys.
-- `api/actions.ts` — server actions или функции для прокси (если понадобятся).
-- `components/` — placeholder-компоненты фичи (минимальная разметка, готовая к стилям из Figma).
-- `types.ts` — только доменные типы, которых нет в сгенерированном OpenAPI.
+- `components/` — placeholder-компоненты фичи (минимальная разметка, готовая к стилям из Figma; следующий шаг).
+
+`shared/` содержит инфраструктуру, не привязанную к конкретной feature: сгенерированные типы, API-клиент, провайдеры и базовые UI-компоненты.
 
 ## Генерация типов и API-клиент
 
 1. Добавить `openapi-typescript` как dev-dependency.
-2. Скрипт `generate:api` генерирует `features/shared/api/generated.ts` из `apps/backend/api/openapi/openapi.yaml`.
-3. Shared fetch-wrapper `features/shared/api/client.ts`:
+2. Скрипт `generate:api` генерирует `shared/api/generated.ts` из `apps/backend/api/openapi/openapi.yaml`.
+3. Shared fetch-wrapper `shared/api/client.ts`:
    - базовый URL `/api` (локальный прокси);
    - JSON only;
    - парсит `Problem Details` (RFC 7807) от бэкенда и выбрасывает `ApiError` с `code`, `message`, `requestId`;
@@ -64,14 +67,14 @@ apps/frontend/
 ## TanStack Query
 
 - Добавить `@tanstack/react-query`.
-- `features/shared/providers/query-provider.tsx` оборачивает приложение.
+- `shared/providers/query-provider.tsx` оборачивает приложение.
 - Каждая feature экспортирует hooks:
   - `useProperties()`, `useProperty(id)`
   - `useCreateProperty()`, `useUpdateProperty()`, `useArchiveProperty()`, ...
   - аналогично для leases, operations, recurring operations, reminders, tenant contacts, billing, auth.
 - Mutation hooks инвалидируют соответствующие query keys.
 
-## UI-компоненты
+## UI-компоненты (следующий шаг)
 
 - Только CSS Modules.
 - Shared базовые компоненты: `Button`, `Input`, `Label`, `Card`, `Spinner`, `ErrorMessage`.
