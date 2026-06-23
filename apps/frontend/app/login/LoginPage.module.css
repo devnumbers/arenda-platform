@@ -1,0 +1,60 @@
+.container {
+  display: flex;
+  min-height: 100vh;
+  padding: 0;
+}
+
+.left {
+  display: none;
+}
+
+.right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.formWrapper {
+  max-width: 420px;
+  width: 100%;
+  background: #ffffff;
+  border-radius: 32px;
+  padding: 32px 24px 24px;
+}
+
+@media (min-width: 1200px) {
+  .container {
+    padding: 24px;
+    gap: 24px;
+  }
+
+  .left {
+    display: flex;
+    flex: 1;
+    position: relative;
+    border-radius: 32px;
+    background-image: url('/images/login-bg.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+
+  .logo {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 360px;
+    height: 360px;
+    background-image: url('/images/login-logo.png');
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+
+  .formWrapper {
+    padding: 32px;
+  }
+}

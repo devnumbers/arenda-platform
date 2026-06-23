@@ -1,5 +1,6 @@
 export { default as Clock } from './clock.svg';
 export { default as Loading } from './loading.svg';
+export { default as Logo } from './logo.svg';
 export { default as ArrowLeft } from './arrow-left.svg';
 export { default as ArrowRight } from './arrow-right.svg';
 export { default as Menu } from './menu.svg';
