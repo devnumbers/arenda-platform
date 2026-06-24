@@ -8,11 +8,13 @@
   line-height: var(--line-height-text-s);
 }
 
+/* The success color matches the Figma design: #34c771. */
 .success {
   background: var(--color-success-bg);
   color: var(--color-success);
 }
 
+/* The warning color matches the Figma design: #ebb800. */
 .warning {
   background: var(--color-warning-bg);
   color: var(--color-warning);
