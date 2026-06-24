@@ -1,7 +1,8 @@
-export function formatDuration(start?: string, end?: string): string {
-  if (!start || !end) return '';
-  const diff = new Date(end).getTime() - new Date(start).getTime();
-  const days = Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+export function formatDuration(start: string, end: string): string {
+  const startTime = new Date(start).getTime();
+  const endTime = new Date(end).getTime();
+  if (Number.isNaN(startTime) || Number.isNaN(endTime)) return '';
+  const days = Math.max(0, Math.floor((endTime - startTime) / (1000 * 60 * 60 * 24)));
   const weeks = Math.floor(days / 7);
   const remDays = days % 7;
   if (weeks === 0) return `${remDays} ${declDays(remDays)}`;

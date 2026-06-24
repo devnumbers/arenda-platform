@@ -1,16 +1,18 @@
 export function formatLeaseMonth(start: string): string {
-  const months = Math.max(
-    1,
-    Math.floor(
-      (Date.now() - new Date(start).getTime()) / (1000 * 60 * 60 * 24 * 30),
-    ),
-  );
-  const last = months % 10;
+  const startDate = new Date(start);
+  if (Number.isNaN(startDate.getTime())) return '';
+  const now = new Date();
+  if (startDate > now) return '';
+  const months =
+    (now.getFullYear() - startDate.getFullYear()) * 12 +
+    (now.getMonth() - startDate.getMonth());
+  const normalized = Math.max(0, months);
+  const last = normalized % 10;
   const label =
-    last === 1 && months !== 11
+    last === 1 && normalized !== 11
       ? 'месяц'
-      : [2, 3, 4].includes(last) && ![12, 13, 14].includes(months % 100)
+      : [2, 3, 4].includes(last) && ![12, 13, 14].includes(normalized % 100)
         ? 'месяца'
         : 'месяцев';
-  return `${months} ${label}`;
+  return `${normalized} ${label}`;
 }

@@ -4,13 +4,13 @@ import { useMemo } from 'react';
 import { useProperties } from '@/features/properties/api/hooks';
 import { useLeases } from '@/features/leases/api/hooks';
 import { ApiError } from '@/shared/api/errors';
-import type { components } from '@/shared/api/generated';
+import { mapPropertyResponse } from '@/entities/property/model/mappers';
+import { mapLeaseResponse } from '@/entities/lease/model/mappers';
+import type { Property } from '@/entities/property/model/types';
+import type { Lease } from '@/entities/lease/model/types';
 
-type PropertyResponse = components['schemas']['PropertyResponse'];
-type LeaseResponse = components['schemas']['LeaseResponse'];
-
-export type PropertyWithLease = PropertyResponse & {
-  activeLease?: LeaseResponse;
+export type PropertyWithLease = Property & {
+  activeLease?: Lease;
 };
 
 type UsePropertyListDataReturn = {
@@ -23,15 +23,15 @@ type UsePropertyListDataReturn = {
   };
 };
 
-function compareActiveLeases(a: LeaseResponse, b: LeaseResponse): number {
+function compareActiveLeases(a: Lease, b: Lease): number {
   // Pick the "more current" active lease:
   // - a later start_date wins;
   // - leases with an invalid/unparseable start_date are treated as older
   //   than any lease with a valid date, so valid dates always win;
   // - if start_date is identical, the lease with the greater id wins
   //   (lexicographic comparison of UUIDs is sufficient here).
-  const aStart = a.start_date ? new Date(a.start_date).getTime() : NaN;
-  const bStart = b.start_date ? new Date(b.start_date).getTime() : NaN;
+  const aStart = a.startDate ? new Date(a.startDate).getTime() : NaN;
+  const bStart = b.startDate ? new Date(b.startDate).getTime() : NaN;
   const aValid = !Number.isNaN(aStart);
   const bValid = !Number.isNaN(bStart);
 
@@ -60,20 +60,21 @@ export function usePropertyListData(): UsePropertyListDataReturn {
 
     // Index active leases by property_id in a single O(L) pass, keeping
     // the best candidate per property. The final join over properties is O(P).
-    const activeLeaseByProperty = new Map<string, LeaseResponse>();
+    const activeLeaseByProperty = new Map<string, Lease>();
 
     for (const lease of leasesQuery.data ?? []) {
       if (lease.status !== 'active') continue;
 
-      const current = activeLeaseByProperty.get(lease.property_id);
+      const mappedLease = mapLeaseResponse(lease);
+      const current = activeLeaseByProperty.get(mappedLease.propertyId);
 
-      if (!current || compareActiveLeases(lease, current) > 0) {
-        activeLeaseByProperty.set(lease.property_id, lease);
+      if (!current || compareActiveLeases(mappedLease, current) > 0) {
+        activeLeaseByProperty.set(mappedLease.propertyId, mappedLease);
       }
     }
 
     return propertiesQuery.data.map((property) => ({
-      ...property,
+      ...mapPropertyResponse(property),
       activeLease: activeLeaseByProperty.get(property.id),
     }));
   }, [propertiesQuery.data, leasesQuery.data]);
