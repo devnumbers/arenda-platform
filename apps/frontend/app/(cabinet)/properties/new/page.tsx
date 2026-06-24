@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { PropertyCreateForm } from '@/widgets/properties/ui/PropertyCreateForm';
+import { PropertyCreateForm } from '@/widgets/properties';
 
 export const metadata: Metadata = {
   title: 'Создать объект — Arenda Platform',
