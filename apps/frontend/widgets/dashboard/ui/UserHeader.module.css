@@ -7,8 +7,9 @@
 .card {
   display: flex;
   align-items: center;
+  flex-direction: row;
   justify-content: space-between;
-  padding: 20px;
+  padding: 24px 24px 24px 28px;
   border: 1px solid #e7e9ec;
   border-radius: 24px;
   background: var(--color-white);
@@ -18,13 +19,13 @@
 .left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
-.greeting {
-  font-size: 1.125rem;
-  font-weight: 600;
-  line-height: 1.5rem;
+.name {
+  font-size: 1.25rem;
+  font-weight: 500;
+  line-height: 1.375rem;
   color: var(--color-text);
 }
 
@@ -32,10 +33,15 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  padding: 0 8px;
+  height: 26px;
   border-radius: 100px;
-  background: linear-gradient(90deg, #d9ebff, #59a6ff);
-  color: var(--color-text);
+  background: linear-gradient(90deg, #d9ebff 0%, #59a6ff 100%);
+}
+
+.badgeLabel {
   font-size: var(--font-size-text-s);
   font-weight: 500;
+  line-height: var(--line-height-text-s);
+  color: var(--color-white);
 }

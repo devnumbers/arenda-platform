@@ -4,12 +4,16 @@ import type { ComponentType, JSX } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import {
-  Home,
-  Objects,
-  Arendators,
-  BoldWallet,
-  BoldProfile,
-  Support,
+  NavHome,
+  NavObjects,
+  NavTenants,
+  NavWallet,
+  NavProfile,
+  NavSupport,
+  BottomHome,
+  BottomObjects,
+  BottomWallet,
+  BottomProfile,
 } from '@/shared/assets/icons';
 import styles from './NavItem.module.css';
 
@@ -17,6 +21,7 @@ export type NavItemProps = {
   readonly href: string;
   readonly label: string;
   readonly iconName: string;
+  readonly bottomIconName?: string;
   readonly isActive: boolean;
   readonly variant: 'sidebar' | 'bottom';
 };
@@ -24,28 +29,33 @@ export type NavItemProps = {
 type IconComponent = ComponentType<{ readonly className?: string }>;
 
 const iconMap: Record<string, IconComponent> = {
-  Home,
-  Objects,
-  Arendators,
-  BoldWallet,
-  BoldProfile,
-  Support,
+  NavHome,
+  NavObjects,
+  NavTenants,
+  NavWallet,
+  NavProfile,
+  NavSupport,
+  BottomHome,
+  BottomObjects,
+  BottomWallet,
+  BottomProfile,
 };
 
 export function NavItem({
   href,
   label,
   iconName,
+  bottomIconName,
   isActive,
   variant,
 }: NavItemProps): JSX.Element {
-  const IconComponent = iconMap[iconName];
+  const isSidebar = variant === 'sidebar';
+  const resolvedIconName = isSidebar ? iconName : (bottomIconName ?? iconName);
+  const IconComponent = iconMap[resolvedIconName];
 
   if (!IconComponent) {
     return <></>;
   }
-
-  const isSidebar = variant === 'sidebar';
 
   return (
     <Link
@@ -56,13 +66,18 @@ export function NavItem({
         isSidebar ? styles.sidebar : styles.bottom
       )}
       aria-current={isActive ? 'page' : undefined}
+      aria-label={isSidebar ? undefined : label}
+      title={isSidebar ? undefined : label}
     >
       <IconComponent
-        className={isSidebar ? styles.sidebarIcon : styles.bottomIcon}
+        className={clsx(
+          isSidebar ? styles.sidebarIcon : styles.bottomIcon,
+          !isSidebar && isActive && styles.bottomIconActive
+        )}
       />
-      <span className={isSidebar ? styles.sidebarLabel : styles.bottomLabel}>
-        {label}
-      </span>
+      {isSidebar && (
+        <span className={styles.sidebarLabel}>{label}</span>
+      )}
     </Link>
   );
 }

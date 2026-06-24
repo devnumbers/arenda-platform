@@ -3,13 +3,14 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: 80px;
-  border-top: 1px solid var(--color-secondary-hover, #e7e9ec);
-  background: #ffffff;
   display: flex;
-  justify-content: space-around;
   align-items: center;
+  background: #ffffff;
   z-index: 100;
+}
+
+.bottomNav > * {
+  flex: 1;
 }
 
 @media (min-width: 1200px) {

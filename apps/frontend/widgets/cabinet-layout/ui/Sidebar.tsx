@@ -2,7 +2,6 @@
 
 import type { JSX } from 'react';
 import { usePathname } from 'next/navigation';
-import { Logo } from '@/shared/assets/icons';
 import { navItems } from '../lib/nav-items';
 import { NavItem } from './NavItem';
 import styles from './Sidebar.module.css';
@@ -12,7 +11,6 @@ export function Sidebar(): JSX.Element {
 
   return (
     <aside className={styles.sidebar}>
-      <Logo className={styles.logo} />
       <nav>
         <ul className={styles.nav}>
           {navItems.map((item) => (

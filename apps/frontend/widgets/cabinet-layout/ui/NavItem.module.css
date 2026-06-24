@@ -1,15 +1,16 @@
 .item {
   text-decoration: none;
   display: flex;
+  height: 48px;
   align-items: center;
-  color: #8d8f92;
+  color: var(--color-text, #1e1e1e);
   transition:
     background-color 0.15s ease,
     color 0.15s ease;
 }
 
 .item:hover {
-  color: var(--color-text, #1e1e1e);
+  background: var(--color-secondary-bg, #f1f3f6);
 }
 
 .active {
@@ -31,15 +32,21 @@
 
 .sidebarLabel {
   font-size: var(--font-size-text-l, 1rem);
+  font-weight: 500;
   line-height: var(--line-height-text-l, 1.25rem);
 }
 
 .bottom {
+  flex: 1;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 4px;
-  padding: 8px 0;
+  padding: 16px 0;
+  color: #8d8f92;
+}
+
+.bottom:hover {
+  background: transparent;
 }
 
 .bottomIcon {
@@ -48,7 +55,14 @@
   flex-shrink: 0;
 }
 
-.bottomLabel {
-  font-size: var(--font-size-text-s, 0.75rem);
-  line-height: var(--line-height-text-s, 1rem);
+.bottomIconActive {
+  color: #1E1E1E;
+}
+
+.bottom.active{
+  background: none;
+}
+
+.bottom.item{
+  height: auto;
 }

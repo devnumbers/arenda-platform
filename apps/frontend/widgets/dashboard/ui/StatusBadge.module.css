@@ -1,0 +1,15 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px 0 6px;
+  border-radius: 8px;
+  background: var(--color-white);
+  color: #34c771;
+}
+
+.label {
+  font-size: var(--font-size-text-s);
+  font-weight: 500;
+  line-height: var(--line-height-text-s);
+}

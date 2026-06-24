@@ -1,0 +1,56 @@
+.root {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 8px;
+  width: auto;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.image {
+  width: var(--entity-card-size, 72px);
+  height: var(--entity-card-size, 72px);
+  background-position: center;
+  background-size: cover;
+  border-radius: 16px;
+}
+
+.image svg {
+  width: 24px;
+  height: 24px;
+}
+
+.small {
+  --entity-card-size: 56px;
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-secondary-bg);
+  color: var(--color-text-muted);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 72px;
+}
+
+.title,
+.subtitle {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: var(--font-size-text-s);
+  font-weight: 500;
+  line-height: var(--line-height-text-s);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.subtitle {
+  color: var(--color-text-muted);
+}

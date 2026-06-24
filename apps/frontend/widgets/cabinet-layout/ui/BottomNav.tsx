@@ -18,6 +18,7 @@ export function BottomNav(): JSX.Element {
           href={item.href}
           label={item.label}
           iconName={item.icon}
+          bottomIconName={item.bottomIcon}
           variant="bottom"
           isActive={pathname === item.href}
         />

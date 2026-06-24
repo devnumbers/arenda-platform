@@ -52,6 +52,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/logout-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["logoutAll"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -178,6 +194,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateOperation"];
+        trace?: never;
+    };
+    "/operations/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/properties/{propertyId}/recurring-operations": {
@@ -802,6 +834,8 @@ export interface components {
         OperationType: "income" | "expense";
         /** @enum {string} */
         OperationCategory: "rent" | "other_income" | "utilities" | "repair" | "tax" | "other_expense";
+        /** @enum {string} */
+        OperationStatus: "pending" | "overdue" | "paid" | "received";
         OperationCreateRequest: {
             type: components["schemas"]["OperationType"];
             category: components["schemas"]["OperationCategory"];
@@ -838,6 +872,7 @@ export interface components {
             amount_kopecks: number;
             /** Format: date */
             operation_date: string;
+            status: components["schemas"]["OperationStatus"];
             comment?: string | null;
             is_exception: boolean;
             /** Format: date-time */
@@ -916,7 +951,7 @@ export interface components {
             /** Format: uuid */
             property_id?: string | null;
             /** @enum {string} */
-            event_type: "operation_due" | "lease_expiring" | "lease_requires_action";
+            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action";
             /** @enum {string} */
             status: "pending" | "sent" | "failed" | "cancelled";
             /** Format: date-time */
@@ -1079,6 +1114,26 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Logged out */
+            204: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    logoutAll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All sessions logged out */
             204: {
                 headers: {
                     "Set-Cookie"?: string;
@@ -1265,7 +1320,9 @@ export interface operations {
     };
     listOperationsByProperty: {
         parameters: {
-            query?: never;
+            query?: {
+                status?: components["schemas"]["OperationStatus"][];
+            };
             header?: never;
             path: {
                 propertyId: string;
@@ -1448,6 +1505,36 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    completeOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Operation completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listRecurringOperationsByProperty: {

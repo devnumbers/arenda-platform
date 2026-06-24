@@ -4,13 +4,6 @@
   gap: 16px;
 }
 
-.title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  line-height: 1.75rem;
-  color: var(--color-text);
-}
-
 .titleSkeleton {
   height: 28px;
   width: 220px;
@@ -18,13 +11,40 @@
 }
 
 .card {
-  padding: 20px;
-  border-radius: 24px;
-  border: none;
-  background: linear-gradient(135deg, #eaf3ff 0%, #f1f3f6 100%);
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  justify-content: space-between;
+  height: 200px;
+  padding: 24px;
+  overflow: hidden;
+  border: none;
+  border-radius: 24px;
+  background: url('/images/dashboard/finance-bg.png'), linear-gradient(135deg, #eaf3ff 0%, #f1f3f6 100%);
+  background-position: center;
+  background-size: cover;
+  box-shadow: none;
+}
+
+.logo3d {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  width: 120px;
+  height: 120px;
+  background: url('/images/dashboard/finance-logo.png');
+  background-position: center;
+  background-size: contain;
+  filter: blur(6px);
+  transform: translateX(-50%);
+}
+
+.top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
 }
 
 .profit {
@@ -33,57 +53,136 @@
   gap: 4px;
 }
 
-.profitLabel {
-  font-size: var(--font-size-text-m);
-  color: var(--color-text-muted);
-}
-
 .profitValue {
-  font-size: 2rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  line-height: 2.5rem;
-  color: var(--color-text);
+  line-height: 1.375rem;
+  color: var(--color-white);
 }
 
-.profitSkeleton {
-  height: 64px;
-  border-radius: 12px;
+.profitLabel {
+  font-size: var(--font-size-text-s);
+  font-weight: 500;
+  line-height: var(--line-height-text-s);
+  color: rgba(255, 255, 255, 0.6);
 }
 
-.columns,
-.columnsSkeleton {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+.miniLogo {
+  width: 74px;
+  height: auto;
+  filter: brightness(0) invert(1);
 }
 
-.columnSkeleton {
-  height: 60px;
-  border-radius: 12px;
+.bottom {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
 }
 
-.column {
+.column,
+.columnRight {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 12px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.6);
 }
 
-.columnLabel {
+.columnRight {
+  align-items: flex-end;
+}
+
+.value {
+  font-size: var(--font-size-text-m);
+  font-weight: 700;
+  line-height: var(--line-height-text-m);
+  color: var(--color-white);
+}
+
+.label {
   font-size: var(--font-size-text-s);
-  color: var(--color-text-muted);
+  font-weight: 500;
+  line-height: var(--line-height-text-s);
+  color: rgba(255, 255, 255, 0.6);
 }
 
-.columnValueIncome {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #2a9d3f;
+/* Skeleton helpers */
+.topSkeleton {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
 }
 
-.columnValueExpense {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #e63946;
+.profitSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.valueSkeleton {
+  width: 160px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.labelSkeleton {
+  width: 120px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.logoSkeleton {
+  width: 74px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.bottomSkeleton {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.columnSkeleton {
+  width: 80px;
+  height: 40px;
+  border-radius: 8px;
+}
+
+@media (min-width: 1200px) {
+  .card {
+    height: 275px;
+    padding: 32px;
+  }
+
+  .logo3d {
+    top: 60px;
+    width: 156px;
+    height: 156px;
+  }
+
+  .profitValue {
+    font-size: 1.25rem;
+    line-height: 1.375rem;
+  }
+
+  .profitLabel {
+    font-size: var(--font-size-text-m);
+    line-height: var(--line-height-text-m);
+  }
+
+  .value {
+    font-size: var(--font-size-text-l);
+    font-weight: 500;
+    line-height: var(--line-height-text-l);
+  }
+
+  .label {
+    font-size: var(--font-size-text-m);
+    line-height: var(--line-height-text-m);
+  }
 }

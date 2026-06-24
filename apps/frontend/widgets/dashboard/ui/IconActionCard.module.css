@@ -1,0 +1,43 @@
+.root {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.iconBox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: var(--icon-action-size, 72px);
+  border-radius: 16px;
+}
+
+.iconBox svg {
+  width: 24px;
+  height: 24px;
+}
+
+.small {
+  --icon-action-size: 56px;
+}
+
+.filled {
+  background: var(--color-secondary-bg);
+}
+
+.outlined {
+  border: 1px solid #e7e9ec;
+  background: transparent;
+}
+
+.label {
+  font-size: var(--font-size-text-s);
+  font-weight: 500;
+  line-height: var(--line-height-text-s);
+  text-align: center;
+}

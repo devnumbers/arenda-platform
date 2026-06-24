@@ -27,7 +27,7 @@ export function DashboardPage(): JSX.Element {
       <NearestLease leases={leases} properties={properties} isLoading={leasesLoading || propertiesLoading} />
       <PropertiesSection properties={properties} isLoading={propertiesLoading} />
       <FinanceSection properties={properties} isLoading={propertiesLoading || operationsLoading} />
-      <PaymentsSection reminders={reminders?.items} isLoading={remindersLoading} />
+      <PaymentsSection reminders={reminders?.items} properties={properties} isLoading={remindersLoading} />
       <TenantsSection leases={leases} isLoading={leasesLoading} />
     </div>
   );

@@ -4,13 +4,6 @@
   gap: 16px;
 }
 
-.title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  line-height: 1.75rem;
-  color: var(--color-text);
-}
-
 .titleSkeleton {
   height: 28px;
   width: 200px;
@@ -18,58 +11,56 @@
 }
 
 .card {
-  padding: 20px;
-  border-radius: 24px;
-  border: 1px solid #e7e9ec;
-  background: var(--color-white);
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.rowSkeleton {
-  height: 48px;
-  border-radius: 12px;
-}
-
-.actionsSkeleton {
-  height: 44px;
-  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid #e7e9ec;
+  border-radius: 24px;
+  background: var(--color-white);
+  box-shadow: none;
 }
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   list-style: none;
 }
 
-.item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.itemTitle {
-  font-size: var(--font-size-text-m);
-  font-weight: 500;
-  color: var(--color-text);
-}
-
-.itemDate {
-  font-size: var(--font-size-text-s);
-  color: var(--color-text-muted);
-}
-
 .actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
   gap: 12px;
+  --icon-action-size: 56px;
+}
+
+.rowSkeleton {
+  height: 72px;
+  border-radius: 24px;
+}
+
+.actionsSkeleton {
+  display: flex;
+  gap: 12px;
+}
+
+.actionSkeleton {
+  flex: 1;
+  height: 80px;
+  border-radius: 16px;
+}
+
+@media (min-width: 1200px) {
+  .card {
+    padding: 24px;
+  }
+
+  .actions {
+    gap: 16px;
+    --icon-action-size: 72px;
+  }
+
+  .actionsSkeleton {
+    gap: 16px;
+  }
 }

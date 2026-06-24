@@ -2,15 +2,17 @@
 
 import type { JSX } from 'react';
 import { Card } from '@heroui/react/card';
-import { Badge } from '@heroui/react/badge';
 import { Skeleton } from '@heroui/react/skeleton';
-import { Button } from '@/shared/ui/button';
-import { LinkButton } from '@/shared/ui/link-button';
 import { Icon } from '@/shared/ui/icon';
-import { Key, ArrowRight } from '@/shared/assets/icons';
+import { Key, ArrowRight, BoldWallet, UserSmall, ClockSmall } from '@/shared/assets/icons';
 import type { components } from '@/shared/api/generated';
 import { formatMoney } from '../lib/format-money';
+import { formatRemainingDuration, formatCurrentLeaseMonth } from '../lib/lease-helpers';
 import { EmptyState } from './EmptyState';
+import { SectionHeader } from './SectionHeader';
+import { StatusBadge } from './StatusBadge';
+import { LeaseProgress } from './LeaseProgress';
+import { IconActionCard } from './IconActionCard';
 import styles from './NearestLease.module.css';
 
 type LeaseResponse = components['schemas']['LeaseResponse'];
@@ -28,28 +30,10 @@ function getNearestLease(leases: LeaseResponse[] | undefined): LeaseResponse | u
   }
 
   const active = leases
-    .filter((lease) => lease.status !== 'completed' && lease.status !== 'archived')
+    .filter((lease) => lease.status === 'active' || lease.status === 'requires_action')
     .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
 
   return active[0] ?? leases[0];
-}
-
-function formatDuration(start: string, end?: string | null): string {
-  if (!end) {
-    return 'Бессрочно';
-  }
-
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  const months =
-    (endDate.getFullYear() - startDate.getFullYear()) * 12 +
-    (endDate.getMonth() - startDate.getMonth());
-
-  if (months <= 0) {
-    return 'Менее месяца';
-  }
-
-  return `${months} мес.`;
 }
 
 function getPropertyName(
@@ -67,10 +51,23 @@ export function NearestLease({ leases, properties, isLoading }: NearestLeaseProp
       <section className={styles.section}>
         <Skeleton className={styles.titleSkeleton} />
         <Card className={styles.card}>
-          <Skeleton className={styles.rowSkeleton} />
+          <div className={styles.headerSkeleton}>
+            <div className={styles.textSkeleton}>
+              <Skeleton className={styles.rowSkeleton} />
+              <Skeleton className={styles.badgeSkeleton} />
+            </div>
+            <Skeleton className={styles.imageSkeleton} />
+          </div>
           <Skeleton className={styles.rowSkeleton} />
           <Skeleton className={styles.progressSkeleton} />
-          <Skeleton className={styles.actionsSkeleton} />
+          <div className={styles.footerSkeleton}>
+            <Skeleton className={styles.rowSkeleton} />
+            <Skeleton className={styles.rowSkeleton} />
+          </div>
+          <div className={styles.actionsSkeleton}>
+            <Skeleton className={styles.actionSkeleton} />
+            <Skeleton className={styles.actionSkeleton} />
+          </div>
         </Card>
       </section>
     );
@@ -79,7 +76,7 @@ export function NearestLease({ leases, properties, isLoading }: NearestLeaseProp
   if (!lease) {
     return (
       <section className={styles.section}>
-        <h2 className={styles.title}>Ближайшая аренда</h2>
+        <SectionHeader title="Ближайшая аренда" href="/tenants" />
         <EmptyState
           icon={<Key />}
           entities="аренд"
@@ -92,49 +89,64 @@ export function NearestLease({ leases, properties, isLoading }: NearestLeaseProp
   }
 
   const propertyName = getPropertyName(lease.property_id, properties);
-  const tenantName = lease.tenant_contact?.name ?? 'Арендатор';
+  const tenantName = lease.tenant_contact?.name ?? null;
   const amount = formatMoney(lease.rent_amount_kopecks);
+  const remaining = formatRemainingDuration(lease.start_date, lease.end_date);
+  const currentMonth = formatCurrentLeaseMonth(lease.start_date);
 
   return (
     <section className={styles.section}>
-      <h2 className={styles.title}>Ближайшая аренда</h2>
+      <SectionHeader title="Ближайшая аренда" href="/tenants" />
       <Card className={styles.card}>
         <div className={styles.header}>
-          <div className={styles.placeholder} />
           <div className={styles.info}>
             <span className={styles.propertyName}>{propertyName}</span>
-            <span className={styles.month}>Арендатор: {tenantName}</span>
+            <StatusBadge status={lease.status} />
           </div>
-          <Badge className={styles.durationBadge} size="sm" variant="soft">
-            {formatDuration(lease.start_date, lease.end_date)}
-          </Badge>
+          <div className={styles.image} />
         </div>
-        <div className={styles.amount}>{amount}</div>
-        <div className={styles.progress}>
-          <div className={styles.segmentFilled} />
-          <div className={styles.segment} />
-          <div className={styles.segment} />
-          <div className={styles.segment} />
+        <div className={styles.amountRow}>
+          <span className={styles.amount}>{amount}</span>
+          <span className={styles.duration}>{remaining}</span>
         </div>
-        <div className={styles.actions}>
-          <Button variant="primary" size="medium" fullWidth>
-            Оплатить аренду
-          </Button>
-          <LinkButton
-            href="/finance"
-            variant="secondary"
-            size="medium"
-            fullWidth
-            rightIcon={
-              <Icon size="m">
-                <ArrowRight />
-              </Icon>
-            }
-          >
-            Все операции
-          </LinkButton>
+        <LeaseProgress startDate={lease.start_date} endDate={lease.end_date} />
+        <div className={styles.footer}>
+          <span className={styles.footerItem}>
+            <Icon size="s">
+              <UserSmall />
+            </Icon>
+            {tenantName ?? 'Нет арендатора'}
+          </span>
+          <span className={styles.footerItem}>
+            <Icon size="s">
+              <ClockSmall />
+            </Icon>
+            {currentMonth}
+          </span>
         </div>
       </Card>
+      <div className={styles.actions}>
+        <IconActionCard
+          href="/finance"
+          icon={
+            <Icon size="l">
+              <BoldWallet />
+            </Icon>
+          }
+          label="Оплатить аренду"
+          variant="filled"
+        />
+        <IconActionCard
+          href="/finance"
+          icon={
+            <Icon size="l">
+              <ArrowRight />
+            </Icon>
+          }
+          label="Все операции"
+          variant="outlined"
+        />
+      </div>
     </section>
   );
 }

@@ -1,13 +1,14 @@
 'use client';
 
 import type { JSX } from 'react';
-import NextLink from 'next/link';
-import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
 import { Icon } from '@/shared/ui/icon';
 import { Objects } from '@/shared/assets/icons';
 import type { components } from '@/shared/api/generated';
 import { EmptyState } from './EmptyState';
+import { SectionHeader } from './SectionHeader';
+import { EntityCard } from './EntityCard';
+import { IconActionCard } from './IconActionCard';
 import styles from './PropertiesSection.module.css';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
@@ -27,7 +28,7 @@ export function PropertiesSection({
     return (
       <section className={styles.section}>
         <Skeleton className={styles.titleSkeleton} />
-        <div className={styles.list}>
+        <div className={styles.scroll}>
           <Skeleton className={styles.itemSkeleton} />
           <Skeleton className={styles.itemSkeleton} />
           <Skeleton className={styles.itemSkeleton} />
@@ -39,7 +40,7 @@ export function PropertiesSection({
   if (!properties || properties.length === 0) {
     return (
       <section className={styles.section}>
-        <h2 className={styles.title}>Объекты</h2>
+        <SectionHeader title="Объекты" href="/properties" />
         <EmptyState
           icon={<Objects />}
           entities="объектов"
@@ -53,31 +54,26 @@ export function PropertiesSection({
 
   return (
     <section className={styles.section}>
-      <div className={styles.header}>
-        <h2 className={styles.title}>Объекты {count}</h2>
-        <NextLink href="/properties" className={styles.link}>
-          Все
-        </NextLink>
-      </div>
+      <SectionHeader title="Объекты" count={count} href="/properties" />
       <div className={styles.scroll}>
         {properties.map((property) => (
-          <NextLink
+          <EntityCard
             key={property.id}
             href={`/properties/${property.id}`}
-            className={styles.cardLink}
-          >
-            <Card className={styles.card}>
-              <div className={styles.placeholder} />
-              <span className={styles.name}>{property.name}</span>
-            </Card>
-          </NextLink>
+            title={property.name}
+          />
         ))}
-        <NextLink href="/properties" className={styles.allCard}>
-          <Icon size="m">
-            <Objects />
-          </Icon>
-          <span>Все</span>
-        </NextLink>
+        <IconActionCard
+          href="/properties"
+          icon={
+            <Icon size="l">
+              <Objects />
+            </Icon>
+          }
+          label="Все"
+          variant="outlined"
+          className={styles.allCard}
+        />
       </div>
     </section>
   );

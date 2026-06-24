@@ -20,3 +20,4 @@ export function CabinetLayout({ children }: CabinetLayoutProps): JSX.Element {
     </div>
   );
 }
+

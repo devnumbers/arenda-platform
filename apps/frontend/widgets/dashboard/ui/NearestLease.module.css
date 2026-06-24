@@ -4,13 +4,6 @@
   gap: 16px;
 }
 
-.title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  line-height: 1.75rem;
-  color: var(--color-text);
-}
-
 .titleSkeleton {
   height: 28px;
   width: 180px;
@@ -18,93 +11,148 @@
 }
 
 .card {
-  padding: 20px;
-  background: #f1f3f6;
-  border-radius: 24px;
-  border: none;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-}
-
-.rowSkeleton {
-  height: 48px;
-  border-radius: 12px;
-}
-
-.progressSkeleton {
-  height: 8px;
-  border-radius: 4px;
-}
-
-.actionsSkeleton {
-  height: 44px;
-  border-radius: 16px;
+  gap: 20px;
+  padding: 20px;
+  border: none;
+  border-radius: 24px;
+  background: var(--color-secondary-bg);
+  box-shadow: none;
 }
 
 .header {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.placeholder {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: var(--color-secondary-pressed);
-  flex-shrink: 0;
+  gap: 16px;
 }
 
 .info {
-  flex: 1;
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 2px;
+  gap: 12px;
 }
 
 .propertyName {
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.25rem;
+  font-size: var(--font-size-text-l);
+  font-weight: 500;
+  line-height: var(--line-height-text-l);
   color: var(--color-text);
 }
 
-.month {
-  font-size: var(--font-size-text-m);
-  color: var(--color-text-muted);
-}
-
-.durationBadge {
+.image {
   flex-shrink: 0;
-}
-
-.amount {
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 2rem;
-  color: var(--color-text);
-}
-
-.progress {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-}
-
-.segment,
-.segmentFilled {
-  height: 6px;
-  border-radius: 3px;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
   background: var(--color-secondary-pressed);
 }
 
-.segmentFilled {
-  background: var(--color-primary);
+.amountRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #a1a3a6;
+}
+
+.amount,
+.duration {
+  font-size: var(--font-size-text-l);
+  font-weight: 500;
+  line-height: var(--line-height-text-l);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.footerItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-text-m);
+  font-weight: 500;
+  line-height: var(--line-height-text-m);
+  color: #a1a3a6;
 }
 
 .actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
   gap: 12px;
+}
+
+/* Skeleton helpers */
+.headerSkeleton {
+  display: flex;
+  gap: 16px;
+}
+
+.textSkeleton {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rowSkeleton {
+  height: 22px;
+  border-radius: 8px;
+}
+
+.badgeSkeleton {
+  width: 100px;
+  height: 22px;
+  border-radius: 8px;
+}
+
+.imageSkeleton {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+}
+
+.progressSkeleton {
+  height: 6px;
+  border-radius: 3px;
+}
+
+.footerSkeleton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.actionsSkeleton {
+  display: flex;
+  gap: 12px;
+}
+
+.actionSkeleton {
+  flex: 1;
+  height: 100px;
+  border-radius: 16px;
+}
+
+@media (min-width: 1200px) {
+  .card {
+    padding: 24px;
+  }
+
+  .propertyName {
+    font-size: 1.25rem;
+    line-height: 1.375rem;
+  }
+
+  .image,
+  .imageSkeleton {
+    width: 64px;
+    height: 64px;
+  }
+
+  .actions {
+    gap: 16px;
+  }
 }

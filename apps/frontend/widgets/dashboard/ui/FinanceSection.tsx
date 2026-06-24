@@ -3,13 +3,13 @@
 import type { JSX } from 'react';
 import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
-import { LinkButton } from '@/shared/ui/link-button';
-import { BoldWallet } from '@/shared/assets/icons';
+import { Logo, BoldWallet } from '@/shared/assets/icons';
 import type { components } from '@/shared/api/generated';
 import { useOperationsForProperties } from '../lib/use-operations-for-properties';
 import { aggregateOperations } from '../lib/finance-aggregator';
 import { formatMoney } from '../lib/format-money';
 import { EmptyState } from './EmptyState';
+import { SectionHeader } from './SectionHeader';
 import styles from './FinanceSection.module.css';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
@@ -19,24 +19,27 @@ type FinanceSectionProps = {
   readonly isLoading: boolean;
 };
 
-export function FinanceSection({
-  properties,
-  isLoading,
-}: FinanceSectionProps): JSX.Element {
-  const { operationsList, isLoading: operationsLoading } =
-    useOperationsForProperties(properties);
+const currentMonth = new Intl.DateTimeFormat('ru-RU', { month: 'long' }).format(new Date());
+
+export function FinanceSection({ properties, isLoading }: FinanceSectionProps): JSX.Element {
+  const { operationsList, isLoading: operationsLoading } = useOperationsForProperties(properties);
   const showLoading = isLoading || operationsLoading;
 
-  const { incomeKopecks, expenseKopecks, profitKopecks } =
-    aggregateOperations(operationsList);
+  const { incomeKopecks, expenseKopecks, profitKopecks } = aggregateOperations(operationsList);
 
   if (showLoading) {
     return (
       <section className={styles.section}>
         <Skeleton className={styles.titleSkeleton} />
         <Card className={styles.card}>
-          <Skeleton className={styles.profitSkeleton} />
-          <div className={styles.columnsSkeleton}>
+          <div className={styles.topSkeleton}>
+            <div className={styles.profitSkeleton}>
+              <Skeleton className={styles.valueSkeleton} />
+              <Skeleton className={styles.labelSkeleton} />
+            </div>
+            <Skeleton className={styles.logoSkeleton} />
+          </div>
+          <div className={styles.bottomSkeleton}>
             <Skeleton className={styles.columnSkeleton} />
             <Skeleton className={styles.columnSkeleton} />
           </div>
@@ -48,7 +51,7 @@ export function FinanceSection({
   if (operationsList.length === 0) {
     return (
       <section className={styles.section}>
-        <h2 className={styles.title}>Финансы и операции</h2>
+        <SectionHeader title="Финансы и операции" href="/finance" />
         <EmptyState
           icon={<BoldWallet />}
           entities="операций"
@@ -62,36 +65,26 @@ export function FinanceSection({
 
   return (
     <section className={styles.section}>
-      <h2 className={styles.title}>Финансы и операции</h2>
+      <SectionHeader title="Финансы и операции" href="/finance" />
       <Card className={styles.card}>
-        <div className={styles.profit}>
-          <span className={styles.profitLabel}>Прибыль</span>
-          <span className={styles.profitValue}>
-            {formatMoney(profitKopecks)}
-          </span>
-        </div>
-        <div className={styles.columns}>
-          <div className={styles.column}>
-            <span className={styles.columnLabel}>Доход</span>
-            <span className={styles.columnValueIncome}>
-              {formatMoney(incomeKopecks)}
-            </span>
+        <span className={styles.logo3d} aria-hidden="true" />
+        <div className={styles.top}>
+          <div className={styles.profit}>
+            <span className={styles.profitValue}>{formatMoney(profitKopecks)}</span>
+            <span className={styles.profitLabel}>Прибыль за {currentMonth}</span>
           </div>
+          <Logo className={styles.miniLogo} />
+        </div>
+        <div className={styles.bottom}>
           <div className={styles.column}>
-            <span className={styles.columnLabel}>Расход</span>
-            <span className={styles.columnValueExpense}>
-              {formatMoney(expenseKopecks)}
-            </span>
+            <span className={styles.value}>{formatMoney(incomeKopecks)}</span>
+            <span className={styles.label}>Доходы</span>
+          </div>
+          <div className={styles.columnRight}>
+            <span className={styles.value}>{formatMoney(expenseKopecks)}</span>
+            <span className={styles.label}>Расходы</span>
           </div>
         </div>
-        <LinkButton
-          href="/finance"
-          variant="secondary"
-          size="medium"
-          fullWidth
-        >
-          Все операции
-        </LinkButton>
       </Card>
     </section>
   );

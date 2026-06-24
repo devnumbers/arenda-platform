@@ -3,31 +3,37 @@
 import type { JSX } from 'react';
 import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
-import { LinkButton } from '@/shared/ui/link-button';
 import { Icon } from '@/shared/ui/icon';
-import { Clock } from '@/shared/assets/icons';
+import { Clock, BoldWallet, ArrowRight } from '@/shared/assets/icons';
 import type { components } from '@/shared/api/generated';
+import { formatDeadline } from '../lib/deadline-helpers';
 import { EmptyState } from './EmptyState';
+import { SectionHeader } from './SectionHeader';
+import { PaymentRow } from './PaymentRow';
+import { IconActionCard } from './IconActionCard';
 import styles from './PaymentsSection.module.css';
 
 type ReminderResponse = components['schemas']['ReminderResponse'];
+type PropertyResponse = components['schemas']['PropertyResponse'];
 
 type PaymentsSectionProps = {
   readonly reminders: ReminderResponse[] | undefined;
+  readonly properties?: PropertyResponse[] | undefined;
   readonly isLoading: boolean;
 };
 
-function formatDate(iso: string): string {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-  }).format(new Date(iso));
+function getPropertyName(
+  propertyId: string | null | undefined,
+  properties: PropertyResponse[] | undefined,
+): string | undefined {
+  if (!propertyId || !properties) {
+    return undefined;
+  }
+
+  return properties.find((property) => property.id === propertyId)?.name;
 }
 
-export function PaymentsSection({
-  reminders,
-  isLoading,
-}: PaymentsSectionProps): JSX.Element {
+export function PaymentsSection({ reminders, properties, isLoading }: PaymentsSectionProps): JSX.Element {
   const items = reminders?.slice(0, 3) ?? [];
 
   if (isLoading) {
@@ -38,7 +44,11 @@ export function PaymentsSection({
           <Skeleton className={styles.rowSkeleton} />
           <Skeleton className={styles.rowSkeleton} />
           <Skeleton className={styles.rowSkeleton} />
-          <Skeleton className={styles.actionsSkeleton} />
+          <div className={styles.actionsSkeleton}>
+            <Skeleton className={styles.actionSkeleton} />
+            <Skeleton className={styles.actionSkeleton} />
+            <Skeleton className={styles.actionSkeleton} />
+          </div>
         </Card>
       </section>
     );
@@ -47,7 +57,7 @@ export function PaymentsSection({
   if (items.length === 0) {
     return (
       <section className={styles.section}>
-        <h2 className={styles.title}>Ближайшие платежи</h2>
+        <SectionHeader title="Ближайшие платежи" href="/finance" />
         <EmptyState
           icon={<Clock />}
           entities="платежей"
@@ -61,39 +71,57 @@ export function PaymentsSection({
 
   return (
     <section className={styles.section}>
-      <h2 className={styles.title}>Ближайшие платежи</h2>
+      <SectionHeader title="Ближайшие платежи" href="/finance" />
       <Card className={styles.card}>
         <ul className={styles.list}>
           {items.map((reminder) => (
-            <li key={reminder.id} className={styles.item}>
-              <Icon size="m">
-                <Clock />
-              </Icon>
-              <div className={styles.info}>
-                <span className={styles.itemTitle}>{reminder.message_title}</span>
-                <span className={styles.itemDate}>
-                  {formatDate(reminder.scheduled_at)}
-                </span>
-              </div>
+            <li key={reminder.id}>
+              <PaymentRow
+                icon={
+                  <Icon size="m">
+                    <Clock />
+                  </Icon>
+                }
+                title={reminder.message_title}
+                subtitle={getPropertyName(reminder.property_id, properties) ?? reminder.message_body}
+                amount=""
+                deadline={formatDeadline(reminder.scheduled_at)}
+              />
             </li>
           ))}
         </ul>
         <div className={styles.actions}>
-          <LinkButton href="/finance" variant="primary" size="medium" fullWidth>
-            Внести платеж
-          </LinkButton>
-          <LinkButton href="/finance" variant="secondary" size="medium" fullWidth>
-            Запланировать
-          </LinkButton>
+          <IconActionCard
+            href="/finance"
+            icon={
+              <Icon size="l">
+                <BoldWallet />
+              </Icon>
+            }
+            label="Внести платеж"
+            variant="filled"
+          />
+          <IconActionCard
+            href="/finance"
+            icon={
+              <Icon size="l">
+                <Clock />
+              </Icon>
+            }
+            label="Запланировать"
+            variant="filled"
+          />
+          <IconActionCard
+            href="/finance"
+            icon={
+              <Icon size="l">
+                <ArrowRight />
+              </Icon>
+            }
+            label="Все платежи"
+            variant="outlined"
+          />
         </div>
-        <LinkButton
-          href="/finance"
-          variant="clear"
-          size="medium"
-          fullWidth
-        >
-          Все платежи
-        </LinkButton>
       </Card>
     </section>
   );

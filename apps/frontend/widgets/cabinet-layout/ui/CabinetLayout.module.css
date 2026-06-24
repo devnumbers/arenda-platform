@@ -7,6 +7,7 @@
   flex: 1;
   display: flex;
   justify-content: center;
+  min-height: 100vh;
 }
 
 .content {
@@ -16,6 +17,10 @@
 }
 
 @media (min-width: 1200px) {
+  .main {
+    margin-left: 240px;
+  }
+
   .content {
     padding: 40px 0;
   }
