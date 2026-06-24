@@ -1,0 +1,53 @@
+.root {
+  display: flex;
+  align-items: center;
+}
+
+.desktopOnly {
+  display: none;
+  gap: 8px;
+}
+
+.mobileOnly {
+  display: flex;
+}
+
+@media (min-width: 768px) {
+  .desktopOnly {
+    display: flex;
+  }
+
+  .mobileOnly {
+    display: none;
+  }
+}
+
+.mobileButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.popoverBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.groupTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -1,0 +1,10 @@
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.content {
+  min-width: 240px;
+  padding: 8px;
+}
