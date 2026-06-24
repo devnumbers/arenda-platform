@@ -1,0 +1,77 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #e7e9ec;
+  border-radius: 24px;
+  background: var(--color-white);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.5rem;
+  color: var(--color-text);
+}
+
+.thumbnail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: var(--color-secondary-bg);
+  color: var(--color-text-muted);
+}
+
+.lease {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.leaseRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rent {
+  font-size: var(--font-size-text-l);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.duration,
+.tenant,
+.month {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-text-m);
+  color: var(--color-text-muted);
+}
+
+.actionRow {
+  display: flex;
+  gap: 8px;
+}
+
+.actionButton {
+  flex: 1;
+}
