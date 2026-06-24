@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { propertyTypeOptions } from '@/features/properties/lib/property-types';
 import { statusFilterOptions } from '@/features/properties/lib/property-statuses';
@@ -44,13 +44,27 @@ function parseSortFromSearchParams(searchParams: URLSearchParams): PropertySort 
 }
 
 export function PropertiesPage({ mode = 'active' }: PropertiesPageProps): JSX.Element {
-  const { data, isLoading, isError, refetch } = usePropertyListData();
+  const { data, isLoading, isFetching, isError, refetch } = usePropertyListData();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [filters, setFilters] = useState<PropertyFilters>(() => parseFiltersFromSearchParams(searchParams));
   const [sort, setSort] = useState<PropertySort>(() => parseSortFromSearchParams(searchParams));
+
+  useEffect(() => {
+    const nextFilters = parseFiltersFromSearchParams(searchParams);
+    const nextSort = parseSortFromSearchParams(searchParams);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setFilters(nextFilters);
+      setSort(nextSort);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams]);
 
   const visible = useMemo(
     () => (data ? applyFiltersAndSort(data, mode, filters, sort) : []),
@@ -69,9 +83,11 @@ export function PropertiesPage({ mode = 'active' }: PropertiesPageProps): JSX.El
         params.set('statuses', nextFilters.statuses.join(','));
       }
 
-      params.set('sort', nextSort);
+      if (nextSort !== initialSort) {
+        params.set('sort', nextSort);
+      }
 
-      const query = new URLSearchParams(Array.from(params.entries())).toString();
+      const query = params.toString();
       router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
     },
     [mode, pathname, router],
@@ -96,7 +112,7 @@ export function PropertiesPage({ mode = 'active' }: PropertiesPageProps): JSX.El
 
       {isLoading && <PropertiesLoading />}
 
-      {!isLoading && isError && <PropertiesErrorState onRetry={refetch} />}
+      {!isLoading && isError && <PropertiesErrorState onRetry={refetch} isLoading={isFetching} />}
 
       {!isLoading && !isError && isEmpty && <PropertiesEmptyState />}
 

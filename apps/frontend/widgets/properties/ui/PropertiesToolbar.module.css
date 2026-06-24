@@ -58,6 +58,9 @@
 }
 
 .optionChip {
+  border: none;
+  background: none;
+  cursor: pointer;
   border-radius: var(--radius-round);
   padding: 6px 12px;
   font-size: 0.875rem;

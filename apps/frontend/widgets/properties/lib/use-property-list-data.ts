@@ -16,6 +16,7 @@ export type PropertyWithLease = Property & {
 type UsePropertyListDataReturn = {
   data: PropertyWithLease[] | undefined;
   isLoading: boolean;
+  isFetching: boolean;
   isError: boolean;
   error: {
     propertiesError: ApiError | null;
@@ -83,6 +84,7 @@ export function usePropertyListData(): UsePropertyListDataReturn {
   return {
     data,
     isLoading: propertiesQuery.isLoading || leasesQuery.isLoading,
+    isFetching: propertiesQuery.isFetching || leasesQuery.isFetching,
     isError: propertiesQuery.isError || leasesQuery.isError,
     error: {
       propertiesError: propertiesQuery.error,
