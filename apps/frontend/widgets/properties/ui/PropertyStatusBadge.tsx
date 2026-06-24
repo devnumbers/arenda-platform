@@ -1,14 +1,13 @@
-'use client';
-
 import type { JSX } from 'react';
+import clsx from 'clsx';
 import { getDisplayStatus, displayStatusConfig } from '@/features/properties/lib/property-statuses';
-import type { components } from '@/shared/api/generated';
 import styles from './PropertyStatusBadge.module.css';
 
-type PropertyResponse = components['schemas']['PropertyResponse'];
-
 export type PropertyStatusBadgeProps = {
-  readonly property: PropertyResponse;
+  readonly property: {
+    readonly status: 'active' | 'maintenance' | 'archived';
+    readonly occupancy: 'free' | 'occupied';
+  };
 };
 
 export function PropertyStatusBadge({ property }: PropertyStatusBadgeProps): JSX.Element | null {
@@ -18,7 +17,7 @@ export function PropertyStatusBadge({ property }: PropertyStatusBadgeProps): JSX
   const config = displayStatusConfig[displayStatus];
 
   return (
-    <span className={`${styles.badge} ${styles[config.color]}`}>
+    <span className={clsx(styles.badge, styles[config.color])} role="status">
       {config.label}
     </span>
   );

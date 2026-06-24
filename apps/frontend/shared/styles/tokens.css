@@ -21,6 +21,13 @@
   --color-white: #ffffff;
   --color-error: #ff4646;
   --color-error-bg: #ffdfdf;
+
+  --color-success: #34c771;
+  --color-success-bg: rgba(52, 199, 113, 0.12);
+
+  --color-warning: #ebb800;
+  --color-warning-bg: rgba(235, 184, 0, 0.12);
+
   --color-black-icon-hover: rgba(30, 30, 30, 0.08);
   --color-black-icon-pressed: rgba(30, 30, 30, 0.16);
 

@@ -2,20 +2,20 @@
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
-  border-radius: 100px;
+  border-radius: var(--radius-round);
   font-size: var(--font-size-text-s);
   font-weight: 500;
   line-height: var(--line-height-text-s);
 }
 
 .success {
-  background: rgba(52, 199, 113, 0.12);
-  color: #34c771;
+  background: var(--color-success-bg);
+  color: var(--color-success);
 }
 
 .warning {
-  background: rgba(235, 184, 0, 0.12);
-  color: #ebb800;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
 }
 
 .neutral {
