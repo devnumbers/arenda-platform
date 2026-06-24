@@ -5,6 +5,7 @@ import { formatPhoneInput } from '@/shared/lib/phone';
 import { Clock, Logo, Support } from '@/shared/assets/icons';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
+import { formatTimer } from '@/features/auth/lib/format-timer';
 import styles from './PhoneStep.module.css';
 
 export type PhoneStepProps = {
@@ -56,30 +57,28 @@ export function PhoneStep({
           fullWidth
           loading={isLoading}
           disabled={phone.length < 18 || isLoading || resendTimer > 0}
-          leftIcon={<Clock />}
-        >
-          <span className={styles.submitContent}>
-            <span>Войти</span>
-            {resendTimer > 0 && (
-              <span className={styles.submitTimer}>
-                {String(Math.floor(resendTimer / 60)).padStart(2, '0')}:
-                {String(resendTimer % 60).padStart(2, '0')}
+          subtitle={
+            resendTimer > 0 ? (
+              <span className={styles.timerRow}>
+                <Clock className={styles.timerIcon} />
+                <span className={styles.timerText}>{formatTimer(resendTimer)}</span>
               </span>
-            )}
-          </span>
+            ) : undefined
+          }
+        >
+          {resendTimer > 0 ? 'Отправить новый код' : 'Войти'}
         </Button>
       </form>
 
       <p className={styles.legal}>
-        Нажимая кнопку «Войти», вы соглашаетесь с{' '}
-        <a className={styles.link} href="#">
-          условиями использования
+        Нажимая кнопку «Войти», я принимаю{' '}
+        <a className={styles.legalLink} href="#">
+          политику конфиденциальности
         </a>{' '}
         и{' '}
-        <a className={styles.link} href="#">
-          политикой конфиденциальности
+        <a className={styles.legalLink} href="#">
+          соглашаюсь на обработку персональных данных
         </a>
-        .
       </p>
 
       <Button
@@ -96,3 +95,5 @@ export function PhoneStep({
     </div>
   );
 }
+
+

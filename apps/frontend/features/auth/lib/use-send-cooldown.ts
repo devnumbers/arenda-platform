@@ -47,7 +47,7 @@ function clearStoredSendAt(): void {
 
 function createCooldownStore(): CooldownStore {
   const listeners = new Set<Listener>();
-  let intervalId: number | null = null;
+  let timeoutId: number | null = null;
 
   function notify() {
     listeners.forEach((listener) => listener());
@@ -59,25 +59,45 @@ function createCooldownStore(): CooldownStore {
     }
   }
 
+  function tick() {
+    const remaining = computeRemainingSeconds(getStoredSendAt());
+
+    if (remaining === 0) {
+      clearStoredSendAt();
+    }
+
+    notify();
+
+    if (remaining > 0) {
+      scheduleNext();
+    }
+  }
+
+  function scheduleNext() {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+
+    const delay = 1000 - (Date.now() % 1000);
+    timeoutId = window.setTimeout(tick, delay || 1000);
+  }
+
   function start() {
-    if (intervalId !== null) {
+    if (timeoutId !== null) {
       return;
     }
 
-    intervalId = window.setInterval(() => {
-      notify();
-    }, 1000);
-
     window.addEventListener('storage', handleStorage);
+    tick();
   }
 
   function stop() {
-    if (intervalId === null) {
+    if (timeoutId === null) {
       return;
     }
 
-    window.clearInterval(intervalId);
-    intervalId = null;
+    window.clearTimeout(timeoutId);
+    timeoutId = null;
     window.removeEventListener('storage', handleStorage);
   }
 
@@ -94,13 +114,7 @@ function createCooldownStore(): CooldownStore {
   }
 
   function getSnapshot() {
-    const remaining = computeRemainingSeconds(getStoredSendAt());
-
-    if (remaining === 0) {
-      clearStoredSendAt();
-    }
-
-    return remaining;
+    return computeRemainingSeconds(getStoredSendAt());
   }
 
   function getServerSnapshot() {
@@ -111,7 +125,8 @@ function createCooldownStore(): CooldownStore {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(STORAGE_KEY, String(Date.now()));
     }
-    notify();
+    stop();
+    start();
   }
 
   return { subscribe, getSnapshot, getServerSnapshot, recordSend };

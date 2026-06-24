@@ -9,6 +9,7 @@ import {
 import { ArrowLeft, Clock, Logo } from '@/shared/assets/icons';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
+import { formatTimer } from '@/features/auth/lib/format-timer';
 import styles from './CodeStep.module.css';
 
 export type CodeStepProps = {
@@ -48,17 +49,14 @@ export function CodeStep({
     }
   };
 
-  const minutes = String(Math.floor(resendTimer / 60)).padStart(2, '0');
-  const seconds = String(resendTimer % 60).padStart(2, '0');
-  const timerText = `${minutes}:${seconds}`;
-
   return (
     <div className={styles.root}>
       <Logo className={styles.logo} />
       <div className={styles.header}>
         <h1 className={styles.title}>Введите код</h1>
         <p className={styles.subtitle}>
-          Отправили СМС-код на номер {phone}
+          Отправили СМС-код на номер{' '}
+          <span className={styles.phone}>{phone}</span>
         </p>
       </div>
 
@@ -82,15 +80,17 @@ export function CodeStep({
           fullWidth
           disabled={resendTimer > 0 || isResending}
           loading={isResending}
-          leftIcon={<Clock />}
           onClick={onResend}
+          subtitle={
+            resendTimer > 0 ? (
+              <span className={styles.timerRow}>
+                <Clock className={styles.timerIcon} />
+                <span className={styles.timerText}>{formatTimer(resendTimer)}</span>
+              </span>
+            ) : undefined
+          }
         >
-          <span className={styles.resendContent}>
-            <span>Отправить новый код</span>
-            {resendTimer > 0 && (
-              <span className={styles.resendTimer}>{timerText}</span>
-            )}
-          </span>
+          Отправить новый код
         </Button>
 
         <Button
