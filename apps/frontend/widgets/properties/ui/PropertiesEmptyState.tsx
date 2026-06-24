@@ -1,6 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
+import { ROUTES } from '@/shared/config/routes';
 import { EmptyState } from '@/widgets/dashboard/ui/EmptyState';
 import { HomeAdd } from '@/shared/assets/icons';
 
@@ -11,7 +12,7 @@ export function PropertiesEmptyState(): JSX.Element {
       title="Здесь будут отображаться ваши объекты"
       entities="объектов"
       subtitle="Добавьте свою квартиру, студию, помещение или другой объект недвижимости"
-      actionHref="/properties/new"
+      actionHref={ROUTES.propertyNew}
       actionText="Создать объект"
     />
   );
