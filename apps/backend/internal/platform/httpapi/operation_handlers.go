@@ -34,6 +34,13 @@ func (h *OperationHandlers) handleOperationError(w http.ResponseWriter, r *http.
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
 		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "operation not found"))
+	case errors.Is(err, leasesapp.ErrOperationAlreadyCompleted):
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 	}
@@ -76,14 +83,22 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 }
 
 // ListOperationsByProperty implements GET /properties/{propertyId}/operations.
-func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
+func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID, params openapi.ListOperationsByPropertyParams) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
 		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
 		return
 	}
 
-	ops, err := h.svc.ListOperationsByProperty(r.Context(), ownerID, propertyId)
+	var statuses []domain.OperationStatus
+	if params.Status != nil {
+		statuses = make([]domain.OperationStatus, 0, len(*params.Status))
+		for _, s := range *params.Status {
+			statuses = append(statuses, domain.OperationStatus(s))
+		}
+	}
+
+	ops, err := h.svc.ListOperationsByProperty(r.Context(), ownerID, propertyId, statuses)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
@@ -167,6 +182,26 @@ func (h *OperationHandlers) DeleteOperation(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// CompleteOperation implements POST /operations/{id}/complete.
+func (h *OperationHandlers) CompleteOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	op, err := h.svc.CompleteOperation(r.Context(), leasesapp.CompleteOperationCommand{
+		OwnerID:     ownerID,
+		OperationID: id,
+	})
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, operationResponse(op))
+}
+
 func operationResponse(op domain.Operation) openapi.OperationResponse {
 	resp := openapi.OperationResponse{
 		Id:            op.ID,
@@ -176,6 +211,7 @@ func operationResponse(op domain.Operation) openapi.OperationResponse {
 		Category:      openapi.OperationCategory(op.Category),
 		AmountKopecks: int(op.AmountKopecks),
 		OperationDate: openapi_types.Date{Time: op.OperationDate},
+		Status:        openapi.OperationStatus(op.Status),
 		IsException:   op.IsException,
 		CreatedAt:     op.CreatedAt,
 		UpdatedAt:     op.UpdatedAt,

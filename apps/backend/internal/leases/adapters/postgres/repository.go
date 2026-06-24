@@ -621,11 +621,12 @@ func (r *OperationRepository) Create(ctx context.Context, op domain.Operation) (
 		OperationDate:        pgconv.DateToPgtype(op.OperationDate),
 		Comment:              pgtype.Text{String: op.Comment, Valid: true},
 		IsException:          op.IsException,
+		Status:               string(op.Status),
 	})
 	if err != nil {
 		return domain.Operation{}, err
 	}
-	return operationFromRow(row), nil
+	return operationFromRow(row)
 }
 
 func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Operation) error {
@@ -646,6 +647,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 			pgconv.DateToPgtype(op.OperationDate),
 			pgtype.Text{String: op.Comment, Valid: true},
 			op.IsException,
+			string(op.Status),
 		}
 	}
 
@@ -656,7 +658,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 
 	_, err := copier.CopyFrom(ctx, pgx.Identifier{"operations"}, []string{
 		"owner_id", "property_id", "lease_id", "recurring_operation_id",
-		"type", "category", "amount_kopecks", "operation_date", "comment", "is_exception",
+		"type", "category", "amount_kopecks", "operation_date", "comment", "is_exception", "status",
 	}, pgx.CopyFromRows(rows))
 	if err != nil {
 		return fmt.Errorf("copy from failed: %w", err)
@@ -675,7 +677,11 @@ func (r *OperationRepository) ListByLease(ctx context.Context, leaseID uuid.UUID
 	}
 	ops := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		ops = append(ops, operationFromRow(row))
+		op, err := operationFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, op)
 	}
 	return ops, nil
 }
@@ -687,7 +693,11 @@ func (r *OperationRepository) ListByRecurringOperation(ctx context.Context, recu
 	}
 	ops := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		ops = append(ops, operationFromRow(row))
+		op, err := operationFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, op)
 	}
 	return ops, nil
 }
@@ -766,7 +776,11 @@ func (r *OperationRepository) ListByProperty(ctx context.Context, ownerID, prope
 	}
 	ops := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		ops = append(ops, operationFromRow(row))
+		op, err := operationFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, op)
 	}
 	return ops, nil
 }
@@ -782,7 +796,7 @@ func (r *OperationRepository) GetByIDAndOwner(ctx context.Context, id, ownerID u
 		}
 		return domain.Operation{}, err
 	}
-	return operationFromRow(row), nil
+	return operationFromRow(row)
 }
 
 func (r *OperationRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Operation, error) {
@@ -796,7 +810,7 @@ func (r *OperationRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, 
 		}
 		return domain.Operation{}, err
 	}
-	return operationFromRow(row), nil
+	return operationFromRow(row)
 }
 
 func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (domain.Operation, error) {
@@ -809,6 +823,7 @@ func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (
 		OperationDate: pgconv.DateToPgtype(op.OperationDate),
 		Comment:       pgtype.Text{String: op.Comment, Valid: true},
 		LeaseID:       pgconv.UUIDToPgtype(op.LeaseID),
+		Status:        string(op.Status),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -816,7 +831,114 @@ func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (
 		}
 		return domain.Operation{}, err
 	}
-	return operationFromRow(row), nil
+	return operationFromRow(row)
+}
+
+func (r *OperationRepository) ListByPropertyWithStatuses(ctx context.Context, ownerID, propertyID uuid.UUID, statuses []domain.OperationStatus) ([]domain.Operation, error) {
+	if len(statuses) == 0 {
+		return r.ListByProperty(ctx, ownerID, propertyID)
+	}
+
+	statusStrs := make([]string, len(statuses))
+	for i, s := range statuses {
+		statusStrs[i] = string(s)
+	}
+
+	rows, err := r.q().ListOperationsByPropertyWithStatuses(ctx, postgres.ListOperationsByPropertyWithStatusesParams{
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+		Statuses:   statusStrs,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	ops := make([]domain.Operation, 0, len(rows))
+	for _, row := range rows {
+		op, err := operationFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, op)
+	}
+	return ops, nil
+}
+
+func (r *OperationRepository) ListPendingOperationsWithPastDate(ctx context.Context, ownerID uuid.UUID, asOf time.Time, limit int) ([]domain.Operation, error) {
+	rows, err := r.q().ListPendingOperationsWithPastDate(ctx, postgres.ListPendingOperationsWithPastDateParams{
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		AsOf:    pgconv.DateToPgtype(asOf),
+		//nolint:gosec // Batch size is configured and bounded by caller.
+		Limit: int32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	ops := make([]domain.Operation, 0, len(rows))
+	for _, row := range rows {
+		op, err := operationFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, op)
+	}
+	return ops, nil
+}
+
+func (r *OperationRepository) ListAllPendingOperationsWithPastDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Operation, error) {
+	rows, err := r.q().ListAllPendingOperationsWithPastDate(ctx, postgres.ListAllPendingOperationsWithPastDateParams{
+		AsOf: pgconv.DateToPgtype(asOf),
+		//nolint:gosec // Batch size is configured and bounded by caller.
+		Limit: int32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	ops := make([]domain.Operation, 0, len(rows))
+	for _, row := range rows {
+		op, err := operationFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, op)
+	}
+	return ops, nil
+}
+
+// MarkOverdue transitions a pending operation to overdue. The returned bool is
+// true when the row was actually updated from pending to overdue, and false
+// when the operation was already in a non-pending state, its date is no longer
+// in the past, or it was not found.
+func (r *OperationRepository) MarkOverdue(ctx context.Context, ownerID, id uuid.UUID, asOf time.Time) (domain.Operation, bool, error) {
+	row, err := r.q().MarkOperationOverdue(ctx, postgres.MarkOperationOverdueParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		AsOf:    pgconv.DateToPgtype(asOf),
+	})
+	if err == nil {
+		op, err := operationFromRow(row)
+		return op, true, err
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return domain.Operation{}, false, err
+	}
+
+	// The row is either missing or not pending. Fetch to distinguish and
+	// return the existing operation when it is already in a non-pending state.
+	existing, err := r.q().GetOperationByIDAndOwner(ctx, postgres.GetOperationByIDAndOwnerParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Operation{}, false, application.ErrNotFound
+		}
+		return domain.Operation{}, false, err
+	}
+	op, err := operationFromRow(existing)
+	return op, false, err
 }
 
 func (r *OperationRepository) SoftDeleteOperation(ctx context.Context, id, ownerID uuid.UUID) error {
@@ -833,7 +955,11 @@ func (r *OperationRepository) SoftDeleteOperation(ctx context.Context, id, owner
 	return nil
 }
 
-func operationFromRow(row postgres.Operation) domain.Operation {
+func operationFromRow(row postgres.Operation) (domain.Operation, error) {
+	status, err := domain.ParseOperationStatus(row.Status)
+	if err != nil {
+		return domain.Operation{}, fmt.Errorf("invalid operation status in database: %w", err)
+	}
 	op := domain.Operation{
 		ID:                   pgconv.UUIDFromPgtype(row.ID),
 		OwnerID:              pgconv.UUIDFromPgtype(row.OwnerID),
@@ -842,6 +968,7 @@ func operationFromRow(row postgres.Operation) domain.Operation {
 		RecurringOperationID: pgconv.UUIDFromPgtype(row.RecurringOperationID),
 		Type:                 domain.OperationType(row.Type),
 		Category:             domain.OperationCategory(row.Category),
+		Status:               status,
 		AmountKopecks:        row.AmountKopecks,
 		OperationDate:        row.OperationDate.Time,
 		Comment:              pgconv.TextToString(row.Comment),
@@ -852,7 +979,7 @@ func operationFromRow(row postgres.Operation) domain.Operation {
 	if row.DeletedAt.Valid {
 		op.DeletedAt = pgconv.TimestamptzToPtrTime(row.DeletedAt)
 	}
-	return op
+	return op, nil
 }
 
 // PropertyRepository provides property information needed by the lease bounded context.

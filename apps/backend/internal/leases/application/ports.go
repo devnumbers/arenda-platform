@@ -67,13 +67,17 @@ type OperationRepository interface {
 	ListOperationDatesByLease(ctx context.Context, leaseID uuid.UUID) ([]time.Time, error)
 	ListOperationDatesByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID) ([]time.Time, error)
 	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.Operation, error)
+	ListByPropertyWithStatuses(ctx context.Context, ownerID, propertyID uuid.UUID, statuses []domain.OperationStatus) ([]domain.Operation, error)
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Operation, error)
 	GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Operation, error)
 	Update(ctx context.Context, op domain.Operation) (domain.Operation, error)
+	MarkOverdue(ctx context.Context, ownerID, id uuid.UUID, asOf time.Time) (domain.Operation, bool, error)
 	SoftDeleteOperation(ctx context.Context, id, ownerID uuid.UUID) error
 	DeleteUneditedFutureOperationsByLease(ctx context.Context, leaseID uuid.UUID, after time.Time) error
 	DeleteUneditedFutureOperationsByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID, after time.Time) error
 	DeleteOperationsOutsideLeaseRange(ctx context.Context, leaseID uuid.UUID, start time.Time, end *time.Time) error
 	DeleteUneditedOperationsByLease(ctx context.Context, leaseID uuid.UUID, from time.Time) error
+	ListPendingOperationsWithPastDate(ctx context.Context, ownerID uuid.UUID, asOf time.Time, limit int) ([]domain.Operation, error)
+	ListAllPendingOperationsWithPastDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Operation, error)
 	WithTx(tx transaction.Tx) OperationRepository
 }

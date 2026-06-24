@@ -1,11 +1,11 @@
 meta {
-  name: Get Operation
+  name: Complete Operation
   type: http
-  seq: 3
+  seq: 5
 }
 
-get {
-  url: {{baseUrl}}/operations/{{operationId}}
+post {
+  url: {{baseUrl}}/operations/{{operationId}}/complete
   body: none
   auth: none
 }
@@ -23,12 +23,13 @@ tests {
     expect(res.status).to.equal(200);
   });
 
-  test("should have operation id", function() {
+  test("should have matching operation id", function() {
     expect(res.body.id).to.equal(bru.getEnvVar("operationId") || bru.getVar("operationId"));
   });
 
-  test("should have a valid status", function() {
-    const validStatuses = ["pending", "overdue", "paid", "received"];
-    expect(res.body.status).to.be.oneOf(validStatuses);
+  test("should transition to completed status based on operation type", function() {
+    // expense operations become paid; income operations become received.
+    const completedStatuses = ["paid", "received"];
+    expect(res.body.status).to.be.oneOf(completedStatuses);
   });
 }

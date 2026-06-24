@@ -111,6 +111,7 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.U
 				RecurringOperationID: rec.ID,
 				Type:                 rec.Type,
 				Category:             rec.Category,
+				Status:               leasesdomain.OperationStatusPending,
 				AmountKopecks:        rec.AmountKopecks,
 				OperationDate:        d,
 				Comment:              rec.Comment,

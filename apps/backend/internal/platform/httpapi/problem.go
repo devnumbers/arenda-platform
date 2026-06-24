@@ -81,6 +81,8 @@ func UserFacingDetail(err error) (string, bool) {
 		return "property already has an open lease", true
 	case errors.Is(err, leasesapp.ErrAlreadyCompleted):
 		return "lease is already completed", true
+	case errors.Is(err, leasesapp.ErrOperationAlreadyCompleted):
+		return "operation is already completed", true
 	case errors.Is(err, leasesapp.ErrArchivedLease):
 		return "cannot modify an archived lease", true
 	case errors.Is(err, leasesapp.ErrTenantContactNotFound):

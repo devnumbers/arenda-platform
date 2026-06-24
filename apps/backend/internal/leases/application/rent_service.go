@@ -49,6 +49,7 @@ func (r *RentService) GenerateRentOperations(
 			RecurringOperationID: recurringOpID,
 			Type:                 domain.OperationTypeIncome,
 			Category:             domain.OperationCategoryRent,
+			Status:               domain.OperationStatusPending,
 			AmountKopecks:        lease.RentAmountKopecks,
 			OperationDate:        d,
 			IsException:          false,

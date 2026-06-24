@@ -96,10 +96,12 @@ const (
 // ReminderScheduler is the port used by other bounded contexts to create and cancel reminders transactionally.
 type ReminderScheduler interface {
 	ScheduleForOperation(ctx context.Context, op OperationInfo, reminderDate time.Time) error
+	ScheduleOverdueReminder(ctx context.Context, op OperationInfo, reminderDate time.Time) error
 	ScheduleForRecurringOperation(ctx context.Context, rec RecurringOperationInfo, baseReminderDate time.Time, ops []OperationInfo) error
 	ScheduleForLease(ctx context.Context, lease LeaseInfo) error
 	EnsureRequiresActionReminder(ctx context.Context, lease LeaseInfo) error
 	CancelByOperation(ctx context.Context, ownerID, opID uuid.UUID) error
+	CancelOverdueReminderByOperation(ctx context.Context, ownerID, opID uuid.UUID) error
 	CancelByRecurringOperation(ctx context.Context, ownerID, recID uuid.UUID) error
 	CancelByLease(ctx context.Context, ownerID, leaseID uuid.UUID) error
 	HasReminderForOperationEvent(ctx context.Context, ownerID, operationID uuid.UUID, eventType domain.EventType) (bool, error)

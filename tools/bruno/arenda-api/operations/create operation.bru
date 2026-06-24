@@ -49,4 +49,8 @@ tests {
   test("should have operation id", function() {
     expect(res.body.id).to.be.a("string");
   });
+
+  test("should default to pending status", function() {
+    expect(res.body.status).to.equal("pending");
+  });
 }

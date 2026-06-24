@@ -17,6 +17,7 @@ const (
 	NotificationEventTypeOperationDue        NotificationEventType = "operation_due"
 	NotificationEventTypeLeaseExpiring       NotificationEventType = "lease_expiring"
 	NotificationEventTypeLeaseRequiresAction NotificationEventType = "lease_requires_action"
+	NotificationEventTypeOperationOverdue    NotificationEventType = "operation_overdue"
 )
 
 func (e *NotificationEventType) Scan(src interface{}) error {
@@ -181,6 +182,7 @@ type Operation struct {
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
+	Status               string             `json:"status"`
 }
 
 type PaymentMethod struct {

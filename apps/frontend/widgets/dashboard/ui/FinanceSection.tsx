@@ -25,7 +25,9 @@ export function FinanceSection({ properties, isLoading }: FinanceSectionProps): 
   const { operationsList, isLoading: operationsLoading } = useOperationsForProperties(properties);
   const showLoading = isLoading || operationsLoading;
 
-  const { incomeKopecks, expenseKopecks, profitKopecks } = aggregateOperations(operationsList);
+  const { actual, pending } = aggregateOperations(operationsList);
+  const { incomeKopecks, expenseKopecks, profitKopecks } = actual;
+  const hasPending = pending.incomeKopecks !== 0 || pending.expenseKopecks !== 0;
 
   if (showLoading) {
     return (
@@ -72,6 +74,14 @@ export function FinanceSection({ properties, isLoading }: FinanceSectionProps): 
           <div className={styles.profit}>
             <span className={styles.profitValue}>{formatMoney(profitKopecks)}</span>
             <span className={styles.profitLabel}>Прибыль за {currentMonth}</span>
+            {hasPending && (
+              <div className={styles.pending}>
+                <span className={styles.pendingLabel}>Ожидает оплаты</span>
+                <span className={styles.pendingValue}>
+                  {formatMoney(pending.incomeKopecks)} / {formatMoney(pending.expenseKopecks)}
+                </span>
+              </div>
+            )}
           </div>
           <Logo className={styles.miniLogo} />
         </div>

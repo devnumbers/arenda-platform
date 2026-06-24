@@ -14,13 +14,13 @@ import (
 const createOperation = `-- name: CreateOperation :one
 INSERT INTO operations (
     owner_id, property_id, lease_id, recurring_operation_id,
-    type, category, amount_kopecks, operation_date, comment, is_exception
+    type, category, amount_kopecks, operation_date, comment, is_exception, status
 )
 VALUES (
     $1, $2, $3, $4,
-    $5, $6, $7, $8, $9, $10
+    $5, $6, $7, $8, $9, $10, $11
 )
-RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at
+RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status
 `
 
 type CreateOperationParams struct {
@@ -34,6 +34,7 @@ type CreateOperationParams struct {
 	OperationDate        pgtype.Date `json:"operation_date"`
 	Comment              pgtype.Text `json:"comment"`
 	IsException          bool        `json:"is_exception"`
+	Status               string      `json:"status"`
 }
 
 func (q *Queries) CreateOperation(ctx context.Context, arg CreateOperationParams) (Operation, error) {
@@ -48,6 +49,7 @@ func (q *Queries) CreateOperation(ctx context.Context, arg CreateOperationParams
 		arg.OperationDate,
 		arg.Comment,
 		arg.IsException,
+		arg.Status,
 	)
 	var i Operation
 	err := row.Scan(
@@ -65,6 +67,7 @@ func (q *Queries) CreateOperation(ctx context.Context, arg CreateOperationParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Status,
 	)
 	return i, err
 }
@@ -180,7 +183,7 @@ func (q *Queries) DeleteUneditedOperationsByLease(ctx context.Context, arg Delet
 }
 
 const getOperationByIDAndOwner = `-- name: GetOperationByIDAndOwner :one
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL
 `
@@ -208,12 +211,13 @@ func (q *Queries) GetOperationByIDAndOwner(ctx context.Context, arg GetOperation
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getOperationByIDAndOwnerForUpdate = `-- name: GetOperationByIDAndOwnerForUpdate :one
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL
 FOR UPDATE
@@ -242,12 +246,63 @@ func (q *Queries) GetOperationByIDAndOwnerForUpdate(ctx context.Context, arg Get
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
+const listAllPendingOperationsWithPastDate = `-- name: ListAllPendingOperationsWithPastDate :many
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
+WHERE status = 'pending'
+  AND operation_date < $1::date
+  AND deleted_at IS NULL
+ORDER BY operation_date ASC
+LIMIT $2::int
+`
+
+type ListAllPendingOperationsWithPastDateParams struct {
+	AsOf  pgtype.Date `json:"as_of"`
+	Limit int32       `json:"limit"`
+}
+
+func (q *Queries) ListAllPendingOperationsWithPastDate(ctx context.Context, arg ListAllPendingOperationsWithPastDateParams) ([]Operation, error) {
+	rows, err := q.db.Query(ctx, listAllPendingOperationsWithPastDate, arg.AsOf, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Operation{}
+	for rows.Next() {
+		var i Operation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.LeaseID,
+			&i.RecurringOperationID,
+			&i.Type,
+			&i.Category,
+			&i.AmountKopecks,
+			&i.OperationDate,
+			&i.Comment,
+			&i.IsException,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listFutureOperationsByLease = `-- name: ListFutureOperationsByLease :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
 WHERE lease_id = $1 AND operation_date > $2
   AND deleted_at IS NULL
 ORDER BY operation_date ASC
@@ -282,6 +337,7 @@ func (q *Queries) ListFutureOperationsByLease(ctx context.Context, arg ListFutur
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -346,7 +402,7 @@ func (q *Queries) ListOperationDatesByRecurringOperation(ctx context.Context, re
 }
 
 const listOperationsByLease = `-- name: ListOperationsByLease :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
 WHERE lease_id = $1
   AND deleted_at IS NULL
 ORDER BY operation_date DESC
@@ -376,6 +432,7 @@ func (q *Queries) ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -388,7 +445,7 @@ func (q *Queries) ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID
 }
 
 const listOperationsByProperty = `-- name: ListOperationsByProperty :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
 WHERE owner_id = $1 AND property_id = $2
   AND deleted_at IS NULL
 ORDER BY operation_date DESC
@@ -423,6 +480,57 @@ func (q *Queries) ListOperationsByProperty(ctx context.Context, arg ListOperatio
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOperationsByPropertyWithStatuses = `-- name: ListOperationsByPropertyWithStatuses :many
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
+WHERE owner_id = $1 AND property_id = $2
+  AND status = ANY($3::text[])
+  AND deleted_at IS NULL
+ORDER BY operation_date DESC
+`
+
+type ListOperationsByPropertyWithStatusesParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+	Statuses   []string    `json:"statuses"`
+}
+
+func (q *Queries) ListOperationsByPropertyWithStatuses(ctx context.Context, arg ListOperationsByPropertyWithStatusesParams) ([]Operation, error) {
+	rows, err := q.db.Query(ctx, listOperationsByPropertyWithStatuses, arg.OwnerID, arg.PropertyID, arg.Statuses)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Operation{}
+	for rows.Next() {
+		var i Operation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.LeaseID,
+			&i.RecurringOperationID,
+			&i.Type,
+			&i.Category,
+			&i.AmountKopecks,
+			&i.OperationDate,
+			&i.Comment,
+			&i.IsException,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -435,7 +543,7 @@ func (q *Queries) ListOperationsByProperty(ctx context.Context, arg ListOperatio
 }
 
 const listOperationsByRecurringOperation = `-- name: ListOperationsByRecurringOperation :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
 WHERE recurring_operation_id = $1
   AND deleted_at IS NULL
 ORDER BY operation_date ASC
@@ -465,6 +573,7 @@ func (q *Queries) ListOperationsByRecurringOperation(ctx context.Context, recurr
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -476,13 +585,105 @@ func (q *Queries) ListOperationsByRecurringOperation(ctx context.Context, recurr
 	return items, nil
 }
 
+const listPendingOperationsWithPastDate = `-- name: ListPendingOperationsWithPastDate :many
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
+WHERE owner_id = $1
+  AND status = 'pending'
+  AND operation_date < $2::date
+  AND deleted_at IS NULL
+ORDER BY operation_date ASC
+LIMIT $3::int
+`
+
+type ListPendingOperationsWithPastDateParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	AsOf    pgtype.Date `json:"as_of"`
+	Limit   int32       `json:"limit"`
+}
+
+func (q *Queries) ListPendingOperationsWithPastDate(ctx context.Context, arg ListPendingOperationsWithPastDateParams) ([]Operation, error) {
+	rows, err := q.db.Query(ctx, listPendingOperationsWithPastDate, arg.OwnerID, arg.AsOf, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Operation{}
+	for rows.Next() {
+		var i Operation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.LeaseID,
+			&i.RecurringOperationID,
+			&i.Type,
+			&i.Category,
+			&i.AmountKopecks,
+			&i.OperationDate,
+			&i.Comment,
+			&i.IsException,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markOperationOverdue = `-- name: MarkOperationOverdue :one
+UPDATE operations
+SET status = 'overdue'
+WHERE id = $1
+  AND owner_id = $2
+  AND status = 'pending'
+  AND operation_date < $3::date
+  AND deleted_at IS NULL
+RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status
+`
+
+type MarkOperationOverdueParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+	AsOf    pgtype.Date `json:"as_of"`
+}
+
+func (q *Queries) MarkOperationOverdue(ctx context.Context, arg MarkOperationOverdueParams) (Operation, error) {
+	row := q.db.QueryRow(ctx, markOperationOverdue, arg.ID, arg.OwnerID, arg.AsOf)
+	var i Operation
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.LeaseID,
+		&i.RecurringOperationID,
+		&i.Type,
+		&i.Category,
+		&i.AmountKopecks,
+		&i.OperationDate,
+		&i.Comment,
+		&i.IsException,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Status,
+	)
+	return i, err
+}
+
 const softDeleteOperation = `-- name: SoftDeleteOperation :one
 UPDATE operations
 SET deleted_at = now(),
     updated_at = now()
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL
-RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at
+RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status
 `
 
 type SoftDeleteOperationParams struct {
@@ -508,6 +709,7 @@ func (q *Queries) SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperati
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Status,
 	)
 	return i, err
 }
@@ -520,10 +722,11 @@ SET type = $3,
     operation_date = $6,
     comment = $7,
     lease_id = $8,
+    status = $9,
     is_exception = true
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL
-RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at
+RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status
 `
 
 type UpdateOperationParams struct {
@@ -535,6 +738,7 @@ type UpdateOperationParams struct {
 	OperationDate pgtype.Date `json:"operation_date"`
 	Comment       pgtype.Text `json:"comment"`
 	LeaseID       pgtype.UUID `json:"lease_id"`
+	Status        string      `json:"status"`
 }
 
 func (q *Queries) UpdateOperation(ctx context.Context, arg UpdateOperationParams) (Operation, error) {
@@ -547,6 +751,7 @@ func (q *Queries) UpdateOperation(ctx context.Context, arg UpdateOperationParams
 		arg.OperationDate,
 		arg.Comment,
 		arg.LeaseID,
+		arg.Status,
 	)
 	var i Operation
 	err := row.Scan(
@@ -564,6 +769,7 @@ func (q *Queries) UpdateOperation(ctx context.Context, arg UpdateOperationParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Status,
 	)
 	return i, err
 }

@@ -470,7 +470,7 @@ func TestSubscriptionHandlers_GetSubscription(t *testing.T) {
 	if resp.Tariff.Name != openapi.TariffNameBasic {
 		t.Errorf("expected tariff basic, got %s", resp.Tariff.Name)
 	}
-	if resp.Status != openapi.SubscriptionStatusActive {
+	if resp.Status != openapi.Active {
 		t.Errorf("expected status active, got %s", resp.Status)
 	}
 }

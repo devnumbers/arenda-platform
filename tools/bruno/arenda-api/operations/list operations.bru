@@ -6,6 +6,7 @@ meta {
 
 get {
   url: {{baseUrl}}/properties/{{propertyId}}/operations
+  body: none
   auth: none
 }
 
@@ -24,5 +25,11 @@ tests {
 
   test("should have items array", function() {
     expect(res.body.items).to.be.an("array");
+  });
+
+  test("each item should have a status", function() {
+    res.body.items.forEach(function(item) {
+      expect(item.status).to.exist;
+    });
   });
 }

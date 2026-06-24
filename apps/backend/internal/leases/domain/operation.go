@@ -70,6 +70,82 @@ func IsValidCategoryForType(category OperationCategory, opType OperationType) bo
 	return false
 }
 
+type OperationStatus string
+
+const (
+	OperationStatusPending  OperationStatus = "pending"
+	OperationStatusOverdue  OperationStatus = "overdue"
+	OperationStatusPaid     OperationStatus = "paid"
+	OperationStatusReceived OperationStatus = "received"
+)
+
+var ErrInvalidOperationStatus = fmt.Errorf("invalid operation status")
+
+func ParseOperationStatus(s string) (OperationStatus, error) {
+	st := OperationStatus(s)
+	if !st.Valid() {
+		return "", fmt.Errorf("%w: %q", ErrInvalidOperationStatus, s)
+	}
+	return st, nil
+}
+
+func (s OperationStatus) Valid() bool {
+	switch s {
+	case OperationStatusPending,
+		OperationStatusOverdue,
+		OperationStatusPaid,
+		OperationStatusReceived:
+		return true
+	}
+	return false
+}
+
+// IsCompleted reports whether the operation has reached a terminal status.
+func (s OperationStatus) IsCompleted() bool {
+	switch s {
+	case OperationStatusPaid, OperationStatusReceived:
+		return true
+	}
+	return false
+}
+
+// CanComplete reports whether the operation may be marked as completed.
+func (s OperationStatus) CanComplete() bool {
+	switch s {
+	case OperationStatusPending, OperationStatusOverdue:
+		return true
+	}
+	return false
+}
+
+// CanBecomeOverdue reports whether the operation may transition to overdue.
+func (s OperationStatus) CanBecomeOverdue() bool {
+	return s == OperationStatusPending
+}
+
+var (
+	ErrStatusPaidRequiresExpense    = fmt.Errorf("status paid is only valid for expense operations")
+	ErrStatusReceivedRequiresIncome = fmt.Errorf("status received is only valid for income operations")
+)
+
+// ValidateStatusForType checks that the status is valid and compatible with the operation type.
+func (o Operation) ValidateStatusForType() error {
+	if !o.Status.Valid() {
+		return fmt.Errorf("%w: %q", ErrInvalidOperationStatus, o.Status)
+	}
+	switch o.Status {
+	case OperationStatusPaid:
+		if o.Type != OperationTypeExpense {
+			return ErrStatusPaidRequiresExpense
+		}
+	case OperationStatusReceived:
+		if o.Type != OperationTypeIncome {
+			return ErrStatusReceivedRequiresIncome
+		}
+	}
+	return nil
+}
+
 type Operation struct {
 	ID                   uuid.UUID
 	OwnerID              uuid.UUID
@@ -78,6 +154,7 @@ type Operation struct {
 	RecurringOperationID uuid.UUID
 	Type                 OperationType
 	Category             OperationCategory
+	Status               OperationStatus
 	AmountKopecks        int64
 	OperationDate        time.Time
 	Comment              string

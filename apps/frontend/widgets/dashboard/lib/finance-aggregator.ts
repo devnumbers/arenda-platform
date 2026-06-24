@@ -1,32 +1,69 @@
 import type { components } from '@/shared/api/generated';
 
 type OperationsResponse = components['schemas']['OperationsResponse'];
+type OperationResponse = components['schemas']['OperationResponse'];
+type OperationStatus = components['schemas']['OperationStatus'];
 
-export type AggregateResult = {
+type IncomeExpense = {
   readonly incomeKopecks: number;
   readonly expenseKopecks: number;
-  readonly profitKopecks: number;
 };
+
+type MutableIncomeExpense = {
+  incomeKopecks: number;
+  expenseKopecks: number;
+};
+
+export type AggregateResult = {
+  readonly actual: IncomeExpense & {
+    readonly profitKopecks: number;
+  };
+  readonly pending: IncomeExpense;
+};
+
+/**
+ * Returns the bucket an operation belongs to.
+ *
+ * Backward compatibility: older responses may not contain `status`.
+ * Such operations are treated as actual (paid/received) so the dashboard
+ * keeps showing already-completed amounts instead of silently dropping them.
+ */
+function getOperationBucket(status: OperationStatus | undefined): 'actual' | 'pending' {
+  if (status === 'pending' || status === 'overdue') {
+    return 'pending';
+  }
+
+  // `paid`, `received`, or a missing/unknown status are treated as actual.
+  return 'actual';
+}
+
+function addOperationToBucket(bucket: MutableIncomeExpense, operation: OperationResponse): void {
+  if (operation.type === 'income') {
+    bucket.incomeKopecks += operation.amount_kopecks;
+  } else {
+    bucket.expenseKopecks += operation.amount_kopecks;
+  }
+}
 
 export function aggregateOperations(
   operationsList: ReadonlyArray<OperationsResponse>,
 ): AggregateResult {
-  let incomeKopecks = 0;
-  let expenseKopecks = 0;
+  const actual: MutableIncomeExpense = { incomeKopecks: 0, expenseKopecks: 0 };
+  const pending: MutableIncomeExpense = { incomeKopecks: 0, expenseKopecks: 0 };
 
   for (const response of operationsList) {
     for (const operation of response.items) {
-      if (operation.type === 'income') {
-        incomeKopecks += operation.amount_kopecks;
-      } else {
-        expenseKopecks += operation.amount_kopecks;
-      }
+      const bucket = getOperationBucket(operation.status);
+      addOperationToBucket(bucket === 'actual' ? actual : pending, operation);
     }
   }
 
   return {
-    incomeKopecks,
-    expenseKopecks,
-    profitKopecks: incomeKopecks - expenseKopecks,
+    actual: {
+      incomeKopecks: actual.incomeKopecks,
+      expenseKopecks: actual.expenseKopecks,
+      profitKopecks: actual.incomeKopecks - actual.expenseKopecks,
+    },
+    pending,
   };
 }

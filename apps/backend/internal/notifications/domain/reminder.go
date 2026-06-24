@@ -21,6 +21,7 @@ type EventType string
 
 const (
 	EventOperationDue        EventType = "operation_due"
+	EventOperationOverdue    EventType = "operation_overdue"
 	EventLeaseExpiring       EventType = "lease_expiring"
 	EventLeaseRequiresAction EventType = "lease_requires_action"
 )
@@ -102,6 +103,15 @@ func ValidateReminderDate(reminderDate, now time.Time) error {
 
 // NewOperationReminder creates a pending reminder for a future operation.
 func NewOperationReminder(ownerID, operationID, propertyID uuid.UUID, reminderDate time.Time, title, body string, now time.Time) (Reminder, error) {
+	return newOperationEventReminder(ownerID, operationID, propertyID, EventOperationDue, reminderDate, title, body, now)
+}
+
+// NewOperationOverdueReminder creates a pending reminder for an overdue operation.
+func NewOperationOverdueReminder(ownerID, operationID, propertyID uuid.UUID, reminderDate time.Time, title, body string, now time.Time) (Reminder, error) {
+	return newOperationEventReminder(ownerID, operationID, propertyID, EventOperationOverdue, reminderDate, title, body, now)
+}
+
+func newOperationEventReminder(ownerID, operationID, propertyID uuid.UUID, eventType EventType, reminderDate time.Time, title, body string, now time.Time) (Reminder, error) {
 	if err := ValidateReminderDate(reminderDate, now); err != nil {
 		return Reminder{}, err
 	}
@@ -115,7 +125,7 @@ func NewOperationReminder(ownerID, operationID, propertyID uuid.UUID, reminderDa
 		TargetType:   TargetOperation,
 		OperationID:  &operationID,
 		PropertyID:   &propertyID,
-		EventType:    EventOperationDue,
+		EventType:    eventType,
 		Status:       ReminderPending,
 		ScheduledAt:  ScheduledAtForDate(reminderDate),
 		MessageTitle: title,

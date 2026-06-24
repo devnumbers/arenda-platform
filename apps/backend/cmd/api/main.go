@@ -238,14 +238,16 @@ func run(fallback *slog.Logger) error {
 	reminderWorker := scheduler.NewReminderWorker(reminderRepo, smsNotifier, contactResolver, platformpostgres.NewBeginner(pool, appLogger), realClock{}, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, appLogger)
 	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, realClock{}, 1*time.Hour, 100, appLogger)
 	billingWorker := scheduler.NewBillingWorker(billingService, pool, realClock{}, cfg.BillingWorkerInterval, appLogger)
+	operationOverdueWorker := scheduler.NewOperationOverdueWorker(operationService, realClock{}, cfg.OverdueOperationWorkerInterval, 100, appLogger)
 
 	dataCleaner := cleaner.New(identitySessionRepo, identitySMSRepo, identityAttemptRepo, realClock{}, 1*time.Hour, 7*24*time.Hour, appLogger)
 	var workers sync.WaitGroup
-	workers.Add(4)
+	workers.Add(5)
 	go func() { defer workers.Done(); dataCleaner.Run(ctx) }()
 	go func() { defer workers.Done(); reminderWorker.Run(ctx) }()
 	go func() { defer workers.Done(); leaseReconciliationWorker.Run(ctx) }()
 	go func() { defer workers.Done(); billingWorker.Run(ctx) }()
+	go func() { defer workers.Done(); operationOverdueWorker.Run(ctx) }()
 
 	ipLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.IPRPS), cfg.RateLimit.IPBurst, 1*time.Hour)
 	defer ipLimiter.Stop()

@@ -245,6 +245,15 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: status
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/OperationStatus'
       responses:
         '200':
           description: Operations list for property
@@ -431,6 +440,39 @@ paths:
           $ref: '#/components/responses/NotFound'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
+  /operations/{id}/complete:
+    post:
+      operationId: completeOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /properties/{propertyId}/recurring-operations:
     get:
       operationId: listRecurringOperationsByProperty
@@ -1739,6 +1781,10 @@ components:
       type: string
       enum: [rent, other_income, utilities, repair, tax, other_expense]
 
+    OperationStatus:
+      type: string
+      enum: [pending, overdue, paid, received]
+
     OperationCreateRequest:
       type: object
       required: [type, category, amount_kopecks, operation_date]
@@ -1781,7 +1827,7 @@ components:
 
     OperationResponse:
       type: object
-      required: [id, owner_id, property_id, type, category, amount_kopecks, operation_date, is_exception, created_at, updated_at]
+      required: [id, owner_id, property_id, type, category, amount_kopecks, operation_date, status, is_exception, created_at, updated_at]
       properties:
         id:
           type: string
@@ -1809,6 +1855,8 @@ components:
         operation_date:
           type: string
           format: date
+        status:
+          $ref: '#/components/schemas/OperationStatus'
         comment:
           type: string
           nullable: true
@@ -1967,7 +2015,7 @@ components:
           nullable: true
         event_type:
           type: string
-          enum: [operation_due, lease_expiring, lease_requires_action]
+          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action]
         status:
           type: string
           enum: [pending, sent, failed, cancelled]

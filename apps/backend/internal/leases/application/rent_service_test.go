@@ -223,6 +223,33 @@ func (r *fakeOperationRepo) DeleteUneditedOperationsByLease(_ context.Context, l
 	return nil
 }
 
+func (r *fakeOperationRepo) ListByPropertyWithStatuses(_ context.Context, _, _ uuid.UUID, _ []domain.OperationStatus) ([]domain.Operation, error) {
+	return nil, nil
+}
+
+func (r *fakeOperationRepo) ListPendingOperationsWithPastDate(_ context.Context, _ uuid.UUID, _ time.Time, _ int) ([]domain.Operation, error) {
+	return nil, nil
+}
+
+func (r *fakeOperationRepo) ListAllPendingOperationsWithPastDate(_ context.Context, _ time.Time, _ int) ([]domain.Operation, error) {
+	return nil, nil
+}
+
+func (r *fakeOperationRepo) MarkOverdue(_ context.Context, ownerID, id uuid.UUID, asOf time.Time) (domain.Operation, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.ops {
+		if r.ops[i].ID == id && r.ops[i].OwnerID == ownerID && r.ops[i].DeletedAt == nil {
+			if r.ops[i].Status == domain.OperationStatusPending && r.ops[i].OperationDate.Before(timeutil.Date(asOf)) {
+				r.ops[i].Status = domain.OperationStatusOverdue
+				return r.ops[i], true, nil
+			}
+			return r.ops[i], false, nil
+		}
+	}
+	return domain.Operation{}, false, ErrNotFound
+}
+
 func (r *fakeOperationRepo) WithTx(_ transaction.Tx) OperationRepository {
 	return r
 }

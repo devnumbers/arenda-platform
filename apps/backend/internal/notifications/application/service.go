@@ -162,13 +162,51 @@ func (s *ReminderService) Cancel(ctx context.Context, ownerID, id uuid.UUID) err
 
 func buildOperationReminder(op OperationInfo, reminderDate time.Time, now time.Time) (domain.Reminder, error) {
 	title := "Напоминание об операции"
+	body := formatOperationAmountAndDate(op)
+	return domain.NewOperationReminder(op.OwnerID, op.ID, op.PropertyID, reminderDate, title, body, now)
+}
+
+func buildOverdueReminder(op OperationInfo, reminderDate time.Time, now time.Time) (domain.Reminder, error) {
+	title := "Операция просрочена"
+	body := fmt.Sprintf("Операция %s просрочена. %s", formatOperationAmountAndDate(op), overdueCTA(op.Type))
+	return domain.NewOperationOverdueReminder(op.OwnerID, op.ID, op.PropertyID, reminderDate, title, body, now)
+}
+
+func formatOperationAmountAndDate(op OperationInfo) string {
 	// OperationInfo.AmountKopecks is guaranteed to be non-negative by the
 	// operations bounded context; integer division and modulo behave as expected.
 	rubles := op.AmountKopecks / 100
 	kopecks := op.AmountKopecks % 100
 	amountStr := fmt.Sprintf("%d.%02d", rubles, kopecks)
-	body := fmt.Sprintf("%s %s ₽ запланировано на %s", op.Category, amountStr, op.OperationDate.Format("02.01.2006"))
-	return domain.NewOperationReminder(op.OwnerID, op.ID, op.PropertyID, reminderDate, title, body, now)
+	return fmt.Sprintf("%s на %s ₽ от %s", operationCategoryDisplayName(op.Category), amountStr, op.OperationDate.Format("02.01.2006"))
+}
+
+func operationCategoryDisplayName(category string) string {
+	switch category {
+	case "rent":
+		return "Аренда"
+	case "other_income":
+		return "Прочий доход"
+	case "utilities":
+		return "Коммунальные услуги"
+	case "repair":
+		return "Ремонт"
+	case "tax":
+		return "Налог"
+	case "other_expense":
+		return "Прочий расход"
+	default:
+		return category
+	}
+}
+
+func overdueCTA(opType string) string {
+	switch opType {
+	case "income":
+		return "Отметьте получение в приложении."
+	default:
+		return "Отметьте оплату в приложении."
+	}
 }
 
 func buildRecurringReminders(rec RecurringOperationInfo, baseReminderDate time.Time, ops []OperationInfo, now time.Time) ([]domain.Reminder, error) {
@@ -268,6 +306,33 @@ func (s *scheduler) ScheduleForOperation(ctx context.Context, op OperationInfo, 
 	return nil
 }
 
+// ScheduleOverdueReminder ensures a pending overdue reminder exists for an operation.
+// It is idempotent: if an active overdue reminder already exists, it returns nil.
+func (s *scheduler) ScheduleOverdueReminder(ctx context.Context, op OperationInfo, reminderDate time.Time) error {
+	exists, err := s.repo.HasReminderForOperationEvent(ctx, op.OwnerID, op.ID, domain.EventOperationOverdue)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+
+	if err := s.repo.CancelByTarget(ctx, op.OwnerID, domain.TargetOperation, op.ID, domain.EventOperationDue); err != nil {
+		return err
+	}
+	if err := s.repo.CancelByTarget(ctx, op.OwnerID, domain.TargetOperation, op.ID, domain.EventOperationOverdue); err != nil {
+		return err
+	}
+	r, err := buildOverdueReminder(op, reminderDate, s.clock.Now())
+	if err != nil {
+		return err
+	}
+	if err := s.repo.Save(ctx, r); err != nil {
+		return fmt.Errorf("save overdue reminder: %w", err)
+	}
+	return nil
+}
+
 // ScheduleForRecurringOperation cancels existing reminders and creates concrete reminders for generated operations.
 func (s *scheduler) ScheduleForRecurringOperation(ctx context.Context, rec RecurringOperationInfo, baseReminderDate time.Time, ops []OperationInfo) error {
 	if err := s.repo.CancelByRecurringOperationID(ctx, rec.OwnerID, rec.ID); err != nil {
@@ -348,6 +413,11 @@ func (s *scheduler) EnsureRequiresActionReminder(ctx context.Context, lease Leas
 // CancelByOperation cancels reminders for a concrete operation.
 func (s *scheduler) CancelByOperation(ctx context.Context, ownerID, opID uuid.UUID) error {
 	return s.repo.CancelByTarget(ctx, ownerID, domain.TargetOperation, opID, domain.EventOperationDue)
+}
+
+// CancelOverdueReminderByOperation cancels overdue reminders for a concrete operation.
+func (s *scheduler) CancelOverdueReminderByOperation(ctx context.Context, ownerID, opID uuid.UUID) error {
+	return s.repo.CancelByTarget(ctx, ownerID, domain.TargetOperation, opID, domain.EventOperationOverdue)
 }
 
 // CancelByRecurringOperation cancels reminders for a recurring operation template.

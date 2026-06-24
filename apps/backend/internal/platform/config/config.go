@@ -27,11 +27,12 @@ type Config struct {
 	TKassaBaseURL         string
 	TKassaTimeout         time.Duration
 	EncryptionKey         string
-	BillingWorkerInterval time.Duration
-	LogSuccessfulRequests bool
-	TariffCacheTTL        time.Duration
-	RateLimit             RateLimit
-	DBPool                DBPoolConfig
+	BillingWorkerInterval          time.Duration
+	OverdueOperationWorkerInterval time.Duration
+	LogSuccessfulRequests          bool
+	TariffCacheTTL                 time.Duration
+	RateLimit                      RateLimit
+	DBPool                         DBPoolConfig
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -363,6 +364,18 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("BILLING_WORKER_INTERVAL must be positive")
 		}
 		cfg.BillingWorkerInterval = d
+	}
+
+	cfg.OverdueOperationWorkerInterval = 24 * time.Hour
+	if v := os.Getenv("OVERDUE_OPERATION_WORKER_INTERVAL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid OVERDUE_OPERATION_WORKER_INTERVAL %q: %w", v, err)
+		}
+		if d <= 0 {
+			return Config{}, fmt.Errorf("OVERDUE_OPERATION_WORKER_INTERVAL must be positive")
+		}
+		cfg.OverdueOperationWorkerInterval = d
 	}
 
 	cfg.TariffCacheTTL = 5 * time.Minute

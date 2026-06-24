@@ -14,6 +14,7 @@ var (
 	ErrOpenLeaseExists       = errors.New("property already has an open lease")
 	ErrInvalidTransition     = errors.New("invalid lease status transition")
 	ErrAlreadyCompleted      = errors.New("lease is already completed")
+	ErrOperationAlreadyCompleted = errors.New("operation is already completed")
 	ErrArchivedLease         = errors.New("cannot modify an archived lease")
 	ErrTenantContactNotFound = errors.New("tenant contact not found")
 	ErrDuplicatePhone        = errors.New("tenant contact with this phone already exists")
