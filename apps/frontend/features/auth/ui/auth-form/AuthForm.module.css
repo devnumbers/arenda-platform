@@ -5,3 +5,40 @@
 .step {
   will-change: opacity, transform;
 }
+
+.topBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 24px;
+}
+
+.topBarCode {
+  justify-content: space-between;
+}
+
+.iconButton {
+  border-radius: 50%;
+}
+
+@media (max-width: 767px) {
+  .topBar {
+    padding: 8px;
+  }
+
+  .iconButton {
+    border-radius: var(--radius-button);
+  }
+}
+
+@media (max-width: 479px) {
+  .topBar {
+    left: -12px;
+    right: -12px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}

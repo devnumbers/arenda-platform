@@ -3,6 +3,8 @@
 import {type ReactNode, useCallback, useEffect, useState} from 'react';
 import clsx from 'clsx';
 import {formatPhoneInput} from '@/shared/lib/phone';
+import {ArrowLeft, Cancel, Support} from '@/shared/assets/icons';
+import {IconButton} from '@/shared/ui/icon-button';
 import {PhoneStep} from '../phone-step/PhoneStep';
 import {CodeStep} from '../code-step/CodeStep';
 import styles from './AuthForm.module.css';
@@ -17,6 +19,7 @@ export type AuthFormProps = {
     onVerifyCode?: (code: string) => void;
     onChangePhone?: () => void;
     onResend?: () => void;
+    onClose?: () => void;
     isSending?: boolean;
     isVerifying?: boolean;
     isResending?: boolean;
@@ -55,6 +58,7 @@ export function AuthForm({
                              onVerifyCode,
                              onChangePhone,
                              onResend,
+                             onClose,
                              isSending = false,
                              isVerifying = false,
                              isResending = false,
@@ -104,6 +108,39 @@ export function AuthForm({
 
     return (
         <div className={styles.root}>
+            {effectiveStep === 'phone' ? (
+                <div className={styles.topBar}>
+                    <IconButton
+                        variant="primary-icon"
+                        size="medium"
+                        aria-label="Закрыть"
+                        icon={<Cancel />}
+                        onClick={onClose}
+                        className={styles.iconButton}
+                    />
+                </div>
+            ) : (
+                <div className={clsx(styles.topBar, styles.topBarCode)}>
+                    <IconButton
+                        variant="primary-icon"
+                        size="medium"
+                        aria-label="Назад"
+                        icon={<ArrowLeft />}
+                        onClick={handleChangePhone}
+                        className={styles.iconButton}
+                    />
+                    <IconButton
+                        variant="primary-icon"
+                        size="medium"
+                        aria-label="Написать в поддержку"
+                        icon={<Support />}
+                        onClick={() => {
+                            window.location.href = 'mailto:support@hatus.ru';
+                        }}
+                        className={styles.iconButton}
+                    />
+                </div>
+            )}
             {effectiveStep === 'phone' ? (
                 <StepTransition stepKey="phone">
                     <PhoneStep

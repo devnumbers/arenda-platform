@@ -63,6 +63,10 @@ export default function LoginPage(): JSX.Element {
         setStep('phone');
     };
 
+    const handleClose = () => {
+        router.push('/');
+    };
+
     const handleResend = () => {
         if (phone.length < 18) {
             return;
@@ -95,6 +99,7 @@ export default function LoginPage(): JSX.Element {
                         onVerifyCode={handleVerifyCode}
                         onChangePhone={handleChangePhone}
                         onResend={handleResend}
+                        onClose={handleClose}
                         isSending={sendPhoneCode.isPending}
                         isVerifying={verifyPhoneCode.isPending}
                         isResending={sendPhoneCode.isPending}
