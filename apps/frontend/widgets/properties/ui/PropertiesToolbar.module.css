@@ -58,11 +58,11 @@
 }
 
 .optionChip {
-  border-radius: 9999px;
+  border-radius: var(--radius-round);
   padding: 6px 12px;
   font-size: 0.875rem;
   font-weight: 500;
-  line-height: 1.25rem;
+  line-height: var(--line-height-text-m);
 }
 
 .optionChipSelected {

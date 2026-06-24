@@ -139,8 +139,7 @@ function StatusFilterSection({ selected, onToggle }: StatusFilterSectionProps): 
 
 function SortSection({ selected, onSelect }: SortSectionProps): JSX.Element {
   return (
-    <div className={styles.group}>
-      <span className={styles.groupTitle}>Сортировка</span>
+    <FilterGroup title="Сортировка">
       <div className={styles.options} role="radiogroup" aria-label="Сортировка">
         {sortOptions.map((option) => (
           <SortOption
@@ -151,7 +150,7 @@ function SortSection({ selected, onSelect }: SortSectionProps): JSX.Element {
           />
         ))}
       </div>
-    </div>
+    </FilterGroup>
   );
 }
 
