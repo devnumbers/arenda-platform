@@ -57,11 +57,17 @@ DELETE FROM login_attempts t WHERE t.ctid IN (
 );
 
 -- name: CreateSession :one
-INSERT INTO sessions (user_id, token_hash, expires_at)
-VALUES ($1, $2, $3) RETURNING *;
+INSERT INTO sessions (user_id, token_hash, expires_at, last_used_at)
+VALUES ($1, $2, $3, $4) RETURNING *;
+
+-- name: UpdateSession :exec
+UPDATE sessions SET expires_at = $1, last_used_at = $2 WHERE token_hash = $3;
 
 -- name: DeleteSessionByTokenHash :exec
 DELETE FROM sessions WHERE token_hash = $1;
+
+-- name: DeleteSessionsByUserID :exec
+DELETE FROM sessions WHERE user_id = $1;
 
 -- name: DeleteExpiredSessions :exec
 DELETE FROM sessions WHERE expires_at < $1;
@@ -72,7 +78,7 @@ DELETE FROM sessions t WHERE t.ctid IN (
 );
 
 -- name: GetSessionByTokenHash :one
-SELECT s.id, s.token_hash, s.expires_at, s.created_at,
+SELECT s.id, s.token_hash, s.expires_at, s.created_at, s.last_used_at,
        u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email
 FROM sessions s
 JOIN users u ON s.user_id = u.id

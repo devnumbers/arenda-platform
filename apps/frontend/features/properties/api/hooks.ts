@@ -13,13 +13,17 @@ import { propertyKeys } from './keys';
 import type { components } from '@/shared/api/generated';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
+type PropertiesResponse = components['schemas']['PropertiesResponse'];
 type PropertyCreateRequest = components['schemas']['PropertyCreateRequest'];
 type PropertyUpdateRequest = components['schemas']['PropertyUpdateRequest'];
 
 export function useProperties(): UseQueryResult<PropertyResponse[], ApiError> {
   return useQuery({
     queryKey: propertyKeys.list,
-    queryFn: () => apiClient<PropertyResponse[]>('/properties'),
+    queryFn: async () => {
+      const response = await apiClient<PropertiesResponse>('/properties');
+      return response.items;
+    },
   });
 }
 

@@ -52,7 +52,9 @@ type AttemptRepository interface {
 type SessionRepository interface {
 	Create(ctx context.Context, session domain.Session) error
 	GetByTokenHash(ctx context.Context, tokenHash string, now time.Time) (domain.Session, domain.User, error)
+	Update(ctx context.Context, session domain.Session) error
 	DeleteByTokenHash(ctx context.Context, tokenHash string) error
+	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 	DeleteExpiredBefore(ctx context.Context, before time.Time) error
 	DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	WithTx(tx transaction.Tx) SessionRepository

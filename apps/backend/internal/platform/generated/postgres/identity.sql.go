@@ -44,18 +44,24 @@ func (q *Queries) CreateSMSCode(ctx context.Context, arg CreateSMSCodeParams) (S
 }
 
 const createSession = `-- name: CreateSession :one
-INSERT INTO sessions (user_id, token_hash, expires_at)
-VALUES ($1, $2, $3) RETURNING id, user_id, token_hash, expires_at, created_at
+INSERT INTO sessions (user_id, token_hash, expires_at, last_used_at)
+VALUES ($1, $2, $3, $4) RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at
 `
 
 type CreateSessionParams struct {
-	UserID    pgtype.UUID        `json:"user_id"`
-	TokenHash string             `json:"token_hash"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	TokenHash  string             `json:"token_hash"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
 }
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
-	row := q.db.QueryRow(ctx, createSession, arg.UserID, arg.TokenHash, arg.ExpiresAt)
+	row := q.db.QueryRow(ctx, createSession,
+		arg.UserID,
+		arg.TokenHash,
+		arg.ExpiresAt,
+		arg.LastUsedAt,
+	)
 	var i Session
 	err := row.Scan(
 		&i.ID,
@@ -63,6 +69,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.TokenHash,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.LastUsedAt,
 	)
 	return i, err
 }
@@ -179,6 +186,15 @@ func (q *Queries) DeleteSessionByTokenHash(ctx context.Context, tokenHash string
 	return err
 }
 
+const deleteSessionsByUserID = `-- name: DeleteSessionsByUserID :exec
+DELETE FROM sessions WHERE user_id = $1
+`
+
+func (q *Queries) DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteSessionsByUserID, userID)
+	return err
+}
+
 const deleteStaleLoginAttempts = `-- name: DeleteStaleLoginAttempts :exec
 DELETE FROM login_attempts WHERE last_failure_at < $1
 `
@@ -253,7 +269,7 @@ func (q *Queries) GetLoginAttemptByPhone(ctx context.Context, phone string) (Log
 }
 
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
-SELECT s.id, s.token_hash, s.expires_at, s.created_at,
+SELECT s.id, s.token_hash, s.expires_at, s.created_at, s.last_used_at,
        u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email
 FROM sessions s
 JOIN users u ON s.user_id = u.id
@@ -270,6 +286,7 @@ type GetSessionByTokenHashRow struct {
 	TokenHash  string             `json:"token_hash"`
 	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
 	UserID     pgtype.UUID        `json:"user_id"`
 	Phone      string             `json:"phone"`
 	Role       string             `json:"role"`
@@ -287,6 +304,7 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, arg GetSessionByTok
 		&i.TokenHash,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.LastUsedAt,
 		&i.UserID,
 		&i.Phone,
 		&i.Role,
@@ -357,6 +375,21 @@ UPDATE sms_codes SET used = true WHERE id = $1
 
 func (q *Queries) MarkSMSCodeUsed(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, markSMSCodeUsed, id)
+	return err
+}
+
+const updateSession = `-- name: UpdateSession :exec
+UPDATE sessions SET expires_at = $1, last_used_at = $2 WHERE token_hash = $3
+`
+
+type UpdateSessionParams struct {
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	TokenHash  string             `json:"token_hash"`
+}
+
+func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) error {
+	_, err := q.db.Exec(ctx, updateSession, arg.ExpiresAt, arg.LastUsedAt, arg.TokenHash)
 	return err
 }
 

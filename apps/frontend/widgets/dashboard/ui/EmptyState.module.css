@@ -1,0 +1,31 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  border-radius: 24px;
+  border: 1px solid #e7e9ec;
+  background: var(--color-white);
+}
+
+.iconWrapper {
+  color: var(--color-primary);
+}
+
+.iconWrapper svg {
+  width: 48px !important;
+  height: 48px !important;
+}
+
+.title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.subtitle {
+  font-size: var(--font-size-text-m);
+  color: var(--color-text-muted);
+}

@@ -151,6 +151,17 @@ func SessionMiddleware(logger *slog.Logger, sessions application.SessionReposito
 				next.ServeHTTP(w, r)
 				return
 			}
+
+			if session.Refresh(now) {
+				if err := sessions.Update(r.Context(), session); err != nil {
+					if logger != nil {
+						logger.ErrorContext(r.Context(), "failed to refresh session", slog.String("error", sanitizeError(err)))
+					}
+				} else {
+					setSessionCookie(w, token, session.ExpiresAt, secure)
+				}
+			}
+
 			ctx := context.WithValue(r.Context(), userIDKey{}, user.ID)
 			ctx = context.WithValue(ctx, userKey{}, user)
 			r = r.WithContext(ctx)

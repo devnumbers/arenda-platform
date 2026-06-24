@@ -151,6 +151,24 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// LogoutAll implements POST /auth/logout-all.
+func (h *AuthHandlers) LogoutAll(w http.ResponseWriter, r *http.Request) {
+	userID, ok := UserIDFromContext(r.Context())
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	if err := h.auth.LogoutAll(r.Context(), userID); err != nil {
+		h.logger.ErrorContext(r.Context(), "logout all failed", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+		return
+	}
+
+	clearSessionCookie(w, h.cookieSecure)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // GetMe implements GET /me.
 func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 	userID, ok := UserIDFromContext(r.Context())

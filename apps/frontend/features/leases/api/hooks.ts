@@ -13,6 +13,7 @@ import { leaseKeys } from './keys';
 import type { components } from '@/shared/api/generated';
 
 type LeaseResponse = components['schemas']['LeaseResponse'];
+type LeasesResponse = components['schemas']['LeasesResponse'];
 type LeaseCreateRequest = components['schemas']['LeaseCreateRequest'];
 type LeaseUpdateRequest = components['schemas']['LeaseUpdateRequest'];
 type ReminderCreateRequest = components['schemas']['ReminderCreateRequest'];
@@ -22,7 +23,10 @@ type RemindersResponse = components['schemas']['RemindersResponse'];
 export function useLeases(): UseQueryResult<LeaseResponse[], ApiError> {
   return useQuery({
     queryKey: leaseKeys.all,
-    queryFn: () => apiClient<LeaseResponse[]>('/leases'),
+    queryFn: async () => {
+      const response = await apiClient<LeasesResponse>('/leases');
+      return response.items;
+    },
   });
 }
 

@@ -10,12 +10,19 @@ import (
 	"github.com/google/uuid"
 )
 
-const SessionTTL = 30 * 24 * time.Hour
+const (
+	// SessionBaseTTL is the per-request sliding window for an active session.
+	SessionBaseTTL = 7 * 24 * time.Hour
+	// SessionMaxTTL is the hard upper bound for a session since creation.
+	SessionMaxTTL = 30 * 24 * time.Hour
+)
 
 type Session struct {
-	UserID    uuid.UUID
-	TokenHash string
-	ExpiresAt time.Time
+	UserID     uuid.UUID
+	TokenHash  string
+	ExpiresAt  time.Time
+	CreatedAt  time.Time
+	LastUsedAt time.Time
 }
 
 type RawSession struct {
@@ -23,8 +30,30 @@ type RawSession struct {
 	Session Session
 }
 
-func (s Session) IsExpired(now time.Time) bool {
+func (s *Session) IsExpired(now time.Time) bool {
 	return now.After(s.ExpiresAt)
+}
+
+// Refresh extends the session expiration by SessionBaseTTL, capped at
+// CreatedAt + SessionMaxTTL. It returns true when the expiration was actually
+// moved forward. Expired sessions are never refreshed.
+func (s *Session) Refresh(now time.Time) bool {
+	if s.IsExpired(now) {
+		return false
+	}
+
+	maxExpires := s.CreatedAt.Add(SessionMaxTTL)
+	candidate := now.Add(SessionBaseTTL)
+	if candidate.After(maxExpires) {
+		candidate = maxExpires
+	}
+	if !candidate.After(s.ExpiresAt) {
+		return false
+	}
+
+	s.ExpiresAt = candidate
+	s.LastUsedAt = now
+	return true
 }
 
 func NewSession(userID uuid.UUID, now time.Time) (RawSession, error) {
@@ -37,9 +66,11 @@ func NewSession(userID uuid.UUID, now time.Time) (RawSession, error) {
 	return RawSession{
 		Token: token,
 		Session: Session{
-			UserID:    userID,
-			TokenHash: hex.EncodeToString(sum[:]),
-			ExpiresAt: now.Add(SessionTTL),
+			UserID:     userID,
+			TokenHash:  hex.EncodeToString(sum[:]),
+			ExpiresAt:  now.Add(SessionBaseTTL),
+			CreatedAt:  now,
+			LastUsedAt: now,
 		},
 	}, nil
 }

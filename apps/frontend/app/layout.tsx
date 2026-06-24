@@ -3,6 +3,8 @@ import type { JSX } from 'react';
 import { Inter } from 'next/font/google';
 import { ToastContainer } from 'react-toastify';
 import { QueryProvider } from '@/shared/providers/query-provider';
+import '../shared/styles/tokens.css';
+import 'react-toastify/dist/ReactToastify.css';
 import './globals.css';
 
 const inter = Inter({

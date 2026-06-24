@@ -206,6 +206,10 @@ func (s *AuthService) Logout(ctx context.Context, tokenHash string) error {
 	return s.sessions.DeleteByTokenHash(ctx, tokenHash)
 }
 
+func (s *AuthService) LogoutAll(ctx context.Context, userID uuid.UUID) error {
+	return s.sessions.DeleteByUserID(ctx, userID)
+}
+
 func (s *AuthService) Me(ctx context.Context, userID uuid.UUID) (domain.User, error) {
 	user, err := s.users.GetByID(ctx, userID)
 	if err != nil {

@@ -264,15 +264,28 @@ func (r *SessionRepository) WithTx(tx transaction.Tx) application.SessionReposit
 
 func (r *SessionRepository) Create(ctx context.Context, session domain.Session) error {
 	_, err := r.q().CreateSession(ctx, postgres.CreateSessionParams{
-		UserID:    pgconv.UUIDToPgtype(session.UserID),
-		TokenHash: session.TokenHash,
-		ExpiresAt: pgtype.Timestamptz{Time: session.ExpiresAt, Valid: true},
+		UserID:     pgconv.UUIDToPgtype(session.UserID),
+		TokenHash:  session.TokenHash,
+		ExpiresAt:  pgtype.Timestamptz{Time: session.ExpiresAt, Valid: true},
+		LastUsedAt: pgtype.Timestamptz{Time: session.LastUsedAt, Valid: true},
 	})
 	return err
 }
 
+func (r *SessionRepository) Update(ctx context.Context, session domain.Session) error {
+	return r.q().UpdateSession(ctx, postgres.UpdateSessionParams{
+		ExpiresAt:  pgtype.Timestamptz{Time: session.ExpiresAt, Valid: true},
+		LastUsedAt: pgtype.Timestamptz{Time: session.LastUsedAt, Valid: true},
+		TokenHash:  session.TokenHash,
+	})
+}
+
 func (r *SessionRepository) DeleteByTokenHash(ctx context.Context, tokenHash string) error {
 	return r.q().DeleteSessionByTokenHash(ctx, tokenHash)
+}
+
+func (r *SessionRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
+	return r.q().DeleteSessionsByUserID(ctx, pgconv.UUIDToPgtype(userID))
 }
 
 func (r *SessionRepository) DeleteExpiredBefore(ctx context.Context, before time.Time) error {
@@ -298,9 +311,11 @@ func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string
 		return domain.Session{}, domain.User{}, err
 	}
 	return domain.Session{
-			UserID:    pgconv.UUIDFromPgtype(row.UserID),
-			TokenHash: row.TokenHash,
-			ExpiresAt: row.ExpiresAt.Time,
+			UserID:     pgconv.UUIDFromPgtype(row.UserID),
+			TokenHash:  row.TokenHash,
+			ExpiresAt:  row.ExpiresAt.Time,
+			CreatedAt:  row.CreatedAt.Time,
+			LastUsedAt: row.LastUsedAt.Time,
 		}, domain.User{
 			ID:         pgconv.UUIDFromPgtype(row.UserID),
 			Phone:      domain.Phone(row.Phone),
