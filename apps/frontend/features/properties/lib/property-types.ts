@@ -1,0 +1,22 @@
+import type { components } from '@/shared/api/generated';
+
+export type PropertyType = components['schemas']['PropertyResponse']['type'];
+
+export const propertyTypeLabels: Record<PropertyType, string> = {
+  apartment: 'Квартира',
+  room: 'Комната',
+  apartments: 'Апартаменты',
+  house: 'Дом',
+  commercial: 'Коммерческое помещение',
+  office: 'Офис',
+  warehouse: 'Склад',
+  garage: 'Гараж',
+  parking: 'Парковка',
+  land: 'Земельный участок',
+};
+
+export const propertyTypeOptions: { value: PropertyType; label: string }[] =
+  Object.entries(propertyTypeLabels).map(([value, label]) => ({
+    value: value as PropertyType,
+    label,
+  }));
