@@ -30,8 +30,8 @@ function compareActiveLeases(a: LeaseResponse, b: LeaseResponse): number {
   //   than any lease with a valid date, so valid dates always win;
   // - if start_date is identical, the lease with the greater id wins
   //   (lexicographic comparison of UUIDs is sufficient here).
-  const aStart = new Date(a.start_date).getTime();
-  const bStart = new Date(b.start_date).getTime();
+  const aStart = a.start_date ? new Date(a.start_date).getTime() : NaN;
+  const bStart = b.start_date ? new Date(b.start_date).getTime() : NaN;
   const aValid = !Number.isNaN(aStart);
   const bValid = !Number.isNaN(bStart);
 
