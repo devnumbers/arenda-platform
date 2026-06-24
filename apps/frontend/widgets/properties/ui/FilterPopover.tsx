@@ -5,7 +5,6 @@ import {
   Popover,
   PopoverContent,
   PopoverDialog,
-  PopoverHeading,
   PopoverTrigger,
 } from '@heroui/react/popover';
 import { Button as HeroButton } from '@heroui/react/button';
@@ -37,8 +36,7 @@ export function FilterPopover({ label, activeCount, children }: FilterPopoverPro
         </HeroButton>
       </PopoverTrigger>
       <PopoverContent className={styles.content}>
-        <PopoverDialog>
-          <PopoverHeading className={styles.heading}>{label}</PopoverHeading>
+        <PopoverDialog aria-label={label}>
           {children}
         </PopoverDialog>
       </PopoverContent>

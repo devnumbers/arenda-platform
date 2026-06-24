@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import type { JSX, ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, FC, JSX, ReactNode } from 'react';
 import clsx from 'clsx';
 import { Button as HeroButton } from '@heroui/react/button';
 import { Filter } from '@/shared/assets/icons';
@@ -21,6 +21,10 @@ import {
   type PropertySort,
 } from '../lib/filter-types';
 import styles from './PropertiesToolbar.module.css';
+
+type HeroButtonProps = ComponentPropsWithoutRef<typeof HeroButton>;
+type SortButtonProps = HeroButtonProps & { role?: string };
+const SortButton = HeroButton as FC<SortButtonProps>;
 
 export type PropertiesToolbarProps = {
   readonly filters: PropertyFilters;
@@ -58,11 +62,39 @@ function OptionChip({
         styles.optionChip,
         selected ? styles.optionChipSelected : styles.optionChipUnselected,
       )}
+      type="button"
+      variant="secondary"
       aria-pressed={selected}
       onClick={onClick}
     >
       {label}
     </HeroButton>
+  );
+}
+
+function SortOption({
+  label,
+  selected,
+  onClick,
+}: {
+  readonly label: string;
+  readonly selected: boolean;
+  readonly onClick: () => void;
+}): JSX.Element {
+  return (
+    <SortButton
+      className={clsx(
+        styles.optionChip,
+        selected ? styles.optionChipSelected : styles.optionChipUnselected,
+      )}
+      type="button"
+      variant="secondary"
+      role="radio"
+      aria-checked={selected}
+      onClick={onClick}
+    >
+      {label}
+    </SortButton>
   );
 }
 
@@ -107,16 +139,19 @@ function StatusFilterSection({ selected, onToggle }: StatusFilterSectionProps): 
 
 function SortSection({ selected, onSelect }: SortSectionProps): JSX.Element {
   return (
-    <FilterGroup title="Сортировка">
-      {sortOptions.map((option) => (
-        <OptionChip
-          key={option.value}
-          label={option.label}
-          selected={selected === option.value}
-          onClick={() => onSelect(option.value)}
-        />
-      ))}
-    </FilterGroup>
+    <div className={styles.group}>
+      <span className={styles.groupTitle}>Сортировка</span>
+      <div className={styles.options} role="radiogroup" aria-label="Сортировка">
+        {sortOptions.map((option) => (
+          <SortOption
+            key={option.value}
+            label={option.label}
+            selected={selected === option.value}
+            onClick={() => onSelect(option.value)}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
