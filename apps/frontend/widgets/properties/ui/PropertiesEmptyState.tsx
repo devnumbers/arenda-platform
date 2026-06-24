@@ -2,7 +2,7 @@
 
 import type { JSX } from 'react';
 import { ROUTES } from '@/shared/config/routes';
-import { EmptyState } from '@/widgets/dashboard/ui/EmptyState';
+import { EmptyState } from '@/shared/ui/empty-state';
 import { HomeAdd } from '@/shared/assets/icons';
 
 export function PropertiesEmptyState(): JSX.Element {

@@ -7,7 +7,7 @@ import { Icon } from '@/shared/ui/icon';
 import { Clock, BoldWallet, ArrowRight } from '@/shared/assets/icons';
 import type { components } from '@/shared/api/generated';
 import { formatDeadline } from '../lib/deadline-helpers';
-import { EmptyState } from './EmptyState';
+import { EmptyState } from '@/shared/ui/empty-state';
 import { SectionHeader } from './SectionHeader';
 import { PaymentRow } from './PaymentRow';
 import { IconActionCard } from './IconActionCard';

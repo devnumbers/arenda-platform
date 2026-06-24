@@ -8,7 +8,7 @@ import { Key, ArrowRight, BoldWallet, UserSmall, ClockSmall } from '@/shared/ass
 import type { components } from '@/shared/api/generated';
 import { formatMoney } from '../lib/format-money';
 import { formatRemainingDuration, formatCurrentLeaseMonth } from '../lib/lease-helpers';
-import { EmptyState } from './EmptyState';
+import { EmptyState } from '@/shared/ui/empty-state';
 import { SectionHeader } from './SectionHeader';
 import { StatusBadge } from './StatusBadge';
 import { LeaseProgress } from './LeaseProgress';

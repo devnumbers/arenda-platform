@@ -77,3 +77,8 @@
   background-color: var(--color-secondary-bg);
   color: var(--color-text);
 }
+
+.optionChip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

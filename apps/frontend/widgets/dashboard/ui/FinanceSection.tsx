@@ -8,7 +8,7 @@ import type { components } from '@/shared/api/generated';
 import { useOperationsForProperties } from '../lib/use-operations-for-properties';
 import { aggregateOperations } from '../lib/finance-aggregator';
 import { formatMoney } from '../lib/format-money';
-import { EmptyState } from './EmptyState';
+import { EmptyState } from '@/shared/ui/empty-state';
 import { SectionHeader } from './SectionHeader';
 import styles from './FinanceSection.module.css';
 
