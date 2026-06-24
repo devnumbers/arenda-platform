@@ -4,14 +4,14 @@ import { PropertiesPage } from '@/widgets/properties/ui/PropertiesPage';
 import { PropertiesLoading } from '@/widgets/properties/ui/PropertiesLoading';
 
 export const metadata: Metadata = {
-  title: 'Мои объекты — Arenda Platform',
-  description: 'Список объектов недвижимости',
+  title: 'Архивные объекты — Arenda Platform',
+  description: 'Архивные объекты недвижимости',
 };
 
-export default function PropertiesRoutePage() {
+export default function PropertiesArchivePage() {
   return (
     <Suspense fallback={<PropertiesLoading />}>
-      <PropertiesPage />
+      <PropertiesPage mode="archived" />
     </Suspense>
   );
 }
