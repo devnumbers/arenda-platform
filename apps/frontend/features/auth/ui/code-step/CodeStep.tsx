@@ -51,7 +51,6 @@ export function CodeStep({
 
   return (
     <div className={styles.root}>
-      <Logo className={styles.logo} />
       <div className={styles.header}>
         <h1 className={styles.title}>Введите код</h1>
         <p className={styles.subtitle}>

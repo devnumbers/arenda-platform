@@ -34,7 +34,6 @@ export function PhoneStep({
 
   return (
     <div className={styles.root}>
-      <Logo className={styles.logo} />
       <div className={styles.header}>
         <h1 className={styles.title}>Введите номер телефона</h1>
         <p className={styles.subtitle}>Чтобы войти или зарегистрироваться</p>
