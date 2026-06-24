@@ -20,6 +20,7 @@ import {
   type PropertyFilters,
   type PropertySort,
 } from '../lib/filter-types';
+import type { PropertiesViewMode } from '../lib/apply-filters';
 import styles from './PropertiesToolbar.module.css';
 
 type HeroButtonProps = ComponentPropsWithoutRef<typeof HeroButton>;
@@ -29,6 +30,7 @@ const SortButton = HeroButton as FC<SortButtonProps>;
 export type PropertiesToolbarProps = {
   readonly filters: PropertyFilters;
   readonly sort: PropertySort;
+  readonly mode?: PropertiesViewMode;
   readonly onChange: (filters: PropertyFilters, sort: PropertySort) => void;
 };
 
@@ -154,7 +156,7 @@ function SortSection({ selected, onSelect }: SortSectionProps): JSX.Element {
   );
 }
 
-export function PropertiesToolbar({ filters, sort, onChange }: PropertiesToolbarProps): JSX.Element {
+export function PropertiesToolbar({ filters, sort, mode = 'active', onChange }: PropertiesToolbarProps): JSX.Element {
   const [draftFilters, setDraftFilters] = useState<PropertyFilters>(filters);
   const [draftSort, setDraftSort] = useState<PropertySort>(sort);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -211,11 +213,13 @@ export function PropertiesToolbar({ filters, sort, onChange }: PropertiesToolbar
             <TypeFilterSection selected={filters.types} onToggle={handleDesktopTypeToggle} />
           </div>
         </FilterPopover>
-        <FilterPopover label="Статус" activeCount={filters.statuses.length}>
-          <div className={styles.popoverBody}>
-            <StatusFilterSection selected={filters.statuses} onToggle={handleDesktopStatusToggle} />
-          </div>
-        </FilterPopover>
+        {mode !== 'archived' && (
+          <FilterPopover label="Статус" activeCount={filters.statuses.length}>
+            <div className={styles.popoverBody}>
+              <StatusFilterSection selected={filters.statuses} onToggle={handleDesktopStatusToggle} />
+            </div>
+          </FilterPopover>
+        )}
         <FilterPopover label="Сортировка" activeCount={0}>
           <div className={styles.popoverBody}>
             <SortSection selected={sort} onSelect={handleDesktopSortSelect} />
@@ -241,7 +245,9 @@ export function PropertiesToolbar({ filters, sort, onChange }: PropertiesToolbar
           onApply={handleApply}
         >
           <TypeFilterSection selected={draftFilters.types} onToggle={handleDraftTypeToggle} />
-          <StatusFilterSection selected={draftFilters.statuses} onToggle={handleDraftStatusToggle} />
+          {mode !== 'archived' && (
+            <StatusFilterSection selected={draftFilters.statuses} onToggle={handleDraftStatusToggle} />
+          )}
           <SortSection selected={draftSort} onSelect={handleDraftSortSelect} />
         </FilterDrawer>
       </div>

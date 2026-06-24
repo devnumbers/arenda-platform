@@ -21,6 +21,7 @@ type UsePropertyListDataReturn = {
     propertiesError: ApiError | null;
     leasesError: ApiError | null;
   };
+  refetch: () => void;
 };
 
 function compareActiveLeases(a: Lease, b: Lease): number {
@@ -86,6 +87,10 @@ export function usePropertyListData(): UsePropertyListDataReturn {
     error: {
       propertiesError: propertiesQuery.error,
       leasesError: leasesQuery.error,
+    },
+    refetch: () => {
+      void propertiesQuery.refetch();
+      void leasesQuery.refetch();
     },
   };
 }

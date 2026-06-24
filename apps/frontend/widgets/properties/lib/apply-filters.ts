@@ -19,14 +19,14 @@ export function applyFiltersAndSort(
     result = result.filter((p) => filters.types.includes(p.type));
   }
 
-  if (filters.statuses.length > 0) {
+  if (mode !== 'archived' && filters.statuses.length > 0) {
     result = result.filter((p) => {
       const display = getDisplayStatus(p.status, p.occupancy);
       return display ? filters.statuses.includes(display) : false;
     });
   }
 
-  result = [...result].sort((a, b) => {
+  result.sort((a, b) => {
     const cmp = a.name.localeCompare(b.name, 'ru');
     return sort === 'name_asc' ? cmp : -cmp;
   });
