@@ -11,6 +11,7 @@ export type EmptyStateProps = {
   readonly subtitle: string;
   readonly actionHref: string;
   readonly actionText: string;
+  readonly title?: string;
 };
 
 export function EmptyState({
@@ -19,6 +20,7 @@ export function EmptyState({
   subtitle,
   actionHref,
   actionText,
+  title,
 }: EmptyStateProps): JSX.Element {
   const sizedIcon = isValidElement(icon)
     ? cloneElement(icon, { width: 48, height: 48 } as Record<string, unknown>)
@@ -27,7 +29,7 @@ export function EmptyState({
   return (
     <HeroEmptyState className={styles.root}>
       <div className={styles.iconWrapper}>{sizedIcon}</div>
-      <h3 className={styles.title}>Нет {entities}</h3>
+      <h3 className={styles.title}>{title ?? `Нет ${entities}`}</h3>
       <p className={styles.subtitle}>{subtitle}</p>
       <LinkButton
         href={actionHref}
