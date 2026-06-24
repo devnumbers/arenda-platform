@@ -1,7 +1,4 @@
-import type { components } from '@/shared/api/generated';
-
-export type PropertyStatus = components['schemas']['PropertyResponse']['status'];
-export type Occupancy = components['schemas']['PropertyResponse']['occupancy'];
+import type { PropertyStatus, Occupancy } from '@/entities/property/model/types';
 
 export type DisplayStatus = 'rented' | 'free' | 'maintenance';
 

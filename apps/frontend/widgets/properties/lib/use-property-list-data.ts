@@ -63,9 +63,9 @@ export function usePropertyListData(): UsePropertyListDataReturn {
     const activeLeaseByProperty = new Map<string, Lease>();
 
     for (const lease of leasesQuery.data ?? []) {
-      if (lease.status !== 'active') continue;
-
       const mappedLease = mapLeaseResponse(lease);
+      if (mappedLease.status !== 'active') continue;
+
       const current = activeLeaseByProperty.get(mappedLease.propertyId);
 
       if (!current || compareActiveLeases(mappedLease, current) > 0) {

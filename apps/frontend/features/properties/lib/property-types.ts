@@ -1,6 +1,4 @@
-import type { components } from '@/shared/api/generated';
-
-export type PropertyType = components['schemas']['PropertyResponse']['type'];
+import type { PropertyType } from '@/entities/property/model/types';
 
 export const propertyTypeLabels: Record<PropertyType, string> = {
   apartment: 'Квартира',

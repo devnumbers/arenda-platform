@@ -1,10 +1,15 @@
 import type { components } from '@/shared/api/generated';
 import type { Lease, LeaseStatus } from './types';
 
-const leaseStatusMap: Record<string, LeaseStatus> = {
+const leaseStatusMap: Record<
+  components['schemas']['LeaseResponse']['status'],
+  LeaseStatus
+> = {
+  awaiting_start: 'awaiting_start',
   active: 'active',
+  requires_action: 'requires_action',
   completed: 'completed',
-  cancelled: 'cancelled',
+  archived: 'archived',
 };
 
 export function mapLeaseResponse(
@@ -17,6 +22,6 @@ export function mapLeaseResponse(
     rentKopecks: dto.rent_amount_kopecks,
     startDate: dto.start_date,
     endDate: dto.end_date ?? undefined,
-    status: leaseStatusMap[dto.status] ?? 'active',
+    status: leaseStatusMap[dto.status],
   };
 }

@@ -1,4 +1,9 @@
-export type LeaseStatus = 'active' | 'completed' | 'cancelled';
+export type LeaseStatus =
+  | 'awaiting_start'
+  | 'active'
+  | 'requires_action'
+  | 'completed'
+  | 'archived';
 
 export type Lease = {
   readonly id: string;
