@@ -1,7 +1,13 @@
 'use client';
 
 import type { JSX, ReactNode } from 'react';
-import { Popover, PopoverContent, PopoverTrigger } from '@heroui/react/popover';
+import {
+  Popover,
+  PopoverContent,
+  PopoverDialog,
+  PopoverHeading,
+  PopoverTrigger,
+} from '@heroui/react/popover';
 import { Button as HeroButton } from '@heroui/react/button';
 import { ChevronDown } from '@/shared/assets/icons';
 import { Icon } from '@/shared/ui/icon';
@@ -31,7 +37,10 @@ export function FilterPopover({ label, activeCount, children }: FilterPopoverPro
         </HeroButton>
       </PopoverTrigger>
       <PopoverContent className={styles.content}>
-        {children}
+        <PopoverDialog>
+          <PopoverHeading className={styles.heading}>{label}</PopoverHeading>
+          {children}
+        </PopoverDialog>
       </PopoverContent>
     </Popover>
   );

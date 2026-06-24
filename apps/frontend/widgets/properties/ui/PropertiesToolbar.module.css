@@ -38,16 +38,39 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
 }
 
 .groupTitle {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--color-text);
+  padding: 0;
 }
 
 .options {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.optionChip {
+  border-radius: 9999px;
+  padding: 6px 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+}
+
+.optionChipSelected {
+  background-color: var(--color-primary);
+  color: var(--color-white);
+}
+
+.optionChipUnselected {
+  background-color: var(--color-secondary-bg);
+  color: var(--color-text);
 }

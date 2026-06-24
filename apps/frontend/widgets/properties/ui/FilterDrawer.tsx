@@ -1,8 +1,18 @@
 'use client';
 
 import type { JSX, ReactNode } from 'react';
-import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from '@heroui/react/drawer';
-import { Button } from '@/shared/ui/button';
+import {
+  Drawer,
+  DrawerBackdrop,
+  DrawerBody,
+  DrawerCloseTrigger,
+  DrawerContent,
+  DrawerDialog,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerHeading,
+} from '@heroui/react/drawer';
+import { Button as HeroButton } from '@heroui/react/button';
 import styles from './FilterDrawer.module.css';
 
 export type FilterDrawerProps = {
@@ -15,14 +25,20 @@ export type FilterDrawerProps = {
 export function FilterDrawer({ isOpen, onClose, onApply, children }: FilterDrawerProps): JSX.Element {
   return (
     <Drawer isOpen={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DrawerBackdrop />
       <DrawerContent placement="bottom">
-        <DrawerHeader className={styles.header}>Фильтры</DrawerHeader>
-        <DrawerBody className={styles.body}>{children}</DrawerBody>
-        <DrawerFooter className={styles.footer}>
-          <Button variant="primary" size="large" fullWidth onClick={onApply}>
-            Применить
-          </Button>
-        </DrawerFooter>
+        <DrawerDialog>
+          <DrawerCloseTrigger aria-label="Закрыть" />
+          <DrawerHeader className={styles.header}>
+            <DrawerHeading>Фильтры</DrawerHeading>
+          </DrawerHeader>
+          <DrawerBody className={styles.body}>{children}</DrawerBody>
+          <DrawerFooter className={styles.footer}>
+            <HeroButton variant="primary" size="lg" fullWidth onClick={onApply}>
+              Применить
+            </HeroButton>
+          </DrawerFooter>
+        </DrawerDialog>
       </DrawerContent>
     </Drawer>
   );

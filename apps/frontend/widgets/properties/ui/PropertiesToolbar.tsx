@@ -16,6 +16,7 @@ import { FilterPopover } from './FilterPopover';
 import { FilterDrawer } from './FilterDrawer';
 import {
   sortOptions,
+  toggleValue,
   type PropertyFilters,
   type PropertySort,
 } from '../lib/filter-types';
@@ -54,9 +55,10 @@ function OptionChip({
   return (
     <HeroButton
       className={clsx(
-        'rounded-full px-3 py-1.5 text-sm font-medium',
-        selected ? 'bg-[#2b7fff] text-white' : 'bg-[#f1f3f6] text-[#1e1e1e]',
+        styles.optionChip,
+        selected ? styles.optionChipSelected : styles.optionChipUnselected,
       )}
+      aria-pressed={selected}
       onClick={onClick}
     >
       {label}
@@ -66,10 +68,10 @@ function OptionChip({
 
 function FilterGroup({ title, children }: { readonly title: string; readonly children: ReactNode }): JSX.Element {
   return (
-    <div className={styles.group}>
-      <span className={styles.groupTitle}>{title}</span>
+    <fieldset className={styles.group}>
+      <legend className={styles.groupTitle}>{title}</legend>
       <div className={styles.options}>{children}</div>
-    </div>
+    </fieldset>
   );
 }
 
@@ -136,20 +138,14 @@ export function PropertiesToolbar({ filters, sort, onChange }: PropertiesToolbar
 
   const handleDesktopTypeToggle = useCallback(
     (type: PropertyType) => {
-      const nextTypes = filters.types.includes(type)
-        ? filters.types.filter((value) => value !== type)
-        : [...filters.types, type];
-      onChange({ ...filters, types: nextTypes }, sort);
+      onChange({ ...filters, types: toggleValue(filters.types, type) }, sort);
     },
     [filters, sort, onChange],
   );
 
   const handleDesktopStatusToggle = useCallback(
     (status: StatusFilterValue) => {
-      const nextStatuses = filters.statuses.includes(status)
-        ? filters.statuses.filter((value) => value !== status)
-        : [...filters.statuses, status];
-      onChange({ ...filters, statuses: nextStatuses }, sort);
+      onChange({ ...filters, statuses: toggleValue(filters.statuses, status) }, sort);
     },
     [filters, sort, onChange],
   );
@@ -162,21 +158,11 @@ export function PropertiesToolbar({ filters, sort, onChange }: PropertiesToolbar
   );
 
   const handleDraftTypeToggle = useCallback((type: PropertyType) => {
-    setDraftFilters((prev) => {
-      const nextTypes = prev.types.includes(type)
-        ? prev.types.filter((value) => value !== type)
-        : [...prev.types, type];
-      return { ...prev, types: nextTypes };
-    });
+    setDraftFilters((prev) => ({ ...prev, types: toggleValue(prev.types, type) }));
   }, []);
 
   const handleDraftStatusToggle = useCallback((status: StatusFilterValue) => {
-    setDraftFilters((prev) => {
-      const nextStatuses = prev.statuses.includes(status)
-        ? prev.statuses.filter((value) => value !== status)
-        : [...prev.statuses, status];
-      return { ...prev, statuses: nextStatuses };
-    });
+    setDraftFilters((prev) => ({ ...prev, statuses: toggleValue(prev.statuses, status) }));
   }, []);
 
   const handleDraftSortSelect = useCallback((nextSort: PropertySort) => {
