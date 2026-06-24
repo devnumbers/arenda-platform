@@ -38,6 +38,12 @@ function compareActiveLeases(a: LeaseResponse, b: LeaseResponse): number {
   if (aValid && !bValid) return 1;
   if (!aValid && bValid) return -1;
 
+  if (!aValid && !bValid) {
+    if (a.id > b.id) return 1;
+    if (a.id < b.id) return -1;
+    return 0;
+  }
+
   if (aStart !== bStart) return aStart - bStart;
 
   if (a.id > b.id) return 1;
