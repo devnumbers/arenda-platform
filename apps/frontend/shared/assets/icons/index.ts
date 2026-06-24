@@ -31,3 +31,7 @@ export { default as BottomHome } from './bottom-home.svg';
 export { default as BottomObjects } from './bottom-objects.svg';
 export { default as BottomWallet } from './bottom-wallet.svg';
 export { default as BottomProfile } from './bottom-profile.svg';
+export { default as Filter } from './filter.svg';
+export { default as ChevronDown } from './chevron-down.svg';
+export { default as ChevronUp } from './chevron-up.svg';
+export { default as HomeAdd } from './home-add.svg';
