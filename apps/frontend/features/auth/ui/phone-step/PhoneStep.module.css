@@ -51,3 +51,14 @@
 .link:hover {
   text-decoration: underline;
 }
+
+.submitContent {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.submitTimer {
+  font-variant-numeric: tabular-nums;
+}

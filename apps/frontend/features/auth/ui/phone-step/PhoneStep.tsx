@@ -2,7 +2,7 @@
 
 import { type ChangeEvent, type JSX } from 'react';
 import { formatPhoneInput } from '@/shared/lib/phone';
-import { Logo, Support } from '@/shared/assets/icons';
+import { Clock, Logo, Support } from '@/shared/assets/icons';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import styles from './PhoneStep.module.css';
@@ -12,6 +12,7 @@ export type PhoneStepProps = {
   onPhoneChange: (value: string) => void;
   onSubmit: () => void;
   isLoading: boolean;
+  resendTimer?: number;
 };
 
 export function PhoneStep({
@@ -19,6 +20,7 @@ export function PhoneStep({
   onPhoneChange,
   onSubmit,
   isLoading,
+  resendTimer = 0,
 }: PhoneStepProps): JSX.Element {
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     onPhoneChange(formatPhoneInput(event.target.value));
@@ -53,9 +55,18 @@ export function PhoneStep({
           size="large"
           fullWidth
           loading={isLoading}
-          disabled={phone.length < 18 || isLoading}
+          disabled={phone.length < 18 || isLoading || resendTimer > 0}
+          leftIcon={<Clock />}
         >
-          Войти
+          <span className={styles.submitContent}>
+            <span>Войти</span>
+            {resendTimer > 0 && (
+              <span className={styles.submitTimer}>
+                {String(Math.floor(resendTimer / 60)).padStart(2, '0')}:
+                {String(resendTimer % 60).padStart(2, '0')}
+              </span>
+            )}
+          </span>
         </Button>
       </form>
 

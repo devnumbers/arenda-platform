@@ -1,37 +1,24 @@
 'use client';
 
-import { useEffect, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 import { AuthForm } from '@/features/auth/ui/auth-form';
 import { useSendPhoneCode, useVerifyPhoneCode } from '@/features/auth/api/hooks';
 import { normalizePhone } from '@/features/auth/lib/normalize-phone';
+import { useSendCooldown } from '@/features/auth/lib/use-send-cooldown';
 import styles from './LoginPage.module.css';
 
 type Step = 'phone' | 'code';
-
-const RESEND_TIMEOUT = 60;
 
 export default function LoginPage(): JSX.Element {
   const router = useRouter();
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
-  const [resendTimer, setResendTimer] = useState(RESEND_TIMEOUT);
+  const { remainingSeconds: resendTimer, recordSend } = useSendCooldown();
 
   const sendPhoneCode = useSendPhoneCode();
   const verifyPhoneCode = useVerifyPhoneCode();
-
-  useEffect(() => {
-    if (step !== 'code' || resendTimer <= 0) {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setResendTimer((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [step, resendTimer]);
 
   const handleSendPhone = (formattedPhone: string) => {
     if (formattedPhone.length < 18) {
@@ -44,8 +31,8 @@ export default function LoginPage(): JSX.Element {
       { phone: normalizePhone(formattedPhone) },
       {
         onSuccess: () => {
+          recordSend();
           setStep('code');
-          setResendTimer(RESEND_TIMEOUT);
         },
         onError: (error) => {
           toast.error(error.detail);
@@ -85,7 +72,7 @@ export default function LoginPage(): JSX.Element {
       { phone: normalizePhone(phone) },
       {
         onSuccess: () => {
-          setResendTimer(RESEND_TIMEOUT);
+          recordSend();
         },
         onError: (error) => {
           toast.error(error.detail);

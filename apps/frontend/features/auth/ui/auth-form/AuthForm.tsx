@@ -111,6 +111,7 @@ export function AuthForm({
             onPhoneChange={handlePhoneChange}
             onSubmit={handleSendPhone}
             isLoading={isSending}
+            resendTimer={resendTimer}
           />
         </StepTransition>
       ) : (
