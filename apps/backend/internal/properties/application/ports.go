@@ -9,6 +9,18 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
+// AddressSuggestion is a domain-friendly address hint returned by a suggestion
+// provider such as DaData.
+type AddressSuggestion struct {
+	Value string
+	City  string
+}
+
+// AddressSuggester returns address suggestions for a partial user query.
+type AddressSuggester interface {
+	SuggestAddresses(ctx context.Context, query string) ([]AddressSuggestion, error)
+}
+
 type SubscriptionLimiter interface {
 	ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error)
 	WithTx(tx transaction.Tx) SubscriptionLimiter

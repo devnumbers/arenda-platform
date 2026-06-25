@@ -13,6 +13,8 @@ var (
 	ErrInvalidTransition = errors.New("invalid property status transition")
 	ErrInvalidInput      = errors.New("invalid property input")
 
+	ErrAddressSuggestFailed = errors.New("address suggestion request failed")
+
 	ErrArchivedProperty     = errors.New("cannot modify an archived property")
 	ErrAlreadyArchived      = errors.New("property is already archived")
 	ErrNotArchived          = errors.New("property is not archived")

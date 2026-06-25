@@ -34,6 +34,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
 	platformnotifications "github.com/nambers/arenda-planform/apps/backend/internal/platform/notifications"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
+	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/dadata"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
@@ -190,6 +191,14 @@ func run(fallback *slog.Logger) error {
 		appLogger,
 	)
 
+	dadataClient := dadata.NewClient(dadata.Config{
+		BaseURL:   cfg.DaDataBaseURL,
+		APIKey:    cfg.DaDataAPIKey,
+		SecretKey: cfg.DaDataSecretKey,
+		Timeout:   cfg.DaDataTimeout,
+		Logger:    appLogger,
+	})
+
 	billingService := billingapp.NewBillingService(
 		tariffRepo,
 		subscriptionRepo,
@@ -266,6 +275,7 @@ func run(fallback *slog.Logger) error {
 		Billing:               billingService,
 		Sessions:              identitySessionRepo,
 		Properties:            propertyService,
+		AddressSuggester:      dadataClient,
 		Leases:                leaseService,
 		TenantContacts:        tenantContactService,
 		Operations:            operationService,

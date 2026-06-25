@@ -26,6 +26,10 @@ type Config struct {
 	TKassaPassword        string
 	TKassaBaseURL         string
 	TKassaTimeout         time.Duration
+	DaDataAPIKey          string
+	DaDataSecretKey       string
+	DaDataBaseURL         string
+	DaDataTimeout         time.Duration
 	EncryptionKey         string
 	BillingWorkerInterval          time.Duration
 	OverdueOperationWorkerInterval time.Duration
@@ -68,6 +72,9 @@ func Load() (Config, error) {
 		TKassaTerminalKey: os.Getenv("T_KASSA_TERMINAL_KEY"),
 		TKassaPassword:    os.Getenv("T_KASSA_PASSWORD"),
 		TKassaBaseURL:     os.Getenv("T_KASSA_BASE_URL"),
+		DaDataAPIKey:      os.Getenv("DADATA_API_KEY"),
+		DaDataSecretKey:   os.Getenv("DADATA_SECRET_KEY"),
+		DaDataBaseURL:     os.Getenv("DADATA_BASE_URL"),
 		EncryptionKey:     os.Getenv("ENCRYPTION_KEY"),
 	}
 
@@ -77,6 +84,31 @@ func Load() (Config, error) {
 	allowedEnvs := map[string]bool{"local": true, "dev": true, "staging": true, "production": true}
 	if !allowedEnvs[cfg.AppEnv] {
 		return Config{}, fmt.Errorf("invalid APP_ENV %q: must be one of local, dev, staging, production", cfg.AppEnv)
+	}
+
+	if cfg.DaDataBaseURL == "" {
+		cfg.DaDataBaseURL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address"
+	}
+	if dadataURL, err := url.Parse(cfg.DaDataBaseURL); err != nil {
+		return Config{}, fmt.Errorf("invalid DADATA_BASE_URL %q: %w", cfg.DaDataBaseURL, err)
+	} else if dadataURL.Scheme != "http" && dadataURL.Scheme != "https" {
+		return Config{}, fmt.Errorf("invalid DADATA_BASE_URL %q: scheme must be http or https", cfg.DaDataBaseURL)
+	}
+
+	cfg.DaDataTimeout = 10 * time.Second
+	if v := os.Getenv("DADATA_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid DADATA_TIMEOUT %q: %w", v, err)
+		}
+		if d <= 0 {
+			return Config{}, fmt.Errorf("DADATA_TIMEOUT must be positive")
+		}
+		cfg.DaDataTimeout = d
+	}
+
+	if cfg.DaDataAPIKey == "" {
+		return Config{}, fmt.Errorf("DADATA_API_KEY is required")
 	}
 
 	if cfg.HTTPAddr == "" {

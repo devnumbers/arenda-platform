@@ -13,13 +13,14 @@ import (
 
 // PropertyHandlers implements the generated property endpoints.
 type PropertyHandlers struct {
-	svc    *propertiesapp.PropertyService
-	logger *slog.Logger
+	svc              *propertiesapp.PropertyService
+	addressSuggester propertiesapp.AddressSuggester
+	logger           *slog.Logger
 }
 
 // NewPropertyHandlers creates HTTP handlers for the properties API.
-func NewPropertyHandlers(svc *propertiesapp.PropertyService, logger *slog.Logger) *PropertyHandlers {
-	return &PropertyHandlers{svc: svc, logger: logger}
+func NewPropertyHandlers(svc *propertiesapp.PropertyService, addressSuggester propertiesapp.AddressSuggester, logger *slog.Logger) *PropertyHandlers {
+	return &PropertyHandlers{svc: svc, addressSuggester: addressSuggester, logger: logger}
 }
 
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
@@ -194,6 +195,33 @@ func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Requ
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, propertyResponse(property))
+}
+
+// GetAddressSuggestions implements GET /dadata/suggestions/address.
+func (h *PropertyHandlers) GetAddressSuggestions(w http.ResponseWriter, r *http.Request, params openapi.GetAddressSuggestionsParams) {
+	_, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	suggestions, err := h.addressSuggester.SuggestAddresses(r.Context(), params.Query)
+	if err != nil {
+		if errors.Is(err, propertiesapp.ErrInvalidInput) {
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid address query"))
+			return
+		}
+		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+		return
+	}
+
+	resp := make([]openapi.AddressSuggestion, 0, len(suggestions))
+	for _, s := range suggestions {
+		city := s.City
+		resp = append(resp, openapi.AddressSuggestion{Value: s.Value, City: &city})
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, openapi.AddressSuggestionsResponse{Suggestions: resp})
 }
 
 func propertyResponse(property domain.Property) openapi.PropertyResponse {

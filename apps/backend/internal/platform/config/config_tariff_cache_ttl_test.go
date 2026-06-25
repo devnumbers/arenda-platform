@@ -10,6 +10,7 @@ func TestTariffCacheTTLDefault(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	t.Setenv("MIGRATIONS_DIR", "./migrations")
 	t.Setenv("APP_BASE_URL", "http://localhost:8080")
+	t.Setenv("DADATA_API_KEY", "test-dadata-key")
 
 	cfg, err := Load()
 	if err != nil {
@@ -25,6 +26,7 @@ func TestTariffCacheTTLEnv(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	t.Setenv("MIGRATIONS_DIR", "./migrations")
 	t.Setenv("APP_BASE_URL", "http://localhost:8080")
+	t.Setenv("DADATA_API_KEY", "test-dadata-key")
 	t.Setenv("TARIFF_CACHE_TTL", "10m")
 
 	cfg, err := Load()
@@ -41,6 +43,7 @@ func TestTariffCacheTTLInvalid(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	t.Setenv("MIGRATIONS_DIR", "./migrations")
 	t.Setenv("APP_BASE_URL", "http://localhost:8080")
+	t.Setenv("DADATA_API_KEY", "test-dadata-key")
 	t.Setenv("TARIFF_CACHE_TTL", "not-a-duration")
 
 	_, err := Load()
@@ -54,6 +57,7 @@ func TestTariffCacheTTLNonPositive(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	t.Setenv("MIGRATIONS_DIR", "./migrations")
 	t.Setenv("APP_BASE_URL", "http://localhost:8080")
+	t.Setenv("DADATA_API_KEY", "test-dadata-key")
 	t.Setenv("TARIFF_CACHE_TTL", "0")
 
 	_, err := Load()

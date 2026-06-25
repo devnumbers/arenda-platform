@@ -12,6 +12,7 @@ func setRequiredLocalEnv(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	t.Setenv("MIGRATIONS_DIR", "./migrations")
 	t.Setenv("APP_BASE_URL", "http://localhost:8080")
+	t.Setenv("DADATA_API_KEY", "test-dadata-key")
 }
 
 func TestTKassaTimeoutDefault(t *testing.T) {
