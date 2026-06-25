@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { PropertyType } from '@/entities/property/model/types';
+import { propertyTypeOptions } from '@/features/properties/lib/property-types';
 
 export type CreateStep = 1 | 2 | 3 | 4;
 
@@ -59,6 +60,10 @@ function loadDraft(): CreateDraft {
   }
 }
 
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === 'string';
+}
+
 function validateDraft(parsed: unknown): CreateDraft {
   if (parsed === null || typeof parsed !== 'object') return DEFAULT_DRAFT;
 
@@ -70,39 +75,21 @@ function validateDraft(parsed: unknown): CreateDraft {
   if (
     'type' in record &&
     record.type !== undefined &&
-    typeof record.type !== 'string'
+    !propertyTypeOptions.some((option) => option.value === record.type)
   ) {
     return DEFAULT_DRAFT;
   }
-  if (
-    'address' in record &&
-    record.address !== undefined &&
-    typeof record.address !== 'string'
-  ) {
-    return DEFAULT_DRAFT;
-  }
-  if (
-    'name' in record &&
-    record.name !== undefined &&
-    typeof record.name !== 'string'
-  ) {
-    return DEFAULT_DRAFT;
-  }
-  if (
-    'description' in record &&
-    record.description !== undefined &&
-    typeof record.description !== 'string'
-  ) {
-    return DEFAULT_DRAFT;
-  }
+  if (!isOptionalString(record.address)) return DEFAULT_DRAFT;
+  if (!isOptionalString(record.name)) return DEFAULT_DRAFT;
+  if (!isOptionalString(record.description)) return DEFAULT_DRAFT;
 
   return {
     step: step as CreateStep,
     ...(record.type !== undefined && { type: record.type as PropertyType }),
-    ...(record.address !== undefined && { address: record.address as string }),
-    ...(record.name !== undefined && { name: record.name as string }),
+    ...(record.address !== undefined && { address: record.address }),
+    ...(record.name !== undefined && { name: record.name }),
     ...(record.description !== undefined && {
-      description: record.description as string,
+      description: record.description,
     }),
   };
 }
