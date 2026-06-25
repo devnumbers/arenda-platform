@@ -1,0 +1,11 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  padding: 84px 20px 96px;
+}
+
+@media (min-width: 768px) {
+  .root {
+    padding: 96px 0;
+  }
+}

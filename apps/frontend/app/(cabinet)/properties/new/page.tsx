@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { PropertyCreateForm } from '@/widgets/properties';
+import { PropertyCreateWizard } from '@/widgets/properties';
+import styles from './page.module.css';
 
 export const metadata: Metadata = {
   title: 'Создать объект — Arenda Platform',
@@ -8,9 +9,8 @@ export const metadata: Metadata = {
 
 export default function PropertiesNewPage() {
   return (
-    <div>
-      <h1>Создать объект</h1>
-      <PropertyCreateForm />
+    <div className={styles.root}>
+      <PropertyCreateWizard />
     </div>
   );
 }

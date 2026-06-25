@@ -1,3 +1,9 @@
 export { PropertiesPage } from './ui/PropertiesPage';
 export { PropertiesLoading } from './ui/PropertiesLoading';
 export { PropertyCreateForm } from './ui/PropertyCreateForm';
+export { PropertyCreateWizard } from './ui/PropertyCreateWizard';
+export { CreateObjectHeader } from './ui/CreateObjectHeader';
+export { PropertyTypeStep } from './ui/PropertyTypeStep';
+export { PropertyAddressStep } from './ui/PropertyAddressStep';
+export { PropertyInfoStep } from './ui/PropertyInfoStep';
+export { PropertySuccessStep } from './ui/PropertySuccessStep';
