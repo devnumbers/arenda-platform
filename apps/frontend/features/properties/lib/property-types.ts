@@ -9,7 +9,7 @@ export const propertyTypeLabels: Record<PropertyType, string> = {
   office: 'Офис',
   warehouse: 'Склад',
   garage: 'Гараж',
-  parking: 'Парковка',
+  parking: 'Машиноместо',
   land: 'Земельный участок',
 };
 
