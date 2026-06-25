@@ -3,15 +3,15 @@
 import type { JSX } from 'react';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { IconButton } from '@/shared/ui/icon-button';
-import styles from './CreateObjectHeader.module.css';
+import styles from './PropertyCreateHeader.module.css';
 
-export type CreateObjectHeaderProps = {
+export type PropertyCreateHeaderProps = {
   step: 1 | 2 | 3;
   onBack: () => void;
   onCancel: () => void;
 };
 
-export function CreateObjectHeader({ step, onBack, onCancel }: CreateObjectHeaderProps): JSX.Element {
+export function PropertyCreateHeader({ step, onBack, onCancel }: PropertyCreateHeaderProps): JSX.Element {
   return (
     <header className={styles.root}>
       <div className={styles.topRow}>
@@ -35,7 +35,7 @@ export function CreateObjectHeader({ step, onBack, onCancel }: CreateObjectHeade
       </div>
       <div className={styles.progressRow}>
         <span className={styles.badge}>{step} из 3</span>
-        <div className={styles.progressBar} role="progressbar" aria-valuenow={step} aria-valuemin={1} aria-valuemax={3}>
+        <div className={styles.progressBar} role="progressbar" aria-label={`Шаг ${step} из 3`} aria-valuenow={step} aria-valuemin={1} aria-valuemax={3}>
           <div className={`${styles.segment} ${step >= 1 ? styles.active : ''}`} />
           <div className={`${styles.segment} ${step >= 2 ? styles.active : ''}`} />
           <div className={`${styles.segment} ${step >= 3 ? styles.active : ''}`} />

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import type { JSX } from 'react';
 import { ROUTES } from '@/shared/config/routes';
 import { usePropertyCreateDraft, type CreateStep } from '@/widgets/properties/lib/use-property-create-draft';
-import { CreateObjectHeader } from './CreateObjectHeader';
+import { PropertyCreateHeader } from './PropertyCreateHeader';
 import { PropertyAddressStep } from './PropertyAddressStep';
 import { PropertyInfoStep } from './PropertyInfoStep';
 import { PropertySuccessStep } from './PropertySuccessStep';
@@ -42,7 +42,7 @@ export function PropertyCreateWizard(): JSX.Element {
 
   return (
     <div className={styles.root}>
-      <CreateObjectHeader step={draft.step} onBack={handleBack} onCancel={handleCancel} />
+      <PropertyCreateHeader step={draft.step} onBack={handleBack} onCancel={handleCancel} />
       <div className={styles.content}>
         {draft.step === 1 && <PropertyTypeStep onNext={handleNext} onBack={handleBack} />}
         {draft.step === 2 && <PropertyAddressStep onNext={handleNext} onBack={handleBack} />}
