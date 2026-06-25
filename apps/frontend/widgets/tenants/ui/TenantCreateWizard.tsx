@@ -52,7 +52,7 @@ export function TenantCreateWizard(): JSX.Element {
         surname: draft.surname.trim() || undefined,
         patronymic: draft.patronymic.trim() || undefined,
         phone: draft.phone.trim() || undefined,
-        comment: draft.comment || undefined,
+        comment: draft.comment.trim() || undefined,
       });
 
       setDraft((prev) => ({ ...prev, step: 'success' }));
