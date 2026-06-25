@@ -1,0 +1,32 @@
+.root {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.iconButton {
+  flex-shrink: 0;
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 22px;
+  color: #1e1e1e;
+  text-align: center;
+}
+
+.spacer {
+  flex-shrink: 0;
+  width: 40px;
+}
+
+@media (min-width: 768px) {
+  .title {
+    font-size: 28px;
+    line-height: 36px;
+  }
+}
