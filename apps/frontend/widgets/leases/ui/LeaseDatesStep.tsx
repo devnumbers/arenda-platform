@@ -2,6 +2,9 @@
 
 import type { JSX } from 'react';
 import { DatePicker } from '@heroui/react/date-picker';
+import { DateField } from '@heroui/react/date-field';
+import { Calendar } from '@heroui/react/calendar';
+import { Label } from '@heroui/react/label';
 import {
   today,
   getLocalTimeZone,
@@ -71,19 +74,82 @@ export function LeaseDatesStep({
         <PaymentDayPicker value={paymentDay} onChange={onPaymentDayChange} />
         <div className={styles.dateRow}>
           <DatePicker
-            label="Начало аренды"
             minValue={minDate}
             value={startDate ? parseDate(startDate) : null}
             onChange={handleStartChange}
             className={styles.dateField}
-          />
+          >
+            <Label>Начало аренды</Label>
+            <DateField.Group>
+              <DateField.Input>
+                {(segment) => <DateField.Segment segment={segment} />}
+              </DateField.Input>
+              <DateField.Suffix>
+                <DatePicker.Trigger>
+                  <DatePicker.TriggerIndicator />
+                </DatePicker.Trigger>
+              </DateField.Suffix>
+            </DateField.Group>
+            <DatePicker.Popover>
+              <Calendar aria-label="Выбрать дату начала аренды">
+                <Calendar.Header>
+                  <Calendar.YearPickerTrigger>
+                    <Calendar.YearPickerTriggerHeading />
+                    <Calendar.YearPickerTriggerIndicator />
+                  </Calendar.YearPickerTrigger>
+                  <Calendar.NavButton slot="previous" />
+                  <Calendar.NavButton slot="next" />
+                </Calendar.Header>
+                <Calendar.Grid>
+                  <Calendar.GridHeader>
+                    {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
+                  </Calendar.GridHeader>
+                  <Calendar.GridBody>
+                    {(date) => <Calendar.Cell date={date} />}
+                  </Calendar.GridBody>
+                </Calendar.Grid>
+              </Calendar>
+            </DatePicker.Popover>
+          </DatePicker>
+
           <DatePicker
-            label="Конец аренды"
             minValue={startDate ? parseDate(startDate) : minDate}
             value={endDate ? parseDate(endDate) : null}
             onChange={handleEndChange}
             className={styles.dateField}
-          />
+          >
+            <Label>Конец аренды</Label>
+            <DateField.Group>
+              <DateField.Input>
+                {(segment) => <DateField.Segment segment={segment} />}
+              </DateField.Input>
+              <DateField.Suffix>
+                <DatePicker.Trigger>
+                  <DatePicker.TriggerIndicator />
+                </DatePicker.Trigger>
+              </DateField.Suffix>
+            </DateField.Group>
+            <DatePicker.Popover>
+              <Calendar aria-label="Выбрать дату окончания аренды">
+                <Calendar.Header>
+                  <Calendar.YearPickerTrigger>
+                    <Calendar.YearPickerTriggerHeading />
+                    <Calendar.YearPickerTriggerIndicator />
+                  </Calendar.YearPickerTrigger>
+                  <Calendar.NavButton slot="previous" />
+                  <Calendar.NavButton slot="next" />
+                </Calendar.Header>
+                <Calendar.Grid>
+                  <Calendar.GridHeader>
+                    {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
+                  </Calendar.GridHeader>
+                  <Calendar.GridBody>
+                    {(date) => <Calendar.Cell date={date} />}
+                  </Calendar.GridBody>
+                </Calendar.Grid>
+              </Calendar>
+            </DatePicker.Popover>
+          </DatePicker>
         </div>
       </div>
       <div className={styles.submit}>

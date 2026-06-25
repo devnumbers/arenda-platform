@@ -1,0 +1,152 @@
+'use client';
+
+import { useEffect, useState, type JSX } from 'react';
+import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { propertyKeys, useProperty } from '@/features/properties/api';
+import { useCreateLease } from '@/features/leases/api';
+import { ApiError } from '@/shared/api/errors';
+import { ROUTES } from '@/shared/config/routes';
+import { useLeaseCreateDraft, type LeaseCreateStep } from '../lib/use-lease-create-draft';
+import { LeaseCreateHeader } from './LeaseCreateHeader';
+import { LeasePriceStep } from './LeasePriceStep';
+import { LeaseDatesStep } from './LeaseDatesStep';
+import { LeaseSuccessStep } from './LeaseSuccessStep';
+import styles from './LeaseCreateWizard.module.css';
+
+const UUID_REGEX = /^[0-9a-fA-F-]{36}$/;
+
+function formatErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.code === 'ErrOpenLeaseExists') {
+      return 'У этого объекта уже есть активная аренда. Завершите текущую аренду перед созданием новой.';
+    }
+    return error.detail;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'Не удалось создать аренду. Попробуйте ещё раз.';
+}
+
+export type LeaseCreateWizardProps = {
+  readonly propertyId?: string;
+};
+
+export function LeaseCreateWizard({ propertyId }: LeaseCreateWizardProps): JSX.Element {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { draft, setDraft } = useLeaseCreateDraft();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | undefined>(undefined);
+
+  const propertyQuery = useProperty(propertyId ?? '');
+  const createLease = useCreateLease();
+
+  useEffect(() => {
+    if (!propertyId || !UUID_REGEX.test(propertyId)) {
+      router.replace(ROUTES.properties);
+      return;
+    }
+    if (propertyQuery.isError) {
+      router.replace(ROUTES.properties);
+      return;
+    }
+    if (propertyQuery.data && propertyQuery.data.occupancy !== 'free') {
+      router.replace(ROUTES.properties);
+    }
+  }, [propertyId, propertyQuery.isError, propertyQuery.data, router]);
+
+  const handleCancel = () => {
+    router.push(ROUTES.properties);
+  };
+
+  const handleBack = () => {
+    setSubmitError(undefined);
+    if (draft.step === 1) {
+      router.push(ROUTES.properties);
+      return;
+    }
+    setDraft((prev) => ({ ...prev, step: ((prev.step - 1) as LeaseCreateStep) }));
+  };
+
+  const handleNext = () => {
+    setSubmitError(undefined);
+    setDraft((prev) => ({ ...prev, step: ((prev.step + 1) as LeaseCreateStep) }));
+  };
+
+  const handleSubmit = async () => {
+    if (!draft.rentAmount || draft.paymentDay === undefined || !draft.startDate) return;
+    if (!propertyId) return;
+
+    setIsSubmitting(true);
+    setSubmitError(undefined);
+
+    try {
+      await createLease.mutateAsync({
+        property_id: propertyId,
+        rent_amount_kopecks: Math.round(Number(draft.rentAmount) * 100),
+        deposit_amount_kopecks: Math.round(Number(draft.depositAmount || '0') * 100),
+        payment_day: draft.paymentDay,
+        start_date: draft.startDate,
+        end_date: draft.endDate || undefined,
+      });
+
+      queryClient.invalidateQueries({ queryKey: propertyKeys.all });
+      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      queryClient.invalidateQueries({ queryKey: propertyKeys.detail(propertyId) });
+
+      handleNext();
+    } catch (error: unknown) {
+      console.error('Failed to create lease', error);
+      setSubmitError(formatErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (draft.step === 3) {
+    return (
+      <div className={styles.root}>
+        <LeaseSuccessStep
+          onAddLater={() => router.push(ROUTES.properties)}
+          onAddTenant={() => router.push(ROUTES.tenants)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.root}>
+      <LeaseCreateHeader step={draft.step} onBack={handleBack} onCancel={handleCancel} />
+      <div className={styles.content}>
+        {draft.step === 1 && (
+          <LeasePriceStep
+            rentAmount={draft.rentAmount ?? ''}
+            depositAmount={draft.depositAmount ?? ''}
+            onRentChange={(rentAmount) => setDraft((prev) => ({ ...prev, rentAmount }))}
+            onDepositChange={(depositAmount) =>
+              setDraft((prev) => ({ ...prev, depositAmount }))
+            }
+            onNext={handleNext}
+          />
+        )}
+        {draft.step === 2 && (
+          <LeaseDatesStep
+            paymentDay={draft.paymentDay}
+            startDate={draft.startDate}
+            endDate={draft.endDate}
+            onPaymentDayChange={(paymentDay) =>
+              setDraft((prev) => ({ ...prev, paymentDay }))
+            }
+            onStartDateChange={(startDate) => setDraft((prev) => ({ ...prev, startDate }))}
+            onEndDateChange={(endDate) => setDraft((prev) => ({ ...prev, endDate }))}
+            onSubmit={handleSubmit}
+            isLoading={isSubmitting}
+            error={submitError}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
