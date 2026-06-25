@@ -1,1 +1,1 @@
-export { TenantCreateWizard } from './ui/TenantCreateWizard';
+export { TenantCreateWizard } from './ui';
