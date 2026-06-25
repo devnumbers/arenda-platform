@@ -93,7 +93,6 @@ export function TenantFormStep({
           error={!isPhoneFormatValid ? 'Введите корректный номер телефона' : undefined}
         />
       </div>
-      {error && <p className={styles.error}>{error}</p>}
       <div className={styles.footer}>
         <Button
           type="button"
@@ -106,6 +105,11 @@ export function TenantFormStep({
         >
           Добавить арендатора
         </Button>
+        {error && (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        )}
       </div>
     </div>
   );
