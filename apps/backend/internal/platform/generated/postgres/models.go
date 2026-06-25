@@ -211,6 +211,13 @@ type Property struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type PropertyPhoto struct {
+	ID         pgtype.UUID        `json:"id"`
+	PropertyID pgtype.UUID        `json:"property_id"`
+	Url        string             `json:"url"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
 type RecurringOperation struct {
 	ID                 pgtype.UUID        `json:"id"`
 	OwnerID            pgtype.UUID        `json:"owner_id"`

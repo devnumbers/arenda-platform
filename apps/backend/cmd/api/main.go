@@ -36,6 +36,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/dadata"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/storage"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"golang.org/x/time/rate"
@@ -174,6 +175,7 @@ func run(fallback *slog.Logger) error {
 	)
 
 	propertyRepo := propertiespg.NewPropertyRepository(db)
+	propertyPhotoRepo := propertiespg.NewPropertyPhotoRepository(db)
 	occupancyProvider := propertiespg.NewOccupancyProvider(db)
 	limiter := billingpg.NewSubscriptionLimiter(db)
 	operationRepo := leasespg.NewOperationRepository(db)
@@ -181,8 +183,32 @@ func run(fallback *slog.Logger) error {
 	reminderRepo := notificationspg.NewReminderRepository(db)
 	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, realClock{})
 	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, reminderScheduler, realClock{})
+
+	var photoStorage propertiesapp.PhotoStorage
+	if cfg.PhotoStorageS3Enabled {
+		var err error
+		photoStorage, err = storage.NewS3Storage(
+			cfg.PhotoStorageEndpoint,
+			cfg.PhotoStorageRegion,
+			cfg.PhotoStorageBucket,
+			cfg.PhotoStorageAccessKey,
+			cfg.PhotoStorageSecretKey,
+			cfg.PhotoStoragePublicBaseURL,
+			cfg.PhotoStoragePathStyle,
+		)
+		if err != nil {
+			return fmt.Errorf("photo storage: %w", err)
+		}
+		appLogger.InfoContext(ctx, "photo storage initialized", "provider", "s3", "bucket", cfg.PhotoStorageBucket, "endpoint", cfg.PhotoStorageEndpoint)
+	} else {
+		photoStorage = storage.NewFakeStorage(cfg.PhotoStoragePublicBaseURL)
+		appLogger.InfoContext(ctx, "photo storage initialized", "provider", "fake")
+	}
+
 	propertyService := propertiesapp.NewPropertyService(
 		propertyRepo,
+		propertyPhotoRepo,
+		photoStorage,
 		occupancyProvider,
 		limiter,
 		propertyBillingLifecycle,

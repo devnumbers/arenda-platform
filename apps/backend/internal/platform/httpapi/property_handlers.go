@@ -44,6 +44,8 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property is not archived"))
 	case errors.Is(err, propertiesapp.ErrPropertyHasOpenLease):
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property has an open lease"))
+	case errors.Is(err, propertiesapp.ErrPhotoLimitReached):
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property photo limit reached"))
 	case isInvalidStatusTransition(err), errors.Is(err, propertiesapp.ErrInvalidTransition):
 		detail, ok := UserFacingDetail(err)
 		if !ok {
@@ -197,6 +199,45 @@ func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Requ
 	writeJSON(r.Context(), w, http.StatusOK, propertyResponse(property))
 }
 
+// UploadPropertyPhoto implements POST /properties/{propertyId}/photos.
+func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	//nolint:gosec // 6 MiB memory bound for multipart form parsing; file size validated by the service.
+	if err := r.ParseMultipartForm(6 << 20); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to parse multipart form", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid multipart form"))
+		return
+	}
+	defer func() { _ = r.MultipartForm.RemoveAll() }()
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to get file from form", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "file is required"))
+		return
+	}
+	defer func() { _ = file.Close() }()
+
+	property, err := h.svc.AddPropertyPhoto(r.Context(), ownerID, propertyId, file, header.Filename, header.Header.Get("Content-Type"), header.Size)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	if len(property.Photos) == 0 {
+		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), errors.New("uploaded photo not found")))
+		return
+	}
+
+	uploaded := property.Photos[len(property.Photos)-1]
+	writeJSON(r.Context(), w, http.StatusCreated, openapi.PropertyPhoto{Id: uploaded.ID, Url: uploaded.URL})
+}
+
 // GetAddressSuggestions implements GET /dadata/suggestions/address.
 func (h *PropertyHandlers) GetAddressSuggestions(w http.ResponseWriter, r *http.Request, params openapi.GetAddressSuggestionsParams) {
 	_, ok := ownerIDFromContext(r)
@@ -237,6 +278,13 @@ func propertyResponse(property domain.Property) openapi.PropertyResponse {
 	}
 	if property.Description != "" {
 		resp.Description = &property.Description
+	}
+	if len(property.Photos) > 0 {
+		photos := make([]openapi.PropertyPhoto, 0, len(property.Photos))
+		for _, p := range property.Photos {
+			photos = append(photos, openapi.PropertyPhoto{Id: p.ID, Url: p.URL})
+		}
+		resp.Photos = &photos
 	}
 	return resp
 }

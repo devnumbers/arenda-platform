@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -169,6 +170,8 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 	repo := newLockingFakePropertyRepo(property)
 	svc := NewPropertyService(
 		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
 		fakeOccupancyProvider{},
 		nil,
 		nil,
@@ -268,6 +271,8 @@ func TestArchiveProperty_ConcurrentArchivesDoNotDoubleArchive(t *testing.T) {
 	repo := newLockingFakePropertyRepo(property)
 	svc := NewPropertyService(
 		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
 		fakeOccupancyProvider{},
 		fakeSubscriptionLimiter{limit: 10},
 		fakePropertyBillingLifecycle{},
@@ -343,6 +348,8 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 	// Limit of one active property means only one unarchive can succeed.
 	svc := NewPropertyService(
 		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
 		fakeOccupancyProvider{},
 		fakeSubscriptionLimiter{limit: 1},
 		fakePropertyBillingLifecycle{},
@@ -402,3 +409,34 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 
 var _ SubscriptionLimiter = fakeSubscriptionLimiter{}
 var _ PropertyBillingLifecycle = fakePropertyBillingLifecycle{}
+
+type fakePropertyPhotoRepo struct{}
+
+func (fakePropertyPhotoRepo) Create(_ context.Context, _ uuid.UUID, _ string) (domain.Photo, error) {
+	return domain.Photo{}, nil
+}
+
+func (fakePropertyPhotoRepo) GetByPropertyID(_ context.Context, _ uuid.UUID) ([]domain.Photo, error) {
+	return nil, nil
+}
+
+func (fakePropertyPhotoRepo) GetByPropertyIDs(_ context.Context, _ []uuid.UUID) (map[uuid.UUID][]domain.Photo, error) {
+	return map[uuid.UUID][]domain.Photo{}, nil
+}
+
+func (fakePropertyPhotoRepo) CountByPropertyID(_ context.Context, _ uuid.UUID) (int, error) {
+	return 0, nil
+}
+
+func (fakePropertyPhotoRepo) WithTx(_ transaction.Tx) PropertyPhotoRepository {
+	return fakePropertyPhotoRepo{}
+}
+
+type fakePropertyPhotoStorage struct{}
+
+func (fakePropertyPhotoStorage) Upload(_ context.Context, _, _ string, _ io.Reader) (string, error) {
+	return "", nil
+}
+
+var _ PropertyPhotoRepository = fakePropertyPhotoRepo{}
+var _ PhotoStorage = fakePropertyPhotoStorage{}

@@ -37,6 +37,14 @@ type Config struct {
 	TariffCacheTTL                 time.Duration
 	RateLimit                      RateLimit
 	DBPool                         DBPoolConfig
+	PhotoStorageEndpoint           string
+	PhotoStorageRegion             string
+	PhotoStorageBucket             string
+	PhotoStorageAccessKey          string
+	PhotoStorageSecretKey          string
+	PhotoStoragePublicBaseURL      string
+	PhotoStoragePathStyle          bool
+	PhotoStorageS3Enabled          bool
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -384,6 +392,49 @@ func Load() (Config, error) {
 
 	if cfg.AppEnv != "local" && cfg.EncryptionKey == "" {
 		return Config{}, fmt.Errorf("ENCRYPTION_KEY is required for APP_ENV=%s", cfg.AppEnv)
+	}
+
+	cfg.PhotoStorageEndpoint = os.Getenv("REGRU_S3_ENDPOINT")
+	cfg.PhotoStorageRegion = os.Getenv("REGRU_S3_REGION")
+	cfg.PhotoStorageBucket = os.Getenv("REGRU_S3_BUCKET")
+	cfg.PhotoStorageAccessKey = os.Getenv("REGRU_S3_ACCESS_KEY")
+	cfg.PhotoStorageSecretKey = os.Getenv("REGRU_S3_SECRET_KEY")
+	cfg.PhotoStoragePublicBaseURL = os.Getenv("REGRU_S3_PUBLIC_BASE_URL")
+
+	cfg.PhotoStoragePathStyle = true
+	if v := os.Getenv("REGRU_S3_PATH_STYLE"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid REGRU_S3_PATH_STYLE %q: %w", v, err)
+		}
+		cfg.PhotoStoragePathStyle = b
+	}
+
+	s3Fields := []string{
+		cfg.PhotoStorageEndpoint,
+		cfg.PhotoStorageBucket,
+		cfg.PhotoStorageAccessKey,
+		cfg.PhotoStorageSecretKey,
+		cfg.PhotoStoragePublicBaseURL,
+	}
+	s3Complete := true
+	for _, f := range s3Fields {
+		if f == "" {
+			s3Complete = false
+			break
+		}
+	}
+	if cfg.AppEnv == "local" {
+		if s3Complete {
+			cfg.PhotoStorageS3Enabled = true
+		} else if cfg.PhotoStoragePublicBaseURL == "" {
+			cfg.PhotoStoragePublicBaseURL = cfg.AppBaseURL + "/uploads"
+		}
+	} else {
+		if !s3Complete {
+			return Config{}, fmt.Errorf("REGRU_S3_ENDPOINT, REGRU_S3_REGION, REGRU_S3_BUCKET, REGRU_S3_ACCESS_KEY, REGRU_S3_SECRET_KEY and REGRU_S3_PUBLIC_BASE_URL are required for APP_ENV=%s", cfg.AppEnv)
+		}
+		cfg.PhotoStorageS3Enabled = true
 	}
 
 	cfg.BillingWorkerInterval = time.Hour

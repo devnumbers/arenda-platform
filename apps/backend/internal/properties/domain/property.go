@@ -95,8 +95,15 @@ type Property struct {
 	Description string
 	Status      PropertyStatus
 	Occupancy   PropertyOccupancy
+	Photos      []Photo
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+}
+
+// Photo is a photo attached to a property.
+type Photo struct {
+	ID  uuid.UUID
+	URL string
 }
 
 var (

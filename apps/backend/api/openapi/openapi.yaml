@@ -260,6 +260,44 @@ paths:
           $ref: '#/components/responses/NotFound'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
+  /properties/{propertyId}/photos:
+    post:
+      operationId: uploadPropertyPhoto
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Photo uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyPhoto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /properties/{propertyId}/operations:
     get:
       operationId: listOperationsByProperty
@@ -1620,12 +1658,36 @@ components:
         occupancy:
           type: string
           enum: [free, occupied]
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyPhoto'
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+
+    PropertyPhoto:
+      type: object
+      required: [id, url]
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+
+    PropertyPhotosResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyPhoto'
 
     LeaseCreateRequest:
       type: object

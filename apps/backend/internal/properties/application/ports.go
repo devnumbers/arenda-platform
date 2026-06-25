@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,4 +52,18 @@ type PropertyRepository interface {
 	Unarchive(ctx context.Context, id, ownerID uuid.UUID) error
 	CountActiveByOwner(ctx context.Context, ownerID uuid.UUID) (int, error)
 	WithTx(tx transaction.Tx) PropertyRepository
+}
+
+// PhotoStorage persists uploaded property photos and returns their public URL.
+type PhotoStorage interface {
+	Upload(ctx context.Context, key string, contentType string, data io.Reader) (string, error)
+}
+
+// PropertyPhotoRepository persists photo metadata for properties.
+type PropertyPhotoRepository interface {
+	Create(ctx context.Context, propertyID uuid.UUID, url string) (domain.Photo, error)
+	GetByPropertyID(ctx context.Context, propertyID uuid.UUID) ([]domain.Photo, error)
+	GetByPropertyIDs(ctx context.Context, propertyIDs []uuid.UUID) (map[uuid.UUID][]domain.Photo, error)
+	CountByPropertyID(ctx context.Context, propertyID uuid.UUID) (int, error)
+	WithTx(tx transaction.Tx) PropertyPhotoRepository
 }
