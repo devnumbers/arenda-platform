@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import { PropertiesLoading } from '@/widgets/properties/ui/PropertiesLoading';
-import { PropertiesPage } from '@/widgets/properties/ui/PropertiesPage';
+import { PropertiesLoading, PropertiesPage } from '@/widgets/properties';
 
 export const metadata: Metadata = {
   title: 'Мои объекты — Arenda Platform',
