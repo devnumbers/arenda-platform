@@ -16,6 +16,7 @@ type PropertyResponse = components['schemas']['PropertyResponse'];
 type PropertiesResponse = components['schemas']['PropertiesResponse'];
 type PropertyCreateRequest = components['schemas']['PropertyCreateRequest'];
 type PropertyUpdateRequest = components['schemas']['PropertyUpdateRequest'];
+type PropertyPhoto = components['schemas']['PropertyPhoto'];
 type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
@@ -126,5 +127,22 @@ export function useAddressSuggestions(
     },
     enabled: query.trim().length >= 3,
     staleTime: 30 * 1000,
+  });
+}
+
+export function useUploadPropertyPhoto(): UseMutationResult<
+  PropertyPhoto,
+  ApiError,
+  { propertyId: string; file: File }
+> {
+  return useMutation({
+    mutationFn: ({ propertyId, file }) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return apiClient<PropertyPhoto>(`/properties/${propertyId}/photos`, {
+        method: 'POST',
+        body: formData,
+      });
+    },
   });
 }

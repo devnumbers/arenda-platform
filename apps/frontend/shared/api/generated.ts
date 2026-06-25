@@ -164,6 +164,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{propertyId}/photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["uploadPropertyPhoto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/operations": {
         parameters: {
             query?: never;
@@ -757,10 +773,20 @@ export interface components {
             status: "active" | "maintenance" | "archived";
             /** @enum {string} */
             occupancy: "free" | "occupied";
+            photos?: components["schemas"]["PropertyPhoto"][];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        PropertyPhoto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uri */
+            url: string;
+        };
+        PropertyPhotosResponse: {
+            items: components["schemas"]["PropertyPhoto"][];
         };
         LeaseCreateRequest: {
             /** Format: uuid */
@@ -1364,6 +1390,39 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    uploadPropertyPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Photo uploaded */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyPhoto"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listOperationsByProperty: {

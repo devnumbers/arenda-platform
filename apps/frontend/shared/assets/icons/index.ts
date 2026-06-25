@@ -19,6 +19,7 @@ export { default as BoldProfile } from './bold-profile.svg';
 export { default as Settings } from './settings.svg';
 export { default as StarColored } from './star-colored.svg';
 export { default as Good } from './good.svg';
+export { default as Trash } from './trash.svg';
 export { default as UserSmall } from './user-small.svg';
 export { default as ClockSmall } from './clock-small.svg';
 export { default as NavHome } from './nav-home.svg';

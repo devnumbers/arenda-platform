@@ -7,4 +7,5 @@ export {
   useArchiveProperty,
   useUnarchiveProperty,
   useAddressSuggestions,
+  useUploadPropertyPhoto,
 } from './hooks';
