@@ -23,6 +23,7 @@ export function PropertyTypeStep({ value, onChange, onNext }: PropertyTypeStepPr
             variant={value === option.value ? 'primary' : 'secondary'}
             size="small"
             className={styles.chip}
+            aria-pressed={value === option.value}
             onClick={() => onChange(option.value)}
           >
             {option.label}
@@ -32,7 +33,7 @@ export function PropertyTypeStep({ value, onChange, onNext }: PropertyTypeStepPr
 
       <Button
         type="button"
-        variant="secondary"
+        variant="primary"
         size="large"
         fullWidth
         disabled={!value}
