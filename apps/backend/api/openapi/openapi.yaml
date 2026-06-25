@@ -128,6 +128,33 @@ paths:
                 $ref: '#/components/schemas/PropertiesResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /dadata/suggestions/address:
+    get:
+      operationId: getAddressSuggestions
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 255
+      responses:
+        '200':
+          description: Address suggestions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressSuggestionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /properties/{id}:
     get:
       operationId: getProperty
@@ -1515,6 +1542,24 @@ components:
         instance:
           type: string
         requestId:
+          type: string
+
+    AddressSuggestionsResponse:
+      type: object
+      required: [suggestions]
+      properties:
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddressSuggestion'
+
+    AddressSuggestion:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string
+        city:
           type: string
 
     PropertyCreateRequest:
