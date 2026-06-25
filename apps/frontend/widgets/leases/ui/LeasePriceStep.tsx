@@ -49,16 +49,18 @@ export function LeasePriceStep({
           fullWidth
         />
       </div>
-      <Button
-        type="button"
-        variant="primary"
-        size="large"
-        fullWidth
-        disabled={!isValid}
-        onClick={onNext}
-      >
-        Продолжить
-      </Button>
+      <div className={styles.footer}>
+        <Button
+          type="button"
+          variant="primary"
+          size="large"
+          fullWidth
+          disabled={!isValid}
+          onClick={onNext}
+        >
+          Продолжить
+        </Button>
+      </div>
     </div>
   );
 }

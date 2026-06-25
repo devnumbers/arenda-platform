@@ -9,3 +9,13 @@
   flex-direction: column;
   gap: 52px;
 }
+
+@media (max-width: 767px) {
+  .root {
+    gap: 32px;
+  }
+
+  .content {
+    gap: 32px;
+  }
+}

@@ -22,12 +22,15 @@ async function handler(
     headers.set('cookie', cookieHeader);
   }
 
+  const body =
+    request.method !== 'GET' && request.method !== 'HEAD'
+      ? await request.arrayBuffer()
+      : undefined;
+
   const response = await fetch(targetUrl, {
     method: request.method,
     headers,
-    body: request.body,
-    // @ts-expect-error Next.js streaming requirement
-    duplex: 'half',
+    body,
   });
 
   const responseHeaders = new Headers(response.headers);

@@ -17,3 +17,24 @@
   flex-direction: column;
   gap: 24px;
 }
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (max-width: 767px) {
+  .root {
+    min-height: calc(100vh - 84px - 96px);
+  }
+
+  .fields {
+    flex: 1;
+  }
+
+  .footer {
+    position: sticky;
+    bottom: 20px;
+  }
+}
