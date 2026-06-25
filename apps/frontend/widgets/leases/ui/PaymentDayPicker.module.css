@@ -1,0 +1,75 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label {
+  font-size: var(--font-size-text-l);
+  font-weight: 400;
+  line-height: var(--line-height-text-l);
+  color: var(--color-text);
+}
+
+.required {
+  color: var(--color-error);
+}
+
+.trigger {
+  justify-content: space-between;
+}
+
+.drawerHeader {
+  padding: 16px 20px;
+}
+
+.drawerBody {
+  padding: 16px 20px 32px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border: none;
+  border-radius: 12px;
+  background: var(--color-secondary-bg);
+  font-size: var(--font-size-text-l);
+  font-weight: 500;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.day:hover {
+  background: var(--color-secondary-hover);
+}
+
+.day:active {
+  background: var(--color-secondary-pressed);
+}
+
+.day:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.dayActive {
+  background: var(--color-primary);
+  color: var(--color-white);
+}
+
+.day.dayActive:hover {
+  background: var(--color-primary-hover);
+}
+
+.day.dayActive:active {
+  background: var(--color-primary-pressed);
+}
