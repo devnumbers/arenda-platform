@@ -16,6 +16,9 @@ type PropertyResponse = components['schemas']['PropertyResponse'];
 type PropertiesResponse = components['schemas']['PropertiesResponse'];
 type PropertyCreateRequest = components['schemas']['PropertyCreateRequest'];
 type PropertyUpdateRequest = components['schemas']['PropertyUpdateRequest'];
+type AddressSuggestionsResponse =
+  components['schemas']['AddressSuggestionsResponse'];
+type AddressSuggestion = components['schemas']['AddressSuggestion'];
 
 export function useProperties(): UseQueryResult<PropertyResponse[], ApiError> {
   return useQuery({
@@ -107,5 +110,21 @@ export function useUnarchiveProperty(): UseMutationResult<
       queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
     },
+  });
+}
+
+export function useAddressSuggestions(
+  query: string,
+): UseQueryResult<AddressSuggestion[], ApiError> {
+  return useQuery({
+    queryKey: propertyKeys.addressSuggestions(query),
+    queryFn: async () => {
+      const response = await apiClient<AddressSuggestionsResponse>(
+        `/dadata/suggestions/address?query=${encodeURIComponent(query)}`,
+      );
+      return response.suggestions;
+    },
+    enabled: query.trim().length >= 3,
+    staleTime: 30 * 1000,
   });
 }

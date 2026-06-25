@@ -100,6 +100,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dadata/suggestions/address": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAddressSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{id}": {
         parameters: {
             query?: never;
@@ -706,6 +722,13 @@ export interface components {
             instance?: string;
             requestId?: string;
         };
+        AddressSuggestionsResponse: {
+            suggestions: components["schemas"]["AddressSuggestion"][];
+        };
+        AddressSuggestion: {
+            value: string;
+            city?: string;
+        };
         PropertyCreateRequest: {
             name: string;
             /** @enum {string} */
@@ -1212,6 +1235,31 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
+        };
+    };
+    getAddressSuggestions: {
+        parameters: {
+            query: {
+                query: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Address suggestions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddressSuggestionsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     getProperty: {

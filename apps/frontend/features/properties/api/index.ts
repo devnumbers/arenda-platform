@@ -6,4 +6,5 @@ export {
   useUpdateProperty,
   useArchiveProperty,
   useUnarchiveProperty,
+  useAddressSuggestions,
 } from './hooks';

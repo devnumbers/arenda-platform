@@ -1,10 +1,174 @@
-import type { JSX } from 'react';
+'use client';
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type JSX,
+  type KeyboardEvent,
+  type ChangeEvent,
+} from 'react';
+import { useAddressSuggestions } from '@/features/properties/api';
+import { useDebounce } from '@/shared/lib/hooks/useDebounce';
+import { Button } from '@/shared/ui/button';
+import { TextField } from '@/shared/ui/text-field';
+import styles from './PropertyAddressStep.module.css';
 
 export type PropertyAddressStepProps = {
+  value?: string;
+  onChange: (address: string) => void;
   onNext: () => void;
   onBack?: () => void;
 };
 
-export function PropertyAddressStep({}: PropertyAddressStepProps): JSX.Element {
-  return <div>Step 2</div>;
+export function PropertyAddressStep({
+  value,
+  onChange,
+  onNext,
+}: PropertyAddressStepProps): JSX.Element {
+  const [inputValue, setInputValue] = useState(value ?? '');
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const debouncedQuery = useDebounce(inputValue, 300);
+  const { data: suggestions, isLoading } = useAddressSuggestions(debouncedQuery);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Sync local input with the selected address when it is restored from
+    // sessionStorage or changed by the parent wizard.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setInputValue(value ?? '');
+  }, [value]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+        setActiveIndex(null);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelect = useCallback(
+    (address: string) => {
+      setInputValue(address);
+      onChange(address);
+      setIsOpen(false);
+      setActiveIndex(null);
+    },
+    [onChange],
+  );
+
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.currentTarget.value;
+    setInputValue(nextValue);
+    setIsOpen(true);
+    setActiveIndex(null);
+    if (value) {
+      onChange('');
+    }
+  };
+
+  const handleFocus = () => {
+    setIsOpen(true);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (!suggestions || suggestions.length === 0) {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+        setActiveIndex(null);
+      }
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setIsOpen(true);
+      setActiveIndex((prev) =>
+        prev === null ? 0 : Math.min(prev + 1, suggestions.length - 1),
+      );
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveIndex((prev) =>
+        prev === null ? suggestions.length - 1 : Math.max(prev - 1, 0),
+      );
+    } else if (event.key === 'Enter' && activeIndex !== null) {
+      event.preventDefault();
+      handleSelect(suggestions[activeIndex].value);
+    } else if (event.key === 'Escape') {
+      setIsOpen(false);
+      setActiveIndex(null);
+    }
+  };
+
+  const showDropdown =
+    isOpen && debouncedQuery.trim().length >= 3;
+
+  return (
+    <div className={styles.root}>
+      <h2 className={styles.heading}>Введите адрес</h2>
+
+      <div className={styles.fieldWrapper} ref={wrapperRef}>
+        <TextField
+          label="Адрес"
+          required
+          fullWidth
+          value={inputValue}
+          onChange={handleChange}
+          onFocus={handleFocus}
+          onKeyDown={handleKeyDown}
+          placeholder=""
+        />
+
+        {showDropdown && (
+          <div className={styles.dropdown}>
+            {isLoading ? (
+              <div className={styles.message}>Загрузка...</div>
+            ) : suggestions && suggestions.length > 0 ? (
+              <ul
+                className={styles.list}
+                role="listbox"
+                aria-label="Предложенные адреса"
+              >
+                {suggestions.map((suggestion, index) => (
+                  <li
+                    key={suggestion.value}
+                    className={styles.listItem}
+                    role="option"
+                    aria-selected={activeIndex === index}
+                    data-active={activeIndex === index}
+                    onClick={() => handleSelect(suggestion.value)}
+                  >
+                    {suggestion.value}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className={styles.message}>Адреса не найдены</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <Button
+        type="button"
+        variant="primary"
+        size="large"
+        fullWidth
+        disabled={!value}
+        onClick={onNext}
+        className={styles.continue}
+      >
+        Продолжить
+      </Button>
+    </div>
+  );
 }

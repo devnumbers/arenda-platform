@@ -44,8 +44,21 @@ export function PropertyCreateWizard(): JSX.Element {
     <div className={styles.root}>
       <PropertyCreateHeader step={draft.step} onBack={handleBack} onCancel={handleCancel} />
       <div className={styles.content}>
-        {draft.step === 1 && <PropertyTypeStep onNext={handleNext} onBack={handleBack} />}
-        {draft.step === 2 && <PropertyAddressStep onNext={handleNext} onBack={handleBack} />}
+        {draft.step === 1 && (
+          <PropertyTypeStep
+            value={draft.type}
+            onChange={(type) => setDraft((prev) => ({ ...prev, type }))}
+            onNext={handleNext}
+          />
+        )}
+        {draft.step === 2 && (
+          <PropertyAddressStep
+            value={draft.address}
+            onChange={(address) => setDraft((prev) => ({ ...prev, address }))}
+            onNext={handleNext}
+            onBack={handleBack}
+          />
+        )}
         {draft.step === 3 && <PropertyInfoStep onNext={handleNext} onBack={handleBack} />}
       </div>
     </div>
