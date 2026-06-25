@@ -1,10 +1,46 @@
+'use client';
+
 import type { JSX } from 'react';
+import { Button } from '@/shared/ui/button';
+import { propertyTypeOptions } from '@/features/properties/lib/property-types';
+import type { PropertyType } from '@/entities/property/model/types';
+import styles from './PropertyTypeStep.module.css';
 
 export type PropertyTypeStepProps = {
+  value?: PropertyType;
+  onChange: (type: PropertyType) => void;
   onNext: () => void;
-  onBack?: () => void;
 };
 
-export function PropertyTypeStep({}: PropertyTypeStepProps): JSX.Element {
-  return <div>Step 1</div>;
+export function PropertyTypeStep({ value, onChange, onNext }: PropertyTypeStepProps): JSX.Element {
+  return (
+    <div className={styles.root}>
+      <div className={styles.chips} role="group" aria-label="Тип объекта">
+        {propertyTypeOptions.map((option) => (
+          <Button
+            key={option.value}
+            type="button"
+            variant={value === option.value ? 'primary' : 'secondary'}
+            size="small"
+            className={styles.chip}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </Button>
+        ))}
+      </div>
+
+      <Button
+        type="button"
+        variant="secondary"
+        size="large"
+        fullWidth
+        disabled={!value}
+        onClick={onNext}
+        className={styles.continue}
+      >
+        Продолжить
+      </Button>
+    </div>
+  );
 }
