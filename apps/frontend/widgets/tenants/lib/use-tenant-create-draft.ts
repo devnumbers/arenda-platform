@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 export type TenantCreateStep = 'form' | 'success';
@@ -28,6 +28,7 @@ const DEFAULT_DRAFT: TenantCreateDraft = {
 export function useTenantCreateDraft(): {
   draft: TenantCreateDraft;
   setDraft: Dispatch<SetStateAction<TenantCreateDraft>>;
+  clearDraft: () => void;
 } {
   const [draft, setDraft] = useState<TenantCreateDraft>(DEFAULT_DRAFT);
 
@@ -49,7 +50,16 @@ export function useTenantCreateDraft(): {
     }
   }, [draft]);
 
-  return { draft, setDraft };
+  const clearDraft = useCallback(() => {
+    setDraft(DEFAULT_DRAFT);
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore storage errors.
+    }
+  }, []);
+
+  return { draft, setDraft, clearDraft };
 }
 
 function loadDraft(): TenantCreateDraft {

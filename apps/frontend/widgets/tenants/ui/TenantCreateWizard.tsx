@@ -23,13 +23,14 @@ function formatErrorMessage(error: unknown): string {
 
 export function TenantCreateWizard(): JSX.Element {
   const router = useRouter();
-  const { draft, setDraft } = useTenantCreateDraft();
+  const { draft, setDraft, clearDraft } = useTenantCreateDraft();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | undefined>(undefined);
 
   const createTenantContact = useCreateTenantContact();
 
   const handleClose = () => {
+    clearDraft();
     router.push(ROUTES.tenants);
   };
 
