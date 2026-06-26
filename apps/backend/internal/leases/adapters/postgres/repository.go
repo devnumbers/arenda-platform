@@ -490,10 +490,11 @@ func (r *RecurringOperationRepository) Update(ctx context.Context, op domain.Rec
 		AmountKopecks: op.AmountKopecks,
 		StartDate:     pgconv.DateToPgtype(op.StartDate),
 		//nolint:gosec // PaymentDay is validated to be 1-31 in domain.
-		PaymentDay: int32(op.PaymentDay),
-		EndDate:    pgconv.DatePtrToPgtype(op.EndDate),
-		Comment:    pgtype.Text{String: op.Comment, Valid: true},
-		OwnerID:    pgconv.UUIDToPgtype(op.OwnerID),
+		PaymentDay:  int32(op.PaymentDay),
+		EndDate:     pgconv.DatePtrToPgtype(op.EndDate),
+		Periodicity: string(op.Periodicity),
+		Comment:     pgtype.Text{String: op.Comment, Valid: true},
+		OwnerID:     pgconv.UUIDToPgtype(op.OwnerID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

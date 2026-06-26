@@ -45,8 +45,9 @@ SET type = $2,
     start_date = $6,
     payment_day = $7,
     end_date = $8,
-    comment = $9
-WHERE id = $1 AND owner_id = $10
+    periodicity = $9,
+    comment = $10
+WHERE id = $1 AND owner_id = $11
 RETURNING *;
 
 -- name: UpdateRecurringOperationStatus :one

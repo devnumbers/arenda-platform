@@ -343,8 +343,9 @@ SET type = $2,
     start_date = $6,
     payment_day = $7,
     end_date = $8,
-    comment = $9
-WHERE id = $1 AND owner_id = $10
+    periodicity = $9,
+    comment = $10
+WHERE id = $1 AND owner_id = $11
 RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name
 `
 
@@ -357,6 +358,7 @@ type UpdateRecurringOperationParams struct {
 	StartDate     pgtype.Date `json:"start_date"`
 	PaymentDay    int32       `json:"payment_day"`
 	EndDate       pgtype.Date `json:"end_date"`
+	Periodicity   string      `json:"periodicity"`
 	Comment       pgtype.Text `json:"comment"`
 	OwnerID       pgtype.UUID `json:"owner_id"`
 }
@@ -371,6 +373,7 @@ func (q *Queries) UpdateRecurringOperation(ctx context.Context, arg UpdateRecurr
 		arg.StartDate,
 		arg.PaymentDay,
 		arg.EndDate,
+		arg.Periodicity,
 		arg.Comment,
 		arg.OwnerID,
 	)
