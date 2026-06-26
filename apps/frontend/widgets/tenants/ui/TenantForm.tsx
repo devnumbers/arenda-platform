@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent, type JSX, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type JSX, type MouseEvent } from 'react';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import { TextField } from '@/shared/ui/text-field';
@@ -21,6 +21,7 @@ export interface TenantFormProps {
   initialData?: Partial<TenantContactFormData>;
   submitLabel: string;
   isLoading: boolean;
+  disabled?: boolean;
   error?: string;
   onSubmit: (data: TenantContactFormData) => void;
   onChange?: (data: TenantContactFormData) => void;
@@ -36,6 +37,7 @@ export function TenantForm({
   initialData,
   submitLabel,
   isLoading,
+  disabled = false,
   error,
   onSubmit,
   onChange,
@@ -71,7 +73,19 @@ export function TenantForm({
   const isEmailValid = email === '' || EMAIL_REGEX.test(email);
   const isCommentValid = comment.length <= MAX_COMMENT_LENGTH;
 
-  const canSubmit = isNameValid && isPhoneValid && isEmailValid && isCommentValid && !isLoading;
+  const hasChanges = useMemo(() => {
+    if (!initialData) return true;
+    return (
+      name.trim() !== (initialData.name ?? '').trim() ||
+      surname.trim() !== (initialData.surname ?? '').trim() ||
+      patronymic.trim() !== (initialData.patronymic ?? '').trim() ||
+      (phone.trim() === '' || phone.trim() === '+7' ? '' : normalizePhone(phone.trim())) !== (initialData.phone ?? '').trim() ||
+      email.trim() !== (initialData.email ?? '').trim() ||
+      comment.trim() !== (initialData.comment ?? '').trim()
+    );
+  }, [initialData, name, surname, patronymic, phone, email, comment]);
+
+  const canSubmit = isNameValid && isPhoneValid && isEmailValid && isCommentValid && !isLoading && !disabled && hasChanges;
 
   const nameError = (isSubmitAttempted || name !== '') && !isNameValid ? 'Введите имя' : undefined;
   const phoneError = (isSubmitAttempted || isPhoneTouched) && !isPhoneValid

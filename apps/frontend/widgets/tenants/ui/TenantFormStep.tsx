@@ -1,6 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
+import { ROUTES } from '@/shared/config/routes';
 import { TenantForm } from './TenantForm';
 import type { TenantContactFormData } from './TenantForm';
 import styles from './TenantFormStep.module.css';
@@ -30,7 +31,7 @@ export function TenantFormStep({
         error={error}
         onSubmit={onSubmit}
         onChange={onChange}
-        backHref="/tenants"
+        backHref={ROUTES.tenants}
       />
     </div>
   );
