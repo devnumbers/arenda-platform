@@ -13,3 +13,24 @@
   line-height: var(--line-height-text-m);
   color: var(--color-text-muted);
 }
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.skeletonTitle {
+  height: 32px;
+  border-radius: 8px;
+}
+
+.skeletonField {
+  height: 56px;
+  border-radius: 16px;
+}
+
+.skeletonButton {
+  height: 48px;
+  border-radius: 12px;
+}

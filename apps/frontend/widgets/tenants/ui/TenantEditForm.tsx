@@ -7,9 +7,9 @@ import {
   useTenantContact,
   useUpdateTenantContact,
 } from '@/features/tenant-contacts/api';
+import { Skeleton } from '@heroui/react/skeleton';
 import { ApiError } from '@/shared/api/errors';
 import { ROUTES } from '@/shared/config/routes';
-import { TenantDetailLoading } from '@/widgets/tenant-detail';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import type { components } from '@/shared/api/generated';
@@ -56,6 +56,18 @@ function TenantEditFormError({
       >
         Повторить
       </Button>
+    </div>
+  );
+}
+
+function TenantEditLoading(): JSX.Element {
+  return (
+    <div className={styles.loading} role="status" aria-busy="true" aria-label="Загрузка формы арендатора">
+      <Skeleton className={styles.skeletonTitle} />
+      <Skeleton className={styles.skeletonField} />
+      <Skeleton className={styles.skeletonField} />
+      <Skeleton className={styles.skeletonField} />
+      <Skeleton className={styles.skeletonButton} />
     </div>
   );
 }
@@ -107,6 +119,10 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
   } = useTenantContact(isValidTenantId ? tenantId : '');
 
   const updateTenantContact = useUpdateTenantContact();
+
+  const handleChange = useCallback(() => {
+    setSubmitError(undefined);
+  }, []);
 
   const initialData: Partial<TenantContactFormData> | undefined = useMemo(() => {
     if (!tenant) {
@@ -165,7 +181,10 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
       }
 
       try {
-        // Cleared optional fields are omitted from the payload so the backend does not skip them as nil values.
+        // Backend only updates non-nil pointer fields. Because JSON `null` becomes nil,
+        // cleared optional fields are currently omitted from the payload; the backend
+        // therefore keeps the previous value. Clearing optional fields requires backend
+        // support for explicit null values.
         await updateTenantContact.mutateAsync({
           id: tenantId,
           data: payload as TenantContactUpdateRequest,
@@ -191,7 +210,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
   }
 
   if (isPending) {
-    return <TenantDetailLoading />;
+    return <TenantEditLoading />;
   }
 
   if (isError) {
@@ -201,7 +220,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
   }
 
   if (!initialData) {
-    return <TenantDetailLoading />;
+    return <TenantEditLoading />;
   }
 
   return (
@@ -211,6 +230,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
       isLoading={updateTenantContact.isPending}
       error={submitError}
       onSubmit={handleSubmit}
+      onChange={handleChange}
       backHref={ROUTES.tenant(tenantId)}
     />
   );
