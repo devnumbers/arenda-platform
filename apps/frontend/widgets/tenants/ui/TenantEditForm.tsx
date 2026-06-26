@@ -156,9 +156,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
         payload.patronymic = patronymicChange;
       }
 
-      const normalizedPhone =
-        data.phone.trim() === '+7' ? '' : data.phone.trim();
-      const phoneChange = getOptionalFieldChange(normalizedPhone, tenant.phone);
+      const phoneChange = getOptionalFieldChange(data.phone.trim(), tenant.phone);
       if (phoneChange !== undefined) {
         payload.phone = phoneChange;
       }

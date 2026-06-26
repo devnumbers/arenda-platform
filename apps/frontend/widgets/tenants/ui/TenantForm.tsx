@@ -5,7 +5,7 @@ import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import { TextField } from '@/shared/ui/text-field';
 import { ArrowLeft } from '@/shared/assets/icons';
-import { formatPhoneInput } from '@/shared/lib/phone';
+import { formatPhoneInput, normalizePhone } from '@/shared/lib/phone';
 import styles from './TenantForm.module.css';
 
 export interface TenantContactFormData {
@@ -102,7 +102,7 @@ export function TenantForm({
         name: name.trim(),
         surname: surname.trim(),
         patronymic: patronymic.trim(),
-        phone: phone.trim() === '+7' ? '' : phone.trim(),
+        phone: phone.trim() === '' || phone.trim() === '+7' ? '' : normalizePhone(phone.trim()),
         email: email.trim(),
         comment: comment.trim(),
       });
