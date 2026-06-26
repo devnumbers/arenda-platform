@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,22 +23,26 @@ type CreateRecurringOperationCommand struct {
 	PropertyID    uuid.UUID
 	Type          string
 	Category      string
+	Name          string
 	AmountKopecks int64
 	StartDate     time.Time
 	PaymentDay    int
 	EndDate       *time.Time
 	Comment       *string
+	Periodicity   string
 }
 
 // UpdateRecurringOperationCommand carries optional updates for a recurring operation.
 type UpdateRecurringOperationCommand struct {
 	Type          *string
 	Category      *string
+	Name          *string
 	AmountKopecks *int64
 	StartDate     *time.Time
 	PaymentDay    *int
 	EndDate       *time.Time
 	Comment       *string
+	Periodicity   *string
 }
 
 // RecurringOperationService orchestrates recurring operation use cases within the
@@ -102,6 +107,23 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		return domain.RecurringOperation{}, err
 	}
 
+	name := strings.TrimSpace(cmd.Name)
+	if name == "" {
+		return domain.RecurringOperation{}, newInvalidInputError("name is required")
+	}
+	if len([]rune(name)) > 50 {
+		return domain.RecurringOperation{}, newInvalidInputError("name must be at most 50 characters")
+	}
+
+	periodicity := domain.RecurringOperationPeriodicityMonthly
+	if strings.TrimSpace(cmd.Periodicity) != "" {
+		p, err := domain.ParseRecurringOperationPeriodicity(strings.TrimSpace(cmd.Periodicity))
+		if err != nil {
+			return domain.RecurringOperation{}, newInvalidInputError(err.Error())
+		}
+		periodicity = p
+	}
+
 	if err := s.validateCommand(cmd.Type, cmd.Category, cmd.AmountKopecks, cmd.StartDate, cmd.PaymentDay, cmd.EndDate); err != nil {
 		return domain.RecurringOperation{}, err
 	}
@@ -118,11 +140,12 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		PropertyID:    cmd.PropertyID,
 		Type:          domain.OperationType(cmd.Type),
 		Category:      domain.OperationCategory(cmd.Category),
+		Name:          name,
 		AmountKopecks: cmd.AmountKopecks,
 		StartDate:     cmd.StartDate,
 		PaymentDay:    cmd.PaymentDay,
 		EndDate:       cmd.EndDate,
-		Periodicity:   domain.RecurringOperationPeriodicityMonthly,
+		Periodicity:   periodicity,
 		Status:        domain.RecurringOperationStatusActive,
 		Comment:       stringOrEmpty(cmd.Comment),
 		CreatedAt:     now,
@@ -239,6 +262,25 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 	}
 	rec.Type = opType
 	rec.Category = category
+
+	if cmd.Name != nil {
+		name := strings.TrimSpace(*cmd.Name)
+		if name == "" {
+			return domain.RecurringOperation{}, newInvalidInputError("name is required")
+		}
+		if len([]rune(name)) > 50 {
+			return domain.RecurringOperation{}, newInvalidInputError("name must be at most 50 characters")
+		}
+		rec.Name = name
+	}
+
+	if cmd.Periodicity != nil {
+		periodicity, err := domain.ParseRecurringOperationPeriodicity(strings.TrimSpace(*cmd.Periodicity))
+		if err != nil {
+			return domain.RecurringOperation{}, newInvalidInputError(err.Error())
+		}
+		rec.Periodicity = periodicity
+	}
 
 	if cmd.AmountKopecks != nil {
 		rec.AmountKopecks = *cmd.AmountKopecks
@@ -646,7 +688,7 @@ func (s *RecurringOperationService) buildOperations(
 	existing map[time.Time]struct{},
 	filter func(time.Time) bool,
 ) ([]domain.Operation, error) {
-	dates := domain.GenerateDates(rec.StartDate, rec.PaymentDay, rec.EndDate, now)
+	dates := domain.GenerateDates(rec.StartDate, rec.PaymentDay, rec.EndDate, now, rec.Periodicity)
 
 	createdAt := s.clock.Now()
 	ops := make([]domain.Operation, 0, len(dates))

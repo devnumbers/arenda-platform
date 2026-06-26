@@ -408,6 +408,7 @@ func (r *RecurringOperationRepository) Create(ctx context.Context, op domain.Rec
 		LeaseID:       pgconv.UUIDToPgtype(op.LeaseID),
 		Type:          string(op.Type),
 		Category:      string(op.Category),
+		Name:          op.Name,
 		AmountKopecks: op.AmountKopecks,
 		StartDate:     pgconv.DateToPgtype(op.StartDate),
 		//nolint:gosec // PaymentDay is validated to be 1-31 in domain.
@@ -485,6 +486,7 @@ func (r *RecurringOperationRepository) Update(ctx context.Context, op domain.Rec
 		ID:            pgconv.UUIDToPgtype(op.ID),
 		Type:          string(op.Type),
 		Category:      string(op.Category),
+		Name:          op.Name,
 		AmountKopecks: op.AmountKopecks,
 		StartDate:     pgconv.DateToPgtype(op.StartDate),
 		//nolint:gosec // PaymentDay is validated to be 1-31 in domain.
@@ -593,6 +595,7 @@ func recurringOperationFromRow(row postgres.RecurringOperation) domain.Recurring
 		LeaseID:       pgconv.UUIDFromPgtype(row.LeaseID),
 		Type:          domain.OperationType(row.Type),
 		Category:      domain.OperationCategory(row.Category),
+		Name:          row.Name,
 		AmountKopecks: row.AmountKopecks,
 		StartDate:     row.StartDate.Time,
 		PaymentDay:    int(row.PaymentDay),

@@ -33,7 +33,7 @@ func (r *RentService) GenerateRentOperations(
 	recurringOpID uuid.UUID,
 	ownerID uuid.UUID,
 ) []domain.Operation {
-	dates := domain.GenerateDates(lease.StartDate, lease.PaymentDay, lease.EndDate, r.clock.Now())
+	dates := domain.GenerateDates(lease.StartDate, lease.PaymentDay, lease.EndDate, r.clock.Now(), domain.RecurringOperationPeriodicityMonthly)
 	if len(dates) == 0 {
 		return nil
 	}

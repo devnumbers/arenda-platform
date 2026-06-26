@@ -159,6 +159,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		LeaseID:       created.ID,
 		Type:          domain.OperationTypeIncome,
 		Category:      domain.OperationCategoryRent,
+		Name:          "Арендная плата",
 		AmountKopecks: created.RentAmountKopecks,
 		StartDate:     created.StartDate,
 		PaymentDay:    created.PaymentDay,

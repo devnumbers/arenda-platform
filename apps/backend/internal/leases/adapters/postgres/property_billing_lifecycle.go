@@ -94,7 +94,7 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.U
 			existingDates[timeutil.Date(d)] = struct{}{}
 		}
 
-		dates := leasesdomain.GenerateDates(rec.StartDate, rec.PaymentDay, rec.EndDate, from)
+		dates := leasesdomain.GenerateDates(rec.StartDate, rec.PaymentDay, rec.EndDate, from, rec.Periodicity)
 		ops := make([]leasesdomain.Operation, 0, len(dates))
 		for _, d := range dates {
 			d = timeutil.Date(d)
