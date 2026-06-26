@@ -344,6 +344,33 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/photos/{photoId}:
+    delete:
+      operationId: deletePropertyPhoto
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: photoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Photo deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /properties/{propertyId}/operations:
     get:
       operationId: listOperationsByProperty
@@ -1374,6 +1401,82 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /admin/subscription/payments:
+    get:
+      operationId: listAdminSubscriptionPayments
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, succeeded, failed, refunded, partial_refunded]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Admin subscription payments list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSubscriptionPaymentsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/subscription/payments/{paymentId}/refund:
+    post:
+      operationId: refundSubscriptionPayment
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundSubscriptionPaymentRequest'
+      responses:
+        '204':
+          description: Payment refunded
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /internal/fake-subscription-payment/{id}/confirm:
     post:
       operationId: confirmFakeSubscriptionPayment
@@ -1556,7 +1659,7 @@ components:
           type: integer
         status:
           type: string
-          enum: [pending, succeeded, failed]
+          enum: [pending, succeeded, failed, refunded, partial_refunded]
         provider:
           type: string
         createdAt:
@@ -1637,6 +1740,45 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SubscriptionPayment'
+
+    AdminSubscriptionPayment:
+      type: object
+      required: [id, tariff, period, amountKopecks, status, provider, userId, userPhone, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tariff:
+          $ref: '#/components/schemas/Tariff'
+        period:
+          type: string
+          enum: [month, year]
+        amountKopecks:
+          type: integer
+        status:
+          type: string
+          enum: [pending, succeeded, failed, refunded, partial_refunded]
+        provider:
+          type: string
+        userId:
+          type: string
+          format: uuid
+        userPhone:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminSubscriptionPaymentsResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminSubscriptionPayment'
+        total:
+          type: integer
 
     Problem:
       type: object
@@ -1993,12 +2135,15 @@ components:
 
     OperationCreateRequest:
       type: object
-      required: [type, category, amount_kopecks, operation_date]
+      required: [type, category, name, amount_kopecks, operation_date]
       properties:
         type:
           $ref: '#/components/schemas/OperationType'
         category:
           $ref: '#/components/schemas/OperationCategory'
+        name:
+          type: string
+          maxLength: 50
         amount_kopecks:
           type: integer
           minimum: 0
@@ -2019,6 +2164,9 @@ components:
           $ref: '#/components/schemas/OperationType'
         category:
           $ref: '#/components/schemas/OperationCategory'
+        name:
+          type: string
+          maxLength: 50
         amount_kopecks:
           type: integer
         operation_date:
@@ -2033,7 +2181,7 @@ components:
 
     OperationResponse:
       type: object
-      required: [id, owner_id, property_id, type, category, amount_kopecks, operation_date, status, is_exception, created_at, updated_at]
+      required: [id, owner_id, property_id, type, category, name, amount_kopecks, operation_date, status, is_exception, created_at, updated_at]
       properties:
         id:
           type: string
@@ -2056,6 +2204,8 @@ components:
           $ref: '#/components/schemas/OperationType'
         category:
           $ref: '#/components/schemas/OperationCategory'
+        name:
+          type: string
         amount_kopecks:
           type: integer
         operation_date:
@@ -2266,6 +2416,14 @@ components:
           type: string
           format: date
 
+    RefundSubscriptionPaymentRequest:
+      type: object
+      properties:
+        amount_kopecks:
+          type: integer
+          description: Optional partial refund amount in kopecks. If omitted, the full payment amount is refunded.
+          minimum: 1
+
     RemindersResponse:
       type: object
       required: [items]
@@ -2284,6 +2442,12 @@ components:
             $ref: '#/components/schemas/Problem'
     Unauthorized:
       description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: Forbidden
       content:
         application/json:
           schema:
