@@ -194,6 +194,7 @@ type RecurringOperation struct {
 	ReminderOffsetDays *int
 	Periodicity        RecurringOperationPeriodicity
 	Status             RecurringOperationStatus
+	Name               string
 	Comment            string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time

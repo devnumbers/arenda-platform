@@ -502,6 +502,7 @@ func (s *LeaseService) ReturnDeposit(ctx context.Context, ownerID, leaseID uuid.
 		Type:          domain.OperationTypeExpense,
 		Category:      domain.OperationCategoryDepositReturn,
 		Status:        domain.OperationStatusPaid,
+		Name:          depositReturnComment,
 		AmountKopecks: lease.DepositAmountKopecks,
 		OperationDate: timeutil.Date(now),
 		Comment:       depositReturnComment,

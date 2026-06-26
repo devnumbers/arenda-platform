@@ -667,6 +667,7 @@ func (s *RecurringOperationService) buildOperations(
 			Type:                 rec.Type,
 			Category:             rec.Category,
 			Status:               domain.OperationStatusPending,
+			Name:                 rec.Name,
 			AmountKopecks:        rec.AmountKopecks,
 			OperationDate:        d,
 			Comment:              rec.Comment,

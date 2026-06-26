@@ -50,6 +50,7 @@ func (r *RentService) GenerateRentOperations(
 			Type:                 domain.OperationTypeIncome,
 			Category:             domain.OperationCategoryRent,
 			Status:               domain.OperationStatusPending,
+			Name:                 "Арендная плата",
 			AmountKopecks:        lease.RentAmountKopecks,
 			OperationDate:        d,
 			IsException:          false,
