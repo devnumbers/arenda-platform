@@ -29,15 +29,18 @@ const DEFAULT_DRAFT: TenantCreateDraft = {
 
 export function useTenantCreateDraft(): {
   draft: TenantCreateDraft;
+  isLoaded: boolean;
   setDraft: Dispatch<SetStateAction<TenantCreateDraft>>;
   clearDraft: () => void;
 } {
   const [draft, setDraft] = useState<TenantCreateDraft>(DEFAULT_DRAFT);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     // Load persisted draft after hydration to avoid SSR/hydration mismatch.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraft(loadDraft());
+    setIsLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -60,7 +63,7 @@ export function useTenantCreateDraft(): {
     }
   }, []);
 
-  return { draft, setDraft, clearDraft };
+  return { draft, isLoaded, setDraft, clearDraft };
 }
 
 function loadDraft(): TenantCreateDraft {

@@ -20,7 +20,6 @@ export function TenantCreateHeader({ onClose }: TenantCreateHeaderProps): JSX.El
         onClick={onClose}
         className={styles.iconButton}
       />
-      <h1 className={styles.title}>Добавление арендатора</h1>
       <div className={styles.spacer} />
     </header>
   );

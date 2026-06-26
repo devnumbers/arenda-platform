@@ -11,7 +11,7 @@ import { TenantLeaseSection } from './TenantLeaseSection';
 import { TenantCommentSection } from './TenantCommentSection';
 import { TenantDetailLoading } from './TenantDetailLoading';
 import { TenantDetailError } from './TenantDetailError';
-import { getTenantContactFullName } from '../lib/get-tenant-contact-full-name';
+import { getTenantContactFullName } from '@/entities/tenant-contact/lib/get-tenant-contact-full-name';
 import styles from './TenantDetailPage.module.css';
 
 function findCurrentLeaseByTenant(

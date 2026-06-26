@@ -1,9 +1,11 @@
 .root {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 400px;
   padding: 24px;
+  gap: 24px;
 }
 
 .card {
@@ -14,6 +16,7 @@
   gap: 32px;
   width: 100%;
   max-width: 480px;
+  height: 400px;
   padding: 40px 24px;
   text-align: center;
   border: 1px solid var(--color-secondary-hover);
@@ -51,9 +54,10 @@
 
 .actions {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex-direction: row;
+  gap: 8px;
   width: 100%;
+  max-width: 480px;
 }
 
 .actions > button {
@@ -61,11 +65,6 @@
 }
 
 @media (min-width: 768px) {
-  .actions {
-    flex-direction: row;
-    justify-content: center;
-  }
-
   .heading {
     font-size: 28px;
     line-height: 36px;

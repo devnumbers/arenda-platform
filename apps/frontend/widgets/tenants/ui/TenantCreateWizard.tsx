@@ -24,7 +24,7 @@ function formatErrorMessage(error: unknown): string {
 
 export function TenantCreateWizard(): JSX.Element {
   const router = useRouter();
-  const { draft, setDraft, clearDraft } = useTenantCreateDraft();
+  const { draft, isLoaded, setDraft, clearDraft } = useTenantCreateDraft();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | undefined>(undefined);
 
@@ -74,6 +74,15 @@ export function TenantCreateWizard(): JSX.Element {
       setIsSubmitting(false);
     }
   };
+
+  if (!isLoaded) {
+    return (
+      <div className={styles.root}>
+        <TenantCreateHeader onClose={handleClose} />
+        <div className={styles.content}>Загрузка…</div>
+      </div>
+    );
+  }
 
   if (draft.step === 'success') {
     return (

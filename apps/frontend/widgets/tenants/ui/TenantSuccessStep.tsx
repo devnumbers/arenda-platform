@@ -25,32 +25,32 @@ export function TenantSuccessStep({
         <div className={styles.text}>
           <h2 className={styles.heading}>Арендатор добавлен</h2>
         </div>
+      </div>
 
-        <div className={styles.actions}>
-          <Button
-            type="button"
-            variant="secondary"
-            size="large"
-            fullWidth
-            onClick={onAddLater}
-          >
-            Добавить позже
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            size="large"
-            fullWidth
-            leftIcon={
-              <Icon size="m">
-                <BoldWallet />
-              </Icon>
-            }
-            onClick={onAddPayments}
-          >
-            Добавить платежи
-          </Button>
-        </div>
+      <div className={styles.actions}>
+        <Button
+          type="button"
+          variant="secondary"
+          size="large"
+          fullWidth
+          onClick={onAddLater}
+        >
+          Добавить позже
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          size="large"
+          fullWidth
+          leftIcon={
+            <Icon size="m">
+              <BoldWallet />
+            </Icon>
+          }
+          onClick={onAddPayments}
+        >
+          Добавить платежи
+        </Button>
       </div>
     </div>
   );
