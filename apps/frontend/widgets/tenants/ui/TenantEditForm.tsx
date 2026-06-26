@@ -215,14 +215,17 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
   }
 
   return (
-    <TenantForm
-      initialData={initialData}
-      submitLabel="Сохранить изменения"
-      isLoading={updateTenantContact.isPending}
-      error={submitError}
-      onSubmit={handleSubmit}
-      onChange={handleChange}
-      backHref={ROUTES.tenant(tenantId)}
-    />
+    <>
+      <h1 className={styles.title}>Редактирование арендатора</h1>
+      <TenantForm
+        initialData={initialData}
+        submitLabel="Сохранить изменения"
+        isLoading={updateTenantContact.isPending}
+        error={submitError}
+        onSubmit={handleSubmit}
+        onChange={handleChange}
+        backHref={ROUTES.tenant(tenantId)}
+      />
+    </>
   );
 }
