@@ -38,6 +38,7 @@ type LeaseRepository interface {
 	CountOpenLeasesByProperty(ctx context.Context, propertyID uuid.UUID) (int, error)
 	GetOpenLeaseByProperty(ctx context.Context, propertyID uuid.UUID) (domain.Lease, error)
 	ListOpenLeasesWithPastEndDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Lease, error)
+	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.Lease, error)
 	WithTx(tx transaction.Tx) LeaseRepository
 }
 
@@ -79,5 +80,7 @@ type OperationRepository interface {
 	DeleteUneditedOperationsByLease(ctx context.Context, leaseID uuid.UUID, from time.Time) error
 	ListPendingOperationsWithPastDate(ctx context.Context, ownerID uuid.UUID, asOf time.Time, limit int) ([]domain.Operation, error)
 	ListAllPendingOperationsWithPastDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Operation, error)
+	GetPropertyOperationsSummary(ctx context.Context, ownerID, propertyID uuid.UUID, asOf time.Time) (OperationsSummary, error)
+	HasDepositReturnForLease(ctx context.Context, leaseID uuid.UUID) (bool, error)
 	WithTx(tx transaction.Tx) OperationRepository
 }

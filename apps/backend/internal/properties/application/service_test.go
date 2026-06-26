@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -175,6 +176,7 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 		fakeOccupancyProvider{},
 		nil,
 		nil,
+		stubLeaseRepo{},
 		fakePropertyTxBeginner{},
 		fakePropertyClock{now: time.Now()},
 		nil,
@@ -276,6 +278,7 @@ func TestArchiveProperty_ConcurrentArchivesDoNotDoubleArchive(t *testing.T) {
 		fakeOccupancyProvider{},
 		fakeSubscriptionLimiter{limit: 10},
 		fakePropertyBillingLifecycle{},
+		stubLeaseRepo{},
 		fakePropertyTxBeginner{},
 		fakePropertyClock{now: time.Now()},
 		nil,
@@ -353,6 +356,7 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 		fakeOccupancyProvider{},
 		fakeSubscriptionLimiter{limit: 1},
 		fakePropertyBillingLifecycle{},
+		stubLeaseRepo{},
 		fakePropertyTxBeginner{},
 		fakePropertyClock{now: time.Now()},
 		nil,
@@ -410,6 +414,14 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 var _ SubscriptionLimiter = fakeSubscriptionLimiter{}
 var _ PropertyBillingLifecycle = fakePropertyBillingLifecycle{}
 
+type stubLeaseRepo struct{}
+
+func (r stubLeaseRepo) ListByProperty(_ context.Context, _, _ uuid.UUID) ([]leasesdomain.Lease, error) {
+	return nil, nil
+}
+
+var _ LeaseRepository = stubLeaseRepo{}
+
 type fakePropertyPhotoRepo struct{}
 
 func (fakePropertyPhotoRepo) Create(_ context.Context, _ uuid.UUID, _ string) (domain.Photo, error) {
@@ -440,3 +452,96 @@ func (fakePropertyPhotoStorage) Upload(_ context.Context, _, _ string, _ io.Read
 
 var _ PropertyPhotoRepository = fakePropertyPhotoRepo{}
 var _ PhotoStorage = fakePropertyPhotoStorage{}
+
+type fakeLeaseRepoForProperties struct {
+	leases []leasesdomain.Lease
+}
+
+func (r fakeLeaseRepoForProperties) ListByProperty(_ context.Context, _, _ uuid.UUID) ([]leasesdomain.Lease, error) {
+	return r.leases, nil
+}
+
+var _ LeaseRepository = fakeLeaseRepoForProperties{}
+
+func TestPropertyService_ListPropertyLeases(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	leaseID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+
+	property := domain.Property{
+		ID:      propertyID,
+		OwnerID: ownerID,
+		Name:    "Test Property",
+		Address: "Address",
+		Type:    domain.PropertyTypeApartment,
+		Status:  domain.PropertyStatusActive,
+	}
+
+	leases := []leasesdomain.Lease{
+		{
+			ID:                leaseID,
+			OwnerID:           ownerID,
+			PropertyID:        propertyID,
+			Status:            leasesdomain.LeaseStatusActive,
+			StartDate:         time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			RentAmountKopecks: 10000,
+			PaymentDay:        1,
+		},
+	}
+
+	repo := newLockingFakePropertyRepo(property)
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		fakeOccupancyProvider{},
+		nil,
+		nil,
+		fakeLeaseRepoForProperties{leases: leases},
+		fakePropertyTxBeginner{},
+		fakePropertyClock{now: now},
+		nil,
+	)
+
+	result, err := svc.ListPropertyLeases(ctx, ownerID, propertyID)
+	if err != nil {
+		t.Fatalf("ListPropertyLeases failed: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 lease, got %d", len(result))
+	}
+	if result[0].ID != leaseID {
+		t.Errorf("expected lease id %s, got %s", leaseID, result[0].ID)
+	}
+	if result[0].Status != leasesdomain.LeaseStatusActive {
+		t.Errorf("expected effective status active, got %q", result[0].Status)
+	}
+}
+
+func TestPropertyService_ListPropertyLeases_PropertyNotFound(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	missingPropertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	now := time.Now()
+
+	repo := newLockingFakePropertyRepo(domain.Property{})
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		fakeOccupancyProvider{},
+		nil,
+		nil,
+		fakeLeaseRepoForProperties{},
+		fakePropertyTxBeginner{},
+		fakePropertyClock{now: now},
+		nil,
+	)
+
+	_, err := svc.ListPropertyLeases(ctx, ownerID, missingPropertyID)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}

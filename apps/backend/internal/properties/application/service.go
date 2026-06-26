@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/google/uuid"
+	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
@@ -53,6 +54,7 @@ type PropertyService struct {
 	occupancyProvider OccupancyProvider
 	limiter          SubscriptionLimiter
 	billingLifecycle PropertyBillingLifecycle
+	leaseRepo        LeaseRepository
 	db               txBeginner
 	clock            clock.Clock
 	logger           *slog.Logger
@@ -65,6 +67,7 @@ func NewPropertyService(
 	occupancyProvider OccupancyProvider,
 	limiter SubscriptionLimiter,
 	billingLifecycle PropertyBillingLifecycle,
+	leaseRepo LeaseRepository,
 	db txBeginner,
 	clock clock.Clock,
 	logger *slog.Logger,
@@ -79,6 +82,7 @@ func NewPropertyService(
 		occupancyProvider: occupancyProvider,
 		limiter:          limiter,
 		billingLifecycle: billingLifecycle,
+		leaseRepo:        leaseRepo,
 		db:               db,
 		clock:            clock,
 		logger:           logger,
@@ -187,6 +191,26 @@ func (s *PropertyService) GetProperty(ctx context.Context, ownerID, id uuid.UUID
 		return domain.Property{}, err
 	}
 	return properties[0], nil
+}
+
+func (s *PropertyService) ListPropertyLeases(ctx context.Context, ownerID, propertyID uuid.UUID) ([]leasesdomain.Lease, error) {
+	if _, err := s.repo.GetByIDAndOwner(ctx, propertyID, ownerID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("get property: %w", err)
+	}
+
+	leases, err := s.leaseRepo.ListByProperty(ctx, ownerID, propertyID)
+	if err != nil {
+		return nil, fmt.Errorf("list property leases: %w", err)
+	}
+
+	now := s.clock.Now()
+	for i := range leases {
+		leases[i].Status = leases[i].EffectiveStatus(now)
+	}
+	return leases, nil
 }
 
 func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.UUID, cmd UpdatePropertyCommand) (domain.Property, error) {

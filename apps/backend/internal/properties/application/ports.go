@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -52,6 +53,11 @@ type PropertyRepository interface {
 	Unarchive(ctx context.Context, id, ownerID uuid.UUID) error
 	CountActiveByOwner(ctx context.Context, ownerID uuid.UUID) (int, error)
 	WithTx(tx transaction.Tx) PropertyRepository
+}
+
+// LeaseRepository provides lease data needed by the properties bounded context.
+type LeaseRepository interface {
+	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]leasesdomain.Lease, error)
 }
 
 // PhotoStorage persists uploaded property photos and returns their public URL.

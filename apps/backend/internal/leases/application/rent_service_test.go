@@ -108,6 +108,61 @@ func (r *fakeOperationRepo) ListByProperty(_ context.Context, ownerID, propertyI
 	return nil, nil
 }
 
+func (r *fakeOperationRepo) GetPropertyOperationsSummary(_ context.Context, ownerID, propertyID uuid.UUID, asOf time.Time) (OperationsSummary, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	monthStart := time.Date(asOf.Year(), asOf.Month(), 1, 0, 0, 0, 0, time.UTC)
+	monthEnd := monthStart.AddDate(0, 1, 0)
+	var allTimeProfit, monthlyProfit int64
+	overdueRentCount := 0
+	overdueTotalCount := 0
+	var nextPaymentDate *time.Time
+	for _, op := range r.ops {
+		if op.OwnerID != ownerID || op.PropertyID != propertyID || op.DeletedAt != nil {
+			continue
+		}
+		opDate := timeutil.Date(op.OperationDate)
+		switch op.Type {
+		case domain.OperationTypeIncome:
+			if op.Status == domain.OperationStatusReceived {
+				allTimeProfit += op.AmountKopecks
+				if !opDate.Before(monthStart) && opDate.Before(monthEnd) {
+					monthlyProfit += op.AmountKopecks
+				}
+			}
+			if op.Status == domain.OperationStatusOverdue {
+				overdueTotalCount++
+				if op.Category == domain.OperationCategoryRent {
+					overdueRentCount++
+				}
+			}
+			if (op.Status == domain.OperationStatusPending || op.Status == domain.OperationStatusOverdue) && op.Category == domain.OperationCategoryRent {
+				if nextPaymentDate == nil || opDate.Before(*nextPaymentDate) {
+					d := opDate
+					nextPaymentDate = &d
+				}
+			}
+		case domain.OperationTypeExpense:
+			if op.Status == domain.OperationStatusPaid {
+				allTimeProfit -= op.AmountKopecks
+				if !opDate.Before(monthStart) && opDate.Before(monthEnd) {
+					monthlyProfit -= op.AmountKopecks
+				}
+			}
+			if op.Status == domain.OperationStatusOverdue {
+				overdueTotalCount++
+			}
+		}
+	}
+	return OperationsSummary{
+		AllTimeProfitKopecks: allTimeProfit,
+		MonthlyProfitKopecks: monthlyProfit,
+		OverdueRentCount:     overdueRentCount,
+		OverdueTotalCount:    overdueTotalCount,
+		NextPaymentDate:      nextPaymentDate,
+	}, nil
+}
+
 func (r *fakeOperationRepo) GetByIDAndOwner(_ context.Context, id, _ uuid.UUID) (domain.Operation, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -225,6 +280,17 @@ func (r *fakeOperationRepo) DeleteUneditedOperationsByLease(_ context.Context, l
 
 func (r *fakeOperationRepo) ListByPropertyWithStatuses(_ context.Context, _, _ uuid.UUID, _ []domain.OperationStatus) ([]domain.Operation, error) {
 	return nil, nil
+}
+
+func (r *fakeOperationRepo) HasDepositReturnForLease(_ context.Context, leaseID uuid.UUID) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, op := range r.ops {
+		if op.LeaseID == leaseID && op.Type == domain.OperationTypeExpense && op.Category == domain.OperationCategoryDepositReturn && op.DeletedAt == nil {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (r *fakeOperationRepo) ListPendingOperationsWithPastDate(_ context.Context, _ uuid.UUID, _ time.Time, _ int) ([]domain.Operation, error) {

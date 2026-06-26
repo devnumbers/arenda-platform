@@ -671,6 +671,59 @@ func (q *Queries) ListPendingSubscriptionPaymentsByUserID(ctx context.Context, u
 	return items, nil
 }
 
+const listPendingUpgradePayments = `-- name: ListPendingUpgradePayments :many
+SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id, sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.status, sp.error_code, sp.created_at, sp.updated_at, sp.payment_url, sp.succeeded_at
+FROM subscription_payments sp
+JOIN user_subscriptions us ON us.id = sp.subscription_id
+WHERE sp.status = 'pending'
+  AND sp.provider_payment_id IS NOT NULL
+  AND sp.tariff_id != us.tariff_id
+  AND sp.created_at < $1
+ORDER BY sp.created_at ASC
+LIMIT $2
+`
+
+type ListPendingUpgradePaymentsParams struct {
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Limit     int32              `json:"limit"`
+}
+
+func (q *Queries) ListPendingUpgradePayments(ctx context.Context, arg ListPendingUpgradePaymentsParams) ([]SubscriptionPayment, error) {
+	rows, err := q.db.Query(ctx, listPendingUpgradePayments, arg.CreatedAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SubscriptionPayment{}
+	for rows.Next() {
+		var i SubscriptionPayment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.SubscriptionID,
+			&i.TariffID,
+			&i.PaymentMethodID,
+			&i.Period,
+			&i.AmountKopecks,
+			&i.Provider,
+			&i.ProviderPaymentID,
+			&i.Status,
+			&i.ErrorCode,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PaymentUrl,
+			&i.SucceededAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSubscriptionPaymentsByUserID = `-- name: ListSubscriptionPaymentsByUserID :many
 SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at FROM subscription_payments WHERE user_id = $1 ORDER BY created_at DESC
 `

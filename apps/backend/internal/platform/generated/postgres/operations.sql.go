@@ -251,6 +251,75 @@ func (q *Queries) GetOperationByIDAndOwnerForUpdate(ctx context.Context, arg Get
 	return i, err
 }
 
+const getPropertyOperationsSummary = `-- name: GetPropertyOperationsSummary :one
+SELECT
+    (
+        COALESCE(SUM(CASE WHEN type = 'income' AND status = 'received' THEN amount_kopecks ELSE 0 END), 0) -
+        COALESCE(SUM(CASE WHEN type = 'expense' AND status = 'paid' THEN amount_kopecks ELSE 0 END), 0)
+    )::bigint AS all_time_profit_kopecks,
+    (
+        COALESCE(SUM(CASE
+            WHEN type = 'income' AND status = 'received'
+                AND operation_date >= date_trunc('month', $3::date)
+                AND operation_date < date_trunc('month', $3::date) + interval '1 month'
+            THEN amount_kopecks ELSE 0 END), 0) -
+        COALESCE(SUM(CASE
+            WHEN type = 'expense' AND status = 'paid'
+                AND operation_date >= date_trunc('month', $3::date)
+                AND operation_date < date_trunc('month', $3::date) + interval '1 month'
+            THEN amount_kopecks ELSE 0 END), 0)
+    )::bigint AS monthly_profit_kopecks,
+    COUNT(*) FILTER (WHERE status = 'overdue' AND type = 'income' AND category = 'rent') AS overdue_rent_count,
+    COUNT(*) FILTER (WHERE status = 'overdue') AS overdue_total_count,
+    (MIN(operation_date) FILTER (WHERE status IN ('pending', 'overdue') AND type = 'income' AND category = 'rent'))::date AS next_payment_date
+FROM operations
+WHERE owner_id = $1 AND property_id = $2 AND deleted_at IS NULL
+`
+
+type GetPropertyOperationsSummaryParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+	AsOf       pgtype.Date `json:"as_of"`
+}
+
+type GetPropertyOperationsSummaryRow struct {
+	AllTimeProfitKopecks int64       `json:"all_time_profit_kopecks"`
+	MonthlyProfitKopecks int64       `json:"monthly_profit_kopecks"`
+	OverdueRentCount     int64       `json:"overdue_rent_count"`
+	OverdueTotalCount    int64       `json:"overdue_total_count"`
+	NextPaymentDate      pgtype.Date `json:"next_payment_date"`
+}
+
+func (q *Queries) GetPropertyOperationsSummary(ctx context.Context, arg GetPropertyOperationsSummaryParams) (GetPropertyOperationsSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getPropertyOperationsSummary, arg.OwnerID, arg.PropertyID, arg.AsOf)
+	var i GetPropertyOperationsSummaryRow
+	err := row.Scan(
+		&i.AllTimeProfitKopecks,
+		&i.MonthlyProfitKopecks,
+		&i.OverdueRentCount,
+		&i.OverdueTotalCount,
+		&i.NextPaymentDate,
+	)
+	return i, err
+}
+
+const hasDepositReturnForLease = `-- name: HasDepositReturnForLease :one
+SELECT EXISTS(
+    SELECT 1 FROM operations
+    WHERE lease_id = $1
+      AND type = 'expense'
+      AND category = 'deposit_return'
+      AND deleted_at IS NULL
+) AS has_deposit_return
+`
+
+func (q *Queries) HasDepositReturnForLease(ctx context.Context, leaseID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasDepositReturnForLease, leaseID)
+	var has_deposit_return bool
+	err := row.Scan(&has_deposit_return)
+	return has_deposit_return, err
+}
+
 const listAllPendingOperationsWithPastDate = `-- name: ListAllPendingOperationsWithPastDate :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
 WHERE status = 'pending'

@@ -180,6 +180,7 @@ func run(fallback *slog.Logger) error {
 	limiter := billingpg.NewSubscriptionLimiter(db)
 	operationRepo := leasespg.NewOperationRepository(db)
 	recurringOpRepo := leasespg.NewRecurringOperationRepository(db)
+	leaseRepo := leasespg.NewLeaseRepository(db)
 	reminderRepo := notificationspg.NewReminderRepository(db)
 	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, realClock{})
 	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, reminderScheduler, realClock{})
@@ -212,6 +213,7 @@ func run(fallback *slog.Logger) error {
 		occupancyProvider,
 		limiter,
 		propertyBillingLifecycle,
+		leaseRepo,
 		platformpostgres.NewBeginner(pool, appLogger),
 		realClock{},
 		appLogger,
@@ -238,7 +240,6 @@ func run(fallback *slog.Logger) error {
 		propertyService,
 	)
 
-	leaseRepo := leasespg.NewLeaseRepository(db)
 	leasePropertyRepo := leasespg.NewPropertyRepository(db)
 	tenantContactRepo := leasespg.NewTenantContactRepository(db)
 

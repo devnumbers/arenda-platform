@@ -260,6 +260,52 @@ paths:
           $ref: '#/components/responses/NotFound'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
+  /properties/{id}/leases:
+    get:
+      operationId: listPropertyLeases
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Property leases
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyLeasesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{id}/operations/summary:
+    get:
+      operationId: getPropertyOperationsSummary
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Property operations summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyOperationsSummaryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /properties/{propertyId}/photos:
     post:
       operationId: uploadPropertyPhoto
@@ -877,6 +923,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LeaseResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
+  /leases/{id}/deposit-return:
+    post:
+      operationId: returnLeaseDeposit
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Deposit returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaseResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1689,6 +1762,32 @@ components:
           items:
             $ref: '#/components/schemas/PropertyPhoto'
 
+    PropertyLeasesResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaseResponse'
+
+    PropertyOperationsSummaryResponse:
+      type: object
+      required: [monthly_profit_kopecks, all_time_profit_kopecks, overdue_rent_count, overdue_total_count]
+      properties:
+        monthly_profit_kopecks:
+          type: integer
+        all_time_profit_kopecks:
+          type: integer
+        overdue_rent_count:
+          type: integer
+        overdue_total_count:
+          type: integer
+        next_payment_date:
+          type: string
+          format: date
+          nullable: true
+
     LeaseCreateRequest:
       type: object
       required: [property_id, start_date, rent_amount_kopecks, payment_day]
@@ -1886,7 +1985,7 @@ components:
 
     OperationCategory:
       type: string
-      enum: [rent, other_income, utilities, repair, tax, other_expense]
+      enum: [rent, other_income, utilities, repair, tax, other_expense, deposit_return]
 
     OperationStatus:
       type: string

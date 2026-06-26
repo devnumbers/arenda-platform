@@ -76,3 +76,8 @@ WHERE status IN ('awaiting_start', 'active')
   AND end_date < sqlc.arg('as_of')::date
 ORDER BY id
 LIMIT sqlc.arg('limit')::int;
+
+-- name: ListLeasesByProperty :many
+SELECT * FROM leases
+WHERE property_id = $1 AND owner_id = $2
+ORDER BY updated_at DESC;

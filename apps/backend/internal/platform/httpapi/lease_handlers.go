@@ -250,6 +250,29 @@ func (h *LeaseHandlers) CompleteLease(w http.ResponseWriter, r *http.Request, id
 	writeJSON(r.Context(), w, http.StatusOK, resp)
 }
 
+// ReturnLeaseDeposit implements POST /leases/{id}/deposit-return.
+func (h *LeaseHandlers) ReturnLeaseDeposit(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	lease, _, err := h.leaseSvc.ReturnDeposit(r.Context(), ownerID, id)
+	if err != nil {
+		h.handleLeaseError(w, r, err)
+		return
+	}
+
+	resp, err := h.leaseResponse(r.Context(), ownerID, lease, nil)
+	if err != nil {
+		h.handleLeaseError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, resp)
+}
+
 // CreateTenantContact implements POST /tenant-contacts.
 func (h *LeaseHandlers) CreateTenantContact(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)

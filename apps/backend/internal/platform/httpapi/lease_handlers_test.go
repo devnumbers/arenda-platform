@@ -20,6 +20,8 @@ type fakeLeaseRepo struct {
 	leases []domain.Lease
 }
 
+var _ leasesapp.LeaseRepository = (*fakeLeaseRepo)(nil)
+
 type fakeLeaseClock struct{}
 
 func (fakeLeaseClock) Now() time.Time { return time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC) }
@@ -50,6 +52,10 @@ func (r *fakeLeaseRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerI
 
 func (r *fakeLeaseRepo) ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Lease, error) {
 	return r.leases, nil
+}
+
+func (r *fakeLeaseRepo) ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.Lease, error) {
+	return nil, nil
 }
 
 func (r *fakeLeaseRepo) Update(ctx context.Context, ownerID uuid.UUID, lease domain.Lease) (domain.Lease, error) {

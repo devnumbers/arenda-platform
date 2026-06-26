@@ -11,6 +11,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -452,6 +453,76 @@ func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID)
 	}
 
 	return completed, nil
+}
+
+func (s *LeaseService) ReturnDeposit(ctx context.Context, ownerID, leaseID uuid.UUID) (domain.Lease, domain.Operation, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.Lease{}, domain.Operation{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txLeases := s.leases.WithTx(tx)
+	txOps := s.operations.WithTx(tx)
+
+	lease, err := txLeases.GetByIDAndOwnerForUpdate(ctx, leaseID, ownerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Lease{}, domain.Operation{}, ErrNotFound
+		}
+		return domain.Lease{}, domain.Operation{}, fmt.Errorf("get lease: %w", err)
+	}
+	if lease.DepositAmountKopecks <= 0 {
+		return domain.Lease{}, domain.Operation{}, fmt.Errorf("%w: no deposit to return", ErrInvalidInput)
+	}
+
+	now := s.clock.Now()
+	if lease.EffectiveStatus(now) == domain.LeaseStatusAwaitingStart || lease.EffectiveStatus(now) == domain.LeaseStatusActive {
+		return domain.Lease{}, domain.Operation{}, fmt.Errorf("%w: cannot return deposit for an active or not-yet-started lease", ErrInvalidInput)
+	}
+
+	exists, err := txOps.HasDepositReturnForLease(ctx, lease.ID)
+	if err != nil {
+		return domain.Lease{}, domain.Operation{}, fmt.Errorf("check deposit return: %w", err)
+	}
+	if exists {
+		return domain.Lease{}, domain.Operation{}, fmt.Errorf("%w: deposit has already been returned for this lease", ErrInvalidInput)
+	}
+
+	opID, err := uuid.NewRandom()
+	if err != nil {
+		return domain.Lease{}, domain.Operation{}, fmt.Errorf("generate operation id: %w", err)
+	}
+	const depositReturnComment = "Возврат залога"
+	op := domain.Operation{
+		ID:            opID,
+		OwnerID:       ownerID,
+		PropertyID:    lease.PropertyID,
+		LeaseID:       lease.ID,
+		Type:          domain.OperationTypeExpense,
+		Category:      domain.OperationCategoryDepositReturn,
+		Status:        domain.OperationStatusPaid,
+		AmountKopecks: lease.DepositAmountKopecks,
+		OperationDate: timeutil.Date(now),
+		Comment:       depositReturnComment,
+		IsException:   true,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	if err := op.ValidateStatusForType(); err != nil {
+		return domain.Lease{}, domain.Operation{}, err
+	}
+	createdOp, err := txOps.Create(ctx, op)
+	if err != nil {
+		return domain.Lease{}, domain.Operation{}, fmt.Errorf("create deposit return operation: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Lease{}, domain.Operation{}, fmt.Errorf("commit tx: %w", err)
+	}
+
+	lease.Status = lease.EffectiveStatus(now)
+	return lease, createdOp, nil
 }
 
 // ListOpenLeasesWithPastEndDate returns open leases whose end date is before asOf.

@@ -152,3 +152,36 @@ WHERE status = 'pending'
   AND deleted_at IS NULL
 ORDER BY operation_date ASC
 LIMIT sqlc.arg('limit')::int;
+
+-- name: GetPropertyOperationsSummary :one
+SELECT
+    (
+        COALESCE(SUM(CASE WHEN type = 'income' AND status = 'received' THEN amount_kopecks ELSE 0 END), 0) -
+        COALESCE(SUM(CASE WHEN type = 'expense' AND status = 'paid' THEN amount_kopecks ELSE 0 END), 0)
+    )::bigint AS all_time_profit_kopecks,
+    (
+        COALESCE(SUM(CASE
+            WHEN type = 'income' AND status = 'received'
+                AND operation_date >= date_trunc('month', sqlc.arg('as_of')::date)
+                AND operation_date < date_trunc('month', sqlc.arg('as_of')::date) + interval '1 month'
+            THEN amount_kopecks ELSE 0 END), 0) -
+        COALESCE(SUM(CASE
+            WHEN type = 'expense' AND status = 'paid'
+                AND operation_date >= date_trunc('month', sqlc.arg('as_of')::date)
+                AND operation_date < date_trunc('month', sqlc.arg('as_of')::date) + interval '1 month'
+            THEN amount_kopecks ELSE 0 END), 0)
+    )::bigint AS monthly_profit_kopecks,
+    COUNT(*) FILTER (WHERE status = 'overdue' AND type = 'income' AND category = 'rent') AS overdue_rent_count,
+    COUNT(*) FILTER (WHERE status = 'overdue') AS overdue_total_count,
+    (MIN(operation_date) FILTER (WHERE status IN ('pending', 'overdue') AND type = 'income' AND category = 'rent'))::date AS next_payment_date
+FROM operations
+WHERE owner_id = $1 AND property_id = $2 AND deleted_at IS NULL;
+
+-- name: HasDepositReturnForLease :one
+SELECT EXISTS(
+    SELECT 1 FROM operations
+    WHERE lease_id = $1
+      AND type = 'expense'
+      AND category = 'deposit_return'
+      AND deleted_at IS NULL
+) AS has_deposit_return;

@@ -29,12 +29,13 @@ func ParseOperationType(s string) (OperationType, error) {
 type OperationCategory string
 
 const (
-	OperationCategoryRent         OperationCategory = "rent"
-	OperationCategoryOtherIncome  OperationCategory = "other_income"
-	OperationCategoryUtilities    OperationCategory = "utilities"
-	OperationCategoryRepair       OperationCategory = "repair"
-	OperationCategoryTax          OperationCategory = "tax"
-	OperationCategoryOtherExpense OperationCategory = "other_expense"
+	OperationCategoryRent          OperationCategory = "rent"
+	OperationCategoryOtherIncome   OperationCategory = "other_income"
+	OperationCategoryUtilities     OperationCategory = "utilities"
+	OperationCategoryRepair        OperationCategory = "repair"
+	OperationCategoryTax           OperationCategory = "tax"
+	OperationCategoryOtherExpense  OperationCategory = "other_expense"
+	OperationCategoryDepositReturn OperationCategory = "deposit_return"
 )
 
 var ErrInvalidOperationCategory = fmt.Errorf("invalid operation category")
@@ -47,7 +48,8 @@ func ParseOperationCategory(s string) (OperationCategory, error) {
 		OperationCategoryUtilities,
 		OperationCategoryRepair,
 		OperationCategoryTax,
-		OperationCategoryOtherExpense:
+		OperationCategoryOtherExpense,
+		OperationCategoryDepositReturn:
 		return c, nil
 	default:
 		return "", fmt.Errorf("%w: %q", ErrInvalidOperationCategory, s)
@@ -63,7 +65,7 @@ func IsValidCategoryForType(category OperationCategory, opType OperationType) bo
 		}
 	case OperationTypeExpense:
 		switch category {
-		case OperationCategoryUtilities, OperationCategoryRepair, OperationCategoryTax, OperationCategoryOtherExpense:
+		case OperationCategoryUtilities, OperationCategoryRepair, OperationCategoryTax, OperationCategoryOtherExpense, OperationCategoryDepositReturn:
 			return true
 		}
 	}

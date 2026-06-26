@@ -143,6 +143,13 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 	return created, nil
 }
 
+func (s *OperationService) GetPropertyOperationsSummary(ctx context.Context, ownerID, propertyID uuid.UUID) (OperationsSummary, error) {
+	if err := validateProperty(ctx, s.properties, ownerID, propertyID); err != nil {
+		return OperationsSummary{}, err
+	}
+	return s.operations.GetPropertyOperationsSummary(ctx, ownerID, propertyID, timeutil.Date(s.clock.Now()))
+}
+
 // ListOperationsByProperty returns operations for the given owner and property,
 // optionally filtered by status.
 func (s *OperationService) ListOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, statuses []domain.OperationStatus) ([]domain.Operation, error) {

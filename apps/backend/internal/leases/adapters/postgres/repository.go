@@ -127,6 +127,25 @@ func (r *LeaseRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID) ([
 	return leases, nil
 }
 
+func (r *LeaseRepository) ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.Lease, error) {
+	rows, err := r.q().ListLeasesByProperty(ctx, postgres.ListLeasesByPropertyParams{
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	leases := make([]domain.Lease, 0, len(rows))
+	for _, row := range rows {
+		lease, err := leaseFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		leases = append(leases, lease)
+	}
+	return leases, nil
+}
+
 func (r *LeaseRepository) Update(ctx context.Context, ownerID uuid.UUID, lease domain.Lease) (domain.Lease, error) {
 	row, err := r.q().UpdateLease(ctx, postgres.UpdateLeaseParams{
 		ID:                   pgconv.UUIDToPgtype(lease.ID),
@@ -783,6 +802,32 @@ func (r *OperationRepository) ListByProperty(ctx context.Context, ownerID, prope
 		ops = append(ops, op)
 	}
 	return ops, nil
+}
+
+func (r *OperationRepository) HasDepositReturnForLease(ctx context.Context, leaseID uuid.UUID) (bool, error) {
+	found, err := r.q().HasDepositReturnForLease(ctx, pgconv.UUIDToPgtype(leaseID))
+	if err != nil {
+		return false, err
+	}
+	return found, nil
+}
+
+func (r *OperationRepository) GetPropertyOperationsSummary(ctx context.Context, ownerID, propertyID uuid.UUID, asOf time.Time) (application.OperationsSummary, error) {
+	row, err := r.q().GetPropertyOperationsSummary(ctx, postgres.GetPropertyOperationsSummaryParams{
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+		AsOf:       pgconv.DateToPgtype(asOf),
+	})
+	if err != nil {
+		return application.OperationsSummary{}, err
+	}
+	return application.OperationsSummary{
+		MonthlyProfitKopecks: row.MonthlyProfitKopecks,
+		AllTimeProfitKopecks: row.AllTimeProfitKopecks,
+		OverdueRentCount:     int(row.OverdueRentCount),
+		OverdueTotalCount:    int(row.OverdueTotalCount),
+		NextPaymentDate:      pgconv.DatePtrFromPgtype(row.NextPaymentDate),
+	}, nil
 }
 
 func (r *OperationRepository) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Operation, error) {

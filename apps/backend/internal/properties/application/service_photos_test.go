@@ -81,6 +81,7 @@ func newPhotoService(t *testing.T, repo PropertyRepository, photoRepo PropertyPh
 		fakeOccupancyProvider{},
 		fakeSubscriptionLimiter{limit: 10},
 		fakePropertyBillingLifecycle{},
+		stubLeaseRepo{},
 		fakePropertyTxBeginner{},
 		fakePropertyClock{now: time.Now()},
 		nil,

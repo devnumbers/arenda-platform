@@ -1,12 +1,16 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
+	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
+	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 )
@@ -15,12 +19,14 @@ import (
 type PropertyHandlers struct {
 	svc              *propertiesapp.PropertyService
 	addressSuggester propertiesapp.AddressSuggester
+	tenantContactSvc *leasesapp.TenantContactService
+	opSvc            *leasesapp.OperationService
 	logger           *slog.Logger
 }
 
 // NewPropertyHandlers creates HTTP handlers for the properties API.
-func NewPropertyHandlers(svc *propertiesapp.PropertyService, addressSuggester propertiesapp.AddressSuggester, logger *slog.Logger) *PropertyHandlers {
-	return &PropertyHandlers{svc: svc, addressSuggester: addressSuggester, logger: logger}
+func NewPropertyHandlers(svc *propertiesapp.PropertyService, addressSuggester propertiesapp.AddressSuggester, tenantContactSvc *leasesapp.TenantContactService, opSvc *leasesapp.OperationService, logger *slog.Logger) *PropertyHandlers {
+	return &PropertyHandlers{svc: svc, addressSuggester: addressSuggester, tenantContactSvc: tenantContactSvc, opSvc: opSvc, logger: logger}
 }
 
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
@@ -199,6 +205,62 @@ func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Requ
 	writeJSON(r.Context(), w, http.StatusOK, propertyResponse(property))
 }
 
+// ListPropertyLeases implements GET /properties/{id}/leases.
+func (h *PropertyHandlers) ListPropertyLeases(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	leases, err := h.svc.ListPropertyLeases(r.Context(), ownerID, id)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	contacts, err := h.tenantContactIDs(r.Context(), ownerID, leases)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.LeaseResponse, 0, len(leases))
+	for _, lease := range leases {
+		resp, err := h.leaseResponse(r.Context(), ownerID, lease, contacts)
+		if err != nil {
+			h.handlePropertyError(w, r, err)
+			return
+		}
+		items = append(items, resp)
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, openapi.PropertyLeasesResponse{Items: items})
+}
+
+// GetPropertyOperationsSummary implements GET /properties/{id}/operations/summary.
+func (h *PropertyHandlers) GetPropertyOperationsSummary(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	summary, err := h.opSvc.GetPropertyOperationsSummary(r.Context(), ownerID, id)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, openapi.PropertyOperationsSummaryResponse{
+		MonthlyProfitKopecks: int(summary.MonthlyProfitKopecks),
+		AllTimeProfitKopecks: int(summary.AllTimeProfitKopecks),
+		OverdueRentCount:     summary.OverdueRentCount,
+		OverdueTotalCount:    summary.OverdueTotalCount,
+		NextPaymentDate:      datePtrToOpenAPI(summary.NextPaymentDate),
+	})
+}
+
 // UploadPropertyPhoto implements POST /properties/{propertyId}/photos.
 func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
@@ -263,6 +325,54 @@ func (h *PropertyHandlers) GetAddressSuggestions(w http.ResponseWriter, r *http.
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, openapi.AddressSuggestionsResponse{Suggestions: resp})
+}
+
+func (h *PropertyHandlers) tenantContactIDs(ctx context.Context, ownerID uuid.UUID, leases []leasesdomain.Lease) (map[uuid.UUID]leasesdomain.TenantContact, error) {
+	ids := make([]uuid.UUID, 0, len(leases))
+	for _, lease := range leases {
+		if lease.TenantContactID != nil && *lease.TenantContactID != uuid.Nil {
+			ids = append(ids, *lease.TenantContactID)
+		}
+	}
+	if len(ids) == 0 {
+		return map[uuid.UUID]leasesdomain.TenantContact{}, nil
+	}
+	return h.tenantContactSvc.ListTenantContactsByIDs(ctx, ownerID, ids)
+}
+
+func (h *PropertyHandlers) leaseResponse(ctx context.Context, ownerID uuid.UUID, lease leasesdomain.Lease, contacts map[uuid.UUID]leasesdomain.TenantContact) (openapi.LeaseResponse, error) {
+	resp := openapi.LeaseResponse{
+		Id:                   lease.ID,
+		OwnerId:              lease.OwnerID,
+		PropertyId:           lease.PropertyID,
+		Status:               openapi.LeaseResponseStatus(lease.Status),
+		StartDate:            openapi_types.Date{Time: lease.StartDate},
+		EndDate:              datePtrToOpenAPI(lease.EndDate),
+		RentAmountKopecks:    int(lease.RentAmountKopecks),
+		DepositAmountKopecks: int(lease.DepositAmountKopecks),
+		PaymentDay:           lease.PaymentDay,
+		CreatedAt:            lease.CreatedAt,
+		UpdatedAt:            lease.UpdatedAt,
+	}
+	if lease.Comment != "" {
+		resp.Comment = &lease.Comment
+	}
+	if lease.TenantContactID != nil && *lease.TenantContactID != uuid.Nil {
+		if contacts != nil {
+			contact, ok := contacts[*lease.TenantContactID]
+			if !ok {
+				return openapi.LeaseResponse{}, leasesapp.ErrTenantContactNotFound
+			}
+			resp.TenantContact = new(tenantContactResponse(contact))
+		} else {
+			contact, err := h.tenantContactSvc.GetTenantContact(ctx, ownerID, *lease.TenantContactID)
+			if err != nil {
+				return openapi.LeaseResponse{}, err
+			}
+			resp.TenantContact = new(tenantContactResponse(contact))
+		}
+	}
+	return resp, nil
 }
 
 func propertyResponse(property domain.Property) openapi.PropertyResponse {

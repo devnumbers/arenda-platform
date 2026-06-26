@@ -82,7 +82,7 @@ func New(deps Deps) http.Handler {
 	}
 
 	authHandlers := NewAuthHandlers(deps.Auth, deps.Billing, deps.CookieSecure, deps.Logger, deps.PhoneSendLimiter, deps.PhoneVerifyLimiter)
-	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.Logger)
+	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Logger)
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger)
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Logger)
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Logger)
