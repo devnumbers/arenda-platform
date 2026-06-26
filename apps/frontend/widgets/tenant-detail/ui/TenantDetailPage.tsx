@@ -60,7 +60,7 @@ export function TenantDetailPage({ id }: TenantDetailPageProps): JSX.Element {
 
   return (
     <main className={styles.root}>
-      <TenantDetailHeader title={fullName || tenant.name} />
+      <TenantDetailHeader title={fullName || tenant.name} tenantId={id} />
       <TenantInfoSection tenant={tenant} />
       {currentLease && <TenantLeaseSection lease={currentLease} />}
       {tenant.comment && <TenantCommentSection comment={tenant.comment} />}
