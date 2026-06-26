@@ -9,6 +9,8 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
+import { mapTenantContactResponse } from '@/entities/tenant-contact/model/mappers';
+import type { TenantContact } from '@/entities/tenant-contact/model/types';
 import { tenantContactKeys } from './keys';
 import type { components } from '@/shared/api/generated';
 
@@ -20,21 +22,27 @@ type TenantContactUpdateRequest =
 type TenantContactsResponse = components['schemas']['TenantContactsResponse'];
 
 export function useTenantContacts(): UseQueryResult<
-  TenantContactsResponse,
+  TenantContact[],
   ApiError
 > {
   return useQuery({
     queryKey: tenantContactKeys.all,
-    queryFn: () => apiClient<TenantContactsResponse>('/tenant-contacts'),
+    queryFn: async () => {
+      const response = await apiClient<TenantContactsResponse>('/tenant-contacts');
+      return response.items.map(mapTenantContactResponse);
+    },
   });
 }
 
 export function useTenantContact(
   id: string,
-): UseQueryResult<TenantContactResponse, ApiError> {
+): UseQueryResult<TenantContact, ApiError> {
   return useQuery({
     queryKey: tenantContactKeys.detail(id),
-    queryFn: () => apiClient<TenantContactResponse>(`/tenant-contacts/${id}`),
+    queryFn: async () => {
+      const response = await apiClient<TenantContactResponse>(`/tenant-contacts/${id}`);
+      return mapTenantContactResponse(response);
+    },
     enabled: Boolean(id),
   });
 }

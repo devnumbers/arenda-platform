@@ -1,0 +1,18 @@
+.title {
+  margin: 0;
+  font-size: var(--font-size-text-l);
+  font-weight: 600;
+  line-height: var(--line-height-text-l);
+  color: var(--color-text);
+}
+
+.text {
+  margin: 0;
+  padding: 20px;
+  border-radius: 24px;
+  background: var(--color-secondary-bg);
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  color: var(--color-text);
+  white-space: pre-wrap;
+}

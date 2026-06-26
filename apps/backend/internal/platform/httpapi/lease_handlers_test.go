@@ -43,11 +43,16 @@ func (r *fakeLeaseRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (dom
 }
 
 func (r *fakeLeaseRepo) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Lease, error) {
-	return domain.Lease{}, nil
+	for _, lease := range r.leases {
+		if lease.ID == id && lease.OwnerID == ownerID {
+			return lease, nil
+		}
+	}
+	return domain.Lease{}, leasesapp.ErrNotFound
 }
 
 func (r *fakeLeaseRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Lease, error) {
-	return domain.Lease{}, nil
+	return r.GetByIDAndOwner(ctx, id, ownerID)
 }
 
 func (r *fakeLeaseRepo) ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Lease, error) {
@@ -55,7 +60,13 @@ func (r *fakeLeaseRepo) ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]d
 }
 
 func (r *fakeLeaseRepo) ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.Lease, error) {
-	return nil, nil
+	var out []domain.Lease
+	for _, lease := range r.leases {
+		if lease.OwnerID == ownerID && lease.PropertyID == propertyID {
+			out = append(out, lease)
+		}
+	}
+	return out, nil
 }
 
 func (r *fakeLeaseRepo) Update(ctx context.Context, ownerID uuid.UUID, lease domain.Lease) (domain.Lease, error) {
@@ -128,11 +139,15 @@ func (r *fakeTenantContactRepo) ListByOwner(ctx context.Context, ownerID uuid.UU
 	return r.contacts, nil
 }
 
+func (r *fakeTenantContactRepo) ListWithLeaseStatus(ctx context.Context, ownerID uuid.UUID) ([]domain.TenantContactWithLeases, error) {
+	return nil, nil
+}
+
 func (r *fakeTenantContactRepo) WithTx(tx transaction.Tx) leasesapp.TenantContactRepository {
 	return r
 }
 
-func TestListLeasesFetchesContactsInBatch(t *testing.T) {
+func TestLeaseHandlers_ListLeases_FetchesContactsInBatch(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	propertyID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	contactID1 := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03")
@@ -182,14 +197,15 @@ func TestListLeasesFetchesContactsInBatch(t *testing.T) {
 	if len(resp.Items) != 2 {
 		t.Fatalf("expected 2 leases, got %d", len(resp.Items))
 	}
-	for _, item := range resp.Items {
-		if item.TenantContact == nil {
-			t.Fatal("expected tenant contact in response")
-		}
+	if resp.Items[0].TenantContact == nil || resp.Items[0].TenantContact.Name != "Alice" {
+		t.Fatalf("expected first tenant contact Alice, got %v", resp.Items[0].TenantContact)
+	}
+	if resp.Items[1].TenantContact == nil || resp.Items[1].TenantContact.Name != "Bob" {
+		t.Fatalf("expected second tenant contact Bob, got %v", resp.Items[1].TenantContact)
 	}
 }
 
-func TestListLeasesNoContacts(t *testing.T) {
+func TestLeaseHandlers_ListLeases_NoContacts(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	propertyID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 
@@ -215,6 +231,138 @@ func TestListLeasesNoContacts(t *testing.T) {
 	}
 	if contactRepo.listByIDsCalls != 0 {
 		t.Fatalf("expected 0 ListByIDs calls when no contacts, got %d", contactRepo.listByIDsCalls)
+	}
+
+	var resp openapi.LeasesResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(resp.Items) != 1 {
+		t.Fatalf("expected 1 lease, got %d", len(resp.Items))
+	}
+	if resp.Items[0].TenantContact != nil {
+		t.Fatalf("expected nil tenant contact, got %v", resp.Items[0].TenantContact)
+	}
+}
+
+func TestLeaseHandlers_ReturnLeaseDeposit(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	propertyID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	leaseID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03")
+	endDate := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+
+	leaseRepo := &fakeLeaseRepo{
+		leases: []domain.Lease{
+			{
+				ID:                   leaseID,
+				OwnerID:              ownerID,
+				PropertyID:           propertyID,
+				Status:               domain.LeaseStatusCompleted,
+				StartDate:            time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+				EndDate:              &endDate,
+				RentAmountKopecks:    10000,
+				DepositAmountKopecks: 50000,
+				PaymentDay:           1,
+			},
+		},
+	}
+	opsRepo := &fakeOperationRepoForHandlers{}
+	contactRepo := &fakeTenantContactRepo{}
+	propertyRepo := newFakePropertyRepoForHandlers()
+
+	leaseSvc := leasesapp.NewLeaseService(
+		leaseRepo,
+		&fakeLeasesAppPropertyRepo{wrapped: propertyRepo},
+		contactRepo,
+		fakeRecurringOperationRepoForHandlers{},
+		opsRepo,
+		fakeScheduler{},
+		fakeLeaseBeginner{},
+		fakeLeaseClock{},
+		slog.Default(),
+	)
+	tenantSvc := leasesapp.NewTenantContactService(contactRepo, slog.Default())
+	handlers := NewLeaseHandlers(leaseSvc, tenantSvc, slog.Default())
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/leases/"+leaseID.String()+"/deposit-return", nil)
+	req = req.WithContext(withOwnerID(req.Context(), ownerID))
+	rr := httptest.NewRecorder()
+
+	handlers.ReturnLeaseDeposit(rr, req, leaseID)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp openapi.LeaseResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp.Id != leaseID {
+		t.Fatalf("expected lease id %s, got %s", leaseID, resp.Id)
+	}
+	if resp.DepositAmountKopecks != 50000 {
+		t.Fatalf("expected deposit 50000, got %d", resp.DepositAmountKopecks)
+	}
+	if resp.Status != openapi.LeaseResponseStatus(domain.LeaseStatusCompleted) {
+		t.Fatalf("expected completed status, got %s", resp.Status)
+	}
+
+	exists, err := opsRepo.HasDepositReturnForLease(context.Background(), leaseID)
+	if err != nil {
+		t.Fatalf("check deposit return: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected deposit return operation to be created")
+	}
+}
+
+func TestLeaseHandlers_ReturnLeaseDeposit_NotFound(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	leaseID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03")
+
+	leaseRepo := &fakeLeaseRepo{leases: nil}
+	opsRepo := &fakeOperationRepoForHandlers{}
+	contactRepo := &fakeTenantContactRepo{}
+	propertyRepo := newFakePropertyRepoForHandlers()
+
+	leaseSvc := leasesapp.NewLeaseService(
+		leaseRepo,
+		&fakeLeasesAppPropertyRepo{wrapped: propertyRepo},
+		contactRepo,
+		fakeRecurringOperationRepoForHandlers{},
+		opsRepo,
+		fakeScheduler{},
+		fakeLeaseBeginner{},
+		fakeLeaseClock{},
+		slog.Default(),
+	)
+	tenantSvc := leasesapp.NewTenantContactService(contactRepo, slog.Default())
+	handlers := NewLeaseHandlers(leaseSvc, tenantSvc, slog.Default())
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/leases/"+leaseID.String()+"/deposit-return", nil)
+	req = req.WithContext(withOwnerID(req.Context(), ownerID))
+	rr := httptest.NewRecorder()
+
+	handlers.ReturnLeaseDeposit(rr, req, leaseID)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestLeaseHandlers_ReturnLeaseDeposit_Unauthorized(t *testing.T) {
+	leaseID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03")
+
+	handlers := NewLeaseHandlers(nil, nil, slog.Default())
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/leases/"+leaseID.String()+"/deposit-return", nil)
+	rr := httptest.NewRecorder()
+
+	handlers.ReturnLeaseDeposit(rr, req, leaseID)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 

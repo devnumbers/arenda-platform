@@ -18,6 +18,7 @@ export function mapLeaseResponse(
   return {
     id: dto.id,
     propertyId: dto.property_id,
+    tenantContactId: dto.tenant_contact?.id,
     tenantName: dto.tenant_contact?.name ?? 'Арендатор',
     rentKopecks: dto.rent_amount_kopecks,
     startDate: dto.start_date,

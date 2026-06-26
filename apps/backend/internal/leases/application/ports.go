@@ -23,6 +23,7 @@ type TenantContactRepository interface {
 	ListByIDs(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID) ([]domain.TenantContact, error)
 	Update(ctx context.Context, ownerID uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error)
 	ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.TenantContact, error)
+	ListWithLeaseStatus(ctx context.Context, ownerID uuid.UUID) ([]domain.TenantContactWithLeases, error)
 	WithTx(tx transaction.Tx) TenantContactRepository
 }
 

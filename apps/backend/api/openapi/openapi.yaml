@@ -1477,6 +1477,32 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /admin/subscription/payments/{paymentId}/sync:
+    post:
+      operationId: syncSubscriptionPayment
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Payment synchronized
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /internal/fake-subscription-payment/{id}/confirm:
     post:
       operationId: confirmFakeSubscriptionPayment
@@ -2071,7 +2097,7 @@ components:
 
     TenantContactResponse:
       type: object
-      required: [id, owner_id, name, surname, patronymic, phone, email, comment, created_at, updated_at]
+      required: [id, owner_id, name, surname, patronymic, phone, email, comment, is_active, active_lease, last_lease, created_at, updated_at]
       properties:
         id:
           type: string
@@ -2096,6 +2122,16 @@ components:
         comment:
           type: string
           nullable: true
+        is_active:
+          type: boolean
+        active_lease:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/LeaseResponse'
+        last_lease:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/LeaseResponse'
         created_at:
           type: string
           format: date-time

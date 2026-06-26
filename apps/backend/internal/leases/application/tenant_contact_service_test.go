@@ -54,6 +54,10 @@ func (r *fakeTenantContactRepo) ListByOwner(ctx context.Context, ownerID uuid.UU
 	return r.contacts, nil
 }
 
+func (r *fakeTenantContactRepo) ListWithLeaseStatus(ctx context.Context, ownerID uuid.UUID) ([]domain.TenantContactWithLeases, error) {
+	return nil, nil
+}
+
 func (r *fakeTenantContactRepo) WithTx(tx transaction.Tx) TenantContactRepository {
 	return r
 }

@@ -159,6 +159,106 @@ func (q *Queries) ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.
 	return items, nil
 }
 
+const listTenantContactsWithLeaseStatus = `-- name: ListTenantContactsWithLeaseStatus :many
+SELECT
+    tc.id,
+    tc.owner_id,
+    tc.name,
+    tc.surname,
+    tc.patronymic,
+    tc.phone,
+    tc.email,
+    tc.comment,
+    tc.created_at,
+    tc.updated_at,
+    l.id AS lease_id,
+    l.owner_id AS lease_owner_id,
+    l.property_id AS lease_property_id,
+    l.status AS lease_status,
+    l.start_date AS lease_start_date,
+    l.end_date AS lease_end_date,
+    l.rent_amount_kopecks AS lease_rent_amount_kopecks,
+    l.deposit_amount_kopecks AS lease_deposit_amount_kopecks,
+    l.payment_day AS lease_payment_day,
+    l.comment AS lease_comment,
+    l.created_at AS lease_created_at,
+    l.updated_at AS lease_updated_at
+FROM tenant_contacts tc
+LEFT JOIN leases l ON l.tenant_contact_id = tc.id AND l.owner_id = tc.owner_id
+WHERE tc.owner_id = $1
+ORDER BY
+    CASE WHEN l.status IN ('awaiting_start', 'active', 'requires_action') THEN 0 ELSE 1 END,
+    l.updated_at DESC
+`
+
+type ListTenantContactsWithLeaseStatusRow struct {
+	ID                        pgtype.UUID        `json:"id"`
+	OwnerID                   pgtype.UUID        `json:"owner_id"`
+	Name                      string             `json:"name"`
+	Surname                   pgtype.Text        `json:"surname"`
+	Patronymic                pgtype.Text        `json:"patronymic"`
+	Phone                     pgtype.Text        `json:"phone"`
+	Email                     pgtype.Text        `json:"email"`
+	Comment                   pgtype.Text        `json:"comment"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+	LeaseID                   pgtype.UUID        `json:"lease_id"`
+	LeaseOwnerID              pgtype.UUID        `json:"lease_owner_id"`
+	LeasePropertyID           pgtype.UUID        `json:"lease_property_id"`
+	LeaseStatus               pgtype.Text        `json:"lease_status"`
+	LeaseStartDate            pgtype.Date        `json:"lease_start_date"`
+	LeaseEndDate              pgtype.Date        `json:"lease_end_date"`
+	LeaseRentAmountKopecks    pgtype.Int8        `json:"lease_rent_amount_kopecks"`
+	LeaseDepositAmountKopecks pgtype.Int8        `json:"lease_deposit_amount_kopecks"`
+	LeasePaymentDay           pgtype.Int4        `json:"lease_payment_day"`
+	LeaseComment              pgtype.Text        `json:"lease_comment"`
+	LeaseCreatedAt            pgtype.Timestamptz `json:"lease_created_at"`
+	LeaseUpdatedAt            pgtype.Timestamptz `json:"lease_updated_at"`
+}
+
+func (q *Queries) ListTenantContactsWithLeaseStatus(ctx context.Context, ownerID pgtype.UUID) ([]ListTenantContactsWithLeaseStatusRow, error) {
+	rows, err := q.db.Query(ctx, listTenantContactsWithLeaseStatus, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTenantContactsWithLeaseStatusRow{}
+	for rows.Next() {
+		var i ListTenantContactsWithLeaseStatusRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Name,
+			&i.Surname,
+			&i.Patronymic,
+			&i.Phone,
+			&i.Email,
+			&i.Comment,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LeaseID,
+			&i.LeaseOwnerID,
+			&i.LeasePropertyID,
+			&i.LeaseStatus,
+			&i.LeaseStartDate,
+			&i.LeaseEndDate,
+			&i.LeaseRentAmountKopecks,
+			&i.LeaseDepositAmountKopecks,
+			&i.LeasePaymentDay,
+			&i.LeaseComment,
+			&i.LeaseCreatedAt,
+			&i.LeaseUpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateTenantContact = `-- name: UpdateTenantContact :one
 UPDATE tenant_contacts
 SET name = $2,

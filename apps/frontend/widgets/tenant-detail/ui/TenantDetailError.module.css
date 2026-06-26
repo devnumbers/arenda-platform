@@ -1,0 +1,15 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 48px 20px;
+  text-align: center;
+}
+
+.text {
+  margin: 0;
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  color: var(--color-text-muted);
+}

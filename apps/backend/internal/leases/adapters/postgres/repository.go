@@ -328,6 +328,61 @@ func (r *TenantContactRepository) ListByIDs(ctx context.Context, ownerID uuid.UU
 	return contacts, nil
 }
 
+func (r *TenantContactRepository) ListWithLeaseStatus(ctx context.Context, ownerID uuid.UUID) ([]domain.TenantContactWithLeases, error) {
+	rows, err := r.q().ListTenantContactsWithLeaseStatus(ctx, pgconv.UUIDToPgtype(ownerID))
+	if err != nil {
+		return nil, err
+	}
+
+	byID := make(map[uuid.UUID]*domain.TenantContactWithLeases)
+	order := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		id := pgconv.UUIDFromPgtype(row.ID)
+		entry, ok := byID[id]
+		if !ok {
+			entry = &domain.TenantContactWithLeases{
+				TenantContact: domain.TenantContact{
+					ID:         id,
+					OwnerID:    pgconv.UUIDFromPgtype(row.OwnerID),
+					Name:       row.Name,
+					Surname:    pgconv.TextToPtrString(row.Surname),
+					Patronymic: pgconv.TextToPtrString(row.Patronymic),
+					Phone:      pgconv.TextToPtrString(row.Phone),
+					Email:      pgconv.TextToPtrString(row.Email),
+					Comment:    pgconv.TextToPtrString(row.Comment),
+					CreatedAt:  row.CreatedAt.Time,
+					UpdatedAt:  row.UpdatedAt.Time,
+				},
+			}
+			byID[id] = entry
+			order = append(order, id)
+		}
+
+		if !row.LeaseID.Valid {
+			continue
+		}
+
+		lease, err := leaseFromStatusRow(row)
+		if err != nil {
+			return nil, err
+		}
+		if entry.ActiveLease == nil && lease.Status.IsOpen() {
+			active := lease
+			entry.ActiveLease = &active
+		}
+		if entry.LastLease == nil && !lease.Status.IsOpen() {
+			last := lease
+			entry.LastLease = &last
+		}
+	}
+
+	result := make([]domain.TenantContactWithLeases, 0, len(order))
+	for _, id := range order {
+		result = append(result, *byID[id])
+	}
+	return result, nil
+}
+
 func (r *TenantContactRepository) Update(ctx context.Context, ownerID uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error) {
 	row, err := r.q().UpdateTenantContact(ctx, postgres.UpdateTenantContactParams{
 		ID:         pgconv.UUIDToPgtype(contact.ID),
@@ -380,6 +435,28 @@ func tenantContactFromRow(row postgres.TenantContact) domain.TenantContact {
 		CreatedAt:  row.CreatedAt.Time,
 		UpdatedAt:  row.UpdatedAt.Time,
 	}
+}
+
+func leaseFromStatusRow(row postgres.ListTenantContactsWithLeaseStatusRow) (domain.Lease, error) {
+	status, err := domain.ParseLeaseStatus(pgconv.TextToString(row.LeaseStatus))
+	if err != nil {
+		return domain.Lease{}, fmt.Errorf("invalid lease status in database: %w", err)
+	}
+	return domain.Lease{
+		ID:                   pgconv.UUIDFromPgtype(row.LeaseID),
+		OwnerID:              pgconv.UUIDFromPgtype(row.LeaseOwnerID),
+		PropertyID:           pgconv.UUIDFromPgtype(row.LeasePropertyID),
+		TenantContactID:      pgconv.UUIDFromPgtypePtr(row.ID),
+		Status:               status,
+		StartDate:            pgconv.DateFromPgtype(row.LeaseStartDate),
+		EndDate:              pgconv.DatePtrFromPgtype(row.LeaseEndDate),
+		RentAmountKopecks:    row.LeaseRentAmountKopecks.Int64,
+		DepositAmountKopecks: row.LeaseDepositAmountKopecks.Int64,
+		PaymentDay:           int(row.LeasePaymentDay.Int32),
+		Comment:              pgconv.TextToString(row.LeaseComment),
+		CreatedAt:            row.LeaseCreatedAt.Time,
+		UpdatedAt:            row.LeaseUpdatedAt.Time,
+	}, nil
 }
 
 // RecurringOperationRepository persists recurring operations.

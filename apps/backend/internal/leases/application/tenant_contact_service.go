@@ -160,6 +160,16 @@ func (s *TenantContactService) ListTenantContacts(ctx context.Context, ownerID u
 	return contacts, nil
 }
 
+// ListTenantContactsWithLeaseStatus returns all tenant contacts for the owner,
+// each enriched with the active lease (if any) and the most recent terminal lease.
+func (s *TenantContactService) ListTenantContactsWithLeaseStatus(ctx context.Context, ownerID uuid.UUID) ([]domain.TenantContactWithLeases, error) {
+	contacts, err := s.repo.ListWithLeaseStatus(ctx, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("list tenant contacts with lease status: %w", err)
+	}
+	return contacts, nil
+}
+
 // ListTenantContactsByIDs returns the tenant contacts for the given owner and IDs.
 func (s *TenantContactService) ListTenantContactsByIDs(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]domain.TenantContact, error) {
 	if len(ids) == 0 {
