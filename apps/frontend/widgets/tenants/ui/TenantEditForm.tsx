@@ -60,14 +60,23 @@ function TenantEditFormError({
   );
 }
 
+interface TenantContactUpdatePayload {
+  name?: string;
+  surname?: string | null;
+  patronymic?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  comment?: string | null;
+}
+
 function getOptionalFieldChange(
-  submittedValue: string,
-  initialValue: string,
+  current: string,
+  initial: string | undefined | null,
 ): string | null | undefined {
-  if (submittedValue === initialValue) {
-    return undefined;
-  }
-  return submittedValue === '' ? null : submittedValue;
+  const normalized = current.trim();
+  const normalizedInitial = (initial ?? '').trim();
+  if (normalized === normalizedInitial) return undefined;
+  return normalized === '' ? null : normalized;
 }
 
 function mapErrorMessage(error: ApiError): string {
@@ -121,60 +130,42 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
 
       setSubmitError(undefined);
 
-      const payload: Record<string, string | null> = {};
+      const payload: TenantContactUpdatePayload = {};
 
       const normalizedName = data.name.trim();
-      if (normalizedName !== tenant.name) {
+      if (normalizedName !== tenant.name.trim()) {
         payload.name = normalizedName;
       }
 
-      const normalizedSurname = data.surname.trim();
-      const surnameChange = getOptionalFieldChange(
-        normalizedSurname,
-        tenant.surname ?? '',
-      );
+      const surnameChange = getOptionalFieldChange(data.surname, tenant.surname);
       if (surnameChange !== undefined) {
         payload.surname = surnameChange;
       }
 
-      const normalizedPatronymic = data.patronymic.trim();
-      const patronymicChange = getOptionalFieldChange(
-        normalizedPatronymic,
-        tenant.patronymic ?? '',
-      );
+      const patronymicChange = getOptionalFieldChange(data.patronymic, tenant.patronymic);
       if (patronymicChange !== undefined) {
         payload.patronymic = patronymicChange;
       }
 
       const normalizedPhone =
         data.phone.trim() === '+7' ? '' : data.phone.trim();
-      const phoneChange = getOptionalFieldChange(
-        normalizedPhone,
-        tenant.phone ?? '',
-      );
+      const phoneChange = getOptionalFieldChange(normalizedPhone, tenant.phone);
       if (phoneChange !== undefined) {
         payload.phone = phoneChange;
       }
 
-      const normalizedEmail = data.email.trim();
-      const emailChange = getOptionalFieldChange(
-        normalizedEmail,
-        tenant.email ?? '',
-      );
+      const emailChange = getOptionalFieldChange(data.email, tenant.email);
       if (emailChange !== undefined) {
         payload.email = emailChange;
       }
 
-      const normalizedComment = data.comment.trim();
-      const commentChange = getOptionalFieldChange(
-        normalizedComment,
-        tenant.comment ?? '',
-      );
+      const commentChange = getOptionalFieldChange(data.comment, tenant.comment);
       if (commentChange !== undefined) {
         payload.comment = commentChange;
       }
 
       try {
+        // Generated TenantContactUpdateRequest marks optional fields as string, but backend accepts null for clearing.
         await updateTenantContact.mutateAsync({
           id: tenantId,
           data: payload as TenantContactUpdateRequest,
@@ -199,7 +190,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
     return <TenantEditFormNotFound />;
   }
 
-  if (isPending || !initialData) {
+  if (isPending) {
     return <TenantDetailLoading />;
   }
 
@@ -207,6 +198,10 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
     return (
       <TenantEditFormError onRetry={refetch} isLoading={isFetching} />
     );
+  }
+
+  if (!initialData) {
+    return <TenantDetailLoading />;
   }
 
   return (
