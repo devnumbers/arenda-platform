@@ -636,6 +636,7 @@ func (r *OperationRepository) Create(ctx context.Context, op domain.Operation) (
 		RecurringOperationID: pgconv.UUIDToPgtype(op.RecurringOperationID),
 		Type:                 string(op.Type),
 		Category:             string(op.Category),
+		Name:                 op.Name,
 		AmountKopecks:        op.AmountKopecks,
 		OperationDate:        pgconv.DateToPgtype(op.OperationDate),
 		Comment:              pgtype.Text{String: op.Comment, Valid: true},
@@ -662,6 +663,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 			pgconv.UUIDToPgtype(op.RecurringOperationID),
 			string(op.Type),
 			string(op.Category),
+			op.Name,
 			op.AmountKopecks,
 			pgconv.DateToPgtype(op.OperationDate),
 			pgtype.Text{String: op.Comment, Valid: true},
@@ -677,7 +679,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 
 	_, err := copier.CopyFrom(ctx, pgx.Identifier{"operations"}, []string{
 		"owner_id", "property_id", "lease_id", "recurring_operation_id",
-		"type", "category", "amount_kopecks", "operation_date", "comment", "is_exception", "status",
+		"type", "category", "name", "amount_kopecks", "operation_date", "comment", "is_exception", "status",
 	}, pgx.CopyFromRows(rows))
 	if err != nil {
 		return fmt.Errorf("copy from failed: %w", err)
@@ -864,6 +866,7 @@ func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (
 		OwnerID:       pgconv.UUIDToPgtype(op.OwnerID),
 		Type:          string(op.Type),
 		Category:      string(op.Category),
+		Name:          op.Name,
 		AmountKopecks: op.AmountKopecks,
 		OperationDate: pgconv.DateToPgtype(op.OperationDate),
 		Comment:       pgtype.Text{String: op.Comment, Valid: true},
@@ -1014,6 +1017,7 @@ func operationFromRow(row postgres.Operation) (domain.Operation, error) {
 		Type:                 domain.OperationType(row.Type),
 		Category:             domain.OperationCategory(row.Category),
 		Status:               status,
+		Name:                 row.Name,
 		AmountKopecks:        row.AmountKopecks,
 		OperationDate:        row.OperationDate.Time,
 		Comment:              pgconv.TextToString(row.Comment),

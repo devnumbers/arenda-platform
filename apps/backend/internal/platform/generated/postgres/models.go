@@ -183,6 +183,7 @@ type Operation struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
 	Status               string             `json:"status"`
+	Name                 string             `json:"name"`
 }
 
 type PaymentMethod struct {
@@ -287,21 +288,22 @@ type SmsCode struct {
 }
 
 type SubscriptionPayment struct {
-	ID                pgtype.UUID        `json:"id"`
-	UserID            pgtype.UUID        `json:"user_id"`
-	SubscriptionID    pgtype.UUID        `json:"subscription_id"`
-	TariffID          pgtype.UUID        `json:"tariff_id"`
-	PaymentMethodID   pgtype.UUID        `json:"payment_method_id"`
-	Period            string             `json:"period"`
-	AmountKopecks     int64              `json:"amount_kopecks"`
-	Provider          string             `json:"provider"`
-	ProviderPaymentID pgtype.Text        `json:"provider_payment_id"`
-	Status            string             `json:"status"`
-	ErrorCode         pgtype.Text        `json:"error_code"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	PaymentUrl        pgtype.Text        `json:"payment_url"`
-	SucceededAt       pgtype.Timestamptz `json:"succeeded_at"`
+	ID                    pgtype.UUID        `json:"id"`
+	UserID                pgtype.UUID        `json:"user_id"`
+	SubscriptionID        pgtype.UUID        `json:"subscription_id"`
+	TariffID              pgtype.UUID        `json:"tariff_id"`
+	PaymentMethodID       pgtype.UUID        `json:"payment_method_id"`
+	Period                string             `json:"period"`
+	AmountKopecks         int64              `json:"amount_kopecks"`
+	Provider              string             `json:"provider"`
+	ProviderPaymentID     pgtype.Text        `json:"provider_payment_id"`
+	Status                string             `json:"status"`
+	ErrorCode             pgtype.Text        `json:"error_code"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	PaymentUrl            pgtype.Text        `json:"payment_url"`
+	SucceededAt           pgtype.Timestamptz `json:"succeeded_at"`
+	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
 }
 
 type Tariff struct {

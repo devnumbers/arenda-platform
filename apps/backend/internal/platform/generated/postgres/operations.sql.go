@@ -14,13 +14,13 @@ import (
 const createOperation = `-- name: CreateOperation :one
 INSERT INTO operations (
     owner_id, property_id, lease_id, recurring_operation_id,
-    type, category, amount_kopecks, operation_date, comment, is_exception, status
+    type, category, name, amount_kopecks, operation_date, comment, is_exception, status
 )
 VALUES (
     $1, $2, $3, $4,
-    $5, $6, $7, $8, $9, $10, $11
+    $5, $6, $7, $8, $9, $10, $11, $12
 )
-RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status
+RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name
 `
 
 type CreateOperationParams struct {
@@ -30,6 +30,7 @@ type CreateOperationParams struct {
 	RecurringOperationID pgtype.UUID `json:"recurring_operation_id"`
 	Type                 string      `json:"type"`
 	Category             string      `json:"category"`
+	Name                 string      `json:"name"`
 	AmountKopecks        int64       `json:"amount_kopecks"`
 	OperationDate        pgtype.Date `json:"operation_date"`
 	Comment              pgtype.Text `json:"comment"`
@@ -45,6 +46,7 @@ func (q *Queries) CreateOperation(ctx context.Context, arg CreateOperationParams
 		arg.RecurringOperationID,
 		arg.Type,
 		arg.Category,
+		arg.Name,
 		arg.AmountKopecks,
 		arg.OperationDate,
 		arg.Comment,
@@ -68,6 +70,7 @@ func (q *Queries) CreateOperation(ctx context.Context, arg CreateOperationParams
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Status,
+		&i.Name,
 	)
 	return i, err
 }
@@ -183,7 +186,7 @@ func (q *Queries) DeleteUneditedOperationsByLease(ctx context.Context, arg Delet
 }
 
 const getOperationByIDAndOwner = `-- name: GetOperationByIDAndOwner :one
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL
 `
@@ -212,12 +215,13 @@ func (q *Queries) GetOperationByIDAndOwner(ctx context.Context, arg GetOperation
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Status,
+		&i.Name,
 	)
 	return i, err
 }
 
 const getOperationByIDAndOwnerForUpdate = `-- name: GetOperationByIDAndOwnerForUpdate :one
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL
 FOR UPDATE
@@ -247,6 +251,7 @@ func (q *Queries) GetOperationByIDAndOwnerForUpdate(ctx context.Context, arg Get
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Status,
+		&i.Name,
 	)
 	return i, err
 }
@@ -321,7 +326,7 @@ func (q *Queries) HasDepositReturnForLease(ctx context.Context, leaseID pgtype.U
 }
 
 const listAllPendingOperationsWithPastDate = `-- name: ListAllPendingOperationsWithPastDate :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
 WHERE status = 'pending'
   AND operation_date < $1::date
   AND deleted_at IS NULL
@@ -359,6 +364,7 @@ func (q *Queries) ListAllPendingOperationsWithPastDate(ctx context.Context, arg 
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Status,
+			&i.Name,
 		); err != nil {
 			return nil, err
 		}
@@ -371,7 +377,7 @@ func (q *Queries) ListAllPendingOperationsWithPastDate(ctx context.Context, arg 
 }
 
 const listFutureOperationsByLease = `-- name: ListFutureOperationsByLease :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
 WHERE lease_id = $1 AND operation_date > $2
   AND deleted_at IS NULL
 ORDER BY operation_date ASC
@@ -407,6 +413,7 @@ func (q *Queries) ListFutureOperationsByLease(ctx context.Context, arg ListFutur
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Status,
+			&i.Name,
 		); err != nil {
 			return nil, err
 		}
@@ -471,7 +478,7 @@ func (q *Queries) ListOperationDatesByRecurringOperation(ctx context.Context, re
 }
 
 const listOperationsByLease = `-- name: ListOperationsByLease :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
 WHERE lease_id = $1
   AND deleted_at IS NULL
 ORDER BY operation_date DESC
@@ -502,6 +509,7 @@ func (q *Queries) ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Status,
+			&i.Name,
 		); err != nil {
 			return nil, err
 		}
@@ -514,7 +522,7 @@ func (q *Queries) ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID
 }
 
 const listOperationsByProperty = `-- name: ListOperationsByProperty :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
 WHERE owner_id = $1 AND property_id = $2
   AND deleted_at IS NULL
 ORDER BY operation_date DESC
@@ -550,6 +558,7 @@ func (q *Queries) ListOperationsByProperty(ctx context.Context, arg ListOperatio
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Status,
+			&i.Name,
 		); err != nil {
 			return nil, err
 		}
@@ -562,7 +571,7 @@ func (q *Queries) ListOperationsByProperty(ctx context.Context, arg ListOperatio
 }
 
 const listOperationsByPropertyWithStatuses = `-- name: ListOperationsByPropertyWithStatuses :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
 WHERE owner_id = $1 AND property_id = $2
   AND status = ANY($3::text[])
   AND deleted_at IS NULL
@@ -600,6 +609,7 @@ func (q *Queries) ListOperationsByPropertyWithStatuses(ctx context.Context, arg 
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Status,
+			&i.Name,
 		); err != nil {
 			return nil, err
 		}
@@ -612,7 +622,7 @@ func (q *Queries) ListOperationsByPropertyWithStatuses(ctx context.Context, arg 
 }
 
 const listOperationsByRecurringOperation = `-- name: ListOperationsByRecurringOperation :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
 WHERE recurring_operation_id = $1
   AND deleted_at IS NULL
 ORDER BY operation_date ASC
@@ -643,6 +653,7 @@ func (q *Queries) ListOperationsByRecurringOperation(ctx context.Context, recurr
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Status,
+			&i.Name,
 		); err != nil {
 			return nil, err
 		}
@@ -655,7 +666,7 @@ func (q *Queries) ListOperationsByRecurringOperation(ctx context.Context, recurr
 }
 
 const listPendingOperationsWithPastDate = `-- name: ListPendingOperationsWithPastDate :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
 WHERE owner_id = $1
   AND status = 'pending'
   AND operation_date < $2::date
@@ -695,6 +706,7 @@ func (q *Queries) ListPendingOperationsWithPastDate(ctx context.Context, arg Lis
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Status,
+			&i.Name,
 		); err != nil {
 			return nil, err
 		}
@@ -714,7 +726,7 @@ WHERE id = $1
   AND status = 'pending'
   AND operation_date < $3::date
   AND deleted_at IS NULL
-RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status
+RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name
 `
 
 type MarkOperationOverdueParams struct {
@@ -742,6 +754,7 @@ func (q *Queries) MarkOperationOverdue(ctx context.Context, arg MarkOperationOve
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Status,
+		&i.Name,
 	)
 	return i, err
 }
@@ -752,7 +765,7 @@ SET deleted_at = now(),
     updated_at = now()
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL
-RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status
+RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name
 `
 
 type SoftDeleteOperationParams struct {
@@ -779,6 +792,7 @@ func (q *Queries) SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperati
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Status,
+		&i.Name,
 	)
 	return i, err
 }
@@ -787,15 +801,16 @@ const updateOperation = `-- name: UpdateOperation :one
 UPDATE operations
 SET type = $3,
     category = $4,
-    amount_kopecks = $5,
-    operation_date = $6,
-    comment = $7,
-    lease_id = $8,
-    status = $9,
+    name = $5,
+    amount_kopecks = $6,
+    operation_date = $7,
+    comment = $8,
+    lease_id = $9,
+    status = $10,
     is_exception = true
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL
-RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status
+RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name
 `
 
 type UpdateOperationParams struct {
@@ -803,6 +818,7 @@ type UpdateOperationParams struct {
 	OwnerID       pgtype.UUID `json:"owner_id"`
 	Type          string      `json:"type"`
 	Category      string      `json:"category"`
+	Name          string      `json:"name"`
 	AmountKopecks int64       `json:"amount_kopecks"`
 	OperationDate pgtype.Date `json:"operation_date"`
 	Comment       pgtype.Text `json:"comment"`
@@ -816,6 +832,7 @@ func (q *Queries) UpdateOperation(ctx context.Context, arg UpdateOperationParams
 		arg.OwnerID,
 		arg.Type,
 		arg.Category,
+		arg.Name,
 		arg.AmountKopecks,
 		arg.OperationDate,
 		arg.Comment,
@@ -839,6 +856,7 @@ func (q *Queries) UpdateOperation(ctx context.Context, arg UpdateOperationParams
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Status,
+		&i.Name,
 	)
 	return i, err
 }
