@@ -65,6 +65,7 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 		PropertyID:    propertyId,
 		Type:          string(body.Type),
 		Category:      string(body.Category),
+		Name:          body.Name,
 		AmountKopecks: int64(body.AmountKopecks),
 		OperationDate: body.OperationDate.Time,
 		LeaseID:       uuidPtrFromOpenAPI(body.LeaseId),
@@ -147,6 +148,7 @@ func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Reque
 	cmd := leasesapp.UpdateOperationCommand{
 		Type:     ptrString(body.Type),
 		Category: ptrString(body.Category),
+		Name:     body.Name,
 		Comment:  body.Comment,
 		LeaseID:  uuidPtrFromOpenAPI(body.LeaseId),
 	}
@@ -209,6 +211,7 @@ func operationResponse(op domain.Operation) openapi.OperationResponse {
 		PropertyId:    op.PropertyID,
 		Type:          openapi.OperationType(op.Type),
 		Category:      openapi.OperationCategory(op.Category),
+		Name:          op.Name,
 		AmountKopecks: int(op.AmountKopecks),
 		OperationDate: openapi_types.Date{Time: op.OperationDate},
 		Status:        openapi.OperationStatus(op.Status),
