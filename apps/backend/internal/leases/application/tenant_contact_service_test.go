@@ -116,3 +116,180 @@ func TestListTenantContactsByIDsRepositoryError(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 }
+
+func setupUpdateTenantContactService(ownerID, contactID uuid.UUID) (*fakeTenantContactRepo, *TenantContactService) {
+	surname := "Ivanov"
+	patronymic := "Ivanovich"
+	phone := "+79161234567"
+	email := "ivan@example.com"
+	comment := "initial comment"
+	repo := &fakeTenantContactRepo{
+		contacts: []domain.TenantContact{
+			{
+				ID:         contactID,
+				OwnerID:    ownerID,
+				Name:       "Ivan",
+				Surname:    &surname,
+				Patronymic: &patronymic,
+				Phone:      &phone,
+				Email:      &email,
+				Comment:    &comment,
+			},
+		},
+	}
+	svc := NewTenantContactService(repo, nil)
+	return repo, svc
+}
+
+func TestUpdateTenantContactClearsSurname(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+
+	empty := ""
+	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
+		Surname: &empty,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTenantContact failed: %v", err)
+	}
+	if updated.Surname != nil {
+		t.Fatalf("expected surname to be cleared, got %q", *updated.Surname)
+	}
+}
+
+func TestUpdateTenantContactClearsPatronymic(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+
+	empty := ""
+	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
+		Patronymic: &empty,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTenantContact failed: %v", err)
+	}
+	if updated.Patronymic != nil {
+		t.Fatalf("expected patronymic to be cleared, got %q", *updated.Patronymic)
+	}
+}
+
+func TestUpdateTenantContactClearsPhone(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+
+	empty := ""
+	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
+		Phone: &empty,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTenantContact failed: %v", err)
+	}
+	if updated.Phone != nil {
+		t.Fatalf("expected phone to be cleared, got %q", *updated.Phone)
+	}
+}
+
+func TestUpdateTenantContactClearsEmail(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+
+	empty := ""
+	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
+		Email: &empty,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTenantContact failed: %v", err)
+	}
+	if updated.Email != nil {
+		t.Fatalf("expected email to be cleared, got %q", *updated.Email)
+	}
+}
+
+func TestUpdateTenantContactClearsComment(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+
+	empty := ""
+	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
+		Comment: &empty,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTenantContact failed: %v", err)
+	}
+	if updated.Comment != nil {
+		t.Fatalf("expected comment to be cleared, got %q", *updated.Comment)
+	}
+}
+
+func TestUpdateTenantContactNormalizesPhone(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+
+	phone := "89161234567"
+	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
+		Phone: &phone,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTenantContact failed: %v", err)
+	}
+	if updated.Phone == nil {
+		t.Fatal("expected phone to be set, got nil")
+	}
+	if *updated.Phone != "+79161234567" {
+		t.Fatalf("expected phone %q, got %q", "+79161234567", *updated.Phone)
+	}
+}
+
+func TestUpdateTenantContactPreservesEmail(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+
+	email := "new.email+tag@example.ru"
+	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
+		Email: &email,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTenantContact failed: %v", err)
+	}
+	if updated.Email == nil {
+		t.Fatal("expected email to be set, got nil")
+	}
+	if *updated.Email != "new.email+tag@example.ru" {
+		t.Fatalf("expected email %q, got %q", "new.email+tag@example.ru", *updated.Email)
+	}
+}
+
+func TestUpdateTenantContactRejectsInvalidPhone(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+
+	phone := "not-a-phone"
+	_, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
+		Phone: &phone,
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+}
+
+func TestUpdateTenantContactRejectsInvalidEmail(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+
+	email := "not-an-email"
+	_, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
+		Email: &email,
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+}
