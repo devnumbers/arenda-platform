@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent, type JSX } from 'react';
+import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent, type JSX, type MouseEvent } from 'react';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import { TextField } from '@/shared/ui/text-field';
@@ -65,7 +65,7 @@ export function TenantForm({
   }, [comment, email, name, onChange, patronymic, phone, surname]);
 
   const isNameValid = name.trim() !== '';
-  const isPhoneValid = phone === '' || phone.length === 18;
+  const isPhoneValid = phone === '' || phone === '+7' || phone.length === 18;
   const isEmailValid = email === '' || EMAIL_REGEX.test(email);
   const isCommentValid = comment.length <= MAX_COMMENT_LENGTH;
 
@@ -102,7 +102,7 @@ export function TenantForm({
         name: name.trim(),
         surname: surname.trim(),
         patronymic: patronymic.trim(),
-        phone: phone.trim(),
+        phone: phone.trim() === '+7' ? '' : phone.trim(),
         email: email.trim(),
         comment: comment.trim(),
       });
@@ -111,7 +111,7 @@ export function TenantForm({
   );
 
   const handleCancelClick = useCallback(
-    (event: React.MouseEvent<HTMLAnchorElement>) => {
+    (event: MouseEvent<HTMLAnchorElement>) => {
       if (onCancel) {
         event.preventDefault();
         onCancel();

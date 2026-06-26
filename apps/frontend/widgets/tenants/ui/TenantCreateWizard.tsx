@@ -43,6 +43,7 @@ export function TenantCreateWizard(): JSX.Element {
         surname: data.surname,
         patronymic: data.patronymic,
         phone: data.phone,
+        email: data.email,
         comment: data.comment,
       }));
     },
@@ -60,7 +61,7 @@ export function TenantCreateWizard(): JSX.Element {
         name: data.name.trim(),
         surname: data.surname.trim() || undefined,
         patronymic: data.patronymic.trim() || undefined,
-        phone: data.phone.trim() || undefined,
+        phone: (data.phone.trim() === '+7' ? '' : data.phone.trim()) || undefined,
         email: data.email.trim() || undefined,
         comment: data.comment.trim() || undefined,
       });
@@ -78,8 +79,14 @@ export function TenantCreateWizard(): JSX.Element {
     return (
       <div className={styles.root}>
         <TenantSuccessStep
-          onAddLater={() => router.push(ROUTES.tenants)}
-          onAddPayments={() => router.push(ROUTES.finance)}
+          onAddLater={() => {
+            clearDraft();
+            router.push(ROUTES.tenants);
+          }}
+          onAddPayments={() => {
+            clearDraft();
+            router.push(ROUTES.finance);
+          }}
         />
       </div>
     );
@@ -95,6 +102,7 @@ export function TenantCreateWizard(): JSX.Element {
             surname: draft.surname,
             patronymic: draft.patronymic,
             phone: draft.phone,
+            email: draft.email,
             comment: draft.comment,
           }}
           isLoading={isSubmitting}

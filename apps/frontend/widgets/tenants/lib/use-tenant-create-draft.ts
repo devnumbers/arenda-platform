@@ -11,6 +11,7 @@ export type TenantCreateDraft = {
   surname: string;
   patronymic: string;
   phone: string;
+  email: string;
   comment: string;
 };
 
@@ -22,6 +23,7 @@ const DEFAULT_DRAFT: TenantCreateDraft = {
   surname: '',
   patronymic: '',
   phone: '',
+  email: '',
   comment: '',
 };
 
@@ -40,10 +42,9 @@ export function useTenantCreateDraft(): {
 
   useEffect(() => {
     try {
-      if (draft.step === 'success') {
-        sessionStorage.removeItem(STORAGE_KEY);
-        return;
-      }
+      // Persist both form and success states so a refresh returns to the
+      // same step (e.g. success screen survives reload). The draft is cleared
+      // explicitly on close or success-button navigation.
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
     } catch {
       // Ignore storage quota / privacy mode errors.
@@ -93,6 +94,7 @@ function validateDraft(parsed: unknown): TenantCreateDraft {
   if (!isString(record.surname)) return DEFAULT_DRAFT;
   if (!isString(record.patronymic)) return DEFAULT_DRAFT;
   if (!isString(record.phone)) return DEFAULT_DRAFT;
+  if (!isString(record.email)) return DEFAULT_DRAFT;
   if (!isString(record.comment)) return DEFAULT_DRAFT;
 
   return {
@@ -101,6 +103,7 @@ function validateDraft(parsed: unknown): TenantCreateDraft {
     surname: record.surname,
     patronymic: record.patronymic,
     phone: record.phone,
+    email: record.email,
     comment: record.comment,
   };
 }
