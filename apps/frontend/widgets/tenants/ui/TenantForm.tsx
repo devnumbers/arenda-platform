@@ -42,12 +42,14 @@ export function TenantForm({
   onCancel,
   backHref,
 }: TenantFormProps): JSX.Element {
-  const [name, setName] = useState(initialData?.name ?? '');
-  const [surname, setSurname] = useState(initialData?.surname ?? '');
-  const [patronymic, setPatronymic] = useState(initialData?.patronymic ?? '');
-  const [phone, setPhone] = useState(initialData?.phone ?? '');
-  const [email, setEmail] = useState(initialData?.email ?? '');
-  const [comment, setComment] = useState(initialData?.comment ?? '');
+  const [name, setName] = useState(initialData?.name?.trim() ?? '');
+  const [surname, setSurname] = useState(initialData?.surname?.trim() ?? '');
+  const [patronymic, setPatronymic] = useState(initialData?.patronymic?.trim() ?? '');
+  const [phone, setPhone] = useState(
+    initialData?.phone ? formatPhoneInput(initialData.phone) : '',
+  );
+  const [email, setEmail] = useState(initialData?.email?.trim() ?? '');
+  const [comment, setComment] = useState(initialData?.comment?.trim() ?? '');
 
   const [isPhoneTouched, setIsPhoneTouched] = useState(false);
   const [isEmailTouched, setIsEmailTouched] = useState(false);
