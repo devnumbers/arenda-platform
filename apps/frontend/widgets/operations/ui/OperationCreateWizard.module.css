@@ -1,0 +1,94 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 52px;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.iconButton {
+  flex-shrink: 0;
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 24px;
+  color: var(--color-text);
+  text-align: center;
+}
+
+.progressRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.badge {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #f1f3f6;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  color: #1e1e1e;
+}
+
+.progressBar {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+}
+
+.segment {
+  flex: 1;
+  height: 6px;
+  border-radius: 32px;
+  background: #f1f3f6;
+  transition: background-color 0.2s ease;
+}
+
+.segment.active {
+  background: #2b7fff;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  text-align: center;
+}
+
+@media (max-width: 767px) {
+  .root {
+    gap: 32px;
+  }
+}
