@@ -58,7 +58,6 @@ export function CategorySelect({
           type="button"
           className={clsx(styles.trigger, error && styles.error)}
           aria-label={label}
-          aria-invalid={Boolean(error)}
         >
           <span className={styles.label}>{label}</span>
           <span className={styles.control}>

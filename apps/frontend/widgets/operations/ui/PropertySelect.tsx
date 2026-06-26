@@ -51,7 +51,6 @@ export function PropertySelect({
           className={clsx(styles.trigger, error && styles.error)}
           disabled={isDisabled}
           aria-label="Объект"
-          aria-invalid={Boolean(error)}
         >
           <span className={styles.label}>Объект</span>
           <span className={styles.control}>
