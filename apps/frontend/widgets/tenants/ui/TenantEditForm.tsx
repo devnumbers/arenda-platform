@@ -62,21 +62,21 @@ function TenantEditFormError({
 
 interface TenantContactUpdatePayload {
   name?: string;
-  surname?: string | null;
-  patronymic?: string | null;
-  phone?: string | null;
-  email?: string | null;
-  comment?: string | null;
+  surname?: string | undefined;
+  patronymic?: string | undefined;
+  phone?: string | undefined;
+  email?: string | undefined;
+  comment?: string | undefined;
 }
 
 function getOptionalFieldChange(
   current: string,
   initial: string | undefined | null,
-): string | null | undefined {
+): string | undefined {
   const normalized = current.trim();
   const normalizedInitial = (initial ?? '').trim();
   if (normalized === normalizedInitial) return undefined;
-  return normalized === '' ? null : normalized;
+  return normalized === '' ? undefined : normalized;
 }
 
 function mapErrorMessage(error: ApiError): string {
@@ -165,7 +165,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
       }
 
       try {
-        // Generated TenantContactUpdateRequest marks optional fields as string, but backend accepts null for clearing.
+        // Cleared optional fields are omitted from the payload so the backend does not skip them as nil values.
         await updateTenantContact.mutateAsync({
           id: tenantId,
           data: payload as TenantContactUpdateRequest,

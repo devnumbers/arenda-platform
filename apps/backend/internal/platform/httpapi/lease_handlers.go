@@ -312,8 +312,13 @@ func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Reques
 	for _, contact := range contacts {
 		resp := tenantContactResponse(contact.TenantContact)
 		resp.IsActive = contact.ActiveLease != nil
+
+		contactsMap := map[uuid.UUID]leasesdomain.TenantContact{
+			contact.ID: contact.TenantContact,
+		}
+
 		if contact.ActiveLease != nil {
-			leaseResp, err := h.presenter.leaseResponse(r.Context(), ownerID, *contact.ActiveLease, nil)
+			leaseResp, err := h.presenter.leaseResponse(r.Context(), ownerID, *contact.ActiveLease, contactsMap)
 			if err != nil {
 				handleTenantContactError(w, r, err)
 				return
@@ -321,7 +326,7 @@ func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Reques
 			resp.ActiveLease = &leaseResp
 		}
 		if contact.LastLease != nil {
-			leaseResp, err := h.presenter.leaseResponse(r.Context(), ownerID, *contact.LastLease, nil)
+			leaseResp, err := h.presenter.leaseResponse(r.Context(), ownerID, *contact.LastLease, contactsMap)
 			if err != nil {
 				handleTenantContactError(w, r, err)
 				return
