@@ -15,7 +15,8 @@ export function formatPhoneInput(input: string): string {
 }
 
 export function normalizePhone(formatted: string): string {
-  const digits = formatted.replace(/\D/g, '');
+  let digits = formatted.replace(/\D/g, '');
+  if (digits.startsWith('8')) digits = digits.slice(1);
   if (digits === '' || digits === '7') return '';
   return digits.startsWith('7') ? `+${digits}` : `+7${digits}`;
 }
