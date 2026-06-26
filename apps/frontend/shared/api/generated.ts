@@ -164,6 +164,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{id}/leases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPropertyLeases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{id}/operations/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPropertyOperationsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/photos": {
         parameters: {
             query?: never;
@@ -175,6 +207,22 @@ export interface paths {
         put?: never;
         post: operations["uploadPropertyPhoto"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/photos/{photoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deletePropertyPhoto"];
         options?: never;
         head?: never;
         patch?: never;
@@ -366,6 +414,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["completeLease"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/leases/{id}/deposit-return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["returnLeaseDeposit"];
         delete?: never;
         options?: never;
         head?: never;
@@ -596,6 +660,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/subscription/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminSubscriptionPayments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/subscription/payments/{paymentId}/refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["refundSubscriptionPayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/fake-subscription-payment/{id}/confirm": {
         parameters: {
             query?: never;
@@ -691,7 +787,7 @@ export interface components {
             period: "month" | "year";
             amountKopecks: number;
             /** @enum {string} */
-            status: "pending" | "succeeded" | "failed";
+            status: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded";
             provider: string;
             /** Format: date-time */
             createdAt: string;
@@ -729,6 +825,26 @@ export interface components {
         };
         SubscriptionPaymentsResponse: {
             items: components["schemas"]["SubscriptionPayment"][];
+        };
+        AdminSubscriptionPayment: {
+            /** Format: uuid */
+            id: string;
+            tariff: components["schemas"]["Tariff"];
+            /** @enum {string} */
+            period: "month" | "year";
+            amountKopecks: number;
+            /** @enum {string} */
+            status: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded";
+            provider: string;
+            /** Format: uuid */
+            userId: string;
+            userPhone: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminSubscriptionPaymentsResponse: {
+            items: components["schemas"]["AdminSubscriptionPayment"][];
+            total: number;
         };
         Problem: {
             type: string;
@@ -787,6 +903,17 @@ export interface components {
         };
         PropertyPhotosResponse: {
             items: components["schemas"]["PropertyPhoto"][];
+        };
+        PropertyLeasesResponse: {
+            items: components["schemas"]["LeaseResponse"][];
+        };
+        PropertyOperationsSummaryResponse: {
+            monthly_profit_kopecks: number;
+            all_time_profit_kopecks: number;
+            overdue_rent_count: number;
+            overdue_total_count: number;
+            /** Format: date */
+            next_payment_date?: string | null;
         };
         LeaseCreateRequest: {
             /** Format: uuid */
@@ -882,12 +1009,13 @@ export interface components {
         /** @enum {string} */
         OperationType: "income" | "expense";
         /** @enum {string} */
-        OperationCategory: "rent" | "other_income" | "utilities" | "repair" | "tax" | "other_expense";
+        OperationCategory: "rent" | "other_income" | "utilities" | "repair" | "tax" | "other_expense" | "deposit_return";
         /** @enum {string} */
         OperationStatus: "pending" | "overdue" | "paid" | "received";
         OperationCreateRequest: {
             type: components["schemas"]["OperationType"];
             category: components["schemas"]["OperationCategory"];
+            name: string;
             amount_kopecks: number;
             /** Format: date */
             operation_date: string;
@@ -898,6 +1026,7 @@ export interface components {
         OperationUpdateRequest: {
             type?: components["schemas"]["OperationType"];
             category?: components["schemas"]["OperationCategory"];
+            name?: string;
             amount_kopecks?: number;
             /** Format: date */
             operation_date?: string;
@@ -918,6 +1047,7 @@ export interface components {
             recurring_operation_id?: string | null;
             type: components["schemas"]["OperationType"];
             category: components["schemas"]["OperationCategory"];
+            name: string;
             amount_kopecks: number;
             /** Format: date */
             operation_date: string;
@@ -935,6 +1065,7 @@ export interface components {
         RecurringOperationCreateRequest: {
             type: components["schemas"]["OperationType"];
             category: components["schemas"]["OperationCategory"];
+            name: string;
             amount_kopecks: number;
             /** Format: date */
             start_date: string;
@@ -942,10 +1073,13 @@ export interface components {
             /** Format: date */
             end_date?: string;
             comment?: string;
+            /** @enum {string} */
+            periodicity?: "monthly" | "yearly";
         };
         RecurringOperationUpdateRequest: {
             type?: components["schemas"]["OperationType"];
             category?: components["schemas"]["OperationCategory"];
+            name?: string;
             amount_kopecks?: number;
             /** Format: date */
             start_date?: string;
@@ -953,6 +1087,8 @@ export interface components {
             /** Format: date */
             end_date?: string;
             comment?: string;
+            /** @enum {string} */
+            periodicity?: "monthly" | "yearly";
         };
         RecurringOperationResponse: {
             /** Format: uuid */
@@ -965,6 +1101,7 @@ export interface components {
             lease_id?: string | null;
             type: components["schemas"]["OperationType"];
             category: components["schemas"]["OperationCategory"];
+            name: string;
             amount_kopecks: number;
             /** Format: date */
             start_date: string;
@@ -972,7 +1109,7 @@ export interface components {
             /** Format: date */
             end_date?: string | null;
             /** @enum {string} */
-            periodicity: "monthly";
+            periodicity: "monthly" | "yearly";
             /** @enum {string} */
             status: "active" | "paused";
             comment?: string | null;
@@ -1025,6 +1162,10 @@ export interface components {
             /** Format: date */
             reminder_date: string;
         };
+        RefundSubscriptionPaymentRequest: {
+            /** @description Optional partial refund amount in kopecks. If omitted, the full payment amount is refunded. */
+            amount_kopecks?: number;
+        };
         RemindersResponse: {
             items: components["schemas"]["ReminderResponse"][];
         };
@@ -1041,6 +1182,15 @@ export interface components {
         };
         /** @description Unauthorized */
         Unauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Forbidden */
+        Forbidden: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1392,6 +1542,54 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listPropertyLeases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property leases */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyLeasesResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getPropertyOperationsSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property operations summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyOperationsSummaryResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     uploadPropertyPhoto: {
         parameters: {
             query?: never;
@@ -1423,6 +1621,30 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    deletePropertyPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                photoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Photo deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     listOperationsByProperty: {
@@ -1985,6 +2207,32 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    returnLeaseDeposit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deposit returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     listLeaseReminders: {
         parameters: {
             query?: never;
@@ -2430,6 +2678,64 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAdminSubscriptionPayments: {
+        parameters: {
+            query?: {
+                status?: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin subscription payments list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSubscriptionPaymentsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    refundSubscriptionPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RefundSubscriptionPaymentRequest"];
+            };
+        };
+        responses: {
+            /** @description Payment refunded */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];
         };
     };
