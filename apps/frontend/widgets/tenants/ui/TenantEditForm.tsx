@@ -79,7 +79,9 @@ function getOptionalFieldChange(
   const normalized = current.trim();
   const normalizedInitial = (initial ?? '').trim();
   if (normalized === normalizedInitial) return undefined;
-  return normalized === '' ? undefined : normalized;
+  // Return an empty string to tell the backend to clear the optional field;
+  // omitted fields are left unchanged.
+  return normalized;
 }
 
 function mapErrorMessage(error: ApiError): string {
@@ -172,10 +174,8 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
       }
 
       try {
-        // Backend uses Go pointer fields with `omitempty`; both omitted keys and JSON `null`
-        // unmarshal to nil, and the service only updates non-nil fields. To support clearing
-        // optional fields, the backend would need to distinguish absent from explicitly null
-        // (e.g., custom unmarshalling or nullable wrapper types).
+        // Optional fields are sent as empty strings to request clearing them on the backend.
+        // Unchanged fields remain omitted and are left as-is.
         await updateTenantContact.mutateAsync({
           id: tenantId,
           data: payload,

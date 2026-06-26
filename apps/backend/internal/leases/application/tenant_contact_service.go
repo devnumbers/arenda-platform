@@ -119,26 +119,51 @@ func (s *TenantContactService) UpdateTenantContact(ctx context.Context, ownerID,
 		contact.Name = name
 	}
 	if cmd.Surname != nil {
-		contact.Surname = cmd.Surname
+		surname := strings.TrimSpace(*cmd.Surname)
+		if surname == "" {
+			contact.Surname = nil
+		} else {
+			contact.Surname = &surname
+		}
 	}
 	if cmd.Patronymic != nil {
-		contact.Patronymic = cmd.Patronymic
+		patronymic := strings.TrimSpace(*cmd.Patronymic)
+		if patronymic == "" {
+			contact.Patronymic = nil
+		} else {
+			contact.Patronymic = &patronymic
+		}
 	}
 	if cmd.Phone != nil {
-		normalized, err := domain.NormalizePhone(*cmd.Phone)
-		if err != nil {
-			return domain.TenantContact{}, ErrInvalidInput
+		phone := strings.TrimSpace(*cmd.Phone)
+		if phone == "" {
+			contact.Phone = nil
+		} else {
+			normalized, err := domain.NormalizePhone(phone)
+			if err != nil {
+				return domain.TenantContact{}, ErrInvalidInput
+			}
+			contact.Phone = &normalized
 		}
-		contact.Phone = &normalized
 	}
 	if cmd.Email != nil {
-		if err := domain.ValidateEmail(*cmd.Email); err != nil {
-			return domain.TenantContact{}, ErrInvalidInput
+		email := strings.TrimSpace(*cmd.Email)
+		if email == "" {
+			contact.Email = nil
+		} else {
+			if err := domain.ValidateEmail(email); err != nil {
+				return domain.TenantContact{}, ErrInvalidInput
+			}
+			contact.Email = &email
 		}
-		contact.Email = cmd.Email
 	}
 	if cmd.Comment != nil {
-		contact.Comment = cmd.Comment
+		comment := strings.TrimSpace(*cmd.Comment)
+		if comment == "" {
+			contact.Comment = nil
+		} else {
+			contact.Comment = &comment
+		}
 	}
 
 	updated, err := s.repo.Update(ctx, ownerID, contact)
