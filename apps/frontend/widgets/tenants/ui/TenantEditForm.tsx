@@ -91,7 +91,7 @@ function mapErrorMessage(error: ApiError): string {
   if (error.status === 404) {
     return 'Арендатор не найден';
   }
-  return error.message;
+  return error.detail ?? error.message;
 }
 
 export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
@@ -209,7 +209,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
   }
 
   if (!initialData) {
-    return <TenantEditLoading />;
+    return <TenantEditFormNotFound />;
   }
 
   return (
