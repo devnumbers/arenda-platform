@@ -96,6 +96,49 @@ func (r *SubscriptionPaymentRepository) ListPendingSubscriptionPaymentsByUserID(
 	return mapSubscriptionPayments(rows), nil
 }
 
+// ListPendingUpgradePayments returns pending subscription payments whose tariff
+// differs from the current subscription tariff, indicating an unfinished upgrade
+// that may need to be reconciled with the provider.
+func (r *SubscriptionPaymentRepository) ListPendingUpgradePayments(ctx context.Context, createdBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error) {
+	rows, err := r.q().ListPendingUpgradePayments(ctx, postgres.ListPendingUpgradePaymentsParams{
+		CreatedAt: pgtype.Timestamptz{Time: createdBefore.UTC(), Valid: true},
+		Limit:     limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list pending upgrade payments: %w", err)
+	}
+	return mapSubscriptionPayments(rows), nil
+}
+
+// ListAll returns all subscription payments for admin view.
+func (r *SubscriptionPaymentRepository) ListAll(ctx context.Context, status string, limit, offset int) ([]application.SubscriptionPaymentWithUser, int64, error) {
+	rows, err := r.q().ListSubscriptionPaymentsAdmin(ctx, postgres.ListSubscriptionPaymentsAdminParams{
+		Column1: status,
+		//nolint:gosec // Limit and offset are validated by the HTTP layer.
+		Limit: int32(limit),
+		//nolint:gosec // Limit and offset are validated by the HTTP layer.
+		Offset: int32(offset),
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("list subscription payments admin: %w", err)
+	}
+
+	items := make([]application.SubscriptionPaymentWithUser, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, application.SubscriptionPaymentWithUser{
+			Payment:   mapListSubscriptionPaymentsAdminRow(row),
+			UserPhone: row.UserPhone,
+		})
+	}
+
+	total, err := r.q().CountSubscriptionPaymentsAdmin(ctx, status)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count subscription payments admin: %w", err)
+	}
+
+	return items, total, nil
+}
+
 // GetLastSucceededBySubscriptionID returns the most recent succeeded payment
 // for a subscription, or ErrNotFound if there is none.
 func (r *SubscriptionPaymentRepository) GetLastSucceededBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) (domain.SubscriptionPayment, error) {
@@ -160,6 +203,36 @@ func (r *SubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.
 			return domain.ErrInvalidPaymentStatus
 		}
 		return fmt.Errorf("mark subscription payment failed: %w", err)
+	}
+	return nil
+}
+
+// MarkRefunded transitions a succeeded subscription payment to refunded or partial_refunded
+// and records the refunded amount.
+func (r *SubscriptionPaymentRepository) MarkRefunded(ctx context.Context, id uuid.UUID, status domain.PaymentStatus, amountKopecks int64, now time.Time) error {
+	row, err := r.q().GetSubscriptionPaymentByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.ErrNotFound
+		}
+		return fmt.Errorf("get subscription payment: %w", err)
+	}
+
+	payment := mapSubscriptionPayment(row)
+	if err := payment.MarkRefunded(amountKopecks, now); err != nil {
+		return err
+	}
+
+	if _, err := r.q().MarkSubscriptionPaymentRefunded(ctx, postgres.MarkSubscriptionPaymentRefundedParams{
+		ID:                    pgtype.UUID{Bytes: id, Valid: true},
+		Status:                string(payment.Status),
+		RefundedAmountKopecks: int64Ptr(payment.RefundedAmountKopecks),
+		UpdatedAt:             pgtype.Timestamptz{Time: payment.UpdatedAt, Valid: true},
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrInvalidPaymentStatus
+		}
+		return fmt.Errorf("mark subscription payment refunded: %w", err)
 	}
 	return nil
 }
@@ -246,20 +319,21 @@ func mapCreateSubscriptionPaymentParams(payment domain.SubscriptionPayment) post
 
 func mapSubscriptionPayment(row postgres.SubscriptionPayment) domain.SubscriptionPayment {
 	payment := domain.SubscriptionPayment{
-		ID:                uuid.UUID(row.ID.Bytes),
-		UserID:            uuid.UUID(row.UserID.Bytes),
-		SubscriptionID:    uuid.UUID(row.SubscriptionID.Bytes),
-		TariffID:          uuid.UUID(row.TariffID.Bytes),
-		PaymentMethodID:   uuidPtrFromPgtype(row.PaymentMethodID),
-		Period:            domain.SubscriptionPeriod(row.Period),
-		AmountKopecks:     row.AmountKopecks,
-		Provider:          domain.PaymentProvider(row.Provider),
-		ProviderPaymentID: stringPtrFromPgtype(row.ProviderPaymentID),
-		PaymentURL:        stringPtrFromPgtype(row.PaymentUrl),
-		Status:            domain.PaymentStatus(row.Status),
-		ErrorCode:         stringPtrFromPgtype(row.ErrorCode),
-		CreatedAt:         row.CreatedAt.Time,
-		UpdatedAt:         row.UpdatedAt.Time,
+		ID:                    uuid.UUID(row.ID.Bytes),
+		UserID:                uuid.UUID(row.UserID.Bytes),
+		SubscriptionID:        uuid.UUID(row.SubscriptionID.Bytes),
+		TariffID:              uuid.UUID(row.TariffID.Bytes),
+		PaymentMethodID:       uuidPtrFromPgtype(row.PaymentMethodID),
+		Period:                domain.SubscriptionPeriod(row.Period),
+		AmountKopecks:         row.AmountKopecks,
+		Provider:              domain.PaymentProvider(row.Provider),
+		ProviderPaymentID:     stringPtrFromPgtype(row.ProviderPaymentID),
+		PaymentURL:            stringPtrFromPgtype(row.PaymentUrl),
+		Status:                domain.PaymentStatus(row.Status),
+		RefundedAmountKopecks: int64PtrFromPgtype(row.RefundedAmountKopecks),
+		ErrorCode:             stringPtrFromPgtype(row.ErrorCode),
+		CreatedAt:             row.CreatedAt.Time,
+		UpdatedAt:             row.UpdatedAt.Time,
 	}
 	if row.SucceededAt.Valid {
 		payment.SucceededAt = &row.SucceededAt.Time
@@ -273,4 +347,25 @@ func mapSubscriptionPayments(rows []postgres.SubscriptionPayment) []domain.Subsc
 		result[i] = mapSubscriptionPayment(row)
 	}
 	return result
+}
+
+func mapListSubscriptionPaymentsAdminRow(row postgres.ListSubscriptionPaymentsAdminRow) domain.SubscriptionPayment {
+	return mapSubscriptionPayment(postgres.SubscriptionPayment{
+		ID:                    row.ID,
+		UserID:                row.UserID,
+		SubscriptionID:        row.SubscriptionID,
+		TariffID:              row.TariffID,
+		PaymentMethodID:       row.PaymentMethodID,
+		Period:                row.Period,
+		AmountKopecks:         row.AmountKopecks,
+		Provider:              row.Provider,
+		ProviderPaymentID:     row.ProviderPaymentID,
+		PaymentUrl:            row.PaymentUrl,
+		Status:                row.Status,
+		RefundedAmountKopecks: row.RefundedAmountKopecks,
+		ErrorCode:             row.ErrorCode,
+		CreatedAt:             row.CreatedAt,
+		UpdatedAt:             row.UpdatedAt,
+		SucceededAt:           row.SucceededAt,
+	})
 }
