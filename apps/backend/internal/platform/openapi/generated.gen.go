@@ -154,15 +154,28 @@ const (
 	Warehouse  PropertyUpdateRequestType = "warehouse"
 )
 
+// Defines values for RecurringOperationCreateRequestPeriodicity.
+const (
+	RecurringOperationCreateRequestPeriodicityMonthly RecurringOperationCreateRequestPeriodicity = "monthly"
+	RecurringOperationCreateRequestPeriodicityYearly  RecurringOperationCreateRequestPeriodicity = "yearly"
+)
+
 // Defines values for RecurringOperationResponsePeriodicity.
 const (
-	Monthly RecurringOperationResponsePeriodicity = "monthly"
+	RecurringOperationResponsePeriodicityMonthly RecurringOperationResponsePeriodicity = "monthly"
+	RecurringOperationResponsePeriodicityYearly  RecurringOperationResponsePeriodicity = "yearly"
 )
 
 // Defines values for RecurringOperationResponseStatus.
 const (
 	RecurringOperationResponseStatusActive RecurringOperationResponseStatus = "active"
 	RecurringOperationResponseStatusPaused RecurringOperationResponseStatus = "paused"
+)
+
+// Defines values for RecurringOperationUpdateRequestPeriodicity.
+const (
+	Monthly RecurringOperationUpdateRequestPeriodicity = "monthly"
+	Yearly  RecurringOperationUpdateRequestPeriodicity = "yearly"
 )
 
 // Defines values for ReminderResponseEventType.
@@ -523,14 +536,19 @@ type PropertyUpdateRequestType string
 
 // RecurringOperationCreateRequest defines model for RecurringOperationCreateRequest.
 type RecurringOperationCreateRequest struct {
-	AmountKopecks int                 `json:"amount_kopecks"`
-	Category      OperationCategory   `json:"category"`
-	Comment       *string             `json:"comment,omitempty"`
-	EndDate       *openapi_types.Date `json:"end_date,omitempty"`
-	PaymentDay    int                 `json:"payment_day"`
-	StartDate     openapi_types.Date  `json:"start_date"`
-	Type          OperationType       `json:"type"`
+	AmountKopecks int                                         `json:"amount_kopecks"`
+	Category      OperationCategory                           `json:"category"`
+	Comment       *string                                     `json:"comment,omitempty"`
+	EndDate       *openapi_types.Date                         `json:"end_date,omitempty"`
+	Name          string                                      `json:"name"`
+	PaymentDay    int                                         `json:"payment_day"`
+	Periodicity   *RecurringOperationCreateRequestPeriodicity `json:"periodicity,omitempty"`
+	StartDate     openapi_types.Date                          `json:"start_date"`
+	Type          OperationType                               `json:"type"`
 }
+
+// RecurringOperationCreateRequestPeriodicity defines model for RecurringOperationCreateRequest.Periodicity.
+type RecurringOperationCreateRequestPeriodicity string
 
 // RecurringOperationResponse defines model for RecurringOperationResponse.
 type RecurringOperationResponse struct {
@@ -541,6 +559,7 @@ type RecurringOperationResponse struct {
 	EndDate       *openapi_types.Date                   `json:"end_date"`
 	Id            openapi_types.UUID                    `json:"id"`
 	LeaseId       *openapi_types.UUID                   `json:"lease_id"`
+	Name          string                                `json:"name"`
 	OwnerId       openapi_types.UUID                    `json:"owner_id"`
 	PaymentDay    int                                   `json:"payment_day"`
 	Periodicity   RecurringOperationResponsePeriodicity `json:"periodicity"`
@@ -559,14 +578,19 @@ type RecurringOperationResponseStatus string
 
 // RecurringOperationUpdateRequest defines model for RecurringOperationUpdateRequest.
 type RecurringOperationUpdateRequest struct {
-	AmountKopecks *int                `json:"amount_kopecks,omitempty"`
-	Category      *OperationCategory  `json:"category,omitempty"`
-	Comment       *string             `json:"comment,omitempty"`
-	EndDate       *openapi_types.Date `json:"end_date,omitempty"`
-	PaymentDay    *int                `json:"payment_day,omitempty"`
-	StartDate     *openapi_types.Date `json:"start_date,omitempty"`
-	Type          *OperationType      `json:"type,omitempty"`
+	AmountKopecks *int                                        `json:"amount_kopecks,omitempty"`
+	Category      *OperationCategory                          `json:"category,omitempty"`
+	Comment       *string                                     `json:"comment,omitempty"`
+	EndDate       *openapi_types.Date                         `json:"end_date,omitempty"`
+	Name          *string                                     `json:"name,omitempty"`
+	PaymentDay    *int                                        `json:"payment_day,omitempty"`
+	Periodicity   *RecurringOperationUpdateRequestPeriodicity `json:"periodicity,omitempty"`
+	StartDate     *openapi_types.Date                         `json:"start_date,omitempty"`
+	Type          *OperationType                              `json:"type,omitempty"`
 }
+
+// RecurringOperationUpdateRequestPeriodicity defines model for RecurringOperationUpdateRequest.Periodicity.
+type RecurringOperationUpdateRequestPeriodicity string
 
 // RecurringOperationsResponse defines model for RecurringOperationsResponse.
 type RecurringOperationsResponse struct {
@@ -3404,53 +3428,53 @@ var swaggerSpec = []string{
 	"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",
-	"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",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

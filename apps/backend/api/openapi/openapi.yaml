@@ -2236,12 +2236,15 @@ components:
 
     RecurringOperationCreateRequest:
       type: object
-      required: [type, category, amount_kopecks, start_date, payment_day]
+      required: [type, category, name, amount_kopecks, start_date, payment_day]
       properties:
         type:
           $ref: '#/components/schemas/OperationType'
         category:
           $ref: '#/components/schemas/OperationCategory'
+        name:
+          type: string
+          maxLength: 50
         amount_kopecks:
           type: integer
           minimum: 0
@@ -2258,6 +2261,9 @@ components:
         comment:
           type: string
           maxLength: 2000
+        periodicity:
+          type: string
+          enum: [monthly, yearly]
 
     RecurringOperationUpdateRequest:
       type: object
@@ -2266,6 +2272,9 @@ components:
           $ref: '#/components/schemas/OperationType'
         category:
           $ref: '#/components/schemas/OperationCategory'
+        name:
+          type: string
+          maxLength: 50
         amount_kopecks:
           type: integer
           minimum: 0
@@ -2282,10 +2291,13 @@ components:
         comment:
           type: string
           maxLength: 2000
+        periodicity:
+          type: string
+          enum: [monthly, yearly]
 
     RecurringOperationResponse:
       type: object
-      required: [id, owner_id, property_id, type, category, amount_kopecks, start_date, payment_day, periodicity, status, created_at, updated_at]
+      required: [id, owner_id, property_id, type, category, name, amount_kopecks, start_date, payment_day, periodicity, status, created_at, updated_at]
       properties:
         id:
           type: string
@@ -2304,6 +2316,8 @@ components:
           $ref: '#/components/schemas/OperationType'
         category:
           $ref: '#/components/schemas/OperationCategory'
+        name:
+          type: string
         amount_kopecks:
           type: integer
         start_date:
@@ -2317,7 +2331,7 @@ components:
           nullable: true
         periodicity:
           type: string
-          enum: [monthly]
+          enum: [monthly, yearly]
         status:
           type: string
           enum: [active, paused]
