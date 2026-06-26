@@ -1,1 +1,1 @@
-export { TenantDetailPage, TenantDetailLoading } from './ui';
+export { TenantDetailHeader, TenantDetailPage, TenantDetailLoading } from './ui';

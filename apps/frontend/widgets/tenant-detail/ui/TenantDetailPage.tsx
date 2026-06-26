@@ -5,6 +5,8 @@ import { useTenantContact } from '@/features/tenant-contacts/api';
 import { useLeases } from '@/features/leases/api';
 import { mapLeaseResponse } from '@/entities/lease/model/mappers';
 import type { Lease } from '@/entities/lease/model/types';
+import { ROUTES } from '@/shared/config/routes';
+import { LinkButton } from '@/shared/ui/link-button';
 import { TenantDetailHeader } from './TenantDetailHeader';
 import { TenantInfoSection } from './TenantInfoSection';
 import { TenantLeaseSection } from './TenantLeaseSection';
@@ -58,9 +60,15 @@ export function TenantDetailPage({ id }: TenantDetailPageProps): JSX.Element {
   const tenant = tenantQuery.data;
   const fullName = getTenantContactFullName(tenant);
 
+  const headerActions = (
+    <LinkButton href={ROUTES.tenantEdit(id)} variant="secondary" size="small">
+      Редактировать
+    </LinkButton>
+  );
+
   return (
     <main className={styles.root}>
-      <TenantDetailHeader title={fullName || tenant.name} tenantId={id} />
+      <TenantDetailHeader title={fullName || tenant.name} actions={headerActions} />
       <TenantInfoSection tenant={tenant} />
       {currentLease && <TenantLeaseSection lease={currentLease} />}
       {tenant.comment && <TenantCommentSection comment={tenant.comment} />}
