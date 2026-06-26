@@ -72,15 +72,6 @@ function TenantEditLoading(): JSX.Element {
   );
 }
 
-interface TenantContactUpdatePayload {
-  name?: string;
-  surname?: string | undefined;
-  patronymic?: string | undefined;
-  phone?: string | undefined;
-  email?: string | undefined;
-  comment?: string | undefined;
-}
-
 function getOptionalFieldChange(
   current: string,
   initial: string | undefined | null,
@@ -146,7 +137,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
 
       setSubmitError(undefined);
 
-      const payload: TenantContactUpdatePayload = {};
+      const payload: TenantContactUpdateRequest = {};
 
       const normalizedName = data.name.trim();
       if (normalizedName !== tenant.name.trim()) {
@@ -181,13 +172,13 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
       }
 
       try {
-        // Backend only updates non-nil pointer fields. Because JSON `null` becomes nil,
-        // cleared optional fields are currently omitted from the payload; the backend
-        // therefore keeps the previous value. Clearing optional fields requires backend
-        // support for explicit null values.
+        // Backend uses Go pointer fields with `omitempty`; both omitted keys and JSON `null`
+        // unmarshal to nil, and the service only updates non-nil fields. To support clearing
+        // optional fields, the backend would need to distinguish absent from explicitly null
+        // (e.g., custom unmarshalling or nullable wrapper types).
         await updateTenantContact.mutateAsync({
           id: tenantId,
-          data: payload as TenantContactUpdateRequest,
+          data: payload,
         });
         toast.success('Арендатор обновлён');
         router.push(ROUTES.tenant(tenantId));
