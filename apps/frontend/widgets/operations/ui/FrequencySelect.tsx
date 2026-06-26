@@ -1,0 +1,59 @@
+'use client';
+
+import { useId, type JSX } from 'react';
+import clsx from 'clsx';
+import { type OperationFrequency } from '@/entities/operation/model/types';
+import styles from './FrequencySelect.module.css';
+
+export type FrequencySelectProps = {
+  readonly value?: OperationFrequency;
+  readonly onChange: (frequency: OperationFrequency) => void;
+  readonly error?: string;
+};
+
+const frequencyOptions: { value: OperationFrequency; label: string }[] = [
+  { value: 'once', label: 'Напомнить один раз' },
+  { value: 'monthly', label: 'Каждый месяц' },
+  { value: 'yearly', label: 'Каждый год' },
+];
+
+export function FrequencySelect({
+  value,
+  onChange,
+  error,
+}: FrequencySelectProps): JSX.Element {
+  const labelId = useId();
+
+  return (
+    <div
+      className={clsx(styles.root, error && styles.error)}
+      role="radiogroup"
+      aria-labelledby={labelId}
+    >
+      <span id={labelId} className={styles.label}>
+        Периодичность
+      </span>
+      <div className={styles.options}>
+        {frequencyOptions.map((option) => {
+          const isSelected = value === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              className={clsx(styles.option, isSelected && styles.selected)}
+              onClick={() => onChange(option.value)}
+            >
+              <span className={styles.radio} aria-hidden="true">
+                <span className={styles.radioDot} />
+              </span>
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      {error && <span className={styles.errorText}>{error}</span>}
+    </div>
+  );
+}
