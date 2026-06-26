@@ -5,11 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useCreateTenantContact } from '@/features/tenant-contacts/api';
 import { ApiError } from '@/shared/api/errors';
 import { ROUTES } from '@/shared/config/routes';
-import { useTenantCreateDraft, type TenantCreateDraft } from '../lib/use-tenant-create-draft';
+import { useTenantCreateDraft } from '../lib/use-tenant-create-draft';
 import { TenantCreateHeader } from './TenantCreateHeader';
 import { TenantFormStep } from './TenantFormStep';
 import { TenantSuccessStep } from './TenantSuccessStep';
 import styles from './TenantCreateWizard.module.css';
+import type { TenantContactFormData } from './TenantForm';
 
 function formatErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -34,26 +35,20 @@ export function TenantCreateWizard(): JSX.Element {
     router.push(ROUTES.tenants);
   };
 
-  const handleFieldChange = <K extends keyof Omit<TenantCreateDraft, 'step'>>(
-    field: K,
-  ) =>
-    (value: TenantCreateDraft[K]) => {
-      setDraft((prev) => ({ ...prev, [field]: value }));
-    };
-
-  const handleSubmit = async () => {
-    if (draft.name.trim() === '') return;
+  const handleSubmit = async (data: TenantContactFormData) => {
+    if (data.name.trim() === '') return;
 
     setIsSubmitting(true);
     setSubmitError(undefined);
 
     try {
       await createTenantContact.mutateAsync({
-        name: draft.name.trim(),
-        surname: draft.surname.trim() || undefined,
-        patronymic: draft.patronymic.trim() || undefined,
-        phone: draft.phone.trim() || undefined,
-        comment: draft.comment.trim() || undefined,
+        name: data.name.trim(),
+        surname: data.surname.trim() || undefined,
+        patronymic: data.patronymic.trim() || undefined,
+        phone: data.phone.trim() || undefined,
+        email: data.email.trim() || undefined,
+        comment: data.comment.trim() || undefined,
       });
 
       setDraft((prev) => ({ ...prev, step: 'success' }));
@@ -81,18 +76,15 @@ export function TenantCreateWizard(): JSX.Element {
       <TenantCreateHeader onClose={handleClose} />
       <div className={styles.content}>
         <TenantFormStep
-          name={draft.name}
-          surname={draft.surname}
-          patronymic={draft.patronymic}
-          phone={draft.phone}
-          comment={draft.comment}
+          initialData={{
+            name: draft.name,
+            surname: draft.surname,
+            patronymic: draft.patronymic,
+            phone: draft.phone,
+            comment: draft.comment,
+          }}
           isLoading={isSubmitting}
           error={submitError}
-          onNameChange={handleFieldChange('name')}
-          onSurnameChange={handleFieldChange('surname')}
-          onPatronymicChange={handleFieldChange('patronymic')}
-          onPhoneChange={handleFieldChange('phone')}
-          onCommentChange={handleFieldChange('comment')}
           onSubmit={handleSubmit}
         />
       </div>
