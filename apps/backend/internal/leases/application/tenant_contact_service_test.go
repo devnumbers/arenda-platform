@@ -47,6 +47,16 @@ func (r *fakeTenantContactRepo) ListByIDs(ctx context.Context, ownerID uuid.UUID
 }
 
 func (r *fakeTenantContactRepo) Update(ctx context.Context, ownerID uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error) {
+	if r.err != nil {
+		return domain.TenantContact{}, r.err
+	}
+	if contact.Phone != nil {
+		for _, c := range r.contacts {
+			if c.OwnerID == ownerID && c.ID != contact.ID && c.Phone != nil && *c.Phone == *contact.Phone {
+				return domain.TenantContact{}, ErrDuplicatePhone
+			}
+		}
+	}
 	return contact, nil
 }
 
@@ -291,5 +301,124 @@ func TestUpdateTenantContactRejectsInvalidEmail(t *testing.T) {
 	})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+}
+
+func TestUpdateTenantContactUpdatesName(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+
+	newName := "Petr"
+	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
+		Name: &newName,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTenantContact failed: %v", err)
+	}
+	if updated.Name != "Petr" {
+		t.Fatalf("expected name %q, got %q", "Petr", updated.Name)
+	}
+}
+
+func TestUpdateTenantContactRejectsEmptyName(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+
+	empty := "   "
+	_, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
+		Name: &empty,
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+}
+
+func TestUpdateTenantContactNoOpPreservesValues(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+
+	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{})
+	if err != nil {
+		t.Fatalf("UpdateTenantContact failed: %v", err)
+	}
+	if updated.Name != "Ivan" {
+		t.Fatalf("expected name %q, got %q", "Ivan", updated.Name)
+	}
+	if updated.Surname == nil || *updated.Surname != "Ivanov" {
+		t.Fatalf("expected surname %q, got %v", "Ivanov", updated.Surname)
+	}
+	if updated.Patronymic == nil || *updated.Patronymic != "Ivanovich" {
+		t.Fatalf("expected patronymic %q, got %v", "Ivanovich", updated.Patronymic)
+	}
+	if updated.Phone == nil || *updated.Phone != "+79161234567" {
+		t.Fatalf("expected phone %q, got %v", "+79161234567", updated.Phone)
+	}
+	if updated.Email == nil || *updated.Email != "ivan@example.com" {
+		t.Fatalf("expected email %q, got %v", "ivan@example.com", updated.Email)
+	}
+	if updated.Comment == nil || *updated.Comment != "initial comment" {
+		t.Fatalf("expected comment %q, got %v", "initial comment", updated.Comment)
+	}
+}
+
+func TestUpdateTenantContactNotFound(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+
+	otherID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a99")
+	newName := "Petr"
+	_, err := svc.UpdateTenantContact(context.Background(), ownerID, otherID, UpdateTenantContactCommand{
+		Name: &newName,
+	})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestUpdateTenantContactDuplicatePhone(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	contactID1 := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+	contactID2 := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03")
+	phone1 := "+79161234567"
+	phone2 := "+79169876543"
+	surname := "Ivanov"
+	patronymic := "Ivanovich"
+	email := "ivan@example.com"
+	comment := "initial comment"
+	repo := &fakeTenantContactRepo{
+		contacts: []domain.TenantContact{
+			{
+				ID:         contactID1,
+				OwnerID:    ownerID,
+				Name:       "Ivan",
+				Surname:    &surname,
+				Patronymic: &patronymic,
+				Phone:      &phone1,
+				Email:      &email,
+				Comment:    &comment,
+			},
+			{
+				ID:         contactID2,
+				OwnerID:    ownerID,
+				Name:       "Petr",
+				Surname:    &surname,
+				Patronymic: &patronymic,
+				Phone:      &phone2,
+				Email:      &email,
+				Comment:    &comment,
+			},
+		},
+	}
+	svc := NewTenantContactService(repo, nil)
+
+	_, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID2, UpdateTenantContactCommand{
+		Phone: &phone1,
+	})
+	if !errors.Is(err, ErrDuplicatePhone) {
+		t.Fatalf("expected ErrDuplicatePhone, got %v", err)
 	}
 }
