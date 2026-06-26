@@ -157,6 +157,7 @@ type Operation struct {
 	Type                 OperationType
 	Category             OperationCategory
 	Status               OperationStatus
+	Name                 string
 	AmountKopecks        int64
 	OperationDate        time.Time
 	Comment              string
