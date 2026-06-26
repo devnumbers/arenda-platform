@@ -58,6 +58,7 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 		PropertyID:    propertyId,
 		Type:          string(body.Type),
 		Category:      string(body.Category),
+		Name:          body.Name,
 		AmountKopecks: int64(body.AmountKopecks),
 		StartDate:     body.StartDate.Time,
 		PaymentDay:    body.PaymentDay,
@@ -67,6 +68,9 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 	}
 	if body.Comment != nil {
 		cmd.Comment = body.Comment
+	}
+	if body.Periodicity != nil {
+		cmd.Periodicity = string(*body.Periodicity)
 	}
 
 	rec, err := h.svc.CreateRecurringOperation(r.Context(), ownerID, cmd)
@@ -135,6 +139,7 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 	cmd := leasesapp.UpdateRecurringOperationCommand{
 		Type:     ptrString(body.Type),
 		Category: ptrString(body.Category),
+		Name:     body.Name,
 		Comment:  body.Comment,
 	}
 	if body.AmountKopecks != nil {
@@ -148,6 +153,10 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 	}
 	if body.EndDate != nil {
 		cmd.EndDate = new(body.EndDate.Time)
+	}
+	if body.Periodicity != nil {
+		p := string(*body.Periodicity)
+		cmd.Periodicity = &p
 	}
 
 	rec, err := h.svc.UpdateRecurringOperation(r.Context(), ownerID, id, cmd)
@@ -200,6 +209,7 @@ func recurringOperationResponse(rec domain.RecurringOperation) openapi.Recurring
 		PropertyId:    rec.PropertyID,
 		Type:          openapi.OperationType(rec.Type),
 		Category:      openapi.OperationCategory(rec.Category),
+		Name:          rec.Name,
 		AmountKopecks: int(rec.AmountKopecks),
 		StartDate:     openapi_types.Date{Time: rec.StartDate},
 		PaymentDay:    rec.PaymentDay,
