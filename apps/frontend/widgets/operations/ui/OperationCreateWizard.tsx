@@ -2,6 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'react-toastify';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { Button } from '@/shared/ui/button';
 import { IconButton } from '@/shared/ui/icon-button';
@@ -69,70 +70,104 @@ function formatDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function startOfToday(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
-
 function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
 }
 
-function daysInMonth(year: number, month: number): number {
-  return new Date(year, month + 1, 0).getDate();
-}
-
 function subtractDaysFromDateString(dateString: string, days: number): string {
   return formatDate(addDays(parseLocalDate(dateString), -days));
 }
 
-function getEarliestFutureOperationDate(schedule: ScheduleData): string | undefined {
-  if (!schedule.date) {
-    return undefined;
+function parseUtcDate(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function formatUtcDate(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function startOfTodayUtc(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+function lastDayOfUtcMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+}
+
+function addUtcMonths(date: Date, months: number): Date {
+  const result = new Date(date);
+  result.setUTCMonth(result.getUTCMonth() + months);
+  return result;
+}
+
+function nextPaymentDateMonthly(current: Date, paymentDay: number): Date {
+  const year = current.getUTCFullYear();
+  const month = current.getUTCMonth();
+  const lastDay = lastDayOfUtcMonth(year, month + 1);
+  const day = Math.min(paymentDay, lastDay);
+  return new Date(Date.UTC(year, month + 1, day));
+}
+
+function nextPaymentDateYearly(current: Date, paymentDay: number): Date {
+  const year = current.getUTCFullYear() + 1;
+  const month = current.getUTCMonth();
+  const lastDay = lastDayOfUtcMonth(year, month);
+  const day = Math.min(paymentDay, lastDay);
+  return new Date(Date.UTC(year, month, day));
+}
+
+function getEarliestFutureOperationDate(schedule: ScheduleData): string | null {
+  if (!schedule.date || schedule.frequency === 'once') {
+    return null;
   }
 
-  const today = startOfToday();
-  const startDate = parseLocalDate(schedule.date);
+  const today = startOfTodayUtc();
+  const startDate = parseUtcDate(schedule.date);
+  const endDate = schedule.endDate ? parseUtcDate(schedule.endDate) : undefined;
+  const paymentDay = schedule.paymentDay ?? startDate.getUTCDate();
 
-  if (startDate >= today) {
-    return schedule.date;
-  }
+  const windowEnd = addUtcMonths(today, 12);
+  let current = new Date(startDate);
+  let first = true;
 
-  if (schedule.frequency === 'yearly') {
-    const date = new Date(startDate);
-    while (date < today) {
-      date.setFullYear(date.getFullYear() + 1);
+  for (let i = 0; i < 37; i++) {
+    if (!first) {
+      if (schedule.frequency === 'yearly') {
+        current = nextPaymentDateYearly(current, paymentDay);
+      } else {
+        current = nextPaymentDateMonthly(current, paymentDay);
+      }
     }
-    return formatDate(date);
-  }
+    first = false;
 
-  const paymentDay = schedule.paymentDay ?? startDate.getDate();
-  let year = today.getFullYear();
-  let month = today.getMonth();
-  let day = Math.min(paymentDay, daysInMonth(year, month));
-  let candidate = new Date(year, month, day);
-
-  if (candidate < today) {
-    month += 1;
-    if (month > 11) {
-      month = 0;
-      year += 1;
+    if (endDate && current > endDate) {
+      break;
     }
-    day = Math.min(paymentDay, daysInMonth(year, month));
-    candidate = new Date(year, month, day);
+    if (current > windowEnd) {
+      break;
+    }
+
+    if (current >= today) {
+      return formatUtcDate(current);
+    }
   }
 
-  return formatDate(candidate);
+  return null;
 }
 
 function validateBasicInfo(data: BasicInfoData, type: OperationType): BasicInfoErrors {
   const errors: BasicInfoErrors = {};
   const amountKopecks = toKopecks(data.amount);
 
-  if (amountKopecks === undefined || amountKopecks <= 0) {
-    errors.amount = 'Введите сумму больше 0';
+  if (amountKopecks === undefined || amountKopecks < 0) {
+    errors.amount = 'Введите сумму';
   }
 
   const name = data.name.trim();
@@ -297,13 +332,17 @@ export function OperationCreateWizard({ type }: OperationCreateWizardProps): JSX
         });
 
         if (reminder.enabled) {
-          await createOperationReminder.mutateAsync({
-            propertyId,
-            operationId: operation.id,
-            data: {
-              reminder_date: subtractDaysFromDateString(operationDate, reminder.offsetDays),
-            },
-          });
+          try {
+            await createOperationReminder.mutateAsync({
+              propertyId,
+              operationId: operation.id,
+              data: {
+                reminder_date: subtractDaysFromDateString(operationDate, reminder.offsetDays),
+              },
+            });
+          } catch {
+            toast.success('Платёж создан, но не удалось добавить напоминание');
+          }
         }
       } else {
         const recurringOperation = await createRecurringOperation.mutateAsync({
@@ -324,20 +363,23 @@ export function OperationCreateWizard({ type }: OperationCreateWizardProps): JSX
         if (reminder.enabled) {
           const earliestDate = getEarliestFutureOperationDate(schedule);
           if (earliestDate) {
-            await createRecurringOperationReminder.mutateAsync({
-              propertyId,
-              recurringOperationId: recurringOperation.id,
-              data: {
-                reminder_date: subtractDaysFromDateString(earliestDate, reminder.offsetDays),
-              },
-            });
+            try {
+              await createRecurringOperationReminder.mutateAsync({
+                propertyId,
+                recurringOperationId: recurringOperation.id,
+                data: {
+                  reminder_date: subtractDaysFromDateString(earliestDate, reminder.offsetDays),
+                },
+              });
+            } catch {
+              toast.success('Платёж создан, но не удалось добавить напоминание');
+            }
           }
         }
       }
 
       setStep('success');
     } catch (error: unknown) {
-      console.error('Failed to create operation', error);
       setSubmitError(formatErrorMessage(error));
     } finally {
       setIsSubmitting(false);

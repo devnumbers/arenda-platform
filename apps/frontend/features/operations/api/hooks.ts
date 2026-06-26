@@ -105,6 +105,9 @@ export function useCreateRecurringOperation(): UseMutationResult<
         queryKey: operationKeys.recurringByProperty(propertyId),
       });
       queryClient.invalidateQueries({
+        queryKey: operationKeys.byProperty(propertyId),
+      });
+      queryClient.invalidateQueries({
         queryKey: operationKeys.summary(propertyId),
       });
     },
