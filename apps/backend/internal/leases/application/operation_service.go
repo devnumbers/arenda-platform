@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +20,7 @@ type CreateOperationCommand struct {
 	PropertyID    uuid.UUID
 	Type          string
 	Category      string
+	Name          string
 	AmountKopecks int64
 	OperationDate time.Time
 	Comment       *string
@@ -29,6 +31,7 @@ type CreateOperationCommand struct {
 type UpdateOperationCommand struct {
 	Type          *string
 	Category      *string
+	Name          *string
 	AmountKopecks *int64
 	OperationDate *time.Time
 	Comment       *string
@@ -97,6 +100,14 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		return domain.Operation{}, err
 	}
 
+	name := strings.TrimSpace(cmd.Name)
+	if name == "" {
+		return domain.Operation{}, newInvalidInputError("name is required")
+	}
+	if len([]rune(name)) > 50 {
+		return domain.Operation{}, newInvalidInputError("name must be at most 50 characters")
+	}
+
 	if err := s.validateAmountAndDate(cmd.AmountKopecks, cmd.OperationDate); err != nil {
 		return domain.Operation{}, err
 	}
@@ -125,6 +136,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		Type:          opType,
 		Category:      category,
 		Status:        domain.OperationStatusPending,
+		Name:          name,
 		AmountKopecks: cmd.AmountKopecks,
 		OperationDate: cmd.OperationDate,
 		Comment:       comment,
@@ -215,6 +227,17 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	}
 	op.Type = opType
 	op.Category = category
+
+	if cmd.Name != nil {
+		name := strings.TrimSpace(*cmd.Name)
+		if name == "" {
+			return domain.Operation{}, newInvalidInputError("name is required")
+		}
+		if len([]rune(name)) > 50 {
+			return domain.Operation{}, newInvalidInputError("name must be at most 50 characters")
+		}
+		op.Name = name
+	}
 
 	if cmd.AmountKopecks != nil {
 		op.AmountKopecks = *cmd.AmountKopecks
