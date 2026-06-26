@@ -4,10 +4,10 @@ import "time"
 
 // GenerateDates returns the planned operation dates for a recurring rent
 // schedule. The first date is always the lease start date. Subsequent dates
-// fall on paymentDay of each month, clamped to the last day of the month when
-// necessary. Generation stops at 12 months from now or at endDate, whichever
-// comes first.
-func GenerateDates(start time.Time, paymentDay int, endDate *time.Time, now time.Time) []time.Time {
+// fall on paymentDay of each month or year (depending on periodicity), clamped
+// to the last day of the month when necessary. Generation stops at 12 months
+// from now or at endDate, whichever comes first.
+func GenerateDates(start time.Time, paymentDay int, endDate *time.Time, now time.Time, periodicity RecurringOperationPeriodicity) []time.Time {
 	var dates []time.Time
 
 	windowEnd := date(now).AddDate(0, 12, 0)
@@ -16,7 +16,12 @@ func GenerateDates(start time.Time, paymentDay int, endDate *time.Time, now time
 
 	for {
 		if !first {
-			current = nextPaymentDate(current, paymentDay)
+			switch periodicity {
+			case RecurringOperationPeriodicityYearly:
+				current = nextPaymentDateYearly(current, paymentDay)
+			default:
+				current = nextPaymentDate(current, paymentDay)
+			}
 		}
 		first = false
 
@@ -48,6 +53,19 @@ func nextPaymentDate(current time.Time, paymentDay int) time.Time {
 	}
 
 	return time.Date(year, month+1, day, 0, 0, 0, 0, time.UTC)
+}
+
+func nextPaymentDateYearly(current time.Time, paymentDay int) time.Time {
+	year, month, _ := current.Date()
+	year++
+	lastDay := lastDayOfMonth(year, month)
+
+	day := paymentDay
+	if day > lastDay {
+		day = lastDay
+	}
+
+	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }
 
 func lastDayOfMonth(year int, month time.Month) int {

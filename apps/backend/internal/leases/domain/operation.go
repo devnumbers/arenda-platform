@@ -178,7 +178,26 @@ type RecurringOperationPeriodicity string
 
 const (
 	RecurringOperationPeriodicityMonthly RecurringOperationPeriodicity = "monthly"
+	RecurringOperationPeriodicityYearly  RecurringOperationPeriodicity = "yearly"
 )
+
+var ErrInvalidRecurringOperationPeriodicity = fmt.Errorf("invalid recurring operation periodicity")
+
+func ParseRecurringOperationPeriodicity(s string) (RecurringOperationPeriodicity, error) {
+	p := RecurringOperationPeriodicity(s)
+	if !p.Valid() {
+		return "", fmt.Errorf("%w: %q", ErrInvalidRecurringOperationPeriodicity, s)
+	}
+	return p, nil
+}
+
+func (p RecurringOperationPeriodicity) Valid() bool {
+	switch p {
+	case RecurringOperationPeriodicityMonthly, RecurringOperationPeriodicityYearly:
+		return true
+	}
+	return false
+}
 
 type RecurringOperation struct {
 	ID                 uuid.UUID
