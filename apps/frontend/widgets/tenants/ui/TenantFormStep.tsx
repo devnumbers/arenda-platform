@@ -8,6 +8,7 @@ import styles from './TenantFormStep.module.css';
 export interface TenantFormStepProps {
   readonly initialData?: Partial<TenantContactFormData>;
   readonly onSubmit: (data: TenantContactFormData) => void;
+  readonly onChange?: (data: TenantContactFormData) => void;
   readonly isLoading: boolean;
   readonly error?: string;
 }
@@ -15,6 +16,7 @@ export interface TenantFormStepProps {
 export function TenantFormStep({
   initialData,
   onSubmit,
+  onChange,
   isLoading,
   error,
 }: TenantFormStepProps): JSX.Element {
@@ -27,6 +29,7 @@ export function TenantFormStep({
         isLoading={isLoading}
         error={error}
         onSubmit={onSubmit}
+        onChange={onChange}
         backHref="/tenants"
       />
     </div>

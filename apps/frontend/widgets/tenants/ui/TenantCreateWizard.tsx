@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type JSX } from 'react';
+import { useCallback, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCreateTenantContact } from '@/features/tenant-contacts/api';
 import { ApiError } from '@/shared/api/errors';
@@ -34,6 +34,20 @@ export function TenantCreateWizard(): JSX.Element {
     clearDraft();
     router.push(ROUTES.tenants);
   };
+
+  const handleChange = useCallback(
+    (data: TenantContactFormData) => {
+      setDraft((prev) => ({
+        ...prev,
+        name: data.name,
+        surname: data.surname,
+        patronymic: data.patronymic,
+        phone: data.phone,
+        comment: data.comment,
+      }));
+    },
+    [setDraft],
+  );
 
   const handleSubmit = async (data: TenantContactFormData) => {
     if (data.name.trim() === '') return;
@@ -86,6 +100,7 @@ export function TenantCreateWizard(): JSX.Element {
           isLoading={isSubmitting}
           error={submitError}
           onSubmit={handleSubmit}
+          onChange={handleChange}
         />
       </div>
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, type ChangeEvent, type FormEvent, type JSX } from 'react';
+import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent, type JSX } from 'react';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import { TextField } from '@/shared/ui/text-field';
@@ -23,6 +23,7 @@ export interface TenantFormProps {
   isLoading: boolean;
   error?: string;
   onSubmit: (data: TenantContactFormData) => void;
+  onChange?: (data: TenantContactFormData) => void;
   onCancel?: () => void;
   backHref: string;
 }
@@ -37,6 +38,7 @@ export function TenantForm({
   isLoading,
   error,
   onSubmit,
+  onChange,
   onCancel,
   backHref,
 }: TenantFormProps): JSX.Element {
@@ -50,6 +52,17 @@ export function TenantForm({
   const [isPhoneTouched, setIsPhoneTouched] = useState(false);
   const [isEmailTouched, setIsEmailTouched] = useState(false);
   const [isSubmitAttempted, setIsSubmitAttempted] = useState(false);
+
+  useEffect(() => {
+    onChange?.({
+      name,
+      surname,
+      patronymic,
+      phone,
+      email,
+      comment,
+    });
+  }, [comment, email, name, onChange, patronymic, phone, surname]);
 
   const isNameValid = name.trim() !== '';
   const isPhoneValid = phone === '' || phone.length === 18;
