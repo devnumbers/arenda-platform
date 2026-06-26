@@ -13,16 +13,16 @@ import (
 
 const createRecurringOperation = `-- name: CreateRecurringOperation :one
 INSERT INTO recurring_operations (
-    owner_id, property_id, lease_id, type, category,
+    owner_id, property_id, lease_id, type, category, name,
     amount_kopecks, start_date, payment_day, end_date,
     periodicity, status, comment
 )
 VALUES (
-    $1, $2, $3, $4, $5,
-    $6, $7, $8, $9,
-    $10, $11, $12
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10,
+    $11, $12, $13
 )
-RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days
+RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name
 `
 
 type CreateRecurringOperationParams struct {
@@ -31,6 +31,7 @@ type CreateRecurringOperationParams struct {
 	LeaseID       pgtype.UUID `json:"lease_id"`
 	Type          string      `json:"type"`
 	Category      string      `json:"category"`
+	Name          string      `json:"name"`
 	AmountKopecks int64       `json:"amount_kopecks"`
 	StartDate     pgtype.Date `json:"start_date"`
 	PaymentDay    int32       `json:"payment_day"`
@@ -47,6 +48,7 @@ func (q *Queries) CreateRecurringOperation(ctx context.Context, arg CreateRecurr
 		arg.LeaseID,
 		arg.Type,
 		arg.Category,
+		arg.Name,
 		arg.AmountKopecks,
 		arg.StartDate,
 		arg.PaymentDay,
@@ -73,6 +75,7 @@ func (q *Queries) CreateRecurringOperation(ctx context.Context, arg CreateRecurr
 		&i.Comment,
 		&i.Status,
 		&i.ReminderOffsetDays,
+		&i.Name,
 	)
 	return i, err
 }
@@ -88,7 +91,7 @@ func (q *Queries) DeleteRecurringOperationByLease(ctx context.Context, leaseID p
 }
 
 const getRecurringOperationByIDAndOwner = `-- name: GetRecurringOperationByIDAndOwner :one
-SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days FROM recurring_operations
+SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name FROM recurring_operations
 WHERE id = $1 AND owner_id = $2
 `
 
@@ -117,12 +120,13 @@ func (q *Queries) GetRecurringOperationByIDAndOwner(ctx context.Context, arg Get
 		&i.Comment,
 		&i.Status,
 		&i.ReminderOffsetDays,
+		&i.Name,
 	)
 	return i, err
 }
 
 const getRecurringOperationByIDAndOwnerForUpdate = `-- name: GetRecurringOperationByIDAndOwnerForUpdate :one
-SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days FROM recurring_operations
+SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name FROM recurring_operations
 WHERE id = $1 AND owner_id = $2
 FOR UPDATE
 `
@@ -152,12 +156,13 @@ func (q *Queries) GetRecurringOperationByIDAndOwnerForUpdate(ctx context.Context
 		&i.Comment,
 		&i.Status,
 		&i.ReminderOffsetDays,
+		&i.Name,
 	)
 	return i, err
 }
 
 const getRecurringOperationByLease = `-- name: GetRecurringOperationByLease :many
-SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days FROM recurring_operations
+SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name FROM recurring_operations
 WHERE lease_id = $1
 ORDER BY created_at DESC
 `
@@ -188,6 +193,7 @@ func (q *Queries) GetRecurringOperationByLease(ctx context.Context, leaseID pgty
 			&i.Comment,
 			&i.Status,
 			&i.ReminderOffsetDays,
+			&i.Name,
 		); err != nil {
 			return nil, err
 		}
@@ -200,7 +206,7 @@ func (q *Queries) GetRecurringOperationByLease(ctx context.Context, leaseID pgty
 }
 
 const getRecurringOperationByLeaseIDAndOwner = `-- name: GetRecurringOperationByLeaseIDAndOwner :one
-SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days FROM recurring_operations
+SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name FROM recurring_operations
 WHERE lease_id = $1 AND owner_id = $2
 ORDER BY created_at DESC
 LIMIT 1
@@ -231,12 +237,13 @@ func (q *Queries) GetRecurringOperationByLeaseIDAndOwner(ctx context.Context, ar
 		&i.Comment,
 		&i.Status,
 		&i.ReminderOffsetDays,
+		&i.Name,
 	)
 	return i, err
 }
 
 const listRecurringOperationsByProperty = `-- name: ListRecurringOperationsByProperty :many
-SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days FROM recurring_operations
+SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name FROM recurring_operations
 WHERE owner_id = $1 AND property_id = $2
 ORDER BY created_at DESC
 `
@@ -272,6 +279,7 @@ func (q *Queries) ListRecurringOperationsByProperty(ctx context.Context, arg Lis
 			&i.Comment,
 			&i.Status,
 			&i.ReminderOffsetDays,
+			&i.Name,
 		); err != nil {
 			return nil, err
 		}
@@ -284,7 +292,7 @@ func (q *Queries) ListRecurringOperationsByProperty(ctx context.Context, arg Lis
 }
 
 const listRecurringOperationsByPropertyID = `-- name: ListRecurringOperationsByPropertyID :many
-SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days FROM recurring_operations
+SELECT id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name FROM recurring_operations
 WHERE property_id = $1
 `
 
@@ -314,6 +322,7 @@ func (q *Queries) ListRecurringOperationsByPropertyID(ctx context.Context, prope
 			&i.Comment,
 			&i.Status,
 			&i.ReminderOffsetDays,
+			&i.Name,
 		); err != nil {
 			return nil, err
 		}
@@ -329,19 +338,21 @@ const updateRecurringOperation = `-- name: UpdateRecurringOperation :one
 UPDATE recurring_operations
 SET type = $2,
     category = $3,
-    amount_kopecks = $4,
-    start_date = $5,
-    payment_day = $6,
-    end_date = $7,
-    comment = $8
-WHERE id = $1 AND owner_id = $9
-RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days
+    name = $4,
+    amount_kopecks = $5,
+    start_date = $6,
+    payment_day = $7,
+    end_date = $8,
+    comment = $9
+WHERE id = $1 AND owner_id = $10
+RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name
 `
 
 type UpdateRecurringOperationParams struct {
 	ID            pgtype.UUID `json:"id"`
 	Type          string      `json:"type"`
 	Category      string      `json:"category"`
+	Name          string      `json:"name"`
 	AmountKopecks int64       `json:"amount_kopecks"`
 	StartDate     pgtype.Date `json:"start_date"`
 	PaymentDay    int32       `json:"payment_day"`
@@ -355,6 +366,7 @@ func (q *Queries) UpdateRecurringOperation(ctx context.Context, arg UpdateRecurr
 		arg.ID,
 		arg.Type,
 		arg.Category,
+		arg.Name,
 		arg.AmountKopecks,
 		arg.StartDate,
 		arg.PaymentDay,
@@ -380,6 +392,7 @@ func (q *Queries) UpdateRecurringOperation(ctx context.Context, arg UpdateRecurr
 		&i.Comment,
 		&i.Status,
 		&i.ReminderOffsetDays,
+		&i.Name,
 	)
 	return i, err
 }
@@ -408,7 +421,7 @@ const updateRecurringOperationStatus = `-- name: UpdateRecurringOperationStatus 
 UPDATE recurring_operations
 SET status = $2
 WHERE id = $1 AND owner_id = $3
-RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days
+RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name
 `
 
 type UpdateRecurringOperationStatusParams struct {
@@ -437,6 +450,7 @@ func (q *Queries) UpdateRecurringOperationStatus(ctx context.Context, arg Update
 		&i.Comment,
 		&i.Status,
 		&i.ReminderOffsetDays,
+		&i.Name,
 	)
 	return i, err
 }
@@ -445,7 +459,7 @@ const updateRecurringOperationStatusByID = `-- name: UpdateRecurringOperationSta
 UPDATE recurring_operations
 SET status = $2
 WHERE id = $1
-RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days
+RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name
 `
 
 type UpdateRecurringOperationStatusByIDParams struct {
@@ -473,6 +487,7 @@ func (q *Queries) UpdateRecurringOperationStatusByID(ctx context.Context, arg Up
 		&i.Comment,
 		&i.Status,
 		&i.ReminderOffsetDays,
+		&i.Name,
 	)
 	return i, err
 }
@@ -481,7 +496,7 @@ const updateRecurringOperationStatusByLeaseID = `-- name: UpdateRecurringOperati
 UPDATE recurring_operations
 SET status = $1, updated_at = NOW()
 WHERE lease_id = $2 AND owner_id = $3
-RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days
+RETURNING id, owner_id, property_id, lease_id, type, category, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name
 `
 
 type UpdateRecurringOperationStatusByLeaseIDParams struct {
@@ -516,6 +531,7 @@ func (q *Queries) UpdateRecurringOperationStatusByLeaseID(ctx context.Context, a
 			&i.Comment,
 			&i.Status,
 			&i.ReminderOffsetDays,
+			&i.Name,
 		); err != nil {
 			return nil, err
 		}

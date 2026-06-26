@@ -1,13 +1,13 @@
 -- name: CreateRecurringOperation :one
 INSERT INTO recurring_operations (
-    owner_id, property_id, lease_id, type, category,
+    owner_id, property_id, lease_id, type, category, name,
     amount_kopecks, start_date, payment_day, end_date,
     periodicity, status, comment
 )
 VALUES (
-    $1, $2, $3, $4, $5,
-    $6, $7, $8, $9,
-    $10, $11, $12
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10,
+    $11, $12, $13
 )
 RETURNING *;
 
@@ -40,12 +40,13 @@ FOR UPDATE;
 UPDATE recurring_operations
 SET type = $2,
     category = $3,
-    amount_kopecks = $4,
-    start_date = $5,
-    payment_day = $6,
-    end_date = $7,
-    comment = $8
-WHERE id = $1 AND owner_id = $9
+    name = $4,
+    amount_kopecks = $5,
+    start_date = $6,
+    payment_day = $7,
+    end_date = $8,
+    comment = $9
+WHERE id = $1 AND owner_id = $10
 RETURNING *;
 
 -- name: UpdateRecurringOperationStatus :one

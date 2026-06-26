@@ -236,6 +236,7 @@ type RecurringOperation struct {
 	Comment            pgtype.Text        `json:"comment"`
 	Status             string             `json:"status"`
 	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
+	Name               string             `json:"name"`
 }
 
 type Reminder struct {
