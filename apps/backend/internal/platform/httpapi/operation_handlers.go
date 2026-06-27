@@ -123,16 +123,19 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 
 	filter := leasesapp.OperationFilter{}
 	if params.Type != nil {
+		filter.Types = make([]domain.OperationType, 0, len(*params.Type))
 		for _, t := range *params.Type {
 			filter.Types = append(filter.Types, domain.OperationType(t))
 		}
 	}
 	if params.Status != nil {
+		filter.Statuses = make([]domain.OperationStatus, 0, len(*params.Status))
 		for _, s := range *params.Status {
 			filter.Statuses = append(filter.Statuses, domain.OperationStatus(s))
 		}
 	}
 	if params.Category != nil {
+		filter.Categories = make([]domain.OperationCategory, 0, len(*params.Category))
 		for _, c := range *params.Category {
 			filter.Categories = append(filter.Categories, domain.OperationCategory(c))
 		}

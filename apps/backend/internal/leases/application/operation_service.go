@@ -164,7 +164,11 @@ func (s *OperationService) GetPropertyOperationsSummary(ctx context.Context, own
 
 // ListOperations returns all operations for the owner filtered by the provided criteria.
 func (s *OperationService) ListOperations(ctx context.Context, ownerID uuid.UUID, filter OperationFilter) ([]domain.Operation, error) {
-	return s.operations.ListByOwner(ctx, ownerID, filter)
+	ops, err := s.operations.ListByOwner(ctx, ownerID, filter)
+	if err != nil {
+		return nil, fmt.Errorf("list operations: %w", err)
+	}
+	return ops, nil
 }
 
 // ListOperationsByProperty returns operations for the given owner and property,
