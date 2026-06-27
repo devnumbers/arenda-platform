@@ -22,6 +22,9 @@ import {
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { FinanceEmptyState } from '@/widgets/finance/ui/FinanceEmptyState';
+import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
+import { useSubscription } from '@/features/subscription/api/hooks';
+import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import { OperationsList } from '@/widgets/operations/ui/OperationsList';
 import styles from './PropertyOperationsPage.module.css';
 
@@ -102,6 +105,8 @@ export function PropertyOperationsPage(): JSX.Element {
 
   const propertyName = propertyQuery.data?.name ?? 'Мой объект';
   const operations = operationsQuery.data?.items ?? [];
+  const { data: subscription } = useSubscription();
+  const readonly = isSubscriptionReadonly(subscription);
 
   return (
     <div className={styles.root}>
@@ -114,19 +119,23 @@ export function PropertyOperationsPage(): JSX.Element {
           />
           <h1 className={styles.title}>{propertyName}</h1>
         </div>
-        <LinkButton
-          href={`${ROUTES.financeCreateOperation}?propertyId=${id}`}
-          variant="primary"
-          size="medium"
-          leftIcon={
-            <Icon size="s">
-              <Plus />
-            </Icon>
-          }
-        >
-          Добавить операцию
-        </LinkButton>
+        {!readonly && (
+          <LinkButton
+            href={`${ROUTES.financeCreateOperation}?propertyId=${id}`}
+            variant="primary"
+            size="medium"
+            leftIcon={
+              <Icon size="s">
+                <Plus />
+              </Icon>
+            }
+          >
+            Добавить операцию
+          </LinkButton>
+        )}
       </header>
+
+      <SubscriptionReadonlyBanner />
 
       {isLoading && <FinanceLoading />}
 
@@ -191,8 +200,8 @@ export function PropertyOperationsPage(): JSX.Element {
             <FinanceEmptyState
               title="Нет операций"
               subtitle="Добавьте первую операцию, чтобы увидеть её в списке"
-              actionHref={`${ROUTES.financeCreateOperation}?propertyId=${id}`}
-              actionText="Добавить операцию"
+              actionHref={readonly ? undefined : `${ROUTES.financeCreateOperation}?propertyId=${id}`}
+              actionText={readonly ? undefined : 'Добавить операцию'}
             />
           ) : (
             <OperationsList items={operations} />

@@ -9,6 +9,9 @@ import { useOperations } from '@/features/operations/api/hooks';
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { FinanceEmptyState } from '@/widgets/finance/ui/FinanceEmptyState';
+import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
+import { useSubscription } from '@/features/subscription/api/hooks';
+import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import { OperationsList } from './OperationsList';
 import styles from './PaymentsPage.module.css';
 
@@ -25,24 +28,30 @@ export function PaymentsPage(): JSX.Element {
   });
 
   const operations = data?.items ?? [];
+  const { data: subscription } = useSubscription();
+  const readonly = isSubscriptionReadonly(subscription);
 
   return (
     <div className={styles.root}>
       <div className={styles.header}>
         <h1 className={styles.title}>Платежи</h1>
-        <LinkButton
-          href={ROUTES.financeCreateOperation}
-          variant="primary"
-          size="medium"
-          leftIcon={
-            <Icon size="s">
-              <Plus />
-            </Icon>
-          }
-        >
-          Добавить операцию
-        </LinkButton>
+        {!readonly && (
+          <LinkButton
+            href={ROUTES.financeCreateOperation}
+            variant="primary"
+            size="medium"
+            leftIcon={
+              <Icon size="s">
+                <Plus />
+              </Icon>
+            }
+          >
+            Добавить операцию
+          </LinkButton>
+        )}
       </div>
+
+      <SubscriptionReadonlyBanner />
 
       {isLoading && <FinanceLoading />}
 

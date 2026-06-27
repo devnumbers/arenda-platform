@@ -14,6 +14,9 @@ import { FinanceEmptyState } from './FinanceEmptyState';
 import { FinanceLoading } from './FinanceLoading';
 import { FinanceErrorState } from './FinanceErrorState';
 import { FinanceSummaryCards } from './FinanceSummaryCards';
+import { SubscriptionReadonlyBanner } from './SubscriptionReadonlyBanner';
+import { useSubscription } from '@/features/subscription/api/hooks';
+import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import styles from './FinancePage.module.css';
 
 function formatDateForApi(date: Date): string {
@@ -63,24 +66,30 @@ export function FinancePage(): JSX.Element {
   };
 
   const operations = operationsData?.items ?? [];
+  const { data: subscription } = useSubscription();
+  const readonly = isSubscriptionReadonly(subscription);
 
   return (
     <div className={styles.root}>
       <div className={styles.header}>
         <h1 className={styles.title}>Финансы</h1>
-        <LinkButton
-          href={ROUTES.financeCreateOperation}
-          variant="primary"
-          size="medium"
-          leftIcon={
-            <Icon size="s">
-              <Plus />
-            </Icon>
-          }
-        >
-          Добавить операцию
-        </LinkButton>
+        {!readonly && (
+          <LinkButton
+            href={ROUTES.financeCreateOperation}
+            variant="primary"
+            size="medium"
+            leftIcon={
+              <Icon size="s">
+                <Plus />
+              </Icon>
+            }
+          >
+            Добавить операцию
+          </LinkButton>
+        )}
       </div>
+
+      <SubscriptionReadonlyBanner />
 
       {isLoading && <FinanceLoading />}
 
@@ -90,8 +99,8 @@ export function FinancePage(): JSX.Element {
         <FinanceEmptyState
           title="Нет операций"
           subtitle="Добавьте первую операцию, чтобы увидеть финансовую сводку"
-          actionHref={ROUTES.financeCreateOperation}
-          actionText="Добавить операцию"
+          actionHref={readonly ? undefined : ROUTES.financeCreateOperation}
+          actionText={readonly ? undefined : 'Добавить операцию'}
         />
       )}
 

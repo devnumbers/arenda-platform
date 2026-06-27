@@ -20,6 +20,9 @@ import { OperationFilters } from './OperationFilters';
 import { OperationsList } from './OperationsList';
 import { RecurringOperationsTab } from './RecurringOperationsTab';
 import { ProfitReport } from './ProfitReport';
+import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
+import { useSubscription } from '@/features/subscription/api/hooks';
+import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import styles from './OperationsPage.module.css';
 
 const TAB_ITEMS: ReadonlyArray<{
@@ -121,24 +124,30 @@ export function OperationsPage(): JSX.Element {
   };
 
   const operations = data?.items ?? [];
+  const { data: subscription } = useSubscription();
+  const readonly = isSubscriptionReadonly(subscription);
 
   return (
     <div className={styles.root}>
       <div className={styles.header}>
         <h1 className={styles.title}>Операции</h1>
-        <LinkButton
-          href={ROUTES.financeCreateOperation}
-          variant="primary"
-          size="medium"
-          leftIcon={
-            <Icon size="s">
-              <Plus />
-            </Icon>
-          }
-        >
-          Добавить операцию
-        </LinkButton>
+        {!readonly && (
+          <LinkButton
+            href={ROUTES.financeCreateOperation}
+            variant="primary"
+            size="medium"
+            leftIcon={
+              <Icon size="s">
+                <Plus />
+              </Icon>
+            }
+          >
+            Добавить операцию
+          </LinkButton>
+        )}
       </div>
+
+      <SubscriptionReadonlyBanner />
 
       <nav className={styles.tabs} aria-label="Тип операции">
         {TAB_ITEMS.map((tabItem) => {
@@ -172,8 +181,8 @@ export function OperationsPage(): JSX.Element {
             <FinanceEmptyState
               title="Нет операций"
               subtitle="Добавьте первую операцию, чтобы увидеть её в списке"
-              actionHref={ROUTES.financeCreateOperation}
-              actionText="Добавить операцию"
+              actionHref={readonly ? undefined : ROUTES.financeCreateOperation}
+              actionText={readonly ? undefined : 'Добавить операцию'}
             />
           )}
 

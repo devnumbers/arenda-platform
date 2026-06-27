@@ -22,6 +22,9 @@ import { formatOperationDate } from '@/entities/operation/lib/dates';
 import { formatMoneyKopecks } from '@/entities/operation/lib/formatMoney';
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
+import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
+import { useSubscription } from '@/features/subscription/api/hooks';
+import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import styles from './OperationDetailPage.module.css';
 
 type OperationResponse = components['schemas']['OperationResponse'];
@@ -53,7 +56,13 @@ function useOperationId(): string | undefined {
   return params?.id;
 }
 
-function OperationDetailCard({ operation }: { readonly operation: OperationResponse }): JSX.Element {
+function OperationDetailCard({
+  operation,
+  readonly,
+}: {
+  readonly operation: OperationResponse;
+  readonly readonly: boolean;
+}): JSX.Element {
   const router = useRouter();
   const completeMutation = useCompleteOperation();
   const deleteMutation = useDeleteOperation();
@@ -134,6 +143,7 @@ function OperationDetailCard({ operation }: { readonly operation: OperationRespo
             variant="primary"
             size="medium"
             loading={completeMutation.isPending}
+            disabled={readonly}
             onClick={handleComplete}
           >
             {isIncome ? 'Отметить полученной' : 'Отметить оплаченной'}
@@ -142,6 +152,7 @@ function OperationDetailCard({ operation }: { readonly operation: OperationRespo
         <Button
           variant="secondary"
           size="medium"
+          disabled={readonly}
           onClick={handleEdit}
         >
           Редактировать
@@ -150,6 +161,7 @@ function OperationDetailCard({ operation }: { readonly operation: OperationRespo
           variant="icon-black"
           size="medium"
           loading={deleteMutation.isPending}
+          disabled={readonly}
           onClick={handleDelete}
         >
           Удалить
@@ -163,6 +175,8 @@ export function OperationDetailPage(): JSX.Element {
   const id = useOperationId();
   const router = useRouter();
   const { data, isLoading, isError, refetch, isFetching } = useOperation(id ?? '');
+  const { data: subscription } = useSubscription();
+  const readonly = isSubscriptionReadonly(subscription);
 
   if (!id) {
     return (
@@ -190,6 +204,8 @@ export function OperationDetailPage(): JSX.Element {
         <span className={styles.title}>Операция</span>
       </div>
 
+      <SubscriptionReadonlyBanner />
+
       {isLoading && <FinanceLoading />}
 
       {!isLoading && isError && (
@@ -197,7 +213,7 @@ export function OperationDetailPage(): JSX.Element {
       )}
 
       {!isLoading && !isError && data && (
-        <OperationDetailCard operation={data} />
+        <OperationDetailCard operation={data} readonly={readonly} />
       )}
     </div>
   );

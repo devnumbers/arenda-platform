@@ -15,6 +15,9 @@ import {
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { FinanceEmptyState } from '@/widgets/finance/ui/FinanceEmptyState';
+import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
+import { useSubscription } from '@/features/subscription/api/hooks';
+import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import styles from './RecurringOperationsTab.module.css';
 
 type RecurringOperationResponse =
@@ -42,10 +45,12 @@ function getStatusLabel(status: RecurringOperationResponse['status']): string {
 
 type RecurringOperationItemProps = {
   readonly operation: RecurringOperationResponse;
+  readonly readonly: boolean;
 };
 
 function RecurringOperationItem({
   operation,
+  readonly,
 }: RecurringOperationItemProps): JSX.Element {
   const pauseMutation = usePauseRecurringOperation();
   const resumeMutation = useResumeRecurringOperation();
@@ -87,6 +92,7 @@ function RecurringOperationItem({
           variant="secondary"
           size="small"
           loading={isMutating}
+          disabled={readonly}
           onClick={handleToggle}
         >
           {actionText}
@@ -104,6 +110,8 @@ export function RecurringOperationsTab(): JSX.Element {
     isError,
     refetch,
   } = useRecurringOperations();
+  const { data: subscription } = useSubscription();
+  const readonly = isSubscriptionReadonly(subscription);
 
   const items = data?.items ?? [];
 
@@ -117,20 +125,30 @@ export function RecurringOperationsTab(): JSX.Element {
 
   if (items.length === 0) {
     return (
-      <FinanceEmptyState
-        title="Нет регулярных операций"
-        subtitle="Создайте регулярную операцию, чтобы платежи добавлялись автоматически."
-        actionHref={ROUTES.financeCreateOperation}
-        actionText="Добавить операцию"
-      />
+      <>
+        <SubscriptionReadonlyBanner />
+        <FinanceEmptyState
+          title="Нет регулярных операций"
+          subtitle="Создайте регулярную операцию, чтобы платежи добавлялись автоматически."
+          actionHref={readonly ? undefined : ROUTES.financeCreateOperation}
+          actionText={readonly ? undefined : 'Добавить операцию'}
+        />
+      </>
     );
   }
 
   return (
-    <ul className={styles.list}>
-      {items.map((operation) => (
-        <RecurringOperationItem key={operation.id} operation={operation} />
-      ))}
-    </ul>
+    <>
+      <SubscriptionReadonlyBanner />
+      <ul className={styles.list}>
+        {items.map((operation) => (
+          <RecurringOperationItem
+            key={operation.id}
+            operation={operation}
+            readonly={readonly}
+          />
+        ))}
+      </ul>
+    </>
   );
 }

@@ -27,6 +27,9 @@ import {
 } from '@/features/operations/api/hooks';
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
+import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
+import { useSubscription } from '@/features/subscription/api/hooks';
+import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import { CategorySelect } from './CategorySelect';
 import { TypeSelect } from './TypeSelect';
 import styles from './OperationEditForm.module.css';
@@ -81,6 +84,7 @@ function useOperationId(): string | undefined {
 function OperationEditFormContent({
   id,
   operation,
+  readonly,
 }: {
   readonly id: string;
   readonly operation: {
@@ -94,6 +98,7 @@ function OperationEditFormContent({
     readonly comment?: string | null;
     readonly lease_id?: string | null;
   };
+  readonly readonly: boolean;
 }): JSX.Element {
   const router = useRouter();
   const updateOperation = useUpdateOperation();
@@ -267,6 +272,7 @@ function OperationEditFormContent({
           size="large"
           fullWidth
           loading={updateOperation.isPending}
+          disabled={readonly}
         >
           Сохранить
         </Button>
@@ -288,6 +294,8 @@ export function OperationEditForm(): JSX.Element {
   const id = useOperationId();
   const router = useRouter();
   const { data, isLoading, isError, refetch, isFetching } = useOperation(id ?? '');
+  const { data: subscription } = useSubscription();
+  const readonly = isSubscriptionReadonly(subscription);
   const initialized = useRef(false);
 
   useEffect(() => {
@@ -324,6 +332,8 @@ export function OperationEditForm(): JSX.Element {
         <h1 className={styles.title}>Редактирование операции</h1>
       </header>
 
+      <SubscriptionReadonlyBanner />
+
       {isLoading && <FinanceLoading />}
 
       {!isLoading && isError && (
@@ -331,7 +341,7 @@ export function OperationEditForm(): JSX.Element {
       )}
 
       {!isLoading && !isError && data && (
-        <OperationEditFormContent id={id} operation={data} />
+        <OperationEditFormContent id={id} operation={data} readonly={readonly} />
       )}
     </div>
   );
