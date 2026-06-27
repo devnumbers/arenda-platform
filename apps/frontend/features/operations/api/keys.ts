@@ -2,8 +2,17 @@ export const operationKeys = {
   byProperty: (propertyId: string) =>
     ['properties', propertyId, 'operations'] as const,
   detail: (id: string) => ['operations', id] as const,
-  operations: (filters: Record<string, string | undefined>) =>
-    ['operations', filters] as const,
+  operations: (filters: {
+    type?: string;
+    status?: string;
+    category?: string;
+    property_id?: string;
+    from?: string;
+    to?: string;
+    recurring_operation_id?: string;
+    limit?: string;
+    offset?: string;
+  }) => ['operations', filters] as const,
   reminders: (propertyId: string, operationId: string) =>
     [
       'properties',

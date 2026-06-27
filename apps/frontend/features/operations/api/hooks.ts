@@ -37,21 +37,30 @@ export type OperationsFilters = {
   from?: string;
   to?: string;
   recurring_operation_id?: string;
-  limit?: string;
-  offset?: string;
+  limit?: number;
+  offset?: number;
 };
 
-export function useOperations(filters: OperationsFilters = {}) {
-  const queryString = useMemo(() => {
-    const params = new URLSearchParams();
+export function useOperations(
+  filters: OperationsFilters = {},
+): UseQueryResult<OperationsResponse, ApiError> {
+  const normalized = useMemo(() => {
+    const result: Record<string, string> = {};
     Object.entries(filters).forEach(([key, value]) => {
-      if (value) params.set(key, value);
+      if (value !== undefined && value !== '') {
+        result[key] = typeof value === 'number' ? String(value) : value;
+      }
     });
-    return params.toString();
+    return result;
   }, [filters]);
 
+  const queryString = useMemo(() => {
+    const params = new URLSearchParams(normalized);
+    return params.toString();
+  }, [normalized]);
+
   return useQuery({
-    queryKey: operationKeys.operations({ ...filters }),
+    queryKey: operationKeys.operations(normalized),
     queryFn: () =>
       apiClient<OperationsResponse>(`/operations${queryString ? `?${queryString}` : ''}`),
   });
@@ -124,6 +133,7 @@ export function useCreateOperation(): UseMutationResult<
         body: JSON.stringify(data),
       }),
     onSuccess: (_, { propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: ['operations'] });
       queryClient.invalidateQueries({
         queryKey: operationKeys.byProperty(propertyId),
       });
@@ -176,6 +186,7 @@ export function useUpdateOperation(): UseMutationResult<
         body: JSON.stringify(data),
       }),
     onSuccess: (_, { id, propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: ['operations'] });
       queryClient.invalidateQueries({
         queryKey: operationKeys.byProperty(propertyId),
       });
@@ -197,6 +208,7 @@ export function useDeleteOperation(): UseMutationResult<
     mutationFn: ({ id }) =>
       apiClient<void>(`/operations/${id}`, { method: 'DELETE' }),
     onSuccess: (_, { id, propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: ['operations'] });
       queryClient.invalidateQueries({
         queryKey: operationKeys.byProperty(propertyId),
       });

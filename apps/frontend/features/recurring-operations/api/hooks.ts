@@ -74,6 +74,7 @@ export function useCreateRecurringOperation(): UseMutationResult<
         },
       ),
     onSuccess: (_, { propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: ['recurring-operations'] });
       queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.byProperty(propertyId),
       });
@@ -94,6 +95,7 @@ export function useUpdateRecurringOperation(): UseMutationResult<
         body: JSON.stringify(data),
       }),
     onSuccess: (_, { id, propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: ['recurring-operations'] });
       queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.byProperty(propertyId),
       });
@@ -118,6 +120,7 @@ export function usePauseRecurringOperation(): UseMutationResult<
         },
       ),
     onSuccess: (_, { id, propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: ['recurring-operations'] });
       queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.byProperty(propertyId),
       });
@@ -143,6 +146,7 @@ export function useResumeRecurringOperation(): UseMutationResult<
         },
       ),
     onSuccess: (_, { id, propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: ['recurring-operations'] });
       queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.byProperty(propertyId),
       });
