@@ -1,0 +1,35 @@
+.root {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+  border-radius: 24px;
+  background: var(--color-secondary-bg);
+}
+
+.label {
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  color: var(--color-text-muted);
+}
+
+.value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-text);
+}
+
+.income {
+  color: var(--color-success);
+}
+
+.expense {
+  color: var(--color-error);
+}

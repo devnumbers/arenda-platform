@@ -37,6 +37,7 @@ export { default as ChevronDown } from './chevron-down.svg';
 export { default as ChevronUp } from './chevron-up.svg';
 export { default as ArrowUp } from './arrow-up.svg';
 export { default as HomeAdd } from './home-add.svg';
+export { default as Plus } from './plus.svg';
 export { default as StatusGood } from './status-good.svg';
 export { default as StatusWarning } from './status-warning.svg';
 export { default as StatusDanger } from './status-danger.svg';
