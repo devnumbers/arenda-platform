@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, type JSX } from 'react';
-import NextLink from 'next/link';
 import { Icon } from '@/shared/ui/icon';
 import { Plus, ArrowRight } from '@/shared/assets/icons';
 import { LinkButton } from '@/shared/ui/link-button';
@@ -109,12 +108,19 @@ export function FinancePage(): JSX.Element {
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>Последние операции</h2>
-              <NextLink href={ROUTES.financeOperations} className={styles.linkAll}>
+              <LinkButton
+                href={ROUTES.financeOperations}
+                variant="clear"
+                size="small"
+                rightIcon={
+                  <Icon size="s">
+                    <ArrowRight />
+                  </Icon>
+                }
+                className={styles.linkAll}
+              >
                 Смотреть все
-                <Icon size="s">
-                  <ArrowRight />
-                </Icon>
-              </NextLink>
+              </LinkButton>
             </div>
 
             <ul className={styles.operationsList}>
@@ -156,24 +162,48 @@ export function FinancePage(): JSX.Element {
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Быстрые ссылки</h2>
             <nav className={styles.quickLinks}>
-              <NextLink href={ROUTES.financeOperations} className={styles.quickLink}>
-                <span className={styles.quickLinkLabel}>Все операции</span>
-                <Icon size="s">
-                  <ArrowRight />
-                </Icon>
-              </NextLink>
-              <NextLink href={ROUTES.financePayments} className={styles.quickLink}>
-                <span className={styles.quickLinkLabel}>Платежи</span>
-                <Icon size="s">
-                  <ArrowRight />
-                </Icon>
-              </NextLink>
-              <NextLink href={`${ROUTES.finance}?tab=report`} className={styles.quickLink}>
-                <span className={styles.quickLinkLabel}>Отчёт о прибыли</span>
-                <Icon size="s">
-                  <ArrowRight />
-                </Icon>
-              </NextLink>
+              <LinkButton
+                href={ROUTES.financeOperations}
+                variant="clear"
+                size="medium"
+                fullWidth
+                rightIcon={
+                  <Icon size="s">
+                    <ArrowRight />
+                  </Icon>
+                }
+                className={styles.quickLink}
+              >
+                Все операции
+              </LinkButton>
+              <LinkButton
+                href={ROUTES.financePayments}
+                variant="clear"
+                size="medium"
+                fullWidth
+                rightIcon={
+                  <Icon size="s">
+                    <ArrowRight />
+                  </Icon>
+                }
+                className={styles.quickLink}
+              >
+                Платежи
+              </LinkButton>
+              <LinkButton
+                href={`${ROUTES.finance}?tab=report`}
+                variant="clear"
+                size="medium"
+                fullWidth
+                rightIcon={
+                  <Icon size="s">
+                    <ArrowRight />
+                  </Icon>
+                }
+                className={styles.quickLink}
+              >
+                Отчёт о прибыли
+              </LinkButton>
             </nav>
           </section>
         </>

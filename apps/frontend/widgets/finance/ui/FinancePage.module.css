@@ -41,14 +41,21 @@
   color: var(--color-text);
 }
 
-.linkAll {
+.linkAll.linkAll {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  padding: 0;
   font-size: var(--font-size-text-m);
   line-height: var(--line-height-text-m);
   color: var(--color-text-muted);
   text-decoration: none;
+  background: transparent;
+}
+
+.linkAll.linkAll:hover {
+  background: transparent;
+  color: var(--color-text);
 }
 
 .linkAll svg {
@@ -148,7 +155,7 @@
   gap: 8px;
 }
 
-.quickLink {
+.quickLink.quickLink {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -161,14 +168,9 @@
   transition: background-color 0.15s ease;
 }
 
-.quickLink:hover {
+.quickLink.quickLink:hover {
   background: var(--color-secondary-hover);
-}
-
-.quickLinkLabel {
-  font-size: var(--font-size-text-m);
-  font-weight: 500;
-  line-height: var(--line-height-text-m);
+  color: var(--color-text);
 }
 
 .quickLink svg {
