@@ -11,6 +11,8 @@ export { OperationsList } from './ui/OperationsList';
 export { OperationFilters } from './ui/OperationFilters';
 export { OperationsPage } from './ui/OperationsPage';
 export { OperationDetailPage } from './ui/OperationDetailPage';
+export { OperationEditForm } from './ui/OperationEditForm';
+export { TypeSelect } from './ui/TypeSelect';
 export type {
   BasicInfoData,
   BasicInfoErrors,
