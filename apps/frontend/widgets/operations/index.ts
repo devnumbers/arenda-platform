@@ -10,6 +10,7 @@ export { OperationListItem } from './ui/OperationListItem';
 export { OperationsList } from './ui/OperationsList';
 export { OperationFilters } from './ui/OperationFilters';
 export { OperationsPage } from './ui/OperationsPage';
+export { OperationDetailPage } from './ui/OperationDetailPage';
 export type {
   BasicInfoData,
   BasicInfoErrors,

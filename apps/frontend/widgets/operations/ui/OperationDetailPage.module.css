@@ -1,0 +1,158 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 84px 20px 96px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 24px;
+  color: #1e1e1e;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--color-white);
+  border: 1px solid var(--color-secondary-hover);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.name {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 28px;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: var(--font-size-text-s);
+  font-weight: 500;
+  line-height: var(--line-height-text-s);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.statusWarning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.statusDanger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.statusSuccess {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.statusDefault {
+  background: var(--color-secondary-bg);
+  color: var(--color-text-muted);
+}
+
+.amountRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.amount {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 32px;
+  color: var(--color-text);
+}
+
+.amountIncome {
+  color: var(--color-success);
+}
+
+.amountExpense {
+  color: var(--color-error);
+}
+
+.type {
+  font-size: var(--font-size-text-m);
+  font-weight: 500;
+  line-height: var(--line-height-text-m);
+  color: var(--color-text-muted);
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+}
+
+.detailRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detailLabel {
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+  color: var(--color-text-muted);
+}
+
+.detailValue {
+  margin: 0;
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  color: var(--color-text);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+@media (min-width: 768px) {
+  .root {
+    gap: 32px;
+    padding: 96px 0;
+  }
+
+  .detailRow {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .detailLabel {
+    flex-shrink: 0;
+    width: 120px;
+  }
+}
