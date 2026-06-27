@@ -292,6 +292,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/{id}": {
         parameters: {
             query?: never;
@@ -324,6 +340,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finance/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getFinanceReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/recurring-operations": {
         parameters: {
             query?: never;
@@ -350,6 +382,22 @@ export interface paths {
         get: operations["listRecurringOperationReminders"];
         put?: never;
         post: operations["createRecurringOperationReminder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recurring-operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRecurringOperations"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1236,6 +1284,43 @@ export interface components {
         RemindersResponse: {
             items: components["schemas"]["ReminderResponse"][];
         };
+        FinanceReportResponse: {
+            period: components["schemas"]["FinanceReportPeriod"];
+            totals: components["schemas"]["FinanceReportTotals"];
+            by_property: components["schemas"]["FinanceReportPropertyRow"][];
+            by_category: components["schemas"]["FinanceReportCategoryRow"][];
+            by_month: components["schemas"]["FinanceReportMonthRow"][];
+        };
+        FinanceReportPeriod: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+        };
+        FinanceReportTotals: {
+            income_kopecks: number;
+            expense_kopecks: number;
+            profit_kopecks: number;
+        };
+        FinanceReportPropertyRow: {
+            /** Format: uuid */
+            property_id: string;
+            income_kopecks: number;
+            expense_kopecks: number;
+            profit_kopecks: number;
+        };
+        FinanceReportCategoryRow: {
+            type: components["schemas"]["OperationType"];
+            category: components["schemas"]["OperationCategory"];
+            total_kopecks: number;
+        };
+        FinanceReportMonthRow: {
+            /** Format: date */
+            month: string;
+            income_kopecks: number;
+            expense_kopecks: number;
+            profit_kopecks: number;
+        };
     };
     responses: {
         /** @description Bad request */
@@ -1800,6 +1885,12 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["OperationStatus"][];
+                type?: components["schemas"]["OperationType"][];
+                category?: components["schemas"]["OperationCategory"][];
+                from?: string;
+                to?: string;
+                limit?: number;
+                offset?: number;
             };
             header?: never;
             path: {
@@ -1908,6 +1999,37 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listOperations: {
+        parameters: {
+            query?: {
+                type?: components["schemas"]["OperationType"][];
+                status?: components["schemas"]["OperationStatus"][];
+                category?: components["schemas"]["OperationCategory"][];
+                property_id?: string;
+                from?: string;
+                to?: string;
+                recurring_operation_id?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Operations list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     getOperation: {
         parameters: {
             query?: never;
@@ -2013,6 +2135,30 @@ export interface operations {
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getFinanceReport: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Finance report */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceReportResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     listRecurringOperationsByProperty: {
@@ -2123,6 +2269,27 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listRecurringOperations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recurring operations list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecurringOperationsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     getRecurringOperation: {
