@@ -91,15 +91,33 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 		return
 	}
 
-	var statuses []domain.OperationStatus
+	filter := leasesapp.OperationFilter{}
 	if params.Status != nil {
-		statuses = make([]domain.OperationStatus, 0, len(*params.Status))
+		filter.Statuses = make([]domain.OperationStatus, 0, len(*params.Status))
 		for _, s := range *params.Status {
-			statuses = append(statuses, domain.OperationStatus(s))
+			filter.Statuses = append(filter.Statuses, domain.OperationStatus(s))
 		}
 	}
+	if params.Type != nil {
+		filter.Types = make([]domain.OperationType, 0, len(*params.Type))
+		for _, t := range *params.Type {
+			filter.Types = append(filter.Types, domain.OperationType(t))
+		}
+	}
+	if params.Category != nil {
+		filter.Categories = make([]domain.OperationCategory, 0, len(*params.Category))
+		for _, c := range *params.Category {
+			filter.Categories = append(filter.Categories, domain.OperationCategory(c))
+		}
+	}
+	if params.From != nil {
+		filter.FromDate = &params.From.Time
+	}
+	if params.To != nil {
+		filter.ToDate = &params.To.Time
+	}
 
-	ops, err := h.svc.ListOperationsByProperty(r.Context(), ownerID, propertyId, statuses)
+	ops, err := h.svc.ListOperationsByProperty(r.Context(), ownerID, propertyId, filter)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return

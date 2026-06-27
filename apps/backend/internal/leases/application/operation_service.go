@@ -172,19 +172,14 @@ func (s *OperationService) ListOperations(ctx context.Context, ownerID uuid.UUID
 }
 
 // ListOperationsByProperty returns operations for the given owner and property,
-// optionally filtered by status.
-func (s *OperationService) ListOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, statuses []domain.OperationStatus) ([]domain.Operation, error) {
+// filtered by the provided criteria.
+func (s *OperationService) ListOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, filter OperationFilter) ([]domain.Operation, error) {
 	if err := validateProperty(ctx, s.properties, ownerID, propertyID); err != nil {
 		return nil, err
 	}
 
-	var ops []domain.Operation
-	var err error
-	if len(statuses) == 0 {
-		ops, err = s.operations.ListByProperty(ctx, ownerID, propertyID)
-	} else {
-		ops, err = s.operations.ListByPropertyWithStatuses(ctx, ownerID, propertyID, statuses)
-	}
+	filter.PropertyID = propertyID
+	ops, err := s.operations.ListByOwner(ctx, ownerID, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list operations: %w", err)
 	}

@@ -465,6 +465,36 @@ paths:
             type: array
             items:
               $ref: '#/components/schemas/OperationStatus'
+        - name: type
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/OperationType'
+        - name: category
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/OperationCategory'
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
       responses:
         '200':
           description: Operations list for property
