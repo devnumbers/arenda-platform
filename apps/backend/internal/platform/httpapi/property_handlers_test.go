@@ -155,6 +155,10 @@ func (r *fakeOperationRepoForHandlers) BulkCreate(_ context.Context, _ []leasesd
 	return nil
 }
 
+func (r *fakeOperationRepoForHandlers) ListByOwner(_ context.Context, _ uuid.UUID, _ leasesapp.OperationFilter) ([]leasesdomain.Operation, error) {
+	return nil, nil
+}
+
 func (r *fakeOperationRepoForHandlers) ListByLease(_ context.Context, _ uuid.UUID) ([]leasesdomain.Operation, error) {
 	return nil, nil
 }

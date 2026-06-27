@@ -61,9 +61,22 @@ type RecurringOperationRepository interface {
 // ReminderScheduler is the port used by leases services to schedule/cancel reminders.
 type ReminderScheduler = notificationsapp.ReminderScheduler
 
+type OperationFilter struct {
+	Types                []domain.OperationType
+	Statuses             []domain.OperationStatus
+	Categories           []domain.OperationCategory
+	PropertyID           uuid.UUID
+	FromDate             *time.Time
+	ToDate               *time.Time
+	RecurringOperationID uuid.UUID
+	Limit                int
+	Offset               int
+}
+
 type OperationRepository interface {
 	Create(ctx context.Context, op domain.Operation) (domain.Operation, error)
 	BulkCreate(ctx context.Context, ops []domain.Operation) error
+	ListByOwner(ctx context.Context, ownerID uuid.UUID, filter OperationFilter) ([]domain.Operation, error)
 	ListByLease(ctx context.Context, leaseID uuid.UUID) ([]domain.Operation, error)
 	ListByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID) ([]domain.Operation, error)
 	ListOperationDatesByLease(ctx context.Context, leaseID uuid.UUID) ([]time.Time, error)

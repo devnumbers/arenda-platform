@@ -772,6 +772,62 @@ type copyFromer interface {
 	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
 }
 
+func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID, filter application.OperationFilter) ([]domain.Operation, error) {
+	types := make([]string, 0, len(filter.Types))
+	for _, t := range filter.Types {
+		types = append(types, string(t))
+	}
+	statuses := make([]string, 0, len(filter.Statuses))
+	for _, s := range filter.Statuses {
+		statuses = append(statuses, string(s))
+	}
+	categories := make([]string, 0, len(filter.Categories))
+	for _, c := range filter.Categories {
+		categories = append(categories, string(c))
+	}
+
+	var fromDate, toDate pgtype.Date
+	if filter.FromDate != nil {
+		fromDate = pgconv.DateToPgtype(*filter.FromDate)
+	}
+	if filter.ToDate != nil {
+		toDate = pgconv.DateToPgtype(*filter.ToDate)
+	}
+
+	//nolint:gosec // Pagination limit is bounded by the API layer.
+	limit := int32(filter.Limit)
+	if limit == 0 {
+		limit = 100
+	}
+
+	rows, err := r.q().ListOperationsByOwner(ctx, postgres.ListOperationsByOwnerParams{
+		OwnerID:              pgconv.UUIDToPgtype(ownerID),
+		Types:                types,
+		Statuses:             statuses,
+		Categories:           categories,
+		PropertyID:           pgconv.UUIDToPgtype(filter.PropertyID),
+		FromDate:             fromDate,
+		ToDate:               toDate,
+		RecurringOperationID: pgconv.UUIDToPgtype(filter.RecurringOperationID),
+		Limit:                limit,
+		//nolint:gosec // Pagination offset is bounded by the API layer.
+		Offset: int32(filter.Offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	ops := make([]domain.Operation, 0, len(rows))
+	for _, row := range rows {
+		op, err := operationFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, op)
+	}
+	return ops, nil
+}
+
 func (r *OperationRepository) ListByLease(ctx context.Context, leaseID uuid.UUID) ([]domain.Operation, error) {
 	rows, err := r.q().ListOperationsByLease(ctx, pgconv.UUIDToPgtype(leaseID))
 	if err != nil {

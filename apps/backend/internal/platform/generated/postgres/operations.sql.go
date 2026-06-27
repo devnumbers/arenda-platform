@@ -521,6 +521,82 @@ func (q *Queries) ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID
 	return items, nil
 }
 
+const listOperationsByOwner = `-- name: ListOperationsByOwner :many
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
+WHERE owner_id = $1
+  AND deleted_at IS NULL
+  AND ($2::text[] = '{}'::text[] OR type = ANY($2::text[]))
+  AND ($3::text[] = '{}'::text[] OR status = ANY($3::text[]))
+  AND ($4::text[] = '{}'::text[] OR category = ANY($4::text[]))
+  AND ($5::uuid IS NULL OR property_id = $5::uuid)
+  AND ($6::date IS NULL OR operation_date >= $6::date)
+  AND ($7::date IS NULL OR operation_date <= $7::date)
+  AND ($8::uuid IS NULL OR recurring_operation_id = $8::uuid)
+ORDER BY operation_date DESC
+LIMIT $10::int OFFSET $9::int
+`
+
+type ListOperationsByOwnerParams struct {
+	OwnerID              pgtype.UUID `json:"owner_id"`
+	Types                []string    `json:"types"`
+	Statuses             []string    `json:"statuses"`
+	Categories           []string    `json:"categories"`
+	PropertyID           pgtype.UUID `json:"property_id"`
+	FromDate             pgtype.Date `json:"from_date"`
+	ToDate               pgtype.Date `json:"to_date"`
+	RecurringOperationID pgtype.UUID `json:"recurring_operation_id"`
+	Offset               int32       `json:"offset"`
+	Limit                int32       `json:"limit"`
+}
+
+func (q *Queries) ListOperationsByOwner(ctx context.Context, arg ListOperationsByOwnerParams) ([]Operation, error) {
+	rows, err := q.db.Query(ctx, listOperationsByOwner,
+		arg.OwnerID,
+		arg.Types,
+		arg.Statuses,
+		arg.Categories,
+		arg.PropertyID,
+		arg.FromDate,
+		arg.ToDate,
+		arg.RecurringOperationID,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Operation{}
+	for rows.Next() {
+		var i Operation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.LeaseID,
+			&i.RecurringOperationID,
+			&i.Type,
+			&i.Category,
+			&i.AmountKopecks,
+			&i.OperationDate,
+			&i.Comment,
+			&i.IsException,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Status,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOperationsByProperty = `-- name: ListOperationsByProperty :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
 WHERE owner_id = $1 AND property_id = $2

@@ -114,6 +114,7 @@ type Querier interface {
 	ListOperationDatesByLease(ctx context.Context, leaseID pgtype.UUID) ([]pgtype.Date, error)
 	ListOperationDatesByRecurringOperation(ctx context.Context, recurringOperationID pgtype.UUID) ([]pgtype.Date, error)
 	ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID) ([]Operation, error)
+	ListOperationsByOwner(ctx context.Context, arg ListOperationsByOwnerParams) ([]Operation, error)
 	ListOperationsByProperty(ctx context.Context, arg ListOperationsByPropertyParams) ([]Operation, error)
 	ListOperationsByPropertyWithStatuses(ctx context.Context, arg ListOperationsByPropertyWithStatusesParams) ([]Operation, error)
 	ListOperationsByRecurringOperation(ctx context.Context, recurringOperationID pgtype.UUID) ([]Operation, error)

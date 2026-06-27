@@ -48,6 +48,10 @@ func (r *fakeOperationRepo) BulkCreate(_ context.Context, ops []domain.Operation
 	return nil
 }
 
+func (r *fakeOperationRepo) ListByOwner(_ context.Context, _ uuid.UUID, _ OperationFilter) ([]domain.Operation, error) {
+	return nil, nil
+}
+
 func (r *fakeOperationRepo) ListByLease(_ context.Context, leaseID uuid.UUID) ([]domain.Operation, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

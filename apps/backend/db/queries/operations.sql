@@ -186,3 +186,17 @@ SELECT EXISTS(
       AND category = 'deposit_return'
       AND deleted_at IS NULL
 ) AS has_deposit_return;
+
+-- name: ListOperationsByOwner :many
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
+WHERE owner_id = $1
+  AND deleted_at IS NULL
+  AND (sqlc.arg('types')::text[] = '{}'::text[] OR type = ANY(sqlc.arg('types')::text[]))
+  AND (sqlc.arg('statuses')::text[] = '{}'::text[] OR status = ANY(sqlc.arg('statuses')::text[]))
+  AND (sqlc.arg('categories')::text[] = '{}'::text[] OR category = ANY(sqlc.arg('categories')::text[]))
+  AND (sqlc.arg('property_id')::uuid IS NULL OR property_id = sqlc.arg('property_id')::uuid)
+  AND (sqlc.arg('from_date')::date IS NULL OR operation_date >= sqlc.arg('from_date')::date)
+  AND (sqlc.arg('to_date')::date IS NULL OR operation_date <= sqlc.arg('to_date')::date)
+  AND (sqlc.arg('recurring_operation_id')::uuid IS NULL OR recurring_operation_id = sqlc.arg('recurring_operation_id')::uuid)
+ORDER BY operation_date DESC
+LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
