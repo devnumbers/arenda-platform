@@ -162,6 +162,11 @@ func (s *OperationService) GetPropertyOperationsSummary(ctx context.Context, own
 	return s.operations.GetPropertyOperationsSummary(ctx, ownerID, propertyID, timeutil.Date(s.clock.Now()))
 }
 
+// ListOperations returns all operations for the owner filtered by the provided criteria.
+func (s *OperationService) ListOperations(ctx context.Context, ownerID uuid.UUID, filter OperationFilter) ([]domain.Operation, error) {
+	return s.operations.ListByOwner(ctx, ownerID, filter)
+}
+
 // ListOperationsByProperty returns operations for the given owner and property,
 // optionally filtered by status.
 func (s *OperationService) ListOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, statuses []domain.OperationStatus) ([]domain.Operation, error) {

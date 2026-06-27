@@ -113,6 +113,62 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 	writeJSON(r.Context(), w, http.StatusOK, openapi.OperationsResponse{Items: items})
 }
 
+// ListOperations implements GET /operations.
+func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Request, params openapi.ListOperationsParams) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	filter := leasesapp.OperationFilter{}
+	if params.Type != nil {
+		for _, t := range *params.Type {
+			filter.Types = append(filter.Types, domain.OperationType(t))
+		}
+	}
+	if params.Status != nil {
+		for _, s := range *params.Status {
+			filter.Statuses = append(filter.Statuses, domain.OperationStatus(s))
+		}
+	}
+	if params.Category != nil {
+		for _, c := range *params.Category {
+			filter.Categories = append(filter.Categories, domain.OperationCategory(c))
+		}
+	}
+	if params.PropertyId != nil {
+		filter.PropertyID = *params.PropertyId
+	}
+	if params.From != nil {
+		filter.FromDate = &params.From.Time
+	}
+	if params.To != nil {
+		filter.ToDate = &params.To.Time
+	}
+	if params.RecurringOperationId != nil {
+		filter.RecurringOperationID = *params.RecurringOperationId
+	}
+	if params.Limit != nil {
+		filter.Limit = *params.Limit
+	}
+	if params.Offset != nil {
+		filter.Offset = *params.Offset
+	}
+
+	ops, err := h.svc.ListOperations(r.Context(), ownerID, filter)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.OperationResponse, 0, len(ops))
+	for _, op := range ops {
+		items = append(items, operationResponse(op))
+	}
+	writeJSON(r.Context(), w, http.StatusOK, openapi.OperationsResponse{Items: items})
+}
+
 // GetOperation implements GET /operations/{id}.
 func (h *OperationHandlers) GetOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
