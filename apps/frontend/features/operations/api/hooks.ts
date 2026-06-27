@@ -30,9 +30,9 @@ type ReminderResponse = components['schemas']['ReminderResponse'];
 type RemindersResponse = components['schemas']['RemindersResponse'];
 
 export type OperationsFilters = {
-  type?: 'income' | 'expense';
-  status?: string;
-  category?: string;
+  type?: 'income' | 'expense' | ('income' | 'expense')[];
+  status?: string | string[];
+  category?: string | string[];
   property_id?: string;
   from?: string;
   to?: string;
@@ -45,17 +45,34 @@ export function useOperations(
   filters: OperationsFilters = {},
 ): UseQueryResult<OperationsResponse, ApiError> {
   const normalized = useMemo(() => {
-    const result: Record<string, string> = {};
+    const result: Record<string, string | string[]> = {};
     Object.entries(filters).forEach(([key, value]) => {
-      if (value !== undefined && value !== '') {
-        result[key] = typeof value === 'number' ? String(value) : value;
+      if (value === undefined || value === '') {
+        return;
+      }
+      if (typeof value === 'number') {
+        result[key] = String(value);
+      } else if (Array.isArray(value)) {
+        const filtered = value.filter((v) => v !== '');
+        if (filtered.length > 0) {
+          result[key] = filtered;
+        }
+      } else {
+        result[key] = value;
       }
     });
     return result;
   }, [filters]);
 
   const queryString = useMemo(() => {
-    const params = new URLSearchParams(normalized);
+    const params = new URLSearchParams();
+    Object.entries(normalized).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach((v) => params.append(key, v));
+      } else {
+        params.set(key, value);
+      }
+    });
     return params.toString();
   }, [normalized]);
 

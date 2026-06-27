@@ -3,9 +3,9 @@ export const operationKeys = {
     ['properties', propertyId, 'operations'] as const,
   detail: (id: string) => ['operations', id] as const,
   operations: (filters: {
-    type?: string;
-    status?: string;
-    category?: string;
+    type?: string | string[];
+    status?: string | string[];
+    category?: string | string[];
     property_id?: string;
     from?: string;
     to?: string;
