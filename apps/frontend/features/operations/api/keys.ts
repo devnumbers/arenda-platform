@@ -2,6 +2,8 @@ export const operationKeys = {
   byProperty: (propertyId: string) =>
     ['properties', propertyId, 'operations'] as const,
   detail: (id: string) => ['operations', id] as const,
+  operations: (filters: Record<string, string | undefined>) =>
+    ['operations', filters] as const,
   reminders: (propertyId: string, operationId: string) =>
     [
       'properties',

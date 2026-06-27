@@ -24,6 +24,16 @@ type ReminderCreateRequest = components['schemas']['ReminderCreateRequest'];
 type ReminderResponse = components['schemas']['ReminderResponse'];
 type RemindersResponse = components['schemas']['RemindersResponse'];
 
+export function useRecurringOperations(): UseQueryResult<
+  RecurringOperationsResponse,
+  ApiError
+> {
+  return useQuery({
+    queryKey: recurringOperationKeys.recurringOperations(),
+    queryFn: () => apiClient<RecurringOperationsResponse>('/recurring-operations'),
+  });
+}
+
 export function useRecurringOperationsByProperty(
   propertyId: string,
 ): UseQueryResult<RecurringOperationsResponse, ApiError> {

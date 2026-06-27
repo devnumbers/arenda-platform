@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   useMutation,
   useQuery,
@@ -27,6 +28,34 @@ type RecurringOperationCreateRequest =
 type ReminderCreateRequest = components['schemas']['ReminderCreateRequest'];
 type ReminderResponse = components['schemas']['ReminderResponse'];
 type RemindersResponse = components['schemas']['RemindersResponse'];
+
+export type OperationsFilters = {
+  type?: 'income' | 'expense';
+  status?: string;
+  category?: string;
+  property_id?: string;
+  from?: string;
+  to?: string;
+  recurring_operation_id?: string;
+  limit?: string;
+  offset?: string;
+};
+
+export function useOperations(filters: OperationsFilters = {}) {
+  const queryString = useMemo(() => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+    });
+    return params.toString();
+  }, [filters]);
+
+  return useQuery({
+    queryKey: operationKeys.operations({ ...filters }),
+    queryFn: () =>
+      apiClient<OperationsResponse>(`/operations${queryString ? `?${queryString}` : ''}`),
+  });
+}
 
 export function useOperationsByProperty(
   propertyId: string,
@@ -59,6 +88,26 @@ export function usePropertyOperationsSummary(
         `/properties/${propertyId}/operations/summary`,
       ),
     enabled: Boolean(propertyId),
+  });
+}
+
+export function useCompleteOperation(): UseMutationResult<
+  OperationResponse,
+  ApiError,
+  { id: string; propertyId?: string }
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }) =>
+      apiClient<OperationResponse>(`/operations/${id}/complete`, { method: 'POST' }),
+    onSuccess: (_, { id, propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: operationKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: ['operations'] });
+      if (propertyId) {
+        queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(propertyId) });
+        queryClient.invalidateQueries({ queryKey: operationKeys.summary(propertyId) });
+      }
+    },
   });
 }
 
