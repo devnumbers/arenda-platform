@@ -18,15 +18,17 @@ import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { FinanceEmptyState } from '@/widgets/finance/ui/FinanceEmptyState';
 import { OperationFilters } from './OperationFilters';
 import { OperationsList } from './OperationsList';
+import { RecurringOperationsTab } from './RecurringOperationsTab';
 import styles from './OperationsPage.module.css';
 
 const TAB_ITEMS: ReadonlyArray<{
-  readonly key: 'all' | 'income' | 'expense';
+  readonly key: 'all' | 'income' | 'expense' | 'recurring';
   readonly label: string;
 }> = [
   { key: 'all', label: 'Все' },
   { key: 'income', label: 'Доходы' },
   { key: 'expense', label: 'Расходы' },
+  { key: 'recurring', label: 'Регулярные' },
 ];
 
 function getCurrentMonthRange(): { from: string; to: string } {
@@ -40,13 +42,18 @@ function getCurrentMonthRange(): { from: string; to: string } {
 function buildTabHref(
   pathname: string,
   searchParams: URLSearchParams,
-  tabKey: 'all' | 'income' | 'expense',
+  tabKey: 'all' | 'income' | 'expense' | 'recurring',
 ): string {
   const params = new URLSearchParams(searchParams.toString());
   if (tabKey === 'all') {
     params.delete('type');
+    params.delete('tab');
+  } else if (tabKey === 'recurring') {
+    params.delete('type');
+    params.set('tab', 'recurring');
   } else {
     params.set('type', tabKey);
+    params.delete('tab');
   }
   const query = params.toString();
   return query ? `${pathname}?${query}` : pathname;
@@ -58,6 +65,12 @@ export function OperationsPage(): JSX.Element {
   const searchParams = useSearchParams();
 
   const type = searchParams.get('type') as 'income' | 'expense' | null;
+  const tab = searchParams.get('tab');
+  const isRecurringTab = tab === 'recurring';
+  const activeTabKey: 'all' | 'income' | 'expense' | 'recurring' = isRecurringTab
+    ? 'recurring'
+    : type ?? 'all';
+
   const status = useMemo(
     () => searchParams.getAll('status'),
     [searchParams],
@@ -123,44 +136,49 @@ export function OperationsPage(): JSX.Element {
       </div>
 
       <nav className={styles.tabs} aria-label="Тип операции">
-        {TAB_ITEMS.map((tab) => {
-          const isActive =
-            (tab.key === 'all' && type === null) || type === tab.key;
+        {TAB_ITEMS.map((tabItem) => {
+          const isActive = activeTabKey === tabItem.key;
           return (
             <NextLink
-              key={tab.key}
-              href={buildTabHref(pathname, searchParams, tab.key)}
+              key={tabItem.key}
+              href={buildTabHref(pathname, searchParams, tabItem.key)}
               className={`${styles.tab} ${isActive ? styles.tabActive : ''}`}
               aria-current={isActive ? 'page' : undefined}
             >
-              {tab.label}
+              {tabItem.label}
             </NextLink>
           );
         })}
       </nav>
 
-      {isLoading && <FinanceLoading />}
-
-      {!isLoading && isError && (
-        <FinanceErrorState onRetry={refetch} isLoading={isFetching} />
-      )}
-
-      {!isLoading && !isError && operations.length === 0 && (
-        <FinanceEmptyState
-          title="Нет операций"
-          subtitle="Добавьте первую операцию, чтобы увидеть её в списке"
-          actionHref={ROUTES.financeCreateOperation}
-          actionText="Добавить операцию"
-        />
-      )}
-
-      {!isLoading && !isError && operations.length > 0 && (
+      {isRecurringTab ? (
+        <RecurringOperationsTab />
+      ) : (
         <>
-          <OperationFilters
-            filters={{ from, to, status }}
-            onChange={handleFilterChange}
-          />
-          <OperationsList items={operations} />
+          {isLoading && <FinanceLoading />}
+
+          {!isLoading && isError && (
+            <FinanceErrorState onRetry={refetch} isLoading={isFetching} />
+          )}
+
+          {!isLoading && !isError && operations.length === 0 && (
+            <FinanceEmptyState
+              title="Нет операций"
+              subtitle="Добавьте первую операцию, чтобы увидеть её в списке"
+              actionHref={ROUTES.financeCreateOperation}
+              actionText="Добавить операцию"
+            />
+          )}
+
+          {!isLoading && !isError && operations.length > 0 && (
+            <>
+              <OperationFilters
+                filters={{ from, to, status }}
+                onChange={handleFilterChange}
+              />
+              <OperationsList items={operations} />
+            </>
+          )}
         </>
       )}
     </div>
