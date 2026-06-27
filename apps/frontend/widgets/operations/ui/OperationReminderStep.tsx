@@ -9,6 +9,7 @@ import styles from './OperationReminderStep.module.css';
 export type OperationReminderStepProps = {
   readonly data: ReminderData;
   readonly onChange: (data: ReminderData) => void;
+  readonly readonly?: boolean;
 };
 
 const offsetOptions: { value: 1 | 3 | 7; label: string }[] = [
@@ -20,6 +21,7 @@ const offsetOptions: { value: 1 | 3 | 7; label: string }[] = [
 export function OperationReminderStep({
   data,
   onChange,
+  readonly,
 }: OperationReminderStepProps): JSX.Element {
   const groupId = useId();
 
@@ -30,6 +32,7 @@ export function OperationReminderStep({
         <Checkbox
           isSelected={data.enabled}
           onChange={(enabled) => onChange({ ...data, enabled })}
+          isDisabled={readonly}
           className={styles.checkbox}
         >
           Добавить SMS-напоминание
@@ -53,6 +56,7 @@ export function OperationReminderStep({
                     type="button"
                     role="radio"
                     aria-checked={isSelected}
+                    disabled={readonly}
                     className={clsx(
                       styles.offsetOption,
                       isSelected && styles.selected

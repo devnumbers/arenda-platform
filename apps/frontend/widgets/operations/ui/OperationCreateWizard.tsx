@@ -458,7 +458,11 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
           />
         )}
         {step === 'reminder' && (
-          <OperationReminderStep data={reminder} onChange={setReminder} />
+          <OperationReminderStep
+            data={reminder}
+            onChange={setReminder}
+            readonly={readonly}
+          />
         )}
       </div>
 

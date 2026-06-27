@@ -9,6 +9,7 @@ export type FrequencySelectProps = {
   readonly value?: OperationFrequency;
   readonly onChange: (frequency: OperationFrequency) => void;
   readonly error?: string;
+  readonly disabled?: boolean;
 };
 
 const frequencyOptions: { value: OperationFrequency; label: string }[] = [
@@ -21,6 +22,7 @@ export function FrequencySelect({
   value,
   onChange,
   error,
+  disabled,
 }: FrequencySelectProps): JSX.Element {
   const labelId = useId();
 
@@ -42,6 +44,7 @@ export function FrequencySelect({
               type="button"
               role="radio"
               aria-checked={isSelected}
+              disabled={disabled}
               className={clsx(styles.option, isSelected && styles.selected)}
               onClick={() => onChange(option.value)}
             >

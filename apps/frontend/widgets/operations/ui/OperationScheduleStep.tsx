@@ -49,6 +49,7 @@ export function OperationScheduleStep({
           value={data.frequency}
           onChange={(frequency) => onChange({ ...data, frequency })}
           error={errors?.frequency}
+          disabled={readonly}
         />
         <TextField
           label={recurring ? 'Дата первого повтора' : 'Дата операции'}
