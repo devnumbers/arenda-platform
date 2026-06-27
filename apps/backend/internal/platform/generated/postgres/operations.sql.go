@@ -532,7 +532,7 @@ WHERE owner_id = $1
   AND ($6::date IS NULL OR operation_date >= $6::date)
   AND ($7::date IS NULL OR operation_date <= $7::date)
   AND ($8::uuid IS NULL OR recurring_operation_id = $8::uuid)
-ORDER BY operation_date DESC
+ORDER BY operation_date DESC, id DESC
 LIMIT $10::int OFFSET $9::int
 `
 

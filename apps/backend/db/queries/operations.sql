@@ -198,5 +198,5 @@ WHERE owner_id = $1
   AND (sqlc.arg('from_date')::date IS NULL OR operation_date >= sqlc.arg('from_date')::date)
   AND (sqlc.arg('to_date')::date IS NULL OR operation_date <= sqlc.arg('to_date')::date)
   AND (sqlc.arg('recurring_operation_id')::uuid IS NULL OR recurring_operation_id = sqlc.arg('recurring_operation_id')::uuid)
-ORDER BY operation_date DESC
+ORDER BY operation_date DESC, id DESC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;

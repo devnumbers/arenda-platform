@@ -786,18 +786,16 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID
 		categories = append(categories, string(c))
 	}
 
-	var fromDate, toDate pgtype.Date
-	if filter.FromDate != nil {
-		fromDate = pgconv.DateToPgtype(*filter.FromDate)
-	}
-	if filter.ToDate != nil {
-		toDate = pgconv.DateToPgtype(*filter.ToDate)
-	}
+	fromDate := pgconv.DatePtrToPgtype(filter.FromDate)
+	toDate := pgconv.DatePtrToPgtype(filter.ToDate)
 
 	//nolint:gosec // Pagination limit is bounded by the API layer.
 	limit := int32(filter.Limit)
-	if limit == 0 {
+	if limit <= 0 {
 		limit = 100
+	}
+	if filter.Offset < 0 {
+		filter.Offset = 0
 	}
 
 	rows, err := r.q().ListOperationsByOwner(ctx, postgres.ListOperationsByOwnerParams{
