@@ -4,17 +4,15 @@ import type { JSX } from 'react';
 import { Skeleton } from '@heroui/react/skeleton';
 import { Icon } from '@/shared/ui/icon';
 import { Objects } from '@/shared/assets/icons';
-import type { components } from '@/shared/api/generated';
 import { EmptyState } from '@/shared/ui/empty-state';
+import type { Property } from '@/entities/property/model/types';
 import { SectionHeader } from './SectionHeader';
 import { EntityCard } from './EntityCard';
 import { IconActionCard } from './IconActionCard';
 import styles from './PropertiesSection.module.css';
 
-type PropertyResponse = components['schemas']['PropertyResponse'];
-
 type PropertiesSectionProps = {
-  readonly properties: PropertyResponse[] | undefined;
+  readonly properties: Property[] | undefined;
   readonly isLoading: boolean;
 };
 

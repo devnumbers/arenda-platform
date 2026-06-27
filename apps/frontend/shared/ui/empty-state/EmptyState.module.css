@@ -2,12 +2,20 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: 32px;
+  min-height: 400px;
   padding: 24px;
   text-align: center;
   border: 1px solid #e7e9ec;
-  border-radius: 24px;
-  background: var(--color-white);
+  border-radius: 32px;
+  background: #ffffff;
+}
+
+.image {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
 }
 
 .iconWrapper {
@@ -18,20 +26,29 @@
 }
 
 .iconWrapper svg {
-  width: 48px;
-  height: 48px;
+  width: 96px;
+  height: 96px;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 400px;
 }
 
 .title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  line-height: 1.5rem;
-  color: var(--color-text);
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 22px;
+  color: #1e1e1e;
 }
 
 .subtitle {
-  font-size: var(--font-size-text-m);
+  margin: 0;
+  font-size: 16px;
   font-weight: 400;
-  line-height: var(--line-height-text-m);
-  color: var(--color-text-muted);
+  line-height: 20px;
+  color: #a1a3a6;
 }

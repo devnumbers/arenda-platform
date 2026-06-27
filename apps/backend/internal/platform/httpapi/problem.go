@@ -47,6 +47,10 @@ func UserFacingDetail(err error) (string, bool) {
 		return "user is temporarily blocked", true
 	case errors.Is(err, identityapp.ErrCodeSentTooRecently):
 		return "code sent too recently", true
+	case errors.Is(err, identityapp.ErrPhoneAlreadyTaken):
+		return "phone number is already in use", true
+	case errors.Is(err, identityapp.ErrPhoneUnchanged):
+		return "new phone must differ from current phone", true
 	case errors.Is(err, identitydomain.ErrTooManyAttempts):
 		return "too many attempts", true
 
@@ -101,12 +105,16 @@ func UserFacingDetail(err error) (string, bool) {
 		return "invalid tariff change", true
 	case errors.Is(err, billingdomain.ErrInvalidSubscriptionState):
 		return "invalid subscription state", true
+	case errors.Is(err, billingdomain.ErrInvalidPaymentStatus):
+		return "payment cannot be refunded in its current status", true
 	case errors.Is(err, billingdomain.ErrCannotEnableAutoRenew):
 		return "cannot enable auto-renew without a validity period", true
 	case errors.Is(err, billingapp.ErrPaymentMethodInUse):
 		return "payment method is in use", true
 	case errors.Is(err, billingapp.ErrPaymentMethodAlreadyExists):
 		return "payment method already exists", true
+	case errors.Is(err, billingapp.ErrInvalidFilter):
+		return "invalid filter", true
 
 	// Notifications / reminders.
 	case errors.Is(err, notificationsapp.ErrInvalidReminderDate):

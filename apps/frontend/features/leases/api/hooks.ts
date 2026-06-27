@@ -10,10 +10,12 @@ import {
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { leaseKeys } from './keys';
+import { operationKeys } from '@/features/operations/api/keys';
 import type { components } from '@/shared/api/generated';
 
 type LeaseResponse = components['schemas']['LeaseResponse'];
 type LeasesResponse = components['schemas']['LeasesResponse'];
+type PropertyLeasesResponse = components['schemas']['PropertyLeasesResponse'];
 type LeaseCreateRequest = components['schemas']['LeaseCreateRequest'];
 type LeaseUpdateRequest = components['schemas']['LeaseUpdateRequest'];
 type ReminderCreateRequest = components['schemas']['ReminderCreateRequest'];
@@ -35,6 +37,16 @@ export function useLease(id: string): UseQueryResult<LeaseResponse, ApiError> {
     queryKey: leaseKeys.detail(id),
     queryFn: () => apiClient<LeaseResponse>(`/leases/${id}`),
     enabled: Boolean(id),
+  });
+}
+
+export function usePropertyLeases(
+  propertyId: string,
+): UseQueryResult<PropertyLeasesResponse, ApiError> {
+  return useQuery({
+    queryKey: leaseKeys.byProperty(propertyId),
+    queryFn: () => apiClient<PropertyLeasesResponse>(`/properties/${propertyId}/leases`),
+    enabled: Boolean(propertyId),
   });
 }
 
@@ -86,9 +98,49 @@ export function useCompleteLease(): UseMutationResult<
       apiClient<LeaseResponse>(`/leases/${id}/complete`, {
         method: 'POST',
       }),
-    onSuccess: (_, id) => {
+    onSuccess: (lease) => {
       queryClient.invalidateQueries({ queryKey: leaseKeys.all });
-      queryClient.invalidateQueries({ queryKey: leaseKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: leaseKeys.detail(lease.id) });
+      if (lease.property_id) {
+        queryClient.invalidateQueries({
+          queryKey: leaseKeys.byProperty(lease.property_id),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.byProperty(lease.property_id),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.summary(lease.property_id),
+        });
+      }
+    },
+  });
+}
+
+export function useReturnDeposit(): UseMutationResult<
+  LeaseResponse,
+  ApiError,
+  string
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id) =>
+      apiClient<LeaseResponse>(`/leases/${id}/deposit-return`, {
+        method: 'POST',
+      }),
+    onSuccess: (lease) => {
+      queryClient.invalidateQueries({ queryKey: leaseKeys.detail(lease.id) });
+      queryClient.invalidateQueries({ queryKey: leaseKeys.all });
+      if (lease.property_id) {
+        queryClient.invalidateQueries({
+          queryKey: leaseKeys.byProperty(lease.property_id),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.byProperty(lease.property_id),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.summary(lease.property_id),
+        });
+      }
     },
   });
 }

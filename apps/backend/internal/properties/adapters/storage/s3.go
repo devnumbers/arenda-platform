@@ -63,3 +63,15 @@ func (s *S3Storage) Upload(ctx context.Context, key, contentType string, data io
 	}
 	return publicURL, nil
 }
+
+// Delete removes the object with the given key from S3.
+func (s *S3Storage) Delete(ctx context.Context, key string) error {
+	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return fmt.Errorf("delete object: %w", err)
+	}
+	return nil
+}

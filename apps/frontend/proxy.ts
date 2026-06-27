@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const protectedPaths = ['/dashboard', '/properties', '/tenants', '/finance', '/profile', '/support'];
+const protectedPaths = ['/dashboard', '/properties', '/tenants', '/finance', '/profile'];
 const sessionCookieName = 'session_id';
 
 export function proxy(request: NextRequest) {

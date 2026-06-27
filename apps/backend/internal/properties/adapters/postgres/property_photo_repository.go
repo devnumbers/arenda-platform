@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -80,6 +82,35 @@ func (r *PropertyPhotoRepository) CountByPropertyID(ctx context.Context, propert
 		return 0, err
 	}
 	return int(count), nil
+}
+
+// GetByID returns a single photo by its ID.
+func (r *PropertyPhotoRepository) GetByID(ctx context.Context, photoID uuid.UUID) (domain.Photo, error) {
+	row, err := r.q().GetPropertyPhotoByID(ctx, pgconv.UUIDToPgtype(photoID))
+	if err != nil {
+		return domain.Photo{}, err
+	}
+	return photoFromRow(row), nil
+}
+
+// GetByIDAndPropertyID returns a photo only if it belongs to the given property.
+func (r *PropertyPhotoRepository) GetByIDAndPropertyID(ctx context.Context, photoID, propertyID uuid.UUID) (domain.Photo, error) {
+	row, err := r.q().GetPropertyPhotoByIDAndPropertyID(ctx, postgres.GetPropertyPhotoByIDAndPropertyIDParams{
+		ID:         pgconv.UUIDToPgtype(photoID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Photo{}, application.ErrNotFound
+		}
+		return domain.Photo{}, err
+	}
+	return photoFromRow(row), nil
+}
+
+// Delete removes a photo record by its ID.
+func (r *PropertyPhotoRepository) Delete(ctx context.Context, photoID uuid.UUID) error {
+	return r.q().DeletePropertyPhoto(ctx, pgconv.UUIDToPgtype(photoID))
 }
 
 func photoFromRow(row postgres.PropertyPhoto) domain.Photo {

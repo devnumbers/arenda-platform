@@ -13,14 +13,16 @@ import (
 )
 
 type fakeBillingService struct {
-	scheduledErr      error
-	renewalErr        error
-	expiredGraceErr   error
-	scheduledCount    int
-	renewalCount      int
-	expiredGraceCount int
-	scheduledStarted  chan struct{}
-	scheduledDelay    <-chan struct{}
+	scheduledErr            error
+	renewalErr              error
+	pendingUpgradeErr       error
+	expiredGraceErr         error
+	scheduledCount          int
+	renewalCount            int
+	pendingUpgradeCount     int
+	expiredGraceCount       int
+	scheduledStarted        chan struct{}
+	scheduledDelay          <-chan struct{}
 }
 
 func (s *fakeBillingService) ProcessScheduledChanges(ctx context.Context, _ time.Time) (int, error) {
@@ -45,6 +47,10 @@ func (s *fakeBillingService) ProcessRenewals(context.Context, time.Time) (int, e
 
 func (s *fakeBillingService) ProcessExpiredGrace(context.Context, time.Time) (int, error) {
 	return s.expiredGraceCount, s.expiredGraceErr
+}
+
+func (s *fakeBillingService) ProcessPendingUpgradePayments(context.Context, time.Time) (int, error) {
+	return s.pendingUpgradeCount, s.pendingUpgradeErr
 }
 
 func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
@@ -86,6 +92,29 @@ func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 		if !bytes.Contains([]byte(logs), []byte(msg)) {
 			t.Errorf("expected log message %q, got:\n%s", msg, logs)
 		}
+	}
+}
+
+func TestBillingWorkerTick_CallsProcessPendingUpgradePayments(t *testing.T) {
+	t.Parallel()
+
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
+
+	svc := &fakeBillingService{pendingUpgradeCount: 3}
+	w := NewBillingWorker(nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
+	w.billing = svc
+
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick error: %v", err)
+	}
+
+	logs := logBuf.String()
+	if !bytes.Contains([]byte(logs), []byte("billing worker finalized pending upgrade payments")) {
+		t.Errorf("expected pending upgrade processing log, got:\n%s", logs)
+	}
+	if !bytes.Contains([]byte(logs), []byte("count=3")) {
+		t.Errorf("expected count=3 in logs, got:\n%s", logs)
 	}
 }
 

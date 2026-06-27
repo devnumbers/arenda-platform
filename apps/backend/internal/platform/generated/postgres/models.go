@@ -165,6 +165,7 @@ type LoginAttempt struct {
 	Failures       int32              `json:"failures"`
 	FirstFailureAt pgtype.Timestamptz `json:"first_failure_at"`
 	LastFailureAt  pgtype.Timestamptz `json:"last_failure_at"`
+	UserID         pgtype.UUID        `json:"user_id"`
 }
 
 type Operation struct {
@@ -286,6 +287,7 @@ type SmsCode struct {
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	Used      bool               `json:"used"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Purpose   string             `json:"purpose"`
 }
 
 type SubscriptionPayment struct {

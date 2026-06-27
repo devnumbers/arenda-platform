@@ -161,6 +161,12 @@ SET status = 'failed', error_code = $2, updated_at = $3
 WHERE id = $1 AND status = 'pending'
 RETURNING *;
 
+-- name: MarkSubscriptionPaymentRefunded :one
+UPDATE subscription_payments
+SET status = $2, refunded_amount_kopecks = $3, updated_at = $4
+WHERE id = $1 AND status = 'succeeded'
+RETURNING *;
+
 -- name: UpdateSubscriptionPaymentProviderPaymentID :one
 UPDATE subscription_payments
 SET provider_payment_id = $2, updated_at = now()
@@ -238,3 +244,38 @@ SELECT * FROM subscription_payments
 WHERE subscription_id = $1 AND status = 'succeeded'
 ORDER BY created_at DESC
 LIMIT 1;
+
+-- name: ListPendingUpgradePayments :many
+SELECT sp.*
+FROM subscription_payments sp
+JOIN user_subscriptions us ON us.id = sp.subscription_id
+WHERE sp.status = 'pending'
+  AND sp.provider_payment_id IS NOT NULL
+  AND sp.tariff_id != us.tariff_id
+  AND sp.created_at < $1
+ORDER BY sp.created_at ASC
+LIMIT $2;
+
+-- name: ListPendingPayments :many
+SELECT *
+FROM subscription_payments
+WHERE status = 'pending'
+  AND provider_payment_id IS NOT NULL
+  AND provider_payment_id <> ''
+  AND created_at < $1
+ORDER BY created_at ASC
+LIMIT $2;
+
+-- name: ListSubscriptionPaymentsAdmin :many
+SELECT sp.*, u.phone AS user_phone
+FROM subscription_payments sp
+JOIN users u ON sp.user_id = u.id
+WHERE ($1::text = '' OR sp.status = $1::text)
+ORDER BY sp.created_at DESC
+LIMIT $2 OFFSET $3;
+
+-- name: CountSubscriptionPaymentsAdmin :one
+SELECT COUNT(*)
+FROM subscription_payments sp
+JOIN users u ON sp.user_id = u.id
+WHERE ($1::text = '' OR sp.status = $1::text);

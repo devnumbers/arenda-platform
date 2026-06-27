@@ -16,6 +16,11 @@ const (
 	MaxSMSFailures      = 5
 )
 
+const (
+	SMSCodePurposeLogin       = "login"
+	SMSCodePurposePhoneChange = "phone_change"
+)
+
 var (
 	ErrSMSCodeInvalid  = errors.New("sms code invalid")
 	ErrTooManyAttempts = errors.New("too many attempts")
@@ -23,21 +28,25 @@ var (
 
 type SMSCode struct {
 	ID        uuid.UUID
+	UserID    *uuid.UUID
 	Phone     Phone
+	Purpose   string
 	CodeHash  string
 	ExpiresAt time.Time
 	Used      bool
 	CreatedAt time.Time
 }
 
-func NewSMSCode(phone Phone, code string, now time.Time) (SMSCode, error) {
+func NewSMSCode(phone Phone, code, purpose string, userID *uuid.UUID, now time.Time) (SMSCode, error) {
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return SMSCode{}, fmt.Errorf("generate sms code id: %w", err)
 	}
 	return SMSCode{
 		ID:        id,
+		UserID:    userID,
 		Phone:     phone,
+		Purpose:   purpose,
 		CodeHash:  hashCode(phone.String(), code),
 		ExpiresAt: now.Add(SMSCodeTTL),
 		Used:      false,

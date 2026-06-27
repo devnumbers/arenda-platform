@@ -43,3 +43,23 @@ type SubscriptionPaymentView struct {
 	Payment domain.SubscriptionPayment
 	Tariff  domain.Tariff
 }
+
+// SubscriptionPaymentWithUser is a subscription payment together with its tariff and the user's phone.
+type SubscriptionPaymentWithUser struct {
+	Payment   domain.SubscriptionPayment
+	UserPhone string
+}
+
+// AdminSubscriptionPaymentView is a subscription payment with tariff and user phone for admin view.
+type AdminSubscriptionPaymentView struct {
+	Payment   domain.SubscriptionPayment
+	Tariff    domain.Tariff
+	UserPhone string
+}
+
+// ListAllPaymentsFilters carries optional filters for the admin list endpoint.
+type ListAllPaymentsFilters struct {
+	Status string
+	Limit  int
+	Offset int
+}

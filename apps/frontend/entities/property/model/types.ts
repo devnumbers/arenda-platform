@@ -12,6 +12,11 @@ export type PropertyType =
   | 'parking'
   | 'land';
 
+export type PropertyPhoto = {
+  readonly id: string;
+  readonly url: string;
+};
+
 export type Property = {
   readonly id: string;
   readonly name: string;
@@ -20,4 +25,5 @@ export type Property = {
   readonly description?: string;
   readonly status: PropertyStatus;
   readonly occupancy: Occupancy;
+  readonly photos?: PropertyPhoto[];
 };

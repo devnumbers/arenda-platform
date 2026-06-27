@@ -71,9 +71,7 @@ export function PropertyAddressStep({
     setInputValue(nextValue);
     setIsOpen(true);
     setActiveIndex(null);
-    if (value) {
-      onChange('');
-    }
+    onChange(nextValue);
   };
 
   const handleFocus = () => {
@@ -121,6 +119,7 @@ export function PropertyAddressStep({
           label="Адрес"
           required
           fullWidth
+          maxLength={500}
           value={inputValue}
           onChange={handleChange}
           onFocus={handleFocus}

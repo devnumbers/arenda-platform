@@ -11,15 +11,18 @@ import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { authKeys } from './keys';
 import type { components } from '@/shared/api/generated';
+import type { User } from '@/entities/user/model/types';
+import { mapMeResponse } from '@/entities/user/model/mappers';
 
 type MeResponse = components['schemas']['MeResponse'];
 type SendPhoneCodeRequest = components['schemas']['SendPhoneCodeRequest'];
 type VerifyPhoneCodeRequest = components['schemas']['VerifyPhoneCodeRequest'];
 
-export function useMe(): UseQueryResult<MeResponse, ApiError> {
+export function useMe(): UseQueryResult<User, ApiError> {
   return useQuery({
     queryKey: authKeys.me,
     queryFn: () => apiClient<MeResponse>('/me'),
+    select: mapMeResponse,
     retry: false,
   });
 }

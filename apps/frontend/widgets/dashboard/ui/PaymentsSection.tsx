@@ -6,6 +6,7 @@ import { Skeleton } from '@heroui/react/skeleton';
 import { Icon } from '@/shared/ui/icon';
 import { Clock, BoldWallet, ArrowRight } from '@/shared/assets/icons';
 import type { components } from '@/shared/api/generated';
+import type { Property } from '@/entities/property/model/types';
 import { formatDeadline } from '../lib/deadline-helpers';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { SectionHeader } from './SectionHeader';
@@ -14,17 +15,16 @@ import { IconActionCard } from './IconActionCard';
 import styles from './PaymentsSection.module.css';
 
 type ReminderResponse = components['schemas']['ReminderResponse'];
-type PropertyResponse = components['schemas']['PropertyResponse'];
 
 type PaymentsSectionProps = {
   readonly reminders: ReminderResponse[] | undefined;
-  readonly properties?: PropertyResponse[] | undefined;
+  readonly properties?: Property[] | undefined;
   readonly isLoading: boolean;
 };
 
 function getPropertyName(
   propertyId: string | null | undefined,
-  properties: PropertyResponse[] | undefined,
+  properties: Property[] | undefined,
 ): string | undefined {
   if (!propertyId || !properties) {
     return undefined;

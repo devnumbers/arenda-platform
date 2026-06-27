@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
+	"path"
 	"sort"
 
 	"github.com/google/uuid"
@@ -534,6 +536,76 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, ownerID, propert
 	property.Photos = photos
 
 	return property, nil
+}
+
+// DeletePropertyPhoto removes a photo record from the database and then deletes
+// the file from storage on a best-effort basis. The DB record is the source of
+// truth; if storage cleanup fails, the operation still succeeds and the orphan
+// object is logged for later cleanup.
+func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, ownerID, propertyID, photoID uuid.UUID) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := s.repo.WithTx(tx)
+	txPhotoRepo := s.photoRepo.WithTx(tx)
+
+	_, err = txRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, ownerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("get property: %w", err)
+	}
+
+	photo, err := txPhotoRepo.GetByIDAndPropertyID(ctx, photoID, propertyID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("get photo: %w", err)
+	}
+
+	if err := txPhotoRepo.Delete(ctx, photoID); err != nil {
+		return fmt.Errorf("delete photo record: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+
+	key, err := photoStorageKey(propertyID, photoID, photo.URL)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to derive storage key for photo cleanup",
+			"property_id", propertyID.String(),
+			"photo_id", photoID.String(),
+			"error", err.Error())
+		return nil
+	}
+
+	if err := s.photoStorage.Delete(ctx, key); err != nil {
+		s.logger.WarnContext(ctx, "failed to delete photo from storage, record already removed",
+			"property_id", propertyID.String(),
+			"photo_id", photoID.String(),
+			"key", key,
+			"error", err.Error())
+	}
+
+	return nil
+}
+
+func photoStorageKey(propertyID, photoID uuid.UUID, photoURL string) (string, error) {
+	parsed, err := url.Parse(photoURL)
+	if err != nil {
+		return "", fmt.Errorf("parse photo url: %w", err)
+	}
+	ext := path.Ext(parsed.Path)
+	if ext == "" {
+		return "", fmt.Errorf("could not determine extension from photo url path")
+	}
+	return fmt.Sprintf("%s/%s/%s%s", photoKeyPrefix, propertyID.String(), photoID.String(), ext), nil
 }
 
 // withPhotos loads and attaches photos to the given properties.

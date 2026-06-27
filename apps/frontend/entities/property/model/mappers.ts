@@ -12,5 +12,6 @@ export function mapPropertyResponse(
     description: dto.description,
     status: dto.status,
     occupancy: dto.occupancy,
+    photos: dto.photos?.map((photo) => ({ id: photo.id, url: photo.url })),
   };
 }

@@ -11,40 +11,41 @@ import (
 )
 
 type Config struct {
-	AppEnv                string
-	HTTPAddr              string
-	LogLevel              string
-	LogLevelValue         slog.Level
-	LogFormat             string
-	DatabaseURL           string
-	MigrationsDir         string
-	CookieSecure          bool
-	SMSSender             string
-	PaymentProvider       string
-	AppBaseURL            string
-	TKassaTerminalKey     string
-	TKassaPassword        string
-	TKassaBaseURL         string
-	TKassaTimeout         time.Duration
-	DaDataAPIKey          string
-	DaDataSecretKey       string
-	DaDataBaseURL         string
-	DaDataTimeout         time.Duration
-	EncryptionKey         string
-	BillingWorkerInterval          time.Duration
-	OverdueOperationWorkerInterval time.Duration
-	LogSuccessfulRequests          bool
-	TariffCacheTTL                 time.Duration
-	RateLimit                      RateLimit
-	DBPool                         DBPoolConfig
-	PhotoStorageEndpoint           string
-	PhotoStorageRegion             string
-	PhotoStorageBucket             string
-	PhotoStorageAccessKey          string
-	PhotoStorageSecretKey          string
-	PhotoStoragePublicBaseURL      string
-	PhotoStoragePathStyle          bool
-	PhotoStorageS3Enabled          bool
+	AppEnv                              string
+	HTTPAddr                            string
+	LogLevel                            string
+	LogLevelValue                       slog.Level
+	LogFormat                           string
+	DatabaseURL                         string
+	MigrationsDir                       string
+	CookieSecure                        bool
+	SMSSender                           string
+	PaymentProvider                     string
+	AppBaseURL                          string
+	TKassaTerminalKey                   string
+	TKassaPassword                      string
+	TKassaBaseURL                       string
+	TKassaTimeout                       time.Duration
+	DaDataAPIKey                        string
+	DaDataSecretKey                     string
+	DaDataBaseURL                       string
+	DaDataTimeout                       time.Duration
+	EncryptionKey                       string
+	BillingWorkerInterval               time.Duration
+	PaymentReconciliationWorkerInterval time.Duration
+	OverdueOperationWorkerInterval      time.Duration
+	LogSuccessfulRequests               bool
+	TariffCacheTTL                      time.Duration
+	RateLimit                           RateLimit
+	DBPool                              DBPoolConfig
+	PhotoStorageEndpoint                string
+	PhotoStorageRegion                  string
+	PhotoStorageBucket                  string
+	PhotoStorageAccessKey               string
+	PhotoStorageSecretKey               string
+	PhotoStoragePublicBaseURL           string
+	PhotoStoragePathStyle               bool
+	PhotoStorageS3Enabled               bool
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -447,6 +448,18 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("BILLING_WORKER_INTERVAL must be positive")
 		}
 		cfg.BillingWorkerInterval = d
+	}
+
+	cfg.PaymentReconciliationWorkerInterval = 5 * time.Minute
+	if v := os.Getenv("PAYMENT_RECONCILIATION_WORKER_INTERVAL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid PAYMENT_RECONCILIATION_WORKER_INTERVAL %q: %w", v, err)
+		}
+		if d <= 0 {
+			return Config{}, fmt.Errorf("PAYMENT_RECONCILIATION_WORKER_INTERVAL must be positive")
+		}
+		cfg.PaymentReconciliationWorkerInterval = d
 	}
 
 	cfg.OverdueOperationWorkerInterval = 24 * time.Hour

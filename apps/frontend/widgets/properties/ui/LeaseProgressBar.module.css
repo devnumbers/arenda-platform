@@ -1,0 +1,41 @@
+.root {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  height: 6px;
+  border-radius: 16px;
+}
+
+.track {
+  flex: 1 1 0;
+  min-width: 0;
+  background: #ffffff;
+  border-radius: 32px;
+  overflow: hidden;
+}
+
+.indicator {
+  height: 100%;
+  background: #2b7fff;
+  border-radius: 32px;
+  transition: width 0.2s ease;
+}
+
+.inactive {
+  background: #a1a3a6;
+}
+
+.marker {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  margin-left: -6px;
+  background: #2b7fff;
+  border-radius: 50%;
+}
+
+.inactiveMarker {
+  background: #a1a3a6;
+}

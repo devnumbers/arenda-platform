@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { JSX, ReactNode } from 'react';
-import clsx from 'clsx';
-import { Button as HeroButton } from '@heroui/react/button';
-import { Filter } from '@/shared/assets/icons';
+import NextLink from 'next/link';
+import { Button } from '@/shared/ui/button';
 import { Icon } from '@/shared/ui/icon';
+import { Filter, HomeAdd, Cancel } from '@/shared/assets/icons';
+import { ROUTES } from '@/shared/config/routes';
 import { propertyTypeOptions } from '@/features/properties/lib/property-types';
 import {
   statusFilterOptions,
@@ -33,68 +34,64 @@ export type PropertiesToolbarProps = {
 type TypeFilterSectionProps = {
   readonly selected: readonly PropertyType[];
   readonly onToggle: (type: PropertyType) => void;
+  readonly layout: 'popover' | 'drawer';
 };
 
 type StatusFilterSectionProps = {
   readonly selected: readonly StatusFilterValue[];
   readonly onToggle: (status: StatusFilterValue) => void;
+  readonly layout: 'popover' | 'drawer';
 };
 
 type SortSectionProps = {
   readonly selected: PropertySort;
   readonly onSelect: (sort: PropertySort) => void;
+  readonly layout: 'popover' | 'drawer';
 };
 
-function OptionChip({
+function FilterOption({
   label,
   selected,
   onClick,
+  layout,
 }: {
   readonly label: string;
   readonly selected: boolean;
   readonly onClick: () => void;
+  readonly layout: 'popover' | 'drawer';
 }): JSX.Element {
+  if (layout === 'popover') {
+    return (
+      <Button
+        className={styles.popoverOption}
+        variant={selected ? 'secondary' : 'icon-black'}
+        size="small"
+        fullWidth
+        onClick={onClick}
+      >
+        {label}
+      </Button>
+    );
+  }
+
   return (
-    <button
-      className={clsx(
-        styles.optionChip,
-        selected ? styles.optionChipSelected : styles.optionChipUnselected,
-      )}
-      type="button"
-      aria-pressed={selected}
+    <Button
+      variant={selected ? 'primary' : 'secondary'}
+      size="small"
       onClick={onClick}
     >
       {label}
-    </button>
+    </Button>
   );
 }
 
-function SortOption({
-  label,
-  selected,
-  onClick,
+function FilterGroup({
+  title,
+  children,
 }: {
-  readonly label: string;
-  readonly selected: boolean;
-  readonly onClick: () => void;
+  readonly title: string;
+  readonly children: ReactNode;
 }): JSX.Element {
-  return (
-    <button
-      className={clsx(
-        styles.optionChip,
-        selected ? styles.optionChipSelected : styles.optionChipUnselected,
-      )}
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-}
-
-function FilterGroup({ title, children }: { readonly title: string; readonly children: ReactNode }): JSX.Element {
   return (
     <fieldset className={styles.group}>
       <legend className={styles.groupTitle}>{title}</legend>
@@ -103,46 +100,61 @@ function FilterGroup({ title, children }: { readonly title: string; readonly chi
   );
 }
 
-function TypeFilterSection({ selected, onToggle }: TypeFilterSectionProps): JSX.Element {
+function TypeFilterSection({
+  selected,
+  onToggle,
+  layout,
+}: TypeFilterSectionProps): JSX.Element {
   return (
     <FilterGroup title="Тип объекта">
       {propertyTypeOptions.map((option) => (
-        <OptionChip
+        <FilterOption
           key={option.value}
           label={option.label}
           selected={selected.includes(option.value)}
           onClick={() => onToggle(option.value)}
+          layout={layout}
         />
       ))}
     </FilterGroup>
   );
 }
 
-function StatusFilterSection({ selected, onToggle }: StatusFilterSectionProps): JSX.Element {
+function StatusFilterSection({
+  selected,
+  onToggle,
+  layout,
+}: StatusFilterSectionProps): JSX.Element {
   return (
     <FilterGroup title="Статус">
       {statusFilterOptions.map((option) => (
-        <OptionChip
+        <FilterOption
           key={option.value}
           label={option.label}
           selected={selected.includes(option.value)}
           onClick={() => onToggle(option.value)}
+          layout={layout}
         />
       ))}
     </FilterGroup>
   );
 }
 
-function SortSection({ selected, onSelect }: SortSectionProps): JSX.Element {
+function SortSection({
+  selected,
+  onSelect,
+  layout,
+}: SortSectionProps): JSX.Element {
   return (
     <FilterGroup title="Сортировка">
       <div className={styles.options} role="radiogroup" aria-label="Сортировка">
         {sortOptions.map((option) => (
-          <SortOption
+          <FilterOption
             key={option.value}
             label={option.label}
             selected={selected === option.value}
             onClick={() => onSelect(option.value)}
+            layout={layout}
           />
         ))}
       </div>
@@ -150,7 +162,18 @@ function SortSection({ selected, onSelect }: SortSectionProps): JSX.Element {
   );
 }
 
-export function PropertiesToolbar({ filters, sort, mode = 'active', onChange }: PropertiesToolbarProps): JSX.Element {
+type SelectedChip = {
+  readonly key: string;
+  readonly label: string;
+  readonly onRemove: () => void;
+};
+
+export function PropertiesToolbar({
+  filters,
+  sort,
+  mode = 'active',
+  onChange,
+}: PropertiesToolbarProps): JSX.Element {
   const [draftFilters, setDraftFilters] = useState<PropertyFilters>(filters);
   const [draftSort, setDraftSort] = useState<PropertySort>(sort);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -175,7 +198,10 @@ export function PropertiesToolbar({ filters, sort, mode = 'active', onChange }: 
 
   const handleDesktopStatusToggle = useCallback(
     (status: StatusFilterValue) => {
-      onChange({ ...filters, statuses: toggleValue(filters.statuses, status) }, sort);
+      onChange(
+        { ...filters, statuses: toggleValue(filters.statuses, status) },
+        sort,
+      );
     },
     [filters, sort, onChange],
   );
@@ -188,63 +214,181 @@ export function PropertiesToolbar({ filters, sort, mode = 'active', onChange }: 
   );
 
   const handleDraftTypeToggle = useCallback((type: PropertyType) => {
-    setDraftFilters((prev) => ({ ...prev, types: toggleValue(prev.types, type) }));
+    setDraftFilters((prev) => ({
+      ...prev,
+      types: toggleValue(prev.types, type),
+    }));
   }, []);
 
   const handleDraftStatusToggle = useCallback((status: StatusFilterValue) => {
-    setDraftFilters((prev) => ({ ...prev, statuses: toggleValue(prev.statuses, status) }));
+    setDraftFilters((prev) => ({
+      ...prev,
+      statuses: toggleValue(prev.statuses, status),
+    }));
   }, []);
 
   const handleDraftSortSelect = useCallback((nextSort: PropertySort) => {
     setDraftSort(nextSort);
   }, []);
 
+  const selectedChips = useMemo<readonly SelectedChip[]>(() => {
+    const chips: SelectedChip[] = [];
+
+    filters.types.forEach((value) => {
+      const option = propertyTypeOptions.find((item) => item.value === value);
+      if (!option) return;
+      chips.push({
+        key: `type-${value}`,
+        label: `Тип: ${option.label}`,
+        onRemove: () =>
+          onChange(
+            { ...filters, types: filters.types.filter((v) => v !== value) },
+            sort,
+          ),
+      });
+    });
+
+    filters.statuses.forEach((value) => {
+      const option = statusFilterOptions.find((item) => item.value === value);
+      if (!option) return;
+      chips.push({
+        key: `status-${value}`,
+        label: `Статус: ${option.label}`,
+        onRemove: () =>
+          onChange(
+            {
+              ...filters,
+              statuses: filters.statuses.filter((v) => v !== value),
+            },
+            sort,
+          ),
+      });
+    });
+
+    return chips;
+  }, [filters, sort, onChange]);
+
+  const hasSelectedFilters =
+    filters.types.length > 0 || filters.statuses.length > 0;
+
+  const handleReset = useCallback(() => {
+    onChange({ types: [], statuses: [] }, sort);
+  }, [onChange, sort]);
+
   return (
     <div className={styles.root}>
-      <div className={styles.desktopOnly}>
-        <FilterPopover label="Тип объекта" activeCount={filters.types.length}>
-          <div className={styles.popoverBody}>
-            <TypeFilterSection selected={filters.types} onToggle={handleDesktopTypeToggle} />
-          </div>
-        </FilterPopover>
-        {mode !== 'archived' && (
-          <FilterPopover label="Статус" activeCount={filters.statuses.length}>
-            <div className={styles.popoverBody}>
-              <StatusFilterSection selected={filters.statuses} onToggle={handleDesktopStatusToggle} />
-            </div>
+      <div className={styles.row}>
+        <div className={styles.desktopOnly}>
+          <FilterPopover
+            label="Тип объекта"
+            activeCount={filters.types.length}
+          >
+            <TypeFilterSection
+              selected={filters.types}
+              onToggle={handleDesktopTypeToggle}
+              layout="popover"
+            />
           </FilterPopover>
-        )}
-        <FilterPopover label="Сортировка" activeCount={0}>
-          <div className={styles.popoverBody}>
-            <SortSection selected={sort} onSelect={handleDesktopSortSelect} />
-          </div>
-        </FilterPopover>
-      </div>
+          {mode !== 'archived' && (
+            <FilterPopover
+              label="Статус"
+              activeCount={filters.statuses.length}
+            >
+              <StatusFilterSection
+                selected={filters.statuses}
+                onToggle={handleDesktopStatusToggle}
+                layout="popover"
+              />
+            </FilterPopover>
+          )}
+          <FilterPopover label="Сортировка" activeCount={0}>
+            <SortSection
+              selected={sort}
+              onSelect={handleDesktopSortSelect}
+              layout="popover"
+            />
+          </FilterPopover>
+        </div>
 
-      <div className={styles.mobileOnly}>
-        <HeroButton
-          className={styles.mobileButton}
-          variant="secondary"
-          size="sm"
-          onClick={openDrawer}
+        <div className={styles.mobileOnly}>
+          <Button
+            className={styles.mobileButton}
+            variant="secondary"
+            size="small"
+            leftIcon={
+              <Icon size="s">
+                <Filter />
+              </Icon>
+            }
+            onClick={openDrawer}
+          >
+            Фильтры
+          </Button>
+          <FilterDrawer
+            isOpen={isDrawerOpen}
+            onClose={() => setIsDrawerOpen(false)}
+            onApply={handleApply}
+          >
+            <TypeFilterSection
+              selected={draftFilters.types}
+              onToggle={handleDraftTypeToggle}
+              layout="drawer"
+            />
+            {mode !== 'archived' && (
+              <StatusFilterSection
+                selected={draftFilters.statuses}
+                onToggle={handleDraftStatusToggle}
+                layout="drawer"
+              />
+            )}
+            <SortSection
+              selected={draftSort}
+              onSelect={handleDraftSortSelect}
+              layout="drawer"
+            />
+          </FilterDrawer>
+        </div>
+
+        <NextLink
+          href={ROUTES.propertyNew}
+          className={styles.addButton}
+          aria-label="Добавить объект"
         >
           <Icon size="s">
-            <Filter />
+            <HomeAdd />
           </Icon>
-          Фильтры
-        </HeroButton>
-        <FilterDrawer
-          isOpen={isDrawerOpen}
-          onClose={() => setIsDrawerOpen(false)}
-          onApply={handleApply}
-        >
-          <TypeFilterSection selected={draftFilters.types} onToggle={handleDraftTypeToggle} />
-          {mode !== 'archived' && (
-            <StatusFilterSection selected={draftFilters.statuses} onToggle={handleDraftStatusToggle} />
-          )}
-          <SortSection selected={draftSort} onSelect={handleDraftSortSelect} />
-        </FilterDrawer>
+        </NextLink>
       </div>
+
+      {hasSelectedFilters && (
+        <div className={styles.chipsRow}>
+          <div className={styles.chips}>
+            {selectedChips.map((chip) => (
+              <Button
+                key={chip.key}
+                className={styles.chip}
+                variant="secondary"
+                size="tiny"
+                rightIcon={
+                  <Icon size="xs">
+                    <Cancel />
+                  </Icon>
+                }
+                onClick={chip.onRemove}
+              >
+                {chip.label}
+              </Button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className={styles.reset}
+            onClick={handleReset}
+          >
+            Сбросить
+          </button>
+        </div>
+      )}
     </div>
   );
 }

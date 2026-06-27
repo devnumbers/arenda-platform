@@ -1,3 +1,6 @@
+import { getLeaseMonthCount } from '@/shared/lib/format-lease-month';
+import { pluralize } from '@/shared/lib/pluralize';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function formatRemainingDuration(start: string, end?: string | null): string {
@@ -7,6 +10,11 @@ export function formatRemainingDuration(start: string, end?: string | null): str
 
   const startDate = new Date(start);
   const endDate = new Date(end);
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return '';
+  }
+
   const now = Date.now();
 
   if (endDate.getTime() <= now) {
@@ -32,27 +40,8 @@ export function formatRemainingDuration(start: string, end?: string | null): str
 
 export function formatCurrentLeaseMonth(start: string): string {
   const startDate = new Date(start);
-  const now = new Date();
+  if (Number.isNaN(startDate.getTime())) return '';
 
-  const months =
-    (now.getFullYear() - startDate.getFullYear()) * 12 +
-    (now.getMonth() - startDate.getMonth()) +
-    1;
-
-  return `${months} месяц`;
-}
-
-function pluralize(count: number, one: string, few: string, many: string): string {
-  const mod10 = count % 10;
-  const mod100 = count % 100;
-
-  if (mod10 === 1 && mod100 !== 11) {
-    return one;
-  }
-
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
-    return few;
-  }
-
-  return many;
+  const months = getLeaseMonthCount(start) + 1;
+  return `${months} ${pluralize(months, 'месяц', 'месяца', 'месяцев')}`;
 }

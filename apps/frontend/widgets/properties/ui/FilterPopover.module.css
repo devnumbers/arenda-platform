@@ -5,8 +5,15 @@
 }
 
 .content {
-  min-width: 240px;
+  min-width: 175px;
   padding: 8px;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 0 16px rgba(0, 0, 0, 0.24);
 }
 
-
+.popoverBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

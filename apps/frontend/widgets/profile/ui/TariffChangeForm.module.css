@@ -1,0 +1,174 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.periodSelector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.periodLabel {
+  font-size: var(--font-size-text-m);
+  font-weight: 500;
+  line-height: var(--line-height-text-m);
+  color: var(--color-text);
+}
+
+.periodOptions {
+  display: flex;
+  gap: 12px;
+}
+
+.periodOption {
+  flex: 1 1 0;
+  padding: 12px 16px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-input);
+  background-color: var(--color-secondary-bg);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--font-size-text-m);
+  font-weight: 500;
+  line-height: var(--line-height-text-m);
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.periodOption:hover {
+  border-color: var(--color-secondary-hover);
+}
+
+.periodOption:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.periodOption:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.periodOptionSelected {
+  border-color: var(--color-primary);
+  background-color: var(--color-clear-hover);
+  color: var(--color-primary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  border: 1px solid var(--color-secondary-hover);
+  border-radius: 24px;
+  background: var(--color-white);
+  box-shadow: none;
+}
+
+.currentCard {
+  border-color: var(--color-primary);
+  background: var(--color-clear-hover);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tariffName {
+  margin: 0;
+  font-size: var(--font-size-text-l);
+  font-weight: 600;
+  line-height: var(--line-height-text-l);
+  color: var(--color-text);
+}
+
+.currentBadge {
+  padding: 4px 10px;
+  border-radius: var(--radius-round);
+  background: var(--color-primary);
+  color: var(--color-white);
+  font-size: var(--font-size-text-s);
+  font-weight: 500;
+  line-height: var(--line-height-text-s);
+}
+
+.priceRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.price {
+  font-size: var(--font-size-text-m);
+  font-weight: 500;
+  line-height: var(--line-height-text-m);
+  color: var(--color-text);
+}
+
+.period {
+  margin-left: 4px;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.limit {
+  margin: 0;
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  color: var(--color-text-muted);
+}
+
+.nameSkeleton {
+  height: 24px;
+  width: 40%;
+  border-radius: 8px;
+}
+
+.priceSkeleton {
+  height: 20px;
+  width: 60%;
+  border-radius: 6px;
+}
+
+.limitSkeleton {
+  height: 18px;
+  width: 50%;
+  border-radius: 6px;
+}
+
+.buttonSkeleton {
+  height: 48px;
+  width: 100%;
+  border-radius: var(--radius-button);
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 40px 24px;
+  border-radius: 24px;
+  background: var(--color-secondary-bg);
+  text-align: center;
+}
+
+.errorText {
+  margin: 0;
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  color: var(--color-text);
+}

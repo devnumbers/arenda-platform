@@ -11,3 +11,12 @@ SELECT * FROM property_photos WHERE property_id = ANY($1::uuid[]) ORDER BY creat
 
 -- name: CountPropertyPhotosByPropertyID :one
 SELECT COUNT(*) FROM property_photos WHERE property_id = $1;
+
+-- name: GetPropertyPhotoByID :one
+SELECT * FROM property_photos WHERE id = $1;
+
+-- name: GetPropertyPhotoByIDAndPropertyID :one
+SELECT * FROM property_photos WHERE id = $1 AND property_id = $2;
+
+-- name: DeletePropertyPhoto :exec
+DELETE FROM property_photos WHERE id = $1;

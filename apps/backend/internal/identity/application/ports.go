@@ -24,17 +24,22 @@ type Sender interface {
 
 type UserRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.User, error)
+	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetByPhone(ctx context.Context, phone domain.Phone) (domain.User, error)
 	GetPhoneByID(ctx context.Context, id uuid.UUID) (string, error)
 	Create(ctx context.Context, user domain.User) (domain.User, error)
+	Update(ctx context.Context, user domain.User) (domain.User, error)
+	UpdatePhone(ctx context.Context, id uuid.UUID, phone domain.Phone) (domain.User, error)
 	WithTx(tx transaction.Tx) UserRepository
 }
 
 type SMSCodeRepository interface {
 	Save(ctx context.Context, code domain.SMSCode) error
-	GetLatestByPhone(ctx context.Context, phone domain.Phone, now time.Time) (domain.SMSCode, error)
+	GetLatestByPhone(ctx context.Context, phone domain.Phone, purpose string, now time.Time) (domain.SMSCode, error)
+	GetLatestByPhoneAndUserID(ctx context.Context, phone domain.Phone, purpose string, userID uuid.UUID, now time.Time) (domain.SMSCode, error)
 	MarkUsedByID(ctx context.Context, id uuid.UUID) error
 	DeleteByID(ctx context.Context, id uuid.UUID) error
+	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 	DeleteExpiredBefore(ctx context.Context, before time.Time) error
 	DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	WithTx(tx transaction.Tx) SMSCodeRepository
@@ -42,8 +47,9 @@ type SMSCodeRepository interface {
 
 type AttemptRepository interface {
 	GetByPhone(ctx context.Context, phone domain.Phone) (domain.AttemptWindow, error)
-	Save(ctx context.Context, phone domain.Phone, window domain.AttemptWindow) error
+	Save(ctx context.Context, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow) error
 	DeleteByPhone(ctx context.Context, phone domain.Phone) error
+	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 	DeleteStaleBefore(ctx context.Context, before time.Time) error
 	DeleteStaleBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	WithTx(tx transaction.Tx) AttemptRepository
@@ -55,6 +61,7 @@ type SessionRepository interface {
 	Update(ctx context.Context, session domain.Session) error
 	DeleteByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
+	DeleteByUserIDExcept(ctx context.Context, userID uuid.UUID, tokenHash string) error
 	DeleteExpiredBefore(ctx context.Context, before time.Time) error
 	DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	WithTx(tx transaction.Tx) SessionRepository

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -131,6 +132,50 @@ func TestVerifyWebhookToken(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid webhook token") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseWebhookRefundStatuses(t *testing.T) {
+	tests := []struct {
+		name            string
+		status          string
+		amount          int64
+		wantStatus      domain.PaymentStatus
+		wantAmount      int64
+	}{
+		{"refunded", "REFUNDED", 99000, domain.PaymentStatusRefunded, 99000},
+		{"partial_refunded", "PARTIAL_REFUNDED", 49000, domain.PaymentStatusPartialRefunded, 49000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := map[string]any{
+				"TerminalKey": testTerminalKey,
+				"OrderId":     "order-refund",
+				"PaymentId":   json.Number("12345"),
+				"Status":      tt.status,
+				"Amount":      json.Number(strconv.FormatInt(tt.amount, 10)),
+				"Success":     true,
+			}
+			payload["Token"] = sign(payload, testPassword)
+
+			body, err := json.Marshal(payload)
+			if err != nil {
+				t.Fatalf("marshal webhook: %v", err)
+			}
+
+			p := newTestProvider("")
+			got, err := p.ParseWebhook(context.Background(), body)
+			if err != nil {
+				t.Fatalf("ParseWebhook error: %v", err)
+			}
+			if got.Status != tt.wantStatus {
+				t.Errorf("status = %v, want %v", got.Status, tt.wantStatus)
+			}
+			if got.AmountKopecks != tt.wantAmount {
+				t.Errorf("amount = %v, want %v", got.AmountKopecks, tt.wantAmount)
+			}
+		})
 	}
 }
 
@@ -526,10 +571,8 @@ func TestProviderInitAddCard(t *testing.T) {
 
 	p := newTestProvider(server.URL + "/v2/")
 	result, err := p.InitAddCard(context.Background(), application.InitAddCardRequest{
-		UserID:          uuid.New(),
-		CustomerKey:     "customer-1",
-		SuccessURL:      "https://example.com/success",
-		NotificationURL: "https://example.com/notify",
+		UserID:      uuid.New(),
+		CustomerKey: "customer-1",
 	})
 	if err != nil {
 		t.Fatalf("InitAddCard failed: %v", err)
@@ -542,7 +585,7 @@ func TestProviderInitAddCard(t *testing.T) {
 	}
 }
 
-func TestProviderInitAddCardCustomerAPIErrorContinues(t *testing.T) {
+func TestProviderInitAddCardCustomerAPIErrorPropagated(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v2/AddCustomer":
@@ -556,12 +599,7 @@ func TestProviderInitAddCardCustomerAPIErrorContinues(t *testing.T) {
 				CustomerKey: "customer-1",
 			})
 		case "/v2/AddCard":
-			_ = verifyRequestToken(t, r, testPassword)
-			_ = json.NewEncoder(w).Encode(addCardResponse{
-				baseResponse: baseResponse{Success: true},
-				PaymentURL:   "https://pay",
-				RequestKey:   "rk",
-			})
+			t.Fatalf("AddCard should not be called when AddCustomer fails")
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -569,15 +607,15 @@ func TestProviderInitAddCardCustomerAPIErrorContinues(t *testing.T) {
 	defer server.Close()
 
 	p := newTestProvider(server.URL + "/v2/")
-	result, err := p.InitAddCard(context.Background(), application.InitAddCardRequest{
+	_, err := p.InitAddCard(context.Background(), application.InitAddCardRequest{
 		UserID:      uuid.New(),
 		CustomerKey: "customer-1",
 	})
-	if err != nil {
-		t.Fatalf("InitAddCard failed: %v", err)
+	if err == nil {
+		t.Fatalf("expected error when AddCustomer fails")
 	}
-	if result.RequestKey != "rk" {
-		t.Fatalf("RequestKey: got %q, want %q", result.RequestKey, "rk")
+	if !strings.Contains(err.Error(), "add customer failed") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -658,7 +696,7 @@ func TestProviderRemoveCardNotFound(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(removeCardResponse{
 			baseResponse: baseResponse{
 				Success:   false,
-				ErrorCode: "502",
+				ErrorCode: "107",
 				Message:   "Card not found",
 			},
 		})
@@ -780,6 +818,54 @@ func TestParseWebhookAddCardRejectsNonSuccess(t *testing.T) {
 	}
 }
 
+func TestParseWebhookAddCardLegacyType(t *testing.T) {
+	payload := map[string]any{
+		"TerminalKey":      testTerminalKey,
+		"NotificationType": notificationTypeAddCardLegacy,
+		"CustomerKey":      "customer-1",
+		"RequestKey":       "request-key-1",
+		"RebillId":         "rebill-1",
+		"CardId":           "card-1",
+		"Pan":              "430000******0777",
+		"ExpDate":          "12/25",
+		"Status":           "SUCCESS",
+		"Success":          true,
+	}
+	payload["Token"] = sign(payload, testPassword)
+	body, _ := json.Marshal(payload)
+
+	p := newTestProvider("")
+	result, err := p.ParseWebhook(context.Background(), body)
+	if err != nil {
+		t.Fatalf("ParseWebhook failed: %v", err)
+	}
+	if result.NotificationType != notificationTypeAddCardLegacy {
+		t.Fatalf("NotificationType: got %q, want %q", result.NotificationType, notificationTypeAddCardLegacy)
+	}
+	if result.RequestKey != "request-key-1" {
+		t.Fatalf("RequestKey: got %q", result.RequestKey)
+	}
+}
+
+func TestParseWebhookUnknownNotificationType(t *testing.T) {
+	payload := map[string]any{
+		"TerminalKey":      testTerminalKey,
+		"NotificationType": "NotificationFiscalization",
+		"Success":          true,
+	}
+	payload["Token"] = sign(payload, testPassword)
+	body, _ := json.Marshal(payload)
+
+	p := newTestProvider("")
+	_, err := p.ParseWebhook(context.Background(), body)
+	if err == nil {
+		t.Fatalf("expected error for unknown notification type")
+	}
+	if !strings.Contains(err.Error(), "unknown notification type") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestProviderHTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -793,6 +879,26 @@ func TestProviderHTTPError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "HTTP 500") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestProviderHTTPErrorIncludesBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("invalid request body"))
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	_, err := p.Status(context.Background(), uuid.New(), "1")
+	if err == nil {
+		t.Fatalf("expected HTTP error")
+	}
+	if !strings.Contains(err.Error(), "HTTP 400") {
+		t.Fatalf("expected HTTP 400 in error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "invalid request body") {
+		t.Fatalf("expected response body in error: %v", err)
 	}
 }
 
@@ -869,5 +975,159 @@ func TestSignDoesNotMutateInput(t *testing.T) {
 	_ = sign(data, testPassword)
 	if len(data) != len(original) {
 		t.Fatalf("sign mutated input map")
+	}
+}
+
+
+func TestProviderCancel_FullRefund(t *testing.T) {
+	paymentID := uuid.New()
+	providerPaymentID := "cancel-123"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/Cancel" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		data := verifyRequestToken(t, r, testPassword)
+		if got, want := data["PaymentId"], providerPaymentID; got != want {
+			t.Fatalf("PaymentId: got %v, want %v", got, want)
+		}
+		if _, ok := data["Amount"]; ok {
+			t.Fatal("expected Amount omitted for full refund")
+		}
+
+		_ = json.NewEncoder(w).Encode(cancelResponse{
+			baseResponse:   baseResponse{Success: true, Status: "REFUNDED"},
+			PaymentID:      providerPaymentID,
+			OrderID:        paymentID.String(),
+			OriginalAmount: 10000,
+			NewAmount:      0,
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	result, err := p.Cancel(context.Background(), application.CancelRequest{
+		PaymentID:         paymentID,
+		ProviderPaymentID: providerPaymentID,
+		AmountKopecks:     0,
+	})
+	if err != nil {
+		t.Fatalf("Cancel failed: %v", err)
+	}
+	if result.Status != domain.PaymentStatusRefunded {
+		t.Fatalf("Status: got %v, want %v", result.Status, domain.PaymentStatusRefunded)
+	}
+	if result.RefundedAmountKopecks != 10000 {
+		t.Fatalf("RefundedAmountKopecks: got %d, want 10000", result.RefundedAmountKopecks)
+	}
+}
+
+func TestProviderCancel_PartialRefund(t *testing.T) {
+	paymentID := uuid.New()
+	providerPaymentID := "cancel-456"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/Cancel" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		data := verifyRequestToken(t, r, testPassword)
+		if got, want := data["Amount"], float64(3000); got != want {
+			t.Fatalf("Amount: got %v, want %v", got, want)
+		}
+
+		_ = json.NewEncoder(w).Encode(cancelResponse{
+			baseResponse:   baseResponse{Success: true, Status: "PARTIAL_REFUNDED"},
+			PaymentID:      providerPaymentID,
+			OrderID:        paymentID.String(),
+			OriginalAmount: 10000,
+			NewAmount:      7000,
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	result, err := p.Cancel(context.Background(), application.CancelRequest{
+		PaymentID:         paymentID,
+		ProviderPaymentID: providerPaymentID,
+		AmountKopecks:     3000,
+	})
+	if err != nil {
+		t.Fatalf("Cancel failed: %v", err)
+	}
+	if result.Status != domain.PaymentStatusPartialRefunded {
+		t.Fatalf("Status: got %v, want %v", result.Status, domain.PaymentStatusPartialRefunded)
+	}
+	if result.RefundedAmountKopecks != 3000 {
+		t.Fatalf("RefundedAmountKopecks: got %d, want 3000", result.RefundedAmountKopecks)
+	}
+}
+
+func TestProviderCancel_ReversedPending(t *testing.T) {
+	paymentID := uuid.New()
+	providerPaymentID := "cancel-reversed"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/Cancel" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		_ = verifyRequestToken(t, r, testPassword)
+		_ = json.NewEncoder(w).Encode(cancelResponse{
+			baseResponse:   baseResponse{Success: true, Status: "REVERSED"},
+			PaymentID:      providerPaymentID,
+			OrderID:        paymentID.String(),
+			OriginalAmount: 10000,
+			NewAmount:      0,
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	result, err := p.Cancel(context.Background(), application.CancelRequest{
+		PaymentID:         paymentID,
+		ProviderPaymentID: providerPaymentID,
+		AmountKopecks:     0,
+	})
+	if err != nil {
+		t.Fatalf("Cancel failed: %v", err)
+	}
+	if result.Status != domain.PaymentStatusRefunded {
+		t.Fatalf("Status: got %v, want %v", result.Status, domain.PaymentStatusRefunded)
+	}
+	if result.RefundedAmountKopecks != 10000 {
+		t.Fatalf("RefundedAmountKopecks: got %d, want 10000", result.RefundedAmountKopecks)
+	}
+}
+
+func TestProviderCancel_Error(t *testing.T) {
+	paymentID := uuid.New()
+	providerPaymentID := "cancel-789"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/Cancel" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		_ = verifyRequestToken(t, r, testPassword)
+		_ = json.NewEncoder(w).Encode(cancelResponse{
+			baseResponse: baseResponse{
+				Success:   false,
+				ErrorCode: "204",
+				Message:   "Cannot cancel payment",
+			},
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	_, err := p.Cancel(context.Background(), application.CancelRequest{
+		PaymentID:         paymentID,
+		ProviderPaymentID: providerPaymentID,
+		AmountKopecks:     0,
+	})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) || providerErr.ErrorCode != "204" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

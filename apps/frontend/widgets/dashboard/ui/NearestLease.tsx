@@ -6,6 +6,7 @@ import { Skeleton } from '@heroui/react/skeleton';
 import { Icon } from '@/shared/ui/icon';
 import { Key, ArrowRight, BoldWallet, UserSmall, ClockSmall } from '@/shared/assets/icons';
 import type { components } from '@/shared/api/generated';
+import type { Property } from '@/entities/property/model/types';
 import { formatMoney } from '../lib/format-money';
 import { formatRemainingDuration, formatCurrentLeaseMonth } from '../lib/lease-helpers';
 import { EmptyState } from '@/shared/ui/empty-state';
@@ -16,11 +17,10 @@ import { IconActionCard } from './IconActionCard';
 import styles from './NearestLease.module.css';
 
 type LeaseResponse = components['schemas']['LeaseResponse'];
-type PropertyResponse = components['schemas']['PropertyResponse'];
 
 type NearestLeaseProps = {
   readonly leases: LeaseResponse[] | undefined;
-  readonly properties: PropertyResponse[] | undefined;
+  readonly properties: Property[] | undefined;
   readonly isLoading: boolean;
 };
 
@@ -38,7 +38,7 @@ function getNearestLease(leases: LeaseResponse[] | undefined): LeaseResponse | u
 
 function getPropertyName(
   propertyId: string,
-  properties: PropertyResponse[] | undefined,
+  properties: Property[] | undefined,
 ): string {
   return properties?.find((property) => property.id === propertyId)?.name ?? 'Объект';
 }

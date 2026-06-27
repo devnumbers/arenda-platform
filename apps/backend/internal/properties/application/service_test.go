@@ -440,6 +440,18 @@ func (fakePropertyPhotoRepo) CountByPropertyID(_ context.Context, _ uuid.UUID) (
 	return 0, nil
 }
 
+func (fakePropertyPhotoRepo) GetByID(_ context.Context, _ uuid.UUID) (domain.Photo, error) {
+	return domain.Photo{}, nil
+}
+
+func (fakePropertyPhotoRepo) GetByIDAndPropertyID(_ context.Context, _, _ uuid.UUID) (domain.Photo, error) {
+	return domain.Photo{}, nil
+}
+
+func (fakePropertyPhotoRepo) Delete(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+
 func (fakePropertyPhotoRepo) WithTx(_ transaction.Tx) PropertyPhotoRepository {
 	return fakePropertyPhotoRepo{}
 }
@@ -448,6 +460,10 @@ type fakePropertyPhotoStorage struct{}
 
 func (fakePropertyPhotoStorage) Upload(_ context.Context, _, _ string, _ io.Reader) (string, error) {
 	return "", nil
+}
+
+func (fakePropertyPhotoStorage) Delete(_ context.Context, _ string) error {
+	return nil
 }
 
 var _ PropertyPhotoRepository = fakePropertyPhotoRepo{}

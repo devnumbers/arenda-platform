@@ -7,8 +7,8 @@ import {
   PopoverDialog,
   PopoverTrigger,
 } from '@heroui/react/popover';
-import { Button as HeroButton } from '@heroui/react/button';
 import { ChevronDown } from '@/shared/assets/icons';
+import { Button } from '@/shared/ui/button';
 import { Icon } from '@/shared/ui/icon';
 import styles from './FilterPopover.module.css';
 
@@ -24,16 +24,18 @@ export function FilterPopover({ label, activeCount, children }: FilterPopoverPro
   return (
     <Popover>
       <PopoverTrigger>
-        <HeroButton
+        <Button
           className={styles.trigger}
           variant="secondary"
-          size="sm"
+          size="small"
+          rightIcon={
+            <Icon size="xs">
+              <ChevronDown />
+            </Icon>
+          }
         >
           {triggerLabel}
-          <Icon size="xs">
-            <ChevronDown />
-          </Icon>
-        </HeroButton>
+        </Button>
       </PopoverTrigger>
       <PopoverContent className={styles.content}>
         <PopoverDialog aria-label={label}>

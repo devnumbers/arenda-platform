@@ -1,0 +1,53 @@
+meta {
+  name: Admin - Verify Phone Code
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/auth/phone/verify
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "phone": "{{adminPhone}}",
+    "code": "{{adminCode}}"
+  }
+}
+
+script:post-response {
+  // Extract admin session_id from Set-Cookie for subsequent admin requests.
+  const setCookie = res.getHeader("set-cookie");
+  if (setCookie) {
+    const raw = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+    const match = raw.match(/(__Host-session_id|session_id)=([^;]+)/);
+    if (match) {
+      bru.setEnvVar("adminCookieName", match[1]);
+      bru.setVar("adminCookieName", match[1]);
+      bru.setEnvVar("admin_session_id", match[2]);
+      bru.setVar("admin_session_id", match[2]);
+      console.log("saved adminCookieName =", match[1]);
+      console.log("saved admin_session_id =", match[2]);
+    }
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have user id", function() {
+    expect(res.body.id).to.be.a("string");
+  });
+
+  test("should set admin session cookie", function() {
+    expect(res.getHeader("set-cookie")).to.exist;
+  });
+}

@@ -48,17 +48,19 @@ export function useTenantContact(
 }
 
 export function useCreateTenantContact(): UseMutationResult<
-  TenantContactResponse,
+  TenantContact,
   ApiError,
   TenantContactCreateRequest
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: TenantContactCreateRequest) =>
-      apiClient<TenantContactResponse>('/tenant-contacts', {
+    mutationFn: async (data: TenantContactCreateRequest) => {
+      const response = await apiClient<TenantContactResponse>('/tenant-contacts', {
         method: 'POST',
         body: JSON.stringify(data),
-      }),
+      });
+      return mapTenantContactResponse(response);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: tenantContactKeys.all });
     },
@@ -66,17 +68,19 @@ export function useCreateTenantContact(): UseMutationResult<
 }
 
 export function useUpdateTenantContact(): UseMutationResult<
-  TenantContactResponse,
+  TenantContact,
   ApiError,
   { id: string; data: TenantContactUpdateRequest }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }) =>
-      apiClient<TenantContactResponse>(`/tenant-contacts/${id}`, {
+    mutationFn: async ({ id, data }) => {
+      const response = await apiClient<TenantContactResponse>(`/tenant-contacts/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
-      }),
+      });
+      return mapTenantContactResponse(response);
+    },
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: tenantContactKeys.all });
       queryClient.invalidateQueries({

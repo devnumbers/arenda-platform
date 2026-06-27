@@ -10,7 +10,7 @@
   flex-direction: row;
   justify-content: space-between;
   padding: 24px 24px 24px 28px;
-  border: 1px solid #e7e9ec;
+  border: 1px solid var(--color-secondary-hover);
   border-radius: 24px;
   background: var(--color-white);
   box-shadow: none;

@@ -1,0 +1,36 @@
+meta {
+  name: Refund Payment (partial)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/admin/subscription/payments/{{paymentId}}/refund
+  body: json
+  auth: none
+}
+
+script:pre-request {
+  // Requires admin session. Run admin/auth/verify-code first.
+  const sessionId = bru.getEnvVar("admin_session_id") || bru.getVar("admin_session_id");
+  const cookieName = bru.getEnvVar("adminCookieName") || bru.getVar("adminCookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:post-response {
+  console.log("admin partial refund status =", res.status);
+}
+
+body:json {
+  {
+    "amount_kopecks": {{refundAmountKopecks}}
+  }
+}
+
+tests {
+  test("should return 204", function() {
+    expect(res.status).to.equal(204);
+  });
+}

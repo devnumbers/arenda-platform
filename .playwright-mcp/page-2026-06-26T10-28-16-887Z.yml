@@ -1,0 +1,456 @@
+- generic [ref=e2]:
+  - region "Skip to main content":
+    - link "Skip to main content" [ref=e3] [cursor=pointer]:
+      - /url: "#__docusaurus_skipToContent_fallback"
+  - navigation "Main" [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - link "T-API" [ref=e8] [cursor=pointer]:
+          - /url: /
+          - img "T-API" [ref=e10]
+        - link "Подключение" [ref=e11] [cursor=pointer]:
+          - /url: /eacq/intro
+        - link "Сценарии" [ref=e12] [cursor=pointer]:
+          - /url: /eacq/scenarios/payments
+        - link "API" [ref=e13] [cursor=pointer]:
+          - /url: /eacq/api
+        - link "Модули для CMS" [ref=e14] [cursor=pointer]:
+          - /url: /eacq/modules
+        - link "История изменений" [ref=e15] [cursor=pointer]:
+          - /url: /eacq/release_notes
+      - generic [ref=e16]:
+        - button [ref=e19] [cursor=pointer]:
+          - link [ref=e20]:
+            - /url: https://t.me/TBusinessAPI
+            - img [ref=e24]
+        - button [ref=e27] [cursor=pointer]:
+          - img [ref=e31]
+        - combobox [ref=e35] [cursor=pointer]:
+          - listbox [ref=e39]:
+            - generic [ref=e40]:
+              - generic [ref=e48]: Интернет-эквайринг
+              - button "Открыть" [ref=e51]:
+                - img [ref=e54]
+  - generic [ref=e57]:
+    - complementary [ref=e58]:
+      - navigation "Docs sidebar" [ref=e61]:
+        - list [ref=e62]:
+          - listitem [ref=e63]:
+            - generic [ref=e64]:
+              - link "API" [expanded] [ref=e65] [cursor=pointer]:
+                - /url: /eacq/api
+              - button "Toggle the collapsible sidebar category 'API'" [ref=e66] [cursor=pointer]
+            - list [ref=e67]:
+              - listitem [ref=e68]:
+                - link "Введение" [ref=e69] [cursor=pointer]:
+                  - /url: /eacq/api/priem-platezhei
+                  - generic [ref=e70]: Введение
+              - listitem [ref=e71]:
+                - generic [ref=e72]:
+                  - link "Проведение платежа" [ref=e73] [cursor=pointer]:
+                    - /url: /eacq/api/provedenie-platezha
+                  - button "Toggle the collapsible sidebar category 'Проведение платежа'" [ref=e74] [cursor=pointer]
+              - listitem [ref=e75]:
+                - generic [ref=e76]:
+                  - link "Прием платежей по карте" [ref=e77] [cursor=pointer]:
+                    - /url: /eacq/api/priem-platezhei-po-karte
+                  - button "Toggle the collapsible sidebar category 'Прием платежей по карте'" [ref=e78] [cursor=pointer]
+              - listitem [ref=e79]:
+                - generic [ref=e80]:
+                  - link "Другие способы приема платежей" [ref=e81] [cursor=pointer]:
+                    - /url: /eacq/api/drugie-sposobi-priema-platezhei
+                  - button "Toggle the collapsible sidebar category 'Другие способы приема платежей'" [ref=e82] [cursor=pointer]
+              - listitem [ref=e83]:
+                - generic [ref=e84]:
+                  - link "Привязка карты" [ref=e85] [cursor=pointer]:
+                    - /url: /eacq/api/privyazka-karti
+                  - button "Toggle the collapsible sidebar category 'Привязка карты'" [ref=e86] [cursor=pointer]
+              - listitem [ref=e87]:
+                - generic [ref=e88]:
+                  - link "Проведение платежа по сохраненным реквизитам" [ref=e89] [cursor=pointer]:
+                    - /url: /eacq/api/provedenie-platezha-po-sokhranennim-rekvizitam
+                  - button "Toggle the collapsible sidebar category 'Проведение платежа по сохраненным реквизитам'" [ref=e90] [cursor=pointer]
+              - listitem [ref=e91]:
+                - generic [ref=e92]:
+                  - link "Отмена платежа" [expanded] [ref=e93] [cursor=pointer]:
+                    - /url: /eacq/api/otmena-platezha
+                  - button "Toggle the collapsible sidebar category 'Отмена платежа'" [ref=e94] [cursor=pointer]
+                - list [ref=e95]:
+                  - listitem [ref=e96]:
+                    - link "post Отменить платеж" [ref=e97] [cursor=pointer]:
+                      - /url: /eacq/api/cancel
+                      - text: post
+                      - generic [ref=e98]: Отменить платеж
+              - listitem [ref=e99]:
+                - generic [ref=e100]:
+                  - link "Статус платежа или заказа" [ref=e101] [cursor=pointer]:
+                    - /url: /eacq/api/status-platezha-ili-zakaza
+                  - button "Toggle the collapsible sidebar category 'Статус платежа или заказа'" [ref=e102] [cursor=pointer]
+              - listitem [ref=e103]:
+                - generic [ref=e104]:
+                  - link "Справка по операции" [ref=e105] [cursor=pointer]:
+                    - /url: /eacq/api/spravka-po-operatsii
+                  - button "Toggle the collapsible sidebar category 'Справка по операции'" [ref=e106] [cursor=pointer]
+              - listitem [ref=e107]:
+                - generic [ref=e108]:
+                  - link "Методы работы с чеками" [ref=e109] [cursor=pointer]:
+                    - /url: /eacq/api/metodi-raboti-s-chekami
+                  - button "Toggle the collapsible sidebar category 'Методы работы с чеками'" [ref=e110] [cursor=pointer]
+    - main [ref=e111]:
+      - generic [ref=e115]:
+        - article [ref=e116]:
+          - navigation "Breadcrumbs" [ref=e117]:
+            - list [ref=e118]:
+              - listitem [ref=e119]:
+                - link "API" [ref=e120] [cursor=pointer]:
+                  - /url: /eacq/api
+              - listitem [ref=e121]:
+                - link "Отмена платежа" [ref=e122] [cursor=pointer]:
+                  - /url: /eacq/api/otmena-platezha
+              - listitem [ref=e123]:
+                - generic [ref=e124]: Отменить платеж
+          - generic [ref=e126]:
+            - generic [ref=e127]:
+              - heading "Отменить платеж" [level=1] [ref=e129]
+              - generic [ref=e131]:
+                - tablist [ref=e137]:
+                  - tab "production" [selected] [ref=e139] [cursor=pointer]:
+                    - generic [ref=e140]: production
+                  - tab "test" [ref=e142] [cursor=pointer]:
+                    - generic [ref=e143]: test
+                - generic [ref=e145]:
+                  - generic [ref=e146]: POST
+                  - paragraph [ref=e147]: https://securepay.tinkoff.ru/v2/Cancel
+                  - button "Copy code to clipboard" [ref=e148] [cursor=pointer]:
+                    - img [ref=e152]
+              - generic [ref=e155]:
+                - tablist [ref=e161]:
+                  - tab "Описание" [selected] [ref=e163] [cursor=pointer]:
+                    - generic [ref=e164]: Описание
+                - generic [ref=e167]:
+                  - paragraph [ref=e168]: Метод отменяет платеж.
+                  - paragraph [ref=e169]:
+                    - link "Подробнее об отмене платежа" [ref=e170] [cursor=pointer]:
+                      - /url: /eacq/scenarios/cancel_confirm/
+              - heading "Запрос" [level=3] [ref=e172]
+              - generic [ref=e173]:
+                - paragraph [ref=e174]:
+                  - text: Request body schema
+                  - strong [ref=e175]: application/json
+                - generic [ref=e176]:
+                  - generic [ref=e177]:
+                    - paragraph [ref=e178]: Required
+                    - paragraph [ref=e180]: TerminalKey
+                  - generic [ref=e181]:
+                    - paragraph [ref=e182]: String
+                    - paragraph [ref=e185]: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+                - generic [ref=e186]:
+                  - generic [ref=e187]:
+                    - paragraph [ref=e188]: Required
+                    - paragraph [ref=e190]: PaymentId
+                  - generic [ref=e191]:
+                    - paragraph [ref=e192]: String
+                    - paragraph [ref=e195]: Идентификатор платежа в системе Т‑Бизнес.
+                - generic [ref=e196]:
+                  - generic [ref=e197]:
+                    - paragraph [ref=e198]: Required
+                    - paragraph [ref=e200]: Token
+                  - generic [ref=e201]:
+                    - paragraph [ref=e202]: String
+                    - paragraph [ref=e205]:
+                      - text: Подпись запроса.
+                      - link "Как сформировать" [ref=e206] [cursor=pointer]:
+                        - /url: /eacq/intro/developer/token
+                      - text: .
+                - generic [ref=e207]:
+                  - paragraph [ref=e210]: IP
+                  - generic [ref=e211]:
+                    - paragraph [ref=e212]: String
+                    - paragraph [ref=e215]: IP-адрес покупателя.
+                - generic [ref=e216]:
+                  - paragraph [ref=e219]: Amount
+                  - generic [ref=e220]:
+                    - paragraph [ref=e221]: Number
+                    - generic [ref=e223]:
+                      - paragraph [ref=e224]:
+                        - text: Сумма в копейках. Если не передан, используется
+                        - code [ref=e225]: Amount
+                        - text: ", переданный в методе"
+                        - link "Инициировать платеж" [ref=e226] [cursor=pointer]:
+                          - /url: /eacq/api/init
+                        - text: .
+                      - paragraph [ref=e227]:
+                        - text: При отмене операции в статусе
+                        - code [ref=e228]: NEW
+                        - text: поле
+                        - code [ref=e229]: Amount
+                        - text: игнорируется, даже если оно заполнено. Отмена проводится на полную сумму.
+                - group [ref=e230] [cursor=pointer]:
+                  - generic "Receipt Object JSON-объект с данными чека. Обязателен, если подключена онлайн-касса. При частичной отмене данные, которые передаются в этом запросе, могут отличаться от данных, которые были переданы в методе Инициировать платеж. При полной отмене структура чека не передается, при частичной — передаются товары, которые нужно отменить." [ref=e231]:
+                    - generic [ref=e232]:
+                      - generic [ref=e234]:
+                        - img [ref=e236]
+                        - paragraph [ref=e238]: Receipt
+                      - generic [ref=e239]:
+                        - paragraph [ref=e240]: Object
+                        - generic [ref=e242]:
+                          - paragraph [ref=e243]: JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
+                          - paragraph [ref=e244]:
+                            - text: При частичной отмене данные, которые передаются в этом запросе, могут отличаться от данных, которые были переданы в методе
+                            - link "Инициировать платеж" [ref=e245]:
+                              - /url: /eacq/api/init
+                            - text: .
+                          - paragraph [ref=e246]: При полной отмене структура чека не передается, при частичной — передаются товары, которые нужно отменить.
+                - group [ref=e247] [cursor=pointer]:
+                  - generic "Shops Array of objects () JSON-объект с данными маркетплейса. Обязательный для маркетплейсов." [ref=e248]:
+                    - generic [ref=e249]:
+                      - generic [ref=e251]:
+                        - img [ref=e253]
+                        - paragraph [ref=e255]: Shops
+                      - generic [ref=e256]:
+                        - paragraph [ref=e257]: Array of objects ()
+                        - paragraph [ref=e260]: JSON-объект с данными маркетплейса. Обязательный для маркетплейсов.
+                - generic [ref=e261]:
+                  - paragraph [ref=e264]: QrMemberId
+                  - generic [ref=e265]:
+                    - paragraph [ref=e266]: String
+                    - generic [ref=e268]:
+                      - paragraph [ref=e269]: Код банка в классификации СБП, в который нужно выполнить возврат.
+                      - paragraph [ref=e270]:
+                        - text: Подробнее — в параметре
+                        - code [ref=e271]: MemberId
+                        - text: метода
+                        - link "Получить список банков-пользователей QR" [ref=e272] [cursor=pointer]:
+                          - /url: /eacq/api/qr-members-list
+                        - text: .
+                - generic [ref=e273]:
+                  - paragraph [ref=e276]: Route
+                  - generic [ref=e277]:
+                    - paragraph [ref=e278]: String
+                    - generic [ref=e279]:
+                      - paragraph [ref=e281]:
+                        - strong [ref=e282]: "Requirements:"
+                        - text: "["
+                        - code [ref=e283]: TCB
+                        - text: ","
+                        - code [ref=e284]: BNPL
+                        - text: "]"
+                      - paragraph [ref=e286]: Способ платежа.
+                - generic [ref=e287]:
+                  - paragraph [ref=e290]: Source
+                  - generic [ref=e291]:
+                    - paragraph [ref=e292]: String
+                    - generic [ref=e293]:
+                      - paragraph [ref=e295]:
+                        - strong [ref=e296]: "Requirements:"
+                        - text: "["
+                        - code [ref=e297]: installment
+                        - text: ","
+                        - code [ref=e298]: BNPL
+                        - text: "]"
+                      - paragraph [ref=e300]: Источник платежа.
+                - generic [ref=e301]:
+                  - paragraph [ref=e304]: ExternalRequestId
+                  - generic [ref=e305]:
+                    - paragraph [ref=e306]: String
+                    - generic [ref=e307]:
+                      - paragraph [ref=e309]:
+                        - strong [ref=e310]: "Requirements:"
+                        - code [ref=e311]: <= 256 characters
+                      - generic [ref=e312]:
+                        - paragraph [ref=e313]: Идентификатор операции на стороне мерчанта.
+                        - paragraph [ref=e314]: Параметр обязательный для операций «Долями» и в рассрочку.
+                        - list [ref=e315]:
+                          - listitem [ref=e316]: Если поле не передано или пустое (""), запрос будет обработан без проверки ранее созданных возвратов.
+                          - listitem [ref=e317]:
+                            - text: Если поле заполнено, перед проведением возврата будет проверен запрос на отмену с таким
+                            - code [ref=e318]: ExternalRequestId
+                            - text: .
+                          - listitem [ref=e319]: Если такой запрос уже есть, в ответе вернется текущее состояние платежной операции, если нет — платеж будет отменен.
+                          - listitem [ref=e320]:
+                            - text: Для операций «Долями» при заполнении параметра нужно генерировать значение в формате
+                            - code [ref=e321]: UUID v4
+                            - text: .
+                          - listitem [ref=e322]:
+                            - text: Для операций в рассрочку при заполнении параметра нужно генерировать значение с типом
+                            - code [ref=e323]: string
+                            - text: — ограничение 100 символов.
+                          - listitem [ref=e324]:
+                            - text: Для способа оплаты AlfaPay при заполнении параметра
+                            - code [ref=e325]: ExternalRequestId
+                            - text: длина значения не должна превышать 30 символов.
+              - heading "Ответ" [level=3] [ref=e326]
+              - generic [ref=e329] [cursor=pointer]:
+                - generic [ref=e330]:
+                  - paragraph [ref=e331]: "200"
+                  - paragraph [ref=e332]: OK
+                - img [ref=e334]
+              - generic [ref=e338] [cursor=pointer]:
+                - generic [ref=e339]:
+                  - paragraph [ref=e340]: "500"
+                  - paragraph [ref=e341]: Внутренняя ошибка сервера
+                - img [ref=e343]
+              - generic [ref=e345]:
+                - generic [ref=e346]:
+                  - paragraph [ref=e347]: Это полезный материал?
+                  - generic [ref=e348]:
+                    - button "Да" [ref=e349] [cursor=pointer]:
+                      - generic [ref=e350]:
+                        - img [ref=e353]
+                        - generic [ref=e356]: Да
+                    - button "Нет" [ref=e357] [cursor=pointer]:
+                      - generic [ref=e358]:
+                        - img [ref=e361]
+                        - generic [ref=e364]: Нет
+                - generic [ref=e366]:
+                  - img [ref=e368]
+                  - link "Обратиться в поддержку" [ref=e370] [cursor=pointer]:
+                    - /url: /eacq/intro/feedback
+            - generic [ref=e371]:
+              - generic [ref=e372]:
+                - paragraph [ref=e373]: Сценарий использования
+                - link "Отмена и возврат платежа" [ref=e374] [cursor=pointer]:
+                  - /url: /eacq/scenarios/cancel_confirm/
+                  - img [ref=e376]
+                  - text: Отмена и возврат платежа
+              - heading "Пример запроса" [level=3] [ref=e379]
+              - generic [ref=e380]:
+                - generic [ref=e381]:
+                  - paragraph [ref=e384] [cursor=pointer]: Payload
+                  - paragraph [ref=e387] [cursor=pointer]: cURL
+                  - paragraph [ref=e390] [cursor=pointer]: Go
+                  - paragraph [ref=e393] [cursor=pointer]: Java
+                  - paragraph [ref=e396] [cursor=pointer]: NodeJs
+                  - paragraph [ref=e399] [cursor=pointer]: PHP
+                  - paragraph [ref=e402] [cursor=pointer]: Python
+                - generic [ref=e404]:
+                  - generic [ref=e405]:
+                    - generic [ref=e406]:
+                      - paragraph [ref=e407]: Content type
+                      - paragraph [ref=e408]: application/json
+                    - generic [ref=e409]:
+                      - button "Copy code to clipboard" [ref=e410] [cursor=pointer]:
+                        - img [ref=e414]
+                      - button [ref=e416] [cursor=pointer]:
+                        - img [ref=e420]
+                  - generic [ref=e423]:
+                    - paragraph [ref=e424]: "{"
+                    - generic [ref=e425]:
+                      - paragraph [ref=e426]: "\"TerminalKey\":"
+                      - paragraph [ref=e427]: "\"TBankTest\","
+                    - generic [ref=e428]:
+                      - paragraph [ref=e429]: "\"PaymentId\":"
+                      - paragraph [ref=e430]: "\"2304882\","
+                    - generic [ref=e431]:
+                      - paragraph [ref=e432]: "\"Token\":"
+                      - paragraph [ref=e433]: "\"c0ad1dfc4e94ed44715c5ed0e84f8ec439695b9ac219a7a19555a075a3c3ed24\","
+                    - generic [ref=e434]:
+                      - paragraph [ref=e435]: "\"IP\":"
+                      - paragraph [ref=e436]: "\"192.168.255.255\","
+                    - generic [ref=e437]:
+                      - paragraph [ref=e438]: "\"Amount\":"
+                      - paragraph [ref=e439]: 19200,
+                    - group [ref=e440] [cursor=pointer]:
+                      - 'generic "\"Receipt\": { ... }," [ref=e441]'
+                    - group [ref=e442] [cursor=pointer]:
+                      - 'generic "\"Shops\": [" [ref=e443]'
+                      - group [ref=e444]:
+                        - 'generic "{" [ref=e445]'
+                        - generic [ref=e446]:
+                          - paragraph [ref=e447]: "\"ShopCode\":"
+                          - paragraph [ref=e448]: "\"700456\","
+                        - generic [ref=e449]:
+                          - paragraph [ref=e450]: "\"Amount\":"
+                          - paragraph [ref=e451]: 10000,
+                        - generic [ref=e452]:
+                          - paragraph [ref=e453]: "\"Name\":"
+                          - paragraph [ref=e454]: "\"Товар\""
+                        - generic [ref=e455]: "}"
+                      - generic [ref=e456]: "],"
+                    - generic [ref=e457]:
+                      - paragraph [ref=e458]: "\"QrMemberId\":"
+                      - paragraph [ref=e459]: "\"77892\","
+                    - generic [ref=e460]:
+                      - paragraph [ref=e461]: "\"Route\":"
+                      - paragraph [ref=e462]: "\"BNPL\","
+                    - generic [ref=e463]:
+                      - paragraph [ref=e464]: "\"Source\":"
+                      - paragraph [ref=e465]: "\"BNPL\","
+                    - generic [ref=e466]:
+                      - paragraph [ref=e467]: "\"ExternalRequestId\":"
+                      - paragraph [ref=e468]: "\"1234556\""
+                    - paragraph [ref=e469]: "}"
+              - heading "Пример ответа" [level=3] [ref=e470]
+              - generic [ref=e471]:
+                - generic [ref=e472]:
+                  - generic [ref=e473] [cursor=pointer]: "200"
+                  - generic [ref=e474] [cursor=pointer]: "500"
+                - generic [ref=e476]:
+                  - generic [ref=e477]:
+                    - generic [ref=e478]:
+                      - paragraph [ref=e479]: Content type
+                      - paragraph [ref=e480]: application/json
+                    - generic [ref=e481]:
+                      - button "Copy code to clipboard" [ref=e482] [cursor=pointer]:
+                        - img [ref=e486]
+                      - button [ref=e488] [cursor=pointer]:
+                        - img [ref=e492]
+                  - generic [ref=e495]:
+                    - paragraph [ref=e496]: "{"
+                    - generic [ref=e497]:
+                      - paragraph [ref=e498]: "\"TerminalKey\":"
+                      - paragraph [ref=e499]: "\"TBankTest\","
+                    - generic [ref=e500]:
+                      - paragraph [ref=e501]: "\"OrderId\":"
+                      - paragraph [ref=e502]: "\"21057\","
+                    - generic [ref=e503]:
+                      - paragraph [ref=e504]: "\"Success\":"
+                      - paragraph [ref=e505]: true,
+                    - generic [ref=e506]:
+                      - paragraph [ref=e507]: "\"Status\":"
+                      - paragraph [ref=e508]: "\"REVERSED\","
+                    - generic [ref=e509]:
+                      - paragraph [ref=e510]: "\"OriginalAmount\":"
+                      - paragraph [ref=e511]: 13000,
+                    - generic [ref=e512]:
+                      - paragraph [ref=e513]: "\"NewAmount\":"
+                      - paragraph [ref=e514]: 5000,
+                    - generic [ref=e515]:
+                      - paragraph [ref=e516]: "\"PaymentId\":"
+                      - paragraph [ref=e517]: "\"2304882\","
+                    - generic [ref=e518]:
+                      - paragraph [ref=e519]: "\"ErrorCode\":"
+                      - paragraph [ref=e520]: "\"0\","
+                    - generic [ref=e521]:
+                      - paragraph [ref=e522]: "\"Message\":"
+                      - paragraph [ref=e523]: "\"OK\","
+                    - generic [ref=e524]:
+                      - paragraph [ref=e525]: "\"Details\":"
+                      - paragraph [ref=e526]: "\"None\","
+                    - generic [ref=e527]:
+                      - paragraph [ref=e528]: "\"ExternalRequestId\":"
+                      - paragraph [ref=e529]: "\"756478567845678436\""
+                    - paragraph [ref=e530]: "}"
+        - navigation "Docs pages" [ref=e533]:
+          - link "Назад Отмена платежа" [ref=e534] [cursor=pointer]:
+            - /url: /eacq/api/otmena-platezha
+            - img [ref=e536]
+            - generic [ref=e538]:
+              - generic [ref=e539]: Назад
+              - generic [ref=e540]: Отмена платежа
+          - link "Вперед Статус платежа или заказа" [ref=e541] [cursor=pointer]:
+            - /url: /eacq/api/status-platezha-ili-zakaza
+            - generic [ref=e542]:
+              - generic [ref=e543]: Вперед
+              - generic [ref=e544]: Статус платежа или заказа
+            - img [ref=e546]
+  - generic [ref=e548]:
+    - generic [ref=e549]:
+      - img [ref=e550]
+      - paragraph [ref=e554]: acq_help@tbank.ru
+    - generic [ref=e555]:
+      - generic [ref=e556]:
+        - link "Все сервисы T-API" [ref=e558] [cursor=pointer]:
+          - /url: /
+        - paragraph
+      - paragraph [ref=e561]: АО «ТБанк» использует файлы «cookie» с целью персонализации сервисов и повышения удобства пользования веб-сайтом. «Cookie» представляют собой небольшие файлы, содержащие информацию о предыдущих посещениях веб-сайта. Если вы не хотите использовать файлы «cookie», измените настройки браузера.

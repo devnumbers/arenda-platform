@@ -1,6 +1,9 @@
 -- name: GetUserByID :one
 SELECT * FROM users WHERE id = $1;
 
+-- name: GetUserByIDForUpdate :one
+SELECT * FROM users WHERE id = $1 FOR UPDATE;
+
 -- name: GetUserByPhone :one
 SELECT * FROM users WHERE phone = $1;
 
@@ -9,22 +12,35 @@ INSERT INTO users (id, phone, role) VALUES ($1, $2, $3)
 ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone
 RETURNING *;
 
--- name: GetLatestSMSCodeByPhone :one
+-- name: GetLatestSMSCodeByPhoneAndPurpose :one
 SELECT * FROM sms_codes
-WHERE phone = $1 AND used = false AND expires_at > $2
+WHERE phone = $1 AND purpose = $2 AND used = false AND expires_at > $3
 ORDER BY created_at DESC
 LIMIT 1
 FOR UPDATE;
 
--- name: CreateSMSCode :one
-INSERT INTO sms_codes (id, phone, code_hash, expires_at)
-VALUES ($1, $2, $3, $4) RETURNING *;
+-- name: GetLatestSMSCodeByPhoneAndPurposeAndUserID :one
+SELECT * FROM sms_codes
+WHERE phone = $1 AND purpose = $2 AND user_id = $3 AND used = false AND expires_at > $4
+ORDER BY created_at DESC
+LIMIT 1
+FOR UPDATE;
+
+-- name: CreateSMSCode :exec
+INSERT INTO sms_codes (id, phone, code_hash, expires_at, user_id, purpose)
+VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: MarkSMSCodeUsed :exec
 UPDATE sms_codes SET used = true WHERE id = $1;
 
 -- name: DeleteSMSCodeByID :exec
 DELETE FROM sms_codes WHERE id = $1;
+
+-- name: DeleteSMSCodeByPhoneAndPurpose :exec
+DELETE FROM sms_codes WHERE phone = $1 AND purpose = $2;
+
+-- name: DeleteSMSCodesByUserID :exec
+DELETE FROM sms_codes WHERE user_id = $1;
 
 -- name: DeleteExpiredSMSCodes :exec
 DELETE FROM sms_codes WHERE expires_at < $1;
@@ -38,15 +54,19 @@ DELETE FROM sms_codes t WHERE t.ctid IN (
 SELECT * FROM login_attempts WHERE phone = $1;
 
 -- name: UpsertLoginAttempt :exec
-INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at, user_id)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (phone) DO UPDATE SET
     failures = EXCLUDED.failures,
     first_failure_at = EXCLUDED.first_failure_at,
-    last_failure_at = EXCLUDED.last_failure_at;
+    last_failure_at = EXCLUDED.last_failure_at,
+    user_id = EXCLUDED.user_id;
 
 -- name: DeleteLoginAttemptByPhone :exec
 DELETE FROM login_attempts WHERE phone = $1;
+
+-- name: DeleteLoginAttemptsByUserID :exec
+DELETE FROM login_attempts WHERE user_id = $1;
 
 -- name: DeleteStaleLoginAttempts :exec
 DELETE FROM login_attempts WHERE last_failure_at < $1;
@@ -69,6 +89,9 @@ DELETE FROM sessions WHERE token_hash = $1;
 -- name: DeleteSessionsByUserID :exec
 DELETE FROM sessions WHERE user_id = $1;
 
+-- name: DeleteSessionsByUserIDExcept :exec
+DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2;
+
 -- name: DeleteExpiredSessions :exec
 DELETE FROM sessions WHERE expires_at < $1;
 
@@ -86,3 +109,20 @@ WHERE s.token_hash = $1 AND s.expires_at > $2;
 
 -- name: GetUserPhoneByID :one
 SELECT phone FROM users WHERE id = $1;
+
+-- name: UpdateUser :one
+UPDATE users
+SET name = $2,
+    surname = $3,
+    patronymic = $4,
+    email = $5,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateUserPhone :one
+UPDATE users
+SET phone = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;

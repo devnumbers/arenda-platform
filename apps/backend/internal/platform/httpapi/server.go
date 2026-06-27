@@ -99,10 +99,25 @@ func New(deps Deps) http.Handler {
 		SubscriptionHandlers:       subscriptionHandlers,
 	}
 
-	return openapi.HandlerWithOptions(handler, openapi.ChiServerOptions{
+	// The generated OpenAPI router has no per-route middleware support, so we
+	// let it register all routes first, then override the admin refund route
+	// with one that applies AdminOnlyMiddleware. Chi matches the last
+	// registered route, and delegating to the generated wrapper keeps path
+	// parameter binding and error handling consistent.
+	generated := openapi.HandlerWithOptions(handler, openapi.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: openAPIErrorHandler,
 	})
+
+	wrapper := openapi.ServerInterfaceWrapper{
+		Handler:          handler,
+		ErrorHandlerFunc: openAPIErrorHandler,
+	}
+	r.With(AdminOnlyMiddleware).Get("/admin/subscription/payments", wrapper.ListAdminSubscriptionPayments)
+	r.With(AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/refund", wrapper.RefundSubscriptionPayment)
+	r.With(AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/sync", wrapper.SyncSubscriptionPayment)
+
+	return generated
 }
 
 func rateLimitMiddleware(limiter *RateLimiter) func(http.Handler) http.Handler {

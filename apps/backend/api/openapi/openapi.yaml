@@ -91,6 +91,79 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    patch:
+      operationId: updateMe
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdateRequest'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /me/phone/send-code:
+    post:
+      operationId: sendPhoneChangeCode
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendPhoneChangeCodeRequest'
+      responses:
+        '204':
+          description: Code sent
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /me/phone/change:
+    post:
+      operationId: changePhone
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePhoneRequest'
+      responses:
+        '200':
+          description: Phone changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /properties:
     post:
       operationId: createProperty
@@ -1607,6 +1680,45 @@ components:
         subscription:
           $ref: '#/components/schemas/Subscription'
           nullable: true
+
+    UserUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+          maxLength: 255
+        surname:
+          type: string
+          nullable: true
+          maxLength: 255
+        patronymic:
+          type: string
+          nullable: true
+          maxLength: 255
+        email:
+          type: string
+          nullable: true
+          maxLength: 255
+
+    SendPhoneChangeCodeRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone:
+          type: string
+          example: '+79990001122'
+
+    ChangePhoneRequest:
+      type: object
+      required: [phone, code]
+      properties:
+        phone:
+          type: string
+          example: '+79990001122'
+        code:
+          type: string
+          example: '123456'
 
     Tariff:
       type: object

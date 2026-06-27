@@ -1,18 +1,17 @@
-export function formatLeaseMonth(start: string): string {
+import { pluralize } from '@/shared/lib/pluralize';
+
+export function getLeaseMonthCount(start: string): number {
   const startDate = new Date(start);
-  if (Number.isNaN(startDate.getTime())) return '';
+  if (Number.isNaN(startDate.getTime())) return 0;
   const now = new Date();
-  if (startDate > now) return '';
   const months =
     (now.getFullYear() - startDate.getFullYear()) * 12 +
     (now.getMonth() - startDate.getMonth());
-  const normalized = Math.max(0, months);
-  const last = normalized % 10;
-  const label =
-    last === 1 && normalized !== 11
-      ? 'месяц'
-      : [2, 3, 4].includes(last) && ![12, 13, 14].includes(normalized % 100)
-        ? 'месяца'
-        : 'месяцев';
-  return `${normalized} ${label}`;
+  return Math.max(0, months);
+}
+
+export function formatLeaseMonth(start: string): string {
+  const normalized = getLeaseMonthCount(start);
+  if (normalized === 0) return '';
+  return `${normalized} ${pluralize(normalized, 'месяц', 'месяца', 'месяцев')}`;
 }

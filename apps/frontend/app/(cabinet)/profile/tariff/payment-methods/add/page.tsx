@@ -1,0 +1,79 @@
+'use client';
+
+import { useCallback, useEffect, useRef, type JSX } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'react-toastify';
+import { IconLink } from '@/shared/ui/icon-link';
+import { ArrowLeft } from '@/shared/assets/icons';
+import { Button } from '@/shared/ui/button';
+import { useAddPaymentMethod } from '@/features/billing/api/hooks';
+import { ROUTES } from '@/shared/config/routes';
+import styles from './page.module.css';
+
+export default function AddPaymentMethodPage(): JSX.Element {
+  const router = useRouter();
+  const add = useAddPaymentMethod();
+  const startedRef = useRef(false);
+
+  const startAdd = useCallback(() => {
+    add.mutate(
+      {},
+      {
+        onSuccess: (data) => {
+          if (data.confirmUrl) {
+            window.location.assign(data.confirmUrl);
+            return;
+          }
+
+          router.push(ROUTES.profilePaymentMethods);
+        },
+        onError: (error) => {
+          toast.error(error.detail || 'Не удалось начать добавление карты');
+        },
+      },
+    );
+  }, [add, router]);
+
+  useEffect(() => {
+    if (startedRef.current) {
+      return;
+    }
+    startedRef.current = true;
+    startAdd();
+  }, [startAdd]);
+
+  return (
+    <div className={styles.root}>
+      <div className={styles.content}>
+        <header className={styles.header}>
+          <IconLink
+            href={ROUTES.profilePaymentMethods}
+            aria-label="Назад"
+            icon={<ArrowLeft />}
+          />
+          <h1 className={styles.title}>Добавить карту</h1>
+        </header>
+        <section className={styles.section}>
+          {add.isError ? (
+            <div className={styles.error}>
+              <p className={styles.errorText}>
+                Не удалось подключить банковскую форму
+              </p>
+              <Button
+                onClick={startAdd}
+                variant="secondary"
+                loading={add.isPending}
+              >
+                Повторить
+              </Button>
+            </div>
+          ) : (
+            <Button loading fullWidth size="large" variant="primary">
+              Подключаем банковскую форму…
+            </Button>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}

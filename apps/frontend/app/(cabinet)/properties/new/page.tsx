@@ -10,7 +10,9 @@ export const metadata: Metadata = {
 export default function PropertiesNewPage() {
   return (
     <div className={styles.root}>
-      <PropertyCreateWizard />
+      <div className={styles.content}>
+        <PropertyCreateWizard />
+      </div>
     </div>
   );
 }

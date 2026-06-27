@@ -26,11 +26,13 @@ var readonlyExemptPrefixes = []string{
 	"/auth",
 	"/tariffs",
 	"/subscription/change",
+	"/subscription/cancel",
 	"/subscription/auto-renew",
 	"/subscription/payment-methods",
 	"/webhooks",
 	"/internal",
 	"/me",
+	"/admin",
 }
 
 func isReadonlyExempt(path string) bool {

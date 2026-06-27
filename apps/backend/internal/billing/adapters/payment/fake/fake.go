@@ -25,18 +25,20 @@ const (
 )
 
 type pendingEntry struct {
-	payload    application.WebhookPayload
-	savedToken string
-	createdAt  time.Time
+	payload        application.WebhookPayload
+	savedToken     string
+	amountKopecks  int64
+	createdAt      time.Time
 }
 
 // Provider is a fake payment processor that keeps pending payments in memory.
 type Provider struct {
-	baseURL string
-	log     *slog.Logger
-	clock   clock.Clock
-	mu      sync.Mutex
-	pending map[string]pendingEntry
+	baseURL        string
+	log            *slog.Logger
+	clock          clock.Clock
+	mu             sync.Mutex
+	pending        map[string]pendingEntry
+	confirmedAmounts map[string]int64
 }
 
 // Name returns the provider identity used by the application layer.
@@ -47,10 +49,11 @@ func (p *Provider) Name() domain.PaymentProvider {
 // NewProvider creates a fake provider for local development and Bruno tests.
 func NewProvider(baseURL string, log *slog.Logger, clk clock.Clock) *Provider {
 	return &Provider{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		log:     log,
-		clock:   clk,
-		pending: make(map[string]pendingEntry),
+		baseURL:          strings.TrimRight(baseURL, "/"),
+		log:              log,
+		clock:            clk,
+		pending:          make(map[string]pendingEntry),
+		confirmedAmounts: make(map[string]int64),
 	}
 }
 
@@ -91,8 +94,9 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 			InternalPaymentID: req.PaymentID,
 			Status:            domain.PaymentStatusPending,
 		},
-		savedToken: savedToken,
-		createdAt:  p.clock.Now().UTC(),
+		savedToken:    savedToken,
+		amountKopecks: req.AmountKopecks,
+		createdAt:     p.clock.Now().UTC(),
 	}
 	p.mu.Unlock()
 
@@ -164,6 +168,9 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 		"provider_payment_id", providerPaymentID,
 		"internal_payment_id", req.PaymentID.String(),
 	)
+	p.mu.Lock()
+	p.confirmedAmounts[providerPaymentID] = req.AmountKopecks
+	p.mu.Unlock()
 	return application.ChargeResult{
 		ProviderPaymentID: providerPaymentID,
 		Status:            domain.PaymentStatusSucceeded,
@@ -183,6 +190,46 @@ func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) e
 	_ = customerKey
 	_ = cardID
 	return nil
+}
+
+// Cancel refunds a finalized fake payment. For the fake provider we treat every
+// cancel as successful. For full refunds the original payment amount is reported
+// back so callers do not need to track it separately.
+func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (application.CancelResult, error) {
+	if req.PaymentID == uuid.Nil {
+		return application.CancelResult{}, errors.New("fake: payment id is required")
+	}
+	if req.ProviderPaymentID == "" {
+		return application.CancelResult{}, errors.New("fake: provider payment id is required")
+	}
+
+	refundedAmount := req.AmountKopecks
+	if refundedAmount == 0 {
+		p.mu.Lock()
+		if amount, ok := p.confirmedAmounts[req.ProviderPaymentID]; ok {
+			refundedAmount = amount
+		} else if amount, ok := p.confirmedAmounts[req.PaymentID.String()]; ok {
+			refundedAmount = amount
+		}
+		p.mu.Unlock()
+	}
+
+	status := domain.PaymentStatusRefunded
+	if req.AmountKopecks > 0 {
+		status = domain.PaymentStatusPartialRefunded
+	}
+
+	p.log.InfoContext(ctx, "fake payment cancelled",
+		"provider_payment_id", req.ProviderPaymentID,
+		"internal_payment_id", req.PaymentID.String(),
+		"amount_kopecks", refundedAmount,
+	)
+
+	return application.CancelResult{
+		ProviderPaymentID:     req.ProviderPaymentID,
+		Status:                status,
+		RefundedAmountKopecks: refundedAmount,
+	}, nil
 }
 
 // WebhookResponse returns the fixed success response the fake provider expects
@@ -265,6 +312,9 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 		}
 	} else {
 		errorCode = nil
+		p.mu.Lock()
+		p.confirmedAmounts[internalPaymentID] = entry.amountKopecks
+		p.mu.Unlock()
 	}
 
 	return application.WebhookPayload{

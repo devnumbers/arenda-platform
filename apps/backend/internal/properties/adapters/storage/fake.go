@@ -36,6 +36,14 @@ func (s *FakeStorage) Upload(_ context.Context, key, _ string, data io.Reader) (
 	return fmt.Sprintf("%s/%s", s.publicBaseURL, key), nil
 }
 
+// Delete removes the object from the in-memory store.
+func (s *FakeStorage) Delete(_ context.Context, key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.objects, key)
+	return nil
+}
+
 // Object returns a stored object for test assertions.
 func (s *FakeStorage) Object(key string) ([]byte, bool) {
 	s.mu.RLock()

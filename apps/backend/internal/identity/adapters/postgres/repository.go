@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
@@ -42,6 +44,25 @@ func (r *UserRepository) WithTx(tx transaction.Tx) application.UserRepository {
 
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
 	row, err := r.q().GetUserByID(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, application.ErrNotFound
+		}
+		return domain.User{}, err
+	}
+	return domain.User{
+		ID:         pgconv.UUIDFromPgtype(row.ID),
+		Phone:      domain.Phone(row.Phone),
+		Role:       domain.Role(row.Role),
+		Name:       pgconv.TextToPtrString(row.Name),
+		Surname:    pgconv.TextToPtrString(row.Surname),
+		Patronymic: pgconv.TextToPtrString(row.Patronymic),
+		Email:      pgconv.TextToPtrString(row.Email),
+	}, nil
+}
+
+func (r *UserRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.User, error) {
+	row, err := r.q().GetUserByIDForUpdate(ctx, pgconv.UUIDToPgtype(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.User{}, application.ErrNotFound
@@ -109,6 +130,57 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.U
 	}, nil
 }
 
+func (r *UserRepository) Update(ctx context.Context, user domain.User) (domain.User, error) {
+	row, err := r.q().UpdateUser(ctx, postgres.UpdateUserParams{
+		ID:         pgconv.UUIDToPgtype(user.ID),
+		Name:       pgconv.StringPtrToPgtype(user.Name),
+		Surname:    pgconv.StringPtrToPgtype(user.Surname),
+		Patronymic: pgconv.StringPtrToPgtype(user.Patronymic),
+		Email:      pgconv.StringPtrToPgtype(user.Email),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, application.ErrNotFound
+		}
+		return domain.User{}, err
+	}
+	return domain.User{
+		ID:         pgconv.UUIDFromPgtype(row.ID),
+		Phone:      domain.Phone(row.Phone),
+		Role:       domain.Role(row.Role),
+		Name:       pgconv.TextToPtrString(row.Name),
+		Surname:    pgconv.TextToPtrString(row.Surname),
+		Patronymic: pgconv.TextToPtrString(row.Patronymic),
+		Email:      pgconv.TextToPtrString(row.Email),
+	}, nil
+}
+
+func (r *UserRepository) UpdatePhone(ctx context.Context, id uuid.UUID, phone domain.Phone) (domain.User, error) {
+	row, err := r.q().UpdateUserPhone(ctx, postgres.UpdateUserPhoneParams{
+		ID:    pgconv.UUIDToPgtype(id),
+		Phone: phone.String(),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, application.ErrNotFound
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return domain.User{}, application.ErrPhoneAlreadyTaken
+		}
+		return domain.User{}, err
+	}
+	return domain.User{
+		ID:         pgconv.UUIDFromPgtype(row.ID),
+		Phone:      domain.Phone(row.Phone),
+		Role:       domain.Role(row.Role),
+		Name:       pgconv.TextToPtrString(row.Name),
+		Surname:    pgconv.TextToPtrString(row.Surname),
+		Patronymic: pgconv.TextToPtrString(row.Patronymic),
+		Email:      pgconv.TextToPtrString(row.Email),
+	}, nil
+}
+
 // SMSCodeRepository persists SMS codes.
 type SMSCodeRepository struct {
 	db postgres.DBTX
@@ -129,18 +201,20 @@ func (r *SMSCodeRepository) WithTx(tx transaction.Tx) application.SMSCodeReposit
 }
 
 func (r *SMSCodeRepository) Save(ctx context.Context, code domain.SMSCode) error {
-	_, err := r.q().CreateSMSCode(ctx, postgres.CreateSMSCodeParams{
+	return r.q().CreateSMSCode(ctx, postgres.CreateSMSCodeParams{
 		ID:        pgconv.UUIDToPgtype(code.ID),
 		Phone:     code.Phone.String(),
 		CodeHash:  code.CodeHash,
 		ExpiresAt: pgtype.Timestamptz{Time: code.ExpiresAt, Valid: true},
+		UserID:    pgconv.UUIDToPgtypePtr(code.UserID),
+		Purpose:   code.Purpose,
 	})
-	return err
 }
 
-func (r *SMSCodeRepository) GetLatestByPhone(ctx context.Context, phone domain.Phone, now time.Time) (domain.SMSCode, error) {
-	row, err := r.q().GetLatestSMSCodeByPhone(ctx, postgres.GetLatestSMSCodeByPhoneParams{
+func (r *SMSCodeRepository) GetLatestByPhone(ctx context.Context, phone domain.Phone, purpose string, now time.Time) (domain.SMSCode, error) {
+	row, err := r.q().GetLatestSMSCodeByPhoneAndPurpose(ctx, postgres.GetLatestSMSCodeByPhoneAndPurposeParams{
 		Phone:     phone.String(),
+		Purpose:   purpose,
 		ExpiresAt: pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err != nil {
@@ -151,7 +225,34 @@ func (r *SMSCodeRepository) GetLatestByPhone(ctx context.Context, phone domain.P
 	}
 	return domain.SMSCode{
 		ID:        pgconv.UUIDFromPgtype(row.ID),
+		UserID:    pgconv.UUIDFromPgtypePtr(row.UserID),
 		Phone:     domain.Phone(row.Phone),
+		Purpose:   row.Purpose,
+		CodeHash:  row.CodeHash,
+		ExpiresAt: row.ExpiresAt.Time,
+		Used:      row.Used,
+		CreatedAt: row.CreatedAt.Time,
+	}, nil
+}
+
+func (r *SMSCodeRepository) GetLatestByPhoneAndUserID(ctx context.Context, phone domain.Phone, purpose string, userID uuid.UUID, now time.Time) (domain.SMSCode, error) {
+	row, err := r.q().GetLatestSMSCodeByPhoneAndPurposeAndUserID(ctx, postgres.GetLatestSMSCodeByPhoneAndPurposeAndUserIDParams{
+		Phone:     phone.String(),
+		Purpose:   purpose,
+		UserID:    pgconv.UUIDToPgtype(userID),
+		ExpiresAt: pgtype.Timestamptz{Time: now, Valid: true},
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.SMSCode{}, application.ErrNotFound
+		}
+		return domain.SMSCode{}, err
+	}
+	return domain.SMSCode{
+		ID:        pgconv.UUIDFromPgtype(row.ID),
+		UserID:    pgconv.UUIDFromPgtypePtr(row.UserID),
+		Phone:     domain.Phone(row.Phone),
+		Purpose:   row.Purpose,
 		CodeHash:  row.CodeHash,
 		ExpiresAt: row.ExpiresAt.Time,
 		Used:      row.Used,
@@ -165,6 +266,10 @@ func (r *SMSCodeRepository) MarkUsedByID(ctx context.Context, id uuid.UUID) erro
 
 func (r *SMSCodeRepository) DeleteByID(ctx context.Context, id uuid.UUID) error {
 	return r.q().DeleteSMSCodeByID(ctx, pgconv.UUIDToPgtype(id))
+}
+
+func (r *SMSCodeRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
+	return r.q().DeleteSMSCodesByUserID(ctx, pgconv.UUIDToPgtype(userID))
 }
 
 func (r *SMSCodeRepository) DeleteExpiredBefore(ctx context.Context, before time.Time) error {
@@ -212,7 +317,7 @@ func (r *AttemptRepository) GetByPhone(ctx context.Context, phone domain.Phone) 
 	}, nil
 }
 
-func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, window domain.AttemptWindow) error {
+func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow) error {
 	failures := window.Failures
 	if failures < 0 {
 		failures = 0
@@ -225,11 +330,16 @@ func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, window
 		Failures:       int32(failures),
 		FirstFailureAt: pgtype.Timestamptz{Time: window.FirstFailureAt, Valid: true},
 		LastFailureAt:  pgtype.Timestamptz{Time: window.LastFailureAt, Valid: true},
+		UserID:         pgconv.UUIDToPgtype(userID),
 	})
 }
 
 func (r *AttemptRepository) DeleteByPhone(ctx context.Context, phone domain.Phone) error {
 	return r.q().DeleteLoginAttemptByPhone(ctx, phone.String())
+}
+
+func (r *AttemptRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
+	return r.q().DeleteLoginAttemptsByUserID(ctx, pgconv.UUIDToPgtype(userID))
 }
 
 func (r *AttemptRepository) DeleteStaleBefore(ctx context.Context, before time.Time) error {
@@ -286,6 +396,13 @@ func (r *SessionRepository) DeleteByTokenHash(ctx context.Context, tokenHash str
 
 func (r *SessionRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
 	return r.q().DeleteSessionsByUserID(ctx, pgconv.UUIDToPgtype(userID))
+}
+
+func (r *SessionRepository) DeleteByUserIDExcept(ctx context.Context, userID uuid.UUID, tokenHash string) error {
+	return r.q().DeleteSessionsByUserIDExcept(ctx, postgres.DeleteSessionsByUserIDExceptParams{
+		UserID:    pgconv.UUIDToPgtype(userID),
+		TokenHash: tokenHash,
+	})
 }
 
 func (r *SessionRepository) DeleteExpiredBefore(ctx context.Context, before time.Time) error {

@@ -5,21 +5,16 @@ import NextLink from 'next/link';
 import {Card} from '@heroui/react/card';
 import {Icon} from '@/shared/ui/icon';
 import {ArrowRight, StarColored} from '@/shared/assets/icons';
+import {getTariffLabel} from '@/entities/user/lib/get-tariff-label';
 import styles from './UserHeader.module.css';
 
 export type UserHeaderProps = {
     readonly name?: string | null;
-    readonly tariff?: 'basic' | 'pro' | 'business' | string | null;
-};
-
-const tariffLabels: Record<string, string> = {
-    basic: 'Базовый',
-    pro: 'Pro',
-    business: 'Бизнес',
+    readonly tariff?: string | null;
 };
 
 export function UserHeader({name, tariff}: UserHeaderProps): JSX.Element {
-    const tariffName = tariff ? (tariffLabels[tariff] ?? tariff) : 'Без подписки';
+    const tariffName = getTariffLabel(tariff);
 
     return (
         <NextLink href="/profile" className={styles.link}>

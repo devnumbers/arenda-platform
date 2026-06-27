@@ -1,15 +1,16 @@
 .root {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
+  padding: 84px 20px 96px;
 }
 
 .title {
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
-  line-height: 2rem;
-  color: var(--color-text);
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 24px;
+  color: #1e1e1e;
 }
 
 .list {
@@ -19,4 +20,11 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+@media (min-width: 768px) {
+  .root {
+    gap: 32px;
+    padding: 96px 0;
+  }
 }

@@ -10,9 +10,11 @@ import (
 type PaymentStatus string
 
 const (
-	PaymentStatusPending   PaymentStatus = "pending"
-	PaymentStatusSucceeded PaymentStatus = "succeeded"
-	PaymentStatusFailed    PaymentStatus = "failed"
+	PaymentStatusPending          PaymentStatus = "pending"
+	PaymentStatusSucceeded        PaymentStatus = "succeeded"
+	PaymentStatusFailed           PaymentStatus = "failed"
+	PaymentStatusRefunded         PaymentStatus = "refunded"
+	PaymentStatusPartialRefunded  PaymentStatus = "partial_refunded"
 )
 
 // SubscriptionPeriod is the billing period for a subscription payment.
@@ -35,11 +37,12 @@ type SubscriptionPayment struct {
 	Provider          PaymentProvider
 	ProviderPaymentID *string
 	PaymentURL        *string
-	Status            PaymentStatus
-	ErrorCode         *string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-	SucceededAt       *time.Time
+	Status                 PaymentStatus
+	RefundedAmountKopecks  *int64
+	ErrorCode              *string
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+	SucceededAt            *time.Time
 }
 
 // NewSubscriptionPayment creates a new pending subscription payment.
@@ -95,7 +98,31 @@ func (p *SubscriptionPayment) MarkFailed(errorCode *string, now time.Time) error
 	return nil
 }
 
+// MarkRefunded transitions the payment to refunded or partial_refunded.
+// Only succeeded or pending payments can be transitioned.
+func (p *SubscriptionPayment) MarkRefunded(amountKopecks int64, now time.Time) error {
+	if p.Status != PaymentStatusSucceeded && p.Status != PaymentStatusPending {
+		return ErrInvalidPaymentStatus
+	}
+	if amountKopecks < 0 || amountKopecks > p.AmountKopecks {
+		return ErrInvalidAmount
+	}
+	now = now.UTC()
+	p.UpdatedAt = now
+	p.RefundedAmountKopecks = &amountKopecks
+	if amountKopecks == p.AmountKopecks {
+		p.Status = PaymentStatusRefunded
+		return nil
+	}
+	p.Status = PaymentStatusPartialRefunded
+	return nil
+}
+
 // IsFinalized reports whether the payment has reached a terminal state.
 func (p *SubscriptionPayment) IsFinalized() bool {
-	return p.Status == PaymentStatusSucceeded || p.Status == PaymentStatusFailed
+	switch p.Status {
+	case PaymentStatusSucceeded, PaymentStatusFailed, PaymentStatusRefunded, PaymentStatusPartialRefunded:
+		return true
+	}
+	return false
 }

@@ -45,6 +45,52 @@ func (q *Queries) CreatePropertyPhoto(ctx context.Context, arg CreatePropertyPho
 	return i, err
 }
 
+const deletePropertyPhoto = `-- name: DeletePropertyPhoto :exec
+DELETE FROM property_photos WHERE id = $1
+`
+
+func (q *Queries) DeletePropertyPhoto(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deletePropertyPhoto, id)
+	return err
+}
+
+const getPropertyPhotoByID = `-- name: GetPropertyPhotoByID :one
+SELECT id, property_id, url, created_at FROM property_photos WHERE id = $1
+`
+
+func (q *Queries) GetPropertyPhotoByID(ctx context.Context, id pgtype.UUID) (PropertyPhoto, error) {
+	row := q.db.QueryRow(ctx, getPropertyPhotoByID, id)
+	var i PropertyPhoto
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.Url,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPropertyPhotoByIDAndPropertyID = `-- name: GetPropertyPhotoByIDAndPropertyID :one
+SELECT id, property_id, url, created_at FROM property_photos WHERE id = $1 AND property_id = $2
+`
+
+type GetPropertyPhotoByIDAndPropertyIDParams struct {
+	ID         pgtype.UUID `json:"id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+func (q *Queries) GetPropertyPhotoByIDAndPropertyID(ctx context.Context, arg GetPropertyPhotoByIDAndPropertyIDParams) (PropertyPhoto, error) {
+	row := q.db.QueryRow(ctx, getPropertyPhotoByIDAndPropertyID, arg.ID, arg.PropertyID)
+	var i PropertyPhoto
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.Url,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listPropertyPhotosByPropertyID = `-- name: ListPropertyPhotosByPropertyID :many
 SELECT id, property_id, url, created_at FROM property_photos WHERE property_id = $1 ORDER BY created_at
 `

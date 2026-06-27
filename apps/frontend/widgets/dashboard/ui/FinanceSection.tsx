@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
 import { Logo, BoldWallet } from '@/shared/assets/icons';
-import type { components } from '@/shared/api/generated';
+import type { Property } from '@/entities/property/model/types';
 import { useOperationsForProperties } from '../lib/use-operations-for-properties';
 import { aggregateOperations } from '../lib/finance-aggregator';
 import { formatMoney } from '../lib/format-money';
@@ -12,10 +12,8 @@ import { EmptyState } from '@/shared/ui/empty-state';
 import { SectionHeader } from './SectionHeader';
 import styles from './FinanceSection.module.css';
 
-type PropertyResponse = components['schemas']['PropertyResponse'];
-
 type FinanceSectionProps = {
-  readonly properties: PropertyResponse[] | undefined;
+  readonly properties: Property[] | undefined;
   readonly isLoading: boolean;
 };
 

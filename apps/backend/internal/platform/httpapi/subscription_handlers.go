@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
@@ -261,10 +262,16 @@ func (h *SubscriptionHandlers) ConfirmFakeSubscriptionPayment(w http.ResponseWri
 	writeJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
-const maxWebhookBody = 256 * 1024
+const (
+	maxWebhookBody        = 256 * 1024
+	webhookProcessTimeout = 30 * time.Second
+)
 
 // HandlePaymentWebhook implements POST /webhooks/payment/{provider}.
 // Webhooks always return 200 OK to avoid leaking payload validity to attackers.
+// The actual business processing is done asynchronously so that slow or
+// temporarily unavailable downstream dependencies cannot trigger the provider's
+// webhook timeout (e.g. T-Kassa's 10-second window).
 func (h *SubscriptionHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *http.Request, provider string) {
 	defer func() { _ = r.Body.Close() }()
 
@@ -275,31 +282,58 @@ func (h *SubscriptionHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *ht
 		h.logger.ErrorContext(r.Context(), "failed to read webhook body",
 			slog.String("provider", provider),
 			slog.String("error", sanitizeError(err)))
-		writeJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
+		writeWebhookResponse(w, h.billing.WebhookResponse())
 		return
 	}
 	if len(payload) > maxWebhookBody {
 		h.logger.ErrorContext(r.Context(), "webhook body exceeds size limit",
 			slog.String("provider", provider),
 			slog.Int("size", len(payload)))
-		writeJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
+		writeWebhookResponse(w, h.billing.WebhookResponse())
 		return
 	}
 
-	if err := h.billing.HandleWebhook(r.Context(), provider, payload); err != nil {
-		h.logger.ErrorContext(r.Context(), "webhook handling failed",
-			slog.String("provider", provider),
-			slog.String("error", sanitizeError(err)))
-	}
+	h.logger.InfoContext(r.Context(), "payment webhook received",
+		slog.String("provider", provider),
+		slog.String("remote_addr", r.RemoteAddr),
+		slog.Int("body_size", len(payload)))
 
-	if responseBody := h.billing.WebhookResponse(); len(responseBody) > 0 {
+	// Respond immediately to satisfy the provider's timeout window, then process
+	// the webhook in a background goroutine with its own timeout and recovery.
+	writeWebhookResponse(w, h.billing.WebhookResponse())
+
+	reqCtx := r.Context()
+	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				h.logger.ErrorContext(reqCtx, "panic processing payment webhook",
+					slog.String("provider", provider),
+					slog.Any("recover", rec))
+			}
+		}()
+
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(reqCtx), webhookProcessTimeout)
+		defer cancel()
+
+		if err := h.billing.HandleWebhook(ctx, provider, payload); err != nil {
+			h.logger.ErrorContext(ctx, "payment webhook processing failed",
+				slog.String("provider", provider),
+				slog.String("error", sanitizeError(err)))
+			return
+		}
+		h.logger.InfoContext(ctx, "payment webhook processed",
+			slog.String("provider", provider))
+	}()
+}
+
+func writeWebhookResponse(w http.ResponseWriter, responseBody []byte) {
+	if len(responseBody) > 0 {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(responseBody)
 		return
 	}
-
-	writeJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *SubscriptionHandlers) handleBillingError(w http.ResponseWriter, r *http.Request, err error) {
@@ -315,7 +349,8 @@ func (h *SubscriptionHandlers) handleBillingError(w http.ResponseWriter, r *http
 		errors.Is(err, billingapp.ErrPaymentMethodInUse),
 		errors.Is(err, billingapp.ErrPaymentMethodAlreadyExists),
 		errors.Is(err, domain.ErrCannotEnableAutoRenew),
-		errors.Is(err, domain.ErrInvalidSubscriptionState):
+		errors.Is(err, domain.ErrInvalidSubscriptionState),
+		errors.Is(err, domain.ErrInvalidPaymentStatus):
 		detail, ok := UserFacingDetail(err)
 		if !ok {
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
@@ -323,7 +358,8 @@ func (h *SubscriptionHandlers) handleBillingError(w http.ResponseWriter, r *http
 		}
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
 	case errors.Is(err, domain.ErrInvalidPeriod),
-		errors.Is(err, domain.ErrInvalidAmount):
+		errors.Is(err, domain.ErrInvalidAmount),
+		errors.Is(err, billingapp.ErrInvalidFilter):
 		detail, ok := UserFacingDetail(err)
 		if !ok {
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
@@ -381,6 +417,28 @@ func paymentMethodResponse(pm domain.PaymentMethod) *openapi.PaymentMethod {
 	}
 }
 
+// RefundSubscriptionPayment implements POST /admin/subscription/payments/{paymentId}/refund.
+func (h *SubscriptionHandlers) RefundSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId uuid.UUID) {
+	var amount *int64
+	var body openapi.RefundSubscriptionPaymentRequest
+	if err := decodeJSONBody(w, r, &body); err != nil && !errors.Is(err, io.EOF) {
+		h.logger.ErrorContext(r.Context(), "failed to decode refund payment request", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		return
+	}
+	if body.AmountKopecks != nil {
+		v := int64(*body.AmountKopecks)
+		amount = &v
+	}
+
+	if err := h.billing.RefundPayment(r.Context(), paymentId, amount); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func subscriptionPaymentResponse(view billingapp.SubscriptionPaymentView) openapi.SubscriptionPayment {
 	p := view.Payment
 	return openapi.SubscriptionPayment{
@@ -392,4 +450,61 @@ func subscriptionPaymentResponse(view billingapp.SubscriptionPaymentView) openap
 		Provider:      string(p.Provider),
 		CreatedAt:     p.CreatedAt,
 	}
+}
+
+func adminSubscriptionPaymentResponse(view billingapp.AdminSubscriptionPaymentView) openapi.AdminSubscriptionPayment {
+	p := view.Payment
+	return openapi.AdminSubscriptionPayment{
+		Id:            p.ID,
+		Tariff:        tariffResponse(view.Tariff),
+		Period:        openapi.AdminSubscriptionPaymentPeriod(p.Period),
+		AmountKopecks: int(p.AmountKopecks),
+		Status:        openapi.AdminSubscriptionPaymentStatus(p.Status),
+		Provider:      string(p.Provider),
+		UserId:        p.UserID,
+		UserPhone:     view.UserPhone,
+		CreatedAt:     p.CreatedAt,
+	}
+}
+
+// SyncSubscriptionPayment implements POST /admin/subscription/payments/{paymentId}/sync.
+func (h *SubscriptionHandlers) SyncSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId uuid.UUID) {
+	if err := h.billing.SyncPendingPayment(r.Context(), paymentId); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ListAdminSubscriptionPayments implements GET /admin/subscription/payments.
+func (h *SubscriptionHandlers) ListAdminSubscriptionPayments(w http.ResponseWriter, r *http.Request, params openapi.ListAdminSubscriptionPaymentsParams) {
+	filters := billingapp.ListAllPaymentsFilters{
+		Limit:  20,
+		Offset: 0,
+	}
+	if params.Limit != nil {
+		filters.Limit = *params.Limit
+	}
+	if params.Offset != nil {
+		filters.Offset = *params.Offset
+	}
+	if params.Status != nil {
+		filters.Status = string(*params.Status)
+	}
+
+	views, total, err := h.billing.ListAllPayments(r.Context(), filters)
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.AdminSubscriptionPayment, 0, len(views))
+	for _, v := range views {
+		items = append(items, adminSubscriptionPaymentResponse(v))
+	}
+	writeJSON(r.Context(), w, http.StatusOK, openapi.AdminSubscriptionPaymentsResponse{
+		Items: items,
+		Total: int(total),
+	})
 }

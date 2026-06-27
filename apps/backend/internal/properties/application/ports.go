@@ -63,13 +63,17 @@ type LeaseRepository interface {
 // PhotoStorage persists uploaded property photos and returns their public URL.
 type PhotoStorage interface {
 	Upload(ctx context.Context, key string, contentType string, data io.Reader) (string, error)
+	Delete(ctx context.Context, key string) error
 }
 
 // PropertyPhotoRepository persists photo metadata for properties.
 type PropertyPhotoRepository interface {
 	Create(ctx context.Context, propertyID uuid.UUID, url string) (domain.Photo, error)
+	GetByID(ctx context.Context, photoID uuid.UUID) (domain.Photo, error)
+	GetByIDAndPropertyID(ctx context.Context, photoID, propertyID uuid.UUID) (domain.Photo, error)
 	GetByPropertyID(ctx context.Context, propertyID uuid.UUID) ([]domain.Photo, error)
 	GetByPropertyIDs(ctx context.Context, propertyIDs []uuid.UUID) (map[uuid.UUID][]domain.Photo, error)
 	CountByPropertyID(ctx context.Context, propertyID uuid.UUID) (int, error)
+	Delete(ctx context.Context, photoID uuid.UUID) error
 	WithTx(tx transaction.Tx) PropertyPhotoRepository
 }

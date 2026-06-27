@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createSMSCode = `-- name: CreateSMSCode :one
-INSERT INTO sms_codes (id, phone, code_hash, expires_at)
-VALUES ($1, $2, $3, $4) RETURNING id, user_id, phone, code_hash, expires_at, used, created_at
+const createSMSCode = `-- name: CreateSMSCode :exec
+INSERT INTO sms_codes (id, phone, code_hash, expires_at, user_id, purpose)
+VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type CreateSMSCodeParams struct {
@@ -21,26 +21,20 @@ type CreateSMSCodeParams struct {
 	Phone     string             `json:"phone"`
 	CodeHash  string             `json:"code_hash"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Purpose   string             `json:"purpose"`
 }
 
-func (q *Queries) CreateSMSCode(ctx context.Context, arg CreateSMSCodeParams) (SmsCode, error) {
-	row := q.db.QueryRow(ctx, createSMSCode,
+func (q *Queries) CreateSMSCode(ctx context.Context, arg CreateSMSCodeParams) error {
+	_, err := q.db.Exec(ctx, createSMSCode,
 		arg.ID,
 		arg.Phone,
 		arg.CodeHash,
 		arg.ExpiresAt,
+		arg.UserID,
+		arg.Purpose,
 	)
-	var i SmsCode
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Phone,
-		&i.CodeHash,
-		&i.ExpiresAt,
-		&i.Used,
-		&i.CreatedAt,
-	)
-	return i, err
+	return err
 }
 
 const createSession = `-- name: CreateSession :one
@@ -168,12 +162,44 @@ func (q *Queries) DeleteLoginAttemptByPhone(ctx context.Context, phone string) e
 	return err
 }
 
+const deleteLoginAttemptsByUserID = `-- name: DeleteLoginAttemptsByUserID :exec
+DELETE FROM login_attempts WHERE user_id = $1
+`
+
+func (q *Queries) DeleteLoginAttemptsByUserID(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteLoginAttemptsByUserID, userID)
+	return err
+}
+
 const deleteSMSCodeByID = `-- name: DeleteSMSCodeByID :exec
 DELETE FROM sms_codes WHERE id = $1
 `
 
 func (q *Queries) DeleteSMSCodeByID(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteSMSCodeByID, id)
+	return err
+}
+
+const deleteSMSCodeByPhoneAndPurpose = `-- name: DeleteSMSCodeByPhoneAndPurpose :exec
+DELETE FROM sms_codes WHERE phone = $1 AND purpose = $2
+`
+
+type DeleteSMSCodeByPhoneAndPurposeParams struct {
+	Phone   string `json:"phone"`
+	Purpose string `json:"purpose"`
+}
+
+func (q *Queries) DeleteSMSCodeByPhoneAndPurpose(ctx context.Context, arg DeleteSMSCodeByPhoneAndPurposeParams) error {
+	_, err := q.db.Exec(ctx, deleteSMSCodeByPhoneAndPurpose, arg.Phone, arg.Purpose)
+	return err
+}
+
+const deleteSMSCodesByUserID = `-- name: DeleteSMSCodesByUserID :exec
+DELETE FROM sms_codes WHERE user_id = $1
+`
+
+func (q *Queries) DeleteSMSCodesByUserID(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteSMSCodesByUserID, userID)
 	return err
 }
 
@@ -192,6 +218,20 @@ DELETE FROM sessions WHERE user_id = $1
 
 func (q *Queries) DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteSessionsByUserID, userID)
+	return err
+}
+
+const deleteSessionsByUserIDExcept = `-- name: DeleteSessionsByUserIDExcept :exec
+DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2
+`
+
+type DeleteSessionsByUserIDExceptParams struct {
+	UserID    pgtype.UUID `json:"user_id"`
+	TokenHash string      `json:"token_hash"`
+}
+
+func (q *Queries) DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) error {
+	_, err := q.db.Exec(ctx, deleteSessionsByUserIDExcept, arg.UserID, arg.TokenHash)
 	return err
 }
 
@@ -223,21 +263,22 @@ func (q *Queries) DeleteStaleLoginAttemptsBatch(ctx context.Context, arg DeleteS
 	return result.RowsAffected(), nil
 }
 
-const getLatestSMSCodeByPhone = `-- name: GetLatestSMSCodeByPhone :one
-SELECT id, user_id, phone, code_hash, expires_at, used, created_at FROM sms_codes
-WHERE phone = $1 AND used = false AND expires_at > $2
+const getLatestSMSCodeByPhoneAndPurpose = `-- name: GetLatestSMSCodeByPhoneAndPurpose :one
+SELECT id, user_id, phone, code_hash, expires_at, used, created_at, purpose FROM sms_codes
+WHERE phone = $1 AND purpose = $2 AND used = false AND expires_at > $3
 ORDER BY created_at DESC
 LIMIT 1
 FOR UPDATE
 `
 
-type GetLatestSMSCodeByPhoneParams struct {
+type GetLatestSMSCodeByPhoneAndPurposeParams struct {
 	Phone     string             `json:"phone"`
+	Purpose   string             `json:"purpose"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
-func (q *Queries) GetLatestSMSCodeByPhone(ctx context.Context, arg GetLatestSMSCodeByPhoneParams) (SmsCode, error) {
-	row := q.db.QueryRow(ctx, getLatestSMSCodeByPhone, arg.Phone, arg.ExpiresAt)
+func (q *Queries) GetLatestSMSCodeByPhoneAndPurpose(ctx context.Context, arg GetLatestSMSCodeByPhoneAndPurposeParams) (SmsCode, error) {
+	row := q.db.QueryRow(ctx, getLatestSMSCodeByPhoneAndPurpose, arg.Phone, arg.Purpose, arg.ExpiresAt)
 	var i SmsCode
 	err := row.Scan(
 		&i.ID,
@@ -247,12 +288,49 @@ func (q *Queries) GetLatestSMSCodeByPhone(ctx context.Context, arg GetLatestSMSC
 		&i.ExpiresAt,
 		&i.Used,
 		&i.CreatedAt,
+		&i.Purpose,
+	)
+	return i, err
+}
+
+const getLatestSMSCodeByPhoneAndPurposeAndUserID = `-- name: GetLatestSMSCodeByPhoneAndPurposeAndUserID :one
+SELECT id, user_id, phone, code_hash, expires_at, used, created_at, purpose FROM sms_codes
+WHERE phone = $1 AND purpose = $2 AND user_id = $3 AND used = false AND expires_at > $4
+ORDER BY created_at DESC
+LIMIT 1
+FOR UPDATE
+`
+
+type GetLatestSMSCodeByPhoneAndPurposeAndUserIDParams struct {
+	Phone     string             `json:"phone"`
+	Purpose   string             `json:"purpose"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) GetLatestSMSCodeByPhoneAndPurposeAndUserID(ctx context.Context, arg GetLatestSMSCodeByPhoneAndPurposeAndUserIDParams) (SmsCode, error) {
+	row := q.db.QueryRow(ctx, getLatestSMSCodeByPhoneAndPurposeAndUserID,
+		arg.Phone,
+		arg.Purpose,
+		arg.UserID,
+		arg.ExpiresAt,
+	)
+	var i SmsCode
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Phone,
+		&i.CodeHash,
+		&i.ExpiresAt,
+		&i.Used,
+		&i.CreatedAt,
+		&i.Purpose,
 	)
 	return i, err
 }
 
 const getLoginAttemptByPhone = `-- name: GetLoginAttemptByPhone :one
-SELECT id, phone, failures, first_failure_at, last_failure_at FROM login_attempts WHERE phone = $1
+SELECT id, phone, failures, first_failure_at, last_failure_at, user_id FROM login_attempts WHERE phone = $1
 `
 
 func (q *Queries) GetLoginAttemptByPhone(ctx context.Context, phone string) (LoginAttempt, error) {
@@ -264,6 +342,7 @@ func (q *Queries) GetLoginAttemptByPhone(ctx context.Context, phone string) (Log
 		&i.Failures,
 		&i.FirstFailureAt,
 		&i.LastFailureAt,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -337,6 +416,27 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	return i, err
 }
 
+const getUserByIDForUpdate = `-- name: GetUserByIDForUpdate :one
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at FROM users WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByIDForUpdate, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.Role,
+		&i.Name,
+		&i.Surname,
+		&i.Patronymic,
+		&i.Email,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByPhone = `-- name: GetUserByPhone :one
 SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at FROM users WHERE phone = $1
 `
@@ -393,13 +493,86 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) er
 	return err
 }
 
+const updateUser = `-- name: UpdateUser :one
+UPDATE users
+SET name = $2,
+    surname = $3,
+    patronymic = $4,
+    email = $5,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at
+`
+
+type UpdateUserParams struct {
+	ID         pgtype.UUID `json:"id"`
+	Name       pgtype.Text `json:"name"`
+	Surname    pgtype.Text `json:"surname"`
+	Patronymic pgtype.Text `json:"patronymic"`
+	Email      pgtype.Text `json:"email"`
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUser,
+		arg.ID,
+		arg.Name,
+		arg.Surname,
+		arg.Patronymic,
+		arg.Email,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.Role,
+		&i.Name,
+		&i.Surname,
+		&i.Patronymic,
+		&i.Email,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserPhone = `-- name: UpdateUserPhone :one
+UPDATE users
+SET phone = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at
+`
+
+type UpdateUserPhoneParams struct {
+	ID    pgtype.UUID `json:"id"`
+	Phone string      `json:"phone"`
+}
+
+func (q *Queries) UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserPhone, arg.ID, arg.Phone)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.Role,
+		&i.Name,
+		&i.Surname,
+		&i.Patronymic,
+		&i.Email,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertLoginAttempt = `-- name: UpsertLoginAttempt :exec
-INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at, user_id)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (phone) DO UPDATE SET
     failures = EXCLUDED.failures,
     first_failure_at = EXCLUDED.first_failure_at,
-    last_failure_at = EXCLUDED.last_failure_at
+    last_failure_at = EXCLUDED.last_failure_at,
+    user_id = EXCLUDED.user_id
 `
 
 type UpsertLoginAttemptParams struct {
@@ -407,6 +580,7 @@ type UpsertLoginAttemptParams struct {
 	Failures       int32              `json:"failures"`
 	FirstFailureAt pgtype.Timestamptz `json:"first_failure_at"`
 	LastFailureAt  pgtype.Timestamptz `json:"last_failure_at"`
+	UserID         pgtype.UUID        `json:"user_id"`
 }
 
 func (q *Queries) UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error {
@@ -415,6 +589,7 @@ func (q *Queries) UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttempt
 		arg.Failures,
 		arg.FirstFailureAt,
 		arg.LastFailureAt,
+		arg.UserID,
 	)
 	return err
 }

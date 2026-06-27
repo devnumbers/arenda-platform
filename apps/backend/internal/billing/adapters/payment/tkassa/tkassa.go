@@ -25,17 +25,18 @@ import (
 )
 
 const (
-	defaultBaseURL              = "https://rest-api-test.tinkoff.ru/v2/"
-	defaultTimeout              = 30 * time.Second
-	webhookOK                   = "OK"
-	recurrentYes                = "Y"
-	payTypeOneStage             = "O"
-	checkType3DSHold            = "3DSHOLD"
-	firstPaymentInitiatorType   = "1" // CIT CC (customer-initiated credential-on-file first payment)
-	renewalInitiatorType        = "R" // MIT COF recurring
-	notificationTypeAddCard     = "AddCard"
-	maxResponseBytes            = 1 << 20 // 1 MiB
-	maxDescriptionLength        = 140     // T-Kassa limit for Description field
+	defaultBaseURL                = "https://rest-api-test.tinkoff.ru/v2/"
+	defaultTimeout                = 30 * time.Second
+	webhookOK                     = "OK"
+	recurrentYes                  = "Y"
+	payTypeOneStage               = "O"
+	checkType3DSHold              = "3DSHOLD"
+	firstPaymentInitiatorType     = "1" // CIT CC (customer-initiated credential-on-file first payment)
+	renewalInitiatorType          = "R" // MIT COF recurring
+	notificationTypeAddCard       = "NotificationAddCard"
+	notificationTypeAddCardLegacy = "AddCard"
+	maxResponseBytes              = 1 << 20 // 1 MiB
+	maxDescriptionLength          = 140     // T-Kassa limit for Description field
 )
 
 // ProviderError is returned when T-Kassa responds with Success=false and a non-zero ErrorCode.
@@ -56,6 +57,10 @@ func (e *ProviderError) Error() string {
 	}
 	return msg
 }
+
+// ProviderErrorCode exposes the T-Kassa ErrorCode so application-layer error
+// handlers can persist it without importing this package.
+func (e *ProviderError) ProviderErrorCode() string { return e.ErrorCode }
 
 // Provider is a T-Kassa payment adapter.
 type Provider struct {
@@ -193,6 +198,8 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 }
 
 // Charge performs a recurrent charge through T-Kassa.
+// Amount is intentionally omitted from the request body: T-Kassa takes the
+// charge amount from the original Init call.
 func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (application.ChargeResult, error) {
 	body := map[string]any{
 		"TerminalKey": p.terminalKey,
@@ -237,21 +244,76 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 	return mapStatus(resp.Status), nil
 }
 
+// Cancel refunds or cancels a payment through T-Kassa.
+func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (application.CancelResult, error) {
+	body := map[string]any{
+		"TerminalKey": p.terminalKey,
+		"PaymentId":   req.ProviderPaymentID,
+	}
+	if req.AmountKopecks > 0 {
+		body["Amount"] = req.AmountKopecks
+	}
+
+	p.log.InfoContext(ctx, "tkassa cancel",
+		"internal_payment_id", req.PaymentID.String(),
+		"provider_payment_id", req.ProviderPaymentID,
+		"amount_kopecks", req.AmountKopecks,
+	)
+
+	var resp cancelResponse
+	if err := p.post(ctx, "Cancel", body, &resp); err != nil {
+		return application.CancelResult{}, err
+	}
+
+	if !resp.Success {
+		return application.CancelResult{}, &ProviderError{
+			Method:    "Cancel",
+			ErrorCode: resp.ErrorCode,
+			Message:   resp.Message,
+			Details:   resp.Details,
+		}
+	}
+
+	status := mapCancelStatus(resp.Status)
+	refundedAmount := req.AmountKopecks
+	// Prefer the amount reported by T-Kassa when both original and new amounts
+	// are present. Fall back to the requested amount only when the response does
+	// not contain them.
+	if resp.OriginalAmount > 0 || resp.NewAmount > 0 {
+		refundedAmount = resp.OriginalAmount - resp.NewAmount
+		if refundedAmount < 0 {
+			refundedAmount = 0
+		}
+	}
+
+	return application.CancelResult{
+		ProviderPaymentID:     resp.PaymentID,
+		Status:                status,
+		RefundedAmountKopecks: refundedAmount,
+	}, nil
+}
+
+// cancelResponse is the T-Kassa response for the Cancel method.
+type cancelResponse struct {
+	baseResponse
+	OrderID        string `json:"OrderId"`
+	PaymentID      string `json:"PaymentId"`
+	OriginalAmount int64  `json:"OriginalAmount"`
+	NewAmount      int64  `json:"NewAmount"`
+}
+
 // InitAddCard initializes attaching a new card to a T-Kassa customer.
 func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (application.InitAddCardResult, error) {
-	// AddCustomer is idempotent. Some API-level errors simply mean the customer
-	// already exists; in that case we can continue to AddCard. All other errors
-	// are propagated so they cannot mask real problems.
+	// The T-Kassa AddCard schema requires the customer to already exist, so we
+	// call AddCustomer first. Any error here is propagated because it may mask a
+	// real problem and the docs do not treat duplicate customers as a success case.
 	customerBody := map[string]any{
 		"TerminalKey": p.terminalKey,
 		"CustomerKey": req.CustomerKey,
 	}
 	var customerResp addCustomerResponse
 	if err := p.post(ctx, "AddCustomer", customerBody, &customerResp); err != nil {
-		var providerErr *ProviderError
-		if !errors.As(err, &providerErr) || !isDuplicateCustomerError(providerErr) {
-			return application.InitAddCardResult{}, fmt.Errorf("tkassa: add customer failed: %w", err)
-		}
+		return application.InitAddCardResult{}, fmt.Errorf("tkassa: add customer failed: %w", err)
 	}
 
 	checkType := req.CheckType
@@ -328,7 +390,9 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 		return application.WebhookPayload{}, errors.New("tkassa: webhook terminal key mismatch")
 	}
 
-	if notificationType := getString(data, "NotificationType"); notificationType == notificationTypeAddCard {
+	notificationType := getString(data, "NotificationType")
+	switch notificationType {
+	case notificationTypeAddCard, notificationTypeAddCardLegacy:
 		if !isAddCardSuccessful(data) {
 			return application.WebhookPayload{}, errors.New("tkassa: add card webhook ignored: binding not successful")
 		}
@@ -341,6 +405,11 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 			Pan:              getString(data, "Pan"),
 			ExpDate:          getString(data, "ExpDate"),
 		}, nil
+	case "", "NotificationPayment":
+		// Payment notifications either omit NotificationType or explicitly set
+		// it to NotificationPayment. Continue parsing as a payment webhook below.
+	default:
+		return application.WebhookPayload{}, fmt.Errorf("tkassa: unknown notification type %q", notificationType)
 	}
 
 	orderID := getString(data, "OrderId")
@@ -358,6 +427,7 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 		ProviderPaymentID: getString(data, "PaymentId"),
 		Status:            status,
 		ErrorCode:         errorCodePtr,
+		AmountKopecks:     getInt64(data, "Amount"),
 		RebillID:          getString(data, "RebillId"),
 		CardID:            getString(data, "CardId"),
 		Pan:               getString(data, "Pan"),
@@ -389,8 +459,8 @@ func (p *Provider) post(ctx context.Context, method string, body map[string]any,
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("tkassa: %s returned HTTP %d", method, resp.StatusCode)
+		bodySnippet, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("tkassa: %s returned HTTP %d: %s", method, resp.StatusCode, string(bodySnippet))
 	}
 
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(out); err != nil {
@@ -542,6 +612,22 @@ func getString(data map[string]any, key string) string {
 	return stringifyValue(v)
 }
 
+func getInt64(data map[string]any, key string) int64 {
+	v, ok := data[key]
+	if !ok {
+		return 0
+	}
+	s := stringifyValue(v)
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
 func isAddCardSuccessful(data map[string]any) bool {
 	if status := getString(data, "Status"); status != "SUCCESS" {
 		return false
@@ -558,12 +644,32 @@ func mapStatus(status string) domain.PaymentStatus {
 		return domain.PaymentStatusPending
 	case statusConfirmed:
 		return domain.PaymentStatusSucceeded
+	case statusRefunded:
+		return domain.PaymentStatusRefunded
+	case statusPartialRefunded:
+		return domain.PaymentStatusPartialRefunded
 	case statusRejected, statusAuthFail, statusCanceled, statusDeadlineExpired,
-		statusReversed, statusPartialReversed, statusRefunded, statusPartialRefunded,
-		status3DSFailed:
+		statusReversed, statusPartialReversed, status3DSFailed:
 		return domain.PaymentStatusFailed
 	default:
 		return domain.PaymentStatusPending
+	}
+}
+
+// mapCancelStatus maps the T-Kassa Cancel response statuses to domain refund statuses.
+// REVERSED means the operation was cancelled before completion (e.g. a pending/NEW payment),
+// so it is treated as a full refund for our domain model.
+func mapCancelStatus(status string) domain.PaymentStatus {
+	switch status {
+	case statusRefunded, statusReversed:
+		return domain.PaymentStatusRefunded
+	case statusPartialRefunded, statusPartialReversed:
+		return domain.PaymentStatusPartialRefunded
+	case statusNew, statusAuthorized, statusAuthorizing, status3DSChecking,
+		status3DSChecked, statusConfirming, statusFormShowed, statusAsyncRefunding:
+		return domain.PaymentStatusPending
+	default:
+		return domain.PaymentStatusFailed
 	}
 }
 
@@ -591,23 +697,13 @@ const (
 	statusCanceled        = "CANCELED"
 )
 
-func isDuplicateCustomerError(err *ProviderError) bool {
-	// A duplicate customer usually comes back with code "7" (invalid customer
-	// status). Code "0" means success and must not be treated as duplicate.
-	switch err.ErrorCode {
-	case "7":
-		return true
-	}
-	return false
-}
-
 func isCardNotFoundError(err error) bool {
 	var providerErr *ProviderError
 	if !errors.As(err, &providerErr) {
 		return false
 	}
 	switch providerErr.ErrorCode {
-	case "502", "231":
+	case "107", "231":
 		return true
 	}
 	return false

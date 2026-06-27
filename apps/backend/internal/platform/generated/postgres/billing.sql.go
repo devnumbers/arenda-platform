@@ -11,6 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countSubscriptionPaymentsAdmin = `-- name: CountSubscriptionPaymentsAdmin :one
+SELECT COUNT(*)
+FROM subscription_payments sp
+JOIN users u ON sp.user_id = u.id
+WHERE ($1::text = '' OR sp.status = $1::text)
+`
+
+func (q *Queries) CountSubscriptionPaymentsAdmin(ctx context.Context, dollar_1 string) (int64, error) {
+	row := q.db.QueryRow(ctx, countSubscriptionPaymentsAdmin, dollar_1)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSubscriptionsByActivePaymentMethodID = `-- name: CountSubscriptionsByActivePaymentMethodID :one
 SELECT COUNT(*) FROM user_subscriptions WHERE active_payment_method_id = $1
 `
@@ -154,7 +168,7 @@ INSERT INTO subscription_payments (
     error_code
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 
 type CreateSubscriptionPaymentParams struct {
@@ -202,6 +216,7 @@ func (q *Queries) CreateSubscriptionPayment(ctx context.Context, arg CreateSubsc
 		&i.UpdatedAt,
 		&i.PaymentUrl,
 		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
 	)
 	return i, err
 }
@@ -227,7 +242,7 @@ func (q *Queries) DeletePaymentMethodByID(ctx context.Context, id pgtype.UUID) e
 }
 
 const getLastSucceededSubscriptionPaymentBySubscriptionID = `-- name: GetLastSucceededSubscriptionPaymentBySubscriptionID :one
-SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at FROM subscription_payments
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks FROM subscription_payments
 WHERE subscription_id = $1 AND status = 'succeeded'
 ORDER BY created_at DESC
 LIMIT 1
@@ -252,6 +267,7 @@ func (q *Queries) GetLastSucceededSubscriptionPaymentBySubscriptionID(ctx contex
 		&i.UpdatedAt,
 		&i.PaymentUrl,
 		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
 	)
 	return i, err
 }
@@ -403,7 +419,7 @@ func (q *Queries) GetSubscriptionByUserIDForUpdate(ctx context.Context, userID p
 }
 
 const getSubscriptionPaymentByID = `-- name: GetSubscriptionPaymentByID :one
-SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at FROM subscription_payments WHERE id = $1
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks FROM subscription_payments WHERE id = $1
 `
 
 func (q *Queries) GetSubscriptionPaymentByID(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error) {
@@ -425,12 +441,13 @@ func (q *Queries) GetSubscriptionPaymentByID(ctx context.Context, id pgtype.UUID
 		&i.UpdatedAt,
 		&i.PaymentUrl,
 		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
 	)
 	return i, err
 }
 
 const getSubscriptionPaymentByIDForUpdate = `-- name: GetSubscriptionPaymentByIDForUpdate :one
-SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at FROM subscription_payments WHERE id = $1 FOR UPDATE
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks FROM subscription_payments WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetSubscriptionPaymentByIDForUpdate(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error) {
@@ -452,6 +469,7 @@ func (q *Queries) GetSubscriptionPaymentByIDForUpdate(ctx context.Context, id pg
 		&i.UpdatedAt,
 		&i.PaymentUrl,
 		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
 	)
 	return i, err
 }
@@ -631,8 +649,61 @@ func (q *Queries) ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.
 	return items, nil
 }
 
+const listPendingPayments = `-- name: ListPendingPayments :many
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
+FROM subscription_payments
+WHERE status = 'pending'
+  AND provider_payment_id IS NOT NULL
+  AND provider_payment_id <> ''
+  AND created_at < $1
+ORDER BY created_at ASC
+LIMIT $2
+`
+
+type ListPendingPaymentsParams struct {
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Limit     int32              `json:"limit"`
+}
+
+func (q *Queries) ListPendingPayments(ctx context.Context, arg ListPendingPaymentsParams) ([]SubscriptionPayment, error) {
+	rows, err := q.db.Query(ctx, listPendingPayments, arg.CreatedAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SubscriptionPayment{}
+	for rows.Next() {
+		var i SubscriptionPayment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.SubscriptionID,
+			&i.TariffID,
+			&i.PaymentMethodID,
+			&i.Period,
+			&i.AmountKopecks,
+			&i.Provider,
+			&i.ProviderPaymentID,
+			&i.Status,
+			&i.ErrorCode,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PaymentUrl,
+			&i.SucceededAt,
+			&i.RefundedAmountKopecks,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPendingSubscriptionPaymentsByUserID = `-- name: ListPendingSubscriptionPaymentsByUserID :many
-SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at FROM subscription_payments WHERE user_id = $1 AND status = 'pending' ORDER BY created_at DESC
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks FROM subscription_payments WHERE user_id = $1 AND status = 'pending' ORDER BY created_at DESC
 `
 
 func (q *Queries) ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error) {
@@ -660,6 +731,7 @@ func (q *Queries) ListPendingSubscriptionPaymentsByUserID(ctx context.Context, u
 			&i.UpdatedAt,
 			&i.PaymentUrl,
 			&i.SucceededAt,
+			&i.RefundedAmountKopecks,
 		); err != nil {
 			return nil, err
 		}
@@ -672,7 +744,7 @@ func (q *Queries) ListPendingSubscriptionPaymentsByUserID(ctx context.Context, u
 }
 
 const listPendingUpgradePayments = `-- name: ListPendingUpgradePayments :many
-SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id, sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.status, sp.error_code, sp.created_at, sp.updated_at, sp.payment_url, sp.succeeded_at
+SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id, sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.status, sp.error_code, sp.created_at, sp.updated_at, sp.payment_url, sp.succeeded_at, sp.refunded_amount_kopecks
 FROM subscription_payments sp
 JOIN user_subscriptions us ON us.id = sp.subscription_id
 WHERE sp.status = 'pending'
@@ -713,6 +785,80 @@ func (q *Queries) ListPendingUpgradePayments(ctx context.Context, arg ListPendin
 			&i.UpdatedAt,
 			&i.PaymentUrl,
 			&i.SucceededAt,
+			&i.RefundedAmountKopecks,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubscriptionPaymentsAdmin = `-- name: ListSubscriptionPaymentsAdmin :many
+SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id, sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.status, sp.error_code, sp.created_at, sp.updated_at, sp.payment_url, sp.succeeded_at, sp.refunded_amount_kopecks, u.phone AS user_phone
+FROM subscription_payments sp
+JOIN users u ON sp.user_id = u.id
+WHERE ($1::text = '' OR sp.status = $1::text)
+ORDER BY sp.created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListSubscriptionPaymentsAdminParams struct {
+	Column1 string `json:"column_1"`
+	Limit   int32  `json:"limit"`
+	Offset  int32  `json:"offset"`
+}
+
+type ListSubscriptionPaymentsAdminRow struct {
+	ID                    pgtype.UUID        `json:"id"`
+	UserID                pgtype.UUID        `json:"user_id"`
+	SubscriptionID        pgtype.UUID        `json:"subscription_id"`
+	TariffID              pgtype.UUID        `json:"tariff_id"`
+	PaymentMethodID       pgtype.UUID        `json:"payment_method_id"`
+	Period                string             `json:"period"`
+	AmountKopecks         int64              `json:"amount_kopecks"`
+	Provider              string             `json:"provider"`
+	ProviderPaymentID     pgtype.Text        `json:"provider_payment_id"`
+	Status                string             `json:"status"`
+	ErrorCode             pgtype.Text        `json:"error_code"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	PaymentUrl            pgtype.Text        `json:"payment_url"`
+	SucceededAt           pgtype.Timestamptz `json:"succeeded_at"`
+	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
+	UserPhone             string             `json:"user_phone"`
+}
+
+func (q *Queries) ListSubscriptionPaymentsAdmin(ctx context.Context, arg ListSubscriptionPaymentsAdminParams) ([]ListSubscriptionPaymentsAdminRow, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionPaymentsAdmin, arg.Column1, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSubscriptionPaymentsAdminRow{}
+	for rows.Next() {
+		var i ListSubscriptionPaymentsAdminRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.SubscriptionID,
+			&i.TariffID,
+			&i.PaymentMethodID,
+			&i.Period,
+			&i.AmountKopecks,
+			&i.Provider,
+			&i.ProviderPaymentID,
+			&i.Status,
+			&i.ErrorCode,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PaymentUrl,
+			&i.SucceededAt,
+			&i.RefundedAmountKopecks,
+			&i.UserPhone,
 		); err != nil {
 			return nil, err
 		}
@@ -725,7 +871,7 @@ func (q *Queries) ListPendingUpgradePayments(ctx context.Context, arg ListPendin
 }
 
 const listSubscriptionPaymentsByUserID = `-- name: ListSubscriptionPaymentsByUserID :many
-SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at FROM subscription_payments WHERE user_id = $1 ORDER BY created_at DESC
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks FROM subscription_payments WHERE user_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error) {
@@ -753,6 +899,7 @@ func (q *Queries) ListSubscriptionPaymentsByUserID(ctx context.Context, userID p
 			&i.UpdatedAt,
 			&i.PaymentUrl,
 			&i.SucceededAt,
+			&i.RefundedAmountKopecks,
 		); err != nil {
 			return nil, err
 		}
@@ -973,7 +1120,7 @@ const markSubscriptionPaymentFailed = `-- name: MarkSubscriptionPaymentFailed :o
 UPDATE subscription_payments
 SET status = 'failed', error_code = $2, updated_at = $3
 WHERE id = $1 AND status = 'pending'
-RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 
 type MarkSubscriptionPaymentFailedParams struct {
@@ -1001,6 +1148,50 @@ func (q *Queries) MarkSubscriptionPaymentFailed(ctx context.Context, arg MarkSub
 		&i.UpdatedAt,
 		&i.PaymentUrl,
 		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
+	)
+	return i, err
+}
+
+const markSubscriptionPaymentRefunded = `-- name: MarkSubscriptionPaymentRefunded :one
+UPDATE subscription_payments
+SET status = $2, refunded_amount_kopecks = $3, updated_at = $4
+WHERE id = $1 AND status = 'succeeded'
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
+`
+
+type MarkSubscriptionPaymentRefundedParams struct {
+	ID                    pgtype.UUID        `json:"id"`
+	Status                string             `json:"status"`
+	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) MarkSubscriptionPaymentRefunded(ctx context.Context, arg MarkSubscriptionPaymentRefundedParams) (SubscriptionPayment, error) {
+	row := q.db.QueryRow(ctx, markSubscriptionPaymentRefunded,
+		arg.ID,
+		arg.Status,
+		arg.RefundedAmountKopecks,
+		arg.UpdatedAt,
+	)
+	var i SubscriptionPayment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SubscriptionID,
+		&i.TariffID,
+		&i.PaymentMethodID,
+		&i.Period,
+		&i.AmountKopecks,
+		&i.Provider,
+		&i.ProviderPaymentID,
+		&i.Status,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PaymentUrl,
+		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
 	)
 	return i, err
 }
@@ -1009,7 +1200,7 @@ const markSubscriptionPaymentSucceeded = `-- name: MarkSubscriptionPaymentSuccee
 UPDATE subscription_payments
 SET status = 'succeeded', updated_at = $2, succeeded_at = $2
 WHERE id = $1 AND status = 'pending'
-RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 
 type MarkSubscriptionPaymentSucceededParams struct {
@@ -1036,6 +1227,7 @@ func (q *Queries) MarkSubscriptionPaymentSucceeded(ctx context.Context, arg Mark
 		&i.UpdatedAt,
 		&i.PaymentUrl,
 		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
 	)
 	return i, err
 }
@@ -1136,7 +1328,7 @@ const updateSubscriptionPaymentMethodAndProviderID = `-- name: UpdateSubscriptio
 UPDATE subscription_payments
 SET payment_method_id = $2, provider_payment_id = $3, updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 
 type UpdateSubscriptionPaymentMethodAndProviderIDParams struct {
@@ -1164,6 +1356,7 @@ func (q *Queries) UpdateSubscriptionPaymentMethodAndProviderID(ctx context.Conte
 		&i.UpdatedAt,
 		&i.PaymentUrl,
 		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
 	)
 	return i, err
 }
@@ -1172,7 +1365,7 @@ const updateSubscriptionPaymentMethodID = `-- name: UpdateSubscriptionPaymentMet
 UPDATE subscription_payments
 SET payment_method_id = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 
 type UpdateSubscriptionPaymentMethodIDParams struct {
@@ -1199,6 +1392,7 @@ func (q *Queries) UpdateSubscriptionPaymentMethodID(ctx context.Context, arg Upd
 		&i.UpdatedAt,
 		&i.PaymentUrl,
 		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
 	)
 	return i, err
 }
@@ -1207,7 +1401,7 @@ const updateSubscriptionPaymentPaymentURL = `-- name: UpdateSubscriptionPaymentP
 UPDATE subscription_payments
 SET payment_url = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 
 type UpdateSubscriptionPaymentPaymentURLParams struct {
@@ -1234,6 +1428,7 @@ func (q *Queries) UpdateSubscriptionPaymentPaymentURL(ctx context.Context, arg U
 		&i.UpdatedAt,
 		&i.PaymentUrl,
 		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
 	)
 	return i, err
 }
@@ -1242,7 +1437,7 @@ const updateSubscriptionPaymentProviderPaymentID = `-- name: UpdateSubscriptionP
 UPDATE subscription_payments
 SET provider_payment_id = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 
 type UpdateSubscriptionPaymentProviderPaymentIDParams struct {
@@ -1269,6 +1464,7 @@ func (q *Queries) UpdateSubscriptionPaymentProviderPaymentID(ctx context.Context
 		&i.UpdatedAt,
 		&i.PaymentUrl,
 		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
 	)
 	return i, err
 }

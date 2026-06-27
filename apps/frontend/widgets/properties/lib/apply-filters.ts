@@ -21,8 +21,14 @@ export function applyFiltersAndSort(
 
   if (mode !== 'archived' && filters.statuses.length > 0) {
     result = result.filter((p) => {
-      const display = getDisplayStatus(p.status, p.occupancy);
-      return display ? filters.statuses.includes(display) : false;
+      const display = getDisplayStatus(
+        p.status,
+        p.occupancy,
+        p.lastLease?.status,
+      );
+      return display && display !== 'overdue'
+        ? filters.statuses.includes(display)
+        : false;
     });
   }
 

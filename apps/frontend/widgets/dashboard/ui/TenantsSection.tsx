@@ -1,6 +1,6 @@
 'use client';
 
-import type { JSX } from 'react';
+import { useMemo, type JSX } from 'react';
 import { Skeleton } from '@heroui/react/skeleton';
 import { Icon } from '@/shared/ui/icon';
 import { Arendators } from '@/shared/assets/icons';
@@ -20,10 +20,16 @@ type TenantsSectionProps = {
 };
 
 export function TenantsSection({ leases, isLoading }: TenantsSectionProps): JSX.Element {
-  const tenants =
-    leases
-      ?.map((lease) => lease.tenant_contact)
-      .filter((contact): contact is TenantContactResponse => contact !== null) ?? [];
+  const tenants = useMemo(() => {
+    const seen = new Map<string, TenantContactResponse>();
+    for (const lease of leases ?? []) {
+      const contact = lease.tenant_contact;
+      if (contact && !seen.has(contact.id)) {
+        seen.set(contact.id, contact);
+      }
+    }
+    return Array.from(seen.values());
+  }, [leases]);
   const count = tenants.length;
 
   if (isLoading) {

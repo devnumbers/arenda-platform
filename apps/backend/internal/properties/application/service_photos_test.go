@@ -25,6 +25,10 @@ func (s *fakePhotoStorage) Upload(_ context.Context, _, _ string, _ io.Reader) (
 	return s.uploadURL, nil
 }
 
+func (s *fakePhotoStorage) Delete(_ context.Context, _ string) error {
+	return nil
+}
+
 type fakePhotoRepo struct {
 	photos      map[uuid.UUID][]domain.Photo
 	createErr   error
@@ -66,6 +70,18 @@ func (r *fakePhotoRepo) CountByPropertyID(_ context.Context, _ uuid.UUID) (int, 
 		return 0, r.countErr
 	}
 	return r.count, nil
+}
+
+func (r *fakePhotoRepo) GetByID(_ context.Context, _ uuid.UUID) (domain.Photo, error) {
+	return domain.Photo{}, nil
+}
+
+func (r *fakePhotoRepo) GetByIDAndPropertyID(_ context.Context, _, _ uuid.UUID) (domain.Photo, error) {
+	return domain.Photo{}, nil
+}
+
+func (r *fakePhotoRepo) Delete(_ context.Context, _ uuid.UUID) error {
+	return nil
 }
 
 func (r *fakePhotoRepo) WithTx(_ transaction.Tx) PropertyPhotoRepository {

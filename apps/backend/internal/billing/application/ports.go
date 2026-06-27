@@ -25,6 +25,7 @@ var (
 	// ErrProviderCardNotFound is returned when a provider reports that the card
 	// has already been removed or does not exist.
 	ErrProviderCardNotFound = errors.New("provider card not found")
+	ErrInvalidFilter        = errors.New("invalid filter")
 )
 
 type TariffRepository interface {
@@ -66,8 +67,12 @@ type SubscriptionPaymentRepository interface {
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
 	ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
 	GetLastSucceededBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) (domain.SubscriptionPayment, error)
+	ListPendingUpgradePayments(ctx context.Context, createdBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error)
+	ListPendingPayments(ctx context.Context, createdBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error)
+	ListAll(ctx context.Context, status string, limit, offset int) ([]SubscriptionPaymentWithUser, int64, error)
 	MarkSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, errorCode *string, now time.Time) error
+	MarkRefunded(ctx context.Context, id uuid.UUID, status domain.PaymentStatus, amountKopecks int64, now time.Time) error
 	UpdateProviderPaymentID(ctx context.Context, id uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
 	UpdatePaymentURL(ctx context.Context, id uuid.UUID, paymentURL string) (domain.SubscriptionPayment, error)
 	UpdatePaymentMethodAndProviderID(ctx context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
@@ -99,6 +104,7 @@ type Provider interface {
 	Name() domain.PaymentProvider
 	Init(ctx context.Context, req InitRequest) (InitResult, error)
 	Charge(ctx context.Context, req ChargeRequest) (ChargeResult, error)
+	Cancel(ctx context.Context, req CancelRequest) (CancelResult, error)
 	Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error)
 	ParseWebhook(ctx context.Context, payload []byte) (WebhookPayload, error)
 	InitAddCard(ctx context.Context, req InitAddCardRequest) (InitAddCardResult, error)
@@ -141,11 +147,27 @@ type ChargeResult struct {
 	Status            domain.PaymentStatus
 }
 
+// CancelRequest asks the provider to cancel or refund a finalized payment.
+// AmountKopecks = 0 means a full refund.
+type CancelRequest struct {
+	PaymentID         uuid.UUID
+	ProviderPaymentID string
+	AmountKopecks     int64
+}
+
+// CancelResult reports the provider's response to a cancel/refund request.
+type CancelResult struct {
+	ProviderPaymentID     string
+	Status                domain.PaymentStatus
+	RefundedAmountKopecks int64
+}
+
 type WebhookPayload struct {
 	ProviderPaymentID string
 	InternalPaymentID uuid.UUID
 	Status            domain.PaymentStatus
 	ErrorCode         *string
+	AmountKopecks     int64 // payment amount for regular webhooks, refund amount for refund webhooks
 	RebillID          string
 	CardID            string
 	Pan               string
@@ -157,12 +179,9 @@ type WebhookPayload struct {
 
 // InitAddCardRequest starts a T-Kassa "AddCard" initialization.
 type InitAddCardRequest struct {
-	UserID          uuid.UUID
-	CustomerKey     string
-	CheckType       string
-	SuccessURL      string
-	FailURL         string
-	NotificationURL string
+	UserID      uuid.UUID
+	CustomerKey string
+	CheckType   string
 }
 
 // InitAddCardResult carries the T-Kassa response for AddCard initialization.

@@ -25,6 +25,7 @@ func (f *fakeSessionRepo) DeleteByUserID(_ context.Context, userID uuid.UUID) er
 	f.deletedUserID = userID
 	return nil
 }
+func (f *fakeSessionRepo) DeleteByUserIDExcept(_ context.Context, _ uuid.UUID, _ string) error { return nil }
 func (f *fakeSessionRepo) DeleteExpiredBefore(_ context.Context, _ time.Time) error        { return nil }
 func (f *fakeSessionRepo) DeleteExpiredBeforeBatch(_ context.Context, _ time.Time, _ int32) (int64, error) {
 	return 0, nil
@@ -54,6 +55,7 @@ func (failingSessionRepo) GetByTokenHash(_ context.Context, _ string, _ time.Tim
 func (failingSessionRepo) Update(_ context.Context, _ domain.Session) error                { return nil }
 func (failingSessionRepo) DeleteByTokenHash(_ context.Context, _ string) error             { return nil }
 func (failingSessionRepo) DeleteByUserID(_ context.Context, _ uuid.UUID) error             { return errors.New("db error") }
+func (failingSessionRepo) DeleteByUserIDExcept(_ context.Context, _ uuid.UUID, _ string) error { return nil }
 func (failingSessionRepo) DeleteExpiredBefore(_ context.Context, _ time.Time) error        { return nil }
 func (failingSessionRepo) DeleteExpiredBeforeBatch(_ context.Context, _ time.Time, _ int32) (int64, error) {
 	return 0, nil

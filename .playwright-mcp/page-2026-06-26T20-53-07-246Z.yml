@@ -1,0 +1,32 @@
+- generic [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - button "Назад" [ref=e45] [cursor=pointer]:
+          - img [ref=e46]
+        - button "Написать в поддержку" [ref=e48] [cursor=pointer]:
+          - img [ref=e50]
+      - generic [ref=e54]:
+        - generic [ref=e55]:
+          - heading "Введите код" [level=1] [ref=e56]
+          - paragraph [ref=e57]: Отправили СМС-код на номер +7 (915) 038-06-63
+        - generic [ref=e59]:
+          - generic [ref=e60]:
+            - textbox "6-значный код" [active] [ref=e61]:
+              - /placeholder: " "
+            - generic: 6-значный код
+          - generic [ref=e63]: 0/6
+        - generic [ref=e64]:
+          - button "Отправить новый код 00:55" [disabled] [ref=e65]:
+            - generic [ref=e66]:
+              - generic [ref=e67]: Отправить новый код
+              - generic [ref=e69]:
+                - img [ref=e70]
+                - generic [ref=e73]: 00:55
+          - button "Изменить номер" [ref=e74] [cursor=pointer]:
+            - img [ref=e76]
+            - generic [ref=e79]: Изменить номер
+  - region "Notifications Alt+T"
+  - button "Open Next.js Dev Tools" [ref=e40] [cursor=pointer]:
+    - img [ref=e41]
+  - alert [ref=e44]

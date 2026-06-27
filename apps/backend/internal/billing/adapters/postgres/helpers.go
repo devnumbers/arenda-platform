@@ -44,6 +44,21 @@ func uuidPtrFromPgtype(u pgtype.UUID) *uuid.UUID {
 	return &id
 }
 
+func int64Ptr(n *int64) pgtype.Int8 {
+	if n == nil {
+		return pgtype.Int8{Valid: false}
+	}
+	return pgtype.Int8{Int64: *n, Valid: true}
+}
+
+func int64PtrFromPgtype(n pgtype.Int8) *int64 {
+	if !n.Valid {
+		return nil
+	}
+	v := n.Int64
+	return &v
+}
+
 func timestamptzPtr(t *time.Time) pgtype.Timestamptz {
 	if t == nil {
 		return pgtype.Timestamptz{Valid: false}

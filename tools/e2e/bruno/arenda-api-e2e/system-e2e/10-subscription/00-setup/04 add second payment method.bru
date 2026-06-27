@@ -31,23 +31,23 @@ script:pre-request {
 }
 
 script:post-response {
-  if (res.body && res.body.id) {
-    bru.setEnvVar("secondPaymentMethodId", res.body.id);
-    bru.setVar("secondPaymentMethodId", res.body.id);
-    console.log("saved secondPaymentMethodId =", res.body.id);
+  if (res.body && res.body.paymentMethod && res.body.paymentMethod.id) {
+    bru.setEnvVar("secondPaymentMethodId", res.body.paymentMethod.id);
+    bru.setVar("secondPaymentMethodId", res.body.paymentMethod.id);
+    console.log("saved secondPaymentMethodId =", res.body.paymentMethod.id);
   }
 }
 
 tests {
-  test("should return 201", function() {
-    expect(res.status).to.equal(201);
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
   });
 
   test("should return payment method id", function() {
-    expect(res.body.id).to.be.a("string");
+    expect(res.body.paymentMethod.id).to.be.a("string");
   });
 
   test("should be inactive by default", function() {
-    expect(res.body.isActive).to.equal(false);
+    expect(res.body.paymentMethod.isActive).to.equal(false);
   });
 }

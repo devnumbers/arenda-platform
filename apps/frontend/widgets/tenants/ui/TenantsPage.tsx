@@ -36,16 +36,18 @@ export function TenantsPage(): JSX.Element {
 
   return (
     <div className={styles.root}>
-      <header className={styles.header}>
-        <IconLink href={ROUTES.dashboard} aria-label="Назад" icon={<ArrowLeft />} />
-        <h1 className={styles.title}>Арендаторы</h1>
-        <LinkButton href={ROUTES.tenantNew} variant="secondary" size="small">
-          Добавить
-        </LinkButton>
-      </header>
+      <div className={styles.content}>
+        <header className={styles.header}>
+          <IconLink href={ROUTES.dashboard} aria-label="Назад" icon={<ArrowLeft />} />
+          <h1 className={styles.title}>Арендаторы</h1>
+          <LinkButton href={ROUTES.tenantNew} variant="secondary" size="small">
+            Добавить
+          </LinkButton>
+        </header>
 
-      <TenantSection title="Текущие арендаторы" tenants={active} />
-      <TenantSection title="Прошлые арендаторы" tenants={past} />
+        <TenantSection title="Текущие арендаторы" tenants={active} />
+        <TenantSection title="Прошлые арендаторы" tenants={past} />
+      </div>
     </div>
   );
 }

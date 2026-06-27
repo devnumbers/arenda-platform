@@ -22,6 +22,7 @@ const billingWorkerLockKey int64 = 0xB111
 type billingService interface {
 	ProcessScheduledChanges(ctx context.Context, now time.Time) (int, error)
 	ProcessRenewals(ctx context.Context, now time.Time) (int, error)
+	ProcessPendingUpgradePayments(ctx context.Context, now time.Time) (int, error)
 	ProcessExpiredGrace(ctx context.Context, now time.Time) (int, error)
 }
 
@@ -107,6 +108,13 @@ func (w *BillingWorker) tick(ctx context.Context) error {
 		w.logger.InfoContext(ctx, "billing worker processed renewals", "count", renewed)
 	}
 
+	upgrades, upgradeErr := w.billing.ProcessPendingUpgradePayments(ctx, now)
+	if upgradeErr != nil {
+		w.logger.ErrorContext(ctx, "billing worker pending upgrade processing failed", "error", sanitize.Error(upgradeErr))
+	} else if upgrades > 0 {
+		w.logger.InfoContext(ctx, "billing worker finalized pending upgrade payments", "count", upgrades)
+	}
+
 	downgraded, graceErr := w.billing.ProcessExpiredGrace(ctx, now)
 	if graceErr != nil {
 		w.logger.ErrorContext(ctx, "billing worker expired grace processing failed", "error", sanitize.Error(graceErr))
@@ -120,6 +128,9 @@ func (w *BillingWorker) tick(ctx context.Context) error {
 	}
 	if renewalErr != nil {
 		errs = append(errs, fmt.Errorf("renewals: %w", renewalErr))
+	}
+	if upgradeErr != nil {
+		errs = append(errs, fmt.Errorf("pending upgrades: %w", upgradeErr))
 	}
 	if graceErr != nil {
 		errs = append(errs, fmt.Errorf("expired grace: %w", graceErr))

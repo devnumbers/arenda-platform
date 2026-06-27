@@ -3,9 +3,9 @@
 import { useQueries } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { operationKeys } from '@/features/operations/api/keys';
+import type { Property } from '@/entities/property/model/types';
 import type { components } from '@/shared/api/generated';
 
-type PropertyResponse = components['schemas']['PropertyResponse'];
 type OperationsResponse = components['schemas']['OperationsResponse'];
 
 export type OperationsForPropertiesResult = {
@@ -14,7 +14,7 @@ export type OperationsForPropertiesResult = {
 };
 
 export function useOperationsForProperties(
-  properties: PropertyResponse[] | undefined,
+  properties: Property[] | undefined,
 ): OperationsForPropertiesResult {
   const propertyIds = properties?.map((property) => property.id) ?? [];
   const queries = useQueries({

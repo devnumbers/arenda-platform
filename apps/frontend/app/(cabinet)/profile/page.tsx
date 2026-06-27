@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { ProfileOverview } from '@/widgets/profile';
 
 export const metadata: Metadata = {
   title: 'Профиль — Arenda Platform',
@@ -6,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function ProfilePage() {
-  return <h1>Профиль</h1>;
+  return <ProfileOverview />;
 }

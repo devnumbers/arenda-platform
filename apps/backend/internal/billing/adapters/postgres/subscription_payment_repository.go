@@ -110,6 +110,21 @@ func (r *SubscriptionPaymentRepository) ListPendingUpgradePayments(ctx context.C
 	return mapSubscriptionPayments(rows), nil
 }
 
+// ListPendingPayments returns pending subscription payments older than the
+// provided cutoff, ordered by creation time ascending, limited to the given
+// number of rows. It is used by the reconciliation worker to find stuck
+// payments that need to be checked with the provider.
+func (r *SubscriptionPaymentRepository) ListPendingPayments(ctx context.Context, createdBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error) {
+	rows, err := r.q().ListPendingPayments(ctx, postgres.ListPendingPaymentsParams{
+		CreatedAt: pgtype.Timestamptz{Time: createdBefore.UTC(), Valid: true},
+		Limit:     limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list pending payments: %w", err)
+	}
+	return mapSubscriptionPayments(rows), nil
+}
+
 // ListAll returns all subscription payments for admin view.
 func (r *SubscriptionPaymentRepository) ListAll(ctx context.Context, status string, limit, offset int) ([]application.SubscriptionPaymentWithUser, int64, error) {
 	rows, err := r.q().ListSubscriptionPaymentsAdmin(ctx, postgres.ListSubscriptionPaymentsAdminParams{
@@ -207,7 +222,7 @@ func (r *SubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.
 	return nil
 }
 
-// MarkRefunded transitions a succeeded subscription payment to refunded or partial_refunded
+// MarkRefunded transitions a succeeded or pending subscription payment to refunded or partial_refunded
 // and records the refunded amount.
 func (r *SubscriptionPaymentRepository) MarkRefunded(ctx context.Context, id uuid.UUID, status domain.PaymentStatus, amountKopecks int64, now time.Time) error {
 	row, err := r.q().GetSubscriptionPaymentByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})

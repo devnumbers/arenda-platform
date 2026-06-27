@@ -1,7 +1,14 @@
 .root {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 48px;
+  padding: 84px 20px 96px;
+}
+
+.content {
+  width: 100%;
+  max-width: 560px;
 }
 
 .header {
@@ -20,4 +27,10 @@
   line-height: 22px;
   color: var(--color-text);
   text-align: center;
+}
+
+@media (min-width: 768px) {
+  .root {
+    padding: 96px 0;
+  }
 }

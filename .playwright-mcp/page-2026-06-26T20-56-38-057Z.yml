@@ -1,0 +1,88 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - navigation [ref=e4]:
+        - list [ref=e5]:
+          - listitem [ref=e6]:
+            - link "Главная" [ref=e7] [cursor=pointer]:
+              - /url: /dashboard
+              - img [ref=e8]
+              - generic [ref=e10]: Главная
+          - listitem [ref=e11]:
+            - link "Объекты" [ref=e12] [cursor=pointer]:
+              - /url: /properties
+              - img [ref=e13]
+              - generic [ref=e16]: Объекты
+          - listitem [ref=e17]:
+            - link "Арендаторы" [ref=e18] [cursor=pointer]:
+              - /url: /tenants
+              - img [ref=e19]
+              - generic [ref=e21]: Арендаторы
+          - listitem [ref=e22]:
+            - link "Финансы" [ref=e23] [cursor=pointer]:
+              - /url: /finance
+              - img [ref=e24]
+              - generic [ref=e26]: Финансы
+          - listitem [ref=e27]:
+            - link "Профиль" [ref=e28] [cursor=pointer]:
+              - /url: /profile
+              - img [ref=e29]
+              - generic [ref=e31]: Профиль
+          - listitem [ref=e32]:
+            - link "Поддержка" [ref=e33] [cursor=pointer]:
+              - /url: /support
+              - img [ref=e34]
+              - generic [ref=e37]: Поддержка
+    - main [ref=e38]:
+      - generic [ref=e377]:
+        - heading "Редактирование арендатора" [level=1] [ref=e378]
+        - generic [ref=e379]:
+          - generic [ref=e380]:
+            - generic [ref=e381]:
+              - generic [ref=e382]: Имя*
+              - textbox "Имя*" [ref=e384]:
+                - /placeholder: " "
+                - text: Иван
+            - generic [ref=e385]:
+              - generic [ref=e386]: Фамилия
+              - textbox "Фамилия" [ref=e388]:
+                - /placeholder: " "
+                - text: Иванов
+            - generic [ref=e389]:
+              - generic [ref=e390]: Отчество
+              - textbox "Отчество" [ref=e392]:
+                - /placeholder: " "
+                - text: Иванович
+            - generic [ref=e393]:
+              - generic [ref=e394]: Телефон
+              - textbox "Телефон" [ref=e396]:
+                - /placeholder: +7 (000) 000-00-00
+                - text: +7 (933) 333-33-33
+            - generic [ref=e397]:
+              - generic [ref=e398]: Email
+              - textbox "Email" [ref=e400]:
+                - /placeholder: email@example.com
+            - generic [ref=e401]:
+              - generic [ref=e402]: Комментарий
+              - textbox "Комментарий" [ref=e404]:
+                - /placeholder: " "
+                - text: Первый тестовый арендатор (отредактирован)
+              - generic [ref=e406]: 42/500
+          - alert [ref=e431]: Арендатор с таким телефоном уже существует
+          - generic [ref=e407]:
+            - button "Сохранить изменения" [ref=e408] [cursor=pointer]:
+              - generic [ref=e433]: Сохранить изменения
+            - link "Отмена" [ref=e411] [cursor=pointer]:
+              - /url: /tenants/6ed222f3-0a04-4c18-a6b8-92a708b3c320
+              - img [ref=e413]
+              - generic [ref=e416]: Отмена
+  - region "Notifications Alt+T":
+    - alert [ref=e435]:
+      - img [ref=e437]
+      - text: Арендатор с таким телефоном уже существует
+      - button "close" [ref=e439] [cursor=pointer]:
+        - img [ref=e440]
+      - progressbar "notification timer" [ref=e444]
+  - button "Open Next.js Dev Tools" [ref=e46] [cursor=pointer]:
+    - img [ref=e47]
+  - alert [ref=e50]: Редактировать арендатора — Arenda Platform

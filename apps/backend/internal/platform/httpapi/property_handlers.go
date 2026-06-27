@@ -1,16 +1,14 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
+
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
-	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 )
@@ -19,14 +17,14 @@ import (
 type PropertyHandlers struct {
 	svc              *propertiesapp.PropertyService
 	addressSuggester propertiesapp.AddressSuggester
-	tenantContactSvc *leasesapp.TenantContactService
 	opSvc            *leasesapp.OperationService
 	logger           *slog.Logger
+	presenter        *leasePresenter
 }
 
 // NewPropertyHandlers creates HTTP handlers for the properties API.
 func NewPropertyHandlers(svc *propertiesapp.PropertyService, addressSuggester propertiesapp.AddressSuggester, tenantContactSvc *leasesapp.TenantContactService, opSvc *leasesapp.OperationService, logger *slog.Logger) *PropertyHandlers {
-	return &PropertyHandlers{svc: svc, addressSuggester: addressSuggester, tenantContactSvc: tenantContactSvc, opSvc: opSvc, logger: logger}
+	return &PropertyHandlers{svc: svc, addressSuggester: addressSuggester, opSvc: opSvc, logger: logger, presenter: newLeasePresenter(tenantContactSvc)}
 }
 
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
@@ -38,7 +36,7 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 			return
 		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
-	case errors.Is(err, propertiesapp.ErrNotFound):
+	case errors.Is(err, propertiesapp.ErrNotFound), errors.Is(err, leasesapp.ErrNotFound):
 		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "property not found"))
 	case errors.Is(err, propertiesapp.ErrLimitExceeded):
 		writeProblem(w, http.StatusPaymentRequired, problem(r.Context(), "Limit exceeded", "active property limit exceeded"))
@@ -59,6 +57,13 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 			return
 		}
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
+	case errors.Is(err, leasesapp.ErrTenantContactNotFound):
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 	}
@@ -219,7 +224,7 @@ func (h *PropertyHandlers) ListPropertyLeases(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	contacts, err := h.tenantContactIDs(r.Context(), ownerID, leases)
+	contacts, err := h.presenter.tenantContactIDs(r.Context(), ownerID, leases)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
@@ -227,7 +232,7 @@ func (h *PropertyHandlers) ListPropertyLeases(w http.ResponseWriter, r *http.Req
 
 	items := make([]openapi.LeaseResponse, 0, len(leases))
 	for _, lease := range leases {
-		resp, err := h.leaseResponse(r.Context(), ownerID, lease, contacts)
+		resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, contacts)
 		if err != nil {
 			h.handlePropertyError(w, r, err)
 			return
@@ -300,6 +305,22 @@ func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Re
 	writeJSON(r.Context(), w, http.StatusCreated, openapi.PropertyPhoto{Id: uploaded.ID, Url: uploaded.URL})
 }
 
+// DeletePropertyPhoto implements DELETE /properties/{propertyId}/photos/{photoId}.
+func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId, photoId uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	if err := h.svc.DeletePropertyPhoto(r.Context(), ownerID, propertyId, photoId); err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // GetAddressSuggestions implements GET /dadata/suggestions/address.
 func (h *PropertyHandlers) GetAddressSuggestions(w http.ResponseWriter, r *http.Request, params openapi.GetAddressSuggestionsParams) {
 	_, ok := ownerIDFromContext(r)
@@ -325,54 +346,6 @@ func (h *PropertyHandlers) GetAddressSuggestions(w http.ResponseWriter, r *http.
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, openapi.AddressSuggestionsResponse{Suggestions: resp})
-}
-
-func (h *PropertyHandlers) tenantContactIDs(ctx context.Context, ownerID uuid.UUID, leases []leasesdomain.Lease) (map[uuid.UUID]leasesdomain.TenantContact, error) {
-	ids := make([]uuid.UUID, 0, len(leases))
-	for _, lease := range leases {
-		if lease.TenantContactID != nil && *lease.TenantContactID != uuid.Nil {
-			ids = append(ids, *lease.TenantContactID)
-		}
-	}
-	if len(ids) == 0 {
-		return map[uuid.UUID]leasesdomain.TenantContact{}, nil
-	}
-	return h.tenantContactSvc.ListTenantContactsByIDs(ctx, ownerID, ids)
-}
-
-func (h *PropertyHandlers) leaseResponse(ctx context.Context, ownerID uuid.UUID, lease leasesdomain.Lease, contacts map[uuid.UUID]leasesdomain.TenantContact) (openapi.LeaseResponse, error) {
-	resp := openapi.LeaseResponse{
-		Id:                   lease.ID,
-		OwnerId:              lease.OwnerID,
-		PropertyId:           lease.PropertyID,
-		Status:               openapi.LeaseResponseStatus(lease.Status),
-		StartDate:            openapi_types.Date{Time: lease.StartDate},
-		EndDate:              datePtrToOpenAPI(lease.EndDate),
-		RentAmountKopecks:    int(lease.RentAmountKopecks),
-		DepositAmountKopecks: int(lease.DepositAmountKopecks),
-		PaymentDay:           lease.PaymentDay,
-		CreatedAt:            lease.CreatedAt,
-		UpdatedAt:            lease.UpdatedAt,
-	}
-	if lease.Comment != "" {
-		resp.Comment = &lease.Comment
-	}
-	if lease.TenantContactID != nil && *lease.TenantContactID != uuid.Nil {
-		if contacts != nil {
-			contact, ok := contacts[*lease.TenantContactID]
-			if !ok {
-				return openapi.LeaseResponse{}, leasesapp.ErrTenantContactNotFound
-			}
-			resp.TenantContact = new(tenantContactResponse(contact))
-		} else {
-			contact, err := h.tenantContactSvc.GetTenantContact(ctx, ownerID, *lease.TenantContactID)
-			if err != nil {
-				return openapi.LeaseResponse{}, err
-			}
-			resp.TenantContact = new(tenantContactResponse(contact))
-		}
-	}
-	return resp, nil
 }
 
 func propertyResponse(property domain.Property) openapi.PropertyResponse {

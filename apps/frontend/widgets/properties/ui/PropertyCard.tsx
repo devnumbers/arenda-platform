@@ -1,6 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
+import NextLink from 'next/link';
 import { LinkButton } from '@/shared/ui/link-button';
 import { Icon } from '@/shared/ui/icon';
 import { Objects, UserSmall, ClockSmall } from '@/shared/assets/icons';
@@ -97,7 +98,11 @@ export function PropertyCard({ property }: PropertyCardProps): JSX.Element {
 
   return (
     <article className={styles.root}>
-      <div className={styles.header}>
+      <NextLink
+        href={ROUTES.property(property.id)}
+        className={styles.header}
+        aria-label={`Открыть объект ${property.name}`}
+      >
         <div className={styles.meta}>
           <h3 className={styles.title}>{property.name}</h3>
           {displayStatus && <PropertyStatusBadge status={displayStatus} />}
@@ -107,7 +112,7 @@ export function PropertyCard({ property }: PropertyCardProps): JSX.Element {
             <Objects />
           </Icon>
         </div>
-      </div>
+      </NextLink>
 
       {showLeaseInfo && (
         <div className={styles.lease}>

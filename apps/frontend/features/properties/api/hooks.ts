@@ -9,6 +9,8 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
+import { mapPropertyResponse } from '@/entities/property/model/mappers';
+import type { Property } from '@/entities/property/model/types';
 import { propertyKeys } from './keys';
 import type { components } from '@/shared/api/generated';
 
@@ -21,22 +23,25 @@ type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
 
-export function useProperties(): UseQueryResult<PropertyResponse[], ApiError> {
+export function useProperties(): UseQueryResult<Property[], ApiError> {
   return useQuery({
     queryKey: propertyKeys.list,
     queryFn: async () => {
       const response = await apiClient<PropertiesResponse>('/properties');
-      return response.items;
+      return response.items.map(mapPropertyResponse);
     },
   });
 }
 
 export function useProperty(
   id: string,
-): UseQueryResult<PropertyResponse, ApiError> {
+): UseQueryResult<Property, ApiError> {
   return useQuery({
     queryKey: propertyKeys.detail(id),
-    queryFn: () => apiClient<PropertyResponse>(`/properties/${id}`),
+    queryFn: async () => {
+      const response = await apiClient<PropertyResponse>(`/properties/${id}`);
+      return mapPropertyResponse(response);
+    },
     enabled: Boolean(id),
   });
 }
@@ -143,6 +148,24 @@ export function useUploadPropertyPhoto(): UseMutationResult<
         method: 'POST',
         body: formData,
       });
+    },
+  });
+}
+
+export function useDeletePropertyPhoto(): UseMutationResult<
+  void,
+  ApiError,
+  { propertyId: string; photoId: string }
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ propertyId, photoId }) =>
+      apiClient<void>(`/properties/${propertyId}/photos/${photoId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: (_, { propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      queryClient.invalidateQueries({ queryKey: propertyKeys.detail(propertyId) });
     },
   });
 }

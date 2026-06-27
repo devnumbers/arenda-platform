@@ -178,6 +178,39 @@ func TestProviderCharge(t *testing.T) {
 	}
 }
 
+func TestProviderCharge_FullRefund(t *testing.T) {
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	paymentID := uuid.MustParse("33333333-3333-3333-3333-333333333334")
+	amount := int64(15000)
+
+	chargeRes, err := p.Charge(context.Background(), application.ChargeRequest{
+		PaymentID:     paymentID,
+		AmountKopecks: amount,
+		Token:         "fake_token_normal",
+	})
+	if err != nil {
+		t.Fatalf("Charge error: %v", err)
+	}
+	if chargeRes.Status != domain.PaymentStatusSucceeded {
+		t.Fatalf("expected succeeded status, got %q", chargeRes.Status)
+	}
+
+	cancelRes, err := p.Cancel(context.Background(), application.CancelRequest{
+		PaymentID:         paymentID,
+		ProviderPaymentID: chargeRes.ProviderPaymentID,
+		AmountKopecks:     0,
+	})
+	if err != nil {
+		t.Fatalf("Cancel error: %v", err)
+	}
+	if cancelRes.Status != domain.PaymentStatusRefunded {
+		t.Errorf("expected status %q, got %q", domain.PaymentStatusRefunded, cancelRes.Status)
+	}
+	if cancelRes.RefundedAmountKopecks != amount {
+		t.Errorf("expected refunded amount %d, got %d", amount, cancelRes.RefundedAmountKopecks)
+	}
+}
+
 func TestProviderChargeValidation(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
 	validPaymentID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
@@ -441,5 +474,99 @@ func TestProviderPurgePendingTTL(t *testing.T) {
 	_, err = p.ConfirmPayment(context.Background(), paymentID.String())
 	if err == nil {
 		t.Fatal("expected error for purged payment")
+	}
+}
+
+func TestProviderCancel(t *testing.T) {
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111113")
+	providerPaymentID := "fake_cancel_1"
+	amount := int64(10000)
+
+	if _, err := p.Init(context.Background(), application.InitRequest{
+		PaymentID:     paymentID,
+		AmountKopecks: amount,
+		Period:        domain.PeriodMonth,
+		UserID:        uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+	}); err != nil {
+		t.Fatalf("Init error: %v", err)
+	}
+	if _, err := p.ConfirmPayment(context.Background(), paymentID.String()); err != nil {
+		t.Fatalf("ConfirmPayment error: %v", err)
+	}
+
+	full, err := p.Cancel(context.Background(), application.CancelRequest{
+		PaymentID:         paymentID,
+		ProviderPaymentID: providerPaymentID,
+		AmountKopecks:     0,
+	})
+	if err != nil {
+		t.Fatalf("Cancel full refund error: %v", err)
+	}
+	if full.Status != domain.PaymentStatusRefunded {
+		t.Errorf("expected status %q for full refund, got %q", domain.PaymentStatusRefunded, full.Status)
+	}
+	if full.RefundedAmountKopecks != amount {
+		t.Errorf("expected refunded amount %d for full refund, got %d", amount, full.RefundedAmountKopecks)
+	}
+	if full.ProviderPaymentID != providerPaymentID {
+		t.Errorf("expected provider payment id %q, got %q", providerPaymentID, full.ProviderPaymentID)
+	}
+
+	partialAmount := int64(3000)
+	partial, err := p.Cancel(context.Background(), application.CancelRequest{
+		PaymentID:         paymentID,
+		ProviderPaymentID: providerPaymentID,
+		AmountKopecks:     partialAmount,
+	})
+	if err != nil {
+		t.Fatalf("Cancel partial refund error: %v", err)
+	}
+	if partial.Status != domain.PaymentStatusPartialRefunded {
+		t.Errorf("expected status %q for partial refund, got %q", domain.PaymentStatusPartialRefunded, partial.Status)
+	}
+	if partial.RefundedAmountKopecks != partialAmount {
+		t.Errorf("expected refunded amount %d for partial refund, got %d", partialAmount, partial.RefundedAmountKopecks)
+	}
+}
+
+func TestProviderCancelValidation(t *testing.T) {
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+
+	cases := []struct {
+		name    string
+		req     application.CancelRequest
+		wantErr string
+	}{
+		{
+			name: "nil payment id",
+			req: application.CancelRequest{
+				PaymentID:         uuid.Nil,
+				ProviderPaymentID: "fake_cancel_1",
+				AmountKopecks:     0,
+			},
+			wantErr: "payment id is required",
+		},
+		{
+			name: "empty provider payment id",
+			req: application.CancelRequest{
+				PaymentID:         uuid.MustParse("11111111-1111-1111-1111-111111111113"),
+				ProviderPaymentID: "",
+				AmountKopecks:     0,
+			},
+			wantErr: "provider payment id is required",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := p.Cancel(context.Background(), tc.req)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("expected error to contain %q, got %q", tc.wantErr, err.Error())
+			}
+		})
 	}
 }

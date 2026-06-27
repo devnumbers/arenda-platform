@@ -30,9 +30,9 @@
   color: var(--color-primary);
 }
 
-.iconWrapper svg {
-  width: 64px;
-  height: 64px;
+.illustration {
+  width: 96px;
+  height: 96px;
 }
 
 .text {

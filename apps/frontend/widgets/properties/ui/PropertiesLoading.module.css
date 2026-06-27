@@ -5,7 +5,73 @@
 }
 
 .card {
-  height: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
   border-radius: 24px;
-  background: var(--color-secondary-bg);
+  background: #f1f3f6;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.title {
+  width: 60%;
+  height: 20px;
+  border-radius: 8px;
+}
+
+.badge {
+  width: 80px;
+  height: 16px;
+  border-radius: 8px;
+}
+
+.thumbnail {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shortBar {
+  width: 30%;
+  height: 16px;
+  border-radius: 8px;
+}
+
+.progress {
+  display: flex;
+  gap: 4px;
+}
+
+.segment {
+  flex: 1 1 0;
+  height: 6px;
+  border-radius: 16px;
 }

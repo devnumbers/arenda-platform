@@ -8,4 +8,5 @@ export {
   useUnarchiveProperty,
   useAddressSuggestions,
   useUploadPropertyPhoto,
+  useDeletePropertyPhoto,
 } from './hooks';

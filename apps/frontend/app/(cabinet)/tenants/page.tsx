@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
+import { TenantsPage } from '@/widgets/tenants';
 
 export const metadata: Metadata = {
   title: 'Арендаторы — Arenda Platform',
-  description: 'Страница арендаторов',
+  description: 'Список арендаторов',
 };
 
-export default function TenantsPage() {
-  return <h1>Арендаторы</h1>;
+export default function TenantsListPage() {
+  return <TenantsPage />;
 }

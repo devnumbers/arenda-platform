@@ -1,0 +1,30 @@
+meta {
+  name: Sync Payment
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/admin/subscription/payments/{{paymentId}}/sync
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  // Requires admin session. Run admin/auth/verify-code first.
+  const sessionId = bru.getEnvVar("admin_session_id") || bru.getVar("admin_session_id");
+  const cookieName = bru.getEnvVar("adminCookieName") || bru.getVar("adminCookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:post-response {
+  console.log("admin sync payment status =", res.status);
+}
+
+tests {
+  test("should return 204", function() {
+    expect(res.status).to.equal(204);
+  });
+}
