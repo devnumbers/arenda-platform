@@ -6,6 +6,10 @@ export { OperationScheduleStep } from './ui/OperationScheduleStep';
 export { OperationReminderStep } from './ui/OperationReminderStep';
 export { OperationSuccessScreen } from './ui/OperationSuccessScreen';
 export { OperationCreateWizard } from './ui/OperationCreateWizard';
+export { OperationListItem } from './ui/OperationListItem';
+export { OperationsList } from './ui/OperationsList';
+export { OperationFilters } from './ui/OperationFilters';
+export { OperationsPage } from './ui/OperationsPage';
 export type {
   BasicInfoData,
   BasicInfoErrors,

@@ -1,0 +1,70 @@
+.root {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--color-white);
+  border: 1px solid var(--color-secondary-hover);
+  text-decoration: none;
+  color: inherit;
+  transition: background-color 0.15s ease;
+}
+
+.root:hover {
+  background: var(--color-secondary-bg);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--font-size-text-m);
+  font-weight: 500;
+  line-height: var(--line-height-text-m);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+  color: var(--color-text-muted);
+}
+
+.right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.amount {
+  font-size: var(--font-size-text-m);
+  font-weight: 600;
+  line-height: var(--line-height-text-m);
+  color: var(--color-text);
+}
+
+.amountIncome {
+  color: var(--color-success);
+}
+
+.amountExpense {
+  color: var(--color-error);
+}
+
+.status {
+  font-size: var(--font-size-text-s);
+  font-weight: 500;
+  line-height: var(--line-height-text-s);
+  color: var(--color-text-muted);
+}
