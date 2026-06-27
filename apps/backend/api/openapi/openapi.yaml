@@ -495,6 +495,18 @@ paths:
           schema:
             type: string
             format: date
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1000
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
       responses:
         '200':
           description: Operations list for property

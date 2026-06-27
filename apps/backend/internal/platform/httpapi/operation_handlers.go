@@ -116,6 +116,14 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 	if params.To != nil {
 		filter.ToDate = &params.To.Time
 	}
+	if params.Limit != nil {
+		filter.Limit = *params.Limit
+	} else {
+		filter.Limit = 1000
+	}
+	if params.Offset != nil {
+		filter.Offset = *params.Offset
+	}
 
 	ops, err := h.svc.ListOperationsByProperty(r.Context(), ownerID, propertyId, filter)
 	if err != nil {
