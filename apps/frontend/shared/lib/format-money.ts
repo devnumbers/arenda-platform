@@ -1,4 +1,8 @@
-export function formatMoneyKopecks(kopecks: number): string {
+export function formatMoneyKopecks(
+  kopecks: number,
+  options: { round?: boolean } = {},
+): string {
   if (!Number.isFinite(kopecks)) return '';
-  return `${(kopecks / 100).toLocaleString('ru-RU')} ₽`;
+  const value = options.round ? Math.round(kopecks / 100) : kopecks / 100;
+  return `${value.toLocaleString('ru-RU')} ₽`;
 }

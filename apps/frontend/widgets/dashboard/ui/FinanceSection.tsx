@@ -7,7 +7,7 @@ import { Logo, BoldWallet } from '@/shared/assets/icons';
 import type { Property } from '@/entities/property/model/types';
 import { useOperationsForProperties } from '../lib/use-operations-for-properties';
 import { aggregateOperations } from '../lib/finance-aggregator';
-import { formatMoney } from '../lib/format-money';
+import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { SectionHeader } from './SectionHeader';
 import styles from './FinanceSection.module.css';
@@ -70,13 +70,13 @@ export function FinanceSection({ properties, isLoading }: FinanceSectionProps): 
         <span className={styles.logo3d} aria-hidden="true" />
         <div className={styles.top}>
           <div className={styles.profit}>
-            <span className={styles.profitValue}>{formatMoney(profitKopecks)}</span>
+            <span className={styles.profitValue}>{formatMoneyKopecks(profitKopecks, { round: true })}</span>
             <span className={styles.profitLabel}>Прибыль за {currentMonth}</span>
             {hasPending && (
               <div className={styles.pending}>
                 <span className={styles.pendingLabel}>Ожидает оплаты</span>
                 <span className={styles.pendingValue}>
-                  {formatMoney(pending.incomeKopecks)} / {formatMoney(pending.expenseKopecks)}
+                  {formatMoneyKopecks(pending.incomeKopecks, { round: true })} / {formatMoneyKopecks(pending.expenseKopecks, { round: true })}
                 </span>
               </div>
             )}
@@ -85,11 +85,11 @@ export function FinanceSection({ properties, isLoading }: FinanceSectionProps): 
         </div>
         <div className={styles.bottom}>
           <div className={styles.column}>
-            <span className={styles.value}>{formatMoney(incomeKopecks)}</span>
+            <span className={styles.value}>{formatMoneyKopecks(incomeKopecks, { round: true })}</span>
             <span className={styles.label}>Доходы</span>
           </div>
           <div className={styles.columnRight}>
-            <span className={styles.value}>{formatMoney(expenseKopecks)}</span>
+            <span className={styles.value}>{formatMoneyKopecks(expenseKopecks, { round: true })}</span>
             <span className={styles.label}>Расходы</span>
           </div>
         </div>

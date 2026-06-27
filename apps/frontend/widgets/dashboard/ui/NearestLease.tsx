@@ -7,7 +7,7 @@ import { Icon } from '@/shared/ui/icon';
 import { Key, ArrowRight, BoldWallet, UserSmall, ClockSmall } from '@/shared/assets/icons';
 import type { components } from '@/shared/api/generated';
 import type { Property } from '@/entities/property/model/types';
-import { formatMoney } from '../lib/format-money';
+import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { formatRemainingDuration, formatCurrentLeaseMonth } from '../lib/lease-helpers';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { SectionHeader } from './SectionHeader';
@@ -90,7 +90,7 @@ export function NearestLease({ leases, properties, isLoading }: NearestLeaseProp
 
   const propertyName = getPropertyName(lease.property_id, properties);
   const tenantName = lease.tenant_contact?.name ?? null;
-  const amount = formatMoney(lease.rent_amount_kopecks);
+  const amount = formatMoneyKopecks(lease.rent_amount_kopecks, { round: true });
   const remaining = formatRemainingDuration(lease.start_date, lease.end_date);
   const currentMonth = formatCurrentLeaseMonth(lease.start_date);
 
