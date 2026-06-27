@@ -21,6 +21,11 @@
   gap: 24px;
 }
 
+.emptyLink {
+  align-self: flex-start;
+  margin-top: -12px;
+}
+
 @media (max-width: 767px) {
   .root {
     gap: 32px;

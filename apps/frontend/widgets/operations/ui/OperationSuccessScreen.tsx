@@ -30,7 +30,7 @@ export function OperationSuccessScreen({
           </Icon>
         </div>
         <div className={styles.text}>
-          <h2 className={styles.heading}>Платёж создан</h2>
+          <h2 className={styles.heading}>Операция создана</h2>
           <p className={styles.subtext}>
             {type === 'income'
               ? 'Доход добавлен и отобразится в списке финансов'

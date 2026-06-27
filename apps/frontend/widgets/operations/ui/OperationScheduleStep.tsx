@@ -10,6 +10,7 @@ export type OperationScheduleStepProps = {
   readonly data: ScheduleData;
   readonly onChange: (data: ScheduleData) => void;
   readonly errors?: ScheduleErrors;
+  readonly readonly?: boolean;
 };
 
 function isRecurring(frequency: string): boolean {
@@ -20,6 +21,7 @@ export function OperationScheduleStep({
   data,
   onChange,
   errors,
+  readonly,
 }: OperationScheduleStepProps): JSX.Element {
   const recurring = isRecurring(data.frequency);
 
@@ -53,6 +55,7 @@ export function OperationScheduleStep({
           type="date"
           required
           fullWidth
+          disabled={readonly}
           value={data.date ?? ''}
           onChange={handleDateChange}
           error={errors?.date}
@@ -60,13 +63,14 @@ export function OperationScheduleStep({
         {recurring && (
           <>
             <TextField
-              label="День платежа"
+              label="День операции"
               placeholder="1–31"
               type="number"
               min={1}
               max={31}
               required
               fullWidth
+              disabled={readonly}
               value={data.paymentDay ?? ''}
               onChange={handlePaymentDayChange}
               error={errors?.paymentDay}
@@ -75,6 +79,7 @@ export function OperationScheduleStep({
               label="Дата окончания (необязательно)"
               type="date"
               fullWidth
+              disabled={readonly}
               value={data.endDate ?? ''}
               onChange={handleEndDateChange}
               error={errors?.endDate}

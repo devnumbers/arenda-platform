@@ -19,6 +19,9 @@ import {
   useCreateRecurringOperationReminder,
 } from '@/features/operations/api';
 import { ApiError } from '@/shared/api/errors';
+import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
+import { useSubscription } from '@/features/subscription/api/hooks';
+import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import { OperationBasicInfoStep } from './OperationBasicInfoStep';
 import { OperationReminderStep } from './OperationReminderStep';
 import { OperationScheduleStep } from './OperationScheduleStep';
@@ -46,6 +49,7 @@ const stepNumber: Record<Step, number> = {
 
 export type OperationCreateWizardProps = {
   readonly type: OperationType;
+  readonly propertyId?: string;
 };
 
 function formatErrorMessage(error: unknown): string {
@@ -55,7 +59,7 @@ function formatErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
-  return 'Не удалось создать платёж. Попробуйте ещё раз.';
+  return 'Не удалось создать операцию. Попробуйте ещё раз.';
 }
 
 function parseLocalDate(value: string): Date {
@@ -172,7 +176,7 @@ function validateBasicInfo(data: BasicInfoData, type: OperationType): BasicInfoE
 
   const name = data.name.trim();
   if (name === '') {
-    errors.name = 'Введите название платежа';
+    errors.name = 'Введите название операции';
   } else if (name.length > 50) {
     errors.name = 'Название не должно превышать 50 символов';
   }
@@ -206,9 +210,9 @@ function validateSchedule(data: ScheduleData): ScheduleErrors {
 
   if (data.frequency !== 'once') {
     if (data.paymentDay === undefined) {
-      errors.paymentDay = 'Укажите день платежа';
+      errors.paymentDay = 'Укажите день операции';
     } else if (data.paymentDay < 1 || data.paymentDay > 31) {
-      errors.paymentDay = 'День платежа должен быть от 1 до 31';
+      errors.paymentDay = 'День операции должен быть от 1 до 31';
     }
   }
 
@@ -219,15 +223,18 @@ function validateSchedule(data: ScheduleData): ScheduleErrors {
   return errors;
 }
 
-export function OperationCreateWizard({ type }: OperationCreateWizardProps): JSX.Element {
+export function OperationCreateWizard({ type, propertyId }: OperationCreateWizardProps): JSX.Element {
   const router = useRouter();
+
+  const { data: subscription } = useSubscription();
+  const readonly = isSubscriptionReadonly(subscription);
 
   const [step, setStep] = useState<Step>('basic');
   const [basicInfo, setBasicInfo] = useState<BasicInfoData>({
     amount: '',
     name: '',
     category: undefined,
-    propertyId: undefined,
+    propertyId: propertyId ?? undefined,
     comment: '',
   });
   const [basicErrors, setBasicErrors] = useState<BasicInfoErrors>({});
@@ -341,7 +348,7 @@ export function OperationCreateWizard({ type }: OperationCreateWizardProps): JSX
               },
             });
           } catch {
-            toast.success('Платёж создан, но не удалось добавить напоминание');
+            toast.success('Операция создана, но не удалось добавить напоминание');
           }
         }
       } else {
@@ -372,7 +379,7 @@ export function OperationCreateWizard({ type }: OperationCreateWizardProps): JSX
                 },
               });
             } catch {
-              toast.success('Платёж создан, но не удалось добавить напоминание');
+              toast.success('Операция создана, но не удалось добавить напоминание');
             }
           }
         }
@@ -394,6 +401,7 @@ export function OperationCreateWizard({ type }: OperationCreateWizardProps): JSX
 
   return (
     <div className={styles.root}>
+      <SubscriptionReadonlyBanner />
       <header className={styles.header}>
         <div className={styles.topRow}>
           <IconButton
@@ -404,7 +412,7 @@ export function OperationCreateWizard({ type }: OperationCreateWizardProps): JSX
             onClick={handleBack}
             className={styles.iconButton}
           />
-          <h1 className={styles.title}>Создание платежа</h1>
+          <h1 className={styles.title}>Создание операции</h1>
           <IconButton
             variant="icon-black"
             size="small"
@@ -438,6 +446,7 @@ export function OperationCreateWizard({ type }: OperationCreateWizardProps): JSX
             data={basicInfo}
             onChange={setBasicInfo}
             errors={basicErrors}
+            readonly={readonly}
           />
         )}
         {step === 'schedule' && (
@@ -445,6 +454,7 @@ export function OperationCreateWizard({ type }: OperationCreateWizardProps): JSX
             data={schedule}
             onChange={setSchedule}
             errors={scheduleErrors}
+            readonly={readonly}
           />
         )}
         {step === 'reminder' && (
@@ -459,9 +469,10 @@ export function OperationCreateWizard({ type }: OperationCreateWizardProps): JSX
           size="large"
           fullWidth
           loading={isSubmitting}
+          disabled={readonly}
           onClick={step === 'reminder' ? handleSubmit : handleNext}
         >
-          {step === 'reminder' ? 'Создать платёж' : 'Далее'}
+          {step === 'reminder' ? 'Создать операцию' : 'Далее'}
         </Button>
       </div>
     </div>

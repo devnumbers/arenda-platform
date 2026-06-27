@@ -3,21 +3,22 @@ import { OperationCreateWizard } from '@/widgets/operations';
 import styles from './page.module.css';
 
 export const metadata: Metadata = {
-  title: 'Создание платежа — Arenda Platform',
+  title: 'Создание операции — Arenda Platform',
   description: 'Создание операции дохода или расхода',
 };
 
 export default async function CreateOperationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<{ type?: string; propertyId?: string | string[] }>;
 }) {
-  const { type } = await searchParams;
+  const { type, propertyId } = await searchParams;
   const operationType = type === 'income' || type === 'expense' ? type : 'expense';
+  const selectedPropertyId = typeof propertyId === 'string' ? propertyId : undefined;
 
   return (
     <div className={styles.root}>
-      <OperationCreateWizard type={operationType} />
+      <OperationCreateWizard type={operationType} propertyId={selectedPropertyId} />
     </div>
   );
 }

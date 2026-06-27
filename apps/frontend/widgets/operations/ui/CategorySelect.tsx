@@ -24,6 +24,7 @@ export type CategorySelectProps = {
   readonly value?: OperationCategory;
   readonly onChange: (category: OperationCategory) => void;
   readonly error?: string;
+  readonly disabled?: boolean;
 };
 
 export function CategorySelect({
@@ -31,6 +32,7 @@ export function CategorySelect({
   value,
   onChange,
   error,
+  disabled,
 }: CategorySelectProps): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -57,6 +59,7 @@ export function CategorySelect({
         <button
           type="button"
           className={clsx(styles.trigger, error && styles.error)}
+          disabled={disabled}
           aria-label={label}
         >
           <span className={styles.label}>{label}</span>

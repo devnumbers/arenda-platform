@@ -18,12 +18,14 @@ export type PropertySelectProps = {
   readonly value?: string;
   readonly onChange: (propertyId: string) => void;
   readonly error?: string;
+  readonly disabled?: boolean;
 };
 
 export function PropertySelect({
   value,
   onChange,
   error,
+  disabled,
 }: PropertySelectProps): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
   const { data: properties, isLoading } = useProperties();
@@ -41,7 +43,7 @@ export function PropertySelect({
   };
 
   const isEmpty = !isLoading && properties?.length === 0;
-  const isDisabled = isLoading || isEmpty;
+  const isDisabled = isLoading || isEmpty || disabled;
 
   return (
     <Popover isOpen={isOpen} onOpenChange={setIsOpen}>
