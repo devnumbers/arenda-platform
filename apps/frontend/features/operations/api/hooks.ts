@@ -43,6 +43,7 @@ export type OperationsFilters = {
 
 export function useOperations(
   filters: OperationsFilters = {},
+  options: { enabled?: boolean } = {},
 ): UseQueryResult<OperationsResponse, ApiError> {
   const normalized = useMemo(() => {
     const result: Record<string, string | string[]> = {};
@@ -80,6 +81,7 @@ export function useOperations(
     queryKey: operationKeys.operations(normalized),
     queryFn: () =>
       apiClient<OperationsResponse>(`/operations${queryString ? `?${queryString}` : ''}`),
+    enabled: options.enabled,
   });
 }
 

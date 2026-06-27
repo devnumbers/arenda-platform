@@ -19,16 +19,18 @@ import { FinanceEmptyState } from '@/widgets/finance/ui/FinanceEmptyState';
 import { OperationFilters } from './OperationFilters';
 import { OperationsList } from './OperationsList';
 import { RecurringOperationsTab } from './RecurringOperationsTab';
+import { ProfitReport } from './ProfitReport';
 import styles from './OperationsPage.module.css';
 
 const TAB_ITEMS: ReadonlyArray<{
-  readonly key: 'all' | 'income' | 'expense' | 'recurring';
+  readonly key: 'all' | 'income' | 'expense' | 'recurring' | 'profit';
   readonly label: string;
 }> = [
   { key: 'all', label: 'Все' },
   { key: 'income', label: 'Доходы' },
   { key: 'expense', label: 'Расходы' },
   { key: 'recurring', label: 'Регулярные' },
+  { key: 'profit', label: 'Прибыль' },
 ];
 
 function getCurrentMonthRange(): { from: string; to: string } {
@@ -42,15 +44,15 @@ function getCurrentMonthRange(): { from: string; to: string } {
 function buildTabHref(
   pathname: string,
   searchParams: URLSearchParams,
-  tabKey: 'all' | 'income' | 'expense' | 'recurring',
+  tabKey: 'all' | 'income' | 'expense' | 'recurring' | 'profit',
 ): string {
   const params = new URLSearchParams(searchParams.toString());
   if (tabKey === 'all') {
     params.delete('type');
     params.delete('tab');
-  } else if (tabKey === 'recurring') {
+  } else if (tabKey === 'recurring' || tabKey === 'profit') {
     params.delete('type');
-    params.set('tab', 'recurring');
+    params.set('tab', tabKey);
   } else {
     params.set('type', tabKey);
     params.delete('tab');
@@ -67,9 +69,12 @@ export function OperationsPage(): JSX.Element {
   const type = searchParams.get('type') as 'income' | 'expense' | null;
   const tab = searchParams.get('tab');
   const isRecurringTab = tab === 'recurring';
-  const activeTabKey: 'all' | 'income' | 'expense' | 'recurring' = isRecurringTab
-    ? 'recurring'
-    : type ?? 'all';
+  const isProfitTab = tab === 'profit';
+  const activeTabKey: 'all' | 'income' | 'expense' | 'recurring' | 'profit' = isProfitTab
+    ? 'profit'
+    : isRecurringTab
+      ? 'recurring'
+      : type ?? 'all';
 
   const status = useMemo(
     () => searchParams.getAll('status'),
@@ -96,7 +101,7 @@ export function OperationsPage(): JSX.Element {
     isFetching,
     isError,
     refetch,
-  } = useOperations(filters);
+  } = useOperations(filters, { enabled: !isProfitTab });
 
   const handleFilterChange = (nextFilters: {
     from: string;
@@ -151,7 +156,9 @@ export function OperationsPage(): JSX.Element {
         })}
       </nav>
 
-      {isRecurringTab ? (
+      {isProfitTab ? (
+        <ProfitReport />
+      ) : isRecurringTab ? (
         <RecurringOperationsTab />
       ) : (
         <>
