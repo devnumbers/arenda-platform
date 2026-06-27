@@ -1138,6 +1138,92 @@ func (r *OperationRepository) SoftDeleteOperation(ctx context.Context, id, owner
 	return nil
 }
 
+func (r *OperationRepository) GetFinanceReportTotals(ctx context.Context, ownerID uuid.UUID, from, to time.Time) (application.FinanceReportTotals, error) {
+	row, err := r.q().GetFinanceReportTotals(ctx, postgres.GetFinanceReportTotalsParams{
+		OwnerID:         pgconv.UUIDToPgtype(ownerID),
+		OperationDate:   pgconv.DateToPgtype(from),
+		OperationDate_2: pgconv.DateToPgtype(to),
+	})
+	if err != nil {
+		return application.FinanceReportTotals{}, err
+	}
+	return application.FinanceReportTotals{
+		IncomeKopecks:  row.IncomeKopecks,
+		ExpenseKopecks: row.ExpenseKopecks,
+	}, nil
+}
+
+func (r *OperationRepository) GetFinanceReportByProperty(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]application.FinanceReportPropertyRow, error) {
+	rows, err := r.q().GetFinanceReportByProperty(ctx, postgres.GetFinanceReportByPropertyParams{
+		OwnerID:         pgconv.UUIDToPgtype(ownerID),
+		OperationDate:   pgconv.DateToPgtype(from),
+		OperationDate_2: pgconv.DateToPgtype(to),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]application.FinanceReportPropertyRow, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, application.FinanceReportPropertyRow{
+			PropertyID:     pgconv.UUIDFromPgtype(row.PropertyID),
+			IncomeKopecks:  row.IncomeKopecks,
+			ExpenseKopecks: row.ExpenseKopecks,
+		})
+	}
+	return result, nil
+}
+
+func (r *OperationRepository) GetFinanceReportByCategory(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]application.FinanceReportCategoryRow, error) {
+	rows, err := r.q().GetFinanceReportByCategory(ctx, postgres.GetFinanceReportByCategoryParams{
+		OwnerID:         pgconv.UUIDToPgtype(ownerID),
+		OperationDate:   pgconv.DateToPgtype(from),
+		OperationDate_2: pgconv.DateToPgtype(to),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]application.FinanceReportCategoryRow, 0, len(rows))
+	for _, row := range rows {
+		opType, err := domain.ParseOperationType(row.Type)
+		if err != nil {
+			return nil, fmt.Errorf("invalid operation type in database: %w", err)
+		}
+		category, err := domain.ParseOperationCategory(row.Category)
+		if err != nil {
+			return nil, fmt.Errorf("invalid operation category in database: %w", err)
+		}
+		result = append(result, application.FinanceReportCategoryRow{
+			Type:         opType,
+			Category:     category,
+			TotalKopecks: row.TotalKopecks,
+		})
+	}
+	return result, nil
+}
+
+func (r *OperationRepository) GetFinanceReportByMonth(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]application.FinanceReportMonthRow, error) {
+	rows, err := r.q().GetFinanceReportByMonth(ctx, postgres.GetFinanceReportByMonthParams{
+		OwnerID:         pgconv.UUIDToPgtype(ownerID),
+		OperationDate:   pgconv.DateToPgtype(from),
+		OperationDate_2: pgconv.DateToPgtype(to),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]application.FinanceReportMonthRow, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, application.FinanceReportMonthRow{
+			Month:          row.Month.Time,
+			IncomeKopecks:  row.IncomeKopecks,
+			ExpenseKopecks: row.ExpenseKopecks,
+		})
+	}
+	return result, nil
+}
+
 func operationFromRow(row postgres.Operation) (domain.Operation, error) {
 	status, err := domain.ParseOperationStatus(row.Status)
 	if err != nil {

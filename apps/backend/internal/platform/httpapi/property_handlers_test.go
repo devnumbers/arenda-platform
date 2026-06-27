@@ -301,6 +301,22 @@ func (r *fakeOperationRepoForHandlers) HasDepositReturnForLease(_ context.Contex
 	return false, nil
 }
 
+func (r *fakeOperationRepoForHandlers) GetFinanceReportTotals(_ context.Context, _ uuid.UUID, _, _ time.Time) (leasesapp.FinanceReportTotals, error) {
+	return leasesapp.FinanceReportTotals{}, nil
+}
+
+func (r *fakeOperationRepoForHandlers) GetFinanceReportByProperty(_ context.Context, _ uuid.UUID, _, _ time.Time) ([]leasesapp.FinanceReportPropertyRow, error) {
+	return nil, nil
+}
+
+func (r *fakeOperationRepoForHandlers) GetFinanceReportByCategory(_ context.Context, _ uuid.UUID, _, _ time.Time) ([]leasesapp.FinanceReportCategoryRow, error) {
+	return nil, nil
+}
+
+func (r *fakeOperationRepoForHandlers) GetFinanceReportByMonth(_ context.Context, _ uuid.UUID, _, _ time.Time) ([]leasesapp.FinanceReportMonthRow, error) {
+	return nil, nil
+}
+
 func (r *fakeOperationRepoForHandlers) WithTx(_ transaction.Tx) leasesapp.OperationRepository {
 	return r
 }

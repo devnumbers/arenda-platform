@@ -73,6 +73,29 @@ type OperationFilter struct {
 	Offset               int
 }
 
+type FinanceReportTotals struct {
+	IncomeKopecks  int64
+	ExpenseKopecks int64
+}
+
+type FinanceReportPropertyRow struct {
+	PropertyID     uuid.UUID
+	IncomeKopecks  int64
+	ExpenseKopecks int64
+}
+
+type FinanceReportCategoryRow struct {
+	Type         domain.OperationType
+	Category     domain.OperationCategory
+	TotalKopecks int64
+}
+
+type FinanceReportMonthRow struct {
+	Month          time.Time
+	IncomeKopecks  int64
+	ExpenseKopecks int64
+}
+
 type OperationRepository interface {
 	Create(ctx context.Context, op domain.Operation) (domain.Operation, error)
 	BulkCreate(ctx context.Context, ops []domain.Operation) error
@@ -96,5 +119,9 @@ type OperationRepository interface {
 	ListAllPendingOperationsWithPastDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Operation, error)
 	GetPropertyOperationsSummary(ctx context.Context, ownerID, propertyID uuid.UUID, asOf time.Time) (OperationsSummary, error)
 	HasDepositReturnForLease(ctx context.Context, leaseID uuid.UUID) (bool, error)
+	GetFinanceReportTotals(ctx context.Context, ownerID uuid.UUID, from, to time.Time) (FinanceReportTotals, error)
+	GetFinanceReportByProperty(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]FinanceReportPropertyRow, error)
+	GetFinanceReportByCategory(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]FinanceReportCategoryRow, error)
+	GetFinanceReportByMonth(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]FinanceReportMonthRow, error)
 	WithTx(tx transaction.Tx) OperationRepository
 }

@@ -162,6 +162,38 @@ func (s *OperationService) GetPropertyOperationsSummary(ctx context.Context, own
 	return s.operations.GetPropertyOperationsSummary(ctx, ownerID, propertyID, timeutil.Date(s.clock.Now()))
 }
 
+type FinanceReport struct {
+	Totals     FinanceReportTotals
+	ByProperty []FinanceReportPropertyRow
+	ByCategory []FinanceReportCategoryRow
+	ByMonth    []FinanceReportMonthRow
+}
+
+func (s *OperationService) GetFinanceReport(ctx context.Context, ownerID uuid.UUID, from, to time.Time) (FinanceReport, error) {
+	totals, err := s.operations.GetFinanceReportTotals(ctx, ownerID, from, to)
+	if err != nil {
+		return FinanceReport{}, fmt.Errorf("report totals: %w", err)
+	}
+	byProperty, err := s.operations.GetFinanceReportByProperty(ctx, ownerID, from, to)
+	if err != nil {
+		return FinanceReport{}, fmt.Errorf("report by property: %w", err)
+	}
+	byCategory, err := s.operations.GetFinanceReportByCategory(ctx, ownerID, from, to)
+	if err != nil {
+		return FinanceReport{}, fmt.Errorf("report by category: %w", err)
+	}
+	byMonth, err := s.operations.GetFinanceReportByMonth(ctx, ownerID, from, to)
+	if err != nil {
+		return FinanceReport{}, fmt.Errorf("report by month: %w", err)
+	}
+	return FinanceReport{
+		Totals:     totals,
+		ByProperty: byProperty,
+		ByCategory: byCategory,
+		ByMonth:    byMonth,
+	}, nil
+}
+
 // ListOperations returns all operations for the owner filtered by the provided criteria.
 func (s *OperationService) ListOperations(ctx context.Context, ownerID uuid.UUID, filter OperationFilter) ([]domain.Operation, error) {
 	ops, err := s.operations.ListByOwner(ctx, ownerID, filter)

@@ -88,6 +88,7 @@ func New(deps Deps) http.Handler {
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Logger)
 	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
 	subscriptionHandlers := NewSubscriptionHandlers(deps.Billing, deps.Logger, deps.DevMode)
+	financeHandlers := NewFinanceHandlers(deps.Operations)
 
 	handler := &composedHandler{
 		AuthHandlers:               authHandlers,
@@ -97,6 +98,7 @@ func New(deps Deps) http.Handler {
 		RecurringOperationHandlers: recurringOperationHandlers,
 		ReminderHandlers:           reminderHandlers,
 		SubscriptionHandlers:       subscriptionHandlers,
+		FinanceHandlers:            financeHandlers,
 	}
 
 	// The generated OpenAPI router has no per-route middleware support, so we
@@ -150,4 +152,5 @@ type composedHandler struct {
 	*RecurringOperationHandlers
 	*ReminderHandlers
 	*SubscriptionHandlers
+	*FinanceHandlers
 }

@@ -804,6 +804,33 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /finance/report:
+    get:
+      operationId: getFinanceReport
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Finance report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinanceReportResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /properties/{propertyId}/recurring-operations:
     get:
       operationId: listRecurringOperationsByProperty
@@ -2714,6 +2741,83 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ReminderResponse'
+
+    FinanceReportResponse:
+      type: object
+      required: [period, totals, by_property, by_category, by_month]
+      properties:
+        period:
+          $ref: '#/components/schemas/FinanceReportPeriod'
+        totals:
+          $ref: '#/components/schemas/FinanceReportTotals'
+        by_property:
+          type: array
+          items:
+            $ref: '#/components/schemas/FinanceReportPropertyRow'
+        by_category:
+          type: array
+          items:
+            $ref: '#/components/schemas/FinanceReportCategoryRow'
+        by_month:
+          type: array
+          items:
+            $ref: '#/components/schemas/FinanceReportMonthRow'
+    FinanceReportPeriod:
+      type: object
+      required: [from, to]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+    FinanceReportTotals:
+      type: object
+      required: [income_kopecks, expense_kopecks, profit_kopecks]
+      properties:
+        income_kopecks:
+          type: integer
+        expense_kopecks:
+          type: integer
+        profit_kopecks:
+          type: integer
+    FinanceReportPropertyRow:
+      type: object
+      required: [property_id, income_kopecks, expense_kopecks, profit_kopecks]
+      properties:
+        property_id:
+          type: string
+          format: uuid
+        income_kopecks:
+          type: integer
+        expense_kopecks:
+          type: integer
+        profit_kopecks:
+          type: integer
+    FinanceReportCategoryRow:
+      type: object
+      required: [type, category, total_kopecks]
+      properties:
+        type:
+          $ref: '#/components/schemas/OperationType'
+        category:
+          $ref: '#/components/schemas/OperationCategory'
+        total_kopecks:
+          type: integer
+    FinanceReportMonthRow:
+      type: object
+      required: [month, income_kopecks, expense_kopecks, profit_kopecks]
+      properties:
+        month:
+          type: string
+          format: date
+        income_kopecks:
+          type: integer
+        expense_kopecks:
+          type: integer
+        profit_kopecks:
+          type: integer
 
   responses:
     BadRequest:

@@ -59,6 +59,10 @@ type Querier interface {
 	DeleteUneditedFutureOperationsByLease(ctx context.Context, arg DeleteUneditedFutureOperationsByLeaseParams) error
 	DeleteUneditedFutureOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedFutureOperationsByRecurringOperationParams) error
 	DeleteUneditedOperationsByLease(ctx context.Context, arg DeleteUneditedOperationsByLeaseParams) error
+	GetFinanceReportByCategory(ctx context.Context, arg GetFinanceReportByCategoryParams) ([]GetFinanceReportByCategoryRow, error)
+	GetFinanceReportByMonth(ctx context.Context, arg GetFinanceReportByMonthParams) ([]GetFinanceReportByMonthRow, error)
+	GetFinanceReportByProperty(ctx context.Context, arg GetFinanceReportByPropertyParams) ([]GetFinanceReportByPropertyRow, error)
+	GetFinanceReportTotals(ctx context.Context, arg GetFinanceReportTotalsParams) (GetFinanceReportTotalsRow, error)
 	GetLastSucceededSubscriptionPaymentBySubscriptionID(ctx context.Context, subscriptionID pgtype.UUID) (SubscriptionPayment, error)
 	GetLatestSMSCodeByPhoneAndPurpose(ctx context.Context, arg GetLatestSMSCodeByPhoneAndPurposeParams) (SmsCode, error)
 	GetLatestSMSCodeByPhoneAndPurposeAndUserID(ctx context.Context, arg GetLatestSMSCodeByPhoneAndPurposeAndUserIDParams) (SmsCode, error)
