@@ -16,3 +16,4 @@ export { PropertyBlockedModal } from './ui/PropertyBlockedModal';
 export { PropertyEndLeaseModal } from './ui/PropertyEndLeaseModal';
 export { PropertyDepositReturnModal } from './ui/PropertyDepositReturnModal';
 export { PropertySuccessBanner } from './ui/PropertySuccessBanner';
+export { PropertyOperationsPage } from './ui/PropertyOperationsPage';

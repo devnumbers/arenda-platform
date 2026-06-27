@@ -1,6 +1,17 @@
 export const operationKeys = {
-  byProperty: (propertyId: string) =>
-    ['properties', propertyId, 'operations'] as const,
+  byProperty: (
+    propertyId: string,
+    filters?: {
+      type?: string | string[];
+      status?: string | string[];
+      category?: string | string[];
+      from?: string;
+      to?: string;
+      recurring_operation_id?: string;
+      limit?: string;
+      offset?: string;
+    },
+  ) => ['properties', propertyId, 'operations', filters ?? {}] as const,
   detail: (id: string) => ['operations', id] as const,
   operations: (filters: {
     type?: string | string[];

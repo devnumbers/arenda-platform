@@ -87,11 +87,48 @@ export function useOperations(
 
 export function useOperationsByProperty(
   propertyId: string,
+  filters?: Omit<OperationsFilters, 'property_id'>,
 ): UseQueryResult<OperationsResponse, ApiError> {
+  const normalized = useMemo(() => {
+    const result: Record<string, string | string[]> = {};
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value === undefined || value === '') {
+          return;
+        }
+        if (typeof value === 'number') {
+          result[key] = String(value);
+        } else if (Array.isArray(value)) {
+          const filtered = value.filter((v) => v !== '');
+          if (filtered.length > 0) {
+            result[key] = filtered;
+          }
+        } else {
+          result[key] = value;
+        }
+      });
+    }
+    return result;
+  }, [filters]);
+
+  const queryString = useMemo(() => {
+    const params = new URLSearchParams();
+    Object.entries(normalized).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach((v) => params.append(key, v));
+      } else {
+        params.set(key, value);
+      }
+    });
+    return params.toString();
+  }, [normalized]);
+
   return useQuery({
-    queryKey: operationKeys.byProperty(propertyId),
+    queryKey: operationKeys.byProperty(propertyId, normalized),
     queryFn: () =>
-      apiClient<OperationsResponse>(`/properties/${propertyId}/operations`),
+      apiClient<OperationsResponse>(
+        `/properties/${propertyId}/operations${queryString ? `?${queryString}` : ''}`,
+      ),
     enabled: Boolean(propertyId),
   });
 }
