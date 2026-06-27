@@ -342,6 +342,10 @@ func (fakeRecurringOperationRepoForHandlers) GetByIDAndOwnerForUpdate(ctx contex
 	return fakeRecurringOperationRepoForHandlers{}.GetByIDAndOwner(ctx, id, ownerID)
 }
 
+func (fakeRecurringOperationRepoForHandlers) ListByOwner(_ context.Context, _ uuid.UUID) ([]leasesdomain.RecurringOperation, error) {
+	return nil, nil
+}
+
 func (fakeRecurringOperationRepoForHandlers) ListByProperty(_ context.Context, _, _ uuid.UUID) ([]leasesdomain.RecurringOperation, error) {
 	return nil, nil
 }

@@ -129,6 +129,7 @@ type Querier interface {
 	ListPendingUpgradePayments(ctx context.Context, arg ListPendingUpgradePaymentsParams) ([]SubscriptionPayment, error)
 	ListPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) ([]PropertyPhoto, error)
 	ListPropertyPhotosByPropertyIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]PropertyPhoto, error)
+	ListRecurringOperationsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]RecurringOperation, error)
 	ListRecurringOperationsByProperty(ctx context.Context, arg ListRecurringOperationsByPropertyParams) ([]RecurringOperation, error)
 	ListRecurringOperationsByPropertyID(ctx context.Context, propertyID pgtype.UUID) ([]RecurringOperation, error)
 	ListRemindersByLease(ctx context.Context, arg ListRemindersByLeaseParams) ([]Reminder, error)

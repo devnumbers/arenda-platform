@@ -48,6 +48,7 @@ type RecurringOperationRepository interface {
 	GetByLeaseID(ctx context.Context, ownerID, leaseID uuid.UUID) (domain.RecurringOperation, error)
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.RecurringOperation, error)
 	GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.RecurringOperation, error)
+	ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.RecurringOperation, error)
 	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.RecurringOperation, error)
 	ListByPropertyID(ctx context.Context, propertyID uuid.UUID) ([]domain.RecurringOperation, error)
 	Update(ctx context.Context, op domain.RecurringOperation) (domain.RecurringOperation, error)

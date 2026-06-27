@@ -543,6 +543,18 @@ func (r *RecurringOperationRepository) GetByIDAndOwnerForUpdate(ctx context.Cont
 	return recurringOperationFromRow(row), nil
 }
 
+func (r *RecurringOperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.RecurringOperation, error) {
+	rows, err := r.q().ListRecurringOperationsByOwner(ctx, pgconv.UUIDToPgtype(ownerID))
+	if err != nil {
+		return nil, err
+	}
+	ops := make([]domain.RecurringOperation, 0, len(rows))
+	for _, row := range rows {
+		ops = append(ops, recurringOperationFromRow(row))
+	}
+	return ops, nil
+}
+
 func (r *RecurringOperationRepository) ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.RecurringOperation, error) {
 	rows, err := r.q().ListRecurringOperationsByProperty(ctx, postgres.ListRecurringOperationsByPropertyParams{
 		OwnerID:    pgconv.UUIDToPgtype(ownerID),

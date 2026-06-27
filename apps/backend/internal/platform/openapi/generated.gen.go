@@ -1117,6 +1117,9 @@ type ServerInterface interface {
 	// (POST /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders)
 	CreateRecurringOperationReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, recurringOperationId openapi_types.UUID)
 
+	// (GET /recurring-operations)
+	ListRecurringOperations(w http.ResponseWriter, r *http.Request)
+
 	// (GET /recurring-operations/{id})
 	GetRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
@@ -1405,6 +1408,11 @@ func (_ Unimplemented) ListRecurringOperationReminders(w http.ResponseWriter, r 
 
 // (POST /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders)
 func (_ Unimplemented) CreateRecurringOperationReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, recurringOperationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /recurring-operations)
+func (_ Unimplemented) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2962,6 +2970,26 @@ func (siw *ServerInterfaceWrapper) CreateRecurringOperationReminder(w http.Respo
 	handler.ServeHTTP(w, r)
 }
 
+// ListRecurringOperations operation middleware
+func (siw *ServerInterfaceWrapper) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRecurringOperations(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetRecurringOperation operation middleware
 func (siw *ServerInterfaceWrapper) GetRecurringOperation(w http.ResponseWriter, r *http.Request) {
 
@@ -3784,6 +3812,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders", wrapper.CreateRecurringOperationReminder)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/recurring-operations", wrapper.ListRecurringOperations)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/recurring-operations/{id}", wrapper.GetRecurringOperation)
 	})
 	r.Group(func(r chi.Router) {
@@ -3930,18 +3961,18 @@ var swaggerSpec = []string{
 	"MEY2LNtDMHsWqfUnBZrR+CpQWwVq8d5pg9WaRASE5WdOj0UziNOIowRQPhXNXISAgzKGylHNBYrKL2Y8",
 	"IaxcLe2JM2W9R+v9+/1H4PRDs9aD35x4qWTXvtF+bDFsG8Sn3+XfDy7n5w4Gd/uWoAnfQwo5iaHSCb2j",
 	"hNCuiMiPxF44Omosz9EdxmMzrpLX/OaedYPVxU137QlbvvXhn4EJ3PUm894Vt+a3F50Q9qrN9RZs0++0",
-	"NuvuFrONY0djOtsG9mpDH1xuHo8xPQ5AztyqdgPoqySWktgucTtOCG6paqBT0h37buynd4DwgFzch6J4",
-	"0EOFu+Pp9aRhq3iaJiBlLadV7sTPr3Kqjis5b+GPgREKWRrDtnxU4vdXlNRRombuzGDiZi+2W4c9r5Cb",
-	"zxmd2XtGe7EHezN3+j3718lT3svUK1oe35VdhP/y55rP5sZ5h1Z6II6MZxUfWBPtEWs+b6VztMgdq7xo",
-	"32Q3l16+H5HnpX5acuSV6N5b+HT8BFilF7NAyskFhRh+lYqgXfY8kOUygjfZS/Mj3YXN29818dVNPqbD",
-	"LNnTfyqrBBG1x7bkK5C/t69eC5fMCoPs4+c27U7ZEPUb7mOmQ1RdHGiDLpPQvEmrEjo1oocw4uh14e+I",
-	"QP08y0UM+YqEHRcYVdlPuuiYF5NKPbVeT9Ivpmj6d0kksYekt/arwWFYGu9YW2+lmwMt9joZrsz1QBjC",
-	"0CM0ex5HOWq+fP54oNziJ7WyHRPPVZF4HMnnKkDYPQPdeUtxnZMg4OgFtGWhutElToLp2XDCs7XTnB6/",
-	"b3j3fi+WtMt77fcdL7UfZXpyLjXL9ol/0GVGnGvdRbcOfPwTCjHA/ELMCgg6EP0gy95mRcec31JPrdMs",
-	"S3oZ/YfNT1YieyTtsNTHQQ8xlShx59HpnWYaxRFbWXidB5mq2DrpqO+20Dm9k0uHYdvIYuegUaJtsfMa",
-	"MNpKTn2FTytCntk0fx84oeQFhZBumu2V/wE4jDJr5f9UC65HlGXbrUtgQMj3fAR4WJT36Xzic/iNT5MI",
-	"INzxMn11Hej59xJKAsgYDP/sZWR7TyRce4h52bxfsAQGaIECmTpYYkQolYpfKY38a3/FeXI9nUYkANGK",
-	"MH79p9mfZv7mcfPPAAAA//8KIWBZL94AAA==",
+	"NuvuFrONY0djOtsG9mpDH1xuHo8xPQ5AztyqdgPoqySWkngIVdI/AaVu5CtO9o2r46DllhobOiUVvK9+",
+	"dHrnMA/IxX3o2wc9m7k7nl4PbLaKp2kCUtZy6OdO/Pwqp+q4kvMW/hgYoZClMWxL6yV+f0VJHSVq5s4M",
+	"Jm5md7uR3fMmvvkq1Jk9C7UXs7o3c6ffs3+dAg69LOai5fEjAkUUNX/1+mwu7ndopQfiyHjOhQNroj1C",
+	"9uetdI4WADUz57fZzeYwxvQ9lPppSTVYontvUejx84iVHh4DKScXFGL4VSqCdtnzQJbLCN5kD/aPdKU4",
+	"b3/X/GE3+ZgOs2RP/8WxEkTUHtuS9kH+3r56LVwyKwyyj5/btDslldRP4Y+ZVVJ1caANukxC8yatSugM",
+	"kx7CiKPXhb8jAvUrNxcx5CsSdtwDVWU/6aJj3u8q9dR6y0s/PKPp3yVgsIfcwfYb1mFYGu9YW2+lmwMt",
+	"9joZrsz1QBjC0CM0e2VIOWq+fP54oBTtJ7WyHfP3VZF4HDn8KkDYPZHfeUtxndoh4OgFtCXzutElToLp",
+	"2XDCs7XTsgeiWzdh2zP0+7KkXZ69v+948P4os7xzqVm2T/yDLjPiXOsuunXg459QiAHmF2JWQNCB6AdZ",
+	"9jYrOub8lnpqnWZZ0svoP2yatxLZI2mHpT4OehasRIk7j07vUNgojtjKwus8yFTF1klHfbeFzumdXDoM",
+	"20YWOweNEm2LndeA0VZy6it8WhHyzKb5M8sJJS8ohHTTbK/8D8BhlFkr/6dacD3pLdtuXQIDQr7nW8rD",
+	"orxP5xOfw298mkQA4Y4H/qvrQM+/l1ASQMZg+GcvI9t7IuHaQ8zL5v2CJTBACxTIDMwSI0KpVPxKaeRf",
+	"+yvOk+vpNCIBiFaE8es/zf408zePm38GAAD//yP1C/Z23wAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

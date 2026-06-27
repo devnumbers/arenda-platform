@@ -954,6 +954,21 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /recurring-operations:
+    get:
+      operationId: listRecurringOperations
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Recurring operations list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringOperationsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /recurring-operations/{id}:
     get:
       operationId: getRecurringOperation

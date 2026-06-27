@@ -85,3 +85,8 @@ WHERE property_id = $2;
 -- name: DeleteRecurringOperationByLease :exec
 DELETE FROM recurring_operations
 WHERE lease_id = $1;
+
+-- name: ListRecurringOperationsByOwner :many
+SELECT * FROM recurring_operations
+WHERE owner_id = $1
+ORDER BY created_at DESC;

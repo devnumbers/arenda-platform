@@ -189,6 +189,20 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 	return created, nil
 }
 
+// ListRecurringOperations returns all recurring operations owned by the given
+// owner.
+func (s *RecurringOperationService) ListRecurringOperations(
+	ctx context.Context,
+	ownerID uuid.UUID,
+) ([]domain.RecurringOperation, error) {
+	recs, err := s.recurringOps.ListByOwner(ctx, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("list recurring operations: %w", err)
+	}
+
+	return recs, nil
+}
+
 // ListRecurringOperationsByProperty returns the recurring operations for a
 // property.
 func (s *RecurringOperationService) ListRecurringOperationsByProperty(

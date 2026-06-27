@@ -104,6 +104,28 @@ func (h *RecurringOperationHandlers) ListRecurringOperationsByProperty(w http.Re
 	writeJSON(r.Context(), w, http.StatusOK, openapi.RecurringOperationsResponse{Items: items})
 }
 
+// ListRecurringOperations implements GET /recurring-operations.
+func (h *RecurringOperationHandlers) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	recs, err := h.svc.ListRecurringOperations(r.Context(), ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.RecurringOperationResponse, 0, len(recs))
+	for _, rec := range recs {
+		items = append(items, recurringOperationResponse(rec))
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, openapi.RecurringOperationsResponse{Items: items})
+}
+
 // GetRecurringOperation implements GET /recurring-operations/{id}.
 func (h *RecurringOperationHandlers) GetRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
