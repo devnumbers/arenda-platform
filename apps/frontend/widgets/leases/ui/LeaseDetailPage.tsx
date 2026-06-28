@@ -354,25 +354,19 @@ function LeaseEditForm({
     const depositKopecks = parseRublesToKopecks(form.depositAmount);
     const paymentDay = Number(form.paymentDay);
 
-    if (
-      rentKopecks === undefined ||
-      depositKopecks === undefined ||
-      Number.isNaN(paymentDay)
-    ) {
+    if (rentKopecks === undefined || Number.isNaN(paymentDay)) {
       return;
     }
 
     const data: LeaseUpdateRequest = {
-      ...(form.tenantContactId
-        ? { tenant_contact_id: form.tenantContactId }
-        : {}),
+      tenant_contact_id: form.tenantContactId || null,
       start_date: form.startDate,
       ...(form.endDate ? { end_date: form.endDate } : {}),
       rent_amount_kopecks: rentKopecks,
-      deposit_amount_kopecks: depositKopecks,
+      deposit_amount_kopecks: depositKopecks ?? 0,
       payment_day: paymentDay,
       ...(form.comment.trim() ? { comment: form.comment.trim() } : {}),
-    };
+    } as unknown as LeaseUpdateRequest;
 
     updateLease.mutate(
       { id: lease.id, data },

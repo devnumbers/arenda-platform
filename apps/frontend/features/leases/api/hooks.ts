@@ -83,6 +83,7 @@ export function useUpdateLease(): UseMutationResult<
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       queryClient.invalidateQueries({ queryKey: leaseKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: operationKeys.byLease(id) });
     },
   });
 }
@@ -101,6 +102,9 @@ export function useCompleteLease(): UseMutationResult<
     onSuccess: (lease) => {
       queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       queryClient.invalidateQueries({ queryKey: leaseKeys.detail(lease.id) });
+      queryClient.invalidateQueries({
+        queryKey: operationKeys.byLease(lease.id),
+      });
       if (lease.property_id) {
         queryClient.invalidateQueries({
           queryKey: leaseKeys.byProperty(lease.property_id),
@@ -130,6 +134,9 @@ export function useReturnDeposit(): UseMutationResult<
     onSuccess: (lease) => {
       queryClient.invalidateQueries({ queryKey: leaseKeys.detail(lease.id) });
       queryClient.invalidateQueries({ queryKey: leaseKeys.all });
+      queryClient.invalidateQueries({
+        queryKey: operationKeys.byLease(lease.id),
+      });
       if (lease.property_id) {
         queryClient.invalidateQueries({
           queryKey: leaseKeys.byProperty(lease.property_id),
