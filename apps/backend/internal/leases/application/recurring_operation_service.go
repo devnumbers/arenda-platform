@@ -269,6 +269,9 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 	now := s.clock.Now()
 
 	if cmd.ApplyFromDate != nil {
+		if cmd.StartDate != nil {
+			return domain.RecurringOperation{}, newInvalidInputError("start_date cannot be used with apply_from_date")
+		}
 		newRec, err := s.splitRecurringOperationSeries(ctx, tx, ownerID, rec, cmd, now)
 		if err != nil {
 			return domain.RecurringOperation{}, err
@@ -323,7 +326,8 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		rec.PaymentDay = *cmd.PaymentDay
 	}
 	if cmd.EndDate != nil {
-		rec.EndDate = cmd.EndDate
+		d := timeutil.Date(*cmd.EndDate)
+		rec.EndDate = &d
 	}
 	if cmd.Comment != nil {
 		rec.Comment = *cmd.Comment
@@ -394,7 +398,11 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 	txOps := s.operations.WithTx(tx)
 
 	applyFromDate := timeutil.Date(*cmd.ApplyFromDate)
+	today := timeutil.Date(now)
 
+	if applyFromDate.Before(today) {
+		return domain.RecurringOperation{}, newInvalidInputError("apply_from_date must be today or in the future")
+	}
 	if !applyFromDate.After(timeutil.Date(rec.StartDate)) {
 		return domain.RecurringOperation{}, newInvalidInputError("apply_from_date must be after the series start date")
 	}
@@ -482,7 +490,7 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 		PaymentDay:         paymentDay,
 		EndDate:            newEndDate,
 		Periodicity:        periodicity,
-		Status:             domain.RecurringOperationStatusActive,
+		Status:             rec.Status,
 		Comment:            comment,
 		ReminderOffsetDays: rec.ReminderOffsetDays,
 		CreatedAt:          now,
