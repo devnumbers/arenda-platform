@@ -18,6 +18,8 @@ export const ROUTES = {
   financeCreateOperation: '/finance/create-operation',
   financeOperation: (id: string) => `/finance/operations/${id}`,
   financeOperationEdit: (id: string) => `/finance/operations/${id}/edit`,
+  financeRecurringOperation: (id: string) => `/finance/operations/recurring/${id}`,
+  financeRecurringOperationEdit: (id: string) => `/finance/operations/recurring/${id}/edit`,
   propertyOperations: (id: string) => `/properties/${id}/operations`,
   profile: '/profile',
   profilePersonal: '/profile/personal',

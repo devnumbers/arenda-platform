@@ -10,6 +10,7 @@ import {
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { recurringOperationKeys } from './keys';
+import { operationKeys } from '@/features/operations/api/keys';
 import type { components } from '@/shared/api/generated';
 
 type RecurringOperationResponse =
@@ -101,6 +102,15 @@ export function useUpdateRecurringOperation(): UseMutationResult<
       });
       queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.detail(id),
+      });
+      queryClient.invalidateQueries({
+        queryKey: recurringOperationKeys.recurringOperations(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: operationKeys.operations({ recurring_operation_id: id }),
+      });
+      queryClient.invalidateQueries({
+        queryKey: operationKeys.byProperty(propertyId),
       });
     },
   });

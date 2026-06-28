@@ -12,6 +12,7 @@ export { OperationFilters } from './ui/OperationFilters';
 export { OperationsPage } from './ui/OperationsPage';
 export { OperationDetailPage } from './ui/OperationDetailPage';
 export { OperationEditForm } from './ui/OperationEditForm';
+export { RecurringOperationEditPage } from './ui/RecurringOperationEditPage';
 export { TypeSelect } from './ui/TypeSelect';
 export type {
   BasicInfoData,

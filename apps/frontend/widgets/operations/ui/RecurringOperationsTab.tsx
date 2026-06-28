@@ -4,6 +4,7 @@ import type { JSX } from 'react';
 import type { components } from '@/shared/api/generated';
 import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
+import { LinkButton } from '@/shared/ui/link-button';
 import { getCategoryLabel } from '@/entities/operation/lib/categories';
 import { formatOperationDate } from '@/entities/operation/lib/dates';
 import { formatMoneyKopecks } from '@/entities/operation/lib/formatMoney';
@@ -88,6 +89,14 @@ function RecurringOperationItem({
           {formatMoneyKopecks(operation.amount_kopecks, { round: true })}
         </span>
         <span className={styles.status}>{getStatusLabel(operation.status)}</span>
+        <LinkButton
+          href={ROUTES.financeRecurringOperationEdit(operation.id)}
+          variant="secondary"
+          size="tiny"
+          fullWidth
+        >
+          Изменить серию
+        </LinkButton>
         <Button
           variant="secondary"
           size="small"

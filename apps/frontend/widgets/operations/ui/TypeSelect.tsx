@@ -8,6 +8,7 @@ import styles from './TypeSelect.module.css';
 export type TypeSelectProps = {
   readonly value: OperationType;
   readonly onChange: (type: OperationType) => void;
+  readonly disabled?: boolean;
 };
 
 const OPTIONS: { readonly value: OperationType; readonly label: string }[] = [
@@ -15,7 +16,7 @@ const OPTIONS: { readonly value: OperationType; readonly label: string }[] = [
   { value: 'expense', label: 'Расход' },
 ];
 
-export function TypeSelect({ value, onChange }: TypeSelectProps): JSX.Element {
+export function TypeSelect({ value, onChange, disabled }: TypeSelectProps): JSX.Element {
   return (
     <div className={styles.root}>
       <span className={styles.label}>Тип операции</span>
@@ -27,6 +28,7 @@ export function TypeSelect({ value, onChange }: TypeSelectProps): JSX.Element {
             variant={value === option.value ? 'secondary' : 'icon-black'}
             size="medium"
             fullWidth
+            disabled={disabled}
             onClick={() => onChange(option.value)}
           >
             {option.label}
