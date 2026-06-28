@@ -80,10 +80,23 @@ export function useUpdateLease(): UseMutationResult<
         method: 'PATCH',
         body: JSON.stringify(data),
       }),
-    onSuccess: (_, { id }) => {
+    onSuccess: (lease, { id }) => {
       queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       queryClient.invalidateQueries({ queryKey: leaseKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: operationKeys.byLease(id) });
+      queryClient.invalidateQueries({
+        queryKey: operationKeys.operations({ lease_id: id }),
+      });
+      if (lease.property_id) {
+        queryClient.invalidateQueries({
+          queryKey: leaseKeys.byProperty(lease.property_id),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.byProperty(lease.property_id),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.summary(lease.property_id),
+        });
+      }
     },
   });
 }
@@ -103,7 +116,7 @@ export function useCompleteLease(): UseMutationResult<
       queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       queryClient.invalidateQueries({ queryKey: leaseKeys.detail(lease.id) });
       queryClient.invalidateQueries({
-        queryKey: operationKeys.byLease(lease.id),
+        queryKey: operationKeys.operations({ lease_id: lease.id }),
       });
       if (lease.property_id) {
         queryClient.invalidateQueries({
@@ -135,7 +148,7 @@ export function useReturnDeposit(): UseMutationResult<
       queryClient.invalidateQueries({ queryKey: leaseKeys.detail(lease.id) });
       queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       queryClient.invalidateQueries({
-        queryKey: operationKeys.byLease(lease.id),
+        queryKey: operationKeys.operations({ lease_id: lease.id }),
       });
       if (lease.property_id) {
         queryClient.invalidateQueries({

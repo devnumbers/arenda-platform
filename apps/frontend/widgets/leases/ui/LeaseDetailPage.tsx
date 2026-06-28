@@ -18,7 +18,7 @@ import {
   useCompleteLease,
   useReturnDeposit,
 } from '@/features/leases/api/hooks';
-import { useOperationsByLease } from '@/features/operations/api/hooks';
+import { useOperations } from '@/features/operations/api/hooks';
 import { useProperty } from '@/features/properties/api/hooks';
 import { useTenantContacts } from '@/features/tenant-contacts/api/hooks';
 import { useSubscription } from '@/features/subscription/api/hooks';
@@ -499,7 +499,7 @@ export function LeaseDetailPage({ id }: LeaseDetailPageProps): JSX.Element {
   const [isEditing, setIsEditing] = useState(false);
 
   const leaseQuery = useLease(id);
-  const operationsQuery = useOperationsByLease(id);
+  const operationsQuery = useOperations({ lease_id: id });
   const { data: subscription } = useSubscription();
   const readonly = isSubscriptionReadonly(subscription);
 

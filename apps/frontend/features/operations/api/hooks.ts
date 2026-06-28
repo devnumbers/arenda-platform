@@ -34,6 +34,7 @@ export type OperationsFilters = {
   status?: string | string[];
   category?: string | string[];
   property_id?: string;
+  lease_id?: string;
   from?: string;
   to?: string;
   recurring_operation_id?: string;
@@ -130,52 +131,6 @@ export function useOperationsByProperty(
         `/properties/${propertyId}/operations${queryString ? `?${queryString}` : ''}`,
       ),
     enabled: Boolean(propertyId),
-  });
-}
-
-export function useOperationsByLease(
-  leaseId: string,
-  filters?: Omit<OperationsFilters, 'lease_id'>,
-): UseQueryResult<OperationsResponse, ApiError> {
-  const normalized = useMemo(() => {
-    const result: Record<string, string | string[]> = {};
-    if (filters) {
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value === undefined || value === '') {
-          return;
-        }
-        if (typeof value === 'number') {
-          result[key] = String(value);
-        } else if (Array.isArray(value)) {
-          const filtered = value.filter((v) => v !== '');
-          if (filtered.length > 0) {
-            result[key] = filtered;
-          }
-        } else {
-          result[key] = value;
-        }
-      });
-    }
-    return result;
-  }, [filters]);
-
-  const queryString = useMemo(() => {
-    const params = new URLSearchParams();
-    params.set('lease_id', leaseId);
-    Object.entries(normalized).forEach(([key, value]) => {
-      if (Array.isArray(value)) {
-        value.forEach((v) => params.append(key, v));
-      } else {
-        params.set(key, value);
-      }
-    });
-    return params.toString();
-  }, [normalized, leaseId]);
-
-  return useQuery({
-    queryKey: operationKeys.byLease(leaseId, normalized),
-    queryFn: () => apiClient<OperationsResponse>(`/operations?${queryString}`),
-    enabled: Boolean(leaseId),
   });
 }
 
