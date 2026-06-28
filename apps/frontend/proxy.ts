@@ -4,7 +4,7 @@ const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:8080';
 const SESSION_COOKIE_NAME = 'session_id';
 const ME_TIMEOUT_MS = 5000;
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
 
   const redirectToLogin = () => {
@@ -43,5 +43,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api/|_next/|static/|login|favicon\\.ico|.*\\..*).*)'],
+  matcher: ['/((?!api(?:/|$)|_next/|static/|login(?:/|$)|favicon\\.ico|.*\\..*).*)'],
 };
