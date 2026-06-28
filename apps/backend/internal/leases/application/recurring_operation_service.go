@@ -454,10 +454,12 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 		comment = *cmd.Comment
 	}
 
-	newEndDate := cmd.EndDate
-	if newEndDate != nil {
-		d := timeutil.Date(*newEndDate)
+	newEndDate := rec.EndDate
+	if cmd.EndDate != nil {
+		d := timeutil.Date(*cmd.EndDate)
 		newEndDate = &d
+	}
+	if newEndDate != nil {
 		if applyFromDate.After(*newEndDate) {
 			return domain.RecurringOperation{}, newInvalidInputError("end_date must be on or after apply_from_date")
 		}
