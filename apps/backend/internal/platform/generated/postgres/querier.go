@@ -100,7 +100,7 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone string) (User, error)
-	GetUserPhoneByID(ctx context.Context, id pgtype.UUID) (string, error)
+	GetUserPhoneByID(ctx context.Context, id pgtype.UUID) (GetUserPhoneByIDRow, error)
 	HasDepositReturnForLease(ctx context.Context, leaseID pgtype.UUID) (bool, error)
 	HasReminderForLeaseEvent(ctx context.Context, arg HasReminderForLeaseEventParams) (bool, error)
 	HasReminderForOperationEvent(ctx context.Context, arg HasReminderForOperationEventParams) (bool, error)

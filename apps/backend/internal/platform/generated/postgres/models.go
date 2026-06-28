@@ -166,6 +166,7 @@ type LoginAttempt struct {
 	FirstFailureAt pgtype.Timestamptz `json:"first_failure_at"`
 	LastFailureAt  pgtype.Timestamptz `json:"last_failure_at"`
 	UserID         pgtype.UUID        `json:"user_id"`
+	PhoneEncrypted bool               `json:"phone_encrypted"`
 }
 
 type Operation struct {
@@ -280,14 +281,15 @@ type Session struct {
 }
 
 type SmsCode struct {
-	ID        pgtype.UUID        `json:"id"`
-	UserID    pgtype.UUID        `json:"user_id"`
-	Phone     string             `json:"phone"`
-	CodeHash  string             `json:"code_hash"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-	Used      bool               `json:"used"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	Purpose   string             `json:"purpose"`
+	ID             pgtype.UUID        `json:"id"`
+	UserID         pgtype.UUID        `json:"user_id"`
+	Phone          string             `json:"phone"`
+	CodeHash       string             `json:"code_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Used           bool               `json:"used"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	Purpose        string             `json:"purpose"`
+	PhoneEncrypted bool               `json:"phone_encrypted"`
 }
 
 type SubscriptionPayment struct {
@@ -332,15 +334,16 @@ type TenantContact struct {
 }
 
 type User struct {
-	ID         pgtype.UUID        `json:"id"`
-	Phone      string             `json:"phone"`
-	Role       string             `json:"role"`
-	Name       pgtype.Text        `json:"name"`
-	Surname    pgtype.Text        `json:"surname"`
-	Patronymic pgtype.Text        `json:"patronymic"`
-	Email      pgtype.Text        `json:"email"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ID             pgtype.UUID        `json:"id"`
+	Phone          string             `json:"phone"`
+	Role           string             `json:"role"`
+	Name           pgtype.Text        `json:"name"`
+	Surname        pgtype.Text        `json:"surname"`
+	Patronymic     pgtype.Text        `json:"patronymic"`
+	Email          pgtype.Text        `json:"email"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	PhoneEncrypted bool               `json:"phone_encrypted"`
 }
 
 type UserSubscription struct {

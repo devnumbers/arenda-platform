@@ -146,10 +146,18 @@ func run(fallback *slog.Logger) error {
 	}
 	appLogger.InfoContext(ctx, "payment provider initialized", "provider", cfg.PaymentProvider, "initialized", paymentProvider != nil)
 
-	identityUserRepo := identitypg.NewUserRepository(db)
-	identitySMSRepo := identitypg.NewSMSCodeRepository(db)
-	identityAttemptRepo := identitypg.NewAttemptRepository(db)
-	identitySessionRepo := identitypg.NewSessionRepository(db)
+	identityUserRepo := identitypg.NewUserRepository(db, encryptor)
+	identitySMSRepo := identitypg.NewSMSCodeRepository(db, encryptor)
+	identityAttemptRepo := identitypg.NewAttemptRepository(db, encryptor)
+	identitySessionRepo := identitypg.NewSessionRepository(db, encryptor)
+
+	if cfg.EncryptionKey != "" {
+		if err := backfillPhoneEncryption(ctx, db, encryptor, appLogger); err != nil {
+			return fmt.Errorf("backfill phone encryption: %w", err)
+		}
+	} else {
+		appLogger.WarnContext(ctx, "skipping phone encryption backfill: ENCRYPTION_KEY is empty")
+	}
 
 	var smsSender identityapp.Sender
 	switch cfg.SMSSender {
@@ -319,6 +327,7 @@ func run(fallback *slog.Logger) error {
 		PhoneVerifyLimiter:    phoneVerifyLimiter,
 		DBPoolStats:           poolStats,
 		DevMode:               cfg.AppEnv == "local" && cfg.PaymentProvider == "fake",
+		TrustedProxies:        cfg.TrustedProxies,
 	})
 
 	server := &http.Server{
@@ -351,4 +360,45 @@ func run(fallback *slog.Logger) error {
 		}
 		return err
 	}
+}
+
+func backfillPhoneEncryption(ctx context.Context, db *database.InstrumentedPool, enc encryption.Encryptor, logger *slog.Logger) error {
+	backfillTable := func(table string) (int64, error) {
+		rows, err := db.Query(ctx, "SELECT id, phone FROM "+table+" WHERE phone_encrypted = false")
+		if err != nil {
+			return 0, fmt.Errorf("select unencrypted %s: %w", table, err)
+		}
+		defer rows.Close()
+
+		var updated int64
+		for rows.Next() {
+			var id, phone string
+			if err := rows.Scan(&id, &phone); err != nil {
+				return updated, fmt.Errorf("scan %s: %w", table, err)
+			}
+			encrypted, err := enc.DeterministicEncrypt(ctx, phone)
+			if err != nil {
+				return updated, fmt.Errorf("encrypt %s phone: %w", table, err)
+			}
+			tag, err := db.Exec(ctx, "UPDATE "+table+" SET phone = $1, phone_encrypted = true WHERE id = $2", encrypted, id)
+			if err != nil {
+				return updated, fmt.Errorf("update %s: %w", table, err)
+			}
+			updated += tag.RowsAffected()
+		}
+		if err := rows.Err(); err != nil {
+			return updated, fmt.Errorf("iterate %s: %w", table, err)
+		}
+		return updated, nil
+	}
+
+	tables := []string{"users", "sms_codes", "login_attempts"}
+	for _, table := range tables {
+		count, err := backfillTable(table)
+		if err != nil {
+			return err
+		}
+		logger.InfoContext(ctx, "phone encryption backfill complete", "table", table, "rows_updated", count)
+	}
+	return nil
 }

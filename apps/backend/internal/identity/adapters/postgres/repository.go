@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"time"
 
@@ -11,26 +12,23 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // UserRepository persists users.
-//
-// TODO(security): phone numbers are currently stored plaintext. Encrypting
-// them is a breaking data change that requires a migration for existing rows
-// and decryption on read. Defer to a dedicated ADR/task before enabling in
-// production-like environments.
 type UserRepository struct {
-	db postgres.DBTX
+	db  postgres.DBTX
+	enc encryption.Encryptor
 }
 
 // NewUserRepository creates a new user repository.
-func NewUserRepository(db postgres.DBTX) *UserRepository {
-	return &UserRepository{db: db}
+func NewUserRepository(db postgres.DBTX, enc encryption.Encryptor) *UserRepository {
+	return &UserRepository{db: db, enc: enc}
 }
 
 func (r *UserRepository) q() *postgres.Queries {
@@ -39,7 +37,7 @@ func (r *UserRepository) q() *postgres.Queries {
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *UserRepository) WithTx(tx transaction.Tx) application.UserRepository {
-	return NewUserRepository(tx.(postgres.DBTX))
+	return NewUserRepository(tx.(postgres.DBTX), r.enc)
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
@@ -50,15 +48,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User
 		}
 		return domain.User{}, err
 	}
-	return domain.User{
-		ID:         pgconv.UUIDFromPgtype(row.ID),
-		Phone:      domain.Phone(row.Phone),
-		Role:       domain.Role(row.Role),
-		Name:       pgconv.TextToPtrString(row.Name),
-		Surname:    pgconv.TextToPtrString(row.Surname),
-		Patronymic: pgconv.TextToPtrString(row.Patronymic),
-		Email:      pgconv.TextToPtrString(row.Email),
-	}, nil
+	return r.mapUser(ctx, row)
 }
 
 func (r *UserRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.User, error) {
@@ -69,65 +59,53 @@ func (r *UserRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (do
 		}
 		return domain.User{}, err
 	}
-	return domain.User{
-		ID:         pgconv.UUIDFromPgtype(row.ID),
-		Phone:      domain.Phone(row.Phone),
-		Role:       domain.Role(row.Role),
-		Name:       pgconv.TextToPtrString(row.Name),
-		Surname:    pgconv.TextToPtrString(row.Surname),
-		Patronymic: pgconv.TextToPtrString(row.Patronymic),
-		Email:      pgconv.TextToPtrString(row.Email),
-	}, nil
+	return r.mapUser(ctx, row)
 }
 
 func (r *UserRepository) GetPhoneByID(ctx context.Context, id uuid.UUID) (string, error) {
-	phone, err := r.q().GetUserPhoneByID(ctx, pgconv.UUIDToPgtype(id))
+	row, err := r.q().GetUserPhoneByID(ctx, pgconv.UUIDToPgtype(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", application.ErrNotFound
 		}
 		return "", err
 	}
+	phone, err := decryptPhone(ctx, r.enc, row.Phone, row.PhoneEncrypted)
+	if err != nil {
+		return "", err
+	}
 	return phone, nil
 }
 
 func (r *UserRepository) GetByPhone(ctx context.Context, phone domain.Phone) (domain.User, error) {
-	row, err := r.q().GetUserByPhone(ctx, phone.String())
+	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	if err != nil {
+		return domain.User{}, err
+	}
+	row, err := r.q().GetUserByPhone(ctx, encryptedPhone)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.User{}, application.ErrNotFound
 		}
 		return domain.User{}, err
 	}
-	return domain.User{
-		ID:         pgconv.UUIDFromPgtype(row.ID),
-		Phone:      domain.Phone(row.Phone),
-		Role:       domain.Role(row.Role),
-		Name:       pgconv.TextToPtrString(row.Name),
-		Surname:    pgconv.TextToPtrString(row.Surname),
-		Patronymic: pgconv.TextToPtrString(row.Patronymic),
-		Email:      pgconv.TextToPtrString(row.Email),
-	}, nil
+	return r.mapUser(ctx, row)
 }
 
 func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.User, error) {
+	encryptedPhone, err := encryptPhone(ctx, r.enc, user.Phone.String())
+	if err != nil {
+		return domain.User{}, err
+	}
 	row, err := r.q().CreateUser(ctx, postgres.CreateUserParams{
 		ID:    pgconv.UUIDToPgtype(user.ID),
-		Phone: user.Phone.String(),
+		Phone: encryptedPhone,
 		Role:  string(user.Role),
 	})
 	if err != nil {
 		return domain.User{}, err
 	}
-	return domain.User{
-		ID:         pgconv.UUIDFromPgtype(row.ID),
-		Phone:      domain.Phone(row.Phone),
-		Role:       domain.Role(row.Role),
-		Name:       pgconv.TextToPtrString(row.Name),
-		Surname:    pgconv.TextToPtrString(row.Surname),
-		Patronymic: pgconv.TextToPtrString(row.Patronymic),
-		Email:      pgconv.TextToPtrString(row.Email),
-	}, nil
+	return r.mapUser(ctx, row)
 }
 
 func (r *UserRepository) Update(ctx context.Context, user domain.User) (domain.User, error) {
@@ -144,21 +122,17 @@ func (r *UserRepository) Update(ctx context.Context, user domain.User) (domain.U
 		}
 		return domain.User{}, err
 	}
-	return domain.User{
-		ID:         pgconv.UUIDFromPgtype(row.ID),
-		Phone:      domain.Phone(row.Phone),
-		Role:       domain.Role(row.Role),
-		Name:       pgconv.TextToPtrString(row.Name),
-		Surname:    pgconv.TextToPtrString(row.Surname),
-		Patronymic: pgconv.TextToPtrString(row.Patronymic),
-		Email:      pgconv.TextToPtrString(row.Email),
-	}, nil
+	return r.mapUser(ctx, row)
 }
 
 func (r *UserRepository) UpdatePhone(ctx context.Context, id uuid.UUID, phone domain.Phone) (domain.User, error) {
+	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	if err != nil {
+		return domain.User{}, err
+	}
 	row, err := r.q().UpdateUserPhone(ctx, postgres.UpdateUserPhoneParams{
 		ID:    pgconv.UUIDToPgtype(id),
-		Phone: phone.String(),
+		Phone: encryptedPhone,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -170,9 +144,17 @@ func (r *UserRepository) UpdatePhone(ctx context.Context, id uuid.UUID, phone do
 		}
 		return domain.User{}, err
 	}
+	return r.mapUser(ctx, row)
+}
+
+func (r *UserRepository) mapUser(ctx context.Context, row postgres.User) (domain.User, error) {
+	phone, err := decryptPhone(ctx, r.enc, row.Phone, row.PhoneEncrypted)
+	if err != nil {
+		return domain.User{}, err
+	}
 	return domain.User{
 		ID:         pgconv.UUIDFromPgtype(row.ID),
-		Phone:      domain.Phone(row.Phone),
+		Phone:      domain.Phone(phone),
 		Role:       domain.Role(row.Role),
 		Name:       pgconv.TextToPtrString(row.Name),
 		Surname:    pgconv.TextToPtrString(row.Surname),
@@ -183,12 +165,13 @@ func (r *UserRepository) UpdatePhone(ctx context.Context, id uuid.UUID, phone do
 
 // SMSCodeRepository persists SMS codes.
 type SMSCodeRepository struct {
-	db postgres.DBTX
+	db  postgres.DBTX
+	enc encryption.Encryptor
 }
 
 // NewSMSCodeRepository creates a new SMS code repository.
-func NewSMSCodeRepository(db postgres.DBTX) *SMSCodeRepository {
-	return &SMSCodeRepository{db: db}
+func NewSMSCodeRepository(db postgres.DBTX, enc encryption.Encryptor) *SMSCodeRepository {
+	return &SMSCodeRepository{db: db, enc: enc}
 }
 
 func (r *SMSCodeRepository) q() *postgres.Queries {
@@ -197,13 +180,17 @@ func (r *SMSCodeRepository) q() *postgres.Queries {
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *SMSCodeRepository) WithTx(tx transaction.Tx) application.SMSCodeRepository {
-	return NewSMSCodeRepository(tx.(postgres.DBTX))
+	return NewSMSCodeRepository(tx.(postgres.DBTX), r.enc)
 }
 
 func (r *SMSCodeRepository) Save(ctx context.Context, code domain.SMSCode) error {
+	encryptedPhone, err := encryptPhone(ctx, r.enc, code.Phone.String())
+	if err != nil {
+		return err
+	}
 	return r.q().CreateSMSCode(ctx, postgres.CreateSMSCodeParams{
 		ID:        pgconv.UUIDToPgtype(code.ID),
-		Phone:     code.Phone.String(),
+		Phone:     encryptedPhone,
 		CodeHash:  code.CodeHash,
 		ExpiresAt: pgtype.Timestamptz{Time: code.ExpiresAt, Valid: true},
 		UserID:    pgconv.UUIDToPgtypePtr(code.UserID),
@@ -212,8 +199,12 @@ func (r *SMSCodeRepository) Save(ctx context.Context, code domain.SMSCode) error
 }
 
 func (r *SMSCodeRepository) GetLatestByPhone(ctx context.Context, phone domain.Phone, purpose string, now time.Time) (domain.SMSCode, error) {
+	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	if err != nil {
+		return domain.SMSCode{}, err
+	}
 	row, err := r.q().GetLatestSMSCodeByPhoneAndPurpose(ctx, postgres.GetLatestSMSCodeByPhoneAndPurposeParams{
-		Phone:     phone.String(),
+		Phone:     encryptedPhone,
 		Purpose:   purpose,
 		ExpiresAt: pgtype.Timestamptz{Time: now, Valid: true},
 	})
@@ -223,21 +214,16 @@ func (r *SMSCodeRepository) GetLatestByPhone(ctx context.Context, phone domain.P
 		}
 		return domain.SMSCode{}, err
 	}
-	return domain.SMSCode{
-		ID:        pgconv.UUIDFromPgtype(row.ID),
-		UserID:    pgconv.UUIDFromPgtypePtr(row.UserID),
-		Phone:     domain.Phone(row.Phone),
-		Purpose:   row.Purpose,
-		CodeHash:  row.CodeHash,
-		ExpiresAt: row.ExpiresAt.Time,
-		Used:      row.Used,
-		CreatedAt: row.CreatedAt.Time,
-	}, nil
+	return r.mapSMSCode(ctx, row)
 }
 
 func (r *SMSCodeRepository) GetLatestByPhoneAndUserID(ctx context.Context, phone domain.Phone, purpose string, userID uuid.UUID, now time.Time) (domain.SMSCode, error) {
+	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	if err != nil {
+		return domain.SMSCode{}, err
+	}
 	row, err := r.q().GetLatestSMSCodeByPhoneAndPurposeAndUserID(ctx, postgres.GetLatestSMSCodeByPhoneAndPurposeAndUserIDParams{
-		Phone:     phone.String(),
+		Phone:     encryptedPhone,
 		Purpose:   purpose,
 		UserID:    pgconv.UUIDToPgtype(userID),
 		ExpiresAt: pgtype.Timestamptz{Time: now, Valid: true},
@@ -248,16 +234,7 @@ func (r *SMSCodeRepository) GetLatestByPhoneAndUserID(ctx context.Context, phone
 		}
 		return domain.SMSCode{}, err
 	}
-	return domain.SMSCode{
-		ID:        pgconv.UUIDFromPgtype(row.ID),
-		UserID:    pgconv.UUIDFromPgtypePtr(row.UserID),
-		Phone:     domain.Phone(row.Phone),
-		Purpose:   row.Purpose,
-		CodeHash:  row.CodeHash,
-		ExpiresAt: row.ExpiresAt.Time,
-		Used:      row.Used,
-		CreatedAt: row.CreatedAt.Time,
-	}, nil
+	return r.mapSMSCode(ctx, row)
 }
 
 func (r *SMSCodeRepository) MarkUsedByID(ctx context.Context, id uuid.UUID) error {
@@ -283,14 +260,32 @@ func (r *SMSCodeRepository) DeleteExpiredBeforeBatch(ctx context.Context, before
 	})
 }
 
+func (r *SMSCodeRepository) mapSMSCode(ctx context.Context, row postgres.SmsCode) (domain.SMSCode, error) {
+	phone, err := decryptPhone(ctx, r.enc, row.Phone, row.PhoneEncrypted)
+	if err != nil {
+		return domain.SMSCode{}, err
+	}
+	return domain.SMSCode{
+		ID:        pgconv.UUIDFromPgtype(row.ID),
+		UserID:    pgconv.UUIDFromPgtypePtr(row.UserID),
+		Phone:     domain.Phone(phone),
+		Purpose:   row.Purpose,
+		CodeHash:  row.CodeHash,
+		ExpiresAt: row.ExpiresAt.Time,
+		Used:      row.Used,
+		CreatedAt: row.CreatedAt.Time,
+	}, nil
+}
+
 // AttemptRepository persists login attempt windows.
 type AttemptRepository struct {
-	db postgres.DBTX
+	db  postgres.DBTX
+	enc encryption.Encryptor
 }
 
 // NewAttemptRepository creates a new attempt repository.
-func NewAttemptRepository(db postgres.DBTX) *AttemptRepository {
-	return &AttemptRepository{db: db}
+func NewAttemptRepository(db postgres.DBTX, enc encryption.Encryptor) *AttemptRepository {
+	return &AttemptRepository{db: db, enc: enc}
 }
 
 func (r *AttemptRepository) q() *postgres.Queries {
@@ -299,11 +294,15 @@ func (r *AttemptRepository) q() *postgres.Queries {
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *AttemptRepository) WithTx(tx transaction.Tx) application.AttemptRepository {
-	return NewAttemptRepository(tx.(postgres.DBTX))
+	return NewAttemptRepository(tx.(postgres.DBTX), r.enc)
 }
 
 func (r *AttemptRepository) GetByPhone(ctx context.Context, phone domain.Phone) (domain.AttemptWindow, error) {
-	row, err := r.q().GetLoginAttemptByPhone(ctx, phone.String())
+	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	if err != nil {
+		return domain.AttemptWindow{}, err
+	}
+	row, err := r.q().GetLoginAttemptByPhone(ctx, encryptedPhone)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.AttemptWindow{}, application.ErrNotFound
@@ -325,8 +324,12 @@ func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, userID
 	if failures > math.MaxInt32 {
 		failures = math.MaxInt32
 	}
+	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	if err != nil {
+		return err
+	}
 	return r.q().UpsertLoginAttempt(ctx, postgres.UpsertLoginAttemptParams{
-		Phone:          phone.String(),
+		Phone:          encryptedPhone,
 		Failures:       int32(failures),
 		FirstFailureAt: pgtype.Timestamptz{Time: window.FirstFailureAt, Valid: true},
 		LastFailureAt:  pgtype.Timestamptz{Time: window.LastFailureAt, Valid: true},
@@ -335,7 +338,11 @@ func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, userID
 }
 
 func (r *AttemptRepository) DeleteByPhone(ctx context.Context, phone domain.Phone) error {
-	return r.q().DeleteLoginAttemptByPhone(ctx, phone.String())
+	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	if err != nil {
+		return err
+	}
+	return r.q().DeleteLoginAttemptByPhone(ctx, encryptedPhone)
 }
 
 func (r *AttemptRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
@@ -355,12 +362,13 @@ func (r *AttemptRepository) DeleteStaleBeforeBatch(ctx context.Context, before t
 
 // SessionRepository persists sessions.
 type SessionRepository struct {
-	db postgres.DBTX
+	db  postgres.DBTX
+	enc encryption.Encryptor
 }
 
 // NewSessionRepository creates a new session repository.
-func NewSessionRepository(db postgres.DBTX) *SessionRepository {
-	return &SessionRepository{db: db}
+func NewSessionRepository(db postgres.DBTX, enc encryption.Encryptor) *SessionRepository {
+	return &SessionRepository{db: db, enc: enc}
 }
 
 func (r *SessionRepository) q() *postgres.Queries {
@@ -369,7 +377,7 @@ func (r *SessionRepository) q() *postgres.Queries {
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *SessionRepository) WithTx(tx transaction.Tx) application.SessionRepository {
-	return NewSessionRepository(tx.(postgres.DBTX))
+	return NewSessionRepository(tx.(postgres.DBTX), r.enc)
 }
 
 func (r *SessionRepository) Create(ctx context.Context, session domain.Session) error {
@@ -427,6 +435,10 @@ func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string
 		}
 		return domain.Session{}, domain.User{}, err
 	}
+	phone, err := decryptPhone(ctx, r.enc, row.Phone, row.PhoneEncrypted)
+	if err != nil {
+		return domain.Session{}, domain.User{}, err
+	}
 	return domain.Session{
 			UserID:     pgconv.UUIDFromPgtype(row.UserID),
 			TokenHash:  row.TokenHash,
@@ -435,11 +447,30 @@ func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string
 			LastUsedAt: row.LastUsedAt.Time,
 		}, domain.User{
 			ID:         pgconv.UUIDFromPgtype(row.UserID),
-			Phone:      domain.Phone(row.Phone),
+			Phone:      domain.Phone(phone),
 			Role:       domain.Role(row.Role),
 			Name:       pgconv.TextToPtrString(row.Name),
 			Surname:    pgconv.TextToPtrString(row.Surname),
 			Patronymic: pgconv.TextToPtrString(row.Patronymic),
 			Email:      pgconv.TextToPtrString(row.Email),
 		}, nil
+}
+
+func encryptPhone(ctx context.Context, enc encryption.Encryptor, phone string) (string, error) {
+	encrypted, err := enc.DeterministicEncrypt(ctx, phone)
+	if err != nil {
+		return "", fmt.Errorf("encrypt phone: %w", err)
+	}
+	return encrypted, nil
+}
+
+func decryptPhone(ctx context.Context, enc encryption.Encryptor, phone string, encrypted bool) (string, error) {
+	if !encrypted {
+		return phone, nil
+	}
+	decrypted, err := enc.Decrypt(ctx, phone)
+	if err != nil {
+		return "", fmt.Errorf("decrypt phone: %w", err)
+	}
+	return decrypted, nil
 }

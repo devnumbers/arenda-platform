@@ -12,8 +12,8 @@ import (
 )
 
 const createSMSCode = `-- name: CreateSMSCode :exec
-INSERT INTO sms_codes (id, phone, code_hash, expires_at, user_id, purpose)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO sms_codes (id, phone, code_hash, expires_at, user_id, purpose, phone_encrypted)
+VALUES ($1, $2, $3, $4, $5, $6, true)
 `
 
 type CreateSMSCodeParams struct {
@@ -69,9 +69,9 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (id, phone, role) VALUES ($1, $2, $3)
-ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone
-RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at
+INSERT INTO users (id, phone, role, phone_encrypted) VALUES ($1, $2, $3, true)
+ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone, phone_encrypted = EXCLUDED.phone_encrypted
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted
 `
 
 type CreateUserParams struct {
@@ -93,6 +93,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Email,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhoneEncrypted,
 	)
 	return i, err
 }
@@ -264,7 +265,7 @@ func (q *Queries) DeleteStaleLoginAttemptsBatch(ctx context.Context, arg DeleteS
 }
 
 const getLatestSMSCodeByPhoneAndPurpose = `-- name: GetLatestSMSCodeByPhoneAndPurpose :one
-SELECT id, user_id, phone, code_hash, expires_at, used, created_at, purpose FROM sms_codes
+SELECT id, user_id, phone, code_hash, expires_at, used, created_at, purpose, phone_encrypted FROM sms_codes
 WHERE phone = $1 AND purpose = $2 AND used = false AND expires_at > $3
 ORDER BY created_at DESC
 LIMIT 1
@@ -289,12 +290,13 @@ func (q *Queries) GetLatestSMSCodeByPhoneAndPurpose(ctx context.Context, arg Get
 		&i.Used,
 		&i.CreatedAt,
 		&i.Purpose,
+		&i.PhoneEncrypted,
 	)
 	return i, err
 }
 
 const getLatestSMSCodeByPhoneAndPurposeAndUserID = `-- name: GetLatestSMSCodeByPhoneAndPurposeAndUserID :one
-SELECT id, user_id, phone, code_hash, expires_at, used, created_at, purpose FROM sms_codes
+SELECT id, user_id, phone, code_hash, expires_at, used, created_at, purpose, phone_encrypted FROM sms_codes
 WHERE phone = $1 AND purpose = $2 AND user_id = $3 AND used = false AND expires_at > $4
 ORDER BY created_at DESC
 LIMIT 1
@@ -325,12 +327,13 @@ func (q *Queries) GetLatestSMSCodeByPhoneAndPurposeAndUserID(ctx context.Context
 		&i.Used,
 		&i.CreatedAt,
 		&i.Purpose,
+		&i.PhoneEncrypted,
 	)
 	return i, err
 }
 
 const getLoginAttemptByPhone = `-- name: GetLoginAttemptByPhone :one
-SELECT id, phone, failures, first_failure_at, last_failure_at, user_id FROM login_attempts WHERE phone = $1
+SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted FROM login_attempts WHERE phone = $1
 `
 
 func (q *Queries) GetLoginAttemptByPhone(ctx context.Context, phone string) (LoginAttempt, error) {
@@ -343,13 +346,14 @@ func (q *Queries) GetLoginAttemptByPhone(ctx context.Context, phone string) (Log
 		&i.FirstFailureAt,
 		&i.LastFailureAt,
 		&i.UserID,
+		&i.PhoneEncrypted,
 	)
 	return i, err
 }
 
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
 SELECT s.id, s.token_hash, s.expires_at, s.created_at, s.last_used_at,
-       u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email
+       u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.phone_encrypted
 FROM sessions s
 JOIN users u ON s.user_id = u.id
 WHERE s.token_hash = $1 AND s.expires_at > $2
@@ -361,18 +365,19 @@ type GetSessionByTokenHashParams struct {
 }
 
 type GetSessionByTokenHashRow struct {
-	ID         pgtype.UUID        `json:"id"`
-	TokenHash  string             `json:"token_hash"`
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
-	UserID     pgtype.UUID        `json:"user_id"`
-	Phone      string             `json:"phone"`
-	Role       string             `json:"role"`
-	Name       pgtype.Text        `json:"name"`
-	Surname    pgtype.Text        `json:"surname"`
-	Patronymic pgtype.Text        `json:"patronymic"`
-	Email      pgtype.Text        `json:"email"`
+	ID             pgtype.UUID        `json:"id"`
+	TokenHash      string             `json:"token_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	LastUsedAt     pgtype.Timestamptz `json:"last_used_at"`
+	UserID         pgtype.UUID        `json:"user_id"`
+	Phone          string             `json:"phone"`
+	Role           string             `json:"role"`
+	Name           pgtype.Text        `json:"name"`
+	Surname        pgtype.Text        `json:"surname"`
+	Patronymic     pgtype.Text        `json:"patronymic"`
+	Email          pgtype.Text        `json:"email"`
+	PhoneEncrypted bool               `json:"phone_encrypted"`
 }
 
 func (q *Queries) GetSessionByTokenHash(ctx context.Context, arg GetSessionByTokenHashParams) (GetSessionByTokenHashRow, error) {
@@ -391,12 +396,13 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, arg GetSessionByTok
 		&i.Surname,
 		&i.Patronymic,
 		&i.Email,
+		&i.PhoneEncrypted,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at FROM users WHERE id = $1
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -412,12 +418,13 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.Email,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhoneEncrypted,
 	)
 	return i, err
 }
 
 const getUserByIDForUpdate = `-- name: GetUserByIDForUpdate :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at FROM users WHERE id = $1 FOR UPDATE
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted FROM users WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -433,12 +440,13 @@ func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (Use
 		&i.Email,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhoneEncrypted,
 	)
 	return i, err
 }
 
 const getUserByPhone = `-- name: GetUserByPhone :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at FROM users WHERE phone = $1
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted FROM users WHERE phone = $1
 `
 
 func (q *Queries) GetUserByPhone(ctx context.Context, phone string) (User, error) {
@@ -454,19 +462,25 @@ func (q *Queries) GetUserByPhone(ctx context.Context, phone string) (User, error
 		&i.Email,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhoneEncrypted,
 	)
 	return i, err
 }
 
 const getUserPhoneByID = `-- name: GetUserPhoneByID :one
-SELECT phone FROM users WHERE id = $1
+SELECT phone, phone_encrypted FROM users WHERE id = $1
 `
 
-func (q *Queries) GetUserPhoneByID(ctx context.Context, id pgtype.UUID) (string, error) {
+type GetUserPhoneByIDRow struct {
+	Phone          string `json:"phone"`
+	PhoneEncrypted bool   `json:"phone_encrypted"`
+}
+
+func (q *Queries) GetUserPhoneByID(ctx context.Context, id pgtype.UUID) (GetUserPhoneByIDRow, error) {
 	row := q.db.QueryRow(ctx, getUserPhoneByID, id)
-	var phone string
-	err := row.Scan(&phone)
-	return phone, err
+	var i GetUserPhoneByIDRow
+	err := row.Scan(&i.Phone, &i.PhoneEncrypted)
+	return i, err
 }
 
 const markSMSCodeUsed = `-- name: MarkSMSCodeUsed :exec
@@ -501,7 +515,7 @@ SET name = $2,
     email = $5,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted
 `
 
 type UpdateUserParams struct {
@@ -531,6 +545,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.Email,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhoneEncrypted,
 	)
 	return i, err
 }
@@ -538,9 +553,10 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 const updateUserPhone = `-- name: UpdateUserPhone :one
 UPDATE users
 SET phone = $2,
+    phone_encrypted = true,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted
 `
 
 type UpdateUserPhoneParams struct {
@@ -561,18 +577,20 @@ func (q *Queries) UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams
 		&i.Email,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhoneEncrypted,
 	)
 	return i, err
 }
 
 const upsertLoginAttempt = `-- name: UpsertLoginAttempt :exec
-INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at, user_id)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
+VALUES ($1, $2, $3, $4, $5, true)
 ON CONFLICT (phone) DO UPDATE SET
     failures = EXCLUDED.failures,
     first_failure_at = EXCLUDED.first_failure_at,
     last_failure_at = EXCLUDED.last_failure_at,
-    user_id = EXCLUDED.user_id
+    user_id = EXCLUDED.user_id,
+    phone_encrypted = EXCLUDED.phone_encrypted
 `
 
 type UpsertLoginAttemptParams struct {

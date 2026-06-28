@@ -12,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"golang.org/x/crypto/hkdf"
 )
 
 // NewEncryptor creates an Encryptor from a key.
@@ -39,7 +41,7 @@ func NewEncryptor(key string) (Encryptor, error) {
 		return nil, fmt.Errorf("create gcm: %w", err)
 	}
 
-	return &aesEncryptor{gcm: gcm, key: decoded}, nil
+	return newAESEncryptor(decoded, gcm), nil
 }
 
 func parseKey(key string) ([]byte, error) {
@@ -62,8 +64,26 @@ func parseKey(key string) ([]byte, error) {
 }
 
 type aesEncryptor struct {
-	gcm cipher.AEAD
-	key []byte
+	gcm    cipher.AEAD
+	key    []byte
+	encKey []byte
+	macKey []byte
+}
+
+func newAESEncryptor(key []byte, gcm cipher.AEAD) *aesEncryptor {
+	encKey := deriveKey(key, "encKey")
+	macKey := deriveKey(key, "macKey")
+	return &aesEncryptor{gcm: gcm, key: key, encKey: encKey, macKey: macKey}
+}
+
+func deriveKey(key []byte, label string) []byte {
+	dk := make([]byte, 32)
+	// HKDF-SHA256 with nil salt and the label as info.
+	if _, err := io.ReadFull(hkdf.New(sha256.New, key, nil, []byte(label)), dk); err != nil {
+		// HKDF extraction/expand never fails for valid inputs; panic on the impossible.
+		panic(fmt.Sprintf("hkdf derive %s: %v", label, err))
+	}
+	return dk
 }
 
 func (e *aesEncryptor) Encrypt(ctx context.Context, plaintext string) (string, error) {
@@ -74,6 +94,20 @@ func (e *aesEncryptor) Encrypt(ctx context.Context, plaintext string) (string, e
 
 	ciphertext := e.gcm.Seal(nonce, nonce, []byte(plaintext), nil)
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+func (e *aesEncryptor) DeterministicEncrypt(ctx context.Context, plaintext string) (string, error) {
+	nonce := deterministicNonce(e.macKey, plaintext)
+	ciphertext := e.gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+func deterministicNonce(macKey []byte, plaintext string) []byte {
+	mac := hmac.New(sha256.New, macKey)
+	// hmac.Write never returns an error for the hash.Hash contract.
+	_, _ = mac.Write([]byte(plaintext))
+	_, _ = mac.Write([]byte("\x00phone"))
+	return mac.Sum(nil)[:12]
 }
 
 func (e *aesEncryptor) Decrypt(ctx context.Context, ciphertext string) (string, error) {
@@ -112,6 +146,10 @@ func hashToken(key []byte, plaintext string) string {
 }
 
 func (noopEncryptor) Encrypt(ctx context.Context, plaintext string) (string, error) {
+	return plaintext, nil
+}
+
+func (noopEncryptor) DeterministicEncrypt(ctx context.Context, plaintext string) (string, error) {
 	return plaintext, nil
 }
 

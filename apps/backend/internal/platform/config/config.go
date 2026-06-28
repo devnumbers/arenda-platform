@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -36,6 +37,7 @@ type Config struct {
 	OverdueOperationWorkerInterval      time.Duration
 	LogSuccessfulRequests               bool
 	TariffCacheTTL                      time.Duration
+	TrustedProxies                      []string
 	RateLimit                           RateLimit
 	DBPool                              DBPoolConfig
 	PhotoStorageEndpoint                string
@@ -472,6 +474,19 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("OVERDUE_OPERATION_WORKER_INTERVAL must be positive")
 		}
 		cfg.OverdueOperationWorkerInterval = d
+	}
+
+	if v := os.Getenv("TRUSTED_PROXIES"); v != "" {
+		for _, cidr := range strings.Split(v, ",") {
+			cidr = strings.TrimSpace(cidr)
+			if cidr == "" {
+				continue
+			}
+			if _, _, err := net.ParseCIDR(cidr); err != nil {
+				return Config{}, fmt.Errorf("invalid TRUSTED_PROXIES entry %q: %w", cidr, err)
+			}
+			cfg.TrustedProxies = append(cfg.TrustedProxies, cidr)
+		}
 	}
 
 	cfg.TariffCacheTTL = 5 * time.Minute

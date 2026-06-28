@@ -1,34 +1,34 @@
 -- name: GetUserByID :one
-SELECT * FROM users WHERE id = $1;
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted FROM users WHERE id = $1;
 
 -- name: GetUserByIDForUpdate :one
-SELECT * FROM users WHERE id = $1 FOR UPDATE;
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted FROM users WHERE id = $1 FOR UPDATE;
 
 -- name: GetUserByPhone :one
-SELECT * FROM users WHERE phone = $1;
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted FROM users WHERE phone = $1;
 
 -- name: CreateUser :one
-INSERT INTO users (id, phone, role) VALUES ($1, $2, $3)
-ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone
-RETURNING *;
+INSERT INTO users (id, phone, role, phone_encrypted) VALUES ($1, $2, $3, true)
+ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone, phone_encrypted = EXCLUDED.phone_encrypted
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted;
 
 -- name: GetLatestSMSCodeByPhoneAndPurpose :one
-SELECT * FROM sms_codes
+SELECT id, user_id, phone, code_hash, expires_at, used, created_at, purpose, phone_encrypted FROM sms_codes
 WHERE phone = $1 AND purpose = $2 AND used = false AND expires_at > $3
 ORDER BY created_at DESC
 LIMIT 1
 FOR UPDATE;
 
 -- name: GetLatestSMSCodeByPhoneAndPurposeAndUserID :one
-SELECT * FROM sms_codes
+SELECT id, user_id, phone, code_hash, expires_at, used, created_at, purpose, phone_encrypted FROM sms_codes
 WHERE phone = $1 AND purpose = $2 AND user_id = $3 AND used = false AND expires_at > $4
 ORDER BY created_at DESC
 LIMIT 1
 FOR UPDATE;
 
 -- name: CreateSMSCode :exec
-INSERT INTO sms_codes (id, phone, code_hash, expires_at, user_id, purpose)
-VALUES ($1, $2, $3, $4, $5, $6);
+INSERT INTO sms_codes (id, phone, code_hash, expires_at, user_id, purpose, phone_encrypted)
+VALUES ($1, $2, $3, $4, $5, $6, true);
 
 -- name: MarkSMSCodeUsed :exec
 UPDATE sms_codes SET used = true WHERE id = $1;
@@ -51,16 +51,17 @@ DELETE FROM sms_codes t WHERE t.ctid IN (
 );
 
 -- name: GetLoginAttemptByPhone :one
-SELECT * FROM login_attempts WHERE phone = $1;
+SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted FROM login_attempts WHERE phone = $1;
 
 -- name: UpsertLoginAttempt :exec
-INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at, user_id)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
+VALUES ($1, $2, $3, $4, $5, true)
 ON CONFLICT (phone) DO UPDATE SET
     failures = EXCLUDED.failures,
     first_failure_at = EXCLUDED.first_failure_at,
     last_failure_at = EXCLUDED.last_failure_at,
-    user_id = EXCLUDED.user_id;
+    user_id = EXCLUDED.user_id,
+    phone_encrypted = EXCLUDED.phone_encrypted;
 
 -- name: DeleteLoginAttemptByPhone :exec
 DELETE FROM login_attempts WHERE phone = $1;
@@ -78,7 +79,7 @@ DELETE FROM login_attempts t WHERE t.ctid IN (
 
 -- name: CreateSession :one
 INSERT INTO sessions (user_id, token_hash, expires_at, last_used_at)
-VALUES ($1, $2, $3, $4) RETURNING *;
+VALUES ($1, $2, $3, $4) RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at;
 
 -- name: UpdateSession :exec
 UPDATE sessions SET expires_at = $1, last_used_at = $2 WHERE token_hash = $3;
@@ -102,13 +103,13 @@ DELETE FROM sessions t WHERE t.ctid IN (
 
 -- name: GetSessionByTokenHash :one
 SELECT s.id, s.token_hash, s.expires_at, s.created_at, s.last_used_at,
-       u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email
+       u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.phone_encrypted
 FROM sessions s
 JOIN users u ON s.user_id = u.id
 WHERE s.token_hash = $1 AND s.expires_at > $2;
 
 -- name: GetUserPhoneByID :one
-SELECT phone FROM users WHERE id = $1;
+SELECT phone, phone_encrypted FROM users WHERE id = $1;
 
 -- name: UpdateUser :one
 UPDATE users
@@ -118,11 +119,12 @@ SET name = $2,
     email = $5,
     updated_at = now()
 WHERE id = $1
-RETURNING *;
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted;
 
 -- name: UpdateUserPhone :one
 UPDATE users
 SET phone = $2,
+    phone_encrypted = true,
     updated_at = now()
 WHERE id = $1
-RETURNING *;
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted;

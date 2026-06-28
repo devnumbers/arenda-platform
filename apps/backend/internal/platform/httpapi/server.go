@@ -38,6 +38,7 @@ type Deps struct {
 	PhoneVerifyLimiter  *RateLimiter
 	DBPoolStats         func() DBPoolSnapshot
 	DevMode             bool
+	TrustedProxies      []string
 }
 
 const slowRequestThreshold = 500 * time.Millisecond
@@ -61,12 +62,7 @@ func securityHeaders(secure bool) func(http.Handler) http.Handler {
 func New(deps Deps) http.Handler {
 	r := chi.NewRouter()
 	r.Use(RequestIDMiddleware)
-	//nolint:staticcheck // middleware.RealIP is used here as the project-wide IP extraction strategy.
-	// TODO: migrate from chi's deprecated middleware.RealIP to an explicit,
-	// proxy-aware IP extraction strategy (e.g., via TRUSTED_PROXIES env).
-	// Until then, client traffic must be terminated at a trusted proxy that
-	// sanitises X-Forwarded-For before it reaches this middleware.
-	r.Use(middleware.RealIP)
+	r.Use(realIPMiddleware(deps.TrustedProxies))
 	r.Use(RequestLoggerWithOptions(deps.Logger, RequestLoggerOptions{
 		LogSuccessfulRequests: deps.LogSuccessfulRequests,
 		SlowRequestThreshold:  slowRequestThreshold,
