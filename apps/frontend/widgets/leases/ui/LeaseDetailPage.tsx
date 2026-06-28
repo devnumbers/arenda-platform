@@ -359,14 +359,15 @@ function LeaseEditForm({
     }
 
     const data: LeaseUpdateRequest = {
-      tenant_contact_id: form.tenantContactId || null,
+      tenant_contact_id: form.tenantContactId || undefined,
+      clear_tenant_contact: !form.tenantContactId,
       start_date: form.startDate,
       ...(form.endDate ? { end_date: form.endDate } : {}),
       rent_amount_kopecks: rentKopecks,
       deposit_amount_kopecks: depositKopecks ?? 0,
       payment_day: paymentDay,
       ...(form.comment.trim() ? { comment: form.comment.trim() } : {}),
-    } as unknown as LeaseUpdateRequest;
+    };
 
     updateLease.mutate(
       { id: lease.id, data },

@@ -1045,6 +1045,8 @@ export interface components {
         LeaseUpdateRequest: {
             /** Format: uuid */
             tenant_contact_id?: string;
+            /** @default false */
+            clear_tenant_contact: boolean;
             /** Format: date */
             start_date?: string;
             /** Format: date */

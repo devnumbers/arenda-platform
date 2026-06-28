@@ -32,6 +32,7 @@ type CreateLeaseCommand struct {
 
 type UpdateLeaseCommand struct {
 	TenantContactID      *uuid.UUID
+	ClearTenantContact   *bool
 	StartDate            *time.Time
 	EndDate              *time.Time
 	RentAmountKopecks    *int64
@@ -266,6 +267,9 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 			return domain.Lease{}, fmt.Errorf("get tenant contact: %w", err)
 		}
 		lease.TenantContactID = cmd.TenantContactID
+	}
+	if cmd.ClearTenantContact != nil && *cmd.ClearTenantContact {
+		lease.TenantContactID = nil
 	}
 
 	scheduleChanged := false

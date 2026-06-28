@@ -185,10 +185,11 @@ func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id u
 	}
 
 	cmd := leasesapp.UpdateLeaseCommand{
-		TenantContactID: uuidPtrFromOpenAPI(body.TenantContactId),
-		StartDate:       datePtrFromOpenAPI(body.StartDate),
-		EndDate:         datePtrFromOpenAPI(body.EndDate),
-		Comment:         body.Comment,
+		TenantContactID:    uuidPtrFromOpenAPI(body.TenantContactId),
+		ClearTenantContact: body.ClearTenantContact,
+		StartDate:          datePtrFromOpenAPI(body.StartDate),
+		EndDate:            datePtrFromOpenAPI(body.EndDate),
+		Comment:            body.Comment,
 	}
 	if body.RentAmountKopecks != nil {
 		cmd.RentAmountKopecks = new(int64(*body.RentAmountKopecks))
