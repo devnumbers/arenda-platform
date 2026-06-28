@@ -13,16 +13,17 @@ import (
 
 const createSMSCode = `-- name: CreateSMSCode :exec
 INSERT INTO sms_codes (id, phone, code_hash, expires_at, user_id, purpose, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6, true)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type CreateSMSCodeParams struct {
-	ID        pgtype.UUID        `json:"id"`
-	Phone     string             `json:"phone"`
-	CodeHash  string             `json:"code_hash"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-	UserID    pgtype.UUID        `json:"user_id"`
-	Purpose   string             `json:"purpose"`
+	ID             pgtype.UUID        `json:"id"`
+	Phone          string             `json:"phone"`
+	CodeHash       string             `json:"code_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	UserID         pgtype.UUID        `json:"user_id"`
+	Purpose        string             `json:"purpose"`
+	PhoneEncrypted bool               `json:"phone_encrypted"`
 }
 
 func (q *Queries) CreateSMSCode(ctx context.Context, arg CreateSMSCodeParams) error {
@@ -33,6 +34,7 @@ func (q *Queries) CreateSMSCode(ctx context.Context, arg CreateSMSCodeParams) er
 		arg.ExpiresAt,
 		arg.UserID,
 		arg.Purpose,
+		arg.PhoneEncrypted,
 	)
 	return err
 }
@@ -69,19 +71,25 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (id, phone, role, phone_encrypted) VALUES ($1, $2, $3, true)
+INSERT INTO users (id, phone, role, phone_encrypted) VALUES ($1, $2, $3, $4)
 ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone, phone_encrypted = EXCLUDED.phone_encrypted
 RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted
 `
 
 type CreateUserParams struct {
-	ID    pgtype.UUID `json:"id"`
-	Phone string      `json:"phone"`
-	Role  string      `json:"role"`
+	ID             pgtype.UUID `json:"id"`
+	Phone          string      `json:"phone"`
+	Role           string      `json:"role"`
+	PhoneEncrypted bool        `json:"phone_encrypted"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser, arg.ID, arg.Phone, arg.Role)
+	row := q.db.QueryRow(ctx, createUser,
+		arg.ID,
+		arg.Phone,
+		arg.Role,
+		arg.PhoneEncrypted,
+	)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -553,19 +561,20 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 const updateUserPhone = `-- name: UpdateUserPhone :one
 UPDATE users
 SET phone = $2,
-    phone_encrypted = true,
+    phone_encrypted = $3,
     updated_at = now()
 WHERE id = $1
 RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted
 `
 
 type UpdateUserPhoneParams struct {
-	ID    pgtype.UUID `json:"id"`
-	Phone string      `json:"phone"`
+	ID             pgtype.UUID `json:"id"`
+	Phone          string      `json:"phone"`
+	PhoneEncrypted bool        `json:"phone_encrypted"`
 }
 
 func (q *Queries) UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUserPhone, arg.ID, arg.Phone)
+	row := q.db.QueryRow(ctx, updateUserPhone, arg.ID, arg.Phone, arg.PhoneEncrypted)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -584,7 +593,7 @@ func (q *Queries) UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams
 
 const upsertLoginAttempt = `-- name: UpsertLoginAttempt :exec
 INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, true)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (phone) DO UPDATE SET
     failures = EXCLUDED.failures,
     first_failure_at = EXCLUDED.first_failure_at,
@@ -599,6 +608,7 @@ type UpsertLoginAttemptParams struct {
 	FirstFailureAt pgtype.Timestamptz `json:"first_failure_at"`
 	LastFailureAt  pgtype.Timestamptz `json:"last_failure_at"`
 	UserID         pgtype.UUID        `json:"user_id"`
+	PhoneEncrypted bool               `json:"phone_encrypted"`
 }
 
 func (q *Queries) UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error {
@@ -608,6 +618,7 @@ func (q *Queries) UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttempt
 		arg.FirstFailureAt,
 		arg.LastFailureAt,
 		arg.UserID,
+		arg.PhoneEncrypted,
 	)
 	return err
 }

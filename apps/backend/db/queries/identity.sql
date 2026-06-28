@@ -8,7 +8,7 @@ SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at
 SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted FROM users WHERE phone = $1;
 
 -- name: CreateUser :one
-INSERT INTO users (id, phone, role, phone_encrypted) VALUES ($1, $2, $3, true)
+INSERT INTO users (id, phone, role, phone_encrypted) VALUES ($1, $2, $3, $4)
 ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone, phone_encrypted = EXCLUDED.phone_encrypted
 RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted;
 
@@ -28,7 +28,7 @@ FOR UPDATE;
 
 -- name: CreateSMSCode :exec
 INSERT INTO sms_codes (id, phone, code_hash, expires_at, user_id, purpose, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6, true);
+VALUES ($1, $2, $3, $4, $5, $6, $7);
 
 -- name: MarkSMSCodeUsed :exec
 UPDATE sms_codes SET used = true WHERE id = $1;
@@ -55,7 +55,7 @@ SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_en
 
 -- name: UpsertLoginAttempt :exec
 INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, true)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (phone) DO UPDATE SET
     failures = EXCLUDED.failures,
     first_failure_at = EXCLUDED.first_failure_at,
@@ -124,7 +124,7 @@ RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated
 -- name: UpdateUserPhone :one
 UPDATE users
 SET phone = $2,
-    phone_encrypted = true,
+    phone_encrypted = $3,
     updated_at = now()
 WHERE id = $1
 RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted;

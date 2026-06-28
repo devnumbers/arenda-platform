@@ -158,6 +158,8 @@ func (e *aesEncryptor) HashToken(plaintext string) string {
 	return hashToken(e.key, plaintext)
 }
 
+func (e *aesEncryptor) IsNoop() bool { return false }
+
 type noopEncryptor struct{}
 
 func (noopEncryptor) HashToken(plaintext string) string {
@@ -182,3 +184,5 @@ func (noopEncryptor) DeterministicEncrypt(ctx context.Context, plaintext string)
 func (noopEncryptor) Decrypt(ctx context.Context, ciphertext string) (string, error) {
 	return ciphertext, nil
 }
+
+func (noopEncryptor) IsNoop() bool { return true }

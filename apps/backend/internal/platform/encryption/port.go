@@ -11,4 +11,7 @@ type Encryptor interface {
 	// encoded as a hex string. It is used for duplicate-token detection while
 	// keeping the raw token encrypted at rest.
 	HashToken(plaintext string) string
+	// IsNoop reports whether the encryptor is a pass-through implementation.
+	// Callers use this to store phone_encrypted=false for plaintext values.
+	IsNoop() bool
 }

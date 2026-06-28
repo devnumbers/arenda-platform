@@ -98,9 +98,10 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.U
 		return domain.User{}, err
 	}
 	row, err := r.q().CreateUser(ctx, postgres.CreateUserParams{
-		ID:    pgconv.UUIDToPgtype(user.ID),
-		Phone: encryptedPhone,
-		Role:  string(user.Role),
+		ID:             pgconv.UUIDToPgtype(user.ID),
+		Phone:          encryptedPhone,
+		Role:           string(user.Role),
+		PhoneEncrypted: !r.enc.IsNoop(),
 	})
 	if err != nil {
 		return domain.User{}, err
@@ -131,8 +132,9 @@ func (r *UserRepository) UpdatePhone(ctx context.Context, id uuid.UUID, phone do
 		return domain.User{}, err
 	}
 	row, err := r.q().UpdateUserPhone(ctx, postgres.UpdateUserPhoneParams{
-		ID:    pgconv.UUIDToPgtype(id),
-		Phone: encryptedPhone,
+		ID:             pgconv.UUIDToPgtype(id),
+		Phone:          encryptedPhone,
+		PhoneEncrypted: !r.enc.IsNoop(),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -189,12 +191,13 @@ func (r *SMSCodeRepository) Save(ctx context.Context, code domain.SMSCode) error
 		return err
 	}
 	return r.q().CreateSMSCode(ctx, postgres.CreateSMSCodeParams{
-		ID:        pgconv.UUIDToPgtype(code.ID),
-		Phone:     encryptedPhone,
-		CodeHash:  code.CodeHash,
-		ExpiresAt: pgtype.Timestamptz{Time: code.ExpiresAt, Valid: true},
-		UserID:    pgconv.UUIDToPgtypePtr(code.UserID),
-		Purpose:   code.Purpose,
+		ID:             pgconv.UUIDToPgtype(code.ID),
+		Phone:          encryptedPhone,
+		CodeHash:       code.CodeHash,
+		ExpiresAt:      pgtype.Timestamptz{Time: code.ExpiresAt, Valid: true},
+		UserID:         pgconv.UUIDToPgtypePtr(code.UserID),
+		Purpose:        code.Purpose,
+		PhoneEncrypted: !r.enc.IsNoop(),
 	})
 }
 
@@ -334,6 +337,7 @@ func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, userID
 		FirstFailureAt: pgtype.Timestamptz{Time: window.FirstFailureAt, Valid: true},
 		LastFailureAt:  pgtype.Timestamptz{Time: window.LastFailureAt, Valid: true},
 		UserID:         pgconv.UUIDToPgtype(userID),
+		PhoneEncrypted: !r.enc.IsNoop(),
 	})
 }
 
