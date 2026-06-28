@@ -180,6 +180,9 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 		p := string(*body.Periodicity)
 		cmd.Periodicity = &p
 	}
+	if body.ApplyFromDate != nil {
+		cmd.ApplyFromDate = new(body.ApplyFromDate.Time)
+	}
 
 	rec, err := h.svc.UpdateRecurringOperation(r.Context(), ownerID, id, cmd)
 	if err != nil {

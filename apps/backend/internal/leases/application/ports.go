@@ -67,6 +67,7 @@ type OperationFilter struct {
 	Statuses             []domain.OperationStatus
 	Categories           []domain.OperationCategory
 	PropertyID           uuid.UUID
+	LeaseID              uuid.UUID
 	FromDate             *time.Time
 	ToDate               *time.Time
 	RecurringOperationID uuid.UUID
@@ -114,6 +115,7 @@ type OperationRepository interface {
 	SoftDeleteOperation(ctx context.Context, id, ownerID uuid.UUID) error
 	DeleteUneditedFutureOperationsByLease(ctx context.Context, leaseID uuid.UUID, after time.Time) error
 	DeleteUneditedFutureOperationsByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID, after time.Time) error
+	DeleteUneditedOperationsByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID, from time.Time) error
 	DeleteOperationsOutsideLeaseRange(ctx context.Context, leaseID uuid.UUID, start time.Time, end *time.Time) error
 	DeleteUneditedOperationsByLease(ctx context.Context, leaseID uuid.UUID, from time.Time) error
 	ListPendingOperationsWithPastDate(ctx context.Context, ownerID uuid.UUID, asOf time.Time, limit int) ([]domain.Operation, error)

@@ -38,6 +38,13 @@ WHERE recurring_operation_id = $1
   AND operation_date > $2
   AND deleted_at IS NULL;
 
+-- name: DeleteUneditedOperationsByRecurringOperation :exec
+DELETE FROM operations
+WHERE recurring_operation_id = $1
+  AND is_exception = false
+  AND operation_date >= $2
+  AND deleted_at IS NULL;
+
 -- name: ListFutureOperationsByLease :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
 WHERE lease_id = $1 AND operation_date > $2
@@ -198,5 +205,6 @@ WHERE owner_id = $1
   AND (sqlc.arg('from_date')::date IS NULL OR operation_date >= sqlc.arg('from_date')::date)
   AND (sqlc.arg('to_date')::date IS NULL OR operation_date <= sqlc.arg('to_date')::date)
   AND (sqlc.arg('recurring_operation_id')::uuid IS NULL OR recurring_operation_id = sqlc.arg('recurring_operation_id')::uuid)
+  AND (sqlc.arg('lease_id')::uuid IS NULL OR lease_id = sqlc.arg('lease_id')::uuid)
 ORDER BY operation_date DESC, id DESC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;

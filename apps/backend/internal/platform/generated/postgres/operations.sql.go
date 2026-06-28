@@ -185,6 +185,24 @@ func (q *Queries) DeleteUneditedOperationsByLease(ctx context.Context, arg Delet
 	return err
 }
 
+const deleteUneditedOperationsByRecurringOperation = `-- name: DeleteUneditedOperationsByRecurringOperation :exec
+DELETE FROM operations
+WHERE recurring_operation_id = $1
+  AND is_exception = false
+  AND operation_date >= $2
+  AND deleted_at IS NULL
+`
+
+type DeleteUneditedOperationsByRecurringOperationParams struct {
+	RecurringOperationID pgtype.UUID `json:"recurring_operation_id"`
+	OperationDate        pgtype.Date `json:"operation_date"`
+}
+
+func (q *Queries) DeleteUneditedOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedOperationsByRecurringOperationParams) error {
+	_, err := q.db.Exec(ctx, deleteUneditedOperationsByRecurringOperation, arg.RecurringOperationID, arg.OperationDate)
+	return err
+}
+
 const getOperationByIDAndOwner = `-- name: GetOperationByIDAndOwner :one
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name FROM operations
 WHERE id = $1 AND owner_id = $2
@@ -532,8 +550,9 @@ WHERE owner_id = $1
   AND ($6::date IS NULL OR operation_date >= $6::date)
   AND ($7::date IS NULL OR operation_date <= $7::date)
   AND ($8::uuid IS NULL OR recurring_operation_id = $8::uuid)
+  AND ($9::uuid IS NULL OR lease_id = $9::uuid)
 ORDER BY operation_date DESC, id DESC
-LIMIT $10::int OFFSET $9::int
+LIMIT $11::int OFFSET $10::int
 `
 
 type ListOperationsByOwnerParams struct {
@@ -545,6 +564,7 @@ type ListOperationsByOwnerParams struct {
 	FromDate             pgtype.Date `json:"from_date"`
 	ToDate               pgtype.Date `json:"to_date"`
 	RecurringOperationID pgtype.UUID `json:"recurring_operation_id"`
+	LeaseID              pgtype.UUID `json:"lease_id"`
 	Offset               int32       `json:"offset"`
 	Limit                int32       `json:"limit"`
 }
@@ -559,6 +579,7 @@ func (q *Queries) ListOperationsByOwner(ctx context.Context, arg ListOperationsB
 		arg.FromDate,
 		arg.ToDate,
 		arg.RecurringOperationID,
+		arg.LeaseID,
 		arg.Offset,
 		arg.Limit,
 	)

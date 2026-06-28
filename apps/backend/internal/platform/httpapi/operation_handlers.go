@@ -178,6 +178,9 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 	if params.RecurringOperationId != nil {
 		filter.RecurringOperationID = *params.RecurringOperationId
 	}
+	if params.LeaseId != nil {
+		filter.LeaseID = *params.LeaseId
+	}
 	if params.Limit != nil {
 		filter.Limit = *params.Limit
 	}

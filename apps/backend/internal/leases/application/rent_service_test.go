@@ -243,6 +243,24 @@ func (r *fakeOperationRepo) DeleteUneditedFutureOperationsByRecurringOperation(_
 	return nil
 }
 
+func (r *fakeOperationRepo) DeleteUneditedOperationsByRecurringOperation(_ context.Context, recurringOperationID uuid.UUID, from time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	from = timeutil.Date(from)
+	filtered := r.ops[:0]
+	for _, op := range r.ops {
+		keep := true
+		if op.RecurringOperationID == recurringOperationID && !op.IsException && !timeutil.Date(op.OperationDate).Before(from) {
+			keep = false
+		}
+		if keep {
+			filtered = append(filtered, op)
+		}
+	}
+	r.ops = filtered
+	return nil
+}
+
 func (r *fakeOperationRepo) DeleteOperationsOutsideLeaseRange(_ context.Context, leaseID uuid.UUID, start time.Time, end *time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

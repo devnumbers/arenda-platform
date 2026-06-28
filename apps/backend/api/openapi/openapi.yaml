@@ -675,6 +675,12 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: lease_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
         - name: limit
           in: query
           required: false
@@ -2604,6 +2610,9 @@ components:
         periodicity:
           type: string
           enum: [monthly, yearly]
+        apply_from_date:
+          type: string
+          format: date
 
     RecurringOperationResponse:
       type: object

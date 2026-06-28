@@ -43,6 +43,7 @@ type UpdateRecurringOperationCommand struct {
 	EndDate       *time.Time
 	Comment       *string
 	Periodicity   *string
+	ApplyFromDate *time.Time
 }
 
 // RecurringOperationService orchestrates recurring operation use cases within the
@@ -240,6 +241,9 @@ func (s *RecurringOperationService) GetRecurringOperation(
 
 // UpdateRecurringOperation updates a recurring operation owned by the given owner
 // and regenerates future operations to reflect schedule or amount changes.
+// When ApplyFromDate is set, the series is split: the existing series ends the
+// day before ApplyFromDate and a new series is created with the requested
+// changes starting on ApplyFromDate.
 func (s *RecurringOperationService) UpdateRecurringOperation(
 	ctx context.Context,
 	ownerID, id uuid.UUID,
@@ -260,6 +264,19 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 			return domain.RecurringOperation{}, ErrNotFound
 		}
 		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
+	}
+
+	now := s.clock.Now()
+
+	if cmd.ApplyFromDate != nil {
+		newRec, err := s.splitRecurringOperationSeries(ctx, tx, ownerID, rec, cmd, now)
+		if err != nil {
+			return domain.RecurringOperation{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("commit tx: %w", err)
+		}
+		return newRec, nil
 	}
 
 	typeStr := string(rec.Type)
@@ -316,7 +333,7 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		return domain.RecurringOperation{}, err
 	}
 
-	rec.UpdatedAt = s.clock.Now()
+	rec.UpdatedAt = now
 
 	updated, err := txRecurring.Update(ctx, rec)
 	if err != nil {
@@ -326,7 +343,6 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("update recurring operation: %w", err)
 	}
 
-	now := s.clock.Now()
 	if s.scheduler != nil && updated.ReminderOffsetDays != nil {
 		txScheduler := s.scheduler.WithTx(tx)
 		if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, updated.ID); err != nil {
@@ -362,6 +378,160 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 
 	return updated, nil
 }
+
+// splitRecurringOperationSeries truncates the existing recurring operation at
+// the day before applyFromDate, deletes its unedited operations from that date
+// onward, and creates a new recurring operation with the requested changes.
+func (s *RecurringOperationService) splitRecurringOperationSeries(
+	ctx context.Context,
+	tx transaction.Tx,
+	ownerID uuid.UUID,
+	rec domain.RecurringOperation,
+	cmd UpdateRecurringOperationCommand,
+	now time.Time,
+) (domain.RecurringOperation, error) {
+	txRecurring := s.recurringOps.WithTx(tx)
+	txOps := s.operations.WithTx(tx)
+
+	applyFromDate := timeutil.Date(*cmd.ApplyFromDate)
+
+	if !applyFromDate.After(timeutil.Date(rec.StartDate)) {
+		return domain.RecurringOperation{}, newInvalidInputError("apply_from_date must be after the series start date")
+	}
+	if rec.EndDate != nil && applyFromDate.After(timeutil.Date(*rec.EndDate)) {
+		return domain.RecurringOperation{}, newInvalidInputError("apply_from_date must be on or before the series end date")
+	}
+
+	newID, err := uuid.NewRandom()
+	if err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("generate recurring operation id: %w", err)
+	}
+
+	typeStr := string(rec.Type)
+	categoryStr := string(rec.Category)
+	if cmd.Type != nil {
+		typeStr = *cmd.Type
+	}
+	if cmd.Category != nil {
+		categoryStr = *cmd.Category
+	}
+	opType, category, err := parseTypeAndCategory(typeStr, categoryStr)
+	if err != nil {
+		return domain.RecurringOperation{}, err
+	}
+
+	name := rec.Name
+	if cmd.Name != nil {
+		name = strings.TrimSpace(*cmd.Name)
+		if name == "" {
+			return domain.RecurringOperation{}, newInvalidInputError("name is required")
+		}
+		if len([]rune(name)) > 50 {
+			return domain.RecurringOperation{}, newInvalidInputError("name must be at most 50 characters")
+		}
+	}
+
+	amountKopecks := rec.AmountKopecks
+	if cmd.AmountKopecks != nil {
+		amountKopecks = *cmd.AmountKopecks
+	}
+
+	paymentDay := rec.PaymentDay
+	if cmd.PaymentDay != nil {
+		paymentDay = *cmd.PaymentDay
+	}
+
+	periodicity := rec.Periodicity
+	if cmd.Periodicity != nil {
+		periodicity, err = domain.ParseRecurringOperationPeriodicity(strings.TrimSpace(*cmd.Periodicity))
+		if err != nil {
+			return domain.RecurringOperation{}, newInvalidInputError(err.Error())
+		}
+	}
+
+	comment := rec.Comment
+	if cmd.Comment != nil {
+		comment = *cmd.Comment
+	}
+
+	newEndDate := cmd.EndDate
+	if newEndDate != nil {
+		d := timeutil.Date(*newEndDate)
+		newEndDate = &d
+		if applyFromDate.After(*newEndDate) {
+			return domain.RecurringOperation{}, newInvalidInputError("end_date must be on or after apply_from_date")
+		}
+	}
+
+	if err := s.validateCommand(string(opType), string(category), amountKopecks, applyFromDate, paymentDay, newEndDate); err != nil {
+		return domain.RecurringOperation{}, err
+	}
+
+	newRec := domain.RecurringOperation{
+		ID:                 newID,
+		OwnerID:            ownerID,
+		PropertyID:         rec.PropertyID,
+		LeaseID:            rec.LeaseID,
+		Type:               opType,
+		Category:           category,
+		Name:               name,
+		AmountKopecks:      amountKopecks,
+		StartDate:          applyFromDate,
+		PaymentDay:         paymentDay,
+		EndDate:            newEndDate,
+		Periodicity:        periodicity,
+		Status:             domain.RecurringOperationStatusActive,
+		Comment:            comment,
+		ReminderOffsetDays: rec.ReminderOffsetDays,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+
+	oldEndDate := applyFromDate.AddDate(0, 0, -1)
+	rec.EndDate = &oldEndDate
+	rec.UpdatedAt = now
+
+	if _, err := txRecurring.Update(ctx, rec); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.RecurringOperation{}, ErrNotFound
+		}
+		return domain.RecurringOperation{}, fmt.Errorf("truncate recurring operation: %w", err)
+	}
+
+	if err := txOps.DeleteUneditedOperationsByRecurringOperation(ctx, rec.ID, applyFromDate); err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("delete future operations: %w", err)
+	}
+
+	created, err := txRecurring.Create(ctx, newRec)
+	if err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("create new recurring operation: %w", err)
+	}
+
+	_, err = s.generateOperations(ctx, txOps, created, now, func(d time.Time) bool {
+		return !timeutil.Date(d).Before(applyFromDate)
+	})
+	if err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
+	}
+
+	if s.scheduler != nil && rec.ReminderOffsetDays != nil {
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, rec.ID); err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("cancel recurring reminders: %w", err)
+		}
+
+		persistedOps, err := txOps.ListByRecurringOperation(ctx, created.ID)
+		if err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("list operations for scheduling: %w", err)
+		}
+		if err := scheduleRemindersForOperations(ctx, txScheduler, created, persistedOps, now); err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
+		}
+	}
+
+	return created, nil
+}
+
 
 // PauseRecurringOperation marks a recurring operation as paused and cancels its reminders.
 func (s *RecurringOperationService) PauseRecurringOperation(

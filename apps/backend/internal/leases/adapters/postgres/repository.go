@@ -816,6 +816,7 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID
 		Statuses:             statuses,
 		Categories:           categories,
 		PropertyID:           pgconv.UUIDToPgtype(filter.PropertyID),
+		LeaseID:              pgconv.UUIDToPgtype(filter.LeaseID),
 		FromDate:             fromDate,
 		ToDate:               toDate,
 		RecurringOperationID: pgconv.UUIDToPgtype(filter.RecurringOperationID),
@@ -898,6 +899,13 @@ func (r *OperationRepository) DeleteUneditedFutureOperationsByRecurringOperation
 	return r.q().DeleteUneditedFutureOperationsByRecurringOperation(ctx, postgres.DeleteUneditedFutureOperationsByRecurringOperationParams{
 		RecurringOperationID: pgconv.UUIDToPgtype(recurringOperationID),
 		OperationDate:        pgconv.DateToPgtype(after),
+	})
+}
+
+func (r *OperationRepository) DeleteUneditedOperationsByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID, from time.Time) error {
+	return r.q().DeleteUneditedOperationsByRecurringOperation(ctx, postgres.DeleteUneditedOperationsByRecurringOperationParams{
+		RecurringOperationID: pgconv.UUIDToPgtype(recurringOperationID),
+		OperationDate:        pgconv.DateToPgtype(from),
 	})
 }
 

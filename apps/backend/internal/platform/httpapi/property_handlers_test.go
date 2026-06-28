@@ -219,6 +219,10 @@ func (r *fakeOperationRepoForHandlers) DeleteUneditedFutureOperationsByRecurring
 	return nil
 }
 
+func (r *fakeOperationRepoForHandlers) DeleteUneditedOperationsByRecurringOperation(_ context.Context, _ uuid.UUID, _ time.Time) error {
+	return nil
+}
+
 func (r *fakeOperationRepoForHandlers) DeleteOperationsOutsideLeaseRange(_ context.Context, _ uuid.UUID, _ time.Time, _ *time.Time) error {
 	return nil
 }
