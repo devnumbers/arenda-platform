@@ -54,7 +54,8 @@ func extractClientIP(r *http.Request, trustedNets []*net.IPNet) string {
 		// Trusted proxy but no usable forwarded header; fall back to the proxy's IP.
 		return formatAddr(remoteIP, remotePort)
 	}
-	return formatAddr(chosenIP, remotePort)
+	// A forwarded client IP has no meaningful TCP port; return the bare IP.
+	return chosenIP.String()
 }
 
 func parseRemoteAddr(addr string) (net.IP, string) {

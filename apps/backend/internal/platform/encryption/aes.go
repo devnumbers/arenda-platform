@@ -107,6 +107,11 @@ func (e *aesEncryptor) Encrypt(ctx context.Context, plaintext string) (string, e
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
+// DeterministicEncrypt returns a deterministic ciphertext for the given
+// plaintext. It is currently intended for phone numbers: the nonce is derived
+// with HMAC-SHA256 using a domain-separated label ("\x00phone") so that
+// phone-number plaintexts cannot be replayed against other deterministic
+// encryption contexts that may be added later.
 func (e *aesEncryptor) DeterministicEncrypt(ctx context.Context, plaintext string) (string, error) {
 	nonce := deterministicNonce(e.macKey, plaintext)
 	ciphertext := e.detGCM.Seal(nonce, nonce, []byte(plaintext), nil)
@@ -117,6 +122,7 @@ func deterministicNonce(macKey []byte, plaintext string) []byte {
 	mac := hmac.New(sha256.New, macKey)
 	// hmac.Write never returns an error for the hash.Hash contract.
 	_, _ = mac.Write([]byte(plaintext))
+	// Domain separator for phone-number deterministic encryption.
 	_, _ = mac.Write([]byte("\x00phone"))
 	return mac.Sum(nil)[:12]
 }
