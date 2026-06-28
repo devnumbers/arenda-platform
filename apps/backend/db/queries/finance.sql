@@ -17,7 +17,10 @@ WHERE owner_id = $1
   AND operation_date >= $2 AND operation_date <= $3
   AND deleted_at IS NULL
 GROUP BY property_id
-ORDER BY income_kopecks - expense_kopecks DESC;
+ORDER BY (
+  COALESCE(SUM(CASE WHEN type = 'income' THEN amount_kopecks ELSE 0 END), 0) -
+  COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_kopecks ELSE 0 END), 0)
+) DESC;
 
 -- name: GetFinanceReportByCategory :many
 SELECT
