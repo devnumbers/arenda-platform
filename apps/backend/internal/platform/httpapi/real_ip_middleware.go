@@ -46,7 +46,12 @@ func extractClientIP(r *http.Request, trustedNets []*net.IPNet) string {
 		chosenIP = parseSingleIP(r.Header.Get("X-Real-IP"))
 	}
 	if chosenIP == nil {
-		// Trusted proxy but no forwarded header; fall back to the proxy's IP.
+		// Every X-Forwarded-For IP is trusted and X-Real-IP is absent;
+		// fall back to the rightmost X-Forwarded-For IP.
+		chosenIP = rightmostParseableIP(r.Header.Get("X-Forwarded-For"))
+	}
+	if chosenIP == nil {
+		// Trusted proxy but no usable forwarded header; fall back to the proxy's IP.
 		return formatAddr(remoteIP, remotePort)
 	}
 	return formatAddr(chosenIP, remotePort)
@@ -85,7 +90,14 @@ func pickUntrustedIP(xff string, trustedNets []*net.IPNet) net.IP {
 			return ip
 		}
 	}
-	// All IPs are trusted; return the rightmost parseable one.
+	return nil
+}
+
+func rightmostParseableIP(xff string) net.IP {
+	if xff == "" {
+		return nil
+	}
+	parts := strings.Split(xff, ",")
 	for _, part := range slices.Backward(parts) {
 		if ip := parseSingleIP(part); ip != nil {
 			return ip

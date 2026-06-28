@@ -41,7 +41,7 @@ func NewEncryptor(key string) (Encryptor, error) {
 		return nil, fmt.Errorf("create gcm: %w", err)
 	}
 
-	return newAESEncryptor(decoded, gcm), nil
+	return newAESEncryptor(decoded, gcm)
 }
 
 func parseKey(key string) ([]byte, error) {
@@ -65,15 +65,26 @@ func parseKey(key string) ([]byte, error) {
 
 type aesEncryptor struct {
 	gcm    cipher.AEAD
+	detGCM cipher.AEAD
 	key    []byte
 	encKey []byte
 	macKey []byte
 }
 
-func newAESEncryptor(key []byte, gcm cipher.AEAD) *aesEncryptor {
+func newAESEncryptor(key []byte, gcm cipher.AEAD) (*aesEncryptor, error) {
 	encKey := deriveKey(key, "encKey")
 	macKey := deriveKey(key, "macKey")
-	return &aesEncryptor{gcm: gcm, key: key, encKey: encKey, macKey: macKey}
+
+	detBlock, err := aes.NewCipher(encKey)
+	if err != nil {
+		return nil, fmt.Errorf("create deterministic aes cipher: %w", err)
+	}
+	detGCM, err := cipher.NewGCM(detBlock)
+	if err != nil {
+		return nil, fmt.Errorf("create deterministic gcm: %w", err)
+	}
+
+	return &aesEncryptor{gcm: gcm, detGCM: detGCM, key: key, encKey: encKey, macKey: macKey}, nil
 }
 
 func deriveKey(key []byte, label string) []byte {
@@ -98,7 +109,7 @@ func (e *aesEncryptor) Encrypt(ctx context.Context, plaintext string) (string, e
 
 func (e *aesEncryptor) DeterministicEncrypt(ctx context.Context, plaintext string) (string, error) {
 	nonce := deterministicNonce(e.macKey, plaintext)
-	ciphertext := e.gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	ciphertext := e.detGCM.Seal(nonce, nonce, []byte(plaintext), nil)
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
@@ -121,7 +132,16 @@ func (e *aesEncryptor) Decrypt(ctx context.Context, ciphertext string) (string, 
 	}
 
 	nonce, encrypted := data[:e.gcm.NonceSize()], data[e.gcm.NonceSize():]
-	plaintext, err := e.gcm.Open(nil, nonce, encrypted, nil)
+
+	// Try the deterministic cipher first (phone encryption), then fall back to
+	// the randomized cipher (legacy/token encryption). Both share the same
+	// base64(nonce || ciphertext) format.
+	plaintext, err := e.detGCM.Open(nil, nonce, encrypted, nil)
+	if err == nil {
+		return string(plaintext), nil
+	}
+
+	plaintext, err = e.gcm.Open(nil, nonce, encrypted, nil)
 	if err != nil {
 		return "", fmt.Errorf("decrypt: %w", err)
 	}
