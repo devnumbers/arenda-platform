@@ -1,0 +1,33 @@
+meta {
+  name: Get Finance Report
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/finance/report?from=2026-01-01&to=2026-12-31
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  // Requires an authenticated session. Run auth/verify-code first.
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have totals", function() {
+    expect(res.body.totals).to.be.an("object");
+  });
+
+  test("should have currency", function() {
+    expect(res.body.currency).to.exist;
+  });
+}
