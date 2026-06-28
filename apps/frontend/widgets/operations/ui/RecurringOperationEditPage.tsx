@@ -3,10 +3,12 @@
 import {
   type ChangeEvent,
   type FormEvent,
+  useId,
   useState,
   type JSX,
 } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import clsx from 'clsx';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { Icon } from '@/shared/ui/icon';
 import { IconLink } from '@/shared/ui/icon-link';
@@ -17,7 +19,6 @@ import { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/generated';
 import {
   type OperationCategory,
-  type OperationFrequency,
   type OperationType,
 } from '@/entities/operation/model/types';
 import { getCategoriesByType } from '@/entities/operation/lib/categories';
@@ -32,7 +33,7 @@ import { useSubscription } from '@/features/subscription/api/hooks';
 import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import { CategorySelect } from './CategorySelect';
 import { TypeSelect } from './TypeSelect';
-import { FrequencySelect } from './FrequencySelect';
+import frequencyStyles from './FrequencySelect.module.css';
 import styles from './RecurringOperationEditPage.module.css';
 
 type RecurringOperationResponse =
@@ -40,14 +41,15 @@ type RecurringOperationResponse =
 type RecurringOperationUpdateRequest =
   components['schemas']['RecurringOperationUpdateRequest'];
 
+type RecurringPeriodicity = 'monthly' | 'yearly';
+
 type FormData = {
   type: OperationType;
   category: OperationCategory | undefined;
   name: string;
   amount: string;
-  periodicity: OperationFrequency;
+  periodicity: RecurringPeriodicity;
   paymentDay: number | undefined;
-  startDate: string;
   endDate: string;
   comment: string;
   applyFromDate: string;
@@ -57,11 +59,71 @@ type FormErrors = {
   name?: string;
   amount?: string;
   category?: string;
-  periodicity?: string;
   paymentDay?: string;
   endDate?: string;
   applyFromDate?: string;
 };
+
+const PERIODICITY_OPTIONS: {
+  readonly value: RecurringPeriodicity;
+  readonly label: string;
+}[] = [
+  { value: 'monthly', label: 'Ежемесячно' },
+  { value: 'yearly', label: 'Ежегодно' },
+];
+
+type SeriesFrequencySelectProps = {
+  readonly value: RecurringPeriodicity;
+  readonly onChange: (value: RecurringPeriodicity) => void;
+  readonly error?: string;
+  readonly disabled?: boolean;
+};
+
+function SeriesFrequencySelect({
+  value,
+  onChange,
+  error,
+  disabled,
+}: SeriesFrequencySelectProps): JSX.Element {
+  const labelId = useId();
+
+  return (
+    <div
+      className={clsx(frequencyStyles.root, error && frequencyStyles.error)}
+      role="radiogroup"
+      aria-labelledby={labelId}
+    >
+      <span id={labelId} className={frequencyStyles.label}>
+        Периодичность
+      </span>
+      <div className={frequencyStyles.options}>
+        {PERIODICITY_OPTIONS.map((option) => {
+          const isSelected = value === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              disabled={disabled}
+              className={clsx(
+                frequencyStyles.option,
+                isSelected && frequencyStyles.selected,
+              )}
+              onClick={() => onChange(option.value)}
+            >
+              <span className={frequencyStyles.radio} aria-hidden="true">
+                <span className={frequencyStyles.radioDot} />
+              </span>
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      {error && <span className={frequencyStyles.errorText}>{error}</span>}
+    </div>
+  );
+}
 
 function formatAmountFromKopecks(kopecks: number): string {
   return (kopecks / 100).toFixed(2);
@@ -136,7 +198,6 @@ function RecurringOperationEditPageContent({
     amount: formatAmountFromKopecks(operation.amount_kopecks),
     periodicity: operation.periodicity,
     paymentDay: operation.payment_day,
-    startDate: operation.start_date,
     endDate: operation.end_date ?? '',
     comment: operation.comment ?? '',
     applyFromDate: getInitialApplyFromDate(operation.start_date),
@@ -169,10 +230,6 @@ function RecurringOperationEditPageContent({
     }));
   };
 
-  const handleStartDateChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, startDate: event.currentTarget.value }));
-  };
-
   const handleEndDateChange = (event: ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, endDate: event.currentTarget.value }));
   };
@@ -198,10 +255,6 @@ function RecurringOperationEditPageContent({
 
     if (!form.category) {
       next.category = 'Выберите категорию';
-    }
-
-    if (!form.periodicity) {
-      next.periodicity = 'Выберите периодичность';
     }
 
     if (form.paymentDay === undefined) {
@@ -233,7 +286,6 @@ function RecurringOperationEditPageContent({
     if (
       amountKopecks === undefined ||
       !form.category ||
-      !form.periodicity ||
       form.paymentDay === undefined ||
       !form.applyFromDate
     ) {
@@ -245,7 +297,7 @@ function RecurringOperationEditPageContent({
       category: form.category,
       name: form.name.trim(),
       amount_kopecks: amountKopecks,
-      periodicity: form.periodicity as 'monthly' | 'yearly',
+      periodicity: form.periodicity,
       payment_day: form.paymentDay,
       apply_from_date: form.applyFromDate,
     };
@@ -256,11 +308,6 @@ function RecurringOperationEditPageContent({
 
     if (form.comment.trim()) {
       data.comment = form.comment.trim();
-    }
-
-    // start_date cannot be sent together with apply_from_date on the backend.
-    if (!form.applyFromDate && form.startDate) {
-      data.start_date = form.startDate;
     }
 
     updateOperation.mutate(
@@ -321,10 +368,9 @@ function RecurringOperationEditPageContent({
           onChange={handleAmountChange}
           error={errors.amount}
         />
-        <FrequencySelect
+        <SeriesFrequencySelect
           value={form.periodicity}
           onChange={(periodicity) => setForm((prev) => ({ ...prev, periodicity }))}
-          error={errors.periodicity}
           disabled={readonly}
         />
         <TextField
@@ -339,15 +385,6 @@ function RecurringOperationEditPageContent({
           value={form.paymentDay ?? ''}
           onChange={handlePaymentDayChange}
           error={errors.paymentDay}
-        />
-        <TextField
-          label="Дата начала"
-          type="date"
-          fullWidth
-          disabled={readonly}
-          value={form.startDate}
-          onChange={handleStartDateChange}
-          helperText="Используется, только если не задана дата применения"
         />
         <TextField
           label="Дата окончания (необязательно)"

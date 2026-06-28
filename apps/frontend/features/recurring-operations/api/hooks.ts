@@ -97,6 +97,7 @@ export function useUpdateRecurringOperation(): UseMutationResult<
       }),
     onSuccess: (_, { id, propertyId }) => {
       queryClient.invalidateQueries({ queryKey: ['recurring-operations'] });
+      queryClient.invalidateQueries({ queryKey: ['operations'] });
       queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.byProperty(propertyId),
       });
@@ -104,13 +105,7 @@ export function useUpdateRecurringOperation(): UseMutationResult<
         queryKey: recurringOperationKeys.detail(id),
       });
       queryClient.invalidateQueries({
-        queryKey: recurringOperationKeys.recurringOperations(),
-      });
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.operations({ recurring_operation_id: id }),
-      });
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.byProperty(propertyId),
+        queryKey: operationKeys.summary(propertyId),
       });
     },
   });
