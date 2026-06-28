@@ -550,7 +550,6 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 	return created, nil
 }
 
-
 // PauseRecurringOperation marks a recurring operation as paused and cancels its reminders.
 func (s *RecurringOperationService) PauseRecurringOperation(
 	ctx context.Context,
@@ -993,4 +992,3 @@ func scheduleRemindersForOperations(
 	}
 	return nil
 }
-
