@@ -18,6 +18,7 @@ body:json {
   {
     "type": "expense",
     "category": "utilities",
+    "name": "{{expenseOperationName}}",
     "amount_kopecks": 50000,
     "operation_date": "{{expenseOpDate}}",
     "comment": "{{expenseOperationComment}}"
@@ -31,6 +32,7 @@ script:pre-request {
     req.setHeader("Cookie", `${cookieName}=${sessionId}`);
   }
 
+  bru.setVar("expenseOperationName", "E2E expense operation " + Date.now());
   bru.setVar("expenseOperationComment", "E2E expense operation " + Date.now());
 
   const d = new Date();

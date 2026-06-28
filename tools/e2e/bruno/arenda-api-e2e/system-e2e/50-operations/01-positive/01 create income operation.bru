@@ -18,6 +18,7 @@ body:json {
   {
     "type": "income",
     "category": "rent",
+    "name": "{{incomeOperationName}}",
     "amount_kopecks": 150000,
     "operation_date": "{{incomeOpDate}}",
     "comment": "{{incomeOperationComment}}"
@@ -31,6 +32,7 @@ script:pre-request {
     req.setHeader("Cookie", `${cookieName}=${sessionId}`);
   }
 
+  bru.setVar("incomeOperationName", "E2E income operation " + Date.now());
   bru.setVar("incomeOperationComment", "E2E income operation " + Date.now());
 
   const d = new Date();

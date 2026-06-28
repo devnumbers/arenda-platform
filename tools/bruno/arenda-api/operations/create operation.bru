@@ -18,6 +18,7 @@ body:json {
   {
     "type": "{{operationType}}",
     "category": "{{operationCategory}}",
+    "name": "{{operationName}}",
     "amount_kopecks": {{operationAmountKopecks}},
     "operation_date": "{{operationDate}}",
     "comment": "Manual operation"
@@ -30,6 +31,9 @@ script:pre-request {
   if (sessionId) {
     req.setHeader("Cookie", `session_id=${sessionId}`);
   }
+
+  const operationName = bru.getVar("operationName") || "Manual operation";
+  bru.setVar("operationName", operationName);
 }
 
 script:post-response {
