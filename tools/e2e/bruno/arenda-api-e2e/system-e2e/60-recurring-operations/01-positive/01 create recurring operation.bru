@@ -17,6 +17,7 @@ headers {
 body:json {
   {
     "type": "expense",
+    "name": "{{recurringOperationName}}",
     "category": "utilities",
     "amount_kopecks": 50000,
     "start_date": "{{recurringStartDate}}",
@@ -33,6 +34,7 @@ script:pre-request {
     req.setHeader("Cookie", `${cookieName}=${sessionId}`);
   }
 
+  bru.setVar("recurringOperationName", "E2E recurring utilities " + Date.now());
   bru.setVar("recurringComment", "E2E recurring utilities " + Date.now());
 
   const today = new Date();
