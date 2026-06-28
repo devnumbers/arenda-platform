@@ -3,12 +3,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
 const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:8080';
+const BACKEND_TIMEOUT_MS = 30000;
 
 async function handler(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
   const { path } = await params;
+
+  if (path.length === 0 || path.some((segment) => segment === '' || segment === '..')) {
+    return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
+  }
+
   const targetPath = `/${path.join('/')}`;
   const search = request.nextUrl.searchParams.toString();
   const targetUrl = `${BACKEND_URL}${targetPath}${search ? `?${search}` : ''}`;
@@ -27,23 +33,42 @@ async function handler(
       ? await request.arrayBuffer()
       : undefined;
 
-  const response = await fetch(targetUrl, {
-    method: request.method,
-    headers,
-    body,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), BACKEND_TIMEOUT_MS);
 
-  const responseHeaders = new Headers(response.headers);
-  responseHeaders.delete('transfer-encoding');
+  try {
+    const response = await fetch(targetUrl, {
+      method: request.method,
+      headers,
+      body,
+      signal: controller.signal,
+    });
 
-  return new NextResponse(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: responseHeaders,
-  });
+    const responseHeaders = new Headers(response.headers);
+    responseHeaders.delete('transfer-encoding');
+    responseHeaders.delete('set-cookie');
+
+    const setCookies = response.headers.getSetCookie();
+    for (const cookie of setCookies) {
+      responseHeaders.append('Set-Cookie', cookie);
+    }
+
+    return new NextResponse(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+    });
+  } catch {
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 502 });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export const GET = handler;
 export const POST = handler;
+export const PUT = handler;
 export const PATCH = handler;
 export const DELETE = handler;
+export const OPTIONS = handler;
+export const HEAD = handler;
