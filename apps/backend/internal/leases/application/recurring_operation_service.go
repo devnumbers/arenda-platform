@@ -522,6 +522,14 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 			return domain.RecurringOperation{}, fmt.Errorf("cancel recurring reminders: %w", err)
 		}
 
+		retainedOps, err := txOps.ListByRecurringOperation(ctx, rec.ID)
+		if err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("list retained operations for scheduling: %w", err)
+		}
+		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, retainedOps, now); err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders for retained operations: %w", err)
+		}
+
 		persistedOps, err := txOps.ListByRecurringOperation(ctx, created.ID)
 		if err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("list operations for scheduling: %w", err)
