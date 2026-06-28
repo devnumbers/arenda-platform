@@ -12,6 +12,18 @@ export const operationKeys = {
       offset?: string;
     },
   ) => ['properties', propertyId, 'operations', filters ?? {}] as const,
+  byLease: (
+    leaseId: string,
+    filters?: {
+      type?: string | string[];
+      status?: string | string[];
+      category?: string | string[];
+      from?: string;
+      to?: string;
+      limit?: string;
+      offset?: string;
+    },
+  ) => ['leases', leaseId, 'operations', filters ?? {}] as const,
   detail: (id: string) => ['operations', id] as const,
   operations: (filters: {
     type?: string | string[];
@@ -21,6 +33,7 @@ export const operationKeys = {
     from?: string;
     to?: string;
     recurring_operation_id?: string;
+    lease_id?: string;
     limit?: string;
     offset?: string;
   }) => ['operations', filters] as const,

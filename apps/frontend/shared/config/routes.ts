@@ -7,6 +7,7 @@ export const ROUTES = {
   propertyNew: '/properties/new',
   propertyEdit: (id: string) => `/properties/${id}/edit`,
   leaseNew: '/leases/new',
+  lease: (id: string) => `/leases/${id}`,
   tenants: '/tenants',
   tenant: (id: string) => `/tenants/${id}`,
   tenantNew: '/tenants/new',

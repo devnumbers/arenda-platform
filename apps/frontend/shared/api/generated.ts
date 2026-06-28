@@ -1204,6 +1204,8 @@ export interface components {
             comment?: string;
             /** @enum {string} */
             periodicity?: "monthly" | "yearly";
+            /** Format: date */
+            apply_from_date?: string;
         };
         RecurringOperationResponse: {
             /** Format: uuid */
@@ -2009,6 +2011,7 @@ export interface operations {
                 from?: string;
                 to?: string;
                 recurring_operation_id?: string;
+                lease_id?: string;
                 limit?: number;
                 offset?: number;
             };

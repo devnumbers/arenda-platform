@@ -60,7 +60,7 @@ export function PropertyLeaseCard({
       )}
 
       {lease && endDate ? (
-        <div className={styles.card}>
+        <NextLink href={ROUTES.lease(lease.id)} className={styles.card}>
           <div className={styles.row}>
             <span className={styles.amount}>
               {formatMoneyKopecks(lease.rent_amount_kopecks)}
@@ -86,7 +86,7 @@ export function PropertyLeaseCard({
                 : formatLeaseMonth(lease.start_date)}
             </span>
           </div>
-        </div>
+        </NextLink>
       ) : (
         <div className={styles.empty}>
           <p className={styles.emptyText}>Аренда не создана</p>

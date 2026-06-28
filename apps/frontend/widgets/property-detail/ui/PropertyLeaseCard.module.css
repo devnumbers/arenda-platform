@@ -38,6 +38,8 @@
   padding: 20px;
   border-radius: 24px;
   background: var(--color-secondary-bg);
+  text-decoration: none;
+  color: inherit;
 }
 
 .row {
