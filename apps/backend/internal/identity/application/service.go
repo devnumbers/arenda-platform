@@ -19,6 +19,7 @@ var (
 	ErrCodeSentTooRecently = errors.New("code sent too recently")
 	ErrPhoneAlreadyTaken   = errors.New("phone already taken")
 	ErrPhoneUnchanged      = errors.New("new phone must differ from current phone")
+	ErrEmailAlreadyTaken   = errors.New("email already taken")
 )
 
 const minSendInterval = 1 * time.Minute
@@ -239,6 +240,16 @@ func (s *AuthService) UpdateUser(ctx context.Context, userID uuid.UUID, cmd Upda
 
 	if err := user.UpdatePersonalData(cmd.Name, cmd.Surname, cmd.Patronymic, cmd.Email); err != nil {
 		return domain.User{}, err
+	}
+
+	if user.Email != nil {
+		existing, err := s.users.GetByEmail(ctx, *user.Email)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return domain.User{}, fmt.Errorf("check email: %w", err)
+		}
+		if existing.ID != uuid.Nil && existing.ID != userID {
+			return domain.User{}, ErrEmailAlreadyTaken
+		}
 	}
 
 	updated, err := s.users.Update(ctx, user)
