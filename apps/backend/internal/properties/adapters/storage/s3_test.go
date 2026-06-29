@@ -10,12 +10,13 @@ import (
 )
 
 func TestS3Storage_Upload_RequestShape(t *testing.T) {
-	var gotMethod, gotPath, gotContentType string
+	var gotMethod, gotPath, gotContentType, gotACL string
 	var gotBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotContentType = r.Header.Get("Content-Type")
+		gotACL = r.Header.Get("x-amz-acl")
 		gotBody, _ = io.ReadAll(r.Body)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -40,6 +41,9 @@ func TestS3Storage_Upload_RequestShape(t *testing.T) {
 	}
 	if gotContentType != "image/jpeg" {
 		t.Errorf("content-type = %q, want image/jpeg", gotContentType)
+	}
+	if gotACL != "public-read" {
+		t.Errorf("x-amz-acl = %q, want public-read", gotACL)
 	}
 	if string(gotBody) != "data" {
 		t.Errorf("body = %q, want data", gotBody)

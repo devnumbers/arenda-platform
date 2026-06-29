@@ -11,6 +11,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 // S3Storage uploads property photos to an S3-compatible object store.
@@ -56,6 +57,7 @@ func (s *S3Storage) Upload(ctx context.Context, key, contentType string, size in
 		Body:          data,
 		ContentType:   aws.String(contentType),
 		ContentLength: aws.Int64(size),
+		ACL:           types.ObjectCannedACLPublicRead,
 	})
 	if err != nil {
 		return "", fmt.Errorf("put object: %w", err)
