@@ -216,19 +216,14 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body openapi.UserUpdateRequest
+	var body application.UpdateUserCommand
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
 
-	user, err := h.auth.UpdateUser(r.Context(), userID, application.UpdateUserCommand{
-		Name:       body.Name,
-		Surname:    body.Surname,
-		Patronymic: body.Patronymic,
-		Email:      body.Email,
-	})
+	user, err := h.auth.UpdateUser(r.Context(), userID, body)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidEmail):

@@ -225,10 +225,10 @@ func (s *AuthService) Me(ctx context.Context, userID uuid.UUID) (domain.User, er
 }
 
 type UpdateUserCommand struct {
-	Name       *string
-	Surname    *string
-	Patronymic *string
-	Email      *string
+	Name       domain.Optional[string]
+	Surname    domain.Optional[string]
+	Patronymic domain.Optional[string]
+	Email      domain.Optional[string]
 }
 
 func (s *AuthService) UpdateUser(ctx context.Context, userID uuid.UUID, cmd UpdateUserCommand) (domain.User, error) {

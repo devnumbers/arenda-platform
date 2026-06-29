@@ -71,3 +71,47 @@ func TestAuthServiceLogoutAllPropagatesError(t *testing.T) {
 		t.Fatal("expected error from DeleteByUserID")
 	}
 }
+
+type fakeUserRepo struct {
+	user domain.User
+}
+
+func (f *fakeUserRepo) GetByID(_ context.Context, _ uuid.UUID) (domain.User, error)                 { return f.user, nil }
+func (f *fakeUserRepo) GetByIDForUpdate(_ context.Context, _ uuid.UUID) (domain.User, error)         { return f.user, nil }
+func (f *fakeUserRepo) GetByPhone(_ context.Context, _ domain.Phone) (domain.User, error)             { return domain.User{}, ErrNotFound }
+func (f *fakeUserRepo) GetPhoneByID(_ context.Context, _ uuid.UUID) (string, error)                   { return f.user.Phone.String(), nil }
+func (f *fakeUserRepo) Create(_ context.Context, user domain.User) (domain.User, error)               { return user, nil }
+func (f *fakeUserRepo) Update(_ context.Context, user domain.User) (domain.User, error)               { f.user = user; return user, nil }
+func (f *fakeUserRepo) UpdatePhone(_ context.Context, _ uuid.UUID, phone domain.Phone) (domain.User, error) {
+	f.user.Phone = phone
+	return f.user, nil
+}
+func (f *fakeUserRepo) WithTx(_ transaction.Tx) UserRepository { return f }
+
+func TestUpdateUserClearsName(t *testing.T) {
+	phone, err := domain.NewPhone("+79001234567")
+	if err != nil {
+		t.Fatalf("NewPhone() error = %v", err)
+	}
+
+	name := "Ivan"
+	user, err := domain.NewOwner(phone)
+	if err != nil {
+		t.Fatalf("NewOwner() error = %v", err)
+	}
+	user.Name = &name
+
+	repo := &fakeUserRepo{user: user}
+	svc := NewAuthService(repo, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	updated, err := svc.UpdateUser(context.Background(), user.ID, UpdateUserCommand{
+		Name: domain.Optional[string]{Set: true},
+	})
+	if err != nil {
+		t.Fatalf("UpdateUser() error = %v", err)
+	}
+
+	if updated.Name != nil {
+		t.Errorf("Name = %v, want nil", updated.Name)
+	}
+}
