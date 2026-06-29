@@ -2186,6 +2186,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PropertyPhoto'
+        active_lease:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/LeaseResponse'
         created_at:
           type: string
           format: date-time
