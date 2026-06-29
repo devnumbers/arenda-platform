@@ -26,7 +26,7 @@ func TestS3Storage_Upload_RequestShape(t *testing.T) {
 		t.Fatalf("create storage: %v", err)
 	}
 
-	url, err := storage.Upload(context.Background(), "properties/123/image.jpg", "image/jpeg", strings.NewReader("data"))
+	url, err := storage.Upload(context.Background(), "properties/123/image.jpg", "image/jpeg", int64(len("data")), strings.NewReader("data"))
 	if err != nil {
 		t.Fatalf("upload failed: %v", err)
 	}
@@ -61,8 +61,79 @@ func TestS3Storage_Upload_Error(t *testing.T) {
 		t.Fatalf("create storage: %v", err)
 	}
 
-	_, err = storage.Upload(context.Background(), "properties/123/image.jpg", "image/jpeg", strings.NewReader("data"))
+	_, err = storage.Upload(context.Background(), "properties/123/image.jpg", "image/jpeg", int64(len("data")), strings.NewReader("data"))
 	if err == nil {
 		t.Fatal("expected error for 500 response")
 	}
+}
+
+func TestS3Storage_Upload_SetsContentLength(t *testing.T) {
+	var gotContentLength int64 = -1
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotContentLength = r.ContentLength
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	storage, err := NewS3Storage(srv.URL+"/", "us-east-1", "test-bucket", "access", "secret", "https://cdn.example.com", true)
+	if err != nil {
+		t.Fatalf("create storage: %v", err)
+	}
+
+	wantSize := int64(42)
+	_, err = storage.Upload(context.Background(), "properties/123/image.jpg", "image/jpeg", wantSize, strings.NewReader(strings.Repeat("x", int(wantSize))))
+	if err != nil {
+		t.Fatalf("upload failed: %v", err)
+	}
+
+	if gotContentLength != wantSize {
+		t.Errorf("Content-Length = %d, want %d", gotContentLength, wantSize)
+	}
+	wantPath := "/test-bucket/properties/123/image.jpg"
+	if gotPath != wantPath {
+		t.Errorf("path = %q, want %q", gotPath, wantPath)
+	}
+}
+
+func TestS3Storage_HeadBucket(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodHead {
+				t.Errorf("method = %q, want HEAD", r.Method)
+			}
+			wantPath := "/test-bucket"
+			if r.URL.Path != wantPath {
+				t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		storage, err := NewS3Storage(srv.URL, "us-east-1", "test-bucket", "access", "secret", "https://cdn.example.com", true)
+		if err != nil {
+			t.Fatalf("create storage: %v", err)
+		}
+
+		if err := storage.HeadBucket(context.Background()); err != nil {
+			t.Fatalf("HeadBucket failed: %v", err)
+		}
+	})
+
+	t.Run("error on non-2xx", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer srv.Close()
+
+		storage, err := NewS3Storage(srv.URL, "us-east-1", "test-bucket", "access", "secret", "https://cdn.example.com", true)
+		if err != nil {
+			t.Fatalf("create storage: %v", err)
+		}
+
+		if err := storage.HeadBucket(context.Background()); err == nil {
+			t.Fatal("expected error for 404 response")
+		}
+	})
 }

@@ -435,7 +435,7 @@ func Load() (Config, error) {
 		}
 	} else {
 		if !s3Complete {
-			return Config{}, fmt.Errorf("REGRU_S3_ENDPOINT, REGRU_S3_REGION, REGRU_S3_BUCKET, REGRU_S3_ACCESS_KEY, REGRU_S3_SECRET_KEY and REGRU_S3_PUBLIC_BASE_URL are required for APP_ENV=%s", cfg.AppEnv)
+			return Config{}, fmt.Errorf("REGRU_S3_ENDPOINT, REGRU_S3_BUCKET, REGRU_S3_ACCESS_KEY, REGRU_S3_SECRET_KEY and REGRU_S3_PUBLIC_BASE_URL are required for APP_ENV=%s", cfg.AppEnv)
 		}
 		cfg.PhotoStorageS3Enabled = true
 	}

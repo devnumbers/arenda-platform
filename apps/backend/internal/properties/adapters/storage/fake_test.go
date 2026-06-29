@@ -11,7 +11,7 @@ func TestFakeStorage_Upload(t *testing.T) {
 	ctx := context.Background()
 	s := NewFakeStorage("http://localhost:8080/uploads")
 
-	url, err := s.Upload(ctx, "properties/123/image.jpg", "image/jpeg", bytes.NewReader([]byte("fake-image")))
+	url, err := s.Upload(ctx, "properties/123/image.jpg", "image/jpeg", int64(len("fake-image")), bytes.NewReader([]byte("fake-image")))
 	if err != nil {
 		t.Fatalf("upload failed: %v", err)
 	}
@@ -34,11 +34,11 @@ func TestFakeStorage_Upload_Overwrites(t *testing.T) {
 	ctx := context.Background()
 	s := NewFakeStorage("http://localhost:8080/uploads")
 
-	_, err := s.Upload(ctx, "properties/123/image.jpg", "image/jpeg", bytes.NewReader([]byte("first")))
+	_, err := s.Upload(ctx, "properties/123/image.jpg", "image/jpeg", int64(len("first")), bytes.NewReader([]byte("first")))
 	if err != nil {
 		t.Fatalf("first upload failed: %v", err)
 	}
-	_, err = s.Upload(ctx, "properties/123/image.jpg", "image/jpeg", bytes.NewReader([]byte("second")))
+	_, err = s.Upload(ctx, "properties/123/image.jpg", "image/jpeg", int64(len("second")), bytes.NewReader([]byte("second")))
 	if err != nil {
 		t.Fatalf("second upload failed: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestFakeStorage_Upload_LargeFile(t *testing.T) {
 	s := NewFakeStorage("http://localhost:8080/uploads")
 
 	data := bytes.Repeat([]byte("x"), 1024*1024) // 1 MiB
-	url, err := s.Upload(ctx, "properties/123/large.jpg", "image/jpeg", bytes.NewReader(data))
+	url, err := s.Upload(ctx, "properties/123/large.jpg", "image/jpeg", int64(len(data)), bytes.NewReader(data))
 	if err != nil {
 		t.Fatalf("upload failed: %v", err)
 	}
@@ -68,5 +68,14 @@ func TestFakeStorage_Upload_LargeFile(t *testing.T) {
 	}
 	if len(got) != len(data) {
 		t.Errorf("stored bytes length = %d, want %d", len(got), len(data))
+	}
+}
+
+func TestFakeStorage_HeadBucket(t *testing.T) {
+	ctx := context.Background()
+	s := NewFakeStorage("http://localhost:8080/uploads")
+
+	if err := s.HeadBucket(ctx); err != nil {
+		t.Fatalf("HeadBucket failed: %v", err)
 	}
 }

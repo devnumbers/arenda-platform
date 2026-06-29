@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -33,6 +34,8 @@ func NewS3Storage(endpoint, region, bucket, accessKey, secretKey, publicBaseURL 
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
 
+	endpoint = strings.TrimRight(endpoint, "/")
+
 	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(endpoint)
 		o.UsePathStyle = pathStyle
@@ -46,12 +49,13 @@ func NewS3Storage(endpoint, region, bucket, accessKey, secretKey, publicBaseURL 
 }
 
 // Upload stores the object under the given key and returns its public URL.
-func (s *S3Storage) Upload(ctx context.Context, key, contentType string, data io.Reader) (string, error) {
+func (s *S3Storage) Upload(ctx context.Context, key, contentType string, size int64, data io.Reader) (string, error) {
 	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(s.bucket),
-		Key:         aws.String(key),
-		Body:        data,
-		ContentType: aws.String(contentType),
+		Bucket:        aws.String(s.bucket),
+		Key:           aws.String(key),
+		Body:          data,
+		ContentType:   aws.String(contentType),
+		ContentLength: aws.Int64(size),
 	})
 	if err != nil {
 		return "", fmt.Errorf("put object: %w", err)
@@ -72,6 +76,15 @@ func (s *S3Storage) Delete(ctx context.Context, key string) error {
 	})
 	if err != nil {
 		return fmt.Errorf("delete object: %w", err)
+	}
+	return nil
+}
+
+// HeadBucket checks whether the configured bucket exists and is reachable.
+func (s *S3Storage) HeadBucket(ctx context.Context) error {
+	_, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(s.bucket)})
+	if err != nil {
+		return fmt.Errorf("head bucket: %w", err)
 	}
 	return nil
 }

@@ -62,8 +62,9 @@ type LeaseRepository interface {
 
 // PhotoStorage persists uploaded property photos and returns their public URL.
 type PhotoStorage interface {
-	Upload(ctx context.Context, key string, contentType string, data io.Reader) (string, error)
+	Upload(ctx context.Context, key string, contentType string, size int64, data io.Reader) (string, error)
 	Delete(ctx context.Context, key string) error
+	HeadBucket(ctx context.Context) error
 }
 
 // PropertyPhotoRepository persists photo metadata for properties.

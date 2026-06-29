@@ -23,7 +23,7 @@ func NewFakeStorage(publicBaseURL string) *FakeStorage {
 }
 
 // Upload stores the object in memory and returns a deterministic public URL.
-func (s *FakeStorage) Upload(_ context.Context, key, _ string, data io.Reader) (string, error) {
+func (s *FakeStorage) Upload(_ context.Context, key, _ string, _ int64, data io.Reader) (string, error) {
 	b, err := io.ReadAll(data)
 	if err != nil {
 		return "", fmt.Errorf("read upload data: %w", err)
@@ -41,6 +41,11 @@ func (s *FakeStorage) Delete(_ context.Context, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.objects, key)
+	return nil
+}
+
+// HeadBucket is a no-op for the in-memory storage adapter.
+func (s *FakeStorage) HeadBucket(_ context.Context) error {
 	return nil
 }
 

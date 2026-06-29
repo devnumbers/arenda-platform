@@ -208,6 +208,9 @@ func run(fallback *slog.Logger) error {
 		if err != nil {
 			return fmt.Errorf("photo storage: %w", err)
 		}
+		if err := photoStorage.HeadBucket(ctx); err != nil {
+			return fmt.Errorf("photo storage: head bucket %q: %w", cfg.PhotoStorageBucket, err)
+		}
 		appLogger.InfoContext(ctx, "photo storage initialized", "provider", "s3", "bucket", cfg.PhotoStorageBucket, "endpoint", cfg.PhotoStorageEndpoint)
 	} else {
 		photoStorage = storage.NewFakeStorage(cfg.PhotoStoragePublicBaseURL)

@@ -481,11 +481,15 @@ var _ propertiesapp.PropertyPhotoRepository = fakePropertyPhotoRepo{}
 // fakePropertyPhotoStorage satisfies propertiesapp.PhotoStorage.
 type fakePropertyPhotoStorage struct{}
 
-func (fakePropertyPhotoStorage) Upload(_ context.Context, _, _ string, _ io.Reader) (string, error) {
+func (fakePropertyPhotoStorage) Upload(_ context.Context, _, _ string, _ int64, _ io.Reader) (string, error) {
 	return "", nil
 }
 
 func (fakePropertyPhotoStorage) Delete(_ context.Context, _ string) error {
+	return nil
+}
+
+func (fakePropertyPhotoStorage) HeadBucket(_ context.Context) error {
 	return nil
 }
 

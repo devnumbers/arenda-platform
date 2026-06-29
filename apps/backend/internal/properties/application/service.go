@@ -520,7 +520,7 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, ownerID, propert
 	ext := allowedPhotoContentTypes[contentType]
 	key := fmt.Sprintf("%s/%s/%s%s", photoKeyPrefix, propertyID.String(), photoID.String(), ext)
 
-	url, err := s.photoStorage.Upload(ctx, key, contentType, file)
+	url, err := s.photoStorage.Upload(ctx, key, contentType, size, file)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("upload photo: %w", err)
 	}

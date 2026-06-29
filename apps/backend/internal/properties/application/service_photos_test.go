@@ -14,11 +14,13 @@ import (
 )
 
 type fakePhotoStorage struct {
-	uploadURL string
-	uploadErr error
+	uploadURL    string
+	uploadErr    error
+	uploadedSize int64
 }
 
-func (s *fakePhotoStorage) Upload(_ context.Context, _, _ string, _ io.Reader) (string, error) {
+func (s *fakePhotoStorage) Upload(_ context.Context, _, _ string, size int64, _ io.Reader) (string, error) {
+	s.uploadedSize = size
 	if s.uploadErr != nil {
 		return "", s.uploadErr
 	}
@@ -26,6 +28,10 @@ func (s *fakePhotoStorage) Upload(_ context.Context, _, _ string, _ io.Reader) (
 }
 
 func (s *fakePhotoStorage) Delete(_ context.Context, _ string) error {
+	return nil
+}
+
+func (s *fakePhotoStorage) HeadBucket(_ context.Context) error {
 	return nil
 }
 
@@ -184,6 +190,27 @@ func TestAddPropertyPhoto_Success(t *testing.T) {
 	}
 	if property.Photos[0].ID == uuid.Nil {
 		t.Error("expected non-nil photo id")
+	}
+}
+
+func TestAddPropertyPhoto_PassesSizeToStorage(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	repo := newLockingFakePropertyRepo(domain.Property{ID: propertyID, OwnerID: ownerID})
+	photoRepo := &fakePhotoRepo{count: 0, photos: map[uuid.UUID][]domain.Photo{}}
+	storage := &fakePhotoStorage{uploadURL: "https://cdn.example.com/properties/22222222-2222-2222-2222-222222222222/photo.jpg"}
+	svc := newPhotoService(t, repo, photoRepo, storage)
+
+	wantSize := int64(12345)
+	_, err := svc.AddPropertyPhoto(ctx, ownerID, propertyID, bytes.NewReader([]byte("image-data")), "file.jpg", "image/jpeg", wantSize)
+	if err != nil {
+		t.Fatalf("upload failed: %v", err)
+	}
+
+	if storage.uploadedSize != wantSize {
+		t.Errorf("uploaded size = %d, want %d", storage.uploadedSize, wantSize)
 	}
 }
 
