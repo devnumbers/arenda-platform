@@ -216,14 +216,26 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body application.UpdateUserCommand
+	type updateMeRequest struct {
+		Name       domain.Optional[string] `json:"name"`
+		Surname    domain.Optional[string] `json:"surname"`
+		Patronymic domain.Optional[string] `json:"patronymic"`
+		Email      domain.Optional[string] `json:"email"`
+	}
+
+	var body updateMeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
 		return
 	}
 
-	user, err := h.auth.UpdateUser(r.Context(), userID, body)
+	user, err := h.auth.UpdateUser(r.Context(), userID, application.UpdateUserCommand{
+		Name:       body.Name,
+		Surname:    body.Surname,
+		Patronymic: body.Patronymic,
+		Email:      body.Email,
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidEmail):
