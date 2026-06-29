@@ -1,20 +1,21 @@
 'use client';
 
 import type { JSX } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/shared/ui/button';
-import { Icon } from '@/shared/ui/icon';
-import { BoldUsers } from '@/shared/assets/icons';
+import { ROUTES } from '@/shared/config/routes';
 import styles from './LeaseSuccessStep.module.css';
 
 export type LeaseSuccessStepProps = {
   readonly onAddLater: () => void;
-  readonly onAddTenant: () => void;
+  readonly leaseId: string;
 };
 
 export function LeaseSuccessStep({
   onAddLater,
-  onAddTenant,
+  leaseId,
 }: LeaseSuccessStepProps): JSX.Element {
+  const router = useRouter();
   return (
     <div className={styles.root}>
       <div className={styles.card}>
@@ -28,7 +29,7 @@ export function LeaseSuccessStep({
         <div className={styles.text}>
           <h2 className={styles.heading}>Аренда создана</h2>
           <p className={styles.subtext}>
-            Добавьте арендатора и его контакты, чтобы все данные были в одном месте
+            Перейдите к аренде, чтобы добавить или изменить арендатора
           </p>
         </div>
 
@@ -47,14 +48,9 @@ export function LeaseSuccessStep({
             variant="primary"
             size="large"
             fullWidth
-            leftIcon={
-              <Icon size="m">
-                <BoldUsers />
-              </Icon>
-            }
-            onClick={onAddTenant}
+            onClick={() => router.push(ROUTES.lease(leaseId))}
           >
-            Добавить арендатора
+            Перейти к аренде
           </Button>
         </div>
       </div>

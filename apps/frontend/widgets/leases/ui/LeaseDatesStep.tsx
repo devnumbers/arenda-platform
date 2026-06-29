@@ -12,6 +12,7 @@ import {
   type DateValue,
 } from '@internationalized/date';
 import { Button } from '@/shared/ui/button';
+import type { TenantContact } from '@/entities/tenant-contact/model/types';
 import { PaymentDayPicker } from './PaymentDayPicker';
 import styles from './LeaseDatesStep.module.css';
 
@@ -19,9 +20,13 @@ export type LeaseDatesStepProps = {
   readonly paymentDay?: number;
   readonly startDate?: string;
   readonly endDate?: string;
+  readonly tenantContactId?: string;
+  readonly tenantContacts?: TenantContact[];
   readonly onPaymentDayChange: (day: number) => void;
   readonly onStartDateChange: (date: string) => void;
   readonly onEndDateChange: (date: string) => void;
+  readonly onTenantContactChange: (id: string) => void;
+  readonly onCreateTenant: () => void;
   readonly onSubmit: () => void;
   readonly isLoading: boolean;
   readonly error?: string;
@@ -31,9 +36,13 @@ export function LeaseDatesStep({
   paymentDay,
   startDate,
   endDate,
+  tenantContactId,
+  tenantContacts,
   onPaymentDayChange,
   onStartDateChange,
   onEndDateChange,
+  onTenantContactChange,
+  onCreateTenant,
   onSubmit,
   isLoading,
   error,
@@ -150,6 +159,31 @@ export function LeaseDatesStep({
               </Calendar>
             </DatePicker.Popover>
           </DatePicker>
+        </div>
+
+        <div className={styles.tenantField}>
+          <Label className={styles.tenantLabel}>Арендатор</Label>
+          <select
+            className={styles.tenantSelect}
+            value={tenantContactId ?? ''}
+            onChange={(event) => onTenantContactChange(event.target.value)}
+          >
+            <option value="">Не указан</option>
+            {tenantContacts?.map((contact) => (
+              <option key={contact.id} value={contact.id}>
+                {[contact.surname, contact.name, contact.patronymic]
+                  .filter(Boolean)
+                  .join(' ')}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className={styles.createTenantLink}
+            onClick={onCreateTenant}
+          >
+            Создать нового арендатора
+          </button>
         </div>
       </div>
       <div className={styles.submit}>

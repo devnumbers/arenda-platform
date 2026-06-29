@@ -4,6 +4,7 @@ import { useEffect, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { propertyKeys, useProperty } from '@/features/properties/api';
+import { useTenantContacts } from '@/features/tenant-contacts/api/hooks';
 import { useCreateLease } from '@/features/leases/api';
 import { ApiError } from '@/shared/api/errors';
 import { ROUTES } from '@/shared/config/routes';
@@ -39,8 +40,10 @@ export function LeaseCreateWizard({ propertyId }: LeaseCreateWizardProps): JSX.E
   const { draft, setDraft } = useLeaseCreateDraft();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | undefined>(undefined);
+  const [createdLeaseId, setCreatedLeaseId] = useState<string | undefined>(undefined);
 
   const propertyQuery = useProperty(propertyId ?? '');
+  const tenantContactsQuery = useTenantContacts();
   const createLease = useCreateLease();
 
   useEffect(() => {
@@ -83,14 +86,17 @@ export function LeaseCreateWizard({ propertyId }: LeaseCreateWizardProps): JSX.E
     setSubmitError(undefined);
 
     try {
-      await createLease.mutateAsync({
+      const lease = await createLease.mutateAsync({
         property_id: propertyId,
         rent_amount_kopecks: Math.round(Number(draft.rentAmount) * 100),
         deposit_amount_kopecks: Math.round(Number(draft.depositAmount || '0') * 100),
         payment_day: draft.paymentDay,
         start_date: draft.startDate,
         end_date: draft.endDate || undefined,
+        tenant_contact_id: draft.tenantContactId || undefined,
       });
+
+      setCreatedLeaseId(lease.id);
 
       queryClient.invalidateQueries({ queryKey: propertyKeys.all });
       queryClient.invalidateQueries({ queryKey: propertyKeys.list });
@@ -110,7 +116,7 @@ export function LeaseCreateWizard({ propertyId }: LeaseCreateWizardProps): JSX.E
       <div className={styles.root}>
         <LeaseSuccessStep
           onAddLater={() => router.push(ROUTES.properties)}
-          onAddTenant={() => router.push(ROUTES.tenants)}
+          leaseId={createdLeaseId ?? ''}
         />
       </div>
     );
@@ -136,11 +142,17 @@ export function LeaseCreateWizard({ propertyId }: LeaseCreateWizardProps): JSX.E
             paymentDay={draft.paymentDay}
             startDate={draft.startDate}
             endDate={draft.endDate}
+            tenantContactId={draft.tenantContactId}
+            tenantContacts={tenantContactsQuery.data}
             onPaymentDayChange={(paymentDay) =>
               setDraft((prev) => ({ ...prev, paymentDay }))
             }
             onStartDateChange={(startDate) => setDraft((prev) => ({ ...prev, startDate }))}
             onEndDateChange={(endDate) => setDraft((prev) => ({ ...prev, endDate }))}
+            onTenantContactChange={(tenantContactId) =>
+              setDraft((prev) => ({ ...prev, tenantContactId }))
+            }
+            onCreateTenant={() => router.push(ROUTES.tenantNew)}
             onSubmit={handleSubmit}
             isLoading={isSubmitting}
             error={submitError}
