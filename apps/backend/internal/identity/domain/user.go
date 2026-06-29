@@ -41,18 +41,18 @@ func NewOwner(phone Phone) (User, error) {
 	}, nil
 }
 
-func (u *User) UpdatePersonalData(name, surname, patronymic, email *string) error {
-	if name != nil {
-		u.Name = nonEmptyPtr(strings.TrimSpace(*name))
+func (u *User) UpdatePersonalData(name, surname, patronymic, email Optional[string]) error {
+	if name.Set {
+		u.Name = nonEmptyPtr(strings.TrimSpace(name.Value))
 	}
-	if surname != nil {
-		u.Surname = nonEmptyPtr(strings.TrimSpace(*surname))
+	if surname.Set {
+		u.Surname = nonEmptyPtr(strings.TrimSpace(surname.Value))
 	}
-	if patronymic != nil {
-		u.Patronymic = nonEmptyPtr(strings.TrimSpace(*patronymic))
+	if patronymic.Set {
+		u.Patronymic = nonEmptyPtr(strings.TrimSpace(patronymic.Value))
 	}
-	if email != nil {
-		v := strings.TrimSpace(*email)
+	if email.Set {
+		v := strings.TrimSpace(email.Value)
 		if v != "" && !isValidEmail(v) {
 			return ErrInvalidEmail
 		}
