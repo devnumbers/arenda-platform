@@ -19,6 +19,7 @@ apps/backend/perf/results/
 apps/backend/perfvegeta
 
 .playwright-mcp
+screenshots
 
 docs/plans
 docs/reviews
