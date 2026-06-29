@@ -3,35 +3,34 @@
 import type { JSX } from 'react';
 import NextLink from 'next/link';
 import { Icon } from '@/shared/ui/icon';
-import { LinkButton } from '@/shared/ui/link-button';
 import { ArrowRight, UserSmall } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import type { components } from '@/shared/api/generated';
+import type { Lease } from '@/entities/lease/model/types';
 import { PropertyDetailSection } from './PropertyDetailSection';
 import styles from './PropertyTenantCard.module.css';
 
-type LeaseResponse = components['schemas']['LeaseResponse'];
-
 export type PropertyTenantCardProps = {
-  readonly lease: LeaseResponse | undefined;
-  readonly propertyId: string;
+  readonly lease: Lease | null | undefined;
 };
 
 export function PropertyTenantCard({
   lease,
-  propertyId,
-}: PropertyTenantCardProps): JSX.Element {
-  const tenant = lease?.tenant_contact;
-  const tenantsHref = `${ROUTES.tenants}?propertyId=${propertyId}`;
+}: PropertyTenantCardProps): JSX.Element | null {
+  if (!lease) {
+    return null;
+  }
+
+  const tenant = lease.tenantContact;
+  const leaseHref = ROUTES.lease(lease.id);
 
   return (
     <PropertyDetailSection>
       <div className={styles.header}>
         <h2 className={styles.title}>Арендатор</h2>
         <NextLink
-          href={tenantsHref}
+          href={leaseHref}
           className={styles.headerLink}
-          aria-label="Перейти к арендаторам"
+          aria-label="Перейти к аренде"
         >
           <Icon size="s">
             <ArrowRight />
@@ -62,9 +61,10 @@ export function PropertyTenantCard({
         </div>
       ) : (
         <div className={styles.empty}>
-          <LinkButton href={tenantsHref} variant="primary" fullWidth>
-            Добавить арендатора
-          </LinkButton>
+          <p className={styles.emptyText}>Арендатор не указан</p>
+          <NextLink href={leaseHref} className={styles.emptyLink}>
+            Указать арендатора в аренде
+          </NextLink>
         </div>
       )}
     </PropertyDetailSection>

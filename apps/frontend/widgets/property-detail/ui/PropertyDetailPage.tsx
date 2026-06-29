@@ -194,7 +194,7 @@ export function PropertyDetailPage(): JSX.Element {
         onPayRent={() => router.push(ROUTES.finance)}
       />
 
-      <PropertyTenantCard lease={currentLease ?? lastLease} propertyId={id} />
+      <PropertyTenantCard lease={property.activeLease} />
 
       <PropertyPaymentsCard
         operations={operationsQuery.data?.items ?? []}

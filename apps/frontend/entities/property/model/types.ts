@@ -1,3 +1,5 @@
+import type { Lease } from '@/entities/lease/model/types';
+
 export type PropertyStatus = 'active' | 'maintenance' | 'archived';
 export type Occupancy = 'free' | 'occupied';
 export type PropertyType =
@@ -26,4 +28,5 @@ export type Property = {
   readonly status: PropertyStatus;
   readonly occupancy: Occupancy;
   readonly photos?: PropertyPhoto[];
+  readonly activeLease: Lease | null;
 };

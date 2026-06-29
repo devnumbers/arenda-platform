@@ -9,7 +9,6 @@ import type { Property } from '@/entities/property/model/types';
 import type { Lease } from '@/entities/lease/model/types';
 
 export type PropertyWithLease = Property & {
-  activeLease?: Lease;
   lastLease?: Lease;
 };
 
@@ -82,7 +81,7 @@ export function usePropertyListData(): UsePropertyListDataReturn {
       const bestLease = bestLeaseByProperty.get(property.id);
       return {
         ...property,
-        activeLease: bestLease?.status === 'active' ? bestLease : undefined,
+        activeLease: bestLease?.status === 'active' ? bestLease : null,
         lastLease: bestLease,
       };
     });

@@ -5,11 +5,21 @@ export type LeaseStatus =
   | 'completed'
   | 'archived';
 
+export type TenantContact = {
+  readonly id: string;
+  readonly name: string;
+  readonly surname?: string | null;
+  readonly patronymic?: string | null;
+  readonly phone?: string | null;
+  readonly email?: string | null;
+};
+
 export type Lease = {
   readonly id: string;
   readonly propertyId: string;
   readonly tenantContactId?: string;
   readonly tenantName: string;
+  readonly tenantContact?: TenantContact | null;
   readonly rentKopecks: number;
   readonly startDate: string;
   readonly endDate?: string;
