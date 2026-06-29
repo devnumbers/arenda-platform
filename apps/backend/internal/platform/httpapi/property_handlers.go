@@ -1,13 +1,16 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
 
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
+	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
@@ -102,7 +105,13 @@ func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusCreated, propertyResponse(property))
+	resp, err := h.propertyResponse(r.Context(), ownerID, property, leasesdomain.Lease{})
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+		return
+	}
+	writeJSON(r.Context(), w, http.StatusCreated, resp)
 }
 
 // ListProperties implements GET /properties.
@@ -121,7 +130,13 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 
 	items := make([]openapi.PropertyResponse, 0, len(properties))
 	for _, property := range properties {
-		items = append(items, propertyResponse(property))
+		resp, err := h.propertyResponse(r.Context(), ownerID, property, leasesdomain.Lease{})
+		if err != nil {
+			h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", sanitizeError(err)))
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
+		items = append(items, resp)
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{Items: items})
@@ -135,13 +150,19 @@ func (h *PropertyHandlers) GetProperty(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	property, err := h.svc.GetProperty(r.Context(), ownerID, id)
+	property, activeLease, err := h.svc.GetPropertyWithOpenLease(r.Context(), ownerID, id)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, propertyResponse(property))
+	resp, err := h.propertyResponse(r.Context(), ownerID, property, activeLease)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+		return
+	}
+	writeJSON(r.Context(), w, http.StatusOK, resp)
 }
 
 // UpdateProperty implements PATCH /properties/{id}.
@@ -173,7 +194,13 @@ func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, propertyResponse(property))
+	resp, err := h.propertyResponse(r.Context(), ownerID, property, leasesdomain.Lease{})
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+		return
+	}
+	writeJSON(r.Context(), w, http.StatusOK, resp)
 }
 
 // ArchiveProperty implements POST /properties/{id}/archive.
@@ -190,7 +217,13 @@ func (h *PropertyHandlers) ArchiveProperty(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, propertyResponse(property))
+	resp, err := h.propertyResponse(r.Context(), ownerID, property, leasesdomain.Lease{})
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+		return
+	}
+	writeJSON(r.Context(), w, http.StatusOK, resp)
 }
 
 // UnarchiveProperty implements POST /properties/{id}/unarchive.
@@ -207,7 +240,13 @@ func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, propertyResponse(property))
+	resp, err := h.propertyResponse(r.Context(), ownerID, property, leasesdomain.Lease{})
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+		return
+	}
+	writeJSON(r.Context(), w, http.StatusOK, resp)
 }
 
 // ListPropertyLeases implements GET /properties/{id}/leases.
@@ -348,7 +387,7 @@ func (h *PropertyHandlers) GetAddressSuggestions(w http.ResponseWriter, r *http.
 	writeJSON(r.Context(), w, http.StatusOK, openapi.AddressSuggestionsResponse{Suggestions: resp})
 }
 
-func propertyResponse(property domain.Property) openapi.PropertyResponse {
+func (h *PropertyHandlers) propertyResponse(ctx context.Context, ownerID uuid.UUID, property domain.Property, activeLease leasesdomain.Lease) (openapi.PropertyResponse, error) {
 	resp := openapi.PropertyResponse{
 		Id:        property.ID,
 		Name:      property.Name,
@@ -369,7 +408,14 @@ func propertyResponse(property domain.Property) openapi.PropertyResponse {
 		}
 		resp.Photos = &photos
 	}
-	return resp
+	if activeLease.ID != uuid.Nil {
+		leaseResp, err := h.presenter.leaseResponse(ctx, ownerID, activeLease, nil)
+		if err != nil {
+			return openapi.PropertyResponse{}, fmt.Errorf("map active lease: %w", err)
+		}
+		resp.ActiveLease = &leaseResp
+	}
+	return resp, nil
 }
 
 func ptrString[T ~string](v *T) *string {

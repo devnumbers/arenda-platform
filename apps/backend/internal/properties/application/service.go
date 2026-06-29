@@ -11,6 +11,7 @@ import (
 	"sort"
 
 	"github.com/google/uuid"
+	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
@@ -203,7 +204,7 @@ func (s *PropertyService) GetPropertyWithOpenLease(ctx context.Context, ownerID,
 
 	lease, err := s.leaseRepo.GetOpenLeaseByProperty(ctx, ownerID, property.ID)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
+		if errors.Is(err, leasesapp.ErrNotFound) {
 			return property, leasesdomain.Lease{}, nil
 		}
 		return domain.Property{}, leasesdomain.Lease{}, fmt.Errorf("get open lease: %w", err)
