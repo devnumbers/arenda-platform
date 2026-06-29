@@ -132,4 +132,4 @@ RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated
 -- name: GetUserByEmail :one
 SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted
 FROM users
-WHERE email = $1;
+WHERE LOWER(email) = LOWER($1);

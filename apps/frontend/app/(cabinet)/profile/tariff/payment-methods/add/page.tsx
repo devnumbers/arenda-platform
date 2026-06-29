@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, type JSX } from 'react';
+import { useCallback, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 import { IconLink } from '@/shared/ui/icon-link';
@@ -13,7 +13,6 @@ import styles from './page.module.css';
 export default function AddPaymentMethodPage(): JSX.Element {
   const router = useRouter();
   const add = useAddPaymentMethod();
-  const startedRef = useRef(false);
 
   const startAdd = useCallback(() => {
     add.mutate(
@@ -33,14 +32,6 @@ export default function AddPaymentMethodPage(): JSX.Element {
       },
     );
   }, [add, router]);
-
-  useEffect(() => {
-    if (startedRef.current) {
-      return;
-    }
-    startedRef.current = true;
-    startAdd();
-  }, [startAdd]);
 
   return (
     <div className={styles.root}>
@@ -67,9 +58,18 @@ export default function AddPaymentMethodPage(): JSX.Element {
                 Повторить
               </Button>
             </div>
-          ) : (
+          ) : add.isPending ? (
             <Button loading fullWidth size="large" variant="primary">
               Подключаем банковскую форму…
+            </Button>
+          ) : (
+            <Button
+              onClick={startAdd}
+              fullWidth
+              size="large"
+              variant="primary"
+            >
+              Подключить банковскую форму
             </Button>
           )}
         </section>

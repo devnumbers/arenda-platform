@@ -93,7 +93,7 @@ func (r *UserRepository) GetByPhone(ctx context.Context, phone domain.Phone) (do
 }
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (domain.User, error) {
-	row, err := r.q().GetUserByEmail(ctx, pgtype.Text{String: email, Valid: true})
+	row, err := r.q().GetUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.User{}, application.ErrNotFound

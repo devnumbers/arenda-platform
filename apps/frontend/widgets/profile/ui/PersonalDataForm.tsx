@@ -24,18 +24,25 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
   const [email, setEmail] = useState(me.email ?? '');
   const [isEmailTouched, setIsEmailTouched] = useState(false);
   const [isSubmitAttempted, setIsSubmitAttempted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | undefined>(undefined);
 
   const isEmailValid = email === '' || EMAIL_REGEX.test(email);
 
   const canSubmit = isEmailValid && !updateMe.isPending;
 
+  const duplicateEmailError =
+    submitError === 'duplicate_email'
+      ? 'Этот email уже используется другим пользователем'
+      : undefined;
+
   const emailError = (isSubmitAttempted || isEmailTouched) && !isEmailValid
     ? 'Введите корректный email'
-    : undefined;
+    : duplicateEmailError;
 
   const handleEmailChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setIsEmailTouched(true);
     setEmail(event.currentTarget.value);
+    setSubmitError(undefined);
   }, []);
 
   const handleSubmit = useCallback(
@@ -73,7 +80,15 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
 
       updateMe.mutate(payload, {
         onSuccess: () => {
+          setSubmitError(undefined);
           toast.success('Данные сохранены');
+        },
+        onError: (error) => {
+          if (error.status === 409 && /email is already in use/i.test(error.detail ?? '')) {
+            setSubmitError('duplicate_email');
+          } else {
+            setSubmitError(error.detail);
+          }
         },
       });
     },
@@ -114,9 +129,9 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
         />
       </div>
 
-      {updateMe.error && (
+      {submitError && submitError !== 'duplicate_email' && (
         <p className={styles.errorMessage} role="alert">
-          {updateMe.error.detail}
+          {submitError}
         </p>
       )}
 

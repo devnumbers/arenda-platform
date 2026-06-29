@@ -98,7 +98,7 @@ type Querier interface {
 	GetTariffByID(ctx context.Context, id pgtype.UUID) (Tariff, error)
 	GetTariffByName(ctx context.Context, name string) (Tariff, error)
 	GetTenantContactByIDAndOwner(ctx context.Context, arg GetTenantContactByIDAndOwnerParams) (TenantContact, error)
-	GetUserByEmail(ctx context.Context, email pgtype.Text) (User, error)
+	GetUserByEmail(ctx context.Context, lower string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone string) (User, error)

@@ -524,7 +524,9 @@ func (r *testSessionRepo) Create(_ context.Context, _ identitydomain.Session) er
 func (r *testSessionRepo) Update(_ context.Context, _ identitydomain.Session) error { return nil }
 func (r *testSessionRepo) DeleteByTokenHash(_ context.Context, _ string) error      { return nil }
 func (r *testSessionRepo) DeleteByUserID(_ context.Context, _ uuid.UUID) error      { return nil }
-func (r *testSessionRepo) DeleteByUserIDExcept(_ context.Context, _ uuid.UUID, _ string) error { return nil }
+func (r *testSessionRepo) DeleteByUserIDExcept(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
 func (r *testSessionRepo) DeleteExpiredBefore(_ context.Context, _ time.Time) error { return nil }
 func (r *testSessionRepo) DeleteExpiredBeforeBatch(_ context.Context, _ time.Time, _ int32) (int64, error) {
 	return 0, nil
@@ -551,6 +553,7 @@ func newTestServerHandler(t *testing.T, d *handlerTestDeps, sessions identityapp
 		Operations:            nil,
 		RecurringOperations:   nil,
 		Reminders:             nil,
+		AppBaseURL:            "https://example.com",
 		CookieSecure:          false,
 		Logger:                slog.New(slog.DiscardHandler),
 		Clock:                 fakeClock{},

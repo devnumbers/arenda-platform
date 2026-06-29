@@ -10,7 +10,17 @@ export const metadata: Metadata = {
   description: 'Управление способами оплаты',
 };
 
-export default function PaymentMethodsPage() {
+type PaymentMethodsPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function PaymentMethodsPage({
+  searchParams,
+}: PaymentMethodsPageProps) {
+  const params = await searchParams;
+  const addCardResult =
+    typeof params.addCard === 'string' ? params.addCard : undefined;
+
   return (
     <div className={styles.root}>
       <div className={styles.content}>
@@ -22,7 +32,7 @@ export default function PaymentMethodsPage() {
           />
           <h1 className={styles.title}>Способы оплаты</h1>
         </header>
-        <PaymentMethodList />
+        <PaymentMethodList addCardResult={addCardResult} />
       </div>
     </div>
   );

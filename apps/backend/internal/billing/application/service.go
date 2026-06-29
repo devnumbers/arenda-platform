@@ -717,6 +717,15 @@ func (s *BillingService) HandleWebhook(ctx context.Context, providerName string,
 		return fmt.Errorf("parse webhook: %w", err)
 	}
 
+	s.log.InfoContext(ctx, "processing payment webhook",
+		slog.String("provider", providerName),
+		slog.String("notification_type", result.NotificationType),
+		slog.String("status", string(result.Status)),
+		slog.String("provider_payment_id", result.ProviderPaymentID),
+		slog.String("customer_key", result.CustomerKey),
+		slog.String("request_key", result.RequestKey),
+	)
+
 	// Standalone card binding webhook: upsert the saved card and exit.
 	if isAddCardNotificationType(result.NotificationType) {
 		userID, err := uuid.Parse(result.CustomerKey)

@@ -412,11 +412,11 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, arg GetSessionByTok
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted
 FROM users
-WHERE email = $1
+WHERE LOWER(email) = LOWER($1)
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByEmail, email)
+func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, lower)
 	var i User
 	err := row.Scan(
 		&i.ID,

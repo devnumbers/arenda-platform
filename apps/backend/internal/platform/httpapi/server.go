@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -19,26 +20,27 @@ import (
 
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
-	Auth                *identityapp.AuthService
-	Billing             *billingapp.BillingService
-	Sessions            identityapp.SessionRepository
-	Properties          *propertiesapp.PropertyService
-	AddressSuggester    propertiesapp.AddressSuggester
-	Leases              *leasesapp.LeaseService
-	TenantContacts      *leasesapp.TenantContactService
-	Operations          *leasesapp.OperationService
-	RecurringOperations *leasesapp.RecurringOperationService
-	Reminders           *notificationsapp.ReminderService
-	CookieSecure        bool
-	Logger              *slog.Logger
-	Clock               clock.Clock
+	Auth                  *identityapp.AuthService
+	Billing               *billingapp.BillingService
+	Sessions              identityapp.SessionRepository
+	Properties            *propertiesapp.PropertyService
+	AddressSuggester      propertiesapp.AddressSuggester
+	Leases                *leasesapp.LeaseService
+	TenantContacts        *leasesapp.TenantContactService
+	Operations            *leasesapp.OperationService
+	RecurringOperations   *leasesapp.RecurringOperationService
+	Reminders             *notificationsapp.ReminderService
+	AppBaseURL            string
+	CookieSecure          bool
+	Logger                *slog.Logger
+	Clock                 clock.Clock
 	LogSuccessfulRequests bool
-	IPRateLimiter       *RateLimiter
-	PhoneSendLimiter    *RateLimiter
-	PhoneVerifyLimiter  *RateLimiter
-	DBPoolStats         func() DBPoolSnapshot
-	DevMode             bool
-	TrustedProxies      []string
+	IPRateLimiter         *RateLimiter
+	PhoneSendLimiter      *RateLimiter
+	PhoneVerifyLimiter    *RateLimiter
+	DBPoolStats           func() DBPoolSnapshot
+	DevMode               bool
+	TrustedProxies        []string
 }
 
 const slowRequestThreshold = 500 * time.Millisecond
@@ -115,7 +117,29 @@ func New(deps Deps) http.Handler {
 	r.With(AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/refund", wrapper.RefundSubscriptionPayment)
 	r.With(AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/sync", wrapper.SyncSubscriptionPayment)
 
+	// T-Kassa redirects the user here after the add-card bank form. Redirect them
+	// back to the frontend payment-methods page with a query flag so the UI can
+	// refresh the list and show the appropriate toast.
+	r.Get("/subscription/payment-methods/add-card/success", addCardReturnHandler(deps.AppBaseURL, true))
+	r.Get("/subscription/payment-methods/add-card/fail", addCardReturnHandler(deps.AppBaseURL, false))
+
 	return generated
+}
+
+func addCardReturnHandler(baseURL string, success bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		target := baseURL
+		if path, err := url.JoinPath(baseURL, "/profile/tariff/payment-methods"); err == nil {
+			target = path
+		}
+		q := url.Values{}
+		if success {
+			q.Set("addCard", "success")
+		} else {
+			q.Set("addCard", "fail")
+		}
+		http.Redirect(w, r, target+"?"+q.Encode(), http.StatusFound)
+	}
 }
 
 func rateLimitMiddleware(limiter *RateLimiter) func(http.Handler) http.Handler {

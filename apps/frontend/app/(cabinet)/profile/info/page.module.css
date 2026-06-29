@@ -60,7 +60,7 @@
 
 @media (min-width: 768px) {
   .root {
-    padding: 96px 0;
+    padding: 0 0 96px;
   }
 
   .title {

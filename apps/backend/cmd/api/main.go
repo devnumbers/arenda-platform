@@ -318,6 +318,7 @@ func run(fallback *slog.Logger) error {
 		Operations:            operationService,
 		RecurringOperations:   recurringOperationService,
 		Reminders:             reminderService,
+		AppBaseURL:            cfg.AppBaseURL,
 		CookieSecure:          cfg.CookieSecure,
 		Logger:                appLogger,
 		Clock:                 realClock{},

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, type JSX } from 'react';
+import { useCallback, useEffect, useState, type JSX } from 'react';
 import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
@@ -86,7 +86,13 @@ function PaymentMethodListSkeleton(): JSX.Element {
   );
 }
 
-export function PaymentMethodList(): JSX.Element {
+type PaymentMethodListProps = {
+  readonly addCardResult?: string;
+};
+
+export function PaymentMethodList({
+  addCardResult,
+}: PaymentMethodListProps): JSX.Element {
   const {
     data: items,
     isPending,
@@ -96,6 +102,21 @@ export function PaymentMethodList(): JSX.Element {
   const activate = useActivatePaymentMethod();
   const remove = useDeletePaymentMethod();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (addCardResult === 'success') {
+      toast.success('Карта успешно добавлена');
+      void refetch();
+    } else if (addCardResult === 'fail') {
+      toast.error('Не удалось добавить карту. Попробуйте снова.');
+    }
+
+    if (addCardResult === 'success' || addCardResult === 'fail') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('addCard');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [addCardResult, refetch]);
 
   const handleActivate = useCallback(
     (id: string) => {
