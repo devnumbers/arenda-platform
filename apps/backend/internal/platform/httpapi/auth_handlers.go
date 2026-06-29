@@ -240,6 +240,8 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, domain.ErrInvalidEmail):
 			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "invalid email format"))
+		case errors.Is(err, application.ErrEmailAlreadyTaken):
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Email is already in use"))
 		case errors.Is(err, application.ErrNotFound):
 			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session invalid"))
 		default:
