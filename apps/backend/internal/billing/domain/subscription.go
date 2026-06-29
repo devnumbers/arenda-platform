@@ -58,12 +58,14 @@ func NewOwnerSubscription(userID, tariffID uuid.UUID) (Subscription, error) {
 // CanMutateData reports whether the subscription allows the user to mutate
 // property and finance data at the given moment. Active subscriptions whose
 // paid period has already expired are treated as non-mutable until the worker
-// transitions them to grace or basic.
+// transitions them to grace or basic. Cancelled subscriptions remain mutable
+// until the end of the already paid period, matching the behaviour of active
+// subscriptions.
 func (s *Subscription) CanMutateData(now time.Time) bool {
 	if s.Status == SubscriptionStatusGrace {
 		return s.IsInGrace(now)
 	}
-	if s.Status != SubscriptionStatusActive {
+	if s.Status != SubscriptionStatusActive && s.Status != SubscriptionStatusCancelled {
 		return false
 	}
 	if s.ValidUntil != nil && now.After(*s.ValidUntil) {

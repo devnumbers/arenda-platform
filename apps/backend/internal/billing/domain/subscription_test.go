@@ -54,7 +54,9 @@ func TestSubscriptionCanMutateData(t *testing.T) {
 		{"grace within grace period", SubscriptionStatusGrace, &future, true},
 		{"grace after grace period", SubscriptionStatusGrace, &past, false},
 		{"blocked", SubscriptionStatusBlocked, nil, false},
-		{"cancelled", SubscriptionStatusCancelled, nil, false},
+		{"cancelled without valid_until", SubscriptionStatusCancelled, nil, true},
+		{"cancelled with future valid_until", SubscriptionStatusCancelled, &future, true},
+		{"cancelled with expired valid_until", SubscriptionStatusCancelled, &past, false},
 	}
 
 	for _, tt := range tests {

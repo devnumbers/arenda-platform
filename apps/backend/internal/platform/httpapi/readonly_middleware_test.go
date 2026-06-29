@@ -12,7 +12,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
 
-func newReadonlyMiddleware(t *testing.T, status domain.SubscriptionStatus) http.Handler {
+func newReadonlyMiddleware(t *testing.T, status domain.SubscriptionStatus, validUntil ...*time.Time) http.Handler {
 	t.Helper()
 	d := newHandlerTestDeps(t)
 	userID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
@@ -30,6 +30,9 @@ func newReadonlyMiddleware(t *testing.T, status domain.SubscriptionStatus) http.
 		if status == domain.SubscriptionStatusGrace {
 			graceUntil := time.Now().Add(24 * time.Hour)
 			sub.ValidUntil = &graceUntil
+		}
+		if len(validUntil) > 0 {
+			sub.ValidUntil = validUntil[0]
 		}
 		d.subscriptions.add(sub)
 	}
@@ -109,8 +112,20 @@ func TestReadonlyMiddleware_ExemptsAuthPaths(t *testing.T) {
 }
 
 
-func TestReadonlyMiddleware_BlocksMutationWhenCancelled(t *testing.T) {
+func TestReadonlyMiddleware_AllowsMutationWhenCancelled(t *testing.T) {
 	h := newReadonlyMiddleware(t, domain.SubscriptionStatusCancelled)
+	userID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+
+	req := withUserID(httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/properties", nil), userID)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	assertStatus(t, rec, http.StatusOK)
+}
+
+func TestReadonlyMiddleware_BlocksMutationWhenCancelledAndExpired(t *testing.T) {
+	expired := testNow.Add(-24 * time.Hour)
+	h := newReadonlyMiddleware(t, domain.SubscriptionStatusCancelled, &expired)
 	userID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
 	req := withUserID(httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/properties", nil), userID)
