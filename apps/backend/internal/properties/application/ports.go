@@ -58,6 +58,7 @@ type PropertyRepository interface {
 // LeaseRepository provides lease data needed by the properties bounded context.
 type LeaseRepository interface {
 	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]leasesdomain.Lease, error)
+	GetOpenLeaseByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) (leasesdomain.Lease, error)
 }
 
 // PhotoStorage persists uploaded property photos and returns their public URL.
