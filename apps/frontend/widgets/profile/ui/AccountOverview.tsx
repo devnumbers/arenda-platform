@@ -5,10 +5,12 @@ import NextLink from 'next/link';
 import { Card } from '@heroui/react/card';
 import { Icon } from '@/shared/ui/icon';
 import { Button } from '@/shared/ui/button';
-import { ArrowRight } from '@/shared/assets/icons';
+import { LinkButton } from '@/shared/ui/link-button';
+import { ArrowLeft, ArrowRight } from '@/shared/assets/icons';
 import { useMe } from '@/features/auth/api/hooks';
 import { ROUTES } from '@/shared/config/routes';
 import styles from './AccountOverview.module.css';
+import {IconLink} from "@/shared/ui/icon-link";
 
 function AccountOverviewSkeleton(): JSX.Element {
   return (
@@ -38,19 +40,32 @@ export function AccountOverview(): JSX.Element {
 
   return (
     <section className={styles.section}>
-      <h2 className={styles.sectionTitle}>Аккаунт</h2>
+        <header className={styles.header}>
+            <IconLink
+                href={ROUTES.profile}
+                aria-label="Назад"
+                icon={<ArrowLeft/>}
+            />
+            <h1 className={styles.title}>Аккаунт</h1>
+        </header>
       <Card className={styles.card}>
         <div className={styles.phoneRow}>
           <div>
             <p className={styles.label}>Телефон</p>
             <p className={styles.value}>{me.phone}</p>
           </div>
-          <NextLink href={ROUTES.profileChangePhone} className={styles.link}>
-            <span className={styles.linkText}>Изменить</span>
-            <Icon size="s">
-              <ArrowRight />
-            </Icon>
-          </NextLink>
+          <LinkButton
+            href={ROUTES.profileChangePhone}
+            variant="clear"
+            size="small"
+            rightIcon={
+              <Icon size="s">
+                <ArrowRight />
+              </Icon>
+            }
+          >
+            Изменить
+          </LinkButton>
         </div>
       </Card>
     </section>

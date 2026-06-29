@@ -3,12 +3,14 @@
 import type { JSX } from 'react';
 import { usePathname } from 'next/navigation';
 import { navItems } from '../lib/nav-items';
+import { getActiveNavItem } from '../lib/get-active-nav-item';
 import { NavItem } from './NavItem';
 import styles from './BottomNav.module.css';
 
 export function BottomNav(): JSX.Element {
   const pathname = usePathname();
   const visibleItems = navItems.filter((item) => item.showInBottomNav);
+  const activeItem = getActiveNavItem(pathname, visibleItems);
 
   return (
     <nav className={styles.bottomNav}>
@@ -20,7 +22,7 @@ export function BottomNav(): JSX.Element {
           iconName={item.icon}
           bottomIconName={item.bottomIcon}
           variant="bottom"
-          isActive={pathname === item.href}
+          isActive={activeItem?.href === item.href}
         />
       ))}
     </nav>
