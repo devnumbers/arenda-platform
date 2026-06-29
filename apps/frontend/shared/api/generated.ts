@@ -849,6 +849,7 @@ export interface components {
             name?: string | null;
             surname?: string | null;
             patronymic?: string | null;
+            /** @description Email is stored in lowercase. */
             email?: string | null;
         };
         SendPhoneChangeCodeRequest: {
@@ -1002,6 +1003,7 @@ export interface components {
             /** @enum {string} */
             occupancy: "free" | "occupied";
             photos?: components["schemas"]["PropertyPhoto"][];
+            active_lease: components["schemas"]["LeaseResponse"] | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1545,6 +1547,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];
         };
     };
