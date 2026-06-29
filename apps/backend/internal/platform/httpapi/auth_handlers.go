@@ -297,16 +297,13 @@ func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Reques
 	if err := h.auth.SendPhoneChangeCode(r.Context(), userID, phone); err != nil {
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
-			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "new phone must differ from current phone"))
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Новый номер не должен совпадать с текущим"))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "phone number is already in use"))
-		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Номер телефона уже используется"))
+		case errors.Is(err, application.ErrUserBlocked):
+			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит попыток, попробуйте позже"))
+		case errors.Is(err, application.ErrCodeSentTooRecently):
+			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Код отправлен слишком часто, подождите немного"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
