@@ -108,7 +108,17 @@ func TestUser_UpdatePersonalData(t *testing.T) {
 				Name:       ptr("Ivan"),
 				Surname:    ptr("Ivanov"),
 				Patronymic: ptr("Ivanovich"),
-				Email:      ptr("Ivan@Example.Com"),
+				Email:      ptr("ivan@example.com"),
+			},
+		},
+		{
+			name:   "email is lowercased and trimmed",
+			before: User{},
+			opts: struct{ name, surname, patronymic, email Optional[string] }{
+				email: Optional[string]{Set: true, Value: "  Ivan@Example.COM  "},
+			},
+			want: User{
+				Email: ptr("ivan@example.com"),
 			},
 		},
 		{

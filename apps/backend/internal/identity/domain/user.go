@@ -52,7 +52,7 @@ func (u *User) UpdatePersonalData(name, surname, patronymic, email Optional[stri
 		u.Patronymic = nonEmptyPtr(strings.TrimSpace(patronymic.Value))
 	}
 	if email.Set {
-		v := strings.TrimSpace(email.Value)
+		v := strings.ToLower(strings.TrimSpace(email.Value))
 		if v != "" && !isValidEmail(v) {
 			return ErrInvalidEmail
 		}
