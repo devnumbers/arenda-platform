@@ -85,16 +85,15 @@ function getPropertyAction(property: PropertyWithLease): PropertyAction {
 }
 
 export function PropertyCard({ property }: PropertyCardProps): JSX.Element {
-  const lease = property.lastLease;
+  const lease = property.activeLease;
   const displayStatus = getDisplayStatus(
     property.status,
     property.occupancy,
-    lease?.status,
+    property.lastLease?.status,
   );
   const action = getPropertyAction(property);
 
-  const showLeaseInfo =
-    lease && (displayStatus === 'rented' || displayStatus === 'finished');
+  const showLeaseInfo = lease !== null;
 
   return (
     <article className={styles.root}>
