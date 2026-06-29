@@ -5,7 +5,6 @@ import { Skeleton } from '@heroui/react/skeleton';
 import { Icon } from '@/shared/ui/icon';
 import { Arendators } from '@/shared/assets/icons';
 import type { components } from '@/shared/api/generated';
-import { EmptyState } from '@/shared/ui/empty-state';
 import { SectionHeader } from './SectionHeader';
 import { EntityCard } from './EntityCard';
 import { IconActionCard } from './IconActionCard';
@@ -19,7 +18,7 @@ type TenantsSectionProps = {
   readonly isLoading: boolean;
 };
 
-export function TenantsSection({ leases, isLoading }: TenantsSectionProps): JSX.Element {
+export function TenantsSection({ leases, isLoading }: TenantsSectionProps): JSX.Element | null {
   const tenants = useMemo(() => {
     const seen = new Map<string, TenantContactResponse>();
     for (const lease of leases ?? []) {
@@ -46,18 +45,7 @@ export function TenantsSection({ leases, isLoading }: TenantsSectionProps): JSX.
   }
 
   if (tenants.length === 0) {
-    return (
-      <section className={styles.section}>
-        <SectionHeader title="Арендаторы" href="/tenants" />
-        <EmptyState
-          icon={<Arendators />}
-          entities="арендаторов"
-          subtitle="Добавьте арендатора в разделе аренды"
-          actionHref="/tenants"
-          actionText="Добавить арендатора"
-        />
-      </section>
-    );
+    return null;
   }
 
   return (

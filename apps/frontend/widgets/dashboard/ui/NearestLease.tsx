@@ -8,6 +8,7 @@ import { Key, ArrowRight, BoldWallet, UserSmall, ClockSmall } from '@/shared/ass
 import type { components } from '@/shared/api/generated';
 import type { Property } from '@/entities/property/model/types';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
+import { ROUTES } from '@/shared/config/routes';
 import { formatRemainingDuration, formatCurrentLeaseMonth } from '../lib/lease-helpers';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { SectionHeader } from './SectionHeader';
@@ -76,12 +77,12 @@ export function NearestLease({ leases, properties, isLoading }: NearestLeaseProp
   if (!lease) {
     return (
       <section className={styles.section}>
-        <SectionHeader title="Ближайшая аренда" href="/tenants" />
+        <SectionHeader title="Ближайшая аренда" href={ROUTES.leaseNew} />
         <EmptyState
           icon={<Key />}
           entities="аренд"
           subtitle="Добавьте первую аренду, чтобы видеть её здесь"
-          actionHref="/tenants"
+          actionHref={ROUTES.leaseNew}
           actionText="Добавить аренду"
         />
       </section>
