@@ -128,3 +128,8 @@ SET phone = $2,
     updated_at = now()
 WHERE id = $1
 RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted;
+
+-- name: GetUserByEmail :one
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted
+FROM users
+WHERE email = $1;

@@ -26,6 +26,7 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetByPhone(ctx context.Context, phone domain.Phone) (domain.User, error)
+	GetByEmail(ctx context.Context, email string) (domain.User, error)
 	GetPhoneByID(ctx context.Context, id uuid.UUID) (string, error)
 	Create(ctx context.Context, user domain.User) (domain.User, error)
 	Update(ctx context.Context, user domain.User) (domain.User, error)

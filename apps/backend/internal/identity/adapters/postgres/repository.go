@@ -92,6 +92,17 @@ func (r *UserRepository) GetByPhone(ctx context.Context, phone domain.Phone) (do
 	return r.mapUser(ctx, row)
 }
 
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (domain.User, error) {
+	row, err := r.q().GetUserByEmail(ctx, pgtype.Text{String: email, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, application.ErrNotFound
+		}
+		return domain.User{}, err
+	}
+	return r.mapUser(ctx, row)
+}
+
 func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.User, error) {
 	encryptedPhone, err := encryptPhone(ctx, r.enc, user.Phone.String())
 	if err != nil {

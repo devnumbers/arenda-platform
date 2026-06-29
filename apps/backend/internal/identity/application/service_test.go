@@ -79,6 +79,7 @@ type fakeUserRepo struct {
 func (f *fakeUserRepo) GetByID(_ context.Context, _ uuid.UUID) (domain.User, error)                 { return f.user, nil }
 func (f *fakeUserRepo) GetByIDForUpdate(_ context.Context, _ uuid.UUID) (domain.User, error)         { return f.user, nil }
 func (f *fakeUserRepo) GetByPhone(_ context.Context, _ domain.Phone) (domain.User, error)             { return domain.User{}, ErrNotFound }
+func (f *fakeUserRepo) GetByEmail(_ context.Context, _ string) (domain.User, error)                    { return domain.User{}, ErrNotFound }
 func (f *fakeUserRepo) GetPhoneByID(_ context.Context, _ uuid.UUID) (string, error)                   { return f.user.Phone.String(), nil }
 func (f *fakeUserRepo) Create(_ context.Context, user domain.User) (domain.User, error)               { return user, nil }
 func (f *fakeUserRepo) Update(_ context.Context, user domain.User) (domain.User, error)               { f.user = user; return user, nil }
