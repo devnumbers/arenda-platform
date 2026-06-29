@@ -21,8 +21,10 @@ type VerifyPhoneCodeRequest = components['schemas']['VerifyPhoneCodeRequest'];
 export function useMe(): UseQueryResult<User, ApiError> {
   return useQuery({
     queryKey: authKeys.me,
-    queryFn: () => apiClient<MeResponse>('/me'),
-    select: mapMeResponse,
+    queryFn: async () => {
+      const res = await apiClient<MeResponse>('/me');
+      return mapMeResponse(res);
+    },
     retry: false,
   });
 }

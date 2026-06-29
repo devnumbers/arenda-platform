@@ -30,7 +30,8 @@ export function useUpdateMe(): UseMutationResult<
       });
       return mapMeResponse(res);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      queryClient.setQueryData(authKeys.me, data);
       queryClient.invalidateQueries({ queryKey: authKeys.all });
     },
   });
