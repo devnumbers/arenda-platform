@@ -52,6 +52,14 @@ script:pre-request {
   bru.setVar("propertyNameMain", "E2E Reminders Main " + Date.now());
   bru.setVar("propertyAddressMain", "Main St " + Date.now());
 
+  // Defaults for operation/recurring-operation fixtures in this folder.
+  bru.setVar("operationType", "income");
+  bru.setVar("operationCategory", "rent");
+  bru.setVar("operationAmountKopecks", 100000);
+  bru.setVar("recurringOperationType", "income");
+  bru.setVar("recurringOperationCategory", "rent");
+  bru.setVar("recurringOperationAmountKopecks", 100000);
+
   const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
   if (sessionId) {
     req.setHeader("Cookie", `session_id=${sessionId}`);

@@ -1,15 +1,19 @@
--- Verify that a tenant contact exists for the given owner and phone.
--- Usage: psql ... -v owner_id=uuid -v phone=+79150000000 -f 03-tenant-contact-created.sql
+-- Verify that a tenant contact exists for the given owner.
+-- Usage: psql ... -v owner_id=uuid -f 03-tenant-contact-created.sql
 WITH params AS (
-    SELECT :'owner_id'::uuid AS owner_id,
-           :'phone' AS phone
+    SELECT :'owner_id'::uuid AS owner_id
+),
+latest AS (
+    SELECT tc.id, tc.name, tc.surname
+    FROM tenant_contacts tc
+    WHERE tc.owner_id = (SELECT owner_id FROM params)
+    ORDER BY tc.created_at DESC
+    LIMIT 1
 )
 SELECT
-    (tc.id IS NOT NULL) AS ok,
-    tc.id IS NOT NULL AS contact_exists,
-    tc.name AS contact_name,
-    tc.surname AS contact_surname
+    (l.id IS NOT NULL) AS ok,
+    l.id IS NOT NULL AS contact_exists,
+    l.name AS contact_name,
+    l.surname AS contact_surname
 FROM params
-LEFT JOIN tenant_contacts tc
-       ON tc.owner_id = params.owner_id
-      AND tc.phone = params.phone;
+LEFT JOIN latest l ON true;

@@ -11,7 +11,10 @@ get {
 }
 
 script:pre-request {
-  // Intentionally do not set Cookie header to test unauthenticated access.
+  // Bruno preserves the real session cookie from previous requests in the same
+  // run. Use a valid-looking but non-existent session id so the backend returns
+  // 401 instead of reusing the authenticated cookie from the jar.
+  req.setHeader("Cookie", "session_id=0000000000000000000000000000000000000000000000000000000000000000");
 }
 
 tests {

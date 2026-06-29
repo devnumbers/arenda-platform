@@ -73,14 +73,33 @@
   overflow-y: auto;
 }
 
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+}
+
 .item {
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: none;
   border-radius: 10px;
+  font-family: inherit;
   font-size: var(--font-size-text-m);
   line-height: var(--line-height-text-m);
+  color: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
-.item[data-selected="true"] {
+.item:hover {
+  background-color: var(--color-secondary-bg);
+}
+
+.itemSelected,
+.itemSelected:hover {
   background-color: var(--color-clear-hover);
   color: var(--color-primary);
   font-weight: 500;

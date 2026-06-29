@@ -76,9 +76,44 @@
   overflow-y: auto;
 }
 
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+}
+
 .item {
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: none;
   border-radius: 10px;
+  font-family: inherit;
+  color: inherit;
+  text-align: left;
   cursor: pointer;
+}
+
+.item:hover {
+  background-color: var(--color-secondary-bg);
+}
+
+.itemSelected,
+.itemSelected:hover {
+  background-color: var(--color-clear-hover);
+}
+
+.itemSelected .itemName,
+.itemSelected:hover .itemName {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.itemSelected .itemAddress,
+.itemSelected:hover .itemAddress {
+  color: var(--color-primary);
+  opacity: 0.7;
 }
 
 .itemContent {
@@ -99,16 +134,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.item[data-selected="true"] .itemName {
-  color: var(--color-primary);
-  font-weight: 500;
-}
-
-.item[data-selected="true"] .itemAddress {
-  color: var(--color-primary);
-  opacity: 0.7;
 }
 
 .emptyState,

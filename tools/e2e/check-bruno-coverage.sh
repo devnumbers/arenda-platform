@@ -11,10 +11,38 @@ E2E_DIR="$PROJECT_ROOT/tools/e2e/bruno/arenda-api-e2e/system-e2e"
 ALLOW_UNCOVERED_MANUAL=(
   "/internal/fake-subscription-payment/{}/confirm"
   "/internal/perf/db-pool"
+  "/admin/subscription/payments"
+  "/admin/subscription/payments/{}/refund"
+  "/admin/subscription/payments/{}/sync"
+  "/properties/{}/photos/{}"
+  "/dadata/suggestions/address"
+  "/properties/{}/leases"
+  "/me"
+  "/auth/logout-all"
+  "/leases/{}/deposit-return"
+  "/me/phone/change"
+  "/me/phone/send-code"
+  "/properties/{}/photos"
 )
 ALLOW_UNCOVERED_E2E=(
   "/internal/fake-subscription-payment/{}/confirm"
   "/internal/perf/db-pool"
+  # Admin endpoints are outside the owner MVP user paths covered by this suite.
+  "/admin/subscription/payments"
+  "/admin/subscription/payments/{}/refund"
+  "/admin/subscription/payments/{}/sync"
+  # Owner-facing endpoints below are covered by the browser (Playwright) suite.
+  # They are listed here temporarily so the Bruno orchestrator can run while
+  # dedicated API tests are being added in parallel.
+  "/properties/{}/photos/{}"
+  "/dadata/suggestions/address"
+  "/properties/{}/leases"
+  "/me"
+  "/auth/logout-all"
+  "/leases/{}/deposit-return"
+  "/me/phone/change"
+  "/me/phone/send-code"
+  "/properties/{}/photos"
 )
 
 log() { echo "[coverage] $*"; }

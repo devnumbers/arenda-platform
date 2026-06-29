@@ -50,7 +50,7 @@ export default function LoginPage(): JSX.Element {
             {phone: normalizePhone(phone), code},
             {
                 onSuccess: () => {
-                    router.push('/');
+                    router.push('/dashboard');
                 },
                 onError: () => {
                     toast.error('Неверный код');

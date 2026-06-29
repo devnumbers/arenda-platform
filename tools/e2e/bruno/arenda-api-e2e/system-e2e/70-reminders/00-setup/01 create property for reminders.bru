@@ -31,6 +31,16 @@ script:pre-request {
 
   bru.setVar("reminderPropertyName", "E2E Reminders Prop " + Date.now());
   bru.setVar("reminderPropertyAddress", "E2E Reminders St " + Date.now());
+
+  // Defaults for operation/recurring-operation fixtures in this folder.
+  bru.setVar("operationType", "income");
+  bru.setVar("operationCategory", "rent");
+  bru.setVar("operationAmountKopecks", 100000);
+  bru.setVar("recurringOperationType", "income");
+  bru.setVar("recurringOperationCategory", "rent");
+  bru.setVar("recurringOperationAmountKopecks", 100000);
+  bru.setVar("operationName", "E2E operation " + Date.now());
+  bru.setVar("recurringOperationName", "E2E recurring operation " + Date.now());
 }
 
 script:post-response {

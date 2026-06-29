@@ -265,6 +265,17 @@ extract_session_from_report() {
   return 1
 }
 
+# Extract the authenticated user id from the verify-code response body.
+# Prints: user_id
+extract_user_id_from_report() {
+  local report_json="$1"
+  if [[ ! -f "$report_json" ]] || ! command -v jq >/dev/null 2>&1; then
+    return 1
+  fi
+
+  jq -r '.[0].results[]? | select(.test.filename | contains("verify-code")) | .response.data.id // empty' "$report_json" 2>/dev/null | head -1
+}
+
 # Count lines in a log file (defaults to 1 if missing)
 log_line_count() {
   local log_file="$1"
@@ -288,21 +299,17 @@ extract_active_payment_method_id() {
 
 # Find the subscription payment to use for the webhook test.
 # Prints: payment_id\tprovider_payment_id
-# Takes the run phone as argument and reads the latest payment from the DB.
+# Uses the authenticated USER_ID and reads the latest payment from the DB.
 get_webhook_payment() {
-  local phone="$1"
-
-  local user_id
-  user_id=$(psql_value "SELECT id FROM users WHERE phone = '$phone' LIMIT 1;")
-  if [[ -z "$user_id" ]]; then
-    echo "ERROR: could not find user for phone $phone" >&2
+  if [[ -z "${USER_ID:-}" ]]; then
+    echo "ERROR: USER_ID is not set" >&2
     return 1
   fi
 
   local payment_pair
-  payment_pair=$(psql_value "SELECT id || chr(9) || COALESCE(provider_payment_id, '') FROM subscription_payments WHERE user_id = '$user_id' ORDER BY created_at DESC LIMIT 1;")
+  payment_pair=$(psql_value "SELECT id || chr(9) || COALESCE(provider_payment_id, '') FROM subscription_payments WHERE user_id = '$USER_ID' ORDER BY created_at DESC LIMIT 1;")
   if [[ -z "$payment_pair" ]]; then
-    echo "ERROR: no subscription payment found for user $user_id" >&2
+    echo "ERROR: no subscription payment found for user $USER_ID" >&2
     return 1
   fi
 
@@ -325,6 +332,7 @@ run_bruno_folder() {
     --env-var code="$CODE" \
     --env-var cookieName=session_id \
     --env-var skipSend=true \
+    --disable-cookies \
     --reporter-json "$report_json" \
     "${extra_args[@]}" 2>&1) || status=$?
 
@@ -446,16 +454,12 @@ psql_value() {
     psql -U "$PGUSER" -d "$PGDATABASE" -tA "$@" -c "$query" 2>/dev/null
 }
 
-# Derive the UUID of a user by phone number.
-user_id_by_phone() {
-  local phone="$1"
-  psql_value "SELECT id FROM users WHERE phone = '$phone' LIMIT 1;"
-}
-
-# Derive variables for a SQL check based on current DB state anchored by the run phone.
+# Derive variables for a SQL check based on the authenticated user id extracted
+# from the auth-setup response. Phone numbers are encrypted at rest, so SQL
+# checks must anchor by user_id rather than by plaintext phone.
 derive_sql_vars() {
   local script_name="$1"
-  local user_id
+  local user_id="$USER_ID"
   local property_id
   local lease_id
   local operation_id
@@ -465,38 +469,31 @@ derive_sql_vars() {
 
   case "$script_name" in
     01-user-and-session-created.sql)
-      echo "-v phone=$PHONE"
+      echo "-v user_id=$user_id"
       ;;
     09-subscription-upgraded.sql)
-      user_id=$(user_id_by_phone "$PHONE")
       tariff_id=$(psql_value "SELECT id FROM tariffs WHERE name = 'pro' LIMIT 1;")
       echo "-v user_id=$user_id -v tariff_id=$tariff_id -v subscription_status=active -v payment_status=succeeded"
       ;;
     10-payment-method-active.sql)
-      user_id=$(user_id_by_phone "$PHONE")
       echo "-v user_id=$user_id"
       ;;
     02-property-created.sql)
-      user_id=$(user_id_by_phone "$PHONE")
       property_id=$(psql_value "SELECT id FROM properties WHERE owner_id = '$user_id' AND status = 'active' ORDER BY created_at DESC LIMIT 1;")
       echo "-v property_id=$property_id -v owner_id=$user_id"
       ;;
     13-property-archived.sql)
-      user_id=$(user_id_by_phone "$PHONE")
       property_id=$(psql_value "SELECT id FROM properties WHERE owner_id = '$user_id' AND status = 'archived' ORDER BY created_at DESC LIMIT 1;")
       echo "-v property_id=$property_id"
       ;;
     14-tariff-limit-not-exceeded.sql)
-      user_id=$(user_id_by_phone "$PHONE")
       echo "-v user_id=$user_id"
       ;;
     03-tenant-contact-created.sql)
-      user_id=$(user_id_by_phone "$PHONE")
-      tenant_phone=$(psql_value "SELECT phone FROM tenant_contacts WHERE owner_id = '$user_id' ORDER BY created_at DESC LIMIT 1;")
-      echo "-v owner_id=$user_id -v phone=$tenant_phone"
+      echo "-v owner_id=$user_id"
       ;;
     04-lease-created.sql)
-      user_id=$(user_id_by_phone "$PHONE")
+      user_id="$USER_ID"
       lease_id=$(psql_value "SELECT l.id FROM leases l JOIN properties p ON p.id = l.property_id WHERE p.owner_id = '$user_id' ORDER BY l.created_at DESC LIMIT 1;")
       property_id=$(psql_value "SELECT property_id FROM leases WHERE id = '$lease_id';")
       local status start_date end_date
@@ -506,12 +503,12 @@ derive_sql_vars() {
       echo "-v lease_id=$lease_id -v property_id=$property_id -v status=$status -v start_date=$start_date -v end_date=$end_date"
       ;;
     12-no-duplicate-open-lease.sql)
-      user_id=$(user_id_by_phone "$PHONE")
+      user_id="$USER_ID"
       property_id=$(psql_value "SELECT l.property_id FROM leases l JOIN properties p ON p.id = l.property_id WHERE p.owner_id = '$user_id' ORDER BY l.created_at DESC LIMIT 1;")
       echo "-v property_id=$property_id"
       ;;
     05-operation-created.sql)
-      user_id=$(user_id_by_phone "$PHONE")
+      user_id="$USER_ID"
       operation_id=$(psql_value "SELECT o.id FROM operations o JOIN properties p ON p.id = o.property_id WHERE p.owner_id = '$user_id' AND o.deleted_at IS NULL ORDER BY o.created_at DESC LIMIT 1;")
       local op_type category amount op_date
       op_type=$(psql_value "SELECT type FROM operations WHERE id = '$operation_id';")
@@ -521,12 +518,12 @@ derive_sql_vars() {
       echo "-v operation_id=$operation_id -v type=$op_type -v category=$category -v amount_kopecks=$amount -v operation_date=$op_date"
       ;;
     06-operation-soft-deleted.sql)
-      user_id=$(user_id_by_phone "$PHONE")
+      user_id="$USER_ID"
       operation_id=$(psql_value "SELECT o.id FROM operations o JOIN properties p ON p.id = o.property_id WHERE p.owner_id = '$user_id' AND o.deleted_at IS NOT NULL ORDER BY o.created_at DESC LIMIT 1;")
       echo "-v operation_id=$operation_id"
       ;;
     07-recurring-operation-created.sql)
-      user_id=$(user_id_by_phone "$PHONE")
+      user_id="$USER_ID"
       # The recurring-operations folder may end with a paused/cleaned-up op; use the latest one.
       recurring_op_id=$(psql_value "SELECT ro.id FROM recurring_operations ro JOIN properties p ON p.id = ro.property_id WHERE p.owner_id = '$user_id' ORDER BY ro.created_at DESC LIMIT 1;")
       local payment_day amount status
@@ -536,12 +533,12 @@ derive_sql_vars() {
       echo "-v recurring_operation_id=$recurring_op_id -v payment_day=$payment_day -v amount_kopecks=$amount -v status=$status"
       ;;
     08-recurring-operation-paused.sql)
-      user_id=$(user_id_by_phone "$PHONE")
+      user_id="$USER_ID"
       recurring_op_id=$(psql_value "SELECT ro.id FROM recurring_operations ro JOIN properties p ON p.id = ro.property_id WHERE p.owner_id = '$user_id' AND ro.status = 'paused' ORDER BY ro.created_at DESC LIMIT 1;")
       echo "-v recurring_operation_id=$recurring_op_id"
       ;;
     11-reminder-created.sql)
-      user_id=$(user_id_by_phone "$PHONE")
+      user_id="$USER_ID"
       echo "-v user_id=$user_id"
       ;;
     12-webhook-payment-processed.sql)
@@ -666,7 +663,7 @@ create_operation_curl() {
   curl -fsS -m 30 -X POST "$BASE_URL/properties/$property_id/operations" \
     -H "Content-Type: application/json" \
     -H "Cookie: $cookie_name=$cookie_value" \
-    -d "{\"type\":\"$op_type\",\"category\":\"$category\",\"amount_kopecks\":$amount,\"operation_date\":\"$op_date\",\"comment\":\"Random user op\"}" 2>/dev/null \
+    -d "{\"type\":\"$op_type\",\"category\":\"$category\",\"name\":\"Random user op\",\"amount_kopecks\":$amount,\"operation_date\":\"$op_date\",\"comment\":\"Random user op\"}" 2>/dev/null \
     | extract_id_from_response
 }
 
@@ -956,6 +953,7 @@ main() {
 
   local SESSION_ID=""
   local COOKIE_NAME=""
+  local USER_ID=""
   local auth_report_json="${BRUNO_REPORT_BASE}-system-e2e-00-auth-setup.json"
 
   if run_bruno_folder "system-e2e/00-auth-setup" --bail; then
@@ -967,6 +965,13 @@ main() {
       log "Session extracted: cookieName=$COOKIE_NAME"
     else
       add_failure "Could not extract session from auth-setup report"
+    fi
+
+    USER_ID=$(extract_user_id_from_report "$auth_report_json") || true
+    if [[ -n "$USER_ID" ]]; then
+      log "User id extracted: $USER_ID"
+    else
+      add_failure "Could not extract user id from auth-setup report"
     fi
 
     if [[ "$db_available" == "true" ]]; then
@@ -998,8 +1003,8 @@ main() {
     fi
     if [[ "$folder" == "system-e2e/75-webhooks" ]]; then
       local payment_pair
-      payment_pair=$(get_webhook_payment "$PHONE") || {
-        add_failure "Failed to find webhook payment for phone $PHONE"
+      payment_pair=$(get_webhook_payment) || {
+        add_failure "Failed to find webhook payment for user $USER_ID"
         record_folder "$folder" "FAIL" "get_webhook_payment failed"
         continue
       }

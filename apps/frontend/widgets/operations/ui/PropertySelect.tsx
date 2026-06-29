@@ -7,8 +7,6 @@ import {
   PopoverContent,
   PopoverDialog,
   PopoverTrigger,
-  ListBox,
-  ListBoxItem,
 } from '@heroui/react';
 import { useProperties } from '@/features/properties/api';
 import { ChevronDown } from '@/shared/assets/icons';
@@ -77,22 +75,20 @@ export function PropertySelect({
               Сначала добавьте объект
             </div>
           ) : (
-            <ListBox
+            <div
+              className={styles.list}
+              role="listbox"
               aria-label="Объект"
-              selectionMode="single"
-              selectedKeys={value ? new Set([value]) : new Set()}
-              onSelectionChange={(keys) => {
-                const selectedKey = Array.from(keys)[0];
-                if (typeof selectedKey === 'string') {
-                  handleSelect(selectedKey);
-                }
-              }}
+              aria-activedescendant={value}
             >
               {properties?.map((property) => (
-                <ListBoxItem
+                <button
                   key={property.id}
-                  className={styles.item}
-                  textValue={property.name}
+                  type="button"
+                  role="option"
+                  aria-selected={value === property.id}
+                  className={clsx(styles.item, value === property.id && styles.itemSelected)}
+                  onClick={() => handleSelect(property.id)}
                 >
                   <span className={styles.itemContent}>
                     <span className={styles.itemName}>{property.name}</span>
@@ -102,9 +98,9 @@ export function PropertySelect({
                       </span>
                     )}
                   </span>
-                </ListBoxItem>
+                </button>
               ))}
-            </ListBox>
+            </div>
           )}
         </PopoverDialog>
       </PopoverContent>

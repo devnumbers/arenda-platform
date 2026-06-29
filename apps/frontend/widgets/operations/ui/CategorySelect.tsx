@@ -7,8 +7,6 @@ import {
   PopoverContent,
   PopoverDialog,
   PopoverTrigger,
-  ListBox,
-  ListBoxItem,
 } from '@heroui/react';
 import {
   incomeCategories,
@@ -76,26 +74,25 @@ export function CategorySelect({
       </PopoverTrigger>
       <PopoverContent className={styles.dropdown}>
         <PopoverDialog aria-label={label}>
-          <ListBox
+          <div
+            className={styles.list}
+            role="listbox"
             aria-label={label}
-            selectionMode="single"
-            selectedKeys={value ? new Set([value]) : new Set()}
-            onSelectionChange={(keys) => {
-              const selectedKey = Array.from(keys)[0];
-              const selectedOption = options.find(
-                (option) => option.value === selectedKey
-              );
-              if (selectedOption) {
-                handleSelect(selectedOption.value);
-              }
-            }}
+            aria-activedescendant={value}
           >
             {options.map((option) => (
-              <ListBoxItem key={option.value} className={styles.item}>
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={value === option.value}
+                className={clsx(styles.item, value === option.value && styles.itemSelected)}
+                onClick={() => handleSelect(option.value)}
+              >
                 {option.label}
-              </ListBoxItem>
+              </button>
             ))}
-          </ListBox>
+          </div>
         </PopoverDialog>
       </PopoverContent>
     </Popover>
