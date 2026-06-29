@@ -585,7 +585,7 @@ func TestProviderInitAddCard(t *testing.T) {
 	}
 }
 
-func TestProviderInitAddCardCustomerAPIErrorPropagated(t *testing.T) {
+func TestProviderInitAddCardCustomerAlreadyExistsProceeds(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v2/AddCustomer":
@@ -599,7 +599,47 @@ func TestProviderInitAddCardCustomerAPIErrorPropagated(t *testing.T) {
 				CustomerKey: "customer-1",
 			})
 		case "/v2/AddCard":
-			t.Fatalf("AddCard should not be called when AddCustomer fails")
+			_ = json.NewEncoder(w).Encode(addCardResponse{
+				baseResponse: baseResponse{Success: true},
+				PaymentURL:   "https://securepayments.tinkoff.ru/rest/addcard/abc",
+				RequestKey:   "request-key-1",
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	result, err := p.InitAddCard(context.Background(), application.InitAddCardRequest{
+		UserID:      uuid.New(),
+		CustomerKey: "customer-1",
+	})
+	if err != nil {
+		t.Fatalf("InitAddCard failed: %v", err)
+	}
+	if result.PaymentURL != "https://securepayments.tinkoff.ru/rest/addcard/abc" {
+		t.Fatalf("PaymentURL: got %q", result.PaymentURL)
+	}
+	if result.RequestKey != "request-key-1" {
+		t.Fatalf("RequestKey: got %q", result.RequestKey)
+	}
+}
+
+func TestProviderInitAddCardOtherAPIErrorPropagated(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v2/AddCustomer":
+			_ = verifyRequestToken(t, r, testPassword)
+			_ = json.NewEncoder(w).Encode(addCustomerResponse{
+				baseResponse: baseResponse{
+					Success:   false,
+					ErrorCode: "3",
+					Message:   "Internal error",
+				},
+			})
+		case "/v2/AddCard":
+			t.Fatalf("AddCard should not be called when AddCustomer fails with a non-duplicate error")
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -612,7 +652,7 @@ func TestProviderInitAddCardCustomerAPIErrorPropagated(t *testing.T) {
 		CustomerKey: "customer-1",
 	})
 	if err == nil {
-		t.Fatalf("expected error when AddCustomer fails")
+		t.Fatalf("expected error when AddCustomer fails with a non-duplicate error")
 	}
 	if !strings.Contains(err.Error(), "add customer failed") {
 		t.Fatalf("unexpected error: %v", err)

@@ -305,15 +305,23 @@ type cancelResponse struct {
 // InitAddCard initializes attaching a new card to a T-Kassa customer.
 func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (application.InitAddCardResult, error) {
 	// The T-Kassa AddCard schema requires the customer to already exist, so we
-	// call AddCustomer first. Any error here is propagated because it may mask a
-	// real problem and the docs do not treat duplicate customers as a success case.
+	// call AddCustomer first. If the customer was already created (for example,
+	// by a previous Init payment), T-Kassa returns ErrorCode 7. That is not a
+	// fatal error for the card-binding flow, so we proceed to AddCard.
 	customerBody := map[string]any{
 		"TerminalKey": p.terminalKey,
 		"CustomerKey": req.CustomerKey,
 	}
 	var customerResp addCustomerResponse
 	if err := p.post(ctx, "AddCustomer", customerBody, &customerResp); err != nil {
-		return application.InitAddCardResult{}, fmt.Errorf("tkassa: add customer failed: %w", err)
+		var providerErr *ProviderError
+		if errors.As(err, &providerErr) && providerErr.ErrorCode == "7" {
+			p.log.InfoContext(ctx, "tkassa customer already exists, proceeding to add card",
+				"customer_key", req.CustomerKey,
+			)
+		} else {
+			return application.InitAddCardResult{}, fmt.Errorf("tkassa: add customer failed: %w", err)
+		}
 	}
 
 	checkType := req.CheckType
