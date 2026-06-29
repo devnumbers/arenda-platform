@@ -195,6 +195,25 @@ func (s *PropertyService) GetProperty(ctx context.Context, ownerID, id uuid.UUID
 	return properties[0], nil
 }
 
+func (s *PropertyService) GetPropertyWithOpenLease(ctx context.Context, ownerID, id uuid.UUID) (domain.Property, leasesdomain.Lease, error) {
+	property, err := s.GetProperty(ctx, ownerID, id)
+	if err != nil {
+		return domain.Property{}, leasesdomain.Lease{}, err
+	}
+
+	lease, err := s.leaseRepo.GetOpenLeaseByProperty(ctx, ownerID, property.ID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return property, leasesdomain.Lease{}, nil
+		}
+		return domain.Property{}, leasesdomain.Lease{}, fmt.Errorf("get open lease: %w", err)
+	}
+
+	now := s.clock.Now()
+	lease.Status = lease.EffectiveStatus(now)
+	return property, lease, nil
+}
+
 func (s *PropertyService) ListPropertyLeases(ctx context.Context, ownerID, propertyID uuid.UUID) ([]leasesdomain.Lease, error) {
 	if _, err := s.repo.GetByIDAndOwner(ctx, propertyID, ownerID); err != nil {
 		if errors.Is(err, ErrNotFound) {

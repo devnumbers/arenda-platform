@@ -420,6 +420,10 @@ func (r stubLeaseRepo) ListByProperty(_ context.Context, _, _ uuid.UUID) ([]leas
 	return nil, nil
 }
 
+func (r stubLeaseRepo) GetOpenLeaseByProperty(_ context.Context, _, _ uuid.UUID) (leasesdomain.Lease, error) {
+	return leasesdomain.Lease{}, ErrNotFound
+}
+
 var _ LeaseRepository = stubLeaseRepo{}
 
 type fakePropertyPhotoRepo struct{}
@@ -479,6 +483,15 @@ type fakeLeaseRepoForProperties struct {
 
 func (r fakeLeaseRepoForProperties) ListByProperty(_ context.Context, _, _ uuid.UUID) ([]leasesdomain.Lease, error) {
 	return r.leases, nil
+}
+
+func (r fakeLeaseRepoForProperties) GetOpenLeaseByProperty(_ context.Context, _, propertyID uuid.UUID) (leasesdomain.Lease, error) {
+	for _, lease := range r.leases {
+		if lease.PropertyID == propertyID && lease.Status.IsOpen() {
+			return lease, nil
+		}
+	}
+	return leasesdomain.Lease{}, ErrNotFound
 }
 
 var _ LeaseRepository = fakeLeaseRepoForProperties{}
