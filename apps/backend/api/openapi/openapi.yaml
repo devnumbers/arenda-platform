@@ -2162,7 +2162,7 @@ components:
 
     PropertyResponse:
       type: object
-      required: [id, name, type, address, status, occupancy, created_at, updated_at]
+      required: [id, name, type, address, status, occupancy, active_lease, created_at, updated_at]
       properties:
         id:
           type: string

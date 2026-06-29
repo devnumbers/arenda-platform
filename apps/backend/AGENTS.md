@@ -40,7 +40,7 @@ Rules for the Go backend in `apps/backend`. Also follow the root `AGENTS.md`, `C
 
 ```bash
 go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate
-go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.0 -config api/openapi/oapi-codegen.yaml api/openapi/openapi.yaml
+go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1 -config api/openapi/oapi-codegen.yaml api/openapi/openapi.yaml
 ```
 
 - Do not edit generated files manually.
