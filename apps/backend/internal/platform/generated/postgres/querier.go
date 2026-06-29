@@ -72,7 +72,7 @@ type Querier interface {
 	GetLeaseByIDAndOwnerForUpdate(ctx context.Context, arg GetLeaseByIDAndOwnerForUpdateParams) (Lease, error)
 	GetLeaseByIDForUpdate(ctx context.Context, id pgtype.UUID) (Lease, error)
 	GetLoginAttemptByPhone(ctx context.Context, phone string) (LoginAttempt, error)
-	GetOpenLeaseByProperty(ctx context.Context, propertyID pgtype.UUID) (Lease, error)
+	GetOpenLeaseByProperty(ctx context.Context, arg GetOpenLeaseByPropertyParams) (Lease, error)
 	GetOperationByIDAndOwner(ctx context.Context, arg GetOperationByIDAndOwnerParams) (Operation, error)
 	GetOperationByIDAndOwnerForUpdate(ctx context.Context, arg GetOperationByIDAndOwnerForUpdateParams) (Operation, error)
 	GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)

@@ -81,7 +81,7 @@ func (r *fakeLeaseRepo) CountOpenLeasesByProperty(ctx context.Context, propertyI
 	return 0, nil
 }
 
-func (r *fakeLeaseRepo) GetOpenLeaseByProperty(ctx context.Context, propertyID uuid.UUID) (domain.Lease, error) {
+func (r *fakeLeaseRepo) GetOpenLeaseByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) (domain.Lease, error) {
 	return domain.Lease{}, nil
 }
 

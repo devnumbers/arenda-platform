@@ -59,7 +59,8 @@ WHERE property_id = $1
 
 -- name: GetOpenLeaseByProperty :one
 SELECT * FROM leases
-WHERE property_id = $1
+WHERE owner_id = $1
+  AND property_id = $2
   AND status IN ('awaiting_start', 'active', 'requires_action')
 ORDER BY updated_at DESC
 LIMIT 1;

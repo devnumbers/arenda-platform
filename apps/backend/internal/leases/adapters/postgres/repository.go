@@ -192,8 +192,11 @@ func (r *LeaseRepository) CountOpenLeasesByProperty(ctx context.Context, propert
 	return int(count), nil
 }
 
-func (r *LeaseRepository) GetOpenLeaseByProperty(ctx context.Context, propertyID uuid.UUID) (domain.Lease, error) {
-	row, err := r.q().GetOpenLeaseByProperty(ctx, pgconv.UUIDToPgtype(propertyID))
+func (r *LeaseRepository) GetOpenLeaseByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) (domain.Lease, error) {
+	row, err := r.q().GetOpenLeaseByProperty(ctx, postgres.GetOpenLeaseByPropertyParams{
+		OwnerID:   pgconv.UUIDToPgtype(ownerID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Lease{}, application.ErrNotFound

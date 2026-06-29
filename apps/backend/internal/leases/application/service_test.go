@@ -75,7 +75,7 @@ func (r *fakeLeaseRepo) CountOpenLeasesByProperty(_ context.Context, _ uuid.UUID
 	return 0, nil
 }
 
-func (r *fakeLeaseRepo) GetOpenLeaseByProperty(_ context.Context, _ uuid.UUID) (domain.Lease, error) {
+func (r *fakeLeaseRepo) GetOpenLeaseByProperty(_ context.Context, _, _ uuid.UUID) (domain.Lease, error) {
 	return domain.Lease{}, ErrNotFound
 }
 

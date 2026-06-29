@@ -232,14 +232,20 @@ func (q *Queries) GetLeaseByIDForUpdate(ctx context.Context, id pgtype.UUID) (Le
 
 const getOpenLeaseByProperty = `-- name: GetOpenLeaseByProperty :one
 SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
-WHERE property_id = $1
+WHERE owner_id = $1
+  AND property_id = $2
   AND status IN ('awaiting_start', 'active', 'requires_action')
 ORDER BY updated_at DESC
 LIMIT 1
 `
 
-func (q *Queries) GetOpenLeaseByProperty(ctx context.Context, propertyID pgtype.UUID) (Lease, error) {
-	row := q.db.QueryRow(ctx, getOpenLeaseByProperty, propertyID)
+type GetOpenLeaseByPropertyParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+func (q *Queries) GetOpenLeaseByProperty(ctx context.Context, arg GetOpenLeaseByPropertyParams) (Lease, error) {
+	row := q.db.QueryRow(ctx, getOpenLeaseByProperty, arg.OwnerID, arg.PropertyID)
 	var i Lease
 	err := row.Scan(
 		&i.ID,
