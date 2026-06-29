@@ -350,20 +350,15 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
-			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "new phone must differ from current phone"))
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Новый номер не должен совпадать с текущим"))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "phone number is already in use"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Номер телефона уже используется"))
 		case errors.Is(err, application.ErrUserBlocked),
 			errors.Is(err, domain.ErrTooManyAttempts):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
+			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит попыток, попробуйте позже"))
 		case errors.Is(err, domain.ErrSMSCodeInvalid),
 			errors.Is(err, application.ErrNotFound):
-			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "invalid phone or code"))
+			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный код"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
