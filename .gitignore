@@ -17,3 +17,8 @@ apps/backend/perf/fixtures.json
 apps/backend/perf/results/
 # Compiled perf binaries
 apps/backend/perfvegeta
+
+.playwright-mcp
+
+docs/plans
+docs/reviews
