@@ -6,7 +6,11 @@ import (
 	"testing"
 )
 
-func ptr(s string) *string { return &s }
+func ptr(s string) *string {
+	p := new(string)
+	*p = s
+	return p
+}
 
 func TestUser_UpdatePersonalData(t *testing.T) {
 	cases := []struct {
