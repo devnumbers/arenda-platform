@@ -37,13 +37,15 @@ export function PropertyActionMenu({
                 offset={8}
                 className={styles.menu}
             >
-                <button
-                    type="button"
-                    className={styles.item}
-                    onClick={() => handleAction(onEdit)}
-                >
-                    Редактировать объект
-                </button>
+                {status !== 'archived' && (
+                    <button
+                        type="button"
+                        className={styles.item}
+                        onClick={() => handleAction(onEdit)}
+                    >
+                        Редактировать объект
+                    </button>
+                )}
                 {status !== 'archived' && (
                     <button
                         type="button"

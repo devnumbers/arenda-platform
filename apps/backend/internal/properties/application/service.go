@@ -170,6 +170,20 @@ func (s *PropertyService) ListProperties(ctx context.Context, ownerID uuid.UUID)
 	return properties, nil
 }
 
+func (s *PropertyService) ListArchivedProperties(ctx context.Context, ownerID uuid.UUID) ([]domain.Property, error) {
+	properties, err := s.repo.ListArchivedByOwner(ctx, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("list archived properties: %w", err)
+	}
+
+	properties, err = s.withPhotos(ctx, properties...)
+	if err != nil {
+		return nil, err
+	}
+
+	return properties, nil
+}
+
 func (s *PropertyService) GetProperty(ctx context.Context, ownerID, id uuid.UUID) (domain.Property, error) {
 	property, err := s.repo.GetByIDAndOwner(ctx, id, ownerID)
 	if err != nil {

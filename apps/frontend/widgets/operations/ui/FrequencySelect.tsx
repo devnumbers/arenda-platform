@@ -13,9 +13,9 @@ export type FrequencySelectProps = {
 };
 
 const frequencyOptions: { value: OperationFrequency; label: string }[] = [
-  { value: 'once', label: 'Напомнить один раз' },
-  { value: 'monthly', label: 'Каждый месяц' },
-  { value: 'yearly', label: 'Каждый год' },
+  { value: 'once', label: 'Разово' },
+  { value: 'monthly', label: 'Ежемесячно' },
+  { value: 'yearly', label: 'Ежегодно' },
 ];
 
 export function FrequencySelect({

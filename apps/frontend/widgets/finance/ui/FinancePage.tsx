@@ -7,24 +7,18 @@ import { LinkButton } from '@/shared/ui/link-button';
 import { ROUTES } from '@/shared/config/routes';
 import { useFinanceReport } from '@/features/finance/api/hooks';
 import { useOperations } from '@/features/operations/api/hooks';
-import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import { categoryLabels } from '../lib/category-labels';
-import { statusLabels, statusVariants } from '../lib/status-labels';
+import { OperationListItem } from '@/widgets/operations/ui/OperationListItem';
+import { formatDateForApi } from '@/entities/operation/lib/dates';
 import { FinanceEmptyState } from './FinanceEmptyState';
 import { FinanceLoading } from './FinanceLoading';
 import { FinanceErrorState } from './FinanceErrorState';
 import { FinanceSummaryCards } from './FinanceSummaryCards';
 import { SubscriptionReadonlyBanner } from './SubscriptionReadonlyBanner';
+import { FinanceUpcomingOperations } from './FinanceUpcomingOperations';
 import { useSubscription } from '@/features/subscription/api/hooks';
 import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import styles from './FinancePage.module.css';
-
-function formatDateForApi(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
+import sectionStyles from './FinanceSection.module.css';
 
 function getCurrentMonthRange(): { from: string; to: string } {
   const now = new Date();
@@ -33,8 +27,16 @@ function getCurrentMonthRange(): { from: string; to: string } {
   return { from: formatDateForApi(from), to: formatDateForApi(to) };
 }
 
+function getUpcomingMonthRange(): { from: string; to: string } {
+  const today = new Date();
+  const until = new Date(today);
+  until.setDate(today.getDate() + 30);
+  return { from: formatDateForApi(today), to: formatDateForApi(until) };
+}
+
 export function FinancePage(): JSX.Element {
   const { from, to } = useMemo(() => getCurrentMonthRange(), []);
+  const upcomingRange = useMemo(() => getUpcomingMonthRange(), []);
 
   const {
     data: report,
@@ -52,6 +54,19 @@ export function FinancePage(): JSX.Element {
     refetch: refetchOperations,
   } = useOperations({ limit: 5 });
 
+  const {
+    data: upcomingOperationsData,
+    isLoading: isLoadingUpcoming,
+    isError: isErrorUpcoming,
+    isFetching: isFetchingUpcoming,
+    refetch: refetchUpcoming,
+  } = useOperations({
+    status: ['pending'],
+    from: upcomingRange.from,
+    to: upcomingRange.to,
+    limit: 5,
+  });
+
   const isLoading = isReportLoading || isOperationsLoading;
   const isError = isReportError || isOperationsError;
   const isFetching = isReportFetching || isOperationsFetching;
@@ -66,6 +81,8 @@ export function FinancePage(): JSX.Element {
   };
 
   const operations = operationsData?.items ?? [];
+  const upcomingOperations = upcomingOperationsData?.items ?? [];
+
   const { data: subscription } = useSubscription();
   const readonly = isSubscriptionReadonly(subscription);
 
@@ -95,126 +112,83 @@ export function FinancePage(): JSX.Element {
 
       {!isLoading && isError && <FinanceErrorState onRetry={handleRetry} isLoading={isFetching} />}
 
-      {!isLoading && !isError && operations.length === 0 && (
-        <FinanceEmptyState
-          title="Нет операций"
-          subtitle="Добавьте первую операцию, чтобы увидеть финансовую сводку"
-          actionHref={readonly ? undefined : ROUTES.financeCreateOperation}
-          actionText={readonly ? undefined : 'Добавить операцию'}
-        />
-      )}
-
-      {!isLoading && !isError && operations.length > 0 && (
+      {!isLoading && !isError && (
         <>
-          {report && (
-            <FinanceSummaryCards
-              incomeKopecks={report.totals.income_kopecks}
-              expenseKopecks={report.totals.expense_kopecks}
-              profitKopecks={report.totals.profit_kopecks}
+          {operations.length === 0 && upcomingOperations.length === 0 ? (
+            <FinanceEmptyState
+              title="Нет операций"
+              subtitle="Добавьте первую операцию, чтобы увидеть финансовую сводку"
+              actionHref={readonly ? undefined : ROUTES.financeCreateOperation}
+              actionText={readonly ? undefined : 'Добавить операцию'}
             />
+          ) : (
+            <>
+              {report && (
+                <FinanceSummaryCards
+                  incomeKopecks={report.totals.income_kopecks}
+                  expenseKopecks={report.totals.expense_kopecks}
+                  profitKopecks={report.totals.profit_kopecks}
+                />
+              )}
+
+              <section className={sectionStyles.section}>
+                <div className={styles.sectionHeader}>
+                  <h2 className={sectionStyles.sectionTitle}>Последние операции</h2>
+                  <LinkButton
+                    href={ROUTES.financeOperations}
+                    variant="clear"
+                    size="small"
+                    rightIcon={
+                      <Icon size="s">
+                        <ArrowRight />
+                      </Icon>
+                    }
+                    className={styles.linkAll}
+                  >
+                    Смотреть все
+                  </LinkButton>
+                </div>
+
+                <ul className={sectionStyles.operationsList}>
+                  {operations.map((operation) => (
+                    <li key={operation.id}>
+                      <OperationListItem operation={operation} variant="dashboard" />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              <FinanceUpcomingOperations
+                operations={upcomingOperations}
+                isLoading={isLoadingUpcoming}
+                isFetching={isFetchingUpcoming}
+                isError={isErrorUpcoming}
+                refetch={refetchUpcoming}
+              />
+            </>
           )}
 
-          <section className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>Последние операции</h2>
-              <LinkButton
-                href={ROUTES.financeOperations}
-                variant="clear"
-                size="small"
-                rightIcon={
-                  <Icon size="s">
-                    <ArrowRight />
-                  </Icon>
-                }
-                className={styles.linkAll}
-              >
-                Смотреть все
-              </LinkButton>
-            </div>
-
-            <ul className={styles.operationsList}>
-              {operations.map((operation) => {
-                const isIncome = operation.type === 'income';
-                const amountClass = isIncome ? styles.amountIncome : styles.amountExpense;
-                const sign = isIncome ? '+' : '-';
-                const statusVariant = statusVariants[operation.status];
-
-                return (
-                  <li key={operation.id} className={styles.operationRow}>
-                    <div className={styles.operationMain}>
-                      <span className={styles.operationName}>{operation.name}</span>
-                      <span className={styles.operationMeta}>
-                        {new Date(operation.operation_date).toLocaleDateString('ru-RU')}
-                        {' · '}
-                        {categoryLabels[operation.category] ?? operation.category}
-                      </span>
-                    </div>
-                    <div className={styles.operationRight}>
-                      <span className={`${styles.operationAmount} ${amountClass}`}>
-                        {sign}
-                        {formatMoneyKopecks(operation.amount_kopecks, { round: true })}
-                      </span>
-                      <span
-                        className={`${styles.statusBadge} ${
-                          statusVariant === 'warning' ? styles.statusWarning : styles.statusSuccess
-                        }`}
-                      >
-                        {statusLabels[operation.status] ?? operation.status}
-                      </span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Быстрые ссылки</h2>
-            <nav className={styles.quickLinks}>
-              <LinkButton
-                href={ROUTES.financeOperations}
-                variant="clear"
-                size="medium"
-                fullWidth
-                rightIcon={
-                  <Icon size="s">
-                    <ArrowRight />
-                  </Icon>
-                }
-                className={styles.quickLink}
-              >
-                Все операции
-              </LinkButton>
-              <LinkButton
-                href={ROUTES.financePayments}
-                variant="clear"
-                size="medium"
-                fullWidth
-                rightIcon={
-                  <Icon size="s">
-                    <ArrowRight />
-                  </Icon>
-                }
-                className={styles.quickLink}
-              >
-                Платежи
-              </LinkButton>
-              <LinkButton
-                href={`${ROUTES.finance}?tab=report`}
-                variant="clear"
-                size="medium"
-                fullWidth
-                rightIcon={
-                  <Icon size="s">
-                    <ArrowRight />
-                  </Icon>
-                }
-                className={styles.quickLink}
-              >
-                Отчёт о прибыли
-              </LinkButton>
-            </nav>
-          </section>
+          {operations.length > 0 && (
+            <section className={sectionStyles.section}>
+              <h2 className={sectionStyles.sectionTitle}>Быстрые ссылки</h2>
+              <nav className={styles.quickLinks}>
+                <LinkButton
+                  href={ROUTES.financeOperations}
+                  variant="clear"
+                  size="medium"
+                  fullWidth
+                  rightIcon={
+                    <Icon size="s">
+                      <ArrowRight />
+                    </Icon>
+                  }
+                  className={styles.quickLink}
+                >
+                  Все операции
+                </LinkButton>
+              </nav>
+            </section>
+          )}
         </>
       )}
     </div>

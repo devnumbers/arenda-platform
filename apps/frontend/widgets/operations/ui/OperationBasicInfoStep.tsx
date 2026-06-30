@@ -10,12 +10,14 @@ import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { type BasicInfoData, type BasicInfoErrors } from '../model/types';
 import { CategorySelect } from './CategorySelect';
 import { PropertySelect } from './PropertySelect';
+import { TypeSelect } from './TypeSelect';
 import styles from './OperationBasicInfoStep.module.css';
 
 export type OperationBasicInfoStepProps = {
   readonly type: OperationType;
   readonly data: BasicInfoData;
   readonly onChange: (data: BasicInfoData) => void;
+  readonly onTypeChange: (type: OperationType) => void;
   readonly errors?: BasicInfoErrors;
   readonly readonly?: boolean;
 };
@@ -24,6 +26,7 @@ export function OperationBasicInfoStep({
   type,
   data,
   onChange,
+  onTypeChange,
   errors,
   readonly,
 }: OperationBasicInfoStepProps): JSX.Element {
@@ -58,6 +61,7 @@ export function OperationBasicInfoStep({
         />
       )}
       <div className={styles.fields}>
+        <TypeSelect value={type} onChange={onTypeChange} disabled={readonly} />
         <TextField
           label="Сумма операции, ₽"
           placeholder="0"

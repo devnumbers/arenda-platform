@@ -9,6 +9,8 @@ import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { formatDate } from '@/shared/lib/format-date';
 import type { components } from '@/shared/api/generated';
+import type { Property } from '@/entities/property/model/types';
+import { getCategoryLabel } from '@/entities/operation/lib/categories';
 import { formatOverdueCount } from '../lib/format-overdue-count';
 import { PropertyDetailSection } from './PropertyDetailSection';
 import styles from './PropertyPaymentsCard.module.css';
@@ -16,21 +18,13 @@ import styles from './PropertyPaymentsCard.module.css';
 type OperationResponse = components['schemas']['OperationResponse'];
 
 export type PropertyPaymentsCardProps = {
+  readonly property: Property;
   readonly operations: OperationResponse[];
   readonly overdueCount: number;
 };
 
-const categoryLabels: Record<OperationResponse['category'], string> = {
-  rent: 'Аренда',
-  other_income: 'Другой доход',
-  utilities: 'Коммунальные услуги',
-  repair: 'Ремонт',
-  tax: 'Налог',
-  other_expense: 'Другой расход',
-  deposit_return: 'Возврат залога',
-};
-
 export function PropertyPaymentsCard({
+  property,
   operations,
   overdueCount,
 }: PropertyPaymentsCardProps): JSX.Element {
@@ -44,11 +38,11 @@ export function PropertyPaymentsCard({
   return (
     <PropertyDetailSection>
       <div className={styles.header}>
-        <h2 className={styles.title}>Платежи</h2>
+        <h2 className={styles.title}>Операции</h2>
         <NextLink
-          href={ROUTES.finance}
+          href={`${ROUTES.financeOperations}?property_id=${property.id}`}
           className={styles.headerLink}
-          aria-label="Перейти к платежам"
+          aria-label="Все операции"
         >
           <Icon size="s">
             <ArrowRight />
@@ -65,38 +59,55 @@ export function PropertyPaymentsCard({
       {recent.length > 0 ? (
         <ul className={styles.list}>
           {recent.map((operation) => (
-            <li key={operation.id} className={styles.row}>
-              <span className={styles.category}>
-                {categoryLabels[operation.category]}
-              </span>
-              <span className={styles.amount}>
-                {formatMoneyKopecks(operation.amount_kopecks)}
-              </span>
-              <span className={styles.date}>
-                {formatDate(operation.operation_date)}
-              </span>
+            <li key={operation.id}>
+              <NextLink
+                href={ROUTES.financeOperation(operation.id)}
+                className={styles.row}
+              >
+                <span className={styles.category}>
+                  {getCategoryLabel(operation.category)}
+                </span>
+                <span className={styles.amount}>
+                  {formatMoneyKopecks(operation.amount_kopecks)}
+                </span>
+                <span className={styles.date}>
+                  {formatDate(operation.operation_date)}
+                </span>
+              </NextLink>
             </li>
           ))}
         </ul>
       ) : (
         <div className={styles.empty}>
-          <p className={styles.emptyText}>Платежей пока нет</p>
+          <p className={styles.emptyText}>Операций пока нет</p>
         </div>
       )}
 
       <div className={styles.actions}>
         {recent.length > 0 ? (
           <>
-            <LinkButton href={ROUTES.finance} variant="primary" fullWidth>
-              Внести платёж
+            <LinkButton
+              href={`${ROUTES.financeCreateOperation}?propertyId=${property.id}`}
+              variant="primary"
+              fullWidth
+            >
+              Добавить операцию
             </LinkButton>
-            <LinkButton href={ROUTES.finance} variant="secondary" fullWidth>
-              Запланировать
+            <LinkButton
+              href={`${ROUTES.financeOperations}?property_id=${property.id}`}
+              variant="secondary"
+              fullWidth
+            >
+              Все операции
             </LinkButton>
           </>
         ) : (
-          <LinkButton href={ROUTES.finance} variant="primary" fullWidth>
-            Добавить платежи
+          <LinkButton
+            href={`${ROUTES.financeCreateOperation}?propertyId=${property.id}`}
+            variant="primary"
+            fullWidth
+          >
+            Добавить операцию
           </LinkButton>
         )}
       </div>

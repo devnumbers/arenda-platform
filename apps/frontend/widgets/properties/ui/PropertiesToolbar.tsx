@@ -3,6 +3,7 @@
 import type {JSX, ReactNode} from 'react';
 import {useCallback, useMemo, useState} from 'react';
 import NextLink from 'next/link';
+import {Tooltip} from '@heroui/react';
 import {Button} from '@/shared/ui/button';
 import {Icon} from '@/shared/ui/icon';
 import {Cancel, Filter, HomeAdd} from '@/shared/assets/icons';
@@ -21,6 +22,7 @@ export type PropertiesToolbarProps = {
     readonly sort: PropertySort;
     readonly mode?: PropertiesViewMode;
     readonly onChange: (filters: PropertyFilters, sort: PropertySort) => void;
+    readonly canAdd?: boolean;
 };
 
 type TypeFilterSectionProps = {
@@ -165,6 +167,7 @@ export function PropertiesToolbar({
                                       sort,
                                       mode = 'active',
                                       onChange,
+                                      canAdd = true,
                                   }: PropertiesToolbarProps): JSX.Element {
     const [draftFilters, setDraftFilters] = useState<PropertyFilters>(filters);
     const [draftSort, setDraftSort] = useState<PropertySort>(sort);
@@ -341,15 +344,35 @@ export function PropertiesToolbar({
                     </FilterDrawer>
                 </div>
 
-                <NextLink
-                    href={ROUTES.propertyNew}
-                    className={styles.addButton}
-                    aria-label="Добавить объект"
-                >
-                    <Icon size="s">
-                        <HomeAdd/>
-                    </Icon>
-                </NextLink>
+                {canAdd ? (
+                    <NextLink
+                        href={ROUTES.propertyNew}
+                        className={styles.addButton}
+                        aria-label="Добавить объект"
+                    >
+                        <Icon size="s">
+                            <HomeAdd/>
+                        </Icon>
+                    </NextLink>
+                ) : (
+                    <Tooltip>
+                        <Tooltip.Trigger>
+                            <span
+                                className={styles.addButtonDisabled}
+                                role="button"
+                                aria-label="Добавить объект (достигнут лимит)"
+                                aria-disabled="true"
+                            >
+                                <Icon size="s">
+                                    <HomeAdd/>
+                                </Icon>
+                            </span>
+                        </Tooltip.Trigger>
+                        <Tooltip.Content>
+                            Достигнут лимит объектов по тарифу
+                        </Tooltip.Content>
+                    </Tooltip>
+                )}
             </div>
 
             {hasSelectedFilters && (

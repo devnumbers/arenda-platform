@@ -105,6 +105,16 @@ func (r *lockingFakePropertyRepo) ListActiveByOwner(_ context.Context, _ uuid.UU
 	return nil, nil
 }
 
+func (r *lockingFakePropertyRepo) ListArchivedByOwner(_ context.Context, _ uuid.UUID) ([]domain.Property, error) {
+	archived := make([]domain.Property, 0)
+	for _, p := range r.data {
+		if p.Status == domain.PropertyStatusArchived {
+			archived = append(archived, p)
+		}
+	}
+	return archived, nil
+}
+
 func (r *lockingFakePropertyRepo) Update(_ context.Context, _ uuid.UUID, property domain.Property) (domain.Property, error) {
 	// The caller already holds the lock via GetByIDAndOwnerForUpdate.
 	if _, ok := r.data[property.ID]; !ok {
@@ -576,5 +586,48 @@ func TestPropertyService_ListPropertyLeases_PropertyNotFound(t *testing.T) {
 	_, err := svc.ListPropertyLeases(ctx, ownerID, missingPropertyID)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestPropertyService_ListArchivedProperties(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	archivedID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	repo := newLockingFakePropertyRepo(domain.Property{})
+	repo.data[archivedID] = domain.Property{
+		ID:      archivedID,
+		OwnerID: ownerID,
+		Name:    "Archived",
+		Address: "Archive St",
+		Type:    domain.PropertyTypeApartment,
+		Status:  domain.PropertyStatusArchived,
+	}
+
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		fakeOccupancyProvider{},
+		nil,
+		nil,
+		stubLeaseRepo{},
+		fakePropertyTxBeginner{},
+		fakePropertyClock{now: time.Now()},
+		nil,
+	)
+
+	result, err := svc.ListArchivedProperties(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("list archived properties: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 archived property, got %d", len(result))
+	}
+	if result[0].ID != archivedID {
+		t.Errorf("expected property %s, got %s", archivedID, result[0].ID)
+	}
+	if result[0].Status != domain.PropertyStatusArchived {
+		t.Errorf("expected archived status, got %q", result[0].Status)
 	}
 }

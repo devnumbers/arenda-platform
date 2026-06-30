@@ -92,7 +92,7 @@ export function TenantCreateWizard(): JSX.Element {
             clearDraft();
             router.push(ROUTES.tenants);
           }}
-          onAddPayments={() => {
+          onAddOperations={() => {
             clearDraft();
             router.push(ROUTES.finance);
           }}

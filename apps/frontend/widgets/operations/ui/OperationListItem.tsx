@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import NextLink from 'next/link';
 import type { components } from '@/shared/api/generated';
 import { ROUTES } from '@/shared/config/routes';
-import { getOperationStatusLabel } from '@/entities/operation/lib/statuses';
+import { getOperationStatusLabel, operationStatusOptions } from '@/entities/operation/lib/statuses';
 import { getCategoryLabel } from '@/entities/operation/lib/categories';
 import { formatOperationDate } from '@/entities/operation/lib/dates';
 import { formatMoneyKopecks } from '@/entities/operation/lib/formatMoney';
@@ -16,20 +16,40 @@ type OperationWithPropertyName = OperationResponse & {
   property_name?: string;
 };
 
+export type OperationListItemVariant = 'default' | 'dashboard';
+
 export type OperationListItemProps = {
   readonly operation: OperationResponse;
   readonly showProperty?: boolean;
+  readonly variant?: OperationListItemVariant;
+};
+
+function isFutureDate(dateString: string): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(dateString) > today;
+}
+
+const variantClassMap: Record<string, string> = {
+  warning: styles.badgeWarning,
+  danger: styles.badgeDanger,
+  success: styles.badgeSuccess,
+  default: styles.badgeDefault,
 };
 
 export function OperationListItem({
   operation,
   showProperty = false,
+  variant = 'default',
 }: OperationListItemProps): JSX.Element {
+  const isDashboard = variant === 'dashboard';
   const operationWithProperty = operation as OperationWithPropertyName;
   const isIncome = operation.type === 'income';
   const sign = isIncome ? '+' : '-';
   const amountClass = isIncome ? styles.amountIncome : styles.amountExpense;
   const statusLabel = getOperationStatusLabel(operation.status);
+  const statusVariant = operationStatusOptions.find((option) => option.value === operation.status)?.variant ?? 'default';
+  const future = isFutureDate(operation.operation_date);
   const metaItems = [formatOperationDate(operation.operation_date), getCategoryLabel(operation.category)];
 
   if (showProperty && operationWithProperty.property_name) {
@@ -39,10 +59,13 @@ export function OperationListItem({
   return (
     <NextLink
       href={ROUTES.financeOperation(operation.id)}
-      className={styles.root}
+      className={`${styles.root} ${isDashboard ? styles.rootDashboard : ''}`}
     >
       <div className={styles.main}>
-        <span className={styles.name}>{operation.name}</span>
+        <span className={styles.nameRow}>
+          <span className={styles.name}>{operation.name}</span>
+          {!isDashboard && future && <span className={styles.badgeFuture}>Планируемая</span>}
+        </span>
         <span className={styles.meta}>{metaItems.join(' · ')}</span>
       </div>
       <div className={styles.right}>
@@ -50,7 +73,11 @@ export function OperationListItem({
           {sign}
           {formatMoneyKopecks(operation.amount_kopecks, { round: true })}
         </span>
-        <span className={styles.status}>{statusLabel}</span>
+        {isDashboard ? (
+          <span className={`${styles.badge} ${variantClassMap[statusVariant]}`}>{statusLabel}</span>
+        ) : (
+          <span className={styles.status}>{statusLabel}</span>
+        )}
       </div>
     </NextLink>
   );

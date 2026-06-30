@@ -200,6 +200,7 @@ export function PropertyDetailPage(): JSX.Element {
             <PropertyTenantCard lease={property.activeLease}/>
 
             <PropertyPaymentsCard
+                property={property}
                 operations={operationsQuery.data?.items ?? []}
                 overdueCount={summaryQuery.data?.overdue_total_count ?? 0}
             />
@@ -232,7 +233,7 @@ export function PropertyDetailPage(): JSX.Element {
 
             {successBannerOpen && (
                 <PropertySuccessBanner
-                    onOpenLease={() => router.push(`/leases/${selectedLeaseId}`)}
+                    onOpenLease={() => router.push(ROUTES.lease(selectedLeaseId))}
                     onDepositReturn={handleDepositReturn}
                 />
             )}

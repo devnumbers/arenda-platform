@@ -88,6 +88,18 @@ func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, ownerID uuid
 	return properties, nil
 }
 
+func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Property, error) {
+	rows, err := r.q().ListArchivedPropertiesByOwner(ctx, pgconv.UUIDToPgtype(ownerID))
+	if err != nil {
+		return nil, err
+	}
+	properties := make([]domain.Property, 0, len(rows))
+	for _, row := range rows {
+		properties = append(properties, propertyFromRow(row))
+	}
+	return properties, nil
+}
+
 func (r *PropertyRepository) Update(ctx context.Context, ownerID uuid.UUID, property domain.Property) (domain.Property, error) {
 	row, err := r.q().UpdateProperty(ctx, postgres.UpdatePropertyParams{
 		ID:          pgconv.UUIDToPgtype(property.ID),

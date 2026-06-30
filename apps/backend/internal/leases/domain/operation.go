@@ -161,6 +161,7 @@ type Operation struct {
 	AmountKopecks        int64
 	OperationDate        time.Time
 	Comment              string
+	ReminderOffsetDays   *int
 	IsException          bool
 	DeletedAt            *time.Time
 	CreatedAt            time.Time
@@ -215,6 +216,7 @@ type RecurringOperation struct {
 	Status             RecurringOperationStatus
 	Name               string
 	Comment            string
+	DeletedAt          *time.Time
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 }

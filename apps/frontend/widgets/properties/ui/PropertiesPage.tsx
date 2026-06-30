@@ -5,6 +5,7 @@ import {usePathname, useRouter, useSearchParams} from 'next/navigation';
 import {propertyTypeOptions} from '@/features/properties/lib/property-types';
 import type {StatusFilterValue} from '@/features/properties/lib/property-statuses';
 import {statusFilterOptions} from '@/features/properties/lib/property-statuses';
+import {useSubscription} from '@/features/subscription/api/hooks';
 import {usePropertyListData} from '../lib/use-property-list-data';
 import {applyFiltersAndSort, type PropertiesViewMode} from '../lib/apply-filters';
 import {PropertiesToolbar} from './PropertiesToolbar';
@@ -44,7 +45,8 @@ function parseSortFromSearchParams(searchParams: URLSearchParams): PropertySort 
 }
 
 export function PropertiesPage({mode = 'active'}: PropertiesPageProps): JSX.Element {
-    const {data, isLoading, isFetching, isError, refetch} = usePropertyListData();
+    const {data, isLoading, isFetching, isError, refetch} = usePropertyListData(mode);
+    const subscriptionQuery = useSubscription();
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -105,10 +107,17 @@ export function PropertiesPage({mode = 'active'}: PropertiesPageProps): JSX.Elem
     const isEmpty = !isLoading && !isError && visible.length === 0;
     const title = mode === 'archived' ? 'Архивные объекты' : 'Мои объекты';
 
+    const canAdd = useMemo(() => {
+        if (!subscriptionQuery.data) return true;
+        const limit = subscriptionQuery.data.tariff.activePropertyLimit;
+        if (limit < 0) return true;
+        return (data?.length ?? 0) < limit;
+    }, [subscriptionQuery.data, data]);
+
     return (
         <div className={styles.root}>
             <h1 className={styles.title}>{title}</h1>
-            <PropertiesToolbar mode={mode} filters={filters} sort={sort} onChange={handleChange}/>
+            <PropertiesToolbar mode={mode} filters={filters} sort={sort} onChange={handleChange} canAdd={canAdd}/>
 
             {isLoading && <PropertiesLoading/>}
 

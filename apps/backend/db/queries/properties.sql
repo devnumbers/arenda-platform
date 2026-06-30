@@ -15,6 +15,11 @@ SELECT * FROM properties
 WHERE owner_id = $1 AND status = 'active'
 ORDER BY updated_at DESC;
 
+-- name: ListArchivedPropertiesByOwner :many
+SELECT * FROM properties
+WHERE owner_id = $1 AND status = 'archived'
+ORDER BY updated_at DESC;
+
 -- name: UpdateProperty :one
 UPDATE properties
 SET name = $3, type = $4, address = $5, description = $6, status = $7

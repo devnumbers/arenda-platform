@@ -6,6 +6,7 @@ import {
   type PropertyPageStatus,
 } from '../lib/get-property-page-status';
 import { formatAwaitingStart } from '../lib/format-awaiting-start';
+import { formatOverdueCount } from '../lib/format-overdue-count';
 import { PropertyDetailStatusBadge } from './PropertyDetailStatusBadge';
 import styles from './PropertyStatusSection.module.css';
 
@@ -51,19 +52,8 @@ function getSubLabel(
   if (status === 'requires_action') {
     const overdue = summary?.overdue_total_count ?? 0;
     if (overdue <= 0) return null;
-    const word = declOverdueWord(overdue);
-    return `${overdue} просроченный ${word}`;
+    return formatOverdueCount(overdue);
   }
 
   return null;
-}
-
-function declOverdueWord(count: number): string {
-  const last = count % 10;
-  const hundred = count % 100;
-  if (last === 1 && hundred !== 11) return 'платёж';
-  if ([2, 3, 4].includes(last) && ![12, 13, 14].includes(hundred)) {
-    return 'платежа';
-  }
-  return 'платежей';
 }

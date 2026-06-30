@@ -20,15 +20,6 @@ type OperationsResponse = components['schemas']['OperationsResponse'];
 type PropertyOperationsSummaryResponse =
   components['schemas']['PropertyOperationsSummaryResponse'];
 
-type RecurringOperationResponse =
-  components['schemas']['RecurringOperationResponse'];
-type RecurringOperationCreateRequest =
-  components['schemas']['RecurringOperationCreateRequest'];
-
-type ReminderCreateRequest = components['schemas']['ReminderCreateRequest'];
-type ReminderResponse = components['schemas']['ReminderResponse'];
-type RemindersResponse = components['schemas']['RemindersResponse'];
-
 export type OperationsFilters = {
   type?: 'income' | 'expense' | ('income' | 'expense')[];
   status?: string | string[];
@@ -201,35 +192,6 @@ export function useCreateOperation(): UseMutationResult<
   });
 }
 
-export function useCreateRecurringOperation(): UseMutationResult<
-  RecurringOperationResponse,
-  ApiError,
-  { propertyId: string; data: RecurringOperationCreateRequest }
-> {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ propertyId, data }) =>
-      apiClient<RecurringOperationResponse>(
-        `/properties/${propertyId}/recurring-operations`,
-        {
-          method: 'POST',
-          body: JSON.stringify(data),
-        },
-      ),
-    onSuccess: (_, { propertyId }) => {
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.recurringByProperty(propertyId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.byProperty(propertyId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.summary(propertyId),
-      });
-    },
-  });
-}
-
 export function useUpdateOperation(): UseMutationResult<
   OperationResponse,
   ApiError,
@@ -277,66 +239,3 @@ export function useDeleteOperation(): UseMutationResult<
   });
 }
 
-export function useOperationReminders(
-  propertyId: string,
-  operationId: string,
-): UseQueryResult<RemindersResponse, ApiError> {
-  return useQuery({
-    queryKey: operationKeys.reminders(propertyId, operationId),
-    queryFn: () =>
-      apiClient<RemindersResponse>(
-        `/properties/${propertyId}/operations/${operationId}/reminders`,
-      ),
-    enabled: Boolean(propertyId) && Boolean(operationId),
-  });
-}
-
-export function useCreateOperationReminder(): UseMutationResult<
-  ReminderResponse,
-  ApiError,
-  { propertyId: string; operationId: string; data: ReminderCreateRequest }
-> {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ propertyId, operationId, data }) =>
-      apiClient<ReminderResponse>(
-        `/properties/${propertyId}/operations/${operationId}/reminders`,
-        {
-          method: 'POST',
-          body: JSON.stringify(data),
-        },
-      ),
-    onSuccess: (_, { propertyId, operationId }) => {
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.reminders(propertyId, operationId),
-      });
-    },
-  });
-}
-
-export function useCreateRecurringOperationReminder(): UseMutationResult<
-  RemindersResponse,
-  ApiError,
-  {
-    propertyId: string;
-    recurringOperationId: string;
-    data: ReminderCreateRequest;
-  }
-> {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ propertyId, recurringOperationId, data }) =>
-      apiClient<RemindersResponse>(
-        `/properties/${propertyId}/recurring-operations/${recurringOperationId}/reminders`,
-        {
-          method: 'POST',
-          body: JSON.stringify(data),
-        },
-      ),
-    onSuccess: (_, { propertyId, recurringOperationId }) => {
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.recurringReminders(propertyId, recurringOperationId),
-      });
-    },
-  });
-}

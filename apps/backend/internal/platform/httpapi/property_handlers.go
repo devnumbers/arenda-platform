@@ -142,6 +142,34 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 	writeJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{Items: items})
 }
 
+// ListArchivedProperties implements GET /properties/archive.
+func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	properties, err := h.svc.ListArchivedProperties(r.Context(), ownerID)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.PropertyResponse, 0, len(properties))
+	for _, property := range properties {
+		resp, err := h.propertyResponse(r.Context(), ownerID, property, leasesdomain.Lease{})
+		if err != nil {
+			h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", sanitizeError(err)))
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
+		items = append(items, resp)
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{Items: items})
+}
+
 // GetProperty implements GET /properties/{id}.
 func (h *PropertyHandlers) GetProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)

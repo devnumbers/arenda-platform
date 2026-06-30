@@ -48,6 +48,7 @@ type PropertyRepository interface {
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Property, error)
 	GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Property, error)
 	ListActiveByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Property, error)
+	ListArchivedByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Property, error)
 	Update(ctx context.Context, ownerID uuid.UUID, property domain.Property) (domain.Property, error)
 	Archive(ctx context.Context, id, ownerID uuid.UUID) error
 	Unarchive(ctx context.Context, id, ownerID uuid.UUID) error

@@ -15,7 +15,7 @@ export type FinanceEmptyStateProps = {
 
 export function FinanceEmptyState({
   title = 'Нет данных',
-  subtitle = 'Здесь будут отображаться финансовые операции и платежи',
+  subtitle = 'Здесь будут отображаться финансовые операции',
   actionHref,
   actionText,
 }: FinanceEmptyStateProps): JSX.Element {

@@ -1,7 +1,8 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
+import { Modal } from '@heroui/react';
 import type { components } from '@/shared/api/generated';
 import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
@@ -13,6 +14,7 @@ import {
   useDeleteOperation,
   useOperation,
 } from '@/features/operations/api/hooks';
+import { useProperty } from '@/features/properties/api';
 import { getCategoryLabel } from '@/entities/operation/lib/categories';
 import {
   getOperationStatusLabel,
@@ -56,6 +58,77 @@ function useOperationId(): string | undefined {
   return params?.id;
 }
 
+function isFutureDate(dateString: string): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(dateString) > today;
+}
+
+function isReminderInPast(operationDate: string, offsetDays: number): boolean {
+  const reminderDate = new Date(operationDate);
+  reminderDate.setDate(reminderDate.getDate() - offsetDays);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return reminderDate < today;
+}
+
+function formatReminderLabel(offsetDays: number | null | undefined): string {
+  if (offsetDays === null || offsetDays === undefined) {
+    return 'Нет напоминания';
+  }
+  return `Напоминание за ${offsetDays} ${offsetDays === 1 ? 'день' : 'дня'}`;
+}
+
+type DeleteOperationModalProps = {
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
+  readonly onConfirm: () => void;
+  readonly isLoading: boolean;
+};
+
+function DeleteOperationModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  isLoading,
+}: DeleteOperationModalProps): JSX.Element {
+  const handleOpenChange = (open: boolean): void => {
+    if (!open) {
+      onClose();
+    }
+  };
+
+  return (
+    <Modal>
+      <Modal.Backdrop isOpen={isOpen} onOpenChange={handleOpenChange}>
+        <Modal.Container placement="center" size="sm">
+          <Modal.Dialog aria-label="Удалить операцию">
+            <Modal.Header>
+              <Modal.Heading>Удалить операцию?</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body>
+              <p>Операция будет удалена безвозвратно.</p>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={onClose} type="button">
+                Отменить
+              </Button>
+              <Button
+                variant="primary"
+                onClick={onConfirm}
+                type="button"
+                loading={isLoading}
+              >
+                Удалить
+              </Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
+  );
+}
+
 function OperationDetailCard({
   operation,
   readonly,
@@ -66,6 +139,8 @@ function OperationDetailCard({
   const router = useRouter();
   const completeMutation = useCompleteOperation();
   const deleteMutation = useDeleteOperation();
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const { data: property } = useProperty(operation.property_id);
 
   const isIncome = operation.type === 'income';
   const sign = isIncome ? '+' : '-';
@@ -73,6 +148,9 @@ function OperationDetailCard({
   const statusVariant = getStatusVariant(operation.status);
   const statusClass = statusVariant ? STATUS_VARIANT_CLASS[statusVariant] : '';
   const canComplete = operation.status === 'pending' || operation.status === 'overdue';
+  const future = isFutureDate(operation.operation_date);
+  const isArchived = property?.status === 'archived';
+  const viewOnly = readonly || isArchived || Boolean(operation.lease_id);
 
   const handleComplete = () => {
     completeMutation.mutate({
@@ -86,12 +164,18 @@ function OperationDetailCard({
   };
 
   const handleDelete = () => {
-    if (!confirm('Удалить операцию?')) {
-      return;
-    }
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
     deleteMutation.mutate(
       { id: operation.id, propertyId: operation.property_id },
-      { onSuccess: () => router.push(ROUTES.financeOperations) },
+      {
+        onSuccess: () => {
+          setIsDeleteModalOpen(false);
+          router.push(ROUTES.financeOperations);
+        },
+      },
     );
   };
 
@@ -112,6 +196,27 @@ function OperationDetailCard({
         <span className={styles.type}>{TYPE_LABELS[operation.type]}</span>
       </div>
 
+      {future && (
+        <span className={styles.badgeFuture}>Планируемая операция</span>
+      )}
+
+      {operation.lease_id && (
+        <span className={styles.badgeLease}>Создано из договора аренды</span>
+      )}
+
+      {isArchived && (
+        <p className={styles.banner}>
+          Объект в архиве, операция только для просмотра.
+        </p>
+      )}
+
+      {operation.reminder_offset_days &&
+        isReminderInPast(operation.operation_date, operation.reminder_offset_days) && (
+          <p className={styles.banner}>
+            Напоминание уже должно было быть отправлено или не будет отправлено.
+          </p>
+        )}
+
       <dl className={styles.details}>
         <div className={styles.detailRow}>
           <dt className={styles.detailLabel}>Дата</dt>
@@ -127,7 +232,13 @@ function OperationDetailCard({
         </div>
         <div className={styles.detailRow}>
           <dt className={styles.detailLabel}>Объект</dt>
-          <dd className={styles.detailValue}>Объект: {operation.property_id}</dd>
+          <dd className={styles.detailValue}>{property?.name ?? operation.property_id}</dd>
+        </div>
+        <div className={styles.detailRow}>
+          <dt className={styles.detailLabel}>Напоминание</dt>
+          <dd className={styles.detailValue}>
+            {formatReminderLabel(operation.reminder_offset_days)}
+          </dd>
         </div>
         {operation.comment && (
           <div className={styles.detailRow}>
@@ -137,36 +248,45 @@ function OperationDetailCard({
         )}
       </dl>
 
-      <div className={styles.actions}>
-        {canComplete && (
+      {!viewOnly && (
+        <div className={styles.actions}>
+          {canComplete && (
+            <Button
+              variant="primary"
+              size="medium"
+              loading={completeMutation.isPending}
+              disabled={readonly}
+              onClick={handleComplete}
+            >
+              {isIncome ? 'Отметить полученной' : 'Отметить оплаченной'}
+            </Button>
+          )}
           <Button
-            variant="primary"
+            variant="secondary"
             size="medium"
-            loading={completeMutation.isPending}
             disabled={readonly}
-            onClick={handleComplete}
+            onClick={handleEdit}
           >
-            {isIncome ? 'Отметить полученной' : 'Отметить оплаченной'}
+            Редактировать
           </Button>
-        )}
-        <Button
-          variant="secondary"
-          size="medium"
-          disabled={readonly}
-          onClick={handleEdit}
-        >
-          Редактировать
-        </Button>
-        <Button
-          variant="icon-black"
-          size="medium"
-          loading={deleteMutation.isPending}
-          disabled={readonly}
-          onClick={handleDelete}
-        >
-          Удалить
-        </Button>
-      </div>
+          <Button
+            variant="icon-black"
+            size="medium"
+            loading={deleteMutation.isPending}
+            disabled={readonly}
+            onClick={handleDelete}
+          >
+            Удалить
+          </Button>
+        </div>
+      )}
+
+      <DeleteOperationModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleConfirmDelete}
+        isLoading={deleteMutation.isPending}
+      />
     </section>
   );
 }

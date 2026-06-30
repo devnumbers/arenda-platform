@@ -29,14 +29,14 @@ import { OperationsList } from '@/widgets/operations/ui/OperationsList';
 import styles from './PropertyOperationsPage.module.css';
 
 type Period = 'month' | 'quarter' | 'year';
-type StatusFilter = 'all' | 'payments';
+type StatusFilter = 'all' | 'actual';
 
 const STATUS_FILTERS: ReadonlyArray<{
   readonly key: StatusFilter;
   readonly label: string;
 }> = [
   { key: 'all', label: 'Все' },
-  { key: 'payments', label: 'Платежи' },
+  { key: 'actual', label: 'Актуальные' },
 ];
 
 function getCurrentMonthRange(): { from: string; to: string } {
@@ -81,7 +81,7 @@ export function PropertyOperationsPage(): JSX.Element {
   const filters = useMemo(
     () => ({
       ...dateRange,
-      status: statusFilter === 'payments' ? ['pending', 'overdue'] : undefined,
+      status: statusFilter === 'actual' ? ['pending', 'overdue'] : undefined,
     }),
     [dateRange, statusFilter],
   );
@@ -204,7 +204,9 @@ export function PropertyOperationsPage(): JSX.Element {
               actionText={readonly ? undefined : 'Добавить операцию'}
             />
           ) : (
-            <OperationsList items={operations} />
+            <OperationsList
+              items={operations.map((operation) => ({ kind: 'onetime', data: operation }))}
+            />
           )}
         </>
       )}

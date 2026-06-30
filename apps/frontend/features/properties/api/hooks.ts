@@ -23,13 +23,29 @@ type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
 
-export function useProperties(): UseQueryResult<Property[], ApiError> {
+export function useProperties(
+  options: { enabled?: boolean } = {},
+): UseQueryResult<Property[], ApiError> {
   return useQuery({
     queryKey: propertyKeys.list,
     queryFn: async () => {
       const response = await apiClient<PropertiesResponse>('/properties');
       return response.items.map(mapPropertyResponse);
     },
+    enabled: options.enabled,
+  });
+}
+
+export function useArchivedProperties(
+  options: { enabled?: boolean } = {},
+): UseQueryResult<Property[], ApiError> {
+  return useQuery({
+    queryKey: [...propertyKeys.list, 'archived'],
+    queryFn: async () => {
+      const response = await apiClient<PropertiesResponse>('/properties/archive');
+      return response.items.map(mapPropertyResponse);
+    },
+    enabled: options.enabled,
   });
 }
 

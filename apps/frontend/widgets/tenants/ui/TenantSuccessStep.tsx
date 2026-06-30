@@ -8,12 +8,12 @@ import styles from './TenantSuccessStep.module.css';
 
 export type TenantSuccessStepProps = {
   readonly onAddLater: () => void;
-  readonly onAddPayments: () => void;
+  readonly onAddOperations: () => void;
 };
 
 export function TenantSuccessStep({
   onAddLater,
-  onAddPayments,
+  onAddOperations,
 }: TenantSuccessStepProps): JSX.Element {
   return (
     <div className={styles.root}>
@@ -47,9 +47,9 @@ export function TenantSuccessStep({
               <BoldWallet />
             </Icon>
           }
-          onClick={onAddPayments}
+          onClick={onAddOperations}
         >
-          Добавить платежи
+          Добавить операции
         </Button>
       </div>
     </div>

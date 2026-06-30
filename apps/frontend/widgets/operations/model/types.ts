@@ -10,6 +10,7 @@ export type BasicInfoData = {
   category?: OperationCategory;
   propertyId?: string;
   comment?: string;
+  type?: OperationType;
 };
 
 export type BasicInfoErrors = {
@@ -23,14 +24,12 @@ export type BasicInfoErrors = {
 export type ScheduleData = {
   frequency: OperationFrequency;
   date?: string;
-  paymentDay?: number;
   endDate?: string;
 };
 
 export type ScheduleErrors = {
   frequency?: string;
   date?: string;
-  paymentDay?: string;
   endDate?: string;
 };
 

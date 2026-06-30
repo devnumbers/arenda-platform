@@ -23,6 +23,12 @@
   min-width: 0;
 }
 
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .name {
   font-size: var(--font-size-text-m);
   font-weight: 500;
@@ -31,6 +37,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.badgeFuture {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  font-size: var(--font-size-text-s);
+  font-weight: 500;
+  line-height: var(--line-height-text-s);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .meta {
@@ -67,4 +87,41 @@
   font-weight: 500;
   line-height: var(--line-height-text-s);
   color: var(--color-text-muted);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: var(--font-size-text-s);
+  font-weight: 500;
+  line-height: var(--line-height-text-s);
+  white-space: nowrap;
+}
+
+.badgeWarning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.badgeDanger {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.badgeSuccess {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.badgeDefault {
+  background: var(--color-secondary-bg);
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 1200px) {
+  .rootDashboard {
+    padding: 20px;
+  }
 }

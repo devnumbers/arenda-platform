@@ -21,9 +21,6 @@ type RecurringOperationUpdateRequest =
   components['schemas']['RecurringOperationUpdateRequest'];
 type RecurringOperationsResponse =
   components['schemas']['RecurringOperationsResponse'];
-type ReminderCreateRequest = components['schemas']['ReminderCreateRequest'];
-type ReminderResponse = components['schemas']['ReminderResponse'];
-type RemindersResponse = components['schemas']['RemindersResponse'];
 
 export function useRecurringOperations(): UseQueryResult<
   RecurringOperationsResponse,
@@ -162,46 +159,32 @@ export function useResumeRecurringOperation(): UseMutationResult<
   });
 }
 
-export function useRecurringOperationReminders(
-  propertyId: string,
-  recurringOperationId: string,
-): UseQueryResult<RemindersResponse, ApiError> {
-  return useQuery({
-    queryKey: recurringOperationKeys.reminders(propertyId, recurringOperationId),
-    queryFn: () =>
-      apiClient<RemindersResponse>(
-        `/properties/${propertyId}/recurring-operations/${recurringOperationId}/reminders`,
-      ),
-    enabled: Boolean(propertyId) && Boolean(recurringOperationId),
-  });
-}
-
-export function useCreateRecurringOperationReminder(): UseMutationResult<
-  ReminderResponse,
+export function useDeleteRecurringOperation(): UseMutationResult<
+  void,
   ApiError,
-  {
-    propertyId: string;
-    recurringOperationId: string;
-    data: ReminderCreateRequest;
-  }
+  { id: string; propertyId?: string }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ propertyId, recurringOperationId, data }) =>
-      apiClient<ReminderResponse>(
-        `/properties/${propertyId}/recurring-operations/${recurringOperationId}/reminders`,
-        {
-          method: 'POST',
-          body: JSON.stringify(data),
-        },
-      ),
-    onSuccess: (_, { propertyId, recurringOperationId }) => {
+    mutationFn: ({ id }) =>
+      apiClient<void>(`/recurring-operations/${id}`, { method: 'DELETE' }),
+    onSuccess: (_, { id, propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: ['recurring-operations'] });
+      queryClient.invalidateQueries({ queryKey: ['operations'] });
       queryClient.invalidateQueries({
-        queryKey: recurringOperationKeys.reminders(
-          propertyId,
-          recurringOperationId,
-        ),
+        queryKey: recurringOperationKeys.detail(id),
       });
+      if (propertyId) {
+        queryClient.invalidateQueries({
+          queryKey: recurringOperationKeys.byProperty(propertyId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.byProperty(propertyId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.summary(propertyId),
+        });
+      }
     },
   });
 }

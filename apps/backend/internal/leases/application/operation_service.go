@@ -10,32 +10,33 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
-	notificationsdomain "github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 )
 
 // CreateOperationCommand carries the data needed to create a manual operation.
 type CreateOperationCommand struct {
-	PropertyID    uuid.UUID
-	Type          string
-	Category      string
-	Name          string
-	AmountKopecks int64
-	OperationDate time.Time
-	Comment       *string
-	LeaseID       *uuid.UUID
+	PropertyID         uuid.UUID
+	Type               string
+	Category           string
+	Name               string
+	AmountKopecks      int64
+	OperationDate      time.Time
+	Comment            *string
+	LeaseID            *uuid.UUID
+	ReminderOffsetDays *int
 }
 
 // UpdateOperationCommand carries the optional updates for an operation.
 type UpdateOperationCommand struct {
-	Type          *string
-	Category      *string
-	Name          *string
-	AmountKopecks *int64
-	OperationDate *time.Time
-	Comment       *string
-	LeaseID       *uuid.UUID
+	Type               *string
+	Category           *string
+	Name               *string
+	AmountKopecks      *int64
+	OperationDate      *time.Time
+	Comment            *string
+	LeaseID            *uuid.UUID
+	ReminderOffsetDays *int
 }
 
 // CompleteOperationCommand carries the data needed to mark an operation as completed.
@@ -112,6 +113,11 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		return domain.Operation{}, err
 	}
 
+	if err := validateReminderOffsetDays(cmd.ReminderOffsetDays); err != nil {
+		return domain.Operation{}, err
+	}
+	cmd.ReminderOffsetDays = normalizeReminderOffsetDays(cmd.ReminderOffsetDays)
+
 	leaseID, err := s.resolveLeaseID(ctx, ownerID, cmd.PropertyID, cmd.LeaseID)
 	if err != nil {
 		return domain.Operation{}, err
@@ -129,29 +135,52 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 	}
 
 	op := domain.Operation{
-		ID:            id,
-		OwnerID:       ownerID,
-		PropertyID:    cmd.PropertyID,
-		LeaseID:       leaseID,
-		Type:          opType,
-		Category:      category,
-		Status:        domain.OperationStatusPending,
-		Name:          name,
-		AmountKopecks: cmd.AmountKopecks,
-		OperationDate: cmd.OperationDate,
-		Comment:       comment,
-		IsException:   true,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:                 id,
+		OwnerID:            ownerID,
+		PropertyID:         cmd.PropertyID,
+		LeaseID:            leaseID,
+		Type:               opType,
+		Category:           category,
+		Status:             domain.OperationStatusPending,
+		Name:               name,
+		AmountKopecks:      cmd.AmountKopecks,
+		OperationDate:      cmd.OperationDate,
+		Comment:            comment,
+		ReminderOffsetDays: cmd.ReminderOffsetDays,
+		IsException:        true,
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 	if err := op.ValidateStatusForType(); err != nil {
 		return domain.Operation{}, err
 	}
 
-	created, err := s.operations.Create(ctx, op)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txOps := s.operations.WithTx(tx)
+	created, err := txOps.Create(ctx, op)
 	if err != nil {
 		return domain.Operation{}, fmt.Errorf("create operation: %w", err)
 	}
+
+	if s.scheduler != nil && created.ReminderOffsetDays != nil {
+		txScheduler := s.scheduler.WithTx(tx)
+		reminderDate := created.OperationDate.AddDate(0, 0, -(*created.ReminderOffsetDays))
+		if !reminderDate.Before(timeutil.Date(s.clock.Now())) {
+			if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(created), reminderDate); err != nil {
+				return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
+			}
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Operation{}, fmt.Errorf("commit tx: %w", err)
+	}
+
 	return created, nil
 }
 
@@ -239,7 +268,6 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txOps := s.operations.WithTx(tx)
-	txRecurring := s.recurringOps.WithTx(tx)
 
 	op, err := txOps.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
@@ -248,6 +276,9 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 		}
 		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
 	}
+
+	originalOffset := op.ReminderOffsetDays
+	originalOperationDate := op.OperationDate
 
 	typeStr := string(op.Type)
 	categoryStr := string(op.Category)
@@ -278,7 +309,6 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	if cmd.AmountKopecks != nil {
 		op.AmountKopecks = *cmd.AmountKopecks
 	}
-	originalOperationDate := op.OperationDate
 	if cmd.OperationDate != nil {
 		op.OperationDate = *cmd.OperationDate
 	}
@@ -298,6 +328,13 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 		op.LeaseID = leaseID
 	}
 
+	if cmd.ReminderOffsetDays != nil {
+		if err := validateReminderOffsetDays(cmd.ReminderOffsetDays); err != nil {
+			return domain.Operation{}, err
+		}
+		op.ReminderOffsetDays = normalizeReminderOffsetDays(cmd.ReminderOffsetDays)
+	}
+
 	op.IsException = true
 	now := s.clock.Now()
 	if cmd.OperationDate != nil && op.Status == domain.OperationStatusOverdue && !op.OperationDate.Before(timeutil.Date(now)) {
@@ -313,41 +350,10 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 		return domain.Operation{}, fmt.Errorf("update operation: %w", err)
 	}
 
-	if s.scheduler != nil && cmd.OperationDate != nil && !originalOperationDate.Equal(*cmd.OperationDate) {
+	offsetChanged := !reminderOffsetDaysEqual(originalOffset, updated.ReminderOffsetDays)
+	dateChanged := !originalOperationDate.Equal(updated.OperationDate)
+	if s.scheduler != nil && (offsetChanged || dateChanged) {
 		txScheduler := s.scheduler.WithTx(tx)
-
-		now := s.clock.Now()
-		today := timeutil.Date(now)
-		var reminderDate time.Time
-		var skipSchedule bool
-		if updated.RecurringOperationID != uuid.Nil {
-			rec, err := txRecurring.GetByIDAndOwner(ctx, updated.RecurringOperationID, ownerID)
-			if err != nil {
-				return domain.Operation{}, fmt.Errorf("get recurring operation: %w", err)
-			}
-			if rec.ReminderOffsetDays == nil {
-				skipSchedule = true
-			} else {
-				reminderDate = updated.OperationDate.AddDate(0, 0, -(*rec.ReminderOffsetDays))
-				if reminderDate.Before(today) {
-					skipSchedule = true
-				}
-			}
-		} else {
-			reminderDate = updated.OperationDate
-			if reminderDate.Before(today) {
-				skipSchedule = true
-			}
-			if !skipSchedule {
-				hasReminder, err := txScheduler.HasReminderForOperationEvent(ctx, ownerID, updated.ID, notificationsdomain.EventOperationDue)
-				if err != nil {
-					return domain.Operation{}, fmt.Errorf("check existing reminder: %w", err)
-				}
-				if !hasReminder {
-					skipSchedule = true
-				}
-			}
-		}
 
 		if err := txScheduler.CancelByOperation(ctx, ownerID, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
@@ -356,9 +362,12 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 			return domain.Operation{}, fmt.Errorf("cancel overdue reminders: %w", err)
 		}
 
-		if !skipSchedule {
-			if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated), reminderDate); err != nil {
-				return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
+		if updated.ReminderOffsetDays != nil {
+			reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
+			if !reminderDate.Before(timeutil.Date(now)) {
+				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated), reminderDate); err != nil {
+					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
+				}
 			}
 		}
 	}
@@ -543,6 +552,35 @@ func (s *OperationService) validateAmountAndDate(amount int64, operationDate tim
 		return fmt.Errorf("%w: operation_date is required", ErrInvalidInput)
 	}
 	return nil
+}
+
+func validateReminderOffsetDays(v *int) error {
+	if v == nil {
+		return nil
+	}
+	switch *v {
+	case 0, 1, 3, 7:
+		return nil
+	default:
+		return fmt.Errorf("%w: reminder_offset_days must be 0, 1, 3, or 7", ErrInvalidInput)
+	}
+}
+
+func normalizeReminderOffsetDays(v *int) *int {
+	if v != nil && *v == 0 {
+		return nil
+	}
+	return v
+}
+
+func reminderOffsetDaysEqual(a, b *int) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
 }
 
 func (s *OperationService) resolveLeaseID(ctx context.Context, ownerID, propertyID uuid.UUID, leaseID *uuid.UUID) (uuid.UUID, error) {

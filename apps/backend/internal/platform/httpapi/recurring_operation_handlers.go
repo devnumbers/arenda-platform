@@ -34,6 +34,13 @@ func (h *RecurringOperationHandlers) handleRecurringOperationError(w http.Respon
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
 		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "recurring operation not found"))
+	case errors.Is(err, leasesapp.ErrRecurringOperationLeaseCreated):
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 	}
@@ -61,7 +68,9 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 		Name:          body.Name,
 		AmountKopecks: int64(body.AmountKopecks),
 		StartDate:     body.StartDate.Time,
-		PaymentDay:    body.PaymentDay,
+	}
+	if body.PaymentDay != nil {
+		cmd.PaymentDay = *body.PaymentDay
 	}
 	if body.EndDate != nil {
 		cmd.EndDate = new(body.EndDate.Time)
@@ -71,6 +80,10 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 	}
 	if body.Periodicity != nil {
 		cmd.Periodicity = string(*body.Periodicity)
+	}
+	if body.ReminderOffsetDays != nil {
+		offset := int(*body.ReminderOffsetDays)
+		cmd.ReminderOffsetDays = &offset
 	}
 
 	rec, err := h.svc.CreateRecurringOperation(r.Context(), ownerID, cmd)
@@ -143,6 +156,22 @@ func (h *RecurringOperationHandlers) GetRecurringOperation(w http.ResponseWriter
 	writeJSON(r.Context(), w, http.StatusOK, recurringOperationResponse(rec))
 }
 
+// DeleteRecurringOperation implements DELETE /recurring-operations/{id}.
+func (h *RecurringOperationHandlers) DeleteRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	if err := h.svc.DeleteRecurringOperation(r.Context(), ownerID, id); err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // UpdateRecurringOperation implements PATCH /recurring-operations/{id}.
 func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
@@ -182,6 +211,10 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 	}
 	if body.ApplyFromDate != nil {
 		cmd.ApplyFromDate = new(body.ApplyFromDate.Time)
+	}
+	if body.ReminderOffsetDays != nil {
+		offset := int(*body.ReminderOffsetDays)
+		cmd.ReminderOffsetDays = &offset
 	}
 
 	rec, err := h.svc.UpdateRecurringOperation(r.Context(), ownerID, id, cmd)
@@ -251,6 +284,10 @@ func recurringOperationResponse(rec domain.RecurringOperation) openapi.Recurring
 	}
 	if rec.Comment != "" {
 		resp.Comment = &rec.Comment
+	}
+	if rec.ReminderOffsetDays != nil {
+		offset := openapi.RecurringOperationResponseReminderOffsetDays(*rec.ReminderOffsetDays)
+		resp.ReminderOffsetDays = &offset
 	}
 	return resp
 }

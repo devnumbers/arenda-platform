@@ -7,7 +7,7 @@ export const displayStatusLabels: Record<DisplayStatus, string> = {
   rented: 'Арендован',
   free: 'Не арендован',
   maintenance: 'На ремонте',
-  overdue: '1 просроченный платёж',
+  overdue: '1 просроченная операция',
   finished: 'Аренда завершена',
 };
 

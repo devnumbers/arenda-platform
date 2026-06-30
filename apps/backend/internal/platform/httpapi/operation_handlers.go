@@ -73,6 +73,10 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 	if body.Comment != nil {
 		cmd.Comment = body.Comment
 	}
+	if body.ReminderOffsetDays != nil {
+		offset := int(*body.ReminderOffsetDays)
+		cmd.ReminderOffsetDays = &offset
+	}
 
 	op, err := h.svc.CreateOperation(r.Context(), ownerID, cmd)
 	if err != nil {
@@ -246,6 +250,10 @@ func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Reque
 	if body.OperationDate != nil {
 		cmd.OperationDate = new(body.OperationDate.Time)
 	}
+	if body.ReminderOffsetDays != nil {
+		offset := int(*body.ReminderOffsetDays)
+		cmd.ReminderOffsetDays = &offset
+	}
 
 	op, err := h.svc.UpdateOperation(r.Context(), ownerID, id, cmd)
 	if err != nil {
@@ -315,6 +323,10 @@ func operationResponse(op domain.Operation) openapi.OperationResponse {
 	}
 	if op.Comment != "" {
 		resp.Comment = &op.Comment
+	}
+	if op.ReminderOffsetDays != nil {
+		offset := openapi.OperationResponseReminderOffsetDays(*op.ReminderOffsetDays)
+		resp.ReminderOffsetDays = &offset
 	}
 	return resp
 }

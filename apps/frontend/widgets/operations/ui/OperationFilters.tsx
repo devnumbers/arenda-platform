@@ -7,17 +7,20 @@ import {
   startOfMonth,
   endOfMonth,
 } from '@/entities/operation/lib/dates';
+import type { OperationKind } from './OperationsPage';
 import styles from './OperationFilters.module.css';
 
 export type OperationFiltersState = {
   readonly from: string;
   readonly to: string;
   readonly status: ReadonlyArray<string>;
+  readonly kind: OperationKind;
 };
 
 export type OperationFiltersProps = {
   readonly filters: OperationFiltersState;
   readonly onChange: (filters: OperationFiltersState) => void;
+  readonly onKindChange: (kind: OperationKind) => void;
 };
 
 type Period = 'month' | 'quarter' | 'year';
@@ -85,7 +88,8 @@ function hasActiveFilters(filters: OperationFiltersState): boolean {
   const statusActive = filters.status.length > 0;
   const periodActive =
     filters.from !== currentMonth.from || filters.to !== currentMonth.to;
-  return statusActive || periodActive;
+  const kindActive = filters.kind !== 'all';
+  return statusActive || periodActive || kindActive;
 }
 
 const STATUS_CHIPS: ReadonlyArray<{
@@ -101,6 +105,7 @@ const STATUS_CHIPS: ReadonlyArray<{
 export function OperationFilters({
   filters,
   onChange,
+  onKindChange,
 }: OperationFiltersProps): JSX.Element {
   const handleStatusClick = (key: (typeof STATUS_CHIPS)[number]['key']) => {
     if (key === 'all') {
@@ -124,8 +129,18 @@ export function OperationFilters({
 
   const handleReset = () => {
     const currentMonth = getCurrentMonthRange();
-    onChange({ from: currentMonth.from, to: currentMonth.to, status: [] });
+    onChange({ from: currentMonth.from, to: currentMonth.to, status: [], kind: 'all' });
+    onKindChange('all');
   };
+
+  const KIND_CHIPS: ReadonlyArray<{
+    readonly key: OperationKind;
+    readonly label: string;
+  }> = [
+    { key: 'all', label: 'Все' },
+    { key: 'onetime', label: 'Разовые' },
+    { key: 'recurring', label: 'Регулярные' },
+  ];
 
   return (
     <div className={styles.root}>
@@ -177,6 +192,22 @@ export function OperationFilters({
             {chip.label}
           </Button>
         ))}
+      </div>
+
+      <div className={styles.chipGroup} role="group" aria-label="Фильтр по виду">
+        {KIND_CHIPS.map((chip) => {
+          const isKindSelected = filters.kind === chip.key;
+          return (
+            <Button
+              key={chip.key}
+              variant={isKindSelected ? 'secondary' : 'icon-black'}
+              size="small"
+              onClick={() => onKindChange(chip.key)}
+            >
+              {chip.label}
+            </Button>
+          );
+        })}
       </div>
     </div>
   );

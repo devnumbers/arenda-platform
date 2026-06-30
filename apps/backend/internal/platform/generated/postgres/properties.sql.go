@@ -179,6 +179,42 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 	return items, nil
 }
 
+const listArchivedPropertiesByOwner = `-- name: ListArchivedPropertiesByOwner :many
+SELECT id, owner_id, name, type, address, description, status, created_at, updated_at FROM properties
+WHERE owner_id = $1 AND status = 'archived'
+ORDER BY updated_at DESC
+`
+
+func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Property, error) {
+	rows, err := q.db.Query(ctx, listArchivedPropertiesByOwner, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Property{}
+	for rows.Next() {
+		var i Property
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Name,
+			&i.Type,
+			&i.Address,
+			&i.Description,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const unarchiveProperty = `-- name: UnarchiveProperty :one
 UPDATE properties SET status = 'active'
 WHERE id = $1 AND owner_id = $2

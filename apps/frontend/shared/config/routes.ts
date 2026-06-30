@@ -14,7 +14,6 @@ export const ROUTES = {
   tenantEdit: (id: string) => `/tenants/${id}/edit`,
   finance: '/finance',
   financeOperations: '/finance/operations',
-  financePayments: '/finance/payments',
   financeCreateOperation: '/finance/create-operation',
   financeOperation: (id: string) => `/finance/operations/${id}`,
   financeOperationEdit: (id: string) => `/finance/operations/${id}/edit`,

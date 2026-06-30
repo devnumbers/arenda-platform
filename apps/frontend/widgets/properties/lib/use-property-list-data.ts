@@ -1,8 +1,9 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useProperties } from '@/features/properties/api/hooks';
+import {useArchivedProperties, useProperties} from '@/features/properties/api/hooks';
 import { useLeases } from '@/features/leases/api/hooks';
+import type {PropertiesViewMode} from './apply-filters';
 import { ApiError } from '@/shared/api/errors';
 import { mapLeaseResponse } from '@/entities/lease/model/mappers';
 import type { Property } from '@/entities/property/model/types';
@@ -52,12 +53,15 @@ function compareLeaseRelevance(a: Lease, b: Lease): number {
   return 0;
 }
 
-export function usePropertyListData(): UsePropertyListDataReturn {
-  const propertiesQuery = useProperties();
+export function usePropertyListData(mode: PropertiesViewMode): UsePropertyListDataReturn {
+  const propertiesQuery = useProperties({enabled: mode === 'active'});
+  const archivedPropertiesQuery = useArchivedProperties({enabled: mode === 'archived'});
   const leasesQuery = useLeases();
 
+  const sourceQuery = mode === 'archived' ? archivedPropertiesQuery : propertiesQuery;
+
   const data = useMemo<PropertyWithLease[] | undefined>(() => {
-    if (!propertiesQuery.data) return undefined;
+    if (!sourceQuery.data) return undefined;
 
     // Index the best lease candidate per property in a single O(L) pass.
     // The candidate is either the current active lease or, if none exists,
@@ -77,7 +81,7 @@ export function usePropertyListData(): UsePropertyListDataReturn {
       }
     }
 
-    return propertiesQuery.data.map((property) => {
+    return sourceQuery.data.map((property) => {
       const bestLease = bestLeaseByProperty.get(property.id);
       return {
         ...property,
@@ -85,19 +89,19 @@ export function usePropertyListData(): UsePropertyListDataReturn {
         lastLease: bestLease,
       };
     });
-  }, [propertiesQuery.data, leasesQuery.data]);
+  }, [sourceQuery.data, leasesQuery.data]);
 
   return {
     data,
-    isLoading: propertiesQuery.isLoading || leasesQuery.isLoading,
-    isFetching: propertiesQuery.isFetching || leasesQuery.isFetching,
-    isError: propertiesQuery.isError || leasesQuery.isError,
+    isLoading: sourceQuery.isLoading || leasesQuery.isLoading,
+    isFetching: sourceQuery.isFetching || leasesQuery.isFetching,
+    isError: sourceQuery.isError || leasesQuery.isError,
     error: {
-      propertiesError: propertiesQuery.error,
+      propertiesError: sourceQuery.error,
       leasesError: leasesQuery.error,
     },
     refetch: () => {
-      void propertiesQuery.refetch();
+      void sourceQuery.refetch();
       void leasesQuery.refetch();
     },
   };

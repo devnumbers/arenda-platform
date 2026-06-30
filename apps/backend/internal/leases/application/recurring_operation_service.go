@@ -20,30 +20,32 @@ import (
 // CreateRecurringOperationCommand carries the data needed to create a user-managed
 // recurring operation for a property.
 type CreateRecurringOperationCommand struct {
-	PropertyID    uuid.UUID
-	Type          string
-	Category      string
-	Name          string
-	AmountKopecks int64
-	StartDate     time.Time
-	PaymentDay    int
-	EndDate       *time.Time
-	Comment       *string
-	Periodicity   string
+	PropertyID         uuid.UUID
+	Type               string
+	Category           string
+	Name               string
+	AmountKopecks      int64
+	StartDate          time.Time
+	PaymentDay         int
+	EndDate            *time.Time
+	Comment            *string
+	Periodicity        string
+	ReminderOffsetDays *int
 }
 
 // UpdateRecurringOperationCommand carries optional updates for a recurring operation.
 type UpdateRecurringOperationCommand struct {
-	Type          *string
-	Category      *string
-	Name          *string
-	AmountKopecks *int64
-	StartDate     *time.Time
-	PaymentDay    *int
-	EndDate       *time.Time
-	Comment       *string
-	Periodicity   *string
-	ApplyFromDate *time.Time
+	Type               *string
+	Category           *string
+	Name               *string
+	AmountKopecks      *int64
+	StartDate          *time.Time
+	PaymentDay         *int
+	EndDate            *time.Time
+	Comment            *string
+	Periodicity        *string
+	ApplyFromDate      *time.Time
+	ReminderOffsetDays *int
 }
 
 // RecurringOperationService orchestrates recurring operation use cases within the
@@ -125,7 +127,17 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		periodicity = p
 	}
 
-	if err := s.validateCommand(cmd.Type, cmd.Category, cmd.AmountKopecks, cmd.StartDate, cmd.PaymentDay, cmd.EndDate); err != nil {
+	if err := validateReminderOffsetDays(cmd.ReminderOffsetDays); err != nil {
+		return domain.RecurringOperation{}, err
+	}
+	cmd.ReminderOffsetDays = normalizeReminderOffsetDays(cmd.ReminderOffsetDays)
+
+	paymentDay := cmd.PaymentDay
+	if paymentDay == 0 {
+		paymentDay = cmd.StartDate.Day()
+	}
+
+	if err := s.validateCommand(cmd.Type, cmd.Category, cmd.AmountKopecks, cmd.StartDate, paymentDay, cmd.EndDate); err != nil {
 		return domain.RecurringOperation{}, err
 	}
 
@@ -136,21 +148,22 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 
 	now := s.clock.Now()
 	rec := domain.RecurringOperation{
-		ID:            id,
-		OwnerID:       ownerID,
-		PropertyID:    cmd.PropertyID,
-		Type:          domain.OperationType(cmd.Type),
-		Category:      domain.OperationCategory(cmd.Category),
-		Name:          name,
-		AmountKopecks: cmd.AmountKopecks,
-		StartDate:     cmd.StartDate,
-		PaymentDay:    cmd.PaymentDay,
-		EndDate:       cmd.EndDate,
-		Periodicity:   periodicity,
-		Status:        domain.RecurringOperationStatusActive,
-		Comment:       stringOrEmpty(cmd.Comment),
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:                 id,
+		OwnerID:            ownerID,
+		PropertyID:         cmd.PropertyID,
+		Type:               domain.OperationType(cmd.Type),
+		Category:           domain.OperationCategory(cmd.Category),
+		Name:               name,
+		AmountKopecks:      cmd.AmountKopecks,
+		StartDate:          cmd.StartDate,
+		PaymentDay:         paymentDay,
+		EndDate:            cmd.EndDate,
+		Periodicity:        periodicity,
+		Status:             domain.RecurringOperationStatusActive,
+		Comment:            stringOrEmpty(cmd.Comment),
+		ReminderOffsetDays: cmd.ReminderOffsetDays,
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -239,6 +252,59 @@ func (s *RecurringOperationService) GetRecurringOperation(
 	return rec, nil
 }
 
+// DeleteRecurringOperation soft-deletes a user-managed recurring operation series
+// and removes its future generated operations. Series created by a lease cannot
+// be deleted through this endpoint.
+func (s *RecurringOperationService) DeleteRecurringOperation(
+	ctx context.Context,
+	ownerID, id uuid.UUID,
+) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRecurring := s.recurringOps.WithTx(tx)
+	txOps := s.operations.WithTx(tx)
+
+	rec, err := txRecurring.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("get recurring operation: %w", err)
+	}
+
+	if rec.LeaseID != uuid.Nil {
+		return ErrRecurringOperationLeaseCreated
+	}
+
+	if err := txOps.DeleteFutureGeneratedOperations(ctx, id, ownerID); err != nil {
+		return fmt.Errorf("delete future generated operations: %w", err)
+	}
+
+	if s.scheduler != nil {
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, id); err != nil {
+			return fmt.Errorf("cancel recurring reminders: %w", err)
+		}
+	}
+
+	if err := txRecurring.SoftDelete(ctx, id, ownerID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("soft delete recurring operation: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+
+	return nil
+}
+
 // UpdateRecurringOperation updates a recurring operation owned by the given owner
 // and regenerates future operations to reflect schedule or amount changes.
 // When ApplyFromDate is set, the series is split: the existing series ends the
@@ -324,6 +390,8 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 	}
 	if cmd.PaymentDay != nil {
 		rec.PaymentDay = *cmd.PaymentDay
+	} else if rec.LeaseID == uuid.Nil {
+		rec.PaymentDay = rec.StartDate.Day()
 	}
 	if cmd.EndDate != nil {
 		d := timeutil.Date(*cmd.EndDate)
@@ -331,6 +399,12 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 	}
 	if cmd.Comment != nil {
 		rec.Comment = *cmd.Comment
+	}
+	if cmd.ReminderOffsetDays != nil {
+		if err := validateReminderOffsetDays(cmd.ReminderOffsetDays); err != nil {
+			return domain.RecurringOperation{}, err
+		}
+		rec.ReminderOffsetDays = normalizeReminderOffsetDays(cmd.ReminderOffsetDays)
 	}
 
 	if err := s.validateCommand(string(rec.Type), string(rec.Category), rec.AmountKopecks, rec.StartDate, rec.PaymentDay, rec.EndDate); err != nil {
@@ -447,6 +521,8 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 	paymentDay := rec.PaymentDay
 	if cmd.PaymentDay != nil {
 		paymentDay = *cmd.PaymentDay
+	} else if rec.LeaseID == uuid.Nil {
+		paymentDay = applyFromDate.Day()
 	}
 
 	periodicity := rec.Periodicity
@@ -460,6 +536,14 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 	comment := rec.Comment
 	if cmd.Comment != nil {
 		comment = *cmd.Comment
+	}
+
+	reminderOffsetDays := rec.ReminderOffsetDays
+	if cmd.ReminderOffsetDays != nil {
+		if err := validateReminderOffsetDays(cmd.ReminderOffsetDays); err != nil {
+			return domain.RecurringOperation{}, err
+		}
+		reminderOffsetDays = normalizeReminderOffsetDays(cmd.ReminderOffsetDays)
 	}
 
 	newEndDate := rec.EndDate
@@ -492,7 +576,7 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 		Periodicity:        periodicity,
 		Status:             rec.Status,
 		Comment:            comment,
-		ReminderOffsetDays: rec.ReminderOffsetDays,
+		ReminderOffsetDays: reminderOffsetDays,
 		CreatedAt:          now,
 		UpdatedAt:          now,
 	}
@@ -524,7 +608,7 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
 	}
 
-	if s.scheduler != nil && rec.ReminderOffsetDays != nil {
+	if s.scheduler != nil && (rec.ReminderOffsetDays != nil || created.ReminderOffsetDays != nil) {
 		txScheduler := s.scheduler.WithTx(tx)
 		if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, rec.ID); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("cancel recurring reminders: %w", err)

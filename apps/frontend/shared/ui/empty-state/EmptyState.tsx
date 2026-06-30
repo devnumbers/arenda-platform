@@ -11,8 +11,8 @@ export type EmptyStateProps = {
   readonly imageAlt?: string;
   readonly entities?: string;
   readonly subtitle: string;
-  readonly actionHref: string;
-  readonly actionText: string;
+  readonly actionHref?: string;
+  readonly actionText?: string;
   readonly actionIcon?: ReactNode;
   readonly title?: string;
 };
@@ -50,14 +50,16 @@ export function EmptyState({
         <h3 className={styles.title}>{title ?? `Нет ${entities ?? ''}`}</h3>
         <p className={styles.subtitle}>{subtitle}</p>
       </div>
-      <LinkButton
-        href={actionHref}
-        variant="primary"
-        size="medium"
-        leftIcon={actionIcon}
-      >
-        {actionText}
-      </LinkButton>
+      {actionHref && actionText && (
+        <LinkButton
+          href={actionHref}
+          variant="primary"
+          size="medium"
+          leftIcon={actionIcon}
+        >
+          {actionText}
+        </LinkButton>
+      )}
     </div>
   );
 }

@@ -482,7 +482,7 @@ func (r *RecurringOperationRepository) WithTx(tx transaction.Tx) application.Rec
 }
 
 func (r *RecurringOperationRepository) Create(ctx context.Context, op domain.RecurringOperation) (domain.RecurringOperation, error) {
-	row, err := r.q().CreateRecurringOperation(ctx, postgres.CreateRecurringOperationParams{
+	params := postgres.CreateRecurringOperationParams{
 		OwnerID:       pgconv.UUIDToPgtype(op.OwnerID),
 		PropertyID:    pgconv.UUIDToPgtype(op.PropertyID),
 		LeaseID:       pgconv.UUIDToPgtype(op.LeaseID),
@@ -497,7 +497,12 @@ func (r *RecurringOperationRepository) Create(ctx context.Context, op domain.Rec
 		Periodicity: string(op.Periodicity),
 		Status:      string(op.Status),
 		Comment:     pgtype.Text{String: op.Comment, Valid: true},
-	})
+	}
+	if op.ReminderOffsetDays != nil {
+		//nolint:gosec // Reminder offset is bounded by application validation.
+		params.ReminderOffsetDays = pgtype.Int4{Int32: int32(*op.ReminderOffsetDays), Valid: true}
+	}
+	row, err := r.q().CreateRecurringOperation(ctx, params)
 	if err != nil {
 		return domain.RecurringOperation{}, err
 	}
@@ -574,7 +579,7 @@ func (r *RecurringOperationRepository) ListByProperty(ctx context.Context, owner
 }
 
 func (r *RecurringOperationRepository) Update(ctx context.Context, op domain.RecurringOperation) (domain.RecurringOperation, error) {
-	row, err := r.q().UpdateRecurringOperation(ctx, postgres.UpdateRecurringOperationParams{
+	params := postgres.UpdateRecurringOperationParams{
 		ID:            pgconv.UUIDToPgtype(op.ID),
 		Type:          string(op.Type),
 		Category:      string(op.Category),
@@ -587,7 +592,12 @@ func (r *RecurringOperationRepository) Update(ctx context.Context, op domain.Rec
 		Periodicity: string(op.Periodicity),
 		Comment:     pgtype.Text{String: op.Comment, Valid: true},
 		OwnerID:     pgconv.UUIDToPgtype(op.OwnerID),
-	})
+	}
+	if op.ReminderOffsetDays != nil {
+		//nolint:gosec // Reminder offset is bounded by application validation.
+		params.ReminderOffsetDays = pgtype.Int4{Int32: int32(*op.ReminderOffsetDays), Valid: true}
+	}
+	row, err := r.q().UpdateRecurringOperation(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.RecurringOperation{}, application.ErrNotFound
@@ -680,6 +690,20 @@ func (r *RecurringOperationRepository) DeleteByLease(ctx context.Context, leaseI
 	return r.q().DeleteRecurringOperationByLease(ctx, pgconv.UUIDToPgtype(leaseID))
 }
 
+func (r *RecurringOperationRepository) SoftDelete(ctx context.Context, id, ownerID uuid.UUID) error {
+	_, err := r.q().SoftDeleteRecurringOperation(ctx, postgres.SoftDeleteRecurringOperationParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.ErrNotFound
+		}
+		return err
+	}
+	return nil
+}
+
 func recurringOperationFromRow(row postgres.RecurringOperation) domain.RecurringOperation {
 	rec := domain.RecurringOperation{
 		ID:            pgconv.UUIDFromPgtype(row.ID),
@@ -701,6 +725,9 @@ func recurringOperationFromRow(row postgres.RecurringOperation) domain.Recurring
 	}
 	if row.ReminderOffsetDays.Valid {
 		rec.ReminderOffsetDays = new(int(row.ReminderOffsetDays.Int32))
+	}
+	if row.DeletedAt.Valid {
+		rec.DeletedAt = pgconv.TimestamptzToPtrTime(row.DeletedAt)
 	}
 	return rec
 }
@@ -725,7 +752,7 @@ func (r *OperationRepository) WithTx(tx transaction.Tx) application.OperationRep
 }
 
 func (r *OperationRepository) Create(ctx context.Context, op domain.Operation) (domain.Operation, error) {
-	row, err := r.q().CreateOperation(ctx, postgres.CreateOperationParams{
+	params := postgres.CreateOperationParams{
 		OwnerID:              pgconv.UUIDToPgtype(op.OwnerID),
 		PropertyID:           pgconv.UUIDToPgtype(op.PropertyID),
 		LeaseID:              pgconv.UUIDToPgtype(op.LeaseID),
@@ -738,7 +765,12 @@ func (r *OperationRepository) Create(ctx context.Context, op domain.Operation) (
 		Comment:              pgtype.Text{String: op.Comment, Valid: true},
 		IsException:          op.IsException,
 		Status:               string(op.Status),
-	})
+	}
+	if op.ReminderOffsetDays != nil {
+		//nolint:gosec // Reminder offset is bounded by application validation.
+		params.ReminderOffsetDays = pgtype.Int4{Int32: int32(*op.ReminderOffsetDays), Valid: true}
+	}
+	row, err := r.q().CreateOperation(ctx, params)
 	if err != nil {
 		return domain.Operation{}, err
 	}
@@ -752,6 +784,11 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 
 	rows := make([][]any, len(ops))
 	for i, op := range ops {
+		var reminderOffsetDays pgtype.Int4
+		if op.ReminderOffsetDays != nil {
+			//nolint:gosec // Reminder offset is bounded by application validation.
+			reminderOffsetDays = pgtype.Int4{Int32: int32(*op.ReminderOffsetDays), Valid: true}
+		}
 		rows[i] = []any{
 			pgconv.UUIDToPgtype(op.OwnerID),
 			pgconv.UUIDToPgtype(op.PropertyID),
@@ -765,6 +802,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 			pgtype.Text{String: op.Comment, Valid: true},
 			op.IsException,
 			string(op.Status),
+			reminderOffsetDays,
 		}
 	}
 
@@ -776,6 +814,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 	_, err := copier.CopyFrom(ctx, pgx.Identifier{"operations"}, []string{
 		"owner_id", "property_id", "lease_id", "recurring_operation_id",
 		"type", "category", "name", "amount_kopecks", "operation_date", "comment", "is_exception", "status",
+		"reminder_offset_days",
 	}, pgx.CopyFromRows(rows))
 	if err != nil {
 		return fmt.Errorf("copy from failed: %w", err)
@@ -905,6 +944,13 @@ func (r *OperationRepository) DeleteUneditedFutureOperationsByRecurringOperation
 	})
 }
 
+func (r *OperationRepository) DeleteFutureGeneratedOperations(ctx context.Context, recurringOperationID, ownerID uuid.UUID) error {
+	return r.q().DeleteFutureGeneratedOperations(ctx, postgres.DeleteFutureGeneratedOperationsParams{
+		RecurringOperationID: pgconv.UUIDToPgtype(recurringOperationID),
+		OwnerID:              pgconv.UUIDToPgtype(ownerID),
+	})
+}
+
 func (r *OperationRepository) DeleteUneditedOperationsByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID, from time.Time) error {
 	return r.q().DeleteUneditedOperationsByRecurringOperation(ctx, postgres.DeleteUneditedOperationsByRecurringOperationParams{
 		RecurringOperationID: pgconv.UUIDToPgtype(recurringOperationID),
@@ -1019,7 +1065,7 @@ func (r *OperationRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, 
 }
 
 func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (domain.Operation, error) {
-	row, err := r.q().UpdateOperation(ctx, postgres.UpdateOperationParams{
+	params := postgres.UpdateOperationParams{
 		ID:            pgconv.UUIDToPgtype(op.ID),
 		OwnerID:       pgconv.UUIDToPgtype(op.OwnerID),
 		Type:          string(op.Type),
@@ -1030,7 +1076,12 @@ func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (
 		Comment:       pgtype.Text{String: op.Comment, Valid: true},
 		LeaseID:       pgconv.UUIDToPgtype(op.LeaseID),
 		Status:        string(op.Status),
-	})
+	}
+	if op.ReminderOffsetDays != nil {
+		//nolint:gosec // Reminder offset is bounded by application validation.
+		params.ReminderOffsetDays = pgtype.Int4{Int32: int32(*op.ReminderOffsetDays), Valid: true}
+	}
+	row, err := r.q().UpdateOperation(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Operation{}, application.ErrNotFound
@@ -1268,6 +1319,10 @@ func operationFromRow(row postgres.Operation) (domain.Operation, error) {
 		IsException:          row.IsException,
 		CreatedAt:            row.CreatedAt.Time,
 		UpdatedAt:            row.UpdatedAt.Time,
+	}
+	if row.ReminderOffsetDays.Valid {
+		offset := int(row.ReminderOffsetDays.Int32)
+		op.ReminderOffsetDays = &offset
 	}
 	if row.DeletedAt.Valid {
 		op.DeletedAt = pgconv.TimestamptzToPtrTime(row.DeletedAt)

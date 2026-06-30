@@ -4,12 +4,15 @@ import {
   type ChangeEvent,
   type FormEvent,
   useEffect,
+  useId,
   useRef,
   useState,
   type JSX,
 } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import clsx from 'clsx';
 import { ArrowLeft } from '@/shared/assets/icons';
+import { Checkbox } from '@heroui/react';
 import { Icon } from '@/shared/ui/icon';
 import { IconLink } from '@/shared/ui/icon-link';
 import { Button } from '@/shared/ui/button';
@@ -41,6 +44,8 @@ type FormData = {
   amount: string;
   operation_date: string;
   comment: string;
+  reminderEnabled: boolean;
+  reminderOffsetDays: 1 | 3 | 7;
 };
 
 type FormErrors = {
@@ -81,6 +86,79 @@ function useOperationId(): string | undefined {
   return params?.id;
 }
 
+const REMINDER_OFFSET_OPTIONS: { value: 1 | 3 | 7; label: string }[] = [
+  { value: 1, label: 'За 1 день' },
+  { value: 3, label: 'За 3 дня' },
+  { value: 7, label: 'За 7 дней' },
+];
+
+type ReminderSectionProps = {
+  readonly enabled: boolean;
+  readonly offsetDays: 1 | 3 | 7;
+  readonly onEnabledChange: (enabled: boolean) => void;
+  readonly onOffsetChange: (offsetDays: 1 | 3 | 7) => void;
+  readonly disabled?: boolean;
+};
+
+function ReminderSection({
+  enabled,
+  offsetDays,
+  onEnabledChange,
+  onOffsetChange,
+  disabled,
+}: ReminderSectionProps): JSX.Element {
+  const groupId = useId();
+
+  return (
+    <div className={styles.reminder}>
+      <Checkbox
+        isSelected={enabled}
+        onChange={onEnabledChange}
+        isDisabled={disabled}
+        className={styles.checkbox}
+      >
+        Добавить SMS-напоминание
+      </Checkbox>
+
+      {enabled && (
+        <div
+          className={styles.offsetGroup}
+          role="radiogroup"
+          aria-labelledby={`${groupId}-label`}
+        >
+          <span id={`${groupId}-label`} className={styles.offsetLabel}>
+            За сколько дней напомнить
+          </span>
+          <div className={styles.offsetOptions}>
+            {REMINDER_OFFSET_OPTIONS.map((option) => {
+              const isSelected = offsetDays === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  disabled={disabled}
+                  className={clsx(
+                    styles.offsetOption,
+                    isSelected && styles.selected,
+                  )}
+                  onClick={() => onOffsetChange(option.value)}
+                >
+                  <span className={styles.radio} aria-hidden="true">
+                    <span className={styles.radioDot} />
+                  </span>
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OperationEditFormContent({
   id,
   operation,
@@ -97,6 +175,7 @@ function OperationEditFormContent({
     readonly operation_date: string;
     readonly comment?: string | null;
     readonly lease_id?: string | null;
+    readonly reminder_offset_days?: 1 | 3 | 7 | null;
   };
   readonly readonly: boolean;
 }): JSX.Element {
@@ -110,6 +189,8 @@ function OperationEditFormContent({
     amount: formatAmountFromKopecks(operation.amount_kopecks),
     operation_date: operation.operation_date,
     comment: operation.comment ?? '',
+    reminderEnabled: operation.reminder_offset_days !== null && operation.reminder_offset_days !== undefined,
+    reminderOffsetDays: operation.reminder_offset_days ?? 1,
   });
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -137,6 +218,14 @@ function OperationEditFormContent({
 
   const handleCommentChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setForm((prev) => ({ ...prev, comment: event.currentTarget.value }));
+  };
+
+  const handleReminderToggle = (enabled: boolean) => {
+    setForm((prev) => ({ ...prev, reminderEnabled: enabled }));
+  };
+
+  const handleReminderOffsetChange = (offsetDays: 1 | 3 | 7) => {
+    setForm((prev) => ({ ...prev, reminderOffsetDays: offsetDays }));
   };
 
   const validate = (): boolean => {
@@ -185,6 +274,7 @@ function OperationEditFormContent({
           amount_kopecks: amountKopecks,
           operation_date: form.operation_date,
           comment: form.comment.trim() || undefined,
+          reminder_offset_days: form.reminderEnabled ? form.reminderOffsetDays : 0,
         },
       },
       {
@@ -250,6 +340,13 @@ function OperationEditFormContent({
           fullWidth
           value={form.comment}
           onChange={handleCommentChange}
+        />
+        <ReminderSection
+          enabled={form.reminderEnabled}
+          offsetDays={form.reminderOffsetDays}
+          onEnabledChange={handleReminderToggle}
+          onOffsetChange={handleReminderOffsetChange}
+          disabled={readonly}
         />
       </div>
 

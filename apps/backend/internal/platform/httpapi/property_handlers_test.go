@@ -61,6 +61,18 @@ func (r *fakePropertyRepoForHandlers) ListActiveByOwner(_ context.Context, _ uui
 	return nil, nil
 }
 
+func (r *fakePropertyRepoForHandlers) ListArchivedByOwner(_ context.Context, _ uuid.UUID) ([]propertiesdomain.Property, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	archived := make([]propertiesdomain.Property, 0)
+	for _, p := range r.properties {
+		if p.Status == propertiesdomain.PropertyStatusArchived {
+			archived = append(archived, p)
+		}
+	}
+	return archived, nil
+}
+
 func (r *fakePropertyRepoForHandlers) Update(_ context.Context, _ uuid.UUID, property propertiesdomain.Property) (propertiesdomain.Property, error) {
 	return property, nil
 }
@@ -216,6 +228,10 @@ func (r *fakeOperationRepoForHandlers) DeleteUneditedFutureOperationsByLease(_ c
 }
 
 func (r *fakeOperationRepoForHandlers) DeleteUneditedFutureOperationsByRecurringOperation(_ context.Context, _ uuid.UUID, _ time.Time) error {
+	return nil
+}
+
+func (r *fakeOperationRepoForHandlers) DeleteFutureGeneratedOperations(_ context.Context, _, _ uuid.UUID) error {
 	return nil
 }
 
@@ -375,6 +391,10 @@ func (fakeRecurringOperationRepoForHandlers) SetReminderOffset(_ context.Context
 }
 
 func (fakeRecurringOperationRepoForHandlers) DeleteByLease(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+
+func (fakeRecurringOperationRepoForHandlers) SoftDelete(_ context.Context, _, _ uuid.UUID) error {
 	return nil
 }
 
@@ -766,5 +786,57 @@ func TestPropertyHandlers_GetPropertyOperationsSummary_Unauthorized(t *testing.T
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status 401, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestPropertyHandlers_ListArchivedProperties(t *testing.T) {
+	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
+	archivedID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
+
+	propertyRepo := newFakePropertyRepoForHandlers(propertiesdomain.Property{
+		ID:      archivedID,
+		OwnerID: ownerID,
+		Name:    "Archived Property",
+		Address: "Archive St",
+		Type:    propertiesdomain.PropertyTypeApartment,
+		Status:  propertiesdomain.PropertyStatusArchived,
+	})
+
+	propertySvc := propertiesapp.NewPropertyService(
+		propertyRepo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		fakeOccupancyProviderForHandlers{},
+		fakeSubscriptionLimiterForHandlers{},
+		fakePropertyBillingLifecycleForHandlers{},
+		&fakeLeaseRepo{},
+		fakeLeaseBeginner{},
+		fakeLeaseClock{},
+		slog.Default(),
+	)
+	handlers := NewPropertyHandlers(propertySvc, nil, nil, nil, slog.Default())
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/properties/archive", nil)
+	req = req.WithContext(withOwnerID(req.Context(), ownerID))
+	rr := httptest.NewRecorder()
+
+	handlers.ListArchivedProperties(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp openapi.PropertiesResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(resp.Items) != 1 {
+		t.Fatalf("expected 1 archived property, got %d", len(resp.Items))
+	}
+	if resp.Items[0].Id != archivedID {
+		t.Errorf("expected property %s, got %s", archivedID, resp.Items[0].Id)
+	}
+	if resp.Items[0].Status != openapi.PropertyResponseStatusArchived {
+		t.Errorf("expected archived status, got %q", resp.Items[0].Status)
 	}
 }

@@ -9,6 +9,8 @@ import {
 } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import clsx from 'clsx';
+import { Checkbox, Modal } from '@heroui/react';
+import { toast } from 'react-toastify';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { Icon } from '@/shared/ui/icon';
 import { IconLink } from '@/shared/ui/icon-link';
@@ -25,6 +27,7 @@ import { getCategoriesByType } from '@/entities/operation/lib/categories';
 import {
   useRecurringOperation,
   useUpdateRecurringOperation,
+  useDeleteRecurringOperation,
 } from '@/features/recurring-operations/api/hooks';
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
@@ -49,19 +52,17 @@ type FormData = {
   name: string;
   amount: string;
   periodicity: RecurringPeriodicity;
-  paymentDay: number | undefined;
   endDate: string;
   comment: string;
-  applyFromDate: string;
+  reminderEnabled: boolean;
+  reminderOffsetDays: 1 | 3 | 7;
 };
 
 type FormErrors = {
   name?: string;
   amount?: string;
   category?: string;
-  paymentDay?: string;
   endDate?: string;
-  applyFromDate?: string;
 };
 
 const PERIODICITY_OPTIONS: {
@@ -70,6 +71,12 @@ const PERIODICITY_OPTIONS: {
 }[] = [
   { value: 'monthly', label: 'Ежемесячно' },
   { value: 'yearly', label: 'Ежегодно' },
+];
+
+const REMINDER_OFFSET_OPTIONS: { value: 1 | 3 | 7; label: string }[] = [
+  { value: 1, label: 'За 1 день' },
+  { value: 3, label: 'За 3 дня' },
+  { value: 7, label: 'За 7 дней' },
 ];
 
 type SeriesFrequencySelectProps = {
@@ -125,6 +132,73 @@ function SeriesFrequencySelect({
   );
 }
 
+type ReminderSectionProps = {
+  readonly enabled: boolean;
+  readonly offsetDays: 1 | 3 | 7;
+  readonly onEnabledChange: (enabled: boolean) => void;
+  readonly onOffsetChange: (offsetDays: 1 | 3 | 7) => void;
+  readonly disabled?: boolean;
+};
+
+function ReminderSection({
+  enabled,
+  offsetDays,
+  onEnabledChange,
+  onOffsetChange,
+  disabled,
+}: ReminderSectionProps): JSX.Element {
+  const groupId = useId();
+
+  return (
+    <div className={styles.reminder}>
+      <Checkbox
+        isSelected={enabled}
+        onChange={onEnabledChange}
+        isDisabled={disabled}
+        className={styles.checkbox}
+      >
+        Добавить SMS-напоминание
+      </Checkbox>
+
+      {enabled && (
+        <div
+          className={styles.offsetGroup}
+          role="radiogroup"
+          aria-labelledby={`${groupId}-label`}
+        >
+          <span id={`${groupId}-label`} className={styles.offsetLabel}>
+            За сколько дней напомнить
+          </span>
+          <div className={styles.offsetOptions}>
+            {REMINDER_OFFSET_OPTIONS.map((option) => {
+              const isSelected = offsetDays === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  disabled={disabled}
+                  className={clsx(
+                    styles.offsetOption,
+                    isSelected && styles.selected,
+                  )}
+                  onClick={() => onOffsetChange(option.value)}
+                >
+                  <span className={styles.radio} aria-hidden="true">
+                    <span className={styles.radioDot} />
+                  </span>
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function formatAmountFromKopecks(kopecks: number): string {
   return (kopecks / 100).toFixed(2);
 }
@@ -139,29 +213,6 @@ function parseAmountToKopecks(amount: string): number | undefined {
     return undefined;
   }
   return Math.round(value * 100);
-}
-
-function parseLocalDate(value: string): Date {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function formatLocalDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function startOfTodayLocal(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
-
-function getInitialApplyFromDate(startDate: string): string {
-  const today = startOfTodayLocal();
-  const start = parseLocalDate(startDate);
-  return formatLocalDate(start > today ? start : today);
 }
 
 function formatErrorMessage(error: unknown): string {
@@ -179,6 +230,58 @@ function useRecurringOperationId(): string | undefined {
   return params?.id;
 }
 
+type DeleteSeriesModalProps = {
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
+  readonly onConfirm: () => void;
+  readonly isLoading: boolean;
+};
+
+function DeleteSeriesModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  isLoading,
+}: DeleteSeriesModalProps): JSX.Element {
+  const handleOpenChange = (open: boolean): void => {
+    if (!open) {
+      onClose();
+    }
+  };
+
+  return (
+    <Modal>
+      <Modal.Backdrop isOpen={isOpen} onOpenChange={handleOpenChange}>
+        <Modal.Container placement="center" size="sm">
+          <Modal.Dialog aria-label="Удалить серию">
+            <Modal.Header>
+              <Modal.Heading>Удалить серию?</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body>
+              <p>
+                Будущие операции будут удалены, прошедшие останутся.
+              </p>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={onClose} type="button">
+                Отменить
+              </Button>
+              <Button
+                variant="primary"
+                onClick={onConfirm}
+                type="button"
+                loading={isLoading}
+              >
+                Удалить
+              </Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
+  );
+}
+
 function RecurringOperationEditPageContent({
   id,
   operation,
@@ -190,6 +293,10 @@ function RecurringOperationEditPageContent({
 }): JSX.Element {
   const router = useRouter();
   const updateOperation = useUpdateRecurringOperation();
+  const deleteOperation = useDeleteRecurringOperation();
+
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const canDelete = !readonly && !operation.lease_id;
 
   const [form, setForm] = useState<FormData>({
     type: operation.type,
@@ -197,10 +304,12 @@ function RecurringOperationEditPageContent({
     name: operation.name,
     amount: formatAmountFromKopecks(operation.amount_kopecks),
     periodicity: operation.periodicity,
-    paymentDay: operation.payment_day,
     endDate: operation.end_date ?? '',
     comment: operation.comment ?? '',
-    applyFromDate: getInitialApplyFromDate(operation.start_date),
+    reminderEnabled:
+      operation.reminder_offset_days !== null &&
+      operation.reminder_offset_days !== undefined,
+    reminderOffsetDays: operation.reminder_offset_days ?? 1,
   });
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -222,14 +331,6 @@ function RecurringOperationEditPageContent({
     setForm((prev) => ({ ...prev, amount: event.currentTarget.value }));
   };
 
-  const handlePaymentDayChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const value = event.currentTarget.value;
-    setForm((prev) => ({
-      ...prev,
-      paymentDay: value === '' ? undefined : Number(value),
-    }));
-  };
-
   const handleEndDateChange = (event: ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, endDate: event.currentTarget.value }));
   };
@@ -238,8 +339,12 @@ function RecurringOperationEditPageContent({
     setForm((prev) => ({ ...prev, comment: event.currentTarget.value }));
   };
 
-  const handleApplyFromDateChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, applyFromDate: event.currentTarget.value }));
+  const handleReminderToggle = (enabled: boolean) => {
+    setForm((prev) => ({ ...prev, reminderEnabled: enabled }));
+  };
+
+  const handleReminderOffsetChange = (offsetDays: 1 | 3 | 7) => {
+    setForm((prev) => ({ ...prev, reminderOffsetDays: offsetDays }));
   };
 
   const validate = (): boolean => {
@@ -257,18 +362,12 @@ function RecurringOperationEditPageContent({
       next.category = 'Выберите категорию';
     }
 
-    if (form.paymentDay === undefined) {
-      next.paymentDay = 'Укажите день оплаты';
-    } else if (form.paymentDay < 1 || form.paymentDay > 31) {
-      next.paymentDay = 'День оплаты должен быть от 1 до 31';
-    }
-
-    if (!form.applyFromDate) {
-      next.applyFromDate = 'Выберите дату применения изменений';
-    }
-
-    if (form.endDate && form.applyFromDate && form.endDate < form.applyFromDate) {
-      next.endDate = 'Дата окончания не может быть раньше даты применения';
+    if (form.endDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (new Date(form.endDate) < today) {
+        next.endDate = 'Дата окончания не может быть в прошлом';
+      }
     }
 
     setErrors(next);
@@ -283,12 +382,7 @@ function RecurringOperationEditPageContent({
     }
 
     const amountKopecks = parseAmountToKopecks(form.amount);
-    if (
-      amountKopecks === undefined ||
-      !form.category ||
-      form.paymentDay === undefined ||
-      !form.applyFromDate
-    ) {
+    if (amountKopecks === undefined || !form.category) {
       return;
     }
 
@@ -298,8 +392,7 @@ function RecurringOperationEditPageContent({
       name: form.name.trim(),
       amount_kopecks: amountKopecks,
       periodicity: form.periodicity,
-      payment_day: form.paymentDay,
-      apply_from_date: form.applyFromDate,
+      reminder_offset_days: form.reminderEnabled ? form.reminderOffsetDays : 0,
     };
 
     if (form.endDate) {
@@ -318,14 +411,37 @@ function RecurringOperationEditPageContent({
       },
       {
         onSuccess: () => {
-          router.push(`${ROUTES.financeOperations}?tab=recurring`);
+          router.push(ROUTES.financeOperations);
         },
       },
     );
   };
 
   const handleCancel = () => {
-    router.push(`${ROUTES.financeOperations}?tab=recurring`);
+    router.push(ROUTES.financeOperations);
+  };
+
+  const handleDeleteClick = () => {
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleCloseDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+  };
+
+  const handleConfirmDelete = () => {
+    deleteOperation.mutate(
+      { id, propertyId: operation.property_id },
+      {
+        onSuccess: () => {
+          setIsDeleteModalOpen(false);
+          router.push(ROUTES.financeOperations);
+        },
+        onError: (error) => {
+          toast.error(formatErrorMessage(error));
+        },
+      },
+    );
   };
 
   return (
@@ -374,19 +490,6 @@ function RecurringOperationEditPageContent({
           disabled={readonly}
         />
         <TextField
-          label="День оплаты"
-          placeholder="1–31"
-          type="number"
-          min={1}
-          max={31}
-          required
-          fullWidth
-          disabled={readonly}
-          value={form.paymentDay ?? ''}
-          onChange={handlePaymentDayChange}
-          error={errors.paymentDay}
-        />
-        <TextField
           label="Дата окончания (необязательно)"
           type="date"
           fullWidth
@@ -406,16 +509,12 @@ function RecurringOperationEditPageContent({
           value={form.comment}
           onChange={handleCommentChange}
         />
-        <TextField
-          label="Применить с даты"
-          type="date"
-          required
-          fullWidth
+        <ReminderSection
+          enabled={form.reminderEnabled}
+          offsetDays={form.reminderOffsetDays}
+          onEnabledChange={handleReminderToggle}
+          onOffsetChange={handleReminderOffsetChange}
           disabled={readonly}
-          value={form.applyFromDate}
-          onChange={handleApplyFromDateChange}
-          error={errors.applyFromDate}
-          helperText="Старые операции до этой даты останутся без изменений, новые создадутся с обновлёнными параметрами."
         />
       </div>
 
@@ -446,6 +545,30 @@ function RecurringOperationEditPageContent({
           Отмена
         </Button>
       </div>
+
+      {canDelete && (
+        <div className={styles.deleteSection}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="large"
+            fullWidth
+            className={styles.deleteButton}
+            loading={deleteOperation.isPending}
+            disabled={deleteOperation.isPending}
+            onClick={handleDeleteClick}
+          >
+            Удалить серию
+          </Button>
+        </div>
+      )}
+
+      <DeleteSeriesModal
+        isOpen={isDeleteModalOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        isLoading={deleteOperation.isPending}
+      />
     </form>
   );
 }
@@ -467,7 +590,7 @@ export function RecurringOperationEditPage(): JSX.Element {
     return (
       <div className={styles.root}>
         <FinanceErrorState
-          onRetry={() => router.push(`${ROUTES.financeOperations}?tab=recurring`)}
+          onRetry={() => router.push(ROUTES.financeOperations)}
           isLoading={false}
         />
       </div>
@@ -478,7 +601,7 @@ export function RecurringOperationEditPage(): JSX.Element {
     <div className={styles.root}>
       <header className={styles.header}>
         <IconLink
-          href={`${ROUTES.financeOperations}?tab=recurring`}
+          href={ROUTES.financeOperations}
           variant="icon-black"
           size="medium"
           icon={
@@ -486,7 +609,7 @@ export function RecurringOperationEditPage(): JSX.Element {
               <ArrowLeft />
             </Icon>
           }
-          aria-label="Назад к регулярным операциям"
+          aria-label="Назад к операциям"
         />
         <h1 className={styles.title}>Редактирование серии</h1>
       </header>

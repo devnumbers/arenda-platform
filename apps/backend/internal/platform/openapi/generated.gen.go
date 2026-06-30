@@ -188,6 +188,51 @@ func (e OperationCategory) Valid() bool {
 	}
 }
 
+// Defines values for OperationCreateRequestReminderOffsetDays.
+const (
+	OperationCreateRequestReminderOffsetDaysN0 OperationCreateRequestReminderOffsetDays = 0
+	OperationCreateRequestReminderOffsetDaysN1 OperationCreateRequestReminderOffsetDays = 1
+	OperationCreateRequestReminderOffsetDaysN3 OperationCreateRequestReminderOffsetDays = 3
+	OperationCreateRequestReminderOffsetDaysN7 OperationCreateRequestReminderOffsetDays = 7
+)
+
+// Valid indicates whether the value is a known member of the OperationCreateRequestReminderOffsetDays enum.
+func (e OperationCreateRequestReminderOffsetDays) Valid() bool {
+	switch e {
+	case OperationCreateRequestReminderOffsetDaysN0:
+		return true
+	case OperationCreateRequestReminderOffsetDaysN1:
+		return true
+	case OperationCreateRequestReminderOffsetDaysN3:
+		return true
+	case OperationCreateRequestReminderOffsetDaysN7:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OperationResponseReminderOffsetDays.
+const (
+	OperationResponseReminderOffsetDaysN1 OperationResponseReminderOffsetDays = 1
+	OperationResponseReminderOffsetDaysN3 OperationResponseReminderOffsetDays = 3
+	OperationResponseReminderOffsetDaysN7 OperationResponseReminderOffsetDays = 7
+)
+
+// Valid indicates whether the value is a known member of the OperationResponseReminderOffsetDays enum.
+func (e OperationResponseReminderOffsetDays) Valid() bool {
+	switch e {
+	case OperationResponseReminderOffsetDaysN1:
+		return true
+	case OperationResponseReminderOffsetDaysN3:
+		return true
+	case OperationResponseReminderOffsetDaysN7:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OperationStatus.
 const (
 	OperationStatusOverdue  OperationStatus = "overdue"
@@ -224,6 +269,30 @@ func (e OperationType) Valid() bool {
 	case Expense:
 		return true
 	case Income:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OperationUpdateRequestReminderOffsetDays.
+const (
+	OperationUpdateRequestReminderOffsetDaysN0 OperationUpdateRequestReminderOffsetDays = 0
+	OperationUpdateRequestReminderOffsetDaysN1 OperationUpdateRequestReminderOffsetDays = 1
+	OperationUpdateRequestReminderOffsetDaysN3 OperationUpdateRequestReminderOffsetDays = 3
+	OperationUpdateRequestReminderOffsetDaysN7 OperationUpdateRequestReminderOffsetDays = 7
+)
+
+// Valid indicates whether the value is a known member of the OperationUpdateRequestReminderOffsetDays enum.
+func (e OperationUpdateRequestReminderOffsetDays) Valid() bool {
+	switch e {
+	case OperationUpdateRequestReminderOffsetDaysN0:
+		return true
+	case OperationUpdateRequestReminderOffsetDaysN1:
+		return true
+	case OperationUpdateRequestReminderOffsetDaysN3:
+		return true
+	case OperationUpdateRequestReminderOffsetDaysN7:
 		return true
 	default:
 		return false
@@ -431,6 +500,30 @@ func (e RecurringOperationCreateRequestPeriodicity) Valid() bool {
 	}
 }
 
+// Defines values for RecurringOperationCreateRequestReminderOffsetDays.
+const (
+	RecurringOperationCreateRequestReminderOffsetDaysN0 RecurringOperationCreateRequestReminderOffsetDays = 0
+	RecurringOperationCreateRequestReminderOffsetDaysN1 RecurringOperationCreateRequestReminderOffsetDays = 1
+	RecurringOperationCreateRequestReminderOffsetDaysN3 RecurringOperationCreateRequestReminderOffsetDays = 3
+	RecurringOperationCreateRequestReminderOffsetDaysN7 RecurringOperationCreateRequestReminderOffsetDays = 7
+)
+
+// Valid indicates whether the value is a known member of the RecurringOperationCreateRequestReminderOffsetDays enum.
+func (e RecurringOperationCreateRequestReminderOffsetDays) Valid() bool {
+	switch e {
+	case RecurringOperationCreateRequestReminderOffsetDaysN0:
+		return true
+	case RecurringOperationCreateRequestReminderOffsetDaysN1:
+		return true
+	case RecurringOperationCreateRequestReminderOffsetDaysN3:
+		return true
+	case RecurringOperationCreateRequestReminderOffsetDaysN7:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RecurringOperationResponsePeriodicity.
 const (
 	RecurringOperationResponsePeriodicityMonthly RecurringOperationResponsePeriodicity = "monthly"
@@ -443,6 +536,27 @@ func (e RecurringOperationResponsePeriodicity) Valid() bool {
 	case RecurringOperationResponsePeriodicityMonthly:
 		return true
 	case RecurringOperationResponsePeriodicityYearly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RecurringOperationResponseReminderOffsetDays.
+const (
+	RecurringOperationResponseReminderOffsetDaysN1 RecurringOperationResponseReminderOffsetDays = 1
+	RecurringOperationResponseReminderOffsetDaysN3 RecurringOperationResponseReminderOffsetDays = 3
+	RecurringOperationResponseReminderOffsetDaysN7 RecurringOperationResponseReminderOffsetDays = 7
+)
+
+// Valid indicates whether the value is a known member of the RecurringOperationResponseReminderOffsetDays enum.
+func (e RecurringOperationResponseReminderOffsetDays) Valid() bool {
+	switch e {
+	case RecurringOperationResponseReminderOffsetDaysN1:
+		return true
+	case RecurringOperationResponseReminderOffsetDaysN3:
+		return true
+	case RecurringOperationResponseReminderOffsetDaysN7:
 		return true
 	default:
 		return false
@@ -479,6 +593,30 @@ func (e RecurringOperationUpdateRequestPeriodicity) Valid() bool {
 	case Monthly:
 		return true
 	case Yearly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RecurringOperationUpdateRequestReminderOffsetDays.
+const (
+	RecurringOperationUpdateRequestReminderOffsetDaysN0 RecurringOperationUpdateRequestReminderOffsetDays = 0
+	RecurringOperationUpdateRequestReminderOffsetDaysN1 RecurringOperationUpdateRequestReminderOffsetDays = 1
+	RecurringOperationUpdateRequestReminderOffsetDaysN3 RecurringOperationUpdateRequestReminderOffsetDays = 3
+	RecurringOperationUpdateRequestReminderOffsetDaysN7 RecurringOperationUpdateRequestReminderOffsetDays = 7
+)
+
+// Valid indicates whether the value is a known member of the RecurringOperationUpdateRequestReminderOffsetDays enum.
+func (e RecurringOperationUpdateRequestReminderOffsetDays) Valid() bool {
+	switch e {
+	case RecurringOperationUpdateRequestReminderOffsetDaysN0:
+		return true
+	case RecurringOperationUpdateRequestReminderOffsetDaysN1:
+		return true
+	case RecurringOperationUpdateRequestReminderOffsetDaysN3:
+		return true
+	case RecurringOperationUpdateRequestReminderOffsetDaysN7:
 		return true
 	default:
 		return false
@@ -887,27 +1025,37 @@ type OperationCreateRequest struct {
 	LeaseId       *openapi_types.UUID `json:"lease_id,omitempty"`
 	Name          string              `json:"name"`
 	OperationDate openapi_types.Date  `json:"operation_date"`
-	Type          OperationType       `json:"type"`
+
+	// ReminderOffsetDays 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before the operation date.
+	ReminderOffsetDays *OperationCreateRequestReminderOffsetDays `json:"reminder_offset_days,omitempty"`
+	Type               OperationType                             `json:"type"`
 }
+
+// OperationCreateRequestReminderOffsetDays 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before the operation date.
+type OperationCreateRequestReminderOffsetDays int
 
 // OperationResponse defines model for OperationResponse.
 type OperationResponse struct {
-	AmountKopecks        int                 `json:"amount_kopecks"`
-	Category             OperationCategory   `json:"category"`
-	Comment              *string             `json:"comment,omitempty"`
-	CreatedAt            time.Time           `json:"created_at"`
-	Id                   openapi_types.UUID  `json:"id"`
-	IsException          bool                `json:"is_exception"`
-	LeaseId              *openapi_types.UUID `json:"lease_id,omitempty"`
-	Name                 string              `json:"name"`
-	OperationDate        openapi_types.Date  `json:"operation_date"`
-	OwnerId              openapi_types.UUID  `json:"owner_id"`
-	PropertyId           openapi_types.UUID  `json:"property_id"`
-	RecurringOperationId *openapi_types.UUID `json:"recurring_operation_id,omitempty"`
-	Status               OperationStatus     `json:"status"`
-	Type                 OperationType       `json:"type"`
-	UpdatedAt            time.Time           `json:"updated_at"`
+	AmountKopecks        int                                  `json:"amount_kopecks"`
+	Category             OperationCategory                    `json:"category"`
+	Comment              *string                              `json:"comment,omitempty"`
+	CreatedAt            time.Time                            `json:"created_at"`
+	Id                   openapi_types.UUID                   `json:"id"`
+	IsException          bool                                 `json:"is_exception"`
+	LeaseId              *openapi_types.UUID                  `json:"lease_id,omitempty"`
+	Name                 string                               `json:"name"`
+	OperationDate        openapi_types.Date                   `json:"operation_date"`
+	OwnerId              openapi_types.UUID                   `json:"owner_id"`
+	PropertyId           openapi_types.UUID                   `json:"property_id"`
+	RecurringOperationId *openapi_types.UUID                  `json:"recurring_operation_id,omitempty"`
+	ReminderOffsetDays   *OperationResponseReminderOffsetDays `json:"reminder_offset_days,omitempty"`
+	Status               OperationStatus                      `json:"status"`
+	Type                 OperationType                        `json:"type"`
+	UpdatedAt            time.Time                            `json:"updated_at"`
 }
+
+// OperationResponseReminderOffsetDays defines model for OperationResponse.ReminderOffsetDays.
+type OperationResponseReminderOffsetDays int
 
 // OperationStatus defines model for OperationStatus.
 type OperationStatus string
@@ -923,8 +1071,14 @@ type OperationUpdateRequest struct {
 	LeaseId       *openapi_types.UUID `json:"lease_id,omitempty"`
 	Name          *string             `json:"name,omitempty"`
 	OperationDate *openapi_types.Date `json:"operation_date,omitempty"`
-	Type          *OperationType      `json:"type,omitempty"`
+
+	// ReminderOffsetDays 0 clears any existing reminder; 1/3/7 reschedules the reminder.
+	ReminderOffsetDays *OperationUpdateRequestReminderOffsetDays `json:"reminder_offset_days,omitempty"`
+	Type               *OperationType                            `json:"type,omitempty"`
 }
+
+// OperationUpdateRequestReminderOffsetDays 0 clears any existing reminder; 1/3/7 reschedules the reminder.
+type OperationUpdateRequestReminderOffsetDays int
 
 // OperationsResponse defines model for OperationsResponse.
 type OperationsResponse struct {
@@ -1037,37 +1191,47 @@ type RecurringOperationCreateRequest struct {
 	Comment       *string                                     `json:"comment,omitempty"`
 	EndDate       *openapi_types.Date                         `json:"end_date,omitempty"`
 	Name          string                                      `json:"name"`
-	PaymentDay    int                                         `json:"payment_day"`
+	PaymentDay    *int                                        `json:"payment_day,omitempty"`
 	Periodicity   *RecurringOperationCreateRequestPeriodicity `json:"periodicity,omitempty"`
-	StartDate     openapi_types.Date                          `json:"start_date"`
-	Type          OperationType                               `json:"type"`
+
+	// ReminderOffsetDays 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before each generated operation.
+	ReminderOffsetDays *RecurringOperationCreateRequestReminderOffsetDays `json:"reminder_offset_days,omitempty"`
+	StartDate          openapi_types.Date                                 `json:"start_date"`
+	Type               OperationType                                      `json:"type"`
 }
 
 // RecurringOperationCreateRequestPeriodicity defines model for RecurringOperationCreateRequest.Periodicity.
 type RecurringOperationCreateRequestPeriodicity string
 
+// RecurringOperationCreateRequestReminderOffsetDays 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before each generated operation.
+type RecurringOperationCreateRequestReminderOffsetDays int
+
 // RecurringOperationResponse defines model for RecurringOperationResponse.
 type RecurringOperationResponse struct {
-	AmountKopecks int                                   `json:"amount_kopecks"`
-	Category      OperationCategory                     `json:"category"`
-	Comment       *string                               `json:"comment,omitempty"`
-	CreatedAt     time.Time                             `json:"created_at"`
-	EndDate       *openapi_types.Date                   `json:"end_date,omitempty"`
-	Id            openapi_types.UUID                    `json:"id"`
-	LeaseId       *openapi_types.UUID                   `json:"lease_id,omitempty"`
-	Name          string                                `json:"name"`
-	OwnerId       openapi_types.UUID                    `json:"owner_id"`
-	PaymentDay    int                                   `json:"payment_day"`
-	Periodicity   RecurringOperationResponsePeriodicity `json:"periodicity"`
-	PropertyId    openapi_types.UUID                    `json:"property_id"`
-	StartDate     openapi_types.Date                    `json:"start_date"`
-	Status        RecurringOperationResponseStatus      `json:"status"`
-	Type          OperationType                         `json:"type"`
-	UpdatedAt     time.Time                             `json:"updated_at"`
+	AmountKopecks      int                                           `json:"amount_kopecks"`
+	Category           OperationCategory                             `json:"category"`
+	Comment            *string                                       `json:"comment,omitempty"`
+	CreatedAt          time.Time                                     `json:"created_at"`
+	EndDate            *openapi_types.Date                           `json:"end_date,omitempty"`
+	Id                 openapi_types.UUID                            `json:"id"`
+	LeaseId            *openapi_types.UUID                           `json:"lease_id,omitempty"`
+	Name               string                                        `json:"name"`
+	OwnerId            openapi_types.UUID                            `json:"owner_id"`
+	PaymentDay         int                                           `json:"payment_day"`
+	Periodicity        RecurringOperationResponsePeriodicity         `json:"periodicity"`
+	PropertyId         openapi_types.UUID                            `json:"property_id"`
+	ReminderOffsetDays *RecurringOperationResponseReminderOffsetDays `json:"reminder_offset_days,omitempty"`
+	StartDate          openapi_types.Date                            `json:"start_date"`
+	Status             RecurringOperationResponseStatus              `json:"status"`
+	Type               OperationType                                 `json:"type"`
+	UpdatedAt          time.Time                                     `json:"updated_at"`
 }
 
 // RecurringOperationResponsePeriodicity defines model for RecurringOperationResponse.Periodicity.
 type RecurringOperationResponsePeriodicity string
+
+// RecurringOperationResponseReminderOffsetDays defines model for RecurringOperationResponse.ReminderOffsetDays.
+type RecurringOperationResponseReminderOffsetDays int
 
 // RecurringOperationResponseStatus defines model for RecurringOperationResponse.Status.
 type RecurringOperationResponseStatus string
@@ -1082,12 +1246,18 @@ type RecurringOperationUpdateRequest struct {
 	Name          *string                                     `json:"name,omitempty"`
 	PaymentDay    *int                                        `json:"payment_day,omitempty"`
 	Periodicity   *RecurringOperationUpdateRequestPeriodicity `json:"periodicity,omitempty"`
-	StartDate     *openapi_types.Date                         `json:"start_date,omitempty"`
-	Type          *OperationType                              `json:"type,omitempty"`
+
+	// ReminderOffsetDays 0 clears any existing reminders; 1/3/7 reschedules reminders for future generated operations.
+	ReminderOffsetDays *RecurringOperationUpdateRequestReminderOffsetDays `json:"reminder_offset_days,omitempty"`
+	StartDate          *openapi_types.Date                                `json:"start_date,omitempty"`
+	Type               *OperationType                                     `json:"type,omitempty"`
 }
 
 // RecurringOperationUpdateRequestPeriodicity defines model for RecurringOperationUpdateRequest.Periodicity.
 type RecurringOperationUpdateRequestPeriodicity string
+
+// RecurringOperationUpdateRequestReminderOffsetDays 0 clears any existing reminders; 1/3/7 reschedules reminders for future generated operations.
+type RecurringOperationUpdateRequestReminderOffsetDays int
 
 // RecurringOperationsResponse defines model for RecurringOperationsResponse.
 type RecurringOperationsResponse struct {
@@ -1098,11 +1268,6 @@ type RecurringOperationsResponse struct {
 type RefundSubscriptionPaymentRequest struct {
 	// AmountKopecks Optional partial refund amount in kopecks. If omitted, the full payment amount is refunded.
 	AmountKopecks *int `json:"amount_kopecks,omitempty"`
-}
-
-// ReminderCreateRequest defines model for ReminderCreateRequest.
-type ReminderCreateRequest struct {
-	ReminderDate openapi_types.Date `json:"reminder_date"`
 }
 
 // ReminderResponse defines model for ReminderResponse.
@@ -1397,17 +1562,11 @@ type UpdatePropertyJSONRequestBody = PropertyUpdateRequest
 // CreateOperationJSONRequestBody defines body for CreateOperation for application/json ContentType.
 type CreateOperationJSONRequestBody = OperationCreateRequest
 
-// CreateOperationReminderJSONRequestBody defines body for CreateOperationReminder for application/json ContentType.
-type CreateOperationReminderJSONRequestBody = ReminderCreateRequest
-
 // UploadPropertyPhotoMultipartRequestBody defines body for UploadPropertyPhoto for multipart/form-data ContentType.
 type UploadPropertyPhotoMultipartRequestBody UploadPropertyPhotoMultipartBody
 
 // CreateRecurringOperationJSONRequestBody defines body for CreateRecurringOperation for application/json ContentType.
 type CreateRecurringOperationJSONRequestBody = RecurringOperationCreateRequest
-
-// CreateRecurringOperationReminderJSONRequestBody defines body for CreateRecurringOperationReminder for application/json ContentType.
-type CreateRecurringOperationReminderJSONRequestBody = ReminderCreateRequest
 
 // UpdateRecurringOperationJSONRequestBody defines body for UpdateRecurringOperation for application/json ContentType.
 type UpdateRecurringOperationJSONRequestBody = RecurringOperationUpdateRequest
@@ -1520,6 +1679,9 @@ type ServerInterface interface {
 	// (POST /properties)
 	CreateProperty(w http.ResponseWriter, r *http.Request)
 
+	// (GET /properties/archive)
+	ListArchivedProperties(w http.ResponseWriter, r *http.Request)
+
 	// (GET /properties/{id})
 	GetProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
@@ -1544,12 +1706,6 @@ type ServerInterface interface {
 	// (POST /properties/{propertyId}/operations)
 	CreateOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
 
-	// (GET /properties/{propertyId}/operations/{operationId}/reminders)
-	ListOperationReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID)
-
-	// (POST /properties/{propertyId}/operations/{operationId}/reminders)
-	CreateOperationReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID)
-
 	// (POST /properties/{propertyId}/photos)
 	UploadPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
 
@@ -1562,14 +1718,11 @@ type ServerInterface interface {
 	// (POST /properties/{propertyId}/recurring-operations)
 	CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
 
-	// (GET /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders)
-	ListRecurringOperationReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, recurringOperationId openapi_types.UUID)
-
-	// (POST /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders)
-	CreateRecurringOperationReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, recurringOperationId openapi_types.UUID)
-
 	// (GET /recurring-operations)
 	ListRecurringOperations(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /recurring-operations/{id})
+	DeleteRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /recurring-operations/{id})
 	GetRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1782,6 +1935,11 @@ func (_ Unimplemented) CreateProperty(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /properties/archive)
+func (_ Unimplemented) ListArchivedProperties(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /properties/{id})
 func (_ Unimplemented) GetProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -1822,16 +1980,6 @@ func (_ Unimplemented) CreateOperation(w http.ResponseWriter, r *http.Request, p
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /properties/{propertyId}/operations/{operationId}/reminders)
-func (_ Unimplemented) ListOperationReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /properties/{propertyId}/operations/{operationId}/reminders)
-func (_ Unimplemented) CreateOperationReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
 // (POST /properties/{propertyId}/photos)
 func (_ Unimplemented) UploadPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -1852,18 +2000,13 @@ func (_ Unimplemented) CreateRecurringOperation(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders)
-func (_ Unimplemented) ListRecurringOperationReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, recurringOperationId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders)
-func (_ Unimplemented) CreateRecurringOperationReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, recurringOperationId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
 // (GET /recurring-operations)
 func (_ Unimplemented) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /recurring-operations/{id})
+func (_ Unimplemented) DeleteRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2904,6 +3047,26 @@ func (siw *ServerInterfaceWrapper) CreateProperty(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// ListArchivedProperties operation middleware
+func (siw *ServerInterfaceWrapper) ListArchivedProperties(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListArchivedProperties(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetProperty operation middleware
 func (siw *ServerInterfaceWrapper) GetProperty(w http.ResponseWriter, r *http.Request) {
 
@@ -3254,88 +3417,6 @@ func (siw *ServerInterfaceWrapper) CreateOperation(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
-// ListOperationReminders operation middleware
-func (siw *ServerInterfaceWrapper) ListOperationReminders(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "propertyId" -------------
-	var propertyId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "operationId" -------------
-	var operationId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "operationId", chi.URLParam(r, "operationId"), &operationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operationId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListOperationReminders(w, r, propertyId, operationId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateOperationReminder operation middleware
-func (siw *ServerInterfaceWrapper) CreateOperationReminder(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "propertyId" -------------
-	var propertyId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "operationId" -------------
-	var operationId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "operationId", chi.URLParam(r, "operationId"), &operationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operationId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateOperationReminder(w, r, propertyId, operationId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // UploadPropertyPhoto operation middleware
 func (siw *ServerInterfaceWrapper) UploadPropertyPhoto(w http.ResponseWriter, r *http.Request) {
 
@@ -3473,88 +3554,6 @@ func (siw *ServerInterfaceWrapper) CreateRecurringOperation(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
-// ListRecurringOperationReminders operation middleware
-func (siw *ServerInterfaceWrapper) ListRecurringOperationReminders(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "propertyId" -------------
-	var propertyId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "recurringOperationId" -------------
-	var recurringOperationId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "recurringOperationId", chi.URLParam(r, "recurringOperationId"), &recurringOperationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "recurringOperationId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListRecurringOperationReminders(w, r, propertyId, recurringOperationId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateRecurringOperationReminder operation middleware
-func (siw *ServerInterfaceWrapper) CreateRecurringOperationReminder(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "propertyId" -------------
-	var propertyId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "recurringOperationId" -------------
-	var recurringOperationId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "recurringOperationId", chi.URLParam(r, "recurringOperationId"), &recurringOperationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "recurringOperationId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateRecurringOperationReminder(w, r, propertyId, recurringOperationId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // ListRecurringOperations operation middleware
 func (siw *ServerInterfaceWrapper) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
 
@@ -3566,6 +3565,38 @@ func (siw *ServerInterfaceWrapper) ListRecurringOperations(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListRecurringOperations(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteRecurringOperation operation middleware
+func (siw *ServerInterfaceWrapper) DeleteRecurringOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteRecurringOperation(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4371,6 +4402,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/properties", wrapper.CreateProperty)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/archive", wrapper.ListArchivedProperties)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/properties/{id}", wrapper.GetProperty)
 	})
 	r.Group(func(r chi.Router) {
@@ -4395,12 +4429,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/properties/{propertyId}/operations", wrapper.CreateOperation)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/properties/{propertyId}/operations/{operationId}/reminders", wrapper.ListOperationReminders)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/properties/{propertyId}/operations/{operationId}/reminders", wrapper.CreateOperationReminder)
-	})
-	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/properties/{propertyId}/photos", wrapper.UploadPropertyPhoto)
 	})
 	r.Group(func(r chi.Router) {
@@ -4413,13 +4441,10 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/properties/{propertyId}/recurring-operations", wrapper.CreateRecurringOperation)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders", wrapper.ListRecurringOperationReminders)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/properties/{propertyId}/recurring-operations/{recurringOperationId}/reminders", wrapper.CreateRecurringOperationReminder)
-	})
-	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/recurring-operations", wrapper.ListRecurringOperations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/recurring-operations/{id}", wrapper.DeleteRecurringOperation)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/recurring-operations/{id}", wrapper.GetRecurringOperation)
@@ -4496,93 +4521,95 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"AEQrwvj1X2Z/mfmbx83/BQAA//8=",
+	"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",
+	"l3+d/3Xubu+3/x8AAP//",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

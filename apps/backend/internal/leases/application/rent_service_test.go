@@ -243,6 +243,26 @@ func (r *fakeOperationRepo) DeleteUneditedFutureOperationsByRecurringOperation(_
 	return nil
 }
 
+func (r *fakeOperationRepo) DeleteFutureGeneratedOperations(_ context.Context, recurringOperationID, ownerID uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	today := timeutil.Date(time.Now())
+	filtered := r.ops[:0]
+	for _, op := range r.ops {
+		keep := true
+		if op.RecurringOperationID == recurringOperationID && op.OwnerID == ownerID && !op.IsException && op.DeletedAt == nil {
+			if timeutil.Date(op.OperationDate).After(today) && (op.Status == domain.OperationStatusPending || op.Status == domain.OperationStatusOverdue) {
+				keep = false
+			}
+		}
+		if keep {
+			filtered = append(filtered, op)
+		}
+	}
+	r.ops = filtered
+	return nil
+}
+
 func (r *fakeOperationRepo) DeleteUneditedOperationsByRecurringOperation(_ context.Context, recurringOperationID uuid.UUID, from time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -436,6 +456,19 @@ func (r *fakeRecurringOperationRepo) SetReminderOffset(_ context.Context, _, _ u
 }
 
 func (r *fakeRecurringOperationRepo) DeleteByLease(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+
+func (r *fakeRecurringOperationRepo) SoftDelete(_ context.Context, id, _ uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.recs[id]; !ok {
+		return ErrNotFound
+	}
+	rec := r.recs[id]
+	now := time.Now()
+	rec.DeletedAt = &now
+	r.recs[id] = rec
 	return nil
 }
 

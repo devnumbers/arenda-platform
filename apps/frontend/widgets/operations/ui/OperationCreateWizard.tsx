@@ -2,7 +2,6 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'react-toastify';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { Button } from '@/shared/ui/button';
 import { IconButton } from '@/shared/ui/icon-button';
@@ -12,12 +11,9 @@ import {
   incomeCategories,
   type OperationType,
 } from '@/entities/operation/model/types';
-import {
-  useCreateOperation,
-  useCreateOperationReminder,
-  useCreateRecurringOperation,
-  useCreateRecurringOperationReminder,
-} from '@/features/operations/api';
+import { getCategoriesByType } from '@/entities/operation/lib/categories';
+import { useCreateOperation } from '@/features/operations/api';
+import { useCreateRecurringOperation } from '@/features/recurring-operations/api/hooks';
 import { ApiError } from '@/shared/api/errors';
 import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
 import { useSubscription } from '@/features/subscription/api/hooks';
@@ -62,116 +58,12 @@ function formatErrorMessage(error: unknown): string {
   return 'Не удалось создать операцию. Попробуйте ещё раз.';
 }
 
-function parseLocalDate(value: string): Date {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function formatDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
-function subtractDaysFromDateString(dateString: string, days: number): string {
-  return formatDate(addDays(parseLocalDate(dateString), -days));
-}
-
-function parseUtcDate(value: string): Date {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
-function formatUtcDate(date: Date): string {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function startOfTodayUtc(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}
-
-function lastDayOfUtcMonth(year: number, month: number): number {
-  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-}
-
-function addUtcMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  result.setUTCMonth(result.getUTCMonth() + months);
-  return result;
-}
-
-function nextPaymentDateMonthly(current: Date, paymentDay: number): Date {
-  const year = current.getUTCFullYear();
-  const month = current.getUTCMonth();
-  const lastDay = lastDayOfUtcMonth(year, month + 1);
-  const day = Math.min(paymentDay, lastDay);
-  return new Date(Date.UTC(year, month + 1, day));
-}
-
-function nextPaymentDateYearly(current: Date, paymentDay: number): Date {
-  const year = current.getUTCFullYear() + 1;
-  const month = current.getUTCMonth();
-  const lastDay = lastDayOfUtcMonth(year, month);
-  const day = Math.min(paymentDay, lastDay);
-  return new Date(Date.UTC(year, month, day));
-}
-
-function getEarliestFutureOperationDate(schedule: ScheduleData): string | null {
-  if (!schedule.date || schedule.frequency === 'once') {
-    return null;
-  }
-
-  const today = startOfTodayUtc();
-  const startDate = parseUtcDate(schedule.date);
-  const endDate = schedule.endDate ? parseUtcDate(schedule.endDate) : undefined;
-  const paymentDay = schedule.paymentDay ?? startDate.getUTCDate();
-
-  const windowEnd = addUtcMonths(today, 12);
-  let current = new Date(startDate);
-  let first = true;
-
-  for (let i = 0; i < 37; i++) {
-    if (!first) {
-      if (schedule.frequency === 'yearly') {
-        current = nextPaymentDateYearly(current, paymentDay);
-      } else {
-        current = nextPaymentDateMonthly(current, paymentDay);
-      }
-    }
-    first = false;
-
-    if (endDate && current > endDate) {
-      break;
-    }
-    if (current > windowEnd) {
-      break;
-    }
-
-    if (current >= today) {
-      return formatUtcDate(current);
-    }
-  }
-
-  return null;
-}
-
 function validateBasicInfo(data: BasicInfoData, type: OperationType): BasicInfoErrors {
   const errors: BasicInfoErrors = {};
   const amountKopecks = toKopecks(data.amount);
 
-  if (amountKopecks === undefined || amountKopecks < 0) {
-    errors.amount = 'Введите сумму';
+  if (amountKopecks === undefined || amountKopecks <= 0) {
+    errors.amount = 'Введите сумму больше 0';
   }
 
   const name = data.name.trim();
@@ -208,14 +100,6 @@ function validateSchedule(data: ScheduleData): ScheduleErrors {
     errors.date = 'Выберите дату';
   }
 
-  if (data.frequency !== 'once') {
-    if (data.paymentDay === undefined) {
-      errors.paymentDay = 'Укажите день операции';
-    } else if (data.paymentDay < 1 || data.paymentDay > 31) {
-      errors.paymentDay = 'День операции должен быть от 1 до 31';
-    }
-  }
-
   if (data.endDate && data.date && data.endDate < data.date) {
     errors.endDate = 'Дата окончания не может быть раньше даты начала';
   }
@@ -229,6 +113,8 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
   const { data: subscription } = useSubscription();
   const readonly = isSubscriptionReadonly(subscription);
 
+  const [operationType, setOperationType] = useState<OperationType>(type);
+
   const [step, setStep] = useState<Step>('basic');
   const [basicInfo, setBasicInfo] = useState<BasicInfoData>({
     amount: '',
@@ -236,12 +122,12 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     category: undefined,
     propertyId: propertyId ?? undefined,
     comment: '',
+    type,
   });
   const [basicErrors, setBasicErrors] = useState<BasicInfoErrors>({});
   const [schedule, setSchedule] = useState<ScheduleData>({
     frequency: 'once',
     date: undefined,
-    paymentDay: undefined,
     endDate: undefined,
   });
   const [scheduleErrors, setScheduleErrors] = useState<ScheduleErrors>({});
@@ -254,8 +140,17 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
 
   const createOperation = useCreateOperation();
   const createRecurringOperation = useCreateRecurringOperation();
-  const createOperationReminder = useCreateOperationReminder();
-  const createRecurringOperationReminder = useCreateRecurringOperationReminder();
+
+  const handleTypeChange = (nextType: OperationType) => {
+    setOperationType(nextType);
+    setBasicInfo((prev) => {
+      const validCategories = getCategoriesByType(nextType);
+      const category = validCategories.some((option) => option.value === prev.category)
+        ? prev.category
+        : undefined;
+      return { ...prev, type: nextType, category };
+    });
+  };
 
   const handleCancel = () => {
     router.push(ROUTES.finance);
@@ -278,7 +173,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     setSubmitError(undefined);
 
     if (step === 'basic') {
-      const errors = validateBasicInfo(basicInfo, type);
+      const errors = validateBasicInfo(basicInfo, operationType);
       setBasicErrors(errors);
       if (Object.keys(errors).length === 0) {
         setStep('schedule');
@@ -298,7 +193,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
   const handleSubmit = async () => {
     setSubmitError(undefined);
 
-    const basicValidation = validateBasicInfo(basicInfo, type);
+    const basicValidation = validateBasicInfo(basicInfo, operationType);
     const scheduleValidation = validateSchedule(schedule);
     setBasicErrors(basicValidation);
     setScheduleErrors(scheduleValidation);
@@ -313,76 +208,49 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
       return;
     }
 
-    const propertyId = basicInfo.propertyId;
+    const selectedPropertyId = basicInfo.propertyId;
     const category = basicInfo.category;
     const operationDate = schedule.date;
     const amountKopecks = toKopecks(basicInfo.amount);
 
-    if (!propertyId || !category || !operationDate || amountKopecks === undefined) {
+    if (!selectedPropertyId || !category || !operationDate || amountKopecks === undefined) {
       return;
     }
 
     setIsSubmitting(true);
 
     try {
+      const reminderOffsetDays = reminder.enabled ? reminder.offsetDays : 0;
+      const comment = basicInfo.comment?.trim() || undefined;
+
       if (schedule.frequency === 'once') {
-        const operation = await createOperation.mutateAsync({
-          propertyId,
+        await createOperation.mutateAsync({
+          propertyId: selectedPropertyId,
           data: {
-            type,
+            type: operationType,
             category,
             name: basicInfo.name.trim(),
             amount_kopecks: amountKopecks,
             operation_date: operationDate,
-            comment: basicInfo.comment?.trim() || undefined,
+            comment,
+            reminder_offset_days: reminderOffsetDays,
           },
         });
-
-        if (reminder.enabled) {
-          try {
-            await createOperationReminder.mutateAsync({
-              propertyId,
-              operationId: operation.id,
-              data: {
-                reminder_date: subtractDaysFromDateString(operationDate, reminder.offsetDays),
-              },
-            });
-          } catch {
-            toast.success('Операция создана, но не удалось добавить напоминание');
-          }
-        }
       } else {
-        const recurringOperation = await createRecurringOperation.mutateAsync({
-          propertyId,
+        await createRecurringOperation.mutateAsync({
+          propertyId: selectedPropertyId,
           data: {
-            type,
+            type: operationType,
             category,
             name: basicInfo.name.trim(),
             amount_kopecks: amountKopecks,
             start_date: operationDate,
-            payment_day: schedule.paymentDay ?? 1,
             end_date: schedule.endDate || undefined,
-            comment: basicInfo.comment?.trim() || undefined,
+            comment,
             periodicity: schedule.frequency,
+            reminder_offset_days: reminderOffsetDays,
           },
         });
-
-        if (reminder.enabled) {
-          const earliestDate = getEarliestFutureOperationDate(schedule);
-          if (earliestDate) {
-            try {
-              await createRecurringOperationReminder.mutateAsync({
-                propertyId,
-                recurringOperationId: recurringOperation.id,
-                data: {
-                  reminder_date: subtractDaysFromDateString(earliestDate, reminder.offsetDays),
-                },
-              });
-            } catch {
-              toast.success('Операция создана, но не удалось добавить напоминание');
-            }
-          }
-        }
       }
 
       setStep('success');
@@ -394,7 +262,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
   };
 
   if (step === 'success') {
-    return <OperationSuccessScreen type={type} propertyId={basicInfo.propertyId} />;
+    return <OperationSuccessScreen type={operationType} propertyId={basicInfo.propertyId} />;
   }
 
   const currentStepNumber = stepNumber[step];
@@ -442,9 +310,10 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
       <div className={styles.content}>
         {step === 'basic' && (
           <OperationBasicInfoStep
-            type={type}
+            type={operationType}
             data={basicInfo}
             onChange={setBasicInfo}
+            onTypeChange={handleTypeChange}
             errors={basicErrors}
             readonly={readonly}
           />

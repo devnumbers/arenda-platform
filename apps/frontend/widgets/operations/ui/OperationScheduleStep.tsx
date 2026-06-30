@@ -29,14 +29,6 @@ export function OperationScheduleStep({
     onChange({ ...data, date: event.currentTarget.value || undefined });
   };
 
-  const handlePaymentDayChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const value = event.currentTarget.value;
-    onChange({
-      ...data,
-      paymentDay: value === '' ? undefined : Number(value),
-    });
-  };
-
   const handleEndDateChange = (event: ChangeEvent<HTMLInputElement>) => {
     onChange({ ...data, endDate: event.currentTarget.value || undefined });
   };
@@ -62,30 +54,15 @@ export function OperationScheduleStep({
           error={errors?.date}
         />
         {recurring && (
-          <>
-            <TextField
-              label="День операции"
-              placeholder="1–31"
-              type="number"
-              min={1}
-              max={31}
-              required
-              fullWidth
-              disabled={readonly}
-              value={data.paymentDay ?? ''}
-              onChange={handlePaymentDayChange}
-              error={errors?.paymentDay}
-            />
-            <TextField
-              label="Дата окончания (необязательно)"
-              type="date"
-              fullWidth
-              disabled={readonly}
-              value={data.endDate ?? ''}
-              onChange={handleEndDateChange}
-              error={errors?.endDate}
-            />
-          </>
+          <TextField
+            label="Дата окончания (необязательно)"
+            type="date"
+            fullWidth
+            disabled={readonly}
+            value={data.endDate ?? ''}
+            onChange={handleEndDateChange}
+            error={errors?.endDate}
+          />
         )}
       </div>
     </div>

@@ -56,6 +56,7 @@ type RecurringOperationRepository interface {
 	UpdateStatusByLeaseID(ctx context.Context, leaseID, ownerID uuid.UUID, status string) error
 	SetReminderOffset(ctx context.Context, ownerID, recID uuid.UUID, offsetDays int) error
 	DeleteByLease(ctx context.Context, leaseID uuid.UUID) error
+	SoftDelete(ctx context.Context, id, ownerID uuid.UUID) error
 	WithTx(tx transaction.Tx) RecurringOperationRepository
 }
 
@@ -115,6 +116,7 @@ type OperationRepository interface {
 	SoftDeleteOperation(ctx context.Context, id, ownerID uuid.UUID) error
 	DeleteUneditedFutureOperationsByLease(ctx context.Context, leaseID uuid.UUID, after time.Time) error
 	DeleteUneditedFutureOperationsByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID, after time.Time) error
+	DeleteFutureGeneratedOperations(ctx context.Context, recurringOperationID, ownerID uuid.UUID) error
 	DeleteUneditedOperationsByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID, from time.Time) error
 	DeleteOperationsOutsideLeaseRange(ctx context.Context, leaseID uuid.UUID, start time.Time, end *time.Time) error
 	DeleteUneditedOperationsByLease(ctx context.Context, leaseID uuid.UUID, from time.Time) error

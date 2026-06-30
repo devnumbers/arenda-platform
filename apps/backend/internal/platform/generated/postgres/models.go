@@ -186,6 +186,7 @@ type Operation struct {
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
 	Status               string             `json:"status"`
 	Name                 string             `json:"name"`
+	ReminderOffsetDays   pgtype.Int4        `json:"reminder_offset_days"`
 }
 
 type PaymentMethod struct {
@@ -239,6 +240,7 @@ type RecurringOperation struct {
 	Status             string             `json:"status"`
 	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
 	Name               string             `json:"name"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Reminder struct {

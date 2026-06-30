@@ -123,6 +123,18 @@ func (r *lockingFakeRecurringOperationRepo) DeleteByLease(_ context.Context, _ u
 	return nil
 }
 
+func (r *lockingFakeRecurringOperationRepo) SoftDelete(_ context.Context, id, _ uuid.UUID) error {
+	// The caller already holds the lock via GetByIDAndOwnerForUpdate.
+	if _, ok := r.recs[id]; !ok {
+		return ErrNotFound
+	}
+	rec := r.recs[id]
+	now := time.Now()
+	rec.DeletedAt = &now
+	r.recs[id] = rec
+	return nil
+}
+
 func (r *lockingFakeRecurringOperationRepo) WithTx(tx transaction.Tx) RecurringOperationRepository {
 	return &lockingFakeRecurringOperationRepo{
 		lock: r.lock,
