@@ -1001,6 +1001,7 @@ func (s *RecurringOperationService) buildOperations(
 			continue
 		}
 
+		sourceDate := d
 		ops = append(ops, domain.Operation{
 			OwnerID:              rec.OwnerID,
 			PropertyID:           rec.PropertyID,
@@ -1012,6 +1013,7 @@ func (s *RecurringOperationService) buildOperations(
 			Name:                 rec.Name,
 			AmountKopecks:        rec.AmountKopecks,
 			OperationDate:        d,
+			SourceOperationDate:  &sourceDate,
 			Comment:              rec.Comment,
 			ReminderOffsetDays:   rec.ReminderOffsetDays,
 			IsException:          false,

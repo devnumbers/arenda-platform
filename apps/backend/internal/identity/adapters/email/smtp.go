@@ -28,6 +28,10 @@ func NewSMTPSender(cfg SMTPConfig) *SMTPSender {
 }
 
 func (s *SMTPSender) Send(ctx context.Context, email domain.Email, code string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	addr := fmt.Sprintf("%s:%s", s.cfg.Host, s.cfg.Port)
 	subject := "Код для входа в Arenda"
 	body := fmt.Sprintf("Ваш код для входа: %s\n\nКод действителен 5 минут.", code)

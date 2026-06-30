@@ -5,12 +5,7 @@ import { DatePicker } from '@heroui/react/date-picker';
 import { DateField } from '@heroui/react/date-field';
 import { Calendar } from '@heroui/react/calendar';
 import { Label } from '@heroui/react/label';
-import {
-  today,
-  getLocalTimeZone,
-  parseDate,
-  type DateValue,
-} from '@internationalized/date';
+import { parseDate, type DateValue } from '@internationalized/date';
 import { Button } from '@/shared/ui/button';
 import type { TenantContact } from '@/entities/tenant-contact/model/types';
 import { PaymentDayPicker } from './PaymentDayPicker';
@@ -47,8 +42,6 @@ export function LeaseDatesStep({
   isLoading,
   error,
 }: LeaseDatesStepProps): JSX.Element {
-  const minDate = today(getLocalTimeZone());
-
   const handleStartChange = (value: DateValue | null) => {
     if (!value) return;
     onStartDateChange(value.toString());
@@ -83,7 +76,6 @@ export function LeaseDatesStep({
         <PaymentDayPicker value={paymentDay} onChange={onPaymentDayChange} />
         <div className={styles.dateRow}>
           <DatePicker
-            minValue={minDate}
             value={startDate ? parseDate(startDate) : null}
             onChange={handleStartChange}
             className={styles.dateField}
@@ -122,7 +114,7 @@ export function LeaseDatesStep({
           </DatePicker>
 
           <DatePicker
-            minValue={startDate ? parseDate(startDate) : minDate}
+            minValue={startDate ? parseDate(startDate) : undefined}
             value={endDate ? parseDate(endDate) : null}
             onChange={handleEndChange}
             className={styles.dateField}

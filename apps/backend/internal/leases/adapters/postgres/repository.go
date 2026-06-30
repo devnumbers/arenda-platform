@@ -766,6 +766,7 @@ func (r *OperationRepository) Create(ctx context.Context, op domain.Operation) (
 		Name:                 op.Name,
 		AmountKopecks:        op.AmountKopecks,
 		OperationDate:        pgconv.DateToPgtype(op.OperationDate),
+		SourceOperationDate:  pgconv.DatePtrToPgtype(op.SourceOperationDate),
 		Comment:              pgtype.Text{String: op.Comment, Valid: true},
 		IsException:          op.IsException,
 		Status:               string(op.Status),
@@ -803,6 +804,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 			op.Name,
 			op.AmountKopecks,
 			pgconv.DateToPgtype(op.OperationDate),
+			pgconv.DatePtrToPgtype(op.SourceOperationDate),
 			pgtype.Text{String: op.Comment, Valid: true},
 			op.IsException,
 			string(op.Status),
@@ -817,7 +819,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 
 	_, err := copier.CopyFrom(ctx, pgx.Identifier{"operations"}, []string{
 		"owner_id", "property_id", "lease_id", "recurring_operation_id",
-		"type", "category", "name", "amount_kopecks", "operation_date", "comment", "is_exception", "status",
+		"type", "category", "name", "amount_kopecks", "operation_date", "source_operation_date", "comment", "is_exception", "status",
 		"reminder_offset_days",
 	}, pgx.CopyFromRows(rows))
 	if err != nil {
@@ -1357,6 +1359,7 @@ func operationFromRow(row postgres.Operation) (domain.Operation, error) {
 		Name:                 row.Name,
 		AmountKopecks:        row.AmountKopecks,
 		OperationDate:        row.OperationDate.Time,
+		SourceOperationDate:  pgconv.DatePtrFromPgtype(row.SourceOperationDate),
 		Comment:              pgconv.TextToString(row.Comment),
 		IsException:          row.IsException,
 		CreatedAt:            row.CreatedAt.Time,

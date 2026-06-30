@@ -160,6 +160,7 @@ type Operation struct {
 	Name                 string
 	AmountKopecks        int64
 	OperationDate        time.Time
+	SourceOperationDate  *time.Time
 	Comment              string
 	ReminderOffsetDays   *int
 	IsException          bool

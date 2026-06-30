@@ -7,8 +7,10 @@ import { Icon } from '@/shared/ui/icon';
 import { Objects, UserSmall, ClockSmall } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import { formatDuration } from '@/shared/lib/format-duration';
-import { formatLeaseMonth } from '@/shared/lib/format-lease-month';
+import {
+  formatCurrentLeaseMonth,
+  formatLeaseRemainingDuration,
+} from '@/shared/lib/format-lease-card-values';
 import { getDisplayStatus } from '@/features/properties/lib/property-statuses';
 import type { PropertyWithLease } from '../lib/use-property-list-data';
 import { LeaseProgressBar } from './LeaseProgressBar';
@@ -94,6 +96,12 @@ export function PropertyCard({ property }: PropertyCardProps): JSX.Element {
   const action = getPropertyAction(property);
 
   const showLeaseInfo = lease !== null;
+  const remaining = lease
+    ? formatLeaseRemainingDuration(lease.startDate, lease.endDate)
+    : '';
+  const monthLabel = lease
+    ? formatCurrentLeaseMonth(lease.startDate, lease.status)
+    : '';
 
   return (
     <article className={styles.root}>
@@ -117,9 +125,7 @@ export function PropertyCard({ property }: PropertyCardProps): JSX.Element {
         <div className={styles.lease}>
           <div className={styles.leaseRow}>
             <span className={styles.rent}>{formatMoneyKopecks(lease.rentKopecks)}</span>
-            <span className={styles.duration}>
-              {lease.endDate ? formatDuration(lease.startDate, lease.endDate) : ''}
-            </span>
+            <span className={styles.duration}>{remaining}</span>
           </div>
 
           {lease.endDate && (
@@ -141,7 +147,7 @@ export function PropertyCard({ property }: PropertyCardProps): JSX.Element {
               <Icon size="xs">
                 <ClockSmall />
               </Icon>
-              {formatLeaseMonth(lease.startDate)}
+              {monthLabel}
             </span>
           </div>
         </div>

@@ -36,7 +36,7 @@ func (f *fakeSessionRepo) WithTx(_ transaction.Tx) SessionRepository { return f 
 
 func TestAuthServiceLogoutAll(t *testing.T) {
 	repo := &fakeSessionRepo{}
-	svc := NewAuthService(nil, nil, nil, repo, nil, nil, nil, nil, nil)
+	svc := NewAuthService(nil, nil, nil, repo, nil, nil, nil, nil, nil, nil)
 
 	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	if err := svc.LogoutAll(context.Background(), userID); err != nil {
@@ -69,7 +69,7 @@ func (failingSessionRepo) DeleteExpiredBeforeBatch(_ context.Context, _ time.Tim
 func (failingSessionRepo) WithTx(_ transaction.Tx) SessionRepository { return failingSessionRepo{} }
 
 func TestAuthServiceLogoutAllPropagatesError(t *testing.T) {
-	svc := NewAuthService(nil, nil, nil, failingSessionRepo{}, nil, nil, nil, nil, nil)
+	svc := NewAuthService(nil, nil, nil, failingSessionRepo{}, nil, nil, nil, nil, nil, nil)
 
 	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	err := svc.LogoutAll(context.Background(), userID)
@@ -112,6 +112,11 @@ func (f *fakeUserRepo) UpdatePhone(_ context.Context, _ uuid.UUID, phone domain.
 	f.user.Phone = phone
 	return f.user, nil
 }
+func (f *fakeUserRepo) UpdateEmailVerified(_ context.Context, _ uuid.UUID, email string, verifiedAt *time.Time) (domain.User, error) {
+	f.user.Email = &email
+	f.user.EmailVerifiedAt = verifiedAt
+	return f.user, nil
+}
 func (f *fakeUserRepo) WithTx(_ transaction.Tx) UserRepository { return f }
 
 func TestUpdateUserClearsName(t *testing.T) {
@@ -128,7 +133,7 @@ func TestUpdateUserClearsName(t *testing.T) {
 	user.Name = &name
 
 	repo := &fakeUserRepo{user: user}
-	svc := NewAuthService(repo, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := NewAuthService(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	updated, err := svc.UpdateUser(context.Background(), user.ID, UpdateUserCommand{
 		Name: domain.Optional[string]{Set: true},
@@ -166,7 +171,7 @@ func TestUpdateUser_RejectsDuplicateEmail(t *testing.T) {
 	other.Email = &email
 
 	repo := &fakeUserRepo{user: current, byEmail: other}
-	svc := NewAuthService(repo, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := NewAuthService(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	_, err = svc.UpdateUser(context.Background(), current.ID, UpdateUserCommand{
 		Email: domain.Optional[string]{Set: true, Value: email},
@@ -200,7 +205,7 @@ func TestUpdateUser_RejectsDuplicateEmailCaseInsensitive(t *testing.T) {
 	other.Email = &email
 
 	repo := &fakeUserRepo{user: current, byEmail: other}
-	svc := NewAuthService(repo, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := NewAuthService(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	_, err = svc.UpdateUser(context.Background(), current.ID, UpdateUserCommand{
 		Email: domain.Optional[string]{Set: true, Value: "User@Example.com"},
@@ -225,7 +230,7 @@ func TestUpdateUser_AllowsOwnEmail(t *testing.T) {
 	user.Email = &email
 
 	repo := &fakeUserRepo{user: user, byEmail: user}
-	svc := NewAuthService(repo, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := NewAuthService(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	updated, err := svc.UpdateUser(context.Background(), user.ID, UpdateUserCommand{
 		Email: domain.Optional[string]{Set: true, Value: email},

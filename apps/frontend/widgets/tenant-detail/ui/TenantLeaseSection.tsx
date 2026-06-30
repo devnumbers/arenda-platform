@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import { formatDuration } from '@/shared/lib/format-duration';
+import { formatLeaseRemainingDuration } from '@/shared/lib/format-lease-card-values';
 import { useProperty } from '@/features/properties/api';
 import { PropertyDetailSection } from '@/widgets/property-detail';
 import { getLeaseStatusLabel } from '../lib/get-lease-status-label';
@@ -19,8 +19,8 @@ export function TenantLeaseSection({ lease }: TenantLeaseSectionProps): JSX.Elem
   const propertyQuery = useProperty(lease.propertyId);
   const property = propertyQuery.data;
   const isPropertyError = propertyQuery.isError;
-  const endDate = lease.endDate ?? lease.startDate;
   const propertyHref = ROUTES.property(lease.propertyId);
+  const remaining = formatLeaseRemainingDuration(lease.startDate, lease.endDate);
 
   return (
     <PropertyDetailSection>
@@ -40,9 +40,7 @@ export function TenantLeaseSection({ lease }: TenantLeaseSectionProps): JSX.Elem
               ? 'Не удалось загрузить адрес'
               : (property?.address ?? 'Загрузка адреса…')}
           </span>
-          <span className={styles.duration}>
-            {formatDuration(lease.startDate, endDate)}
-          </span>
+          <span className={styles.duration}>{remaining}</span>
         </div>
       </NextLink>
     </PropertyDetailSection>

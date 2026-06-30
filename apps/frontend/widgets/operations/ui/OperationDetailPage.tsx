@@ -146,7 +146,7 @@ function OperationDetailCard({
   const canComplete = operation.status === 'pending' || operation.status === 'overdue';
   const canMarkIncomplete = operation.status === 'paid' || operation.status === 'received';
   const isArchived = property?.status === 'archived';
-  const viewOnly = readonly || isArchived || Boolean(operation.lease_id);
+  const viewOnly = readonly || isArchived;
 
   const handleComplete = () => {
     completeMutation.mutate({
@@ -176,7 +176,11 @@ function OperationDetailCard({
       {
         onSuccess: () => {
           setIsDeleteModalOpen(false);
-          router.push(ROUTES.financeOperations);
+          router.push(
+            operation.lease_id
+              ? ROUTES.lease(operation.lease_id)
+              : ROUTES.financeOperations,
+          );
         },
       },
     );

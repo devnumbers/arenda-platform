@@ -244,15 +244,56 @@ function TermsCard({ lease }: { readonly lease: LeaseResponse }): JSX.Element {
 
 function OperationsSection({
   operations,
+  isLoading,
+  isError,
+  isFetching,
+  onRetry,
 }: {
   readonly operations: ReadonlyArray<OperationResponse>;
+  readonly isLoading: boolean;
+  readonly isError: boolean;
+  readonly isFetching: boolean;
+  readonly onRetry: () => void;
 }): JSX.Element {
+  if (isLoading) {
+    return (
+      <PropertyDetailSection>
+        <h2 className={styles.sectionTitle}>Арендная плата</h2>
+        <div className={styles.card}>
+          <FinanceLoading />
+        </div>
+      </PropertyDetailSection>
+    );
+  }
+
+  if (isError) {
+    return (
+      <PropertyDetailSection>
+        <h2 className={styles.sectionTitle}>Арендная плата</h2>
+        <div className={styles.card}>
+          <p className={styles.emptyText}>
+            Не удалось загрузить арендные операции.
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="medium"
+            loading={isFetching}
+            onClick={onRetry}
+          >
+            Повторить
+          </Button>
+        </div>
+      </PropertyDetailSection>
+    );
+  }
+
   if (operations.length === 0) {
     return (
       <PropertyDetailSection>
-        <h2 className={styles.sectionTitle}>Операции</h2>
+        <h2 className={styles.sectionTitle}>Арендная плата</h2>
         <div className={styles.card}>
-          <p className={styles.emptyText}>Операций пока нет</p>
+          <p className={styles.emptyText}>Арендных операций пока нет</p>
         </div>
       </PropertyDetailSection>
     );
@@ -260,7 +301,7 @@ function OperationsSection({
 
   return (
     <PropertyDetailSection>
-      <h2 className={styles.sectionTitle}>Операции</h2>
+      <h2 className={styles.sectionTitle}>Арендная плата</h2>
       <ul className={styles.operationsList}>
         {operations.map((operation) => (
           <li key={operation.id}>
@@ -298,13 +339,15 @@ function LeaseEditForm({
   const [errors, setErrors] = useState<FormErrors>({});
 
   const handleTenantChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    setForm((prev) => ({ ...prev, tenantContactId: event.currentTarget.value }));
+    const tenantContactId = event.currentTarget.value;
+    setForm((prev) => ({ ...prev, tenantContactId }));
   };
 
   const handleChange =
     (field: keyof FormData) =>
     (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      setForm((prev) => ({ ...prev, [field]: event.currentTarget.value }));
+      const value = event.currentTarget.value;
+      setForm((prev) => ({ ...prev, [field]: value }));
     };
 
   const validate = (): boolean => {
@@ -499,7 +542,12 @@ export function LeaseDetailPage({ id }: LeaseDetailPageProps): JSX.Element {
   const [isEditing, setIsEditing] = useState(false);
 
   const leaseQuery = useLease(id);
-  const operationsQuery = useOperations({ lease_id: id });
+  const rentOperationsQuery = useOperations({ lease_id: id, category: 'rent' });
+  const depositReturnQuery = useOperations({
+    lease_id: id,
+    category: 'deposit_return',
+    limit: 1,
+  });
   const { data: subscription } = useSubscription();
   const readonly = isSubscriptionReadonly(subscription);
 
@@ -507,23 +555,41 @@ export function LeaseDetailPage({ id }: LeaseDetailPageProps): JSX.Element {
   const returnDeposit = useReturnDeposit();
 
   const lease = leaseQuery.data;
-  const operations = useMemo(
-    () => operationsQuery.data?.items ?? [],
-    [operationsQuery.data],
+  const rentOperations = useMemo(
+    () => rentOperationsQuery.data?.items ?? [],
+    [rentOperationsQuery.data],
+  );
+  const hasDepositReturn = useMemo(
+    () => (depositReturnQuery.data?.items ?? []).length > 0,
+    [depositReturnQuery.data],
   );
 
-  const isLoading = leaseQuery.isPending || operationsQuery.isPending;
-  const isError = leaseQuery.isError || operationsQuery.isError;
-  const isFetching = leaseQuery.isFetching || operationsQuery.isFetching;
+  const isLoading = leaseQuery.isPending;
+  const isError = leaseQuery.isError;
+  const isFetching = leaseQuery.isFetching;
+  const canCompleteLease =
+    lease !== undefined &&
+    !readonly &&
+    (lease.status === 'active' || lease.status === 'requires_action');
+  const canReturnDeposit =
+    lease !== undefined &&
+    !readonly &&
+    !depositReturnQuery.isPending &&
+    !depositReturnQuery.isError &&
+    (lease.status === 'completed' || lease.status === 'requires_action') &&
+    lease.deposit_amount_kopecks > 0 &&
+    !hasDepositReturn;
+  const showLeaseActions = canCompleteLease || canReturnDeposit;
 
   const handleRetry = useCallback(() => {
     if (leaseQuery.isError) {
       leaseQuery.refetch();
     }
-    if (operationsQuery.isError) {
-      operationsQuery.refetch();
-    }
-  }, [leaseQuery, operationsQuery]);
+  }, [leaseQuery]);
+
+  const handleOperationsRetry = useCallback(() => {
+    rentOperationsQuery.refetch();
+  }, [rentOperationsQuery]);
 
   const handleToggleEdit = useCallback(() => {
     setIsEditing((prev) => !prev);
@@ -582,32 +648,42 @@ export function LeaseDetailPage({ id }: LeaseDetailPageProps): JSX.Element {
               <TenantCard tenantContact={lease.tenant_contact} />
               <TermsCard lease={lease} />
 
-              {lease.status !== 'completed' && lease.status !== 'archived' && (
+              {showLeaseActions && (
                 <div className={styles.actions}>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="large"
-                    fullWidth
-                    loading={completeLease.isPending}
-                    onClick={handleComplete}
-                  >
-                    Завершить аренду
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="large"
-                    fullWidth
-                    loading={returnDeposit.isPending}
-                    onClick={handleReturnDeposit}
-                  >
-                    Вернуть залог
-                  </Button>
+                  {canCompleteLease && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="large"
+                      fullWidth
+                      loading={completeLease.isPending}
+                      onClick={handleComplete}
+                    >
+                      Завершить аренду
+                    </Button>
+                  )}
+                  {canReturnDeposit && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="large"
+                      fullWidth
+                      loading={returnDeposit.isPending}
+                      onClick={handleReturnDeposit}
+                    >
+                      Вернуть залог
+                    </Button>
+                  )}
                 </div>
               )}
 
-              <OperationsSection operations={operations} />
+              <OperationsSection
+                operations={rentOperations}
+                isLoading={rentOperationsQuery.isPending}
+                isError={rentOperationsQuery.isError}
+                isFetching={rentOperationsQuery.isFetching}
+                onRetry={handleOperationsRetry}
+              />
             </>
           )}
         </>

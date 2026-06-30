@@ -17,6 +17,7 @@ import (
 	paymenttkassa "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/tkassa"
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
+	identityemail "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/email"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
 	fakesms "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/sms"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
@@ -147,7 +148,7 @@ func run(fallback *slog.Logger) error {
 	appLogger.InfoContext(ctx, "payment provider initialized", "provider", cfg.PaymentProvider, "initialized", paymentProvider != nil)
 
 	identityUserRepo := identitypg.NewUserRepository(db, encryptor)
-	identitySMSRepo := identitypg.NewSMSCodeRepository(db, encryptor)
+	identityCodeRepo := identitypg.NewLoginCodeRepository(db, encryptor)
 	identityAttemptRepo := identitypg.NewAttemptRepository(db, encryptor)
 	identitySessionRepo := identitypg.NewSessionRepository(db, encryptor)
 
@@ -159,7 +160,7 @@ func run(fallback *slog.Logger) error {
 		appLogger.WarnContext(ctx, "skipping phone encryption backfill: ENCRYPTION_KEY is empty")
 	}
 
-	var smsSender identityapp.Sender
+	var smsSender identityapp.SMSSender
 	switch cfg.SMSSender {
 	case "", "fake":
 		if cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
@@ -170,12 +171,15 @@ func run(fallback *slog.Logger) error {
 		return fmt.Errorf("unsupported SMS_SENDER: %s", cfg.SMSSender)
 	}
 
+	emailSender := identityemail.NewFakeSender(appLogger)
+
 	authService := identityapp.NewAuthService(
 		identityUserRepo,
-		identitySMSRepo,
+		identityCodeRepo,
 		identityAttemptRepo,
 		identitySessionRepo,
 		smsSender,
+		emailSender,
 		realClock{},
 		onboardingService,
 		platformpostgres.NewBeginner(pool, appLogger),
@@ -288,7 +292,7 @@ func run(fallback *slog.Logger) error {
 	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(billingService, pool, realClock{}, cfg.PaymentReconciliationWorkerInterval, appLogger)
 	operationOverdueWorker := scheduler.NewOperationOverdueWorker(operationService, realClock{}, cfg.OverdueOperationWorkerInterval, 100, appLogger)
 
-	dataCleaner := cleaner.New(identitySessionRepo, identitySMSRepo, identityAttemptRepo, realClock{}, 1*time.Hour, 7*24*time.Hour, appLogger)
+	dataCleaner := cleaner.New(identitySessionRepo, identityCodeRepo, identityAttemptRepo, realClock{}, 1*time.Hour, 7*24*time.Hour, appLogger)
 	var workers sync.WaitGroup
 	workers.Add(6)
 	go func() { defer workers.Done(); dataCleaner.Run(ctx) }()

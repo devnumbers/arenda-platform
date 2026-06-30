@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 )
 
@@ -39,9 +39,11 @@ func (r *RentService) GenerateRentOperations(
 	}
 
 	now := r.clock.Now()
+	today := timeutil.Date(now)
 	ops := make([]domain.Operation, 0, len(dates))
 
 	for _, d := range dates {
+		sourceDate := d
 		ops = append(ops, domain.Operation{
 			OwnerID:              ownerID,
 			PropertyID:           lease.PropertyID,
@@ -49,10 +51,11 @@ func (r *RentService) GenerateRentOperations(
 			RecurringOperationID: recurringOpID,
 			Type:                 domain.OperationTypeIncome,
 			Category:             domain.OperationCategoryRent,
-			Status:               domain.OperationStatusPending,
+			Status:               rentOperationStatus(d, today),
 			Name:                 "Арендная плата",
 			AmountKopecks:        lease.RentAmountKopecks,
 			OperationDate:        d,
+			SourceOperationDate:  &sourceDate,
 			IsException:          false,
 			CreatedAt:            now,
 			UpdatedAt:            now,
@@ -60,6 +63,13 @@ func (r *RentService) GenerateRentOperations(
 	}
 
 	return ops
+}
+
+func rentOperationStatus(operationDate, today time.Time) domain.OperationStatus {
+	if timeutil.Date(operationDate).Before(timeutil.Date(today)) {
+		return domain.OperationStatusReceived
+	}
+	return domain.OperationStatusPending
 }
 
 // RegenerateFutureOperations deletes unedited future rent operations for a lease

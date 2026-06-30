@@ -104,6 +104,7 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.U
 			if _, ok := existingDates[d]; ok {
 				continue
 			}
+			sourceDate := d
 			ops = append(ops, leasesdomain.Operation{
 				OwnerID:              rec.OwnerID,
 				PropertyID:           rec.PropertyID,
@@ -114,6 +115,7 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.U
 				Status:               leasesdomain.OperationStatusPending,
 				AmountKopecks:        rec.AmountKopecks,
 				OperationDate:        d,
+				SourceOperationDate:  &sourceDate,
 				Comment:              rec.Comment,
 				IsException:          false,
 				CreatedAt:            createdAt,

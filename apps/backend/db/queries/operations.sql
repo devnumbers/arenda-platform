@@ -1,31 +1,32 @@
 -- name: CreateOperation :one
 INSERT INTO operations (
     owner_id, property_id, lease_id, recurring_operation_id,
-    type, category, name, amount_kopecks, operation_date, comment, is_exception, status,
+    type, category, name, amount_kopecks, operation_date, source_operation_date, comment, is_exception, status,
     reminder_offset_days
 )
 VALUES (
     $1, $2, $3, $4,
-    $5, $6, $7, $8, $9, $10, $11, $12,
-    $13
+    $5, $6, $7, $8, $9, $10, $11, $12, $13,
+    $14
 )
 RETURNING *;
 
 -- name: ListOperationsByLease :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE lease_id = $1
   AND deleted_at IS NULL
 ORDER BY operation_date DESC;
 
 -- name: ListOperationDatesByLease :many
-SELECT operation_date FROM operations
+SELECT COALESCE(source_operation_date, operation_date)::date AS operation_date FROM operations
 WHERE lease_id = $1
-  AND deleted_at IS NULL;
+  AND (recurring_operation_id IS NOT NULL OR category = 'rent')
+  AND (deleted_at IS NULL OR is_exception = true);
 
 -- name: ListOperationDatesByRecurringOperation :many
-SELECT operation_date FROM operations
+SELECT COALESCE(source_operation_date, operation_date)::date AS operation_date FROM operations
 WHERE recurring_operation_id = $1
-  AND deleted_at IS NULL;
+  AND (deleted_at IS NULL OR is_exception = true);
 
 -- name: UpdateFutureGeneratedOperationReminderOffsets :execrows
 UPDATE operations
@@ -39,7 +40,7 @@ WHERE recurring_operation_id = $2
   AND reminder_offset_days IS DISTINCT FROM $1;
 
 -- name: ListOperationsByRecurringOperation :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE recurring_operation_id = $1
   AND deleted_at IS NULL
 ORDER BY operation_date ASC;
@@ -68,7 +69,7 @@ WHERE recurring_operation_id = $1
   AND deleted_at IS NULL;
 
 -- name: ListFutureOperationsByLease :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE lease_id = $1 AND operation_date > $2
   AND deleted_at IS NULL
 ORDER BY operation_date ASC;
@@ -89,7 +90,6 @@ WHERE lease_id = $1
 -- name: DeleteOperationsOutsideLeaseRange :exec
 DELETE FROM operations
 WHERE lease_id = $1
-  AND deleted_at IS NULL
   AND (
       operation_date < $2
       OR ($3::date IS NOT NULL AND operation_date > $3::date)
@@ -103,25 +103,25 @@ WHERE lease_id = $1
   AND deleted_at IS NULL;
 
 -- name: ListOperationsByProperty :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE owner_id = $1 AND property_id = $2
   AND deleted_at IS NULL
 ORDER BY operation_date DESC;
 
 -- name: ListOperationsByPropertyWithStatuses :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE owner_id = $1 AND property_id = $2
   AND status = ANY(sqlc.arg('statuses')::text[])
   AND deleted_at IS NULL
 ORDER BY operation_date DESC;
 
 -- name: GetOperationByIDAndOwner :one
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL;
 
 -- name: GetOperationByIDAndOwnerForUpdate :one
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL
 FOR UPDATE;
@@ -155,7 +155,11 @@ RETURNING *;
 -- name: SoftDeleteOperation :one
 UPDATE operations
 SET deleted_at = now(),
-    updated_at = now()
+    updated_at = now(),
+    is_exception = CASE
+        WHEN recurring_operation_id IS NOT NULL OR (lease_id IS NOT NULL AND category = 'rent') THEN true
+        ELSE is_exception
+    END
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL
 RETURNING *;
@@ -218,7 +222,7 @@ SELECT EXISTS(
 ) AS has_deposit_return;
 
 -- name: ListOperationsByOwner :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE owner_id = $1
   AND deleted_at IS NULL
   AND (sqlc.arg('types')::text[] = '{}'::text[] OR type = ANY(sqlc.arg('types')::text[]))
@@ -233,7 +237,7 @@ ORDER BY operation_date DESC, id DESC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
 -- name: ListOperationsByOwnerAsc :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE owner_id = $1
   AND deleted_at IS NULL
   AND (sqlc.arg('types')::text[] = '{}'::text[] OR type = ANY(sqlc.arg('types')::text[]))

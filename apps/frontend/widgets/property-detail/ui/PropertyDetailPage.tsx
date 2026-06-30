@@ -7,7 +7,7 @@ import {toast} from 'react-toastify';
 import {ROUTES} from '@/shared/config/routes';
 import {useArchiveProperty, useProperty, useUnarchiveProperty, useUpdateProperty} from '@/features/properties/api/hooks';
 import {useCompleteLease, usePropertyLeases, useReturnDeposit,} from '@/features/leases/api/hooks';
-import {useOperationsByProperty, usePropertyOperationsSummary,} from '@/features/operations/api/hooks';
+import {useOperations, useOperationsByProperty, usePropertyOperationsSummary, type OperationsFilters,} from '@/features/operations/api/hooks';
 import {ApiError} from '@/shared/api/errors';
 import {findCurrentLease, findLastLease, getPropertyPageStatus,} from '../lib/get-property-page-status';
 import {PropertyDetailHeader} from './PropertyDetailHeader';
@@ -63,6 +63,20 @@ export function PropertyDetailPage(): JSX.Element {
     );
     const currentLease = useMemo(() => findCurrentLease(leases), [leases]);
     const lastLease = useMemo(() => findLastLease(leases), [leases]);
+    const payableRentFilters = useMemo<OperationsFilters>(
+        () => ({
+            lease_id: currentLease?.id,
+            category: ['rent'],
+            status: ['pending', 'overdue'],
+            sort: 'operation_date_asc',
+            limit: 1,
+        }),
+        [currentLease?.id],
+    );
+    const payableRentQuery = useOperations(payableRentFilters, {
+        enabled: Boolean(currentLease?.id),
+    });
+    const isPayRentLoading = Boolean(currentLease) && payableRentQuery.isFetching;
 
     const handleToggleMaintenance = useCallback(() => {
         if (!property) return;
@@ -134,6 +148,21 @@ export function PropertyDetailPage(): JSX.Element {
         router.push(ROUTES.propertyEdit(id));
     }, [id, router]);
 
+    const handlePayRent = useCallback(() => {
+        if (currentLease) {
+            if (payableRentQuery.isFetching) return;
+            const nextRentOperation = payableRentQuery.data?.items[0];
+            router.push(
+                nextRentOperation
+                    ? ROUTES.financeOperation(nextRentOperation.id)
+                    : ROUTES.lease(currentLease.id),
+            );
+            return;
+        }
+
+        router.push(ROUTES.propertyOperations(id));
+    }, [currentLease, id, payableRentQuery.data, payableRentQuery.isFetching, router]);
+
     const handleBlockedContinue = useCallback(() => {
         setBlockedOpen(false);
         handleEndLease();
@@ -195,7 +224,8 @@ export function PropertyDetailPage(): JSX.Element {
                 status={pageStatus}
                 overdueRentCount={summaryQuery.data?.overdue_rent_count ?? 0}
                 propertyId={id}
-                onPayRent={() => router.push(ROUTES.finance)}
+                onPayRent={handlePayRent}
+                isPayRentLoading={isPayRentLoading}
             />
 
             <PropertyTenantCard lease={property.activeLease}/>

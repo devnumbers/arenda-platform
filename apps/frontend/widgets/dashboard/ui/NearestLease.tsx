@@ -9,7 +9,10 @@ import type { components } from '@/shared/api/generated';
 import type { Property } from '@/entities/property/model/types';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { ROUTES } from '@/shared/config/routes';
-import { formatRemainingDuration, formatCurrentLeaseMonth } from '../lib/lease-helpers';
+import {
+  formatCurrentLeaseMonth,
+  formatLeaseRemainingDuration,
+} from '@/shared/lib/format-lease-card-values';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { SectionHeader } from './SectionHeader';
 import { StatusBadge } from './StatusBadge';
@@ -92,8 +95,8 @@ export function NearestLease({ leases, properties, isLoading }: NearestLeaseProp
   const propertyName = getPropertyName(lease.property_id, properties);
   const tenantName = lease.tenant_contact?.name ?? null;
   const amount = formatMoneyKopecks(lease.rent_amount_kopecks, { round: true });
-  const remaining = formatRemainingDuration(lease.start_date, lease.end_date);
-  const currentMonth = formatCurrentLeaseMonth(lease.start_date);
+  const remaining = formatLeaseRemainingDuration(lease.start_date, lease.end_date);
+  const currentMonth = formatCurrentLeaseMonth(lease.start_date, lease.status);
 
   return (
     <section className={styles.section}>
@@ -118,12 +121,14 @@ export function NearestLease({ leases, properties, isLoading }: NearestLeaseProp
             </Icon>
             {tenantName ?? 'Нет арендатора'}
           </span>
-          <span className={styles.footerItem}>
-            <Icon size="s">
-              <ClockSmall />
-            </Icon>
-            {currentMonth}
-          </span>
+          {currentMonth && (
+            <span className={styles.footerItem}>
+              <Icon size="s">
+                <ClockSmall />
+              </Icon>
+              {currentMonth}
+            </span>
+          )}
         </div>
       </Card>
       <div className={styles.actions}>

@@ -81,8 +81,8 @@ func (r *fakeOperationRepo) ListOperationDatesByLease(_ context.Context, leaseID
 	defer r.mu.Unlock()
 	dates := make(map[time.Time]struct{})
 	for _, op := range r.ops {
-		if op.LeaseID == leaseID && op.DeletedAt == nil {
-			dates[timeutil.Date(op.OperationDate)] = struct{}{}
+		if op.LeaseID == leaseID && operationBlocksLeaseRentSchedule(op) && (op.DeletedAt == nil || op.IsException) {
+			dates[operationSourceDate(op)] = struct{}{}
 		}
 	}
 	out := make([]time.Time, 0, len(dates))
@@ -97,8 +97,8 @@ func (r *fakeOperationRepo) ListOperationDatesByRecurringOperation(_ context.Con
 	defer r.mu.Unlock()
 	dates := make(map[time.Time]struct{})
 	for _, op := range r.ops {
-		if op.RecurringOperationID == recurringOperationID && op.DeletedAt == nil {
-			dates[timeutil.Date(op.OperationDate)] = struct{}{}
+		if op.RecurringOperationID == recurringOperationID && (op.DeletedAt == nil || op.IsException) {
+			dates[operationSourceDate(op)] = struct{}{}
 		}
 	}
 	out := make([]time.Time, 0, len(dates))
@@ -218,6 +218,9 @@ func (r *fakeOperationRepo) SoftDeleteOperation(_ context.Context, id, _ uuid.UU
 	for i := range r.ops {
 		if r.ops[i].ID == id {
 			r.ops[i].DeletedAt = &now
+			if r.ops[i].RecurringOperationID != uuid.Nil || (r.ops[i].LeaseID != uuid.Nil && r.ops[i].Category == domain.OperationCategoryRent) {
+				r.ops[i].IsException = true
+			}
 			return nil
 		}
 	}
@@ -395,6 +398,17 @@ func (r *fakeOperationRepo) WithTx(_ transaction.Tx) OperationRepository {
 	return r
 }
 
+func operationSourceDate(op domain.Operation) time.Time {
+	if op.SourceOperationDate != nil {
+		return timeutil.Date(*op.SourceOperationDate)
+	}
+	return timeutil.Date(op.OperationDate)
+}
+
+func operationBlocksLeaseRentSchedule(op domain.Operation) bool {
+	return op.RecurringOperationID != uuid.Nil || op.Category == domain.OperationCategoryRent
+}
+
 type fakeRecurringOperationRepo struct {
 	mu   sync.Mutex
 	recs map[uuid.UUID]domain.RecurringOperation
@@ -491,6 +505,192 @@ func (r *fakeRecurringOperationRepo) SoftDelete(_ context.Context, id, _ uuid.UU
 
 func (r *fakeRecurringOperationRepo) WithTx(_ transaction.Tx) RecurringOperationRepository {
 	return r
+}
+
+func TestGenerateRentOperations_BackdatedLeaseMarksPastPeriodsReceived(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	leaseID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	recID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	endDate := date(2024, 5, 31)
+
+	lease := domain.Lease{
+		ID:                leaseID,
+		OwnerID:           ownerID,
+		PropertyID:        propertyID,
+		StartDate:         date(2024, 3, 1),
+		EndDate:           &endDate,
+		RentAmountKopecks: 10000,
+		PaymentDay:        1,
+	}
+
+	svc := NewRentService(&fakeOperationRepo{}, &fakeRecurringOperationRepo{}, fakeClock{now: date(2024, 6, 30)})
+	ops := svc.GenerateRentOperations(ctx, lease, recID, ownerID)
+	if len(ops) == 0 {
+		t.Fatal("expected generated rent operations")
+	}
+
+	for _, op := range ops {
+		if op.Status != domain.OperationStatusReceived {
+			t.Fatalf("expected past rent operation %s to be received, got %s", op.OperationDate.Format("2006-01-02"), op.Status)
+		}
+	}
+}
+
+func TestRebuildSchedule_DeletedManualLeaseOperationDoesNotBlockGeneratedRent(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	leaseID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	recID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	deletedOperationID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	deletedAt := date(2024, 4, 20)
+
+	start := date(2024, 3, 1)
+	blockedDate := date(2024, 4, 1)
+
+	lease := domain.Lease{
+		ID:                leaseID,
+		OwnerID:           ownerID,
+		PropertyID:        propertyID,
+		StartDate:         start,
+		RentAmountKopecks: 10000,
+		PaymentDay:        1,
+	}
+
+	rec := domain.RecurringOperation{
+		ID:            recID,
+		OwnerID:       ownerID,
+		PropertyID:    propertyID,
+		LeaseID:       leaseID,
+		Type:          domain.OperationTypeIncome,
+		Category:      domain.OperationCategoryRent,
+		AmountKopecks: 10000,
+		StartDate:     start,
+		PaymentDay:    1,
+		Periodicity:   domain.RecurringOperationPeriodicityMonthly,
+		Status:        domain.RecurringOperationStatusActive,
+	}
+
+	opsRepo := &fakeOperationRepo{}
+	recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{recID: rec}}
+
+	_, _ = opsRepo.Create(ctx, domain.Operation{
+		ID:            deletedOperationID,
+		OwnerID:       ownerID,
+		PropertyID:    propertyID,
+		LeaseID:       leaseID,
+		Type:          domain.OperationTypeIncome,
+		Category:      domain.OperationCategoryOtherIncome,
+		AmountKopecks: 5000,
+		OperationDate: blockedDate,
+		IsException:   true,
+		DeletedAt:     &deletedAt,
+	})
+
+	svc := NewRentService(opsRepo, recRepo, fakeClock{now: date(2024, 6, 1)})
+	if err := svc.RebuildSchedule(ctx, lease, start); err != nil {
+		t.Fatalf("RebuildSchedule failed: %v", err)
+	}
+
+	finalOps, err := opsRepo.ListByLease(ctx, leaseID)
+	if err != nil {
+		t.Fatalf("list operations: %v", err)
+	}
+
+	var generatedRentOnBlockedDate bool
+	for _, op := range finalOps {
+		if op.Category == domain.OperationCategoryRent && timeutil.Date(op.OperationDate).Equal(blockedDate) {
+			generatedRentOnBlockedDate = true
+			break
+		}
+	}
+	if !generatedRentOnBlockedDate {
+		t.Fatalf("expected deleted manual lease operation not to block generated rent on %s", blockedDate.Format("2006-01-02"))
+	}
+}
+
+func TestRebuildSchedule_MovedGeneratedRentOperationBlocksOriginalScheduleDate(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	leaseID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	recID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	movedOperationID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+
+	start := date(2024, 3, 1)
+	originalScheduleDate := date(2024, 4, 1)
+	movedDate := date(2024, 4, 15)
+	now := date(2024, 6, 1)
+
+	lease := domain.Lease{
+		ID:                leaseID,
+		OwnerID:           ownerID,
+		PropertyID:        propertyID,
+		StartDate:         start,
+		RentAmountKopecks: 10000,
+		PaymentDay:        1,
+	}
+
+	rec := domain.RecurringOperation{
+		ID:            recID,
+		OwnerID:       ownerID,
+		PropertyID:    propertyID,
+		LeaseID:       leaseID,
+		Type:          domain.OperationTypeIncome,
+		Category:      domain.OperationCategoryRent,
+		AmountKopecks: 10000,
+		StartDate:     start,
+		PaymentDay:    1,
+		Periodicity:   domain.RecurringOperationPeriodicityMonthly,
+		Status:        domain.RecurringOperationStatusActive,
+	}
+
+	opsRepo := &fakeOperationRepo{}
+	recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{recID: rec}}
+
+	_, _ = opsRepo.Create(ctx, domain.Operation{
+		ID:                   movedOperationID,
+		OwnerID:              ownerID,
+		PropertyID:           propertyID,
+		LeaseID:              leaseID,
+		RecurringOperationID: recID,
+		Type:                 domain.OperationTypeIncome,
+		Category:             domain.OperationCategoryRent,
+		AmountKopecks:        10000,
+		OperationDate:        movedDate,
+		SourceOperationDate:  &originalScheduleDate,
+		IsException:          true,
+	})
+
+	svc := NewRentService(opsRepo, recRepo, fakeClock{now: now})
+	if err := svc.RebuildSchedule(ctx, lease, start); err != nil {
+		t.Fatalf("RebuildSchedule failed: %v", err)
+	}
+
+	finalOps, err := opsRepo.ListByLease(ctx, leaseID)
+	if err != nil {
+		t.Fatalf("list operations: %v", err)
+	}
+
+	var originalDateCount int
+	var movedDateCount int
+	for _, op := range finalOps {
+		switch timeutil.Date(op.OperationDate) {
+		case originalScheduleDate:
+			originalDateCount++
+		case movedDate:
+			movedDateCount++
+		}
+	}
+
+	if originalDateCount != 0 {
+		t.Fatalf("expected moved generated operation to block original date %s, got %d operation(s)", originalScheduleDate.Format("2006-01-02"), originalDateCount)
+	}
+	if movedDateCount != 1 {
+		t.Fatalf("expected moved generated operation on %s to be preserved once, got %d", movedDate.Format("2006-01-02"), movedDateCount)
+	}
 }
 
 func TestRebuildSchedule_EarlierStartDatePreservesPastOperations(t *testing.T) {
