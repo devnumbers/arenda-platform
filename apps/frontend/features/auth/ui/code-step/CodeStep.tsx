@@ -52,8 +52,8 @@ export function CodeStep({
   };
 
   const contactLabel = contactType === 'email'
-    ? `Отправили код на email ${contact}`
-    : `Отправили СМС-код на номер ${contact}`;
+    ? 'Отправили код на email'
+    : 'Отправили СМС-код на номер';
 
   const changeLabel = contactType === 'email' ? 'Изменить email' : 'Изменить номер';
 
@@ -63,7 +63,7 @@ export function CodeStep({
         <h1 className={styles.title}>Введите код</h1>
         <p className={styles.subtitle}>
           {contactLabel}{' '}
-          <span className={styles.phone}>{contact}</span>
+          <span className={styles.contact}>{contact}</span>
         </p>
       </div>
 
