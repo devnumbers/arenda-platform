@@ -115,7 +115,7 @@ func (r *lockingFakeRecurringOperationRepo) UpdateStatusByLeaseID(_ context.Cont
 	return nil
 }
 
-func (r *lockingFakeRecurringOperationRepo) SetReminderOffset(_ context.Context, _, _ uuid.UUID, _ int) error {
+func (r *lockingFakeRecurringOperationRepo) SetReminderOffset(_ context.Context, _, _ uuid.UUID, _ *int) error {
 	return nil
 }
 

@@ -4,6 +4,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  type QueryClient,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
@@ -21,6 +22,15 @@ type RecurringOperationUpdateRequest =
   components['schemas']['RecurringOperationUpdateRequest'];
 type RecurringOperationsResponse =
   components['schemas']['RecurringOperationsResponse'];
+
+function invalidateOperationLists(queryClient: QueryClient): void {
+  queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+  queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+}
+
+function invalidateRecurringOperationLists(queryClient: QueryClient): void {
+  queryClient.invalidateQueries({ queryKey: recurringOperationKeys.lists() });
+}
 
 export function useRecurringOperations(): UseQueryResult<
   RecurringOperationsResponse,
@@ -72,7 +82,7 @@ export function useCreateRecurringOperation(): UseMutationResult<
         },
       ),
     onSuccess: (_, { propertyId }) => {
-      queryClient.invalidateQueries({ queryKey: ['recurring-operations'] });
+      invalidateRecurringOperationLists(queryClient);
       queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.byProperty(propertyId),
       });
@@ -93,8 +103,8 @@ export function useUpdateRecurringOperation(): UseMutationResult<
         body: JSON.stringify(data),
       }),
     onSuccess: (_, { id, propertyId }) => {
-      queryClient.invalidateQueries({ queryKey: ['recurring-operations'] });
-      queryClient.invalidateQueries({ queryKey: ['operations'] });
+      invalidateRecurringOperationLists(queryClient);
+      invalidateOperationLists(queryClient);
       queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.byProperty(propertyId),
       });
@@ -122,7 +132,7 @@ export function usePauseRecurringOperation(): UseMutationResult<
         },
       ),
     onSuccess: (_, { id, propertyId }) => {
-      queryClient.invalidateQueries({ queryKey: ['recurring-operations'] });
+      invalidateRecurringOperationLists(queryClient);
       queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.byProperty(propertyId),
       });
@@ -148,7 +158,7 @@ export function useResumeRecurringOperation(): UseMutationResult<
         },
       ),
     onSuccess: (_, { id, propertyId }) => {
-      queryClient.invalidateQueries({ queryKey: ['recurring-operations'] });
+      invalidateRecurringOperationLists(queryClient);
       queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.byProperty(propertyId),
       });
@@ -169,11 +179,12 @@ export function useDeleteRecurringOperation(): UseMutationResult<
     mutationFn: ({ id }) =>
       apiClient<void>(`/recurring-operations/${id}`, { method: 'DELETE' }),
     onSuccess: (_, { id, propertyId }) => {
-      queryClient.invalidateQueries({ queryKey: ['recurring-operations'] });
-      queryClient.invalidateQueries({ queryKey: ['operations'] });
-      queryClient.invalidateQueries({
+      queryClient.removeQueries({
         queryKey: recurringOperationKeys.detail(id),
+        exact: true,
       });
+      invalidateRecurringOperationLists(queryClient);
+      invalidateOperationLists(queryClient);
       if (propertyId) {
         queryClient.invalidateQueries({
           queryKey: recurringOperationKeys.byProperty(propertyId),

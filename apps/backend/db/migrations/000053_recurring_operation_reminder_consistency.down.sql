@@ -1,0 +1,2 @@
+ALTER TABLE recurring_operations
+  DROP CONSTRAINT IF EXISTS recurring_operations_reminder_offset_days_check;

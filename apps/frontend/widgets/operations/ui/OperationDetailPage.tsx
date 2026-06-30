@@ -12,6 +12,7 @@ import { ArrowLeft } from '@/shared/assets/icons';
 import {
   useCompleteOperation,
   useDeleteOperation,
+  useMarkOperationIncomplete,
   useOperation,
 } from '@/features/operations/api/hooks';
 import { useProperty } from '@/features/properties/api';
@@ -56,12 +57,6 @@ function getStatusVariant(status: OperationStatus) {
 function useOperationId(): string | undefined {
   const params = useParams<{ readonly id: string }>();
   return params?.id;
-}
-
-function isFutureDate(dateString: string): boolean {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return new Date(dateString) > today;
 }
 
 function isReminderInPast(operationDate: string, offsetDays: number): boolean {
@@ -138,6 +133,7 @@ function OperationDetailCard({
 }): JSX.Element {
   const router = useRouter();
   const completeMutation = useCompleteOperation();
+  const markIncompleteMutation = useMarkOperationIncomplete();
   const deleteMutation = useDeleteOperation();
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const { data: property } = useProperty(operation.property_id);
@@ -148,12 +144,19 @@ function OperationDetailCard({
   const statusVariant = getStatusVariant(operation.status);
   const statusClass = statusVariant ? STATUS_VARIANT_CLASS[statusVariant] : '';
   const canComplete = operation.status === 'pending' || operation.status === 'overdue';
-  const future = isFutureDate(operation.operation_date);
+  const canMarkIncomplete = operation.status === 'paid' || operation.status === 'received';
   const isArchived = property?.status === 'archived';
   const viewOnly = readonly || isArchived || Boolean(operation.lease_id);
 
   const handleComplete = () => {
     completeMutation.mutate({
+      id: operation.id,
+      propertyId: operation.property_id,
+    });
+  };
+
+  const handleMarkIncomplete = () => {
+    markIncompleteMutation.mutate({
       id: operation.id,
       propertyId: operation.property_id,
     });
@@ -195,10 +198,6 @@ function OperationDetailCard({
         </span>
         <span className={styles.type}>{TYPE_LABELS[operation.type]}</span>
       </div>
-
-      {future && (
-        <span className={styles.badgeFuture}>Планируемая операция</span>
-      )}
 
       {operation.lease_id && (
         <span className={styles.badgeLease}>Создано из договора аренды</span>
@@ -259,6 +258,17 @@ function OperationDetailCard({
               onClick={handleComplete}
             >
               {isIncome ? 'Отметить полученной' : 'Отметить оплаченной'}
+            </Button>
+          )}
+          {canMarkIncomplete && (
+            <Button
+              variant="secondary"
+              size="medium"
+              loading={markIncompleteMutation.isPending}
+              disabled={readonly}
+              onClick={handleMarkIncomplete}
+            >
+              {isIncome ? 'Отметить не полученной' : 'Отметить не оплаченной'}
             </Button>
           )}
           <Button

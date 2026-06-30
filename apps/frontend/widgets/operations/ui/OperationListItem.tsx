@@ -12,23 +12,14 @@ import styles from './OperationListItem.module.css';
 
 type OperationResponse = components['schemas']['OperationResponse'];
 
-type OperationWithPropertyName = OperationResponse & {
-  property_name?: string;
-};
-
 export type OperationListItemVariant = 'default' | 'dashboard';
 
 export type OperationListItemProps = {
   readonly operation: OperationResponse;
+  readonly propertyName?: string;
   readonly showProperty?: boolean;
   readonly variant?: OperationListItemVariant;
 };
-
-function isFutureDate(dateString: string): boolean {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return new Date(dateString) > today;
-}
 
 const variantClassMap: Record<string, string> = {
   warning: styles.badgeWarning,
@@ -39,21 +30,20 @@ const variantClassMap: Record<string, string> = {
 
 export function OperationListItem({
   operation,
+  propertyName,
   showProperty = false,
   variant = 'default',
 }: OperationListItemProps): JSX.Element {
   const isDashboard = variant === 'dashboard';
-  const operationWithProperty = operation as OperationWithPropertyName;
   const isIncome = operation.type === 'income';
   const sign = isIncome ? '+' : '-';
   const amountClass = isIncome ? styles.amountIncome : styles.amountExpense;
   const statusLabel = getOperationStatusLabel(operation.status);
   const statusVariant = operationStatusOptions.find((option) => option.value === operation.status)?.variant ?? 'default';
-  const future = isFutureDate(operation.operation_date);
   const metaItems = [formatOperationDate(operation.operation_date), getCategoryLabel(operation.category)];
 
-  if (showProperty && operationWithProperty.property_name) {
-    metaItems.push(operationWithProperty.property_name);
+  if (showProperty && propertyName) {
+    metaItems.push(propertyName);
   }
 
   return (
@@ -64,7 +54,6 @@ export function OperationListItem({
       <div className={styles.main}>
         <span className={styles.nameRow}>
           <span className={styles.name}>{operation.name}</span>
-          {!isDashboard && future && <span className={styles.badgeFuture}>Планируемая</span>}
         </span>
         <span className={styles.meta}>{metaItems.join(' · ')}</span>
       </div>

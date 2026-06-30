@@ -27,6 +27,17 @@ SELECT operation_date FROM operations
 WHERE recurring_operation_id = $1
   AND deleted_at IS NULL;
 
+-- name: UpdateFutureGeneratedOperationReminderOffsets :execrows
+UPDATE operations
+SET reminder_offset_days = $1,
+    updated_at = now()
+WHERE recurring_operation_id = $2
+  AND owner_id = $3
+  AND is_exception = false
+  AND operation_date >= $4
+  AND deleted_at IS NULL
+  AND reminder_offset_days IS DISTINCT FROM $1;
+
 -- name: ListOperationsByRecurringOperation :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days FROM operations
 WHERE recurring_operation_id = $1
@@ -219,4 +230,19 @@ WHERE owner_id = $1
   AND (sqlc.arg('recurring_operation_id')::uuid IS NULL OR recurring_operation_id = sqlc.arg('recurring_operation_id')::uuid)
   AND (sqlc.arg('lease_id')::uuid IS NULL OR lease_id = sqlc.arg('lease_id')::uuid)
 ORDER BY operation_date DESC, id DESC
+LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
+
+-- name: ListOperationsByOwnerAsc :many
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days FROM operations
+WHERE owner_id = $1
+  AND deleted_at IS NULL
+  AND (sqlc.arg('types')::text[] = '{}'::text[] OR type = ANY(sqlc.arg('types')::text[]))
+  AND (sqlc.arg('statuses')::text[] = '{}'::text[] OR status = ANY(sqlc.arg('statuses')::text[]))
+  AND (sqlc.arg('categories')::text[] = '{}'::text[] OR category = ANY(sqlc.arg('categories')::text[]))
+  AND (sqlc.arg('property_id')::uuid IS NULL OR property_id = sqlc.arg('property_id')::uuid)
+  AND (sqlc.arg('from_date')::date IS NULL OR operation_date >= sqlc.arg('from_date')::date)
+  AND (sqlc.arg('to_date')::date IS NULL OR operation_date <= sqlc.arg('to_date')::date)
+  AND (sqlc.arg('recurring_operation_id')::uuid IS NULL OR recurring_operation_id = sqlc.arg('recurring_operation_id')::uuid)
+  AND (sqlc.arg('lease_id')::uuid IS NULL OR lease_id = sqlc.arg('lease_id')::uuid)
+ORDER BY operation_date ASC, id ASC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;

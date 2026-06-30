@@ -18,6 +18,14 @@ type OperationHandlers struct {
 	logger *slog.Logger
 }
 
+const (
+	operationsPaginationDefaultLimit = 100
+	operationsPaginationMinLimit     = 1
+	operationsPaginationMaxLimit     = 100
+	operationsPaginationMinOffset    = 0
+	operationsPaginationMaxOffset    = 100000
+)
+
 // NewOperationHandlers creates HTTP handlers for the operations API.
 func NewOperationHandlers(svc *leasesapp.OperationService, logger *slog.Logger) *OperationHandlers {
 	return &OperationHandlers{svc: svc, logger: logger}
@@ -44,6 +52,38 @@ func (h *OperationHandlers) handleOperationError(w http.ResponseWriter, r *http.
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 	}
+}
+
+func normalizeOperationsPagination(limitParam, offsetParam *int) (limit int, offset int, fetchLimit int) {
+	limit = operationsPaginationDefaultLimit
+	if limitParam != nil {
+		limit = *limitParam
+	}
+	if limit < operationsPaginationMinLimit {
+		limit = operationsPaginationMinLimit
+	}
+	if limit > operationsPaginationMaxLimit {
+		limit = operationsPaginationMaxLimit
+	}
+
+	if offsetParam != nil {
+		offset = *offsetParam
+	}
+	if offset < operationsPaginationMinOffset {
+		offset = operationsPaginationMinOffset
+	}
+	if offset > operationsPaginationMaxOffset {
+		offset = operationsPaginationMaxOffset
+	}
+
+	return limit, offset, limit + 1
+}
+
+func operationSortFromQuery(sort *openapi.OperationListSort) leasesapp.OperationSort {
+	if sort == nil {
+		return leasesapp.OperationSortOperationDateDesc
+	}
+	return leasesapp.NormalizeOperationSort(leasesapp.OperationSort(*sort))
 }
 
 // CreateOperation implements POST /properties/{propertyId}/operations.
@@ -95,7 +135,12 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 		return
 	}
 
-	filter := leasesapp.OperationFilter{}
+	limit, offset, fetchLimit := normalizeOperationsPagination(params.Limit, params.Offset)
+	filter := leasesapp.OperationFilter{
+		Limit:  fetchLimit,
+		Offset: offset,
+		Sort:   operationSortFromQuery(params.Sort),
+	}
 	if params.Status != nil {
 		filter.Statuses = make([]domain.OperationStatus, 0, len(*params.Status))
 		for _, s := range *params.Status {
@@ -120,14 +165,6 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 	if params.To != nil {
 		filter.ToDate = &params.To.Time
 	}
-	if params.Limit != nil {
-		filter.Limit = *params.Limit
-	} else {
-		filter.Limit = 1000
-	}
-	if params.Offset != nil {
-		filter.Offset = *params.Offset
-	}
 
 	ops, err := h.svc.ListOperationsByProperty(r.Context(), ownerID, propertyId, filter)
 	if err != nil {
@@ -135,12 +172,7 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 		return
 	}
 
-	items := make([]openapi.OperationResponse, 0, len(ops))
-	for _, op := range ops {
-		items = append(items, operationResponse(op))
-	}
-
-	writeJSON(r.Context(), w, http.StatusOK, openapi.OperationsResponse{Items: items})
+	writeJSON(r.Context(), w, http.StatusOK, operationsResponse(ops, limit, offset))
 }
 
 // ListOperations implements GET /operations.
@@ -151,7 +183,12 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	filter := leasesapp.OperationFilter{}
+	limit, offset, fetchLimit := normalizeOperationsPagination(params.Limit, params.Offset)
+	filter := leasesapp.OperationFilter{
+		Limit:  fetchLimit,
+		Offset: offset,
+		Sort:   operationSortFromQuery(params.Sort),
+	}
 	if params.Type != nil {
 		filter.Types = make([]domain.OperationType, 0, len(*params.Type))
 		for _, t := range *params.Type {
@@ -185,12 +222,6 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 	if params.LeaseId != nil {
 		filter.LeaseID = *params.LeaseId
 	}
-	if params.Limit != nil {
-		filter.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		filter.Offset = *params.Offset
-	}
 
 	ops, err := h.svc.ListOperations(r.Context(), ownerID, filter)
 	if err != nil {
@@ -198,11 +229,7 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	items := make([]openapi.OperationResponse, 0, len(ops))
-	for _, op := range ops {
-		items = append(items, operationResponse(op))
-	}
-	writeJSON(r.Context(), w, http.StatusOK, openapi.OperationsResponse{Items: items})
+	writeJSON(r.Context(), w, http.StatusOK, operationsResponse(ops, limit, offset))
 }
 
 // GetOperation implements GET /operations/{id}.
@@ -300,6 +327,26 @@ func (h *OperationHandlers) CompleteOperation(w http.ResponseWriter, r *http.Req
 	writeJSON(r.Context(), w, http.StatusOK, operationResponse(op))
 }
 
+// MarkOperationIncomplete implements POST /operations/{id}/mark-incomplete.
+func (h *OperationHandlers) MarkOperationIncomplete(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		return
+	}
+
+	op, err := h.svc.MarkOperationIncomplete(r.Context(), leasesapp.MarkOperationIncompleteCommand{
+		OwnerID:     ownerID,
+		OperationID: id,
+	})
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, operationResponse(op))
+}
+
 func operationResponse(op domain.Operation) openapi.OperationResponse {
 	resp := openapi.OperationResponse{
 		Id:            op.ID,
@@ -327,6 +374,30 @@ func operationResponse(op domain.Operation) openapi.OperationResponse {
 	if op.ReminderOffsetDays != nil {
 		offset := openapi.OperationResponseReminderOffsetDays(*op.ReminderOffsetDays)
 		resp.ReminderOffsetDays = &offset
+	}
+	return resp
+}
+
+func operationsResponse(ops []domain.Operation, limit int, offset int) openapi.OperationsResponse {
+	hasMore := len(ops) > limit
+	if hasMore {
+		ops = ops[:limit]
+	}
+
+	items := make([]openapi.OperationResponse, 0, len(ops))
+	for _, op := range ops {
+		items = append(items, operationResponse(op))
+	}
+
+	resp := openapi.OperationsResponse{
+		Items:   items,
+		Limit:   limit,
+		Offset:  offset,
+		HasMore: hasMore,
+	}
+	if hasMore {
+		nextOffset := offset + limit
+		resp.NextOffset = &nextOffset
 	}
 	return resp
 }

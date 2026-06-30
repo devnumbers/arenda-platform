@@ -39,20 +39,6 @@
   white-space: nowrap;
 }
 
-.badgeFuture {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 8px;
-  background: var(--color-warning-bg);
-  color: var(--color-warning);
-  font-size: var(--font-size-text-s);
-  font-weight: 500;
-  line-height: var(--line-height-text-s);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
 .meta {
   font-size: var(--font-size-text-s);
   line-height: var(--line-height-text-s);

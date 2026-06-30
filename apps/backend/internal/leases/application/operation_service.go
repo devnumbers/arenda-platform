@@ -45,6 +45,12 @@ type CompleteOperationCommand struct {
 	OperationID uuid.UUID
 }
 
+// MarkOperationIncompleteCommand carries the data needed to mark a completed operation as planned again.
+type MarkOperationIncompleteCommand struct {
+	OwnerID     uuid.UUID
+	OperationID uuid.UUID
+}
+
 // OperationService orchestrates manual operation use cases within the leases
 // bounded context.
 type OperationService struct {
@@ -429,6 +435,81 @@ func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOp
 		}
 		if err := txScheduler.CancelOverdueReminderByOperation(ctx, cmd.OwnerID, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel overdue reminders: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Operation{}, fmt.Errorf("commit tx: %w", err)
+	}
+
+	return updated, nil
+}
+
+// MarkOperationIncomplete marks a completed operation as planned again.
+func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd MarkOperationIncompleteCommand) (domain.Operation, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txOps := s.operations.WithTx(tx)
+
+	op, err := txOps.GetByIDAndOwnerForUpdate(ctx, cmd.OperationID, cmd.OwnerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, ErrNotFound
+		}
+		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
+	}
+
+	if !op.Status.IsCompleted() {
+		if err := tx.Commit(ctx); err != nil {
+			return domain.Operation{}, fmt.Errorf("commit tx: %w", err)
+		}
+		return op, nil
+	}
+
+	now := s.clock.Now()
+	status := domain.OperationStatusPending
+	if op.OperationDate.Before(timeutil.Date(now)) {
+		status = domain.OperationStatusOverdue
+	}
+	op.Status = status
+	op.UpdatedAt = now
+
+	if err := op.ValidateStatusForType(); err != nil {
+		return domain.Operation{}, err
+	}
+
+	updated, err := txOps.Update(ctx, op)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, ErrNotFound
+		}
+		return domain.Operation{}, fmt.Errorf("update operation: %w", err)
+	}
+
+	if s.scheduler != nil {
+		txScheduler := s.scheduler.WithTx(tx)
+		if err := txScheduler.CancelByOperation(ctx, cmd.OwnerID, updated.ID); err != nil {
+			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
+		}
+		if err := txScheduler.CancelOverdueReminderByOperation(ctx, cmd.OwnerID, updated.ID); err != nil {
+			return domain.Operation{}, fmt.Errorf("cancel overdue reminders: %w", err)
+		}
+
+		if updated.Status == domain.OperationStatusOverdue {
+			if err := txScheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(updated), now); err != nil {
+				return domain.Operation{}, fmt.Errorf("schedule overdue reminder: %w", err)
+			}
+		} else if updated.ReminderOffsetDays != nil {
+			reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
+			if !reminderDate.Before(timeutil.Date(op.UpdatedAt)) {
+				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated), reminderDate); err != nil {
+					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
+				}
+			}
 		}
 	}
 

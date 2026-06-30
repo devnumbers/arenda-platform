@@ -105,19 +105,6 @@
   color: var(--color-text-muted);
 }
 
-.badgeFuture {
-  display: inline-flex;
-  align-items: center;
-  align-self: flex-start;
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: var(--color-warning-bg);
-  color: var(--color-warning);
-  font-size: var(--font-size-text-s);
-  font-weight: 500;
-  line-height: var(--line-height-text-s);
-}
-
 .badgeLease {
   display: inline-flex;
   align-items: center;

@@ -187,6 +187,10 @@ func (r *fakeOperationRepoForHandlers) ListOperationDatesByRecurringOperation(_ 
 	return nil, nil
 }
 
+func (r *fakeOperationRepoForHandlers) UpdateFutureGeneratedOperationReminderOffsets(_ context.Context, _, _ uuid.UUID, _ *int, _ time.Time) error {
+	return nil
+}
+
 func (r *fakeOperationRepoForHandlers) ListByProperty(_ context.Context, _, _ uuid.UUID) ([]leasesdomain.Operation, error) {
 	return nil, nil
 }
@@ -386,7 +390,7 @@ func (fakeRecurringOperationRepoForHandlers) UpdateStatusByLeaseID(_ context.Con
 	return nil
 }
 
-func (fakeRecurringOperationRepoForHandlers) SetReminderOffset(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ int) error {
+func (fakeRecurringOperationRepoForHandlers) SetReminderOffset(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ *int) error {
 	return nil
 }
 

@@ -108,6 +108,23 @@ func (r *fakeOperationRepo) ListOperationDatesByRecurringOperation(_ context.Con
 	return out, nil
 }
 
+func (r *fakeOperationRepo) UpdateFutureGeneratedOperationReminderOffsets(_ context.Context, ownerID, recurringOperationID uuid.UUID, offsetDays *int, from time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, op := range r.ops {
+		if op.OwnerID != ownerID ||
+			op.RecurringOperationID != recurringOperationID ||
+			op.IsException ||
+			op.DeletedAt != nil ||
+			timeutil.Date(op.OperationDate).Before(timeutil.Date(from)) {
+			continue
+		}
+		op.ReminderOffsetDays = offsetDays
+		r.ops[id] = op
+	}
+	return nil
+}
+
 func (r *fakeOperationRepo) ListByProperty(_ context.Context, ownerID, propertyID uuid.UUID) ([]domain.Operation, error) {
 	return nil, nil
 }
@@ -451,7 +468,7 @@ func (r *fakeRecurringOperationRepo) UpdateStatusByLeaseID(_ context.Context, _,
 	return nil
 }
 
-func (r *fakeRecurringOperationRepo) SetReminderOffset(_ context.Context, _, _ uuid.UUID, _ int) error {
+func (r *fakeRecurringOperationRepo) SetReminderOffset(_ context.Context, _, _ uuid.UUID, _ *int) error {
 	return nil
 }
 

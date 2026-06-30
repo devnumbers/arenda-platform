@@ -649,6 +649,86 @@ func (q *Queries) ListOperationsByOwner(ctx context.Context, arg ListOperationsB
 	return items, nil
 }
 
+const listOperationsByOwnerAsc = `-- name: ListOperationsByOwnerAsc :many
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days FROM operations
+WHERE owner_id = $1
+  AND deleted_at IS NULL
+  AND ($2::text[] = '{}'::text[] OR type = ANY($2::text[]))
+  AND ($3::text[] = '{}'::text[] OR status = ANY($3::text[]))
+  AND ($4::text[] = '{}'::text[] OR category = ANY($4::text[]))
+  AND ($5::uuid IS NULL OR property_id = $5::uuid)
+  AND ($6::date IS NULL OR operation_date >= $6::date)
+  AND ($7::date IS NULL OR operation_date <= $7::date)
+  AND ($8::uuid IS NULL OR recurring_operation_id = $8::uuid)
+  AND ($9::uuid IS NULL OR lease_id = $9::uuid)
+ORDER BY operation_date ASC, id ASC
+LIMIT $11::int OFFSET $10::int
+`
+
+type ListOperationsByOwnerAscParams struct {
+	OwnerID              pgtype.UUID `json:"owner_id"`
+	Types                []string    `json:"types"`
+	Statuses             []string    `json:"statuses"`
+	Categories           []string    `json:"categories"`
+	PropertyID           pgtype.UUID `json:"property_id"`
+	FromDate             pgtype.Date `json:"from_date"`
+	ToDate               pgtype.Date `json:"to_date"`
+	RecurringOperationID pgtype.UUID `json:"recurring_operation_id"`
+	LeaseID              pgtype.UUID `json:"lease_id"`
+	Offset               int32       `json:"offset"`
+	Limit                int32       `json:"limit"`
+}
+
+func (q *Queries) ListOperationsByOwnerAsc(ctx context.Context, arg ListOperationsByOwnerAscParams) ([]Operation, error) {
+	rows, err := q.db.Query(ctx, listOperationsByOwnerAsc,
+		arg.OwnerID,
+		arg.Types,
+		arg.Statuses,
+		arg.Categories,
+		arg.PropertyID,
+		arg.FromDate,
+		arg.ToDate,
+		arg.RecurringOperationID,
+		arg.LeaseID,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Operation{}
+	for rows.Next() {
+		var i Operation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.LeaseID,
+			&i.RecurringOperationID,
+			&i.Type,
+			&i.Category,
+			&i.AmountKopecks,
+			&i.OperationDate,
+			&i.Comment,
+			&i.IsException,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Status,
+			&i.Name,
+			&i.ReminderOffsetDays,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOperationsByProperty = `-- name: ListOperationsByProperty :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days FROM operations
 WHERE owner_id = $1 AND property_id = $2
@@ -929,6 +1009,38 @@ func (q *Queries) SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperati
 		&i.ReminderOffsetDays,
 	)
 	return i, err
+}
+
+const updateFutureGeneratedOperationReminderOffsets = `-- name: UpdateFutureGeneratedOperationReminderOffsets :execrows
+UPDATE operations
+SET reminder_offset_days = $1,
+    updated_at = now()
+WHERE recurring_operation_id = $2
+  AND owner_id = $3
+  AND is_exception = false
+  AND operation_date >= $4
+  AND deleted_at IS NULL
+  AND reminder_offset_days IS DISTINCT FROM $1
+`
+
+type UpdateFutureGeneratedOperationReminderOffsetsParams struct {
+	ReminderOffsetDays   pgtype.Int4 `json:"reminder_offset_days"`
+	RecurringOperationID pgtype.UUID `json:"recurring_operation_id"`
+	OwnerID              pgtype.UUID `json:"owner_id"`
+	OperationDate        pgtype.Date `json:"operation_date"`
+}
+
+func (q *Queries) UpdateFutureGeneratedOperationReminderOffsets(ctx context.Context, arg UpdateFutureGeneratedOperationReminderOffsetsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateFutureGeneratedOperationReminderOffsets,
+		arg.ReminderOffsetDays,
+		arg.RecurringOperationID,
+		arg.OwnerID,
+		arg.OperationDate,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateOperation = `-- name: UpdateOperation :one

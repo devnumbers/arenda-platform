@@ -340,6 +340,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/{id}/mark-incomplete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["markOperationIncomplete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finance/report": {
         parameters: {
             query?: never;
@@ -1115,6 +1131,11 @@ export interface components {
         OperationCategory: "rent" | "other_income" | "utilities" | "repair" | "tax" | "other_expense" | "deposit_return";
         /** @enum {string} */
         OperationStatus: "pending" | "overdue" | "paid" | "received";
+        /**
+         * @default operation_date_desc
+         * @enum {string}
+         */
+        OperationListSort: "operation_date_desc" | "operation_date_asc";
         OperationCreateRequest: {
             type: components["schemas"]["OperationType"];
             category: components["schemas"]["OperationCategory"];
@@ -1176,6 +1197,10 @@ export interface components {
         };
         OperationsResponse: {
             items: components["schemas"]["OperationResponse"][];
+            limit: number;
+            offset: number;
+            has_more: boolean;
+            next_offset?: number | null;
         };
         RecurringOperationCreateRequest: {
             type: components["schemas"]["OperationType"];
@@ -1925,6 +1950,7 @@ export interface operations {
                 category?: components["schemas"]["OperationCategory"][];
                 from?: string;
                 to?: string;
+                sort?: components["schemas"]["OperationListSort"];
                 limit?: number;
                 offset?: number;
             };
@@ -1990,6 +2016,7 @@ export interface operations {
                 to?: string;
                 recurring_operation_id?: string;
                 lease_id?: string;
+                sort?: components["schemas"]["OperationListSort"];
                 limit?: number;
                 offset?: number;
             };
@@ -2116,6 +2143,35 @@ export interface operations {
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    markOperationIncomplete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Operation marked incomplete */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
         };
     };
     getFinanceReport: {

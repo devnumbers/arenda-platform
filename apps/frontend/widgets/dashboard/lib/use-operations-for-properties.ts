@@ -8,10 +8,41 @@ import type { components } from '@/shared/api/generated';
 
 type OperationsResponse = components['schemas']['OperationsResponse'];
 
+const PROPERTY_OPERATIONS_PAGE_LIMIT = 100;
+
 export type OperationsForPropertiesResult = {
   readonly operationsList: ReadonlyArray<OperationsResponse>;
   readonly isLoading: boolean;
 };
+
+async function fetchAllPropertyOperations(propertyId: string): Promise<OperationsResponse> {
+  const items: OperationsResponse['items'] = [];
+  let offset = 0;
+
+  for (;;) {
+    const params = new URLSearchParams({
+      limit: String(PROPERTY_OPERATIONS_PAGE_LIMIT),
+      offset: String(offset),
+    });
+    const page = await apiClient<OperationsResponse>(
+      `/properties/${propertyId}/operations?${params.toString()}`,
+    );
+    items.push(...page.items);
+
+    if (!page.has_more || page.next_offset == null) {
+      break;
+    }
+    offset = page.next_offset;
+  }
+
+  return {
+    items,
+    limit: PROPERTY_OPERATIONS_PAGE_LIMIT,
+    offset: 0,
+    has_more: false,
+    next_offset: null,
+  };
+}
 
 export function useOperationsForProperties(
   properties: Property[] | undefined,
@@ -19,9 +50,8 @@ export function useOperationsForProperties(
   const propertyIds = properties?.map((property) => property.id) ?? [];
   const queries = useQueries({
     queries: propertyIds.map((propertyId) => ({
-      queryKey: operationKeys.byProperty(propertyId),
-      queryFn: () =>
-        apiClient<OperationsResponse>(`/properties/${propertyId}/operations`),
+      queryKey: operationKeys.byProperty(propertyId, { limit: 'all' }),
+      queryFn: () => fetchAllPropertyOperations(propertyId),
       enabled: Boolean(propertyId),
     })),
   });

@@ -14,7 +14,10 @@ import { FinanceLoading } from './FinanceLoading';
 import { FinanceErrorState } from './FinanceErrorState';
 import { FinanceSummaryCards } from './FinanceSummaryCards';
 import { SubscriptionReadonlyBanner } from './SubscriptionReadonlyBanner';
-import { FinanceUpcomingOperations } from './FinanceUpcomingOperations';
+import {
+  FinanceOperationsPreview,
+  FinanceUpcomingOperations,
+} from './FinanceUpcomingOperations';
 import { useSubscription } from '@/features/subscription/api/hooks';
 import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import styles from './FinancePage.module.css';
@@ -55,6 +58,18 @@ export function FinancePage(): JSX.Element {
   } = useOperations({ limit: 5 });
 
   const {
+    data: overdueOperationsData,
+    isLoading: isLoadingOverdue,
+    isError: isErrorOverdue,
+    isFetching: isFetchingOverdue,
+    refetch: refetchOverdue,
+  } = useOperations({
+    status: ['overdue'],
+    sort: 'operation_date_asc',
+    limit: 5,
+  });
+
+  const {
     data: upcomingOperationsData,
     isLoading: isLoadingUpcoming,
     isError: isErrorUpcoming,
@@ -64,6 +79,7 @@ export function FinancePage(): JSX.Element {
     status: ['pending'],
     from: upcomingRange.from,
     to: upcomingRange.to,
+    sort: 'operation_date_asc',
     limit: 5,
   });
 
@@ -81,7 +97,16 @@ export function FinancePage(): JSX.Element {
   };
 
   const operations = operationsData?.items ?? [];
+  const overdueOperations = overdueOperationsData?.items ?? [];
   const upcomingOperations = upcomingOperationsData?.items ?? [];
+  const shouldShowEmptyState =
+    operations.length === 0 &&
+    overdueOperations.length === 0 &&
+    upcomingOperations.length === 0 &&
+    !isLoadingOverdue &&
+    !isLoadingUpcoming &&
+    !isErrorOverdue &&
+    !isErrorUpcoming;
 
   const { data: subscription } = useSubscription();
   const readonly = isSubscriptionReadonly(subscription);
@@ -114,7 +139,7 @@ export function FinancePage(): JSX.Element {
 
       {!isLoading && !isError && (
         <>
-          {operations.length === 0 && upcomingOperations.length === 0 ? (
+          {shouldShowEmptyState ? (
             <FinanceEmptyState
               title="Нет операций"
               subtitle="Добавьте первую операцию, чтобы увидеть финансовую сводку"
@@ -157,6 +182,17 @@ export function FinancePage(): JSX.Element {
                   ))}
                 </ul>
               </section>
+
+              <FinanceOperationsPreview
+                title="Просроченные операции"
+                operations={overdueOperations}
+                emptyText="Нет просроченных операций"
+                isLoading={isLoadingOverdue}
+                isFetching={isFetchingOverdue}
+                isError={isErrorOverdue}
+                refetch={refetchOverdue}
+                actionHref={`${ROUTES.financeOperations}?status=overdue&period=all&sort=operation_date_asc`}
+              />
 
               <FinanceUpcomingOperations
                 operations={upcomingOperations}

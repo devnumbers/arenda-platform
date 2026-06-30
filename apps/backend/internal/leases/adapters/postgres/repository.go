@@ -12,10 +12,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -194,7 +194,7 @@ func (r *LeaseRepository) CountOpenLeasesByProperty(ctx context.Context, propert
 
 func (r *LeaseRepository) GetOpenLeaseByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) (domain.Lease, error) {
 	row, err := r.q().GetOpenLeaseByProperty(ctx, postgres.GetOpenLeaseByPropertyParams{
-		OwnerID:   pgconv.UUIDToPgtype(ownerID),
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
 	})
 	if err != nil {
@@ -663,11 +663,15 @@ func (r *RecurringOperationRepository) ListByPropertyID(ctx context.Context, pro
 	return ops, nil
 }
 
-// SetReminderOffset stores the reminder offset for a recurring operation.
-func (r *RecurringOperationRepository) SetReminderOffset(ctx context.Context, ownerID, recID uuid.UUID, offsetDays int) error {
-	//nolint:gosec // Reminder offset is bounded by application validation.
+// SetReminderOffset stores or clears the reminder offset for a recurring operation.
+func (r *RecurringOperationRepository) SetReminderOffset(ctx context.Context, ownerID, recID uuid.UUID, offsetDays *int) error {
+	var reminderOffsetDays pgtype.Int4
+	if offsetDays != nil {
+		//nolint:gosec // Reminder offset is bounded by application validation.
+		reminderOffsetDays = pgtype.Int4{Int32: int32(*offsetDays), Valid: true}
+	}
 	_, err := r.q().UpdateRecurringOperationReminderOffset(ctx, postgres.UpdateRecurringOperationReminderOffsetParams{
-		ReminderOffsetDays: pgtype.Int4{Int32: int32(offsetDays), Valid: true},
+		ReminderOffsetDays: reminderOffsetDays,
 		ID:                 pgconv.UUIDToPgtype(recID),
 		OwnerID:            pgconv.UUIDToPgtype(ownerID),
 	})
@@ -852,20 +856,40 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID
 		filter.Offset = 0
 	}
 
-	rows, err := r.q().ListOperationsByOwner(ctx, postgres.ListOperationsByOwnerParams{
-		OwnerID:              pgconv.UUIDToPgtype(ownerID),
-		Types:                types,
-		Statuses:             statuses,
-		Categories:           categories,
-		PropertyID:           pgconv.UUIDToPgtype(filter.PropertyID),
-		LeaseID:              pgconv.UUIDToPgtype(filter.LeaseID),
-		FromDate:             fromDate,
-		ToDate:               toDate,
-		RecurringOperationID: pgconv.UUIDToPgtype(filter.RecurringOperationID),
-		Limit:                limit,
-		//nolint:gosec // Pagination offset is bounded by the API layer.
-		Offset: int32(filter.Offset),
-	})
+	sort := application.NormalizeOperationSort(filter.Sort)
+	var rows []postgres.Operation
+	var err error
+	if sort == application.OperationSortOperationDateAsc {
+		rows, err = r.q().ListOperationsByOwnerAsc(ctx, postgres.ListOperationsByOwnerAscParams{
+			OwnerID:              pgconv.UUIDToPgtype(ownerID),
+			Types:                types,
+			Statuses:             statuses,
+			Categories:           categories,
+			PropertyID:           pgconv.UUIDToPgtype(filter.PropertyID),
+			LeaseID:              pgconv.UUIDToPgtype(filter.LeaseID),
+			FromDate:             fromDate,
+			ToDate:               toDate,
+			RecurringOperationID: pgconv.UUIDToPgtype(filter.RecurringOperationID),
+			Limit:                limit,
+			//nolint:gosec // Pagination offset is bounded by the API layer.
+			Offset: int32(filter.Offset),
+		})
+	} else {
+		rows, err = r.q().ListOperationsByOwner(ctx, postgres.ListOperationsByOwnerParams{
+			OwnerID:              pgconv.UUIDToPgtype(ownerID),
+			Types:                types,
+			Statuses:             statuses,
+			Categories:           categories,
+			PropertyID:           pgconv.UUIDToPgtype(filter.PropertyID),
+			LeaseID:              pgconv.UUIDToPgtype(filter.LeaseID),
+			FromDate:             fromDate,
+			ToDate:               toDate,
+			RecurringOperationID: pgconv.UUIDToPgtype(filter.RecurringOperationID),
+			Limit:                limit,
+			//nolint:gosec // Pagination offset is bounded by the API layer.
+			Offset: int32(filter.Offset),
+		})
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -935,6 +959,24 @@ func (r *OperationRepository) ListOperationDatesByRecurringOperation(ctx context
 		dates = append(dates, row.Time)
 	}
 	return dates, nil
+}
+
+func (r *OperationRepository) UpdateFutureGeneratedOperationReminderOffsets(ctx context.Context, ownerID, recurringOperationID uuid.UUID, offsetDays *int, from time.Time) error {
+	var reminderOffsetDays pgtype.Int4
+	if offsetDays != nil {
+		//nolint:gosec // Reminder offset is bounded by application validation.
+		reminderOffsetDays = pgtype.Int4{Int32: int32(*offsetDays), Valid: true}
+	}
+	_, err := r.q().UpdateFutureGeneratedOperationReminderOffsets(ctx, postgres.UpdateFutureGeneratedOperationReminderOffsetsParams{
+		ReminderOffsetDays:   reminderOffsetDays,
+		RecurringOperationID: pgconv.UUIDToPgtype(recurringOperationID),
+		OwnerID:              pgconv.UUIDToPgtype(ownerID),
+		OperationDate:        pgconv.DateToPgtype(from),
+	})
+	if err != nil {
+		return fmt.Errorf("sync generated operation reminder offsets: %w", err)
+	}
+	return nil
 }
 
 func (r *OperationRepository) DeleteUneditedFutureOperationsByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID, after time.Time) error {

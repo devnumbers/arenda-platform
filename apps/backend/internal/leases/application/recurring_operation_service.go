@@ -333,6 +333,7 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 	}
 
 	now := s.clock.Now()
+	originalReminderOffset := rec.ReminderOffsetDays
 
 	if cmd.ApplyFromDate != nil {
 		if cmd.StartDate != nil {
@@ -421,7 +422,13 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("update recurring operation: %w", err)
 	}
 
-	if s.scheduler != nil && updated.ReminderOffsetDays != nil {
+	if cmd.ReminderOffsetDays != nil {
+		if err := txOps.UpdateFutureGeneratedOperationReminderOffsets(ctx, ownerID, updated.ID, updated.ReminderOffsetDays, timeutil.Date(now)); err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("sync generated operation reminder offsets: %w", err)
+		}
+	}
+
+	if s.scheduler != nil && (originalReminderOffset != nil || updated.ReminderOffsetDays != nil) {
 		txScheduler := s.scheduler.WithTx(tx)
 		if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, updated.ID); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("cancel recurring reminders: %w", err)
@@ -769,8 +776,8 @@ func (s *RecurringOperationService) SetReminderOffset(
 	ownerID, id uuid.UUID,
 	offsetDays int,
 ) error {
-	if offsetDays < 0 {
-		return newInvalidInputError("offset_days must be non-negative")
+	if err := validateReminderOffsetDays(&offsetDays); err != nil {
+		return err
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -818,8 +825,14 @@ func (s *RecurringOperationService) applyReminderOffsetInTx(
 	now time.Time,
 ) error {
 	txRecurring := s.recurringOps.WithTx(tx)
-	if err := txRecurring.SetReminderOffset(ctx, ownerID, rec.ID, offsetDays); err != nil {
+	txOps := s.operations.WithTx(tx)
+	normalizedOffsetDays := normalizeReminderOffsetDays(&offsetDays)
+
+	if err := txRecurring.SetReminderOffset(ctx, ownerID, rec.ID, normalizedOffsetDays); err != nil {
 		return fmt.Errorf("set reminder offset: %w", err)
+	}
+	if err := txOps.UpdateFutureGeneratedOperationReminderOffsets(ctx, ownerID, rec.ID, normalizedOffsetDays, timeutil.Date(now)); err != nil {
+		return fmt.Errorf("sync generated operation reminder offsets: %w", err)
 	}
 
 	if s.scheduler == nil {
@@ -830,11 +843,13 @@ func (s *RecurringOperationService) applyReminderOffsetInTx(
 	if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, rec.ID); err != nil {
 		return fmt.Errorf("cancel recurring reminders: %w", err)
 	}
-	if offsetDays >= 0 {
-		rec.ReminderOffsetDays = &offsetDays
-		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, ops, now); err != nil {
-			return fmt.Errorf("schedule reminders: %w", err)
-		}
+	if normalizedOffsetDays == nil {
+		return nil
+	}
+
+	rec.ReminderOffsetDays = normalizedOffsetDays
+	if err := scheduleRemindersForOperations(ctx, txScheduler, rec, ops, now); err != nil {
+		return fmt.Errorf("schedule reminders: %w", err)
 	}
 	return nil
 }
@@ -998,6 +1013,7 @@ func (s *RecurringOperationService) buildOperations(
 			AmountKopecks:        rec.AmountKopecks,
 			OperationDate:        d,
 			Comment:              rec.Comment,
+			ReminderOffsetDays:   rec.ReminderOffsetDays,
 			IsException:          false,
 			CreatedAt:            createdAt,
 			UpdatedAt:            createdAt,

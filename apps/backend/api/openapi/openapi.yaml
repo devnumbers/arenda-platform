@@ -511,18 +511,27 @@ paths:
           schema:
             type: string
             format: date
+        - name: sort
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OperationListSort'
         - name: limit
           in: query
           required: false
           schema:
             type: integer
-            default: 1000
+            default: 100
+            minimum: 1
+            maximum: 100
         - name: offset
           in: query
           required: false
           schema:
             type: integer
             default: 0
+            minimum: 0
+            maximum: 100000
       responses:
         '200':
           description: Operations list for property
@@ -629,18 +638,27 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: sort
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OperationListSort'
         - name: limit
           in: query
           required: false
           schema:
             type: integer
             default: 100
+            minimum: 1
+            maximum: 100
         - name: offset
           in: query
           required: false
           schema:
             type: integer
             default: 0
+            minimum: 0
+            maximum: 100000
       responses:
         '200':
           description: Operations list
@@ -758,6 +776,37 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /operations/{id}/mark-incomplete:
+    post:
+      operationId: markOperationIncomplete
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Operation marked incomplete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /finance/report:
     get:
       operationId: getFinanceReport
@@ -2363,6 +2412,11 @@ components:
       type: string
       enum: [pending, overdue, paid, received]
 
+    OperationListSort:
+      type: string
+      enum: [operation_date_desc, operation_date_asc]
+      default: operation_date_desc
+
     OperationCreateRequest:
       type: object
       required: [type, category, name, amount_kopecks, operation_date]
@@ -2471,12 +2525,24 @@ components:
 
     OperationsResponse:
       type: object
-      required: [items]
+      required: [items, limit, offset, has_more]
       properties:
         items:
           type: array
           items:
             $ref: '#/components/schemas/OperationResponse'
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+        has_more:
+          type: boolean
+        next_offset:
+          type: integer
+          minimum: 0
+          nullable: true
 
     RecurringOperationCreateRequest:
       type: object

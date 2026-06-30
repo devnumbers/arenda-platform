@@ -2,32 +2,56 @@
 
 import { useMemo, type JSX } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import type { components } from '@/shared/api/generated';
 import NextLink from 'next/link';
 import { Plus } from '@/shared/assets/icons';
 import { Icon } from '@/shared/ui/icon';
+import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import { ROUTES } from '@/shared/config/routes';
-import { useOperations } from '@/features/operations/api/hooks';
-import { useRecurringOperations } from '@/features/recurring-operations/api/hooks';
 import {
-  formatDateForApi,
-  startOfMonth,
+  useInfiniteOperations,
+  type OperationsFilters,
+} from '@/features/operations/api/hooks';
+import {
   endOfMonth,
+  endOfQuarter,
+  endOfYear,
+  formatDateForApi,
+  parseDateForApi,
+  startOfMonth,
+  startOfQuarter,
+  startOfYear,
 } from '@/entities/operation/lib/dates';
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { FinanceEmptyState } from '@/widgets/finance/ui/FinanceEmptyState';
-import { useProperties } from '@/features/properties/api';
-import { OperationFilters } from './OperationFilters';
+import { useArchivedProperties, useProperties } from '@/features/properties/api';
+import {
+  OperationFilters,
+  type OperationFiltersState,
+  type OperationPeriod,
+} from './OperationFilters';
 import { OperationsList } from './OperationsList';
 import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
 import { useSubscription } from '@/features/subscription/api/hooks';
 import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import styles from './OperationsPage.module.css';
 
+type OperationTab = 'all' | 'income' | 'expense';
+type OperationType = Exclude<OperationTab, 'all'>;
+type OperationListSort = NonNullable<OperationsFilters['sort']>;
+type PeriodRange = {
+  readonly from: string;
+  readonly to: string;
+};
+type ResolvedOperationPeriod = OperationFiltersState & {
+  readonly isDefaultPeriod: boolean;
+};
+
+const DEFAULT_OPERATION_SORT: OperationListSort = 'operation_date_desc';
+
 const TAB_ITEMS: ReadonlyArray<{
-  readonly key: 'all' | 'income' | 'expense';
+  readonly key: OperationTab;
   readonly label: string;
 }> = [
   { key: 'all', label: 'Все' },
@@ -35,20 +59,15 @@ const TAB_ITEMS: ReadonlyArray<{
   { key: 'expense', label: 'Расходы' },
 ];
 
-export type OperationKind = 'all' | 'onetime' | 'recurring';
-
-function getCurrentMonthRange(): { from: string; to: string } {
-  const now = new Date();
-  return {
-    from: formatDateForApi(startOfMonth(now)),
-    to: formatDateForApi(endOfMonth(now)),
-  };
+function buildHref(pathname: string, params: URLSearchParams): string {
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
 }
 
 function buildTabHref(
   pathname: string,
-  searchParams: URLSearchParams,
-  tabKey: 'all' | 'income' | 'expense',
+  searchParams: { toString: () => string },
+  tabKey: OperationTab,
 ): string {
   const params = new URLSearchParams(searchParams.toString());
   if (tabKey === 'all') {
@@ -56,56 +75,185 @@ function buildTabHref(
   } else {
     params.set('type', tabKey);
   }
-  const query = params.toString();
-  return query ? `${pathname}?${query}` : pathname;
+  return buildHref(pathname, params);
 }
 
-function buildKindHref(
-  pathname: string,
-  searchParams: URLSearchParams,
-  kind: OperationKind,
-): string {
-  const params = new URLSearchParams(searchParams.toString());
-  if (kind === 'all') {
-    params.delete('kind');
-  } else {
-    params.set('kind', kind);
+function getOperationType(value: string | null): OperationType | undefined {
+  if (value === 'income' || value === 'expense') {
+    return value;
   }
-  const query = params.toString();
-  return query ? `${pathname}?${query}` : pathname;
+  return undefined;
 }
 
-type UnifiedOperationItem =
-  | { kind: 'onetime'; date: string; data: components['schemas']['OperationResponse'] }
-  | { kind: 'recurring'; date: string; data: components['schemas']['RecurringOperationResponse'] };
+function getOperationPeriod(value: string | null): OperationPeriod | undefined {
+  if (
+    value === 'all' ||
+    value === 'month' ||
+    value === 'quarter' ||
+    value === 'year' ||
+    value === 'custom'
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function getOperationSort(value: string | null): OperationListSort | undefined {
+  if (value === 'operation_date_desc' || value === 'operation_date_asc') {
+    return value;
+  }
+  return undefined;
+}
+
+function getMonthRange(date: Date): PeriodRange {
+  return {
+    from: formatDateForApi(startOfMonth(date)),
+    to: formatDateForApi(endOfMonth(date)),
+  };
+}
+
+function getQuarterRange(date: Date): PeriodRange {
+  return {
+    from: formatDateForApi(startOfQuarter(date)),
+    to: formatDateForApi(endOfQuarter(date)),
+  };
+}
+
+function getYearRange(date: Date): PeriodRange {
+  return {
+    from: formatDateForApi(startOfYear(date)),
+    to: formatDateForApi(endOfYear(date)),
+  };
+}
+
+function getPeriodRange(
+  period: Exclude<OperationPeriod, 'all' | 'custom'>,
+  date: Date,
+): PeriodRange {
+  if (period === 'month') return getMonthRange(date);
+  if (period === 'quarter') return getQuarterRange(date);
+  return getYearRange(date);
+}
+
+function isValidRange(from: string | null, to: string | null): boolean {
+  const fromDate = parseDateForApi(from);
+  const toDate = parseDateForApi(to);
+  return Boolean(fromDate && toDate && fromDate <= toDate);
+}
+
+function isSameRange(first: PeriodRange, second: PeriodRange): boolean {
+  return first.from === second.from && first.to === second.to;
+}
+
+function resolveOperationPeriod(searchParams: {
+  get: (name: string) => string | null;
+}): ResolvedOperationPeriod {
+  const now = new Date();
+  const currentMonthRange = getMonthRange(now);
+  const requestedPeriod = getOperationPeriod(searchParams.get('period'));
+
+  if (requestedPeriod === 'all') {
+    return { period: 'all', status: [], isDefaultPeriod: false };
+  }
+
+  const requestedFrom = searchParams.get('from');
+  const requestedTo = searchParams.get('to');
+
+  if (requestedPeriod === 'custom') {
+    if (isValidRange(requestedFrom, requestedTo)) {
+      return {
+        period: 'custom',
+        from: requestedFrom ?? undefined,
+        to: requestedTo ?? undefined,
+        status: [],
+        isDefaultPeriod: false,
+      };
+    }
+
+    return {
+      period: 'month',
+      from: currentMonthRange.from,
+      to: currentMonthRange.to,
+      status: [],
+      isDefaultPeriod: true,
+    };
+  }
+
+  if (requestedPeriod) {
+    const range = isValidRange(requestedFrom, requestedTo)
+      ? { from: requestedFrom ?? currentMonthRange.from, to: requestedTo ?? currentMonthRange.to }
+      : getPeriodRange(requestedPeriod, now);
+
+    return {
+      period: requestedPeriod,
+      from: range.from,
+      to: range.to,
+      status: [],
+      isDefaultPeriod: requestedPeriod === 'month' && isSameRange(range, currentMonthRange),
+    };
+  }
+
+  return {
+    period: 'month',
+    from: currentMonthRange.from,
+    to: currentMonthRange.to,
+    status: [],
+    isDefaultPeriod: true,
+  };
+}
 
 export function OperationsPage(): JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const type = searchParams.get('type') as 'income' | 'expense' | null;
-  const activeTabKey: 'all' | 'income' | 'expense' = type ?? 'all';
-  const kind = (searchParams.get('kind') as OperationKind) ?? 'all';
+  const type = getOperationType(searchParams.get('type'));
+  const activeTabKey: OperationTab = type ?? 'all';
+  const propertyId = searchParams.get('property_id') || undefined;
+  const resolvedPeriod = useMemo(
+    () => resolveOperationPeriod(searchParams),
+    [searchParams],
+  );
+  const period = resolvedPeriod.period;
+  const from = resolvedPeriod.from;
+  const to = resolvedPeriod.to;
+  const sort = getOperationSort(searchParams.get('sort'));
 
   const status = useMemo(
     () => searchParams.getAll('status'),
     [searchParams],
   );
-  const currentMonth = useMemo(() => getCurrentMonthRange(), []);
-  const from = searchParams.get('from') ?? currentMonth.from;
-  const to = searchParams.get('to') ?? currentMonth.to;
 
-  const filters = useMemo(
-    () => ({
-      type: type ?? undefined,
-      status,
-      from,
-      to,
-      limit: 100,
-    }),
-    [type, status, from, to],
-  );
+  const filters = useMemo<Omit<OperationsFilters, 'offset'>>(() => {
+    const nextFilters: Omit<OperationsFilters, 'offset'> = {
+      limit: 50,
+    };
+
+    if (type) {
+      nextFilters.type = type;
+    }
+
+    if (status.length > 0) {
+      nextFilters.status = status;
+    }
+
+    if (propertyId) {
+      nextFilters.property_id = propertyId;
+    }
+
+    if (period !== 'all') {
+      if (from) {
+        nextFilters.from = from;
+      }
+      if (to) {
+        nextFilters.to = to;
+      }
+    }
+
+    nextFilters.sort = sort ?? DEFAULT_OPERATION_SORT;
+
+    return nextFilters;
+  }, [type, status, propertyId, period, from, to, sort]);
 
   const {
     data: operationsData,
@@ -113,78 +261,87 @@ export function OperationsPage(): JSX.Element {
     isFetching: operationsFetching,
     isError: operationsError,
     refetch: refetchOperations,
-  } = useOperations(filters);
+    fetchNextPage,
+    hasNextPage,
+    isFetchNextPageError,
+    isFetchingNextPage,
+  } = useInfiniteOperations(filters);
 
   const {
-    data: recurringData,
-    isLoading: recurringLoading,
-    isFetching: recurringFetching,
-    isError: recurringError,
-    refetch: refetchRecurring,
-  } = useRecurringOperations();
-
-  const {
-    data: properties,
-    isLoading: propertiesLoading,
-    isError: propertiesError,
+    data: activeProperties,
+    isLoading: activePropertiesLoading,
+    isFetching: activePropertiesFetching,
+    isError: activePropertiesError,
+    refetch: refetchActiveProperties,
   } = useProperties();
 
-  const hasProperties = !propertiesLoading && !propertiesError && (properties?.length ?? 0) > 0;
-  const isLoading = operationsLoading || recurringLoading || propertiesLoading;
-  const isError = operationsError || recurringError || propertiesError;
-  const isFetching = operationsFetching || recurringFetching;
+  const {
+    data: archivedProperties,
+    isLoading: archivedPropertiesLoading,
+    isFetching: archivedPropertiesFetching,
+    isError: archivedPropertiesError,
+    refetch: refetchArchivedProperties,
+  } = useArchivedProperties();
 
-  const handleFilterChange = (nextFilters: {
-    from: string;
-    to: string;
-    status: ReadonlyArray<string>;
-  }) => {
-    const params = new URLSearchParams(searchParams.toString());
+  const properties = useMemo(() => {
+    return [...(activeProperties ?? []), ...(archivedProperties ?? [])];
+  }, [activeProperties, archivedProperties]);
 
-    params.set('from', nextFilters.from);
-    params.set('to', nextFilters.to);
+  const propertyNameById = useMemo<ReadonlyMap<string, string>>(() => {
+    return new Map(
+      properties.map((property) => [property.id, property.name] as const),
+    );
+  }, [properties]);
 
-    params.delete('status');
-    nextFilters.status.forEach((value) => params.append('status', value));
-
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  };
-
-  const handleKindChange = (nextKind: OperationKind) => {
-    const href = buildKindHref(pathname, searchParams, nextKind);
-    router.replace(href, { scroll: false });
-  };
-
-  const filteredItems = useMemo<UnifiedOperationItem[]>(() => {
-    const operations = operationsData?.items ?? [];
-    const recurring = recurringData?.items ?? [];
-    const items: UnifiedOperationItem[] = [];
-
-    if (kind !== 'recurring') {
-      operations.forEach((operation) => {
-        if (kind === 'onetime' && operation.recurring_operation_id) {
-          return;
-        }
-        items.push({ kind: 'onetime', date: operation.operation_date, data: operation });
-      });
-    }
-
-    if (kind !== 'onetime') {
-      recurring.forEach((operation) => {
-        items.push({ kind: 'recurring', date: operation.start_date, data: operation });
-      });
-    }
-
-    return items.sort((a, b) => {
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
-    });
-  }, [operationsData, recurringData, kind]);
+  const operations = operationsData?.pages.flatMap((page) => page.items) ?? [];
+  const hasProperties = properties.length > 0;
+  const propertiesLoading = activePropertiesLoading || archivedPropertiesLoading;
+  const propertiesError = activePropertiesError || archivedPropertiesError;
+  const isInitialOperationsError = operationsError && !operationsData;
+  const isLoading = operationsLoading || propertiesLoading;
+  const isError = isInitialOperationsError || propertiesError;
+  const showContent = !isLoading && !isError && hasProperties;
+  const hasActiveFilters =
+    activeTabKey !== 'all' ||
+    Boolean(propertyId) ||
+    !resolvedPeriod.isDefaultPeriod ||
+    status.length > 0;
 
   const { data: subscription } = useSubscription();
   const readonly = isSubscriptionReadonly(subscription);
 
-  const showContent = !isLoading && !isError && hasProperties;
+  const resetFiltersHref = buildHref(pathname, new URLSearchParams());
+
+  const handleResetFilters = () => {
+    router.replace(resetFiltersHref, { scroll: false });
+  };
+
+  const handleFilterChange = (nextFilters: OperationFiltersState) => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    if (nextFilters.period === 'all') {
+      params.set('period', 'all');
+      params.delete('from');
+      params.delete('to');
+    } else {
+      params.set('period', nextFilters.period);
+      if (nextFilters.from) {
+        params.set('from', nextFilters.from);
+      } else {
+        params.delete('from');
+      }
+      if (nextFilters.to) {
+        params.set('to', nextFilters.to);
+      } else {
+        params.delete('to');
+      }
+    }
+
+    params.delete('status');
+    nextFilters.status.forEach((value) => params.append('status', value));
+
+    router.replace(buildHref(pathname, params), { scroll: false });
+  };
 
   return (
     <div className={styles.root}>
@@ -229,10 +386,15 @@ export function OperationsPage(): JSX.Element {
       {!isLoading && isError && (
         <FinanceErrorState
           onRetry={() => {
-            refetchOperations();
-            refetchRecurring();
+            void refetchOperations();
+            void refetchActiveProperties();
+            void refetchArchivedProperties();
           }}
-          isLoading={isFetching}
+          isLoading={
+            operationsFetching ||
+            activePropertiesFetching ||
+            archivedPropertiesFetching
+          }
         />
       )}
 
@@ -247,28 +409,74 @@ export function OperationsPage(): JSX.Element {
 
       {showContent && (
         <OperationFilters
-          filters={{ from, to, status, kind }}
+          filters={{ period, from, to, status }}
+          hasExternalFilters={activeTabKey !== 'all' || Boolean(propertyId)}
+          isDefaultPeriod={resolvedPeriod.isDefaultPeriod}
           onChange={handleFilterChange}
-          onKindChange={handleKindChange}
+          onReset={handleResetFilters}
         />
       )}
 
+      {showContent && propertyId && (
+        <div className={styles.appliedFilters}>
+          <span className={styles.appliedFilter}>
+            Объект: {propertyNameById.get(propertyId) ?? 'Выбранный объект'}
+          </span>
+        </div>
+      )}
+
       {showContent && (
-        <OperationsList
-          items={filteredItems}
-          emptyState={
-            <FinanceEmptyState
-              title={kind === 'all' ? 'Нет операций' : 'Нет совпадений'}
-              subtitle={
-                kind === 'all'
-                  ? 'Добавьте первую операцию, чтобы увидеть её в списке'
-                  : 'Попробуйте изменить фильтры'
-              }
-              actionHref={readonly || kind !== 'all' ? undefined : ROUTES.financeCreateOperation}
-              actionText={readonly || kind !== 'all' ? undefined : 'Добавить операцию'}
-            />
-          }
-        />
+        <>
+          <OperationsList
+            operations={operations}
+            showProperty
+            propertyNameById={propertyNameById}
+            emptyState={
+              <FinanceEmptyState
+                title={hasActiveFilters ? 'Нет совпадений' : 'Нет операций за период'}
+                subtitle={
+                  hasActiveFilters
+                    ? 'Попробуйте изменить фильтры'
+                    : 'Добавьте первую операцию, чтобы увидеть её в списке'
+                }
+                actionHref={
+                  hasActiveFilters
+                    ? resetFiltersHref
+                    : readonly
+                      ? undefined
+                      : ROUTES.financeCreateOperation
+                }
+                actionText={
+                  hasActiveFilters
+                    ? 'Сбросить фильтры'
+                    : readonly
+                      ? undefined
+                      : 'Добавить операцию'
+                }
+              />
+            }
+          />
+
+          {(hasNextPage || isFetchNextPageError) && (
+            <div className={styles.loadMore}>
+              <Button
+                variant="secondary"
+                size="medium"
+                loading={isFetchingNextPage}
+                onClick={() => {
+                  void fetchNextPage();
+                }}
+              >
+                {isFetchNextPageError ? 'Повторить' : 'Показать ещё'}
+              </Button>
+              {isFetchNextPageError && (
+                <span className={styles.loadMoreError} role="alert">
+                  Не удалось загрузить следующие операции
+                </span>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -16,6 +16,7 @@ import {PropertyStatusSection} from './PropertyStatusSection';
 import {PropertyLeaseCard} from './PropertyLeaseCard';
 import {PropertyTenantCard} from './PropertyTenantCard';
 import {PropertyPaymentsCard} from './PropertyPaymentsCard';
+import {PropertyOverdueOperationsCard} from './PropertyOverdueOperationsCard';
 import {PropertyOperationsCard} from './PropertyOperationsCard';
 import {PropertyInfoCard} from './PropertyInfoCard';
 import {PropertyActionMenu} from './PropertyActionMenu';
@@ -204,6 +205,8 @@ export function PropertyDetailPage(): JSX.Element {
                 operations={operationsQuery.data?.items ?? []}
                 overdueCount={summaryQuery.data?.overdue_total_count ?? 0}
             />
+
+            <PropertyOverdueOperationsCard propertyId={id}/>
 
             <PropertyOperationsCard
                 propertyName={property.name}

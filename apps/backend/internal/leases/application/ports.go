@@ -54,7 +54,7 @@ type RecurringOperationRepository interface {
 	Update(ctx context.Context, op domain.RecurringOperation) (domain.RecurringOperation, error)
 	UpdateStatus(ctx context.Context, id, ownerID uuid.UUID, status string) (domain.RecurringOperation, error)
 	UpdateStatusByLeaseID(ctx context.Context, leaseID, ownerID uuid.UUID, status string) error
-	SetReminderOffset(ctx context.Context, ownerID, recID uuid.UUID, offsetDays int) error
+	SetReminderOffset(ctx context.Context, ownerID, recID uuid.UUID, offsetDays *int) error
 	DeleteByLease(ctx context.Context, leaseID uuid.UUID) error
 	SoftDelete(ctx context.Context, id, ownerID uuid.UUID) error
 	WithTx(tx transaction.Tx) RecurringOperationRepository
@@ -62,6 +62,22 @@ type RecurringOperationRepository interface {
 
 // ReminderScheduler is the port used by leases services to schedule/cancel reminders.
 type ReminderScheduler = notificationsapp.ReminderScheduler
+
+type OperationSort string
+
+const (
+	OperationSortOperationDateDesc OperationSort = "operation_date_desc"
+	OperationSortOperationDateAsc  OperationSort = "operation_date_asc"
+)
+
+func NormalizeOperationSort(sort OperationSort) OperationSort {
+	switch sort {
+	case OperationSortOperationDateAsc:
+		return OperationSortOperationDateAsc
+	default:
+		return OperationSortOperationDateDesc
+	}
+}
 
 type OperationFilter struct {
 	Types                []domain.OperationType
@@ -74,6 +90,7 @@ type OperationFilter struct {
 	RecurringOperationID uuid.UUID
 	Limit                int
 	Offset               int
+	Sort                 OperationSort
 }
 
 type FinanceReportTotals struct {
@@ -107,6 +124,7 @@ type OperationRepository interface {
 	ListByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID) ([]domain.Operation, error)
 	ListOperationDatesByLease(ctx context.Context, leaseID uuid.UUID) ([]time.Time, error)
 	ListOperationDatesByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID) ([]time.Time, error)
+	UpdateFutureGeneratedOperationReminderOffsets(ctx context.Context, ownerID, recurringOperationID uuid.UUID, offsetDays *int, from time.Time) error
 	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.Operation, error)
 	ListByPropertyWithStatuses(ctx context.Context, ownerID, propertyID uuid.UUID, statuses []domain.OperationStatus) ([]domain.Operation, error)
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Operation, error)

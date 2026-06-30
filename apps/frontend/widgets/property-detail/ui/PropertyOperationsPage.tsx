@@ -10,7 +10,7 @@ import { LinkButton } from '@/shared/ui/link-button';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import {
-  useOperationsByProperty,
+  useInfiniteOperations,
   usePropertyOperationsSummary,
 } from '@/features/operations/api/hooks';
 import { useProperty } from '@/features/properties/api/hooks';
@@ -80,20 +80,23 @@ export function PropertyOperationsPage(): JSX.Element {
 
   const filters = useMemo(
     () => ({
+      property_id: id,
       ...dateRange,
       status: statusFilter === 'actual' ? ['pending', 'overdue'] : undefined,
+      limit: 50,
     }),
-    [dateRange, statusFilter],
+    [id, dateRange, statusFilter],
   );
 
   const propertyQuery = useProperty(id);
   const summaryQuery = usePropertyOperationsSummary(id);
-  const operationsQuery = useOperationsByProperty(id, filters);
+  const operationsQuery = useInfiniteOperations(filters, { enabled: Boolean(id) });
 
   const isLoading =
     propertyQuery.isLoading || summaryQuery.isLoading || operationsQuery.isLoading;
+  const isInitialOperationsError = operationsQuery.isError && !operationsQuery.data;
   const isError =
-    propertyQuery.isError || summaryQuery.isError || operationsQuery.isError;
+    propertyQuery.isError || summaryQuery.isError || isInitialOperationsError;
   const isFetching =
     propertyQuery.isFetching || summaryQuery.isFetching || operationsQuery.isFetching;
 
@@ -104,7 +107,7 @@ export function PropertyOperationsPage(): JSX.Element {
   };
 
   const propertyName = propertyQuery.data?.name ?? 'Мой объект';
-  const operations = operationsQuery.data?.items ?? [];
+  const operations = operationsQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const { data: subscription } = useSubscription();
   const readonly = isSubscriptionReadonly(subscription);
 
@@ -204,9 +207,29 @@ export function PropertyOperationsPage(): JSX.Element {
               actionText={readonly ? undefined : 'Добавить операцию'}
             />
           ) : (
-            <OperationsList
-              items={operations.map((operation) => ({ kind: 'onetime', data: operation }))}
-            />
+            <>
+              <OperationsList operations={operations} />
+
+              {(operationsQuery.hasNextPage || operationsQuery.isFetchNextPageError) && (
+                <div className={styles.loadMore}>
+                  <Button
+                    variant="secondary"
+                    size="medium"
+                    loading={operationsQuery.isFetchingNextPage}
+                    onClick={() => {
+                      void operationsQuery.fetchNextPage();
+                    }}
+                  >
+                    {operationsQuery.isFetchNextPageError ? 'Повторить' : 'Показать ещё'}
+                  </Button>
+                  {operationsQuery.isFetchNextPageError && (
+                    <span className={styles.loadMoreError} role="alert">
+                      Не удалось загрузить следующие операции
+                    </span>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </>
       )}

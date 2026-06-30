@@ -4,15 +4,12 @@ import {
   type ChangeEvent,
   type FormEvent,
   useEffect,
-  useId,
   useRef,
   useState,
   type JSX,
 } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import clsx from 'clsx';
 import { ArrowLeft } from '@/shared/assets/icons';
-import { Checkbox } from '@heroui/react';
 import { Icon } from '@/shared/ui/icon';
 import { IconLink } from '@/shared/ui/icon-link';
 import { Button } from '@/shared/ui/button';
@@ -35,6 +32,7 @@ import { useSubscription } from '@/features/subscription/api/hooks';
 import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import { CategorySelect } from './CategorySelect';
 import { TypeSelect } from './TypeSelect';
+import { ReminderSection } from './ReminderSection';
 import styles from './OperationEditForm.module.css';
 
 type FormData = {
@@ -86,79 +84,6 @@ function useOperationId(): string | undefined {
   return params?.id;
 }
 
-const REMINDER_OFFSET_OPTIONS: { value: 1 | 3 | 7; label: string }[] = [
-  { value: 1, label: 'За 1 день' },
-  { value: 3, label: 'За 3 дня' },
-  { value: 7, label: 'За 7 дней' },
-];
-
-type ReminderSectionProps = {
-  readonly enabled: boolean;
-  readonly offsetDays: 1 | 3 | 7;
-  readonly onEnabledChange: (enabled: boolean) => void;
-  readonly onOffsetChange: (offsetDays: 1 | 3 | 7) => void;
-  readonly disabled?: boolean;
-};
-
-function ReminderSection({
-  enabled,
-  offsetDays,
-  onEnabledChange,
-  onOffsetChange,
-  disabled,
-}: ReminderSectionProps): JSX.Element {
-  const groupId = useId();
-
-  return (
-    <div className={styles.reminder}>
-      <Checkbox
-        isSelected={enabled}
-        onChange={onEnabledChange}
-        isDisabled={disabled}
-        className={styles.checkbox}
-      >
-        Добавить SMS-напоминание
-      </Checkbox>
-
-      {enabled && (
-        <div
-          className={styles.offsetGroup}
-          role="radiogroup"
-          aria-labelledby={`${groupId}-label`}
-        >
-          <span id={`${groupId}-label`} className={styles.offsetLabel}>
-            За сколько дней напомнить
-          </span>
-          <div className={styles.offsetOptions}>
-            {REMINDER_OFFSET_OPTIONS.map((option) => {
-              const isSelected = offsetDays === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={isSelected}
-                  disabled={disabled}
-                  className={clsx(
-                    styles.offsetOption,
-                    isSelected && styles.selected,
-                  )}
-                  onClick={() => onOffsetChange(option.value)}
-                >
-                  <span className={styles.radio} aria-hidden="true">
-                    <span className={styles.radioDot} />
-                  </span>
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function OperationEditFormContent({
   id,
   operation,
@@ -205,19 +130,23 @@ function OperationEditFormContent({
   };
 
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, name: event.currentTarget.value }));
+    const value = event.currentTarget.value;
+    setForm((prev) => ({ ...prev, name: value }));
   };
 
   const handleAmountChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, amount: event.currentTarget.value }));
+    const value = event.currentTarget.value;
+    setForm((prev) => ({ ...prev, amount: value }));
   };
 
   const handleDateChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, operation_date: event.currentTarget.value }));
+    const value = event.currentTarget.value;
+    setForm((prev) => ({ ...prev, operation_date: value }));
   };
 
   const handleCommentChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    setForm((prev) => ({ ...prev, comment: event.currentTarget.value }));
+    const value = event.currentTarget.value;
+    setForm((prev) => ({ ...prev, comment: value }));
   };
 
   const handleReminderToggle = (enabled: boolean) => {
