@@ -6,18 +6,19 @@ import {
   type ChangeEvent,
   type JSX,
 } from 'react';
-import { ArrowLeft, Clock, Logo } from '@/shared/assets/icons';
+import { ArrowLeft, Clock } from '@/shared/assets/icons';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import { formatTimer } from '@/features/auth/lib/format-timer';
 import styles from './CodeStep.module.css';
 
 export type CodeStepProps = {
-  phone: string;
+  contact: string;
+  contactType: 'phone' | 'email';
   code: string;
   onCodeChange: (value: string) => void;
   onVerify: (code: string) => void;
-  onChangePhone: () => void;
+  onChangeContact: () => void;
   onResend: () => void;
   isVerifying: boolean;
   isResending: boolean;
@@ -25,11 +26,12 @@ export type CodeStepProps = {
 };
 
 export function CodeStep({
-  phone,
+  contact,
+  contactType,
   code,
   onCodeChange,
   onVerify,
-  onChangePhone,
+  onChangeContact,
   onResend,
   isVerifying,
   isResending,
@@ -49,13 +51,19 @@ export function CodeStep({
     }
   };
 
+  const contactLabel = contactType === 'email'
+    ? `Отправили код на email ${contact}`
+    : `Отправили СМС-код на номер ${contact}`;
+
+  const changeLabel = contactType === 'email' ? 'Изменить email' : 'Изменить номер';
+
   return (
     <div className={styles.root}>
       <div className={styles.header}>
         <h1 className={styles.title}>Введите код</h1>
         <p className={styles.subtitle}>
-          Отправили СМС-код на номер{' '}
-          <span className={styles.phone}>{phone}</span>
+          {contactLabel}{' '}
+          <span className={styles.phone}>{contact}</span>
         </p>
       </div>
 
@@ -97,10 +105,10 @@ export function CodeStep({
           size="large"
           fullWidth
           leftIcon={<ArrowLeft />}
-          onClick={onChangePhone}
+          onClick={onChangeContact}
           disabled={isVerifying}
         >
-          Изменить номер
+          {changeLabel}
         </Button>
       </div>
     </div>

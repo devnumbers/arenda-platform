@@ -154,11 +154,12 @@ export function AuthForm({
             ) : (
                 <StepTransition stepKey="code">
                     <CodeStep
-                        phone={phone}
+                        contact={phone}
+                        contactType="phone"
                         code={code}
                         onCodeChange={handleCodeChange}
                         onVerify={handleVerifyCode}
-                        onChangePhone={handleChangePhone}
+                        onChangeContact={handleChangePhone}
                         onResend={handleResend}
                         isVerifying={isVerifying}
                         isResending={isResending}
