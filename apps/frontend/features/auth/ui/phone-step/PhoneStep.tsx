@@ -2,7 +2,7 @@
 
 import { type ChangeEvent, type JSX } from 'react';
 import { formatPhoneInput } from '@/shared/lib/phone';
-import { Clock, Logo, Support } from '@/shared/assets/icons';
+import { Clock, Support } from '@/shared/assets/icons';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import { formatTimer } from '@/features/auth/lib/format-timer';

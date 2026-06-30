@@ -60,8 +60,8 @@ export default function LoginPage(): JSX.Element {
                 onSuccess: () => {
                     router.push('/dashboard');
                 },
-                onError: () => {
-                    toast.error('Неверный код');
+                onError: (error) => {
+                    toast.error(error.detail ?? 'Неверный код');
                 },
             },
         );

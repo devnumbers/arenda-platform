@@ -23,7 +23,7 @@ export function EmailStep({
   const [touched, setTouched] = useState(false);
   const trimmed = email.trim();
   const isValid = emailRegex.test(trimmed);
-  const showError = touched && !isValid && trimmed !== '';
+  const showError = touched && !isValid;
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     onEmailChange(event.target.value);
@@ -36,6 +36,8 @@ export function EmailStep({
       onSubmit();
     }
   };
+
+  const errorMessage = trimmed === '' ? 'Введите email' : 'Введите корректный email';
 
   return (
     <div className={styles.root}>
@@ -53,7 +55,7 @@ export function EmailStep({
           placeholder="you@example.com"
           value={email}
           onChange={handleChange}
-          error={showError ? 'Введите корректный email' : undefined}
+          error={showError ? errorMessage : undefined}
           fullWidth
         />
 
