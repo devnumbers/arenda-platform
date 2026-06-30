@@ -8,6 +8,7 @@ paths:
   /auth/phone/send:
     post:
       operationId: sendPhoneCode
+      deprecated: true
       requestBody:
         required: true
         content:
@@ -24,12 +25,57 @@ paths:
   /auth/phone/verify:
     post:
       operationId: verifyPhoneCode
+      deprecated: true
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/VerifyPhoneCodeRequest'
+      responses:
+        '200':
+          description: Authenticated
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/email/send:
+    post:
+      operationId: sendEmailCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendEmailCodeRequest'
+      responses:
+        '204':
+          description: Code sent
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/email/verify:
+    post:
+      operationId: verifyEmailCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailCodeRequest'
       responses:
         '200':
           description: Authenticated
@@ -1775,6 +1821,31 @@ components:
         code:
           type: string
           example: '123456'
+
+    SendEmailCodeRequest:
+      type: object
+      required:
+        - phone
+        - email
+      properties:
+        phone:
+          type: string
+        email:
+          type: string
+
+    VerifyEmailCodeRequest:
+      type: object
+      required:
+        - phone
+        - email
+        - code
+      properties:
+        phone:
+          type: string
+        email:
+          type: string
+        code:
+          type: string
 
     MeResponse:
       type: object

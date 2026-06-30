@@ -74,6 +74,13 @@ func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.auth.SendCode(r.Context(), phone); err != nil {
 		switch {
+		case errors.Is(err, application.ErrPhoneLoginDeprecated):
+			detail, ok := UserFacingDetail(err)
+			if !ok {
+				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+				return
+			}
+			writeProblem(w, http.StatusGone, problem(r.Context(), "Gone", detail))
 		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
 			detail, ok := UserFacingDetail(err)
 			if !ok {
@@ -88,6 +95,32 @@ func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// SendEmailCode implements POST /auth/email/send.
+func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
+	var body openapi.SendEmailCodeRequest
+	if err := decodeJSONBody(w, r, &body); err != nil {
+		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		return
+	}
+
+	_ = body
+	writeProblem(w, http.StatusNotImplemented, problem(r.Context(), "Not Implemented", "email login is not yet implemented"))
+}
+
+// VerifyEmailCode implements POST /auth/email/verify.
+func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
+	var body openapi.VerifyEmailCodeRequest
+	if err := decodeJSONBody(w, r, &body); err != nil {
+		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		return
+	}
+
+	_ = body
+	writeProblem(w, http.StatusNotImplemented, problem(r.Context(), "Not Implemented", "email login is not yet implemented"))
 }
 
 // VerifyPhoneCode implements POST /auth/phone/verify.
@@ -114,6 +147,13 @@ func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 	raw, user, err := h.auth.VerifyCode(r.Context(), phone, body.Code)
 	if err != nil {
 		switch {
+		case errors.Is(err, application.ErrPhoneLoginDeprecated):
+			detail, ok := UserFacingDetail(err)
+			if !ok {
+				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+				return
+			}
+			writeProblem(w, http.StatusGone, problem(r.Context(), "Gone", detail))
 		case errors.Is(err, application.ErrUserBlocked),
 			errors.Is(err, domain.ErrTooManyAttempts):
 			detail, ok := UserFacingDetail(err)
