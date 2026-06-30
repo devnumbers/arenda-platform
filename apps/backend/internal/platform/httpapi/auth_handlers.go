@@ -126,7 +126,7 @@ func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.emailSend != nil && !h.emailSend.Allow(phone.String()+":"+email.String()) {
+	if h.emailSend != nil && !h.emailSend.Allow(phone.String()) {
 		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "rate limit exceeded"))
 		return
 	}
@@ -174,7 +174,7 @@ func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.emailVerify != nil && !h.emailVerify.Allow(phone.String()+":"+email.String()) {
+	if h.emailVerify != nil && !h.emailVerify.Allow(phone.String()) {
 		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "rate limit exceeded"))
 		return
 	}
