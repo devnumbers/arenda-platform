@@ -9,13 +9,13 @@ import (
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 )
 
-// SMSSender wraps the identity application Sender to implement the notifications SMSSender port.
+// SMSSender wraps the identity application SMSSender to implement the notifications SMSSender port.
 type SMSSender struct {
-	sender identityapp.Sender
+	sender identityapp.SMSSender
 }
 
 // NewSMSSenderAdapter creates a new SMSSender adapter.
-func NewSMSSenderAdapter(sender identityapp.Sender) *SMSSender {
+func NewSMSSenderAdapter(sender identityapp.SMSSender) *SMSSender {
 	return &SMSSender{sender: sender}
 }
 

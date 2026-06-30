@@ -18,8 +18,12 @@ var (
 // Clock is re-exported from the shared clock package for backwards compatibility.
 type Clock = clock.Clock
 
-type Sender interface {
+type SMSSender interface {
 	Send(ctx context.Context, phone domain.Phone, message string) error
+}
+
+type EmailSender interface {
+	Send(ctx context.Context, email domain.Email, code string) error
 }
 
 type UserRepository interface {
@@ -31,19 +35,20 @@ type UserRepository interface {
 	Create(ctx context.Context, user domain.User) (domain.User, error)
 	Update(ctx context.Context, user domain.User) (domain.User, error)
 	UpdatePhone(ctx context.Context, id uuid.UUID, phone domain.Phone) (domain.User, error)
+	UpdateEmailVerified(ctx context.Context, id uuid.UUID, email string, verifiedAt *time.Time) (domain.User, error)
 	WithTx(tx transaction.Tx) UserRepository
 }
 
-type SMSCodeRepository interface {
-	Save(ctx context.Context, code domain.SMSCode) error
-	GetLatestByPhone(ctx context.Context, phone domain.Phone, purpose string, now time.Time) (domain.SMSCode, error)
-	GetLatestByPhoneAndUserID(ctx context.Context, phone domain.Phone, purpose string, userID uuid.UUID, now time.Time) (domain.SMSCode, error)
+type LoginCodeRepository interface {
+	Save(ctx context.Context, code domain.LoginCode) error
+	GetLatestByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose string, now time.Time) (domain.LoginCode, error)
+	GetLatestByPhoneAndUserID(ctx context.Context, phone domain.Phone, purpose string, userID uuid.UUID, now time.Time) (domain.LoginCode, error)
 	MarkUsedByID(ctx context.Context, id uuid.UUID) error
 	DeleteByID(ctx context.Context, id uuid.UUID) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 	DeleteExpiredBefore(ctx context.Context, before time.Time) error
 	DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
-	WithTx(tx transaction.Tx) SMSCodeRepository
+	WithTx(tx transaction.Tx) LoginCodeRepository
 }
 
 type AttemptRepository interface {

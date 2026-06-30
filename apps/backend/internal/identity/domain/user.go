@@ -2,6 +2,7 @@ package domain
 
 import (
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -14,13 +15,14 @@ const (
 )
 
 type User struct {
-	ID         uuid.UUID
-	Phone      Phone
-	Role       Role
-	Name       *string
-	Surname    *string
-	Patronymic *string
-	Email      *string
+	ID              uuid.UUID
+	Phone           Phone
+	Role            Role
+	Name            *string
+	Surname         *string
+	Patronymic      *string
+	Email           *string
+	EmailVerifiedAt *time.Time
 }
 
 func NewOwner(phone Phone) (User, error) {
@@ -40,10 +42,10 @@ func (u *User) UpdatePersonalData(name, surname, patronymic, email Optional[stri
 		u.Name = nonEmptyPtr(strings.TrimSpace(name.Value))
 	}
 	if surname.Set {
-		u.Surname = nonEmptyPtr(strings.TrimSpace(name.Value))
+		u.Surname = nonEmptyPtr(strings.TrimSpace(surname.Value))
 	}
 	if patronymic.Set {
-		u.Patronymic = nonEmptyPtr(strings.TrimSpace(name.Value))
+		u.Patronymic = nonEmptyPtr(strings.TrimSpace(patronymic.Value))
 	}
 	if email.Set {
 		v, err := NormalizeEmail(email.Value)

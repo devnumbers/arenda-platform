@@ -22,13 +22,13 @@ type Querier interface {
 	CountSubscriptionPaymentsAdmin(ctx context.Context, dollar_1 string) (int64, error)
 	CountSubscriptionsByActivePaymentMethodID(ctx context.Context, activePaymentMethodID pgtype.UUID) (int64, error)
 	CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease, error)
+	CreateLoginCode(ctx context.Context, arg CreateLoginCodeParams) error
 	CreateOperation(ctx context.Context, arg CreateOperationParams) (Operation, error)
 	CreatePaymentMethod(ctx context.Context, arg CreatePaymentMethodParams) (PaymentMethod, error)
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
 	CreatePropertyPhoto(ctx context.Context, arg CreatePropertyPhotoParams) (PropertyPhoto, error)
 	CreateRecurringOperation(ctx context.Context, arg CreateRecurringOperationParams) (RecurringOperation, error)
 	CreateReminder(ctx context.Context, arg CreateReminderParams) (Reminder, error)
-	CreateSMSCode(ctx context.Context, arg CreateSMSCodeParams) error
 	CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSReminderParams) (int64, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (UserSubscription, error)
@@ -36,8 +36,8 @@ type Querier interface {
 	CreateTenantContact(ctx context.Context, arg CreateTenantContactParams) (TenantContact, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error
-	DeleteExpiredSMSCodes(ctx context.Context, expiresAt pgtype.Timestamptz) error
-	DeleteExpiredSMSCodesBatch(ctx context.Context, arg DeleteExpiredSMSCodesBatchParams) (int64, error)
+	DeleteExpiredLoginCodes(ctx context.Context, expiresAt pgtype.Timestamptz) error
+	DeleteExpiredLoginCodesBatch(ctx context.Context, arg DeleteExpiredLoginCodesBatchParams) (int64, error)
 	DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error
 	DeleteExpiredSessionsBatch(ctx context.Context, arg DeleteExpiredSessionsBatchParams) (int64, error)
 	DeleteFutureGeneratedOperations(ctx context.Context, arg DeleteFutureGeneratedOperationsParams) error
@@ -45,13 +45,12 @@ type Querier interface {
 	DeleteFutureUneditedOperationsByProperty(ctx context.Context, arg DeleteFutureUneditedOperationsByPropertyParams) error
 	DeleteLoginAttemptByPhone(ctx context.Context, phone string) error
 	DeleteLoginAttemptsByUserID(ctx context.Context, userID pgtype.UUID) error
+	DeleteLoginCodeByID(ctx context.Context, id pgtype.UUID) error
+	DeleteLoginCodesByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteOperationsOutsideLeaseRange(ctx context.Context, arg DeleteOperationsOutsideLeaseRangeParams) error
 	DeletePaymentMethodByID(ctx context.Context, id pgtype.UUID) error
 	DeletePropertyPhoto(ctx context.Context, id pgtype.UUID) error
 	DeleteRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) error
-	DeleteSMSCodeByID(ctx context.Context, id pgtype.UUID) error
-	DeleteSMSCodeByPhoneAndPurpose(ctx context.Context, arg DeleteSMSCodeByPhoneAndPurposeParams) error
-	DeleteSMSCodesByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) error
@@ -66,8 +65,8 @@ type Querier interface {
 	GetFinanceReportByProperty(ctx context.Context, arg GetFinanceReportByPropertyParams) ([]GetFinanceReportByPropertyRow, error)
 	GetFinanceReportTotals(ctx context.Context, arg GetFinanceReportTotalsParams) (GetFinanceReportTotalsRow, error)
 	GetLastSucceededSubscriptionPaymentBySubscriptionID(ctx context.Context, subscriptionID pgtype.UUID) (SubscriptionPayment, error)
-	GetLatestSMSCodeByPhoneAndPurpose(ctx context.Context, arg GetLatestSMSCodeByPhoneAndPurposeParams) (SmsCode, error)
-	GetLatestSMSCodeByPhoneAndPurposeAndUserID(ctx context.Context, arg GetLatestSMSCodeByPhoneAndPurposeAndUserIDParams) (SmsCode, error)
+	GetLatestLoginCodeByPhoneAndEmailAndPurpose(ctx context.Context, arg GetLatestLoginCodeByPhoneAndEmailAndPurposeParams) (GetLatestLoginCodeByPhoneAndEmailAndPurposeRow, error)
+	GetLatestLoginCodeByPhoneAndPurposeAndUserID(ctx context.Context, arg GetLatestLoginCodeByPhoneAndPurposeAndUserIDParams) (GetLatestLoginCodeByPhoneAndPurposeAndUserIDRow, error)
 	GetLeaseByID(ctx context.Context, id pgtype.UUID) (Lease, error)
 	GetLeaseByIDAndOwner(ctx context.Context, arg GetLeaseByIDAndOwnerParams) (Lease, error)
 	GetLeaseByIDAndOwnerForUpdate(ctx context.Context, arg GetLeaseByIDAndOwnerForUpdateParams) (Lease, error)
@@ -152,11 +151,11 @@ type Querier interface {
 	ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]TenantContact, error)
 	ListTenantContactsWithLeaseStatus(ctx context.Context, ownerID pgtype.UUID) ([]ListTenantContactsWithLeaseStatusRow, error)
 	LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
+	MarkLoginCodeUsed(ctx context.Context, id pgtype.UUID) error
 	MarkOperationOverdue(ctx context.Context, arg MarkOperationOverdueParams) (Operation, error)
 	MarkReminderFailed(ctx context.Context, arg MarkReminderFailedParams) (int64, error)
 	MarkReminderSending(ctx context.Context, id pgtype.UUID) (Reminder, error)
 	MarkReminderSent(ctx context.Context, arg MarkReminderSentParams) (int64, error)
-	MarkSMSCodeUsed(ctx context.Context, id pgtype.UUID) error
 	MarkSendingReminderPending(ctx context.Context, arg MarkSendingReminderPendingParams) (int64, error)
 	MarkSendingReminderSent(ctx context.Context, arg MarkSendingReminderSentParams) (int64, error)
 	MarkSubscriptionPaymentFailed(ctx context.Context, arg MarkSubscriptionPaymentFailedParams) (SubscriptionPayment, error)
@@ -188,6 +187,7 @@ type Querier interface {
 	UpdateSubscriptionPaymentProviderPaymentID(ctx context.Context, arg UpdateSubscriptionPaymentProviderPaymentIDParams) (SubscriptionPayment, error)
 	UpdateTenantContact(ctx context.Context, arg UpdateTenantContactParams) (TenantContact, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
+	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error)
 	UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error)
 	UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error
 	UpsertPaymentMethodByTokenHash(ctx context.Context, arg UpsertPaymentMethodByTokenHashParams) (PaymentMethod, error)

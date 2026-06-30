@@ -160,50 +160,79 @@ func (r *UserRepository) UpdatePhone(ctx context.Context, id uuid.UUID, phone do
 	return r.mapUser(ctx, row)
 }
 
+func (r *UserRepository) UpdateEmailVerified(ctx context.Context, id uuid.UUID, email string, verifiedAt *time.Time) (domain.User, error) {
+	row, err := r.q().UpdateUserEmailVerified(ctx, postgres.UpdateUserEmailVerifiedParams{
+		ID:              pgconv.UUIDToPgtype(id),
+		Email:           pgconv.StringPtrToPgtype(&email),
+		EmailVerifiedAt: pgconv.TimePtrToPgtype(verifiedAt),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, application.ErrNotFound
+		}
+		return domain.User{}, err
+	}
+	return r.mapUser(ctx, postgres.User{
+		ID:              row.ID,
+		Phone:           row.Phone,
+		Role:            row.Role,
+		Name:            row.Name,
+		Surname:         row.Surname,
+		Patronymic:      row.Patronymic,
+		Email:           row.Email,
+		EmailVerifiedAt: row.EmailVerifiedAt,
+		CreatedAt:       row.CreatedAt,
+		UpdatedAt:       row.UpdatedAt,
+		PhoneEncrypted:  row.PhoneEncrypted,
+	})
+}
+
 func (r *UserRepository) mapUser(ctx context.Context, row postgres.User) (domain.User, error) {
 	phone, err := decryptPhone(ctx, r.enc, row.Phone, row.PhoneEncrypted)
 	if err != nil {
 		return domain.User{}, err
 	}
 	return domain.User{
-		ID:         pgconv.UUIDFromPgtype(row.ID),
-		Phone:      domain.Phone(phone),
-		Role:       domain.Role(row.Role),
-		Name:       pgconv.TextToPtrString(row.Name),
-		Surname:    pgconv.TextToPtrString(row.Surname),
-		Patronymic: pgconv.TextToPtrString(row.Patronymic),
-		Email:      pgconv.TextToPtrString(row.Email),
+		ID:              pgconv.UUIDFromPgtype(row.ID),
+		Phone:           domain.Phone(phone),
+		Role:            domain.Role(row.Role),
+		Name:            pgconv.TextToPtrString(row.Name),
+		Surname:         pgconv.TextToPtrString(row.Surname),
+		Patronymic:      pgconv.TextToPtrString(row.Patronymic),
+		Email:           pgconv.TextToPtrString(row.Email),
+		EmailVerifiedAt: pgconv.TimestamptzToPtrTime(row.EmailVerifiedAt),
 	}, nil
 }
 
-// SMSCodeRepository persists SMS codes.
-type SMSCodeRepository struct {
+// LoginCodeRepository persists login codes.
+type LoginCodeRepository struct {
 	db  postgres.DBTX
 	enc encryption.Encryptor
 }
 
-// NewSMSCodeRepository creates a new SMS code repository.
-func NewSMSCodeRepository(db postgres.DBTX, enc encryption.Encryptor) *SMSCodeRepository {
-	return &SMSCodeRepository{db: db, enc: enc}
+// NewLoginCodeRepository creates a new login code repository.
+func NewLoginCodeRepository(db postgres.DBTX, enc encryption.Encryptor) *LoginCodeRepository {
+	return &LoginCodeRepository{db: db, enc: enc}
 }
 
-func (r *SMSCodeRepository) q() *postgres.Queries {
+func (r *LoginCodeRepository) q() *postgres.Queries {
 	return postgres.New(r.db)
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
-func (r *SMSCodeRepository) WithTx(tx transaction.Tx) application.SMSCodeRepository {
-	return NewSMSCodeRepository(tx.(postgres.DBTX), r.enc)
+func (r *LoginCodeRepository) WithTx(tx transaction.Tx) application.LoginCodeRepository {
+	return NewLoginCodeRepository(tx.(postgres.DBTX), r.enc)
 }
 
-func (r *SMSCodeRepository) Save(ctx context.Context, code domain.SMSCode) error {
+func (r *LoginCodeRepository) Save(ctx context.Context, code domain.LoginCode) error {
 	encryptedPhone, err := encryptPhone(ctx, r.enc, code.Phone.String())
 	if err != nil {
 		return err
 	}
-	return r.q().CreateSMSCode(ctx, postgres.CreateSMSCodeParams{
+	return r.q().CreateLoginCode(ctx, postgres.CreateLoginCodeParams{
 		ID:             pgconv.UUIDToPgtype(code.ID),
-		Phone:          encryptedPhone,
+		Phone:          pgtype.Text{String: encryptedPhone, Valid: true},
+		Email:          pgtype.Text{String: code.Email.String(), Valid: code.Email.String() != ""},
 		CodeHash:       code.CodeHash,
 		ExpiresAt:      pgtype.Timestamptz{Time: code.ExpiresAt, Valid: true},
 		UserID:         pgconv.UUIDToPgtypePtr(code.UserID),
@@ -212,82 +241,131 @@ func (r *SMSCodeRepository) Save(ctx context.Context, code domain.SMSCode) error
 	})
 }
 
-func (r *SMSCodeRepository) GetLatestByPhone(ctx context.Context, phone domain.Phone, purpose string, now time.Time) (domain.SMSCode, error) {
+func (r *LoginCodeRepository) GetLatestByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose string, now time.Time) (domain.LoginCode, error) {
 	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
 	if err != nil {
-		return domain.SMSCode{}, err
+		return domain.LoginCode{}, err
 	}
-	row, err := r.q().GetLatestSMSCodeByPhoneAndPurpose(ctx, postgres.GetLatestSMSCodeByPhoneAndPurposeParams{
-		Phone:     encryptedPhone,
+	row, err := r.q().GetLatestLoginCodeByPhoneAndEmailAndPurpose(ctx, postgres.GetLatestLoginCodeByPhoneAndEmailAndPurposeParams{
+		Phone:     pgtype.Text{String: encryptedPhone, Valid: true},
+		Email:     pgtype.Text{String: email.String(), Valid: true},
 		Purpose:   purpose,
 		ExpiresAt: pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.SMSCode{}, application.ErrNotFound
+			return domain.LoginCode{}, application.ErrNotFound
 		}
-		return domain.SMSCode{}, err
+		return domain.LoginCode{}, err
 	}
-	return r.mapSMSCode(ctx, row)
+	return r.mapLoginCode(ctx, toLoginCodeRowPhoneEmail(row))
 }
 
-func (r *SMSCodeRepository) GetLatestByPhoneAndUserID(ctx context.Context, phone domain.Phone, purpose string, userID uuid.UUID, now time.Time) (domain.SMSCode, error) {
+func (r *LoginCodeRepository) GetLatestByPhoneAndUserID(ctx context.Context, phone domain.Phone, purpose string, userID uuid.UUID, now time.Time) (domain.LoginCode, error) {
 	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
 	if err != nil {
-		return domain.SMSCode{}, err
+		return domain.LoginCode{}, err
 	}
-	row, err := r.q().GetLatestSMSCodeByPhoneAndPurposeAndUserID(ctx, postgres.GetLatestSMSCodeByPhoneAndPurposeAndUserIDParams{
-		Phone:     encryptedPhone,
+	row, err := r.q().GetLatestLoginCodeByPhoneAndPurposeAndUserID(ctx, postgres.GetLatestLoginCodeByPhoneAndPurposeAndUserIDParams{
+		Phone:     pgtype.Text{String: encryptedPhone, Valid: true},
 		Purpose:   purpose,
 		UserID:    pgconv.UUIDToPgtype(userID),
 		ExpiresAt: pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.SMSCode{}, application.ErrNotFound
+			return domain.LoginCode{}, application.ErrNotFound
 		}
-		return domain.SMSCode{}, err
+		return domain.LoginCode{}, err
 	}
-	return r.mapSMSCode(ctx, row)
+	return r.mapLoginCode(ctx, toLoginCodeRowUserID(row))
 }
 
-func (r *SMSCodeRepository) MarkUsedByID(ctx context.Context, id uuid.UUID) error {
-	return r.q().MarkSMSCodeUsed(ctx, pgconv.UUIDToPgtype(id))
+func (r *LoginCodeRepository) MarkUsedByID(ctx context.Context, id uuid.UUID) error {
+	return r.q().MarkLoginCodeUsed(ctx, pgconv.UUIDToPgtype(id))
 }
 
-func (r *SMSCodeRepository) DeleteByID(ctx context.Context, id uuid.UUID) error {
-	return r.q().DeleteSMSCodeByID(ctx, pgconv.UUIDToPgtype(id))
+func (r *LoginCodeRepository) DeleteByID(ctx context.Context, id uuid.UUID) error {
+	return r.q().DeleteLoginCodeByID(ctx, pgconv.UUIDToPgtype(id))
 }
 
-func (r *SMSCodeRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
-	return r.q().DeleteSMSCodesByUserID(ctx, pgconv.UUIDToPgtype(userID))
+func (r *LoginCodeRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
+	return r.q().DeleteLoginCodesByUserID(ctx, pgconv.UUIDToPgtype(userID))
 }
 
-func (r *SMSCodeRepository) DeleteExpiredBefore(ctx context.Context, before time.Time) error {
-	return r.q().DeleteExpiredSMSCodes(ctx, pgtype.Timestamptz{Time: before, Valid: true})
+func (r *LoginCodeRepository) DeleteExpiredBefore(ctx context.Context, before time.Time) error {
+	return r.q().DeleteExpiredLoginCodes(ctx, pgtype.Timestamptz{Time: before, Valid: true})
 }
 
-func (r *SMSCodeRepository) DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error) {
-	return r.q().DeleteExpiredSMSCodesBatch(ctx, postgres.DeleteExpiredSMSCodesBatchParams{
+func (r *LoginCodeRepository) DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error) {
+	return r.q().DeleteExpiredLoginCodesBatch(ctx, postgres.DeleteExpiredLoginCodesBatchParams{
 		ExpiresAt: pgtype.Timestamptz{Time: before, Valid: true},
 		Limit:     batchSize,
 	})
 }
 
-func (r *SMSCodeRepository) mapSMSCode(ctx context.Context, row postgres.SmsCode) (domain.SMSCode, error) {
-	phone, err := decryptPhone(ctx, r.enc, row.Phone, row.PhoneEncrypted)
-	if err != nil {
-		return domain.SMSCode{}, err
+type loginCodeRow struct {
+	id             pgtype.UUID
+	userID         pgtype.UUID
+	phone          pgtype.Text
+	email          pgtype.Text
+	codeHash       string
+	expiresAt      pgtype.Timestamptz
+	used           bool
+	createdAt      pgtype.Timestamptz
+	purpose        string
+	phoneEncrypted bool
+}
+
+func toLoginCodeRowPhoneEmail(row postgres.GetLatestLoginCodeByPhoneAndEmailAndPurposeRow) loginCodeRow {
+	return loginCodeRow{
+		id:             row.ID,
+		userID:         row.UserID,
+		phone:          row.Phone,
+		email:          row.Email,
+		codeHash:       row.CodeHash,
+		expiresAt:      row.ExpiresAt,
+		used:           row.Used,
+		createdAt:      row.CreatedAt,
+		purpose:        row.Purpose,
+		phoneEncrypted: row.PhoneEncrypted,
 	}
-	return domain.SMSCode{
-		ID:        pgconv.UUIDFromPgtype(row.ID),
-		UserID:    pgconv.UUIDFromPgtypePtr(row.UserID),
+}
+
+func toLoginCodeRowUserID(row postgres.GetLatestLoginCodeByPhoneAndPurposeAndUserIDRow) loginCodeRow {
+	return loginCodeRow{
+		id:             row.ID,
+		userID:         row.UserID,
+		phone:          row.Phone,
+		email:          row.Email,
+		codeHash:       row.CodeHash,
+		expiresAt:      row.ExpiresAt,
+		used:           row.Used,
+		createdAt:      row.CreatedAt,
+		purpose:        row.Purpose,
+		phoneEncrypted: row.PhoneEncrypted,
+	}
+}
+
+func (r *LoginCodeRepository) mapLoginCode(ctx context.Context, row loginCodeRow) (domain.LoginCode, error) {
+	phone, err := decryptPhone(ctx, r.enc, row.phone.String, row.phoneEncrypted)
+	if err != nil {
+		return domain.LoginCode{}, err
+	}
+	email := domain.Email{}
+	if row.email.Valid {
+		email = domain.EmailFrom(row.email.String)
+	}
+	return domain.LoginCode{
+		ID:        pgconv.UUIDFromPgtype(row.id),
+		UserID:    pgconv.UUIDFromPgtypePtr(row.userID),
 		Phone:     domain.Phone(phone),
-		Purpose:   row.Purpose,
-		CodeHash:  row.CodeHash,
-		ExpiresAt: row.ExpiresAt.Time,
-		Used:      row.Used,
-		CreatedAt: row.CreatedAt.Time,
+		Email:     email,
+		Purpose:   row.purpose,
+		CodeHash:  row.codeHash,
+		ExpiresAt: row.expiresAt.Time,
+		Used:      row.used,
+		CreatedAt: row.createdAt.Time,
 	}, nil
 }
 
@@ -461,13 +539,14 @@ func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string
 			CreatedAt:  row.CreatedAt.Time,
 			LastUsedAt: row.LastUsedAt.Time,
 		}, domain.User{
-			ID:         pgconv.UUIDFromPgtype(row.UserID),
-			Phone:      domain.Phone(phone),
-			Role:       domain.Role(row.Role),
-			Name:       pgconv.TextToPtrString(row.Name),
-			Surname:    pgconv.TextToPtrString(row.Surname),
-			Patronymic: pgconv.TextToPtrString(row.Patronymic),
-			Email:      pgconv.TextToPtrString(row.Email),
+			ID:              pgconv.UUIDFromPgtype(row.UserID),
+			Phone:           domain.Phone(phone),
+			Role:            domain.Role(row.Role),
+			Name:            pgconv.TextToPtrString(row.Name),
+			Surname:         pgconv.TextToPtrString(row.Surname),
+			Patronymic:      pgconv.TextToPtrString(row.Patronymic),
+			Email:           pgconv.TextToPtrString(row.Email),
+			EmailVerifiedAt: pgconv.TimestamptzToPtrTime(row.EmailVerifiedAt),
 		}, nil
 }
 

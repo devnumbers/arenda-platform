@@ -14,7 +14,7 @@ const defaultDeleteBatchSize = 1000
 // Cleaner periodically removes expired identity data.
 type Cleaner struct {
 	sessions  identityapp.SessionRepository
-	codes     identityapp.SMSCodeRepository
+	codes     identityapp.LoginCodeRepository
 	attempts  identityapp.AttemptRepository
 	clock     clock.Clock
 	interval  time.Duration
@@ -23,7 +23,7 @@ type Cleaner struct {
 }
 
 // New creates a Cleaner with the given repositories and schedule.
-func New(sessions identityapp.SessionRepository, codes identityapp.SMSCodeRepository, attempts identityapp.AttemptRepository, clock clock.Clock, interval, retention time.Duration, logger *slog.Logger) *Cleaner {
+func New(sessions identityapp.SessionRepository, codes identityapp.LoginCodeRepository, attempts identityapp.AttemptRepository, clock clock.Clock, interval, retention time.Duration, logger *slog.Logger) *Cleaner {
 	return &Cleaner{
 		sessions:  sessions,
 		codes:     codes,
