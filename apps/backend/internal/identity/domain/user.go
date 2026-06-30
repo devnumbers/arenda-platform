@@ -1,16 +1,10 @@
 package domain
 
 import (
-	"errors"
-	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
 )
-
-var emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
-
-var ErrInvalidEmail = errors.New("invalid email")
 
 type Role string
 
@@ -46,19 +40,18 @@ func (u *User) UpdatePersonalData(name, surname, patronymic, email Optional[stri
 		u.Name = nonEmptyPtr(strings.TrimSpace(name.Value))
 	}
 	if surname.Set {
-		u.Surname = nonEmptyPtr(strings.TrimSpace(surname.Value))
+		u.Surname = nonEmptyPtr(strings.TrimSpace(name.Value))
 	}
 	if patronymic.Set {
-		u.Patronymic = nonEmptyPtr(strings.TrimSpace(patronymic.Value))
+		u.Patronymic = nonEmptyPtr(strings.TrimSpace(name.Value))
 	}
 	if email.Set {
-		v := strings.ToLower(strings.TrimSpace(email.Value))
-		if v != "" && !isValidEmail(v) {
-			return ErrInvalidEmail
+		v, err := NormalizeEmail(email.Value)
+		if err != nil {
+			return err
 		}
 		u.Email = nonEmptyPtr(v)
 	}
-
 	return nil
 }
 
@@ -67,8 +60,4 @@ func nonEmptyPtr(s string) *string {
 		return nil
 	}
 	return &s
-}
-
-func isValidEmail(email string) bool {
-	return emailRegex.MatchString(email)
 }

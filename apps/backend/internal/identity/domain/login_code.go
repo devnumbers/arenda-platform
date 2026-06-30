@@ -11,25 +11,26 @@ import (
 )
 
 const (
-	SMSCodeTTL          = 5 * time.Minute
-	SMSAttemptWindowTTL = 30 * time.Minute
-	MaxSMSFailures      = 5
+	LoginCodeTTL          = 5 * time.Minute
+	LoginAttemptWindowTTL = 30 * time.Minute
+	MaxLoginFailures      = 5
 )
 
 const (
-	SMSCodePurposeLogin       = "login"
-	SMSCodePurposePhoneChange = "phone_change"
+	LoginCodePurposeLogin       = "login"
+	LoginCodePurposePhoneChange = "phone_change"
 )
 
 var (
-	ErrSMSCodeInvalid  = errors.New("sms code invalid")
-	ErrTooManyAttempts = errors.New("too many attempts")
+	ErrLoginCodeInvalid = errors.New("login code invalid")
+	ErrTooManyAttempts  = errors.New("too many attempts")
 )
 
-type SMSCode struct {
+type LoginCode struct {
 	ID        uuid.UUID
 	UserID    *uuid.UUID
 	Phone     Phone
+	Email     Email
 	Purpose   string
 	CodeHash  string
 	ExpiresAt time.Time
@@ -37,33 +38,34 @@ type SMSCode struct {
 	CreatedAt time.Time
 }
 
-func NewSMSCode(phone Phone, code, purpose string, userID *uuid.UUID, now time.Time) (SMSCode, error) {
+func NewLoginCode(phone Phone, email Email, code, purpose string, userID *uuid.UUID, now time.Time) (LoginCode, error) {
 	id, err := uuid.NewRandom()
 	if err != nil {
-		return SMSCode{}, fmt.Errorf("generate sms code id: %w", err)
+		return LoginCode{}, fmt.Errorf("generate login code id: %w", err)
 	}
-	return SMSCode{
+	return LoginCode{
 		ID:        id,
 		UserID:    userID,
 		Phone:     phone,
+		Email:     email,
 		Purpose:   purpose,
-		CodeHash:  hashCode(phone.String(), code),
-		ExpiresAt: now.Add(SMSCodeTTL),
+		CodeHash:  hashLoginCode(phone.String(), email.String(), code),
+		ExpiresAt: now.Add(LoginCodeTTL),
 		Used:      false,
 		CreatedAt: now,
 	}, nil
 }
 
-func (c *SMSCode) Verify(code string, now time.Time) error {
-	if c.Used || now.After(c.ExpiresAt) || hashCode(c.Phone.String(), code) != c.CodeHash {
-		return ErrSMSCodeInvalid
+func (c *LoginCode) Verify(code string, now time.Time) error {
+	if c.Used || now.After(c.ExpiresAt) || hashLoginCode(c.Phone.String(), c.Email.String(), code) != c.CodeHash {
+		return ErrLoginCodeInvalid
 	}
 	c.Used = true
 	return nil
 }
 
-func hashCode(phone, code string) string {
-	sum := sha256.Sum256([]byte(phone + ":" + code))
+func hashLoginCode(phone, email, code string) string {
+	sum := sha256.Sum256([]byte(phone + ":" + email + ":" + code))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -78,21 +80,21 @@ func NewAttemptWindow(now time.Time) AttemptWindow {
 }
 
 func (w *AttemptWindow) RecordFailure(now time.Time) error {
-	if w.Failures == 0 || now.Sub(w.FirstFailureAt) > SMSAttemptWindowTTL {
+	if w.Failures == 0 || now.Sub(w.FirstFailureAt) > LoginAttemptWindowTTL {
 		w.FirstFailureAt = now
 		w.Failures = 0
 	}
 	w.Failures++
 	w.LastFailureAt = now
-	if w.Failures >= MaxSMSFailures {
+	if w.Failures >= MaxLoginFailures {
 		return ErrTooManyAttempts
 	}
 	return nil
 }
 
 func (w *AttemptWindow) Blocked(now time.Time) bool {
-	if w.Failures < MaxSMSFailures {
+	if w.Failures < MaxLoginFailures {
 		return false
 	}
-	return now.Before(w.FirstFailureAt.Add(SMSAttemptWindowTTL))
+	return now.Before(w.FirstFailureAt.Add(LoginAttemptWindowTTL))
 }
