@@ -56,6 +56,8 @@ type RateLimit struct {
 	IPBurst             int
 	PhoneSendPerHour    int
 	PhoneVerifyPer15Min int
+	EmailSendPerHour    int
+	EmailVerifyPer15Min int
 }
 
 // DBPoolConfig holds PostgreSQL connection pool settings.
@@ -181,6 +183,8 @@ func Load() (Config, error) {
 		IPBurst:             40,
 		PhoneSendPerHour:    5,
 		PhoneVerifyPer15Min: 10,
+		EmailSendPerHour:    5,
+		EmailVerifyPer15Min: 10,
 	}
 	if v := os.Getenv("RATE_LIMIT_IP_RPS"); v != "" {
 		rps, err := strconv.ParseFloat(v, 64)
@@ -210,6 +214,20 @@ func Load() (Config, error) {
 		}
 		cfg.RateLimit.PhoneVerifyPer15Min = n
 	}
+	if v := os.Getenv("RATE_LIMIT_EMAIL_SEND_PER_HOUR"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid RATE_LIMIT_EMAIL_SEND_PER_HOUR %q: %w", v, err)
+		}
+		cfg.RateLimit.EmailSendPerHour = n
+	}
+	if v := os.Getenv("RATE_LIMIT_EMAIL_VERIFY_PER_15MIN"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid RATE_LIMIT_EMAIL_VERIFY_PER_15MIN %q: %w", v, err)
+		}
+		cfg.RateLimit.EmailVerifyPer15Min = n
+	}
 	if cfg.RateLimit.IPRPS <= 0 {
 		return Config{}, fmt.Errorf("RATE_LIMIT_IP_RPS must be positive")
 	}
@@ -221,6 +239,12 @@ func Load() (Config, error) {
 	}
 	if cfg.RateLimit.PhoneVerifyPer15Min <= 0 {
 		return Config{}, fmt.Errorf("RATE_LIMIT_PHONE_VERIFY_PER_15MIN must be positive")
+	}
+	if cfg.RateLimit.EmailSendPerHour <= 0 {
+		return Config{}, fmt.Errorf("RATE_LIMIT_EMAIL_SEND_PER_HOUR must be positive")
+	}
+	if cfg.RateLimit.EmailVerifyPer15Min <= 0 {
+		return Config{}, fmt.Errorf("RATE_LIMIT_EMAIL_VERIFY_PER_15MIN must be positive")
 	}
 
 	if cfg.DatabaseURL == "" {

@@ -308,6 +308,10 @@ func run(fallback *slog.Logger) error {
 	defer phoneSendLimiter.Stop()
 	phoneVerifyLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.PhoneVerifyPer15Min)/(15*60), cfg.RateLimit.PhoneVerifyPer15Min, 1*time.Hour)
 	defer phoneVerifyLimiter.Stop()
+	emailSendLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.EmailSendPerHour)/3600, cfg.RateLimit.EmailSendPerHour, 1*time.Hour)
+	defer emailSendLimiter.Stop()
+	emailVerifyLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.EmailVerifyPer15Min)/(15*60), cfg.RateLimit.EmailVerifyPer15Min, 1*time.Hour)
+	defer emailVerifyLimiter.Stop()
 
 	var poolStats func() httpapi.DBPoolSnapshot
 	if cfg.AppEnv == "local" {
@@ -333,6 +337,8 @@ func run(fallback *slog.Logger) error {
 		IPRateLimiter:         ipLimiter,
 		PhoneSendLimiter:      phoneSendLimiter,
 		PhoneVerifyLimiter:    phoneVerifyLimiter,
+		EmailSendLimiter:      emailSendLimiter,
+		EmailVerifyLimiter:    emailVerifyLimiter,
 		DBPoolStats:           poolStats,
 		DevMode:               cfg.AppEnv == "local" && cfg.PaymentProvider == "fake",
 		TrustedProxies:        cfg.TrustedProxies,
