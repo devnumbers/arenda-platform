@@ -13,6 +13,7 @@ func setRequiredLocalEnv(t *testing.T) {
 	t.Setenv("MIGRATIONS_DIR", "./migrations")
 	t.Setenv("APP_BASE_URL", "http://localhost:8080")
 	t.Setenv("DADATA_API_KEY", "test-dadata-key")
+	t.Setenv("EMAIL_SENDER", "fake")
 	t.Setenv("REGRU_S3_ENDPOINT", "https://s3.example.com")
 	t.Setenv("REGRU_S3_REGION", "ru-1")
 	t.Setenv("REGRU_S3_BUCKET", "test-bucket")

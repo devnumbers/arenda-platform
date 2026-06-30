@@ -171,7 +171,24 @@ func run(fallback *slog.Logger) error {
 		return fmt.Errorf("unsupported SMS_SENDER: %s", cfg.SMSSender)
 	}
 
-	emailSender := identityemail.NewFakeSender(appLogger)
+	var emailSender identityapp.EmailSender
+	switch cfg.EmailSender {
+	case "fake":
+		if cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
+			return fmt.Errorf("EMAIL_SENDER=fake is only allowed in local or dev environments")
+		}
+		emailSender = identityemail.NewFakeSender(appLogger)
+	case "smtp":
+		emailSender = identityemail.NewSMTPSender(identityemail.SMTPConfig{
+			Host:     cfg.SMTPHost,
+			Port:     cfg.SMTPPort,
+			Username: cfg.SMTPUser,
+			Password: cfg.SMTPPass,
+			From:     cfg.SMTPFrom,
+		})
+	default:
+		return fmt.Errorf("unsupported EMAIL_SENDER: %s", cfg.EmailSender)
+	}
 
 	authService := identityapp.NewAuthService(
 		identityUserRepo,

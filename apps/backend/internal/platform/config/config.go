@@ -48,6 +48,12 @@ type Config struct {
 	PhotoStoragePublicBaseURL           string
 	PhotoStoragePathStyle               bool
 	PhotoStorageS3Enabled               bool
+	EmailSender                         string
+	SMTPHost                            string
+	SMTPPort                            string
+	SMTPUser                            string
+	SMTPPass                            string
+	SMTPFrom                            string
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -80,6 +86,12 @@ func Load() (Config, error) {
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		MigrationsDir:     os.Getenv("MIGRATIONS_DIR"),
 		SMSSender:         os.Getenv("SMS_SENDER"),
+		EmailSender:       os.Getenv("EMAIL_SENDER"),
+		SMTPHost:          os.Getenv("SMTP_HOST"),
+		SMTPPort:          os.Getenv("SMTP_PORT"),
+		SMTPUser:          os.Getenv("SMTP_USER"),
+		SMTPPass:          os.Getenv("SMTP_PASS"),
+		SMTPFrom:          os.Getenv("SMTP_FROM"),
 		PaymentProvider:   os.Getenv("PAYMENT_PROVIDER"),
 		AppBaseURL:        os.Getenv("APP_BASE_URL"),
 		TKassaTerminalKey: os.Getenv("T_KASSA_TERMINAL_KEY"),
@@ -331,6 +343,29 @@ func Load() (Config, error) {
 	allowedSenders := map[string]bool{"": true, "fake": true}
 	if !allowedSenders[cfg.SMSSender] {
 		return Config{}, fmt.Errorf("invalid SMS_SENDER %q: must be empty or fake", cfg.SMSSender)
+	}
+
+	allowedEmailSenders := map[string]bool{"": true, "fake": true, "smtp": true}
+	if !allowedEmailSenders[cfg.EmailSender] {
+		return Config{}, fmt.Errorf("invalid EMAIL_SENDER %q: must be empty, fake, or smtp", cfg.EmailSender)
+	}
+	if cfg.EmailSender == "" {
+		if cfg.AppEnv == "local" || cfg.AppEnv == "dev" {
+			cfg.EmailSender = "fake"
+		} else {
+			return Config{}, fmt.Errorf("EMAIL_SENDER is required for APP_ENV=%s", cfg.AppEnv)
+		}
+	}
+	if cfg.EmailSender == "smtp" {
+		if cfg.SMTPHost == "" {
+			return Config{}, fmt.Errorf("SMTP_HOST is required when EMAIL_SENDER=smtp")
+		}
+		if cfg.SMTPPort == "" {
+			return Config{}, fmt.Errorf("SMTP_PORT is required when EMAIL_SENDER=smtp")
+		}
+		if cfg.SMTPFrom == "" {
+			return Config{}, fmt.Errorf("SMTP_FROM is required when EMAIL_SENDER=smtp")
+		}
 	}
 
 	if cfg.PaymentProvider == "" {
