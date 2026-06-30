@@ -30,6 +30,8 @@ type AuthHandlers struct {
 	logger       *slog.Logger
 	phoneSend    *RateLimiter
 	phoneVerify  *RateLimiter
+	emailSend    *RateLimiter
+	emailVerify  *RateLimiter
 }
 
 // NewAuthHandlers creates HTTP handlers for the auth API.
@@ -40,6 +42,8 @@ func NewAuthHandlers(
 	logger *slog.Logger,
 	phoneSend *RateLimiter,
 	phoneVerify *RateLimiter,
+	emailSend *RateLimiter,
+	emailVerify *RateLimiter,
 ) *AuthHandlers {
 	return &AuthHandlers{
 		auth:         auth,
@@ -48,6 +52,8 @@ func NewAuthHandlers(
 		logger:       logger,
 		phoneSend:    phoneSend,
 		phoneVerify:  phoneVerify,
+		emailSend:    emailSend,
+		emailVerify:  emailVerify,
 	}
 }
 
@@ -106,8 +112,43 @@ func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = body
-	writeProblem(w, http.StatusNotImplemented, problem(r.Context(), "Not Implemented", "email login is not yet implemented"))
+	phone, err := domain.NewPhone(body.Phone)
+	if err != nil {
+		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "invalid phone"))
+		return
+	}
+
+	email, err := domain.NewEmail(body.Email)
+	if err != nil {
+		h.logger.WarnContext(r.Context(), "invalid email in request body", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "invalid email"))
+		return
+	}
+
+	if h.emailSend != nil && !h.emailSend.Allow(phone.String()+":"+email.String()) {
+		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "rate limit exceeded"))
+		return
+	}
+
+	if err := h.auth.SendEmailCode(r.Context(), phone, email); err != nil {
+		switch {
+		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
+			detail, ok := UserFacingDetail(err)
+			if !ok {
+				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+				return
+			}
+			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
+		case errors.Is(err, application.ErrEmailDoesNotMatch):
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "email does not match the phone number"))
+		default:
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // VerifyEmailCode implements POST /auth/email/verify.
@@ -119,8 +160,47 @@ func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = body
-	writeProblem(w, http.StatusNotImplemented, problem(r.Context(), "Not Implemented", "email login is not yet implemented"))
+	phone, err := domain.NewPhone(body.Phone)
+	if err != nil {
+		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "invalid phone"))
+		return
+	}
+
+	email, err := domain.NewEmail(body.Email)
+	if err != nil {
+		h.logger.WarnContext(r.Context(), "invalid email in request body", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "invalid email"))
+		return
+	}
+
+	if h.emailVerify != nil && !h.emailVerify.Allow(phone.String()+":"+email.String()) {
+		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "rate limit exceeded"))
+		return
+	}
+
+	raw, user, err := h.auth.VerifyEmailCode(r.Context(), phone, email, body.Code)
+	if err != nil {
+		switch {
+		case errors.Is(err, application.ErrUserBlocked),
+			errors.Is(err, domain.ErrTooManyAttempts):
+			detail, ok := UserFacingDetail(err)
+			if !ok {
+				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+				return
+			}
+			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
+		case errors.Is(err, domain.ErrLoginCodeInvalid),
+			errors.Is(err, application.ErrNotFound):
+			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "invalid phone, email or code"))
+		default:
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+		}
+		return
+	}
+
+	setSessionCookie(w, raw.Token, raw.Session.ExpiresAt, h.cookieSecure)
+	writeJSON(r.Context(), w, http.StatusOK, meResponse(user))
 }
 
 // VerifyPhoneCode implements POST /auth/phone/verify.

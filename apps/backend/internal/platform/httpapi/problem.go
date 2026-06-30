@@ -53,6 +53,8 @@ func UserFacingDetail(err error) (string, bool) {
 		return "new phone must differ from current phone", true
 	case errors.Is(err, identitydomain.ErrTooManyAttempts):
 		return "too many attempts", true
+	case errors.Is(err, identityapp.ErrPhoneLoginDeprecated):
+		return "phone login is no longer supported", true
 
 	// Properties.
 	case errors.Is(err, propertiesapp.ErrInvalidInput):

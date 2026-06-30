@@ -71,6 +71,11 @@ func (f *fakeUserRepoForHandlers) Update(_ context.Context, user domain.User) (d
 func (f *fakeUserRepoForHandlers) UpdatePhone(_ context.Context, _ uuid.UUID, _ domain.Phone) (domain.User, error) {
 	return domain.User{}, nil
 }
+func (f *fakeUserRepoForHandlers) UpdateEmailVerified(_ context.Context, _ uuid.UUID, email string, verifiedAt *time.Time) (domain.User, error) {
+	f.user.Email = &email
+	f.user.EmailVerifiedAt = verifiedAt
+	return f.user, nil
+}
 func (f *fakeUserRepoForHandlers) WithTx(_ transaction.Tx) application.UserRepository { return f }
 
 func TestAuthHandlers_UpdateMe_Returns409ForDuplicateEmail(t *testing.T) {
@@ -83,8 +88,8 @@ func TestAuthHandlers_UpdateMe_Returns409ForDuplicateEmail(t *testing.T) {
 	other.Email = &email
 
 	userRepo := &fakeUserRepoForHandlers{user: current, byEmail: other}
-	authSvc := application.NewAuthService(userRepo, nil, nil, fakeSessionRepoForHandlers{}, nil, nil, nil, nil, slog.Default())
-	handlers := NewAuthHandlers(authSvc, nil, false, slog.Default(), nil, nil)
+	authSvc := application.NewAuthService(userRepo, nil, nil, fakeSessionRepoForHandlers{}, nil, nil, nil, nil, nil, slog.Default())
+	handlers := NewAuthHandlers(authSvc, nil, false, slog.Default(), nil, nil, nil, nil)
 
 	body := []byte(`{"email":"user@example.com"}`)
 	ctx := context.WithValue(context.Background(), userIDKey{}, current.ID)
