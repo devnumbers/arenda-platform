@@ -8,9 +8,14 @@ SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at
 SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE phone = $1;
 
 -- name: CreateUser :one
-INSERT INTO users (id, phone, role, phone_encrypted) VALUES ($1, $2, $3, $4)
-ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone, phone_encrypted = EXCLUDED.phone_encrypted
-RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at;
+INSERT INTO users (id, phone, role, phone_encrypted, email, email_verified_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (phone) DO UPDATE SET
+    phone = EXCLUDED.phone,
+    phone_encrypted = EXCLUDED.phone_encrypted,
+    email = EXCLUDED.email,
+    email_verified_at = EXCLUDED.email_verified_at
+RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted;
 
 -- name: GetLatestLoginCodeByPhoneAndEmailAndPurpose :one
 SELECT id, user_id, phone, email, code_hash, expires_at, used, created_at, purpose, phone_encrypted FROM login_codes

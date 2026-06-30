@@ -109,15 +109,29 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.U
 		return domain.User{}, err
 	}
 	row, err := r.q().CreateUser(ctx, postgres.CreateUserParams{
-		ID:             pgconv.UUIDToPgtype(user.ID),
-		Phone:          encryptedPhone,
-		Role:           string(user.Role),
-		PhoneEncrypted: !r.enc.IsNoop(),
+		ID:              pgconv.UUIDToPgtype(user.ID),
+		Phone:           encryptedPhone,
+		Role:            string(user.Role),
+		PhoneEncrypted:  !r.enc.IsNoop(),
+		Email:           pgconv.StringPtrToPgtype(user.Email),
+		EmailVerifiedAt: pgconv.TimePtrToPgtype(user.EmailVerifiedAt),
 	})
 	if err != nil {
 		return domain.User{}, err
 	}
-	return r.mapUser(ctx, row)
+	return r.mapUser(ctx, postgres.User{
+		ID:              row.ID,
+		Phone:           row.Phone,
+		Role:            row.Role,
+		Name:            row.Name,
+		Surname:         row.Surname,
+		Patronymic:      row.Patronymic,
+		Email:           row.Email,
+		EmailVerifiedAt: row.EmailVerifiedAt,
+		CreatedAt:       row.CreatedAt,
+		UpdatedAt:       row.UpdatedAt,
+		PhoneEncrypted:  row.PhoneEncrypted,
+	})
 }
 
 func (r *UserRepository) Update(ctx context.Context, user domain.User) (domain.User, error) {

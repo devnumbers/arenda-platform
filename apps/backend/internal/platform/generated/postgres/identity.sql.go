@@ -73,26 +73,49 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (id, phone, role, phone_encrypted) VALUES ($1, $2, $3, $4)
-ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone, phone_encrypted = EXCLUDED.phone_encrypted
-RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at
+INSERT INTO users (id, phone, role, phone_encrypted, email, email_verified_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (phone) DO UPDATE SET
+    phone = EXCLUDED.phone,
+    phone_encrypted = EXCLUDED.phone_encrypted,
+    email = EXCLUDED.email,
+    email_verified_at = EXCLUDED.email_verified_at
+RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted
 `
 
 type CreateUserParams struct {
-	ID             pgtype.UUID `json:"id"`
-	Phone          string      `json:"phone"`
-	Role           string      `json:"role"`
-	PhoneEncrypted bool        `json:"phone_encrypted"`
+	ID              pgtype.UUID        `json:"id"`
+	Phone           string             `json:"phone"`
+	Role            string             `json:"role"`
+	PhoneEncrypted  bool               `json:"phone_encrypted"`
+	Email           pgtype.Text        `json:"email"`
+	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+type CreateUserRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	Phone           string             `json:"phone"`
+	Role            string             `json:"role"`
+	Name            pgtype.Text        `json:"name"`
+	Surname         pgtype.Text        `json:"surname"`
+	Patronymic      pgtype.Text        `json:"patronymic"`
+	Email           pgtype.Text        `json:"email"`
+	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	PhoneEncrypted  bool               `json:"phone_encrypted"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
 	row := q.db.QueryRow(ctx, createUser,
 		arg.ID,
 		arg.Phone,
 		arg.Role,
 		arg.PhoneEncrypted,
+		arg.Email,
+		arg.EmailVerifiedAt,
 	)
-	var i User
+	var i CreateUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.Phone,
@@ -101,10 +124,10 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Surname,
 		&i.Patronymic,
 		&i.Email,
+		&i.EmailVerifiedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PhoneEncrypted,
-		&i.EmailVerifiedAt,
 	)
 	return i, err
 }

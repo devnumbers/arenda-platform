@@ -1,11 +1,11 @@
 meta {
-  name: Send Phone Code
+  name: Send Email Code
   type: http
   seq: 1
 }
 
 post {
-  url: {{baseUrl}}/auth/phone/send
+  url: {{baseUrl}}/auth/email/send
   body: json
   auth: none
 }
@@ -16,7 +16,8 @@ headers {
 
 body:json {
   {
-    "phone": "{{phone}}"
+    "phone": "{{phone}}",
+    "email": "{{email}}"
   }
 }
 

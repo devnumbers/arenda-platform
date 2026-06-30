@@ -1,11 +1,11 @@
 meta {
-  name: Verify Phone Code
+  name: Verify Email Code
   type: http
   seq: 5
 }
 
 post {
-  url: {{baseUrl}}/auth/phone/verify
+  url: {{baseUrl}}/auth/email/verify
   body: json
   auth: none
 }
@@ -17,6 +17,7 @@ headers {
 body:json {
   {
     "phone": "{{phone}}",
+    "email": "{{email}}",
     "code": "{{code}}"
   }
 }

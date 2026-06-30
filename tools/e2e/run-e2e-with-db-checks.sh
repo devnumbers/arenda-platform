@@ -49,6 +49,7 @@ EPOCH=$(date +%s)
 # leftover users/subscriptions in the persistent Docker database.
 PHONE_BASE=$(( (RANDOM * 1000 + RANDOM) % 9000000 + 1000000 ))
 PHONE="+7915$(printf '%07d' $PHONE_BASE)"
+EMAIL="e2e-${PHONE_BASE}@example.com"
 REPORT_FILE="$TMP_DIR/e2e-report-${TIMESTAMP}.md"
 BRUNO_REPORT_BASE="$TMP_DIR/bruno-report-${TIMESTAMP}"
 
@@ -205,30 +206,32 @@ check_postgres() {
 
 # --- Auth helpers ----------------------------------------------------------
 
-send_phone_code() {
+send_email_code() {
   local phone="$1"
-  log "Sending auth code to $phone ..."
-  curl -fsS -m 10 -X POST "$BASE_URL/auth/phone/send" \
+  local email="$2"
+  log "Sending auth code to $phone / $email ..."
+  curl -fsS -m 10 -X POST "$BASE_URL/auth/email/send" \
     -H "Content-Type: application/json" \
-    -d "{\"phone\":\"$phone\"}" >/dev/null
+    -d "{\"phone\":\"$phone\",\"email\":\"$email\"}" >/dev/null
 }
 
-# Extract the 6-digit code from the backend log for a given phone.
+# Extract the 6-digit code from the backend log for a given email.
 # We wait up to 30 seconds because the log may be buffered.
-# The phone is unique per run, so we grep the whole log (last 500 lines) for it.
-extract_code_for_phone() {
-  local phone="$1"
+# The email is unique per run, so we grep the whole log (last 500 lines) for it.
+extract_code_for_email() {
+  local email="$1"
   local log_file="$2"
 
-  log "Extracting code for $phone from $log_file ..." >&2
+  log "Extracting code for $email from $log_file ..." >&2
   local _
   for _ in $(seq 1 30); do
     if [[ -f "$log_file" ]]; then
       local code
-      # The fake sender logs: "fake sms sent", "phone": "...", "message": "Код подтверждения: 123456"
+      # The fake sender logs: "fake email sent", "email": "...", "code": "123456"
       code=$(tail -n 500 "$log_file" 2>/dev/null \
-        | grep -aF "$phone" \
-        | grep -aoE 'Код подтверждения: [0-9]{6}' \
+        | grep -aF "$email" \
+        | grep -aF "fake email sent" \
+        | grep -aoE 'code[=:] ?[0-9]{6}' \
         | tail -1 \
         | grep -aoE '[0-9]{6}' || true)
       if [[ -n "$code" ]]; then
@@ -329,6 +332,7 @@ run_bruno_folder() {
   # shellcheck disable=SC2068
   output=$(cd "$BRUNO_COLLECTION" && bru run "$folder" -r --env Local \
     --env-var phone="$PHONE" \
+    --env-var email="$EMAIL" \
     --env-var code="$CODE" \
     --env-var cookieName=session_id \
     --env-var skipSend=true \
@@ -555,21 +559,22 @@ derive_sql_vars() {
 # Authenticate and upgrade a fresh user to pro. Prints: user_id\tcookie_name\tcookie_value
 auth_and_upgrade() {
   local phone="$1"
+  local email="e2e-$(echo "$phone" | sed 's/[^0-9]//g')@example.com"
   local log_file="$BACKEND_LOG"
 
-  send_phone_code "$phone" >/dev/null
+  send_email_code "$phone" "$email" >/dev/null
   local code
-  code=$(extract_code_for_phone "$phone" "$log_file") || {
-    echo "ERROR: failed to extract code for $phone" >&2
+  code=$(extract_code_for_email "$email" "$log_file") || {
+    echo "ERROR: failed to extract code for $email" >&2
     return 1
   }
 
   local verify_response
-  verify_response=$(curl -fsS -m 10 -X POST "$BASE_URL/auth/phone/verify" \
+  verify_response=$(curl -fsS -m 10 -X POST "$BASE_URL/auth/email/verify" \
     -H "Content-Type: application/json" \
     -D - \
-    -d "{\"phone\":\"$phone\",\"code\":\"$code\"}" 2>/dev/null) || {
-    echo "ERROR: verify failed for $phone" >&2
+    -d "{\"phone\":\"$phone\",\"email\":\"$email\",\"code\":\"$code\"}" 2>/dev/null) || {
+    echo "ERROR: verify failed for $email" >&2
     return 1
   }
 
@@ -769,6 +774,7 @@ write_report() {
 - **Environment:** Local
 - **Backend URL:** $BASE_URL
 - **Phone:** $PHONE
+- **Email:** $EMAIL
 - **Report file:** $REPORT_FILE
 
 ## Summary
@@ -899,6 +905,7 @@ main() {
   log "Arenda E2E runner starting"
   log "Timestamp: $TIMESTAMP"
   log "Phone: $PHONE"
+  log "Email: $EMAIL"
   log "=============================================="
 
   # Coverage gate: fail fast if collections drift from the backend.
@@ -923,15 +930,15 @@ main() {
   fi
 
   # Auth: send code and extract it from logs
-  if ! send_phone_code "$PHONE"; then
-    add_failure "Failed to send auth code to $PHONE"
+  if ! send_email_code "$PHONE" "$EMAIL"; then
+    add_failure "Failed to send auth code to $PHONE / $EMAIL"
     write_report
     exit 1
   fi
 
-  CODE=$(extract_code_for_phone "$PHONE" "$BACKEND_LOG") || true
+  CODE=$(extract_code_for_email "$EMAIL" "$BACKEND_LOG") || true
   if [[ -z "${CODE:-}" ]]; then
-    add_failure "Could not extract 6-digit code from $BACKEND_LOG for $PHONE"
+    add_failure "Could not extract 6-digit code from $BACKEND_LOG for $EMAIL"
     write_report
     exit 1
   fi
@@ -1044,15 +1051,16 @@ main() {
 
   # Edge-case collection uses a fresh user so its auth flow gets a valid unused code.
   local EDGE_PHONE="+7915$(printf '%07d' $(((PHONE_BASE + 100) % 10000000)))"
+  local EDGE_EMAIL="e2e-edge-${PHONE_BASE}@example.com"
   local EDGE_CODE=""
-  log "Sending auth code for edge-case user: $EDGE_PHONE ..."
-  if send_phone_code "$EDGE_PHONE"; then
-    # Give the backend log a moment to flush the fake SMS entry.
+  log "Sending auth code for edge-case user: $EDGE_PHONE / $EDGE_EMAIL ..."
+  if send_email_code "$EDGE_PHONE" "$EDGE_EMAIL"; then
+    # Give the backend log a moment to flush the fake email entry.
     sleep 1
-    EDGE_CODE=$(extract_code_for_phone "$EDGE_PHONE" "$BACKEND_LOG") || true
+    EDGE_CODE=$(extract_code_for_email "$EDGE_EMAIL" "$BACKEND_LOG") || true
   fi
   if [[ -z "$EDGE_CODE" ]]; then
-    add_failure "Could not extract edge-case auth code for $EDGE_PHONE"
+    add_failure "Could not extract edge-case auth code for $EDGE_EMAIL"
   else
     log "Edge-case auth code extracted: $EDGE_CODE"
   fi
@@ -1064,6 +1072,7 @@ main() {
   # shellcheck disable=SC2086
   edge_output=$(cd "$BRUNO_COLLECTION" && bru run system-e2e-edge -r --env Local \
     --env-var phone="${EDGE_PHONE:-$PHONE}" \
+    --env-var email="${EDGE_EMAIL:-$EMAIL}" \
     --env-var code="${EDGE_CODE:-$CODE}" \
     --env-var cookieName=session_id \
     --env-var skipSend=true \
