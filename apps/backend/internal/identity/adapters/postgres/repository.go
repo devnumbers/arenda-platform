@@ -132,6 +132,10 @@ func (r *UserRepository) Update(ctx context.Context, user domain.User) (domain.U
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.User{}, application.ErrNotFound
 		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return domain.User{}, application.ErrEmailAlreadyTaken
+		}
 		return domain.User{}, err
 	}
 	return r.mapUser(ctx, row)

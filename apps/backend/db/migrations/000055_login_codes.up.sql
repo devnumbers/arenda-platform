@@ -14,4 +14,5 @@ CREATE TABLE IF NOT EXISTS login_codes (
 
 CREATE INDEX IF NOT EXISTS idx_login_codes_phone_purpose ON login_codes (phone, purpose) WHERE used = false;
 CREATE INDEX IF NOT EXISTS idx_login_codes_email_purpose ON login_codes (email, purpose) WHERE used = false;
+CREATE INDEX IF NOT EXISTS idx_login_codes_phone_email_purpose ON login_codes(phone, email, purpose) WHERE used = false;
 CREATE INDEX IF NOT EXISTS idx_login_codes_expires_at ON login_codes (expires_at);
