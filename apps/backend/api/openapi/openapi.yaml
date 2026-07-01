@@ -1649,12 +1649,17 @@ paths:
       security:
         - sessionCookie: []
       parameters:
-        - name: status
+        - name: user_id
           in: query
           required: false
           schema:
             type: string
-            enum: [pending, succeeded, failed, refunded, partial_refunded]
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/SubscriptionPaymentStatus'
         - name: limit
           in: query
           required: false
@@ -1742,6 +1747,423 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: phone
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: email
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: role
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [owner, admin]
+        - name: subscription_status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/SubscriptionStatus'
+      responses:
+        '200':
+          description: Admin users list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsersResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{id}:
+    get:
+      operationId: getAdminUser
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Admin user details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{id}/properties:
+    get:
+      operationId: listAdminUserProperties
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, archived, all]
+            default: all
+      responses:
+        '200':
+          description: Admin user properties list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPropertiesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{id}/leases:
+    get:
+      operationId: listAdminUserLeases
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Admin user leases list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLeasesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{id}/tenant-contacts:
+    get:
+      operationId: listAdminUserTenantContacts
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Admin user tenant contacts list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTenantContactsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{id}/operations:
+    get:
+      operationId: listAdminUserOperations
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OperationStatus'
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OperationType'
+        - name: property_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: lease_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Admin user operations list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOperationsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/properties/{id}:
+    get:
+      operationId: getAdminProperty
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Admin property details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPropertyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/leases/{id}:
+    get:
+      operationId: getAdminLease
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Admin lease details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLeaseResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/tenant-contacts/{id}:
+    get:
+      operationId: getAdminTenantContact
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Admin tenant contact details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTenantContactResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/operations/{id}:
+    get:
+      operationId: getAdminOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Admin operation details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -1920,8 +2342,7 @@ components:
       required: [name, activePropertyLimit, monthlyPriceKopecks, yearlyPriceKopecks]
       properties:
         name:
-          type: string
-          enum: [basic, pro, business]
+          $ref: '#/components/schemas/TariffName'
         activePropertyLimit:
           type: integer
         monthlyPriceKopecks:
@@ -1936,8 +2357,7 @@ components:
         tariff:
           $ref: '#/components/schemas/Tariff'
         status:
-          type: string
-          enum: [active, grace, blocked, cancelled]
+          $ref: '#/components/schemas/SubscriptionStatus'
         validUntil:
           type: string
           format: date-time
@@ -1945,8 +2365,7 @@ components:
         autoRenewEnabled:
           type: boolean
         currentPeriod:
-          type: string
-          enum: [month, year]
+          $ref: '#/components/schemas/AdminSubscriptionPaymentPeriod'
           nullable: true
         pendingTariff:
           $ref: '#/components/schemas/Tariff'
@@ -1956,8 +2375,7 @@ components:
           format: date-time
           nullable: true
         pendingPeriod:
-          type: string
-          enum: [month, year]
+          $ref: '#/components/schemas/AdminSubscriptionPaymentPeriod'
           nullable: true
         activePaymentMethod:
           $ref: '#/components/schemas/PaymentMethod'
@@ -1990,13 +2408,11 @@ components:
         tariff:
           $ref: '#/components/schemas/Tariff'
         period:
-          type: string
-          enum: [month, year]
+          $ref: '#/components/schemas/AdminSubscriptionPaymentPeriod'
         amountKopecks:
           type: integer
         status:
-          type: string
-          enum: [pending, succeeded, failed, refunded, partial_refunded]
+          $ref: '#/components/schemas/SubscriptionPaymentStatus'
         provider:
           type: string
         createdAt:
@@ -2008,11 +2424,9 @@ components:
       required: [tariffName, period]
       properties:
         tariffName:
-          type: string
-          enum: [basic, pro, business]
+          $ref: '#/components/schemas/TariffName'
         period:
-          type: string
-          enum: [month, year]
+          $ref: '#/components/schemas/AdminSubscriptionPaymentPeriod'
 
     ChangeTariffResponse:
       type: object
@@ -2088,13 +2502,11 @@ components:
         tariff:
           $ref: '#/components/schemas/Tariff'
         period:
-          type: string
-          enum: [month, year]
+          $ref: '#/components/schemas/AdminSubscriptionPaymentPeriod'
         amountKopecks:
           type: integer
         status:
-          type: string
-          enum: [pending, succeeded, failed, refunded, partial_refunded]
+          $ref: '#/components/schemas/SubscriptionPaymentStatus'
         provider:
           type: string
         userId:
@@ -2102,6 +2514,17 @@ components:
           format: uuid
         userPhone:
           type: string
+        refundedAmountKopecks:
+          type: integer
+          nullable: true
+        succeededAt:
+          type: string
+          format: date-time
+          nullable: true
+        paymentMethodId:
+          type: string
+          format: uuid
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -2116,6 +2539,310 @@ components:
             $ref: '#/components/schemas/AdminSubscriptionPayment'
         total:
           type: integer
+
+    AdminUser:
+      type: object
+      required: [id, phone, role, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        phone:
+          type: string
+        email:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [owner, admin]
+        name:
+          type: string
+          nullable: true
+        surname:
+          type: string
+          nullable: true
+        patronymic:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminUserStats:
+      type: object
+      required: [activePropertiesCount, archivedPropertiesCount, leasesCount, tenantContactsCount, operationsCount]
+      properties:
+        activePropertiesCount:
+          type: integer
+        archivedPropertiesCount:
+          type: integer
+        leasesCount:
+          type: integer
+        tenantContactsCount:
+          type: integer
+        operationsCount:
+          type: integer
+
+    AdminUserResponse:
+      type: object
+      required: [user, subscription, stats]
+      properties:
+        user:
+          $ref: '#/components/schemas/AdminUser'
+        subscription:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Subscription'
+        stats:
+          $ref: '#/components/schemas/AdminUserStats'
+
+    AdminUsersResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUser'
+        total:
+          type: integer
+
+    AdminProperty:
+      type: object
+      required: [id, ownerId, name, type, address, status, occupancy, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/PropertyType'
+        address:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/PropertyStatus'
+        occupancy:
+          type: string
+          enum: [free, occupied]
+        photos:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/PropertyPhoto'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminPropertiesResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminProperty'
+        total:
+          type: integer
+
+    AdminLease:
+      type: object
+      required: [id, ownerId, propertyId, status, startDate, rentAmountKopecks, depositAmountKopecks, paymentDay, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        propertyId:
+          type: string
+          format: uuid
+        tenantContact:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AdminTenantContact'
+        status:
+          $ref: '#/components/schemas/LeaseStatus'
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        rentAmountKopecks:
+          type: integer
+        depositAmountKopecks:
+          type: integer
+        paymentDay:
+          type: integer
+        comment:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminLeasesResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminLease'
+        total:
+          type: integer
+
+    AdminTenantContact:
+      type: object
+      required: [id, ownerId, name, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        surname:
+          type: string
+          nullable: true
+        patronymic:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        comment:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminTenantContactsResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminTenantContact'
+        total:
+          type: integer
+
+    AdminOperation:
+      type: object
+      required: [id, ownerId, propertyId, type, category, name, amountKopecks, operationDate, status, isException, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        propertyId:
+          type: string
+          format: uuid
+        leaseId:
+          type: string
+          format: uuid
+          nullable: true
+        recurringOperationId:
+          type: string
+          format: uuid
+          nullable: true
+        type:
+          $ref: '#/components/schemas/OperationType'
+        category:
+          $ref: '#/components/schemas/OperationCategory'
+        name:
+          type: string
+        amountKopecks:
+          type: integer
+        operationDate:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/OperationStatus'
+        comment:
+          type: string
+          nullable: true
+        isException:
+          type: boolean
+        reminderOffsetDays:
+          type: integer
+          nullable: true
+          enum: [1, 3, 7]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminOperationsResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOperation'
+        total:
+          type: integer
+
+    AdminPropertyResponse:
+      type: object
+      required: [property]
+      properties:
+        property:
+          $ref: '#/components/schemas/AdminProperty'
+
+    AdminLeaseResponse:
+      type: object
+      required: [lease]
+      properties:
+        lease:
+          $ref: '#/components/schemas/AdminLease'
+
+    AdminTenantContactResponse:
+      type: object
+      required: [contact]
+      properties:
+        contact:
+          $ref: '#/components/schemas/AdminTenantContact'
+
+    AdminOperationResponse:
+      type: object
+      required: [operation]
+      properties:
+        operation:
+          $ref: '#/components/schemas/AdminOperation'
 
     Problem:
       type: object
@@ -2160,8 +2887,7 @@ components:
           type: string
           maxLength: 255
         type:
-          type: string
-          enum: [apartment, room, apartments, house, commercial, office, warehouse, garage, parking, land]
+          $ref: '#/components/schemas/PropertyType'
         address:
           type: string
           maxLength: 500
@@ -2176,8 +2902,7 @@ components:
           type: string
           maxLength: 255
         type:
-          type: string
-          enum: [apartment, room, apartments, house, commercial, office, warehouse, garage, parking, land]
+          $ref: '#/components/schemas/PropertyType'
         address:
           type: string
           maxLength: 500
@@ -2185,8 +2910,7 @@ components:
           type: string
           maxLength: 2000
         status:
-          type: string
-          enum: [active, maintenance]
+          $ref: '#/components/schemas/PropertyStatus'
 
     PropertyResponse:
       type: object
@@ -2198,15 +2922,13 @@ components:
         name:
           type: string
         type:
-          type: string
-          enum: [apartment, room, apartments, house, commercial, office, warehouse, garage, parking, land]
+          $ref: '#/components/schemas/PropertyType'
         address:
           type: string
         description:
           type: string
         status:
-          type: string
-          enum: [active, maintenance, archived]
+          $ref: '#/components/schemas/PropertyStatus'
         occupancy:
           type: string
           enum: [free, occupied]
@@ -2344,8 +3066,7 @@ components:
             - $ref: '#/components/schemas/TenantContactResponse'
           nullable: true
         status:
-          type: string
-          enum: [awaiting_start, active, requires_action, completed, archived]
+          $ref: '#/components/schemas/LeaseStatus'
         start_date:
           type: string
           format: date
@@ -2474,6 +3195,34 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PropertyResponse'
+
+    PropertyType:
+      type: string
+      enum: [apartment, room, apartments, house, commercial, office, warehouse, garage, parking, land]
+
+    PropertyStatus:
+      type: string
+      enum: [active, maintenance, archived]
+
+    LeaseStatus:
+      type: string
+      enum: [awaiting_start, active, requires_action, completed, archived]
+
+    SubscriptionStatus:
+      type: string
+      enum: [active, grace, blocked, cancelled]
+
+    SubscriptionPaymentStatus:
+      type: string
+      enum: [pending, succeeded, failed, refunded, partial_refunded]
+
+    AdminSubscriptionPaymentPeriod:
+      type: string
+      enum: [month, year]
+
+    TariffName:
+      type: string
+      enum: [basic, pro, business]
 
     OperationType:
       type: string

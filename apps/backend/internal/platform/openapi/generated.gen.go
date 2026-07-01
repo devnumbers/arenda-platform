@@ -26,111 +26,102 @@ const (
 	SessionCookieScopes sessionCookieContextKey = "sessionCookie.Scopes"
 )
 
+// Defines values for AdminOperationReminderOffsetDays.
+const (
+	AdminOperationReminderOffsetDaysN1 AdminOperationReminderOffsetDays = 1
+	AdminOperationReminderOffsetDaysN3 AdminOperationReminderOffsetDays = 3
+	AdminOperationReminderOffsetDaysN7 AdminOperationReminderOffsetDays = 7
+)
+
+// Valid indicates whether the value is a known member of the AdminOperationReminderOffsetDays enum.
+func (e AdminOperationReminderOffsetDays) Valid() bool {
+	switch e {
+	case AdminOperationReminderOffsetDaysN1:
+		return true
+	case AdminOperationReminderOffsetDaysN3:
+		return true
+	case AdminOperationReminderOffsetDaysN7:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdminPropertyOccupancy.
+const (
+	AdminPropertyOccupancyFree     AdminPropertyOccupancy = "free"
+	AdminPropertyOccupancyOccupied AdminPropertyOccupancy = "occupied"
+)
+
+// Valid indicates whether the value is a known member of the AdminPropertyOccupancy enum.
+func (e AdminPropertyOccupancy) Valid() bool {
+	switch e {
+	case AdminPropertyOccupancyFree:
+		return true
+	case AdminPropertyOccupancyOccupied:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AdminSubscriptionPaymentPeriod.
 const (
-	AdminSubscriptionPaymentPeriodMonth AdminSubscriptionPaymentPeriod = "month"
-	AdminSubscriptionPaymentPeriodYear  AdminSubscriptionPaymentPeriod = "year"
+	Month AdminSubscriptionPaymentPeriod = "month"
+	Year  AdminSubscriptionPaymentPeriod = "year"
 )
 
 // Valid indicates whether the value is a known member of the AdminSubscriptionPaymentPeriod enum.
 func (e AdminSubscriptionPaymentPeriod) Valid() bool {
 	switch e {
-	case AdminSubscriptionPaymentPeriodMonth:
+	case Month:
 		return true
-	case AdminSubscriptionPaymentPeriodYear:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AdminSubscriptionPaymentStatus.
-const (
-	AdminSubscriptionPaymentStatusFailed          AdminSubscriptionPaymentStatus = "failed"
-	AdminSubscriptionPaymentStatusPartialRefunded AdminSubscriptionPaymentStatus = "partial_refunded"
-	AdminSubscriptionPaymentStatusPending         AdminSubscriptionPaymentStatus = "pending"
-	AdminSubscriptionPaymentStatusRefunded        AdminSubscriptionPaymentStatus = "refunded"
-	AdminSubscriptionPaymentStatusSucceeded       AdminSubscriptionPaymentStatus = "succeeded"
-)
-
-// Valid indicates whether the value is a known member of the AdminSubscriptionPaymentStatus enum.
-func (e AdminSubscriptionPaymentStatus) Valid() bool {
-	switch e {
-	case AdminSubscriptionPaymentStatusFailed:
-		return true
-	case AdminSubscriptionPaymentStatusPartialRefunded:
-		return true
-	case AdminSubscriptionPaymentStatusPending:
-		return true
-	case AdminSubscriptionPaymentStatusRefunded:
-		return true
-	case AdminSubscriptionPaymentStatusSucceeded:
+	case Year:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ChangeTariffRequestPeriod.
+// Defines values for AdminUserRole.
 const (
-	ChangeTariffRequestPeriodMonth ChangeTariffRequestPeriod = "month"
-	ChangeTariffRequestPeriodYear  ChangeTariffRequestPeriod = "year"
+	AdminUserRoleAdmin AdminUserRole = "admin"
+	AdminUserRoleOwner AdminUserRole = "owner"
 )
 
-// Valid indicates whether the value is a known member of the ChangeTariffRequestPeriod enum.
-func (e ChangeTariffRequestPeriod) Valid() bool {
+// Valid indicates whether the value is a known member of the AdminUserRole enum.
+func (e AdminUserRole) Valid() bool {
 	switch e {
-	case ChangeTariffRequestPeriodMonth:
+	case AdminUserRoleAdmin:
 		return true
-	case ChangeTariffRequestPeriodYear:
+	case AdminUserRoleOwner:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ChangeTariffRequestTariffName.
+// Defines values for LeaseStatus.
 const (
-	ChangeTariffRequestTariffNameBasic    ChangeTariffRequestTariffName = "basic"
-	ChangeTariffRequestTariffNameBusiness ChangeTariffRequestTariffName = "business"
-	ChangeTariffRequestTariffNamePro      ChangeTariffRequestTariffName = "pro"
+	LeaseStatusActive         LeaseStatus = "active"
+	LeaseStatusArchived       LeaseStatus = "archived"
+	LeaseStatusAwaitingStart  LeaseStatus = "awaiting_start"
+	LeaseStatusCompleted      LeaseStatus = "completed"
+	LeaseStatusRequiresAction LeaseStatus = "requires_action"
 )
 
-// Valid indicates whether the value is a known member of the ChangeTariffRequestTariffName enum.
-func (e ChangeTariffRequestTariffName) Valid() bool {
+// Valid indicates whether the value is a known member of the LeaseStatus enum.
+func (e LeaseStatus) Valid() bool {
 	switch e {
-	case ChangeTariffRequestTariffNameBasic:
+	case LeaseStatusActive:
 		return true
-	case ChangeTariffRequestTariffNameBusiness:
+	case LeaseStatusArchived:
 		return true
-	case ChangeTariffRequestTariffNamePro:
+	case LeaseStatusAwaitingStart:
 		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for LeaseResponseStatus.
-const (
-	LeaseResponseStatusActive         LeaseResponseStatus = "active"
-	LeaseResponseStatusArchived       LeaseResponseStatus = "archived"
-	LeaseResponseStatusAwaitingStart  LeaseResponseStatus = "awaiting_start"
-	LeaseResponseStatusCompleted      LeaseResponseStatus = "completed"
-	LeaseResponseStatusRequiresAction LeaseResponseStatus = "requires_action"
-)
-
-// Valid indicates whether the value is a known member of the LeaseResponseStatus enum.
-func (e LeaseResponseStatus) Valid() bool {
-	switch e {
-	case LeaseResponseStatusActive:
+	case LeaseStatusCompleted:
 		return true
-	case LeaseResponseStatusArchived:
-		return true
-	case LeaseResponseStatusAwaitingStart:
-		return true
-	case LeaseResponseStatusCompleted:
-		return true
-	case LeaseResponseStatusRequiresAction:
+	case LeaseStatusRequiresAction:
 		return true
 	default:
 		return false
@@ -139,16 +130,16 @@ func (e LeaseResponseStatus) Valid() bool {
 
 // Defines values for MeResponseRole.
 const (
-	Admin MeResponseRole = "admin"
-	Owner MeResponseRole = "owner"
+	MeResponseRoleAdmin MeResponseRole = "admin"
+	MeResponseRoleOwner MeResponseRole = "owner"
 )
 
 // Valid indicates whether the value is a known member of the MeResponseRole enum.
 func (e MeResponseRole) Valid() bool {
 	switch e {
-	case Admin:
+	case MeResponseRoleAdmin:
 		return true
-	case Owner:
+	case MeResponseRoleOwner:
 		return true
 	default:
 		return false
@@ -317,163 +308,61 @@ func (e OperationUpdateRequestReminderOffsetDays) Valid() bool {
 	}
 }
 
-// Defines values for PropertyCreateRequestType.
-const (
-	PropertyCreateRequestTypeApartment  PropertyCreateRequestType = "apartment"
-	PropertyCreateRequestTypeApartments PropertyCreateRequestType = "apartments"
-	PropertyCreateRequestTypeCommercial PropertyCreateRequestType = "commercial"
-	PropertyCreateRequestTypeGarage     PropertyCreateRequestType = "garage"
-	PropertyCreateRequestTypeHouse      PropertyCreateRequestType = "house"
-	PropertyCreateRequestTypeLand       PropertyCreateRequestType = "land"
-	PropertyCreateRequestTypeOffice     PropertyCreateRequestType = "office"
-	PropertyCreateRequestTypeParking    PropertyCreateRequestType = "parking"
-	PropertyCreateRequestTypeRoom       PropertyCreateRequestType = "room"
-	PropertyCreateRequestTypeWarehouse  PropertyCreateRequestType = "warehouse"
-)
-
-// Valid indicates whether the value is a known member of the PropertyCreateRequestType enum.
-func (e PropertyCreateRequestType) Valid() bool {
-	switch e {
-	case PropertyCreateRequestTypeApartment:
-		return true
-	case PropertyCreateRequestTypeApartments:
-		return true
-	case PropertyCreateRequestTypeCommercial:
-		return true
-	case PropertyCreateRequestTypeGarage:
-		return true
-	case PropertyCreateRequestTypeHouse:
-		return true
-	case PropertyCreateRequestTypeLand:
-		return true
-	case PropertyCreateRequestTypeOffice:
-		return true
-	case PropertyCreateRequestTypeParking:
-		return true
-	case PropertyCreateRequestTypeRoom:
-		return true
-	case PropertyCreateRequestTypeWarehouse:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for PropertyResponseOccupancy.
 const (
-	Free     PropertyResponseOccupancy = "free"
-	Occupied PropertyResponseOccupancy = "occupied"
+	PropertyResponseOccupancyFree     PropertyResponseOccupancy = "free"
+	PropertyResponseOccupancyOccupied PropertyResponseOccupancy = "occupied"
 )
 
 // Valid indicates whether the value is a known member of the PropertyResponseOccupancy enum.
 func (e PropertyResponseOccupancy) Valid() bool {
 	switch e {
-	case Free:
+	case PropertyResponseOccupancyFree:
 		return true
-	case Occupied:
+	case PropertyResponseOccupancyOccupied:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for PropertyResponseStatus.
+// Defines values for PropertyStatus.
 const (
-	PropertyResponseStatusActive      PropertyResponseStatus = "active"
-	PropertyResponseStatusArchived    PropertyResponseStatus = "archived"
-	PropertyResponseStatusMaintenance PropertyResponseStatus = "maintenance"
+	PropertyStatusActive      PropertyStatus = "active"
+	PropertyStatusArchived    PropertyStatus = "archived"
+	PropertyStatusMaintenance PropertyStatus = "maintenance"
 )
 
-// Valid indicates whether the value is a known member of the PropertyResponseStatus enum.
-func (e PropertyResponseStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the PropertyStatus enum.
+func (e PropertyStatus) Valid() bool {
 	switch e {
-	case PropertyResponseStatusActive:
+	case PropertyStatusActive:
 		return true
-	case PropertyResponseStatusArchived:
+	case PropertyStatusArchived:
 		return true
-	case PropertyResponseStatusMaintenance:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for PropertyResponseType.
-const (
-	PropertyResponseTypeApartment  PropertyResponseType = "apartment"
-	PropertyResponseTypeApartments PropertyResponseType = "apartments"
-	PropertyResponseTypeCommercial PropertyResponseType = "commercial"
-	PropertyResponseTypeGarage     PropertyResponseType = "garage"
-	PropertyResponseTypeHouse      PropertyResponseType = "house"
-	PropertyResponseTypeLand       PropertyResponseType = "land"
-	PropertyResponseTypeOffice     PropertyResponseType = "office"
-	PropertyResponseTypeParking    PropertyResponseType = "parking"
-	PropertyResponseTypeRoom       PropertyResponseType = "room"
-	PropertyResponseTypeWarehouse  PropertyResponseType = "warehouse"
-)
-
-// Valid indicates whether the value is a known member of the PropertyResponseType enum.
-func (e PropertyResponseType) Valid() bool {
-	switch e {
-	case PropertyResponseTypeApartment:
-		return true
-	case PropertyResponseTypeApartments:
-		return true
-	case PropertyResponseTypeCommercial:
-		return true
-	case PropertyResponseTypeGarage:
-		return true
-	case PropertyResponseTypeHouse:
-		return true
-	case PropertyResponseTypeLand:
-		return true
-	case PropertyResponseTypeOffice:
-		return true
-	case PropertyResponseTypeParking:
-		return true
-	case PropertyResponseTypeRoom:
-		return true
-	case PropertyResponseTypeWarehouse:
+	case PropertyStatusMaintenance:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for PropertyUpdateRequestStatus.
+// Defines values for PropertyType.
 const (
-	PropertyUpdateRequestStatusActive      PropertyUpdateRequestStatus = "active"
-	PropertyUpdateRequestStatusMaintenance PropertyUpdateRequestStatus = "maintenance"
+	Apartment  PropertyType = "apartment"
+	Apartments PropertyType = "apartments"
+	Commercial PropertyType = "commercial"
+	Garage     PropertyType = "garage"
+	House      PropertyType = "house"
+	Land       PropertyType = "land"
+	Office     PropertyType = "office"
+	Parking    PropertyType = "parking"
+	Room       PropertyType = "room"
+	Warehouse  PropertyType = "warehouse"
 )
 
-// Valid indicates whether the value is a known member of the PropertyUpdateRequestStatus enum.
-func (e PropertyUpdateRequestStatus) Valid() bool {
-	switch e {
-	case PropertyUpdateRequestStatusActive:
-		return true
-	case PropertyUpdateRequestStatusMaintenance:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for PropertyUpdateRequestType.
-const (
-	Apartment  PropertyUpdateRequestType = "apartment"
-	Apartments PropertyUpdateRequestType = "apartments"
-	Commercial PropertyUpdateRequestType = "commercial"
-	Garage     PropertyUpdateRequestType = "garage"
-	House      PropertyUpdateRequestType = "house"
-	Land       PropertyUpdateRequestType = "land"
-	Office     PropertyUpdateRequestType = "office"
-	Parking    PropertyUpdateRequestType = "parking"
-	Room       PropertyUpdateRequestType = "room"
-	Warehouse  PropertyUpdateRequestType = "warehouse"
-)
-
-// Valid indicates whether the value is a known member of the PropertyUpdateRequestType enum.
-func (e PropertyUpdateRequestType) Valid() bool {
+// Valid indicates whether the value is a known member of the PropertyType enum.
+func (e PropertyType) Valid() bool {
 	switch e {
 	case Apartment:
 		return true
@@ -619,22 +508,22 @@ func (e RecurringOperationUpdateRequestPeriodicity) Valid() bool {
 
 // Defines values for RecurringOperationUpdateRequestReminderOffsetDays.
 const (
-	RecurringOperationUpdateRequestReminderOffsetDaysN0 RecurringOperationUpdateRequestReminderOffsetDays = 0
-	RecurringOperationUpdateRequestReminderOffsetDaysN1 RecurringOperationUpdateRequestReminderOffsetDays = 1
-	RecurringOperationUpdateRequestReminderOffsetDaysN3 RecurringOperationUpdateRequestReminderOffsetDays = 3
-	RecurringOperationUpdateRequestReminderOffsetDaysN7 RecurringOperationUpdateRequestReminderOffsetDays = 7
+	N0 RecurringOperationUpdateRequestReminderOffsetDays = 0
+	N1 RecurringOperationUpdateRequestReminderOffsetDays = 1
+	N3 RecurringOperationUpdateRequestReminderOffsetDays = 3
+	N7 RecurringOperationUpdateRequestReminderOffsetDays = 7
 )
 
 // Valid indicates whether the value is a known member of the RecurringOperationUpdateRequestReminderOffsetDays enum.
 func (e RecurringOperationUpdateRequestReminderOffsetDays) Valid() bool {
 	switch e {
-	case RecurringOperationUpdateRequestReminderOffsetDaysN0:
+	case N0:
 		return true
-	case RecurringOperationUpdateRequestReminderOffsetDaysN1:
+	case N1:
 		return true
-	case RecurringOperationUpdateRequestReminderOffsetDaysN3:
+	case N3:
 		return true
-	case RecurringOperationUpdateRequestReminderOffsetDaysN7:
+	case N7:
 		return true
 	default:
 		return false
@@ -710,18 +599,27 @@ func (e ReminderResponseTargetType) Valid() bool {
 	}
 }
 
-// Defines values for SubscriptionPendingPeriod.
+// Defines values for SubscriptionPaymentStatus.
 const (
-	SubscriptionPendingPeriodMonth SubscriptionPendingPeriod = "month"
-	SubscriptionPendingPeriodYear  SubscriptionPendingPeriod = "year"
+	Failed          SubscriptionPaymentStatus = "failed"
+	PartialRefunded SubscriptionPaymentStatus = "partial_refunded"
+	Pending         SubscriptionPaymentStatus = "pending"
+	Refunded        SubscriptionPaymentStatus = "refunded"
+	Succeeded       SubscriptionPaymentStatus = "succeeded"
 )
 
-// Valid indicates whether the value is a known member of the SubscriptionPendingPeriod enum.
-func (e SubscriptionPendingPeriod) Valid() bool {
+// Valid indicates whether the value is a known member of the SubscriptionPaymentStatus enum.
+func (e SubscriptionPaymentStatus) Valid() bool {
 	switch e {
-	case SubscriptionPendingPeriodMonth:
+	case Failed:
 		return true
-	case SubscriptionPendingPeriodYear:
+	case PartialRefunded:
+		return true
+	case Pending:
+		return true
+	case Refunded:
+		return true
+	case Succeeded:
 		return true
 	default:
 		return false
@@ -752,93 +650,60 @@ func (e SubscriptionStatus) Valid() bool {
 	}
 }
 
-// Defines values for SubscriptionPaymentPeriod.
-const (
-	SubscriptionPaymentPeriodMonth SubscriptionPaymentPeriod = "month"
-	SubscriptionPaymentPeriodYear  SubscriptionPaymentPeriod = "year"
-)
-
-// Valid indicates whether the value is a known member of the SubscriptionPaymentPeriod enum.
-func (e SubscriptionPaymentPeriod) Valid() bool {
-	switch e {
-	case SubscriptionPaymentPeriodMonth:
-		return true
-	case SubscriptionPaymentPeriodYear:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for SubscriptionPaymentStatus.
-const (
-	SubscriptionPaymentStatusFailed          SubscriptionPaymentStatus = "failed"
-	SubscriptionPaymentStatusPartialRefunded SubscriptionPaymentStatus = "partial_refunded"
-	SubscriptionPaymentStatusPending         SubscriptionPaymentStatus = "pending"
-	SubscriptionPaymentStatusRefunded        SubscriptionPaymentStatus = "refunded"
-	SubscriptionPaymentStatusSucceeded       SubscriptionPaymentStatus = "succeeded"
-)
-
-// Valid indicates whether the value is a known member of the SubscriptionPaymentStatus enum.
-func (e SubscriptionPaymentStatus) Valid() bool {
-	switch e {
-	case SubscriptionPaymentStatusFailed:
-		return true
-	case SubscriptionPaymentStatusPartialRefunded:
-		return true
-	case SubscriptionPaymentStatusPending:
-		return true
-	case SubscriptionPaymentStatusRefunded:
-		return true
-	case SubscriptionPaymentStatusSucceeded:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for TariffName.
 const (
-	TariffNameBasic    TariffName = "basic"
-	TariffNameBusiness TariffName = "business"
-	TariffNamePro      TariffName = "pro"
+	Basic    TariffName = "basic"
+	Business TariffName = "business"
+	Pro      TariffName = "pro"
 )
 
 // Valid indicates whether the value is a known member of the TariffName enum.
 func (e TariffName) Valid() bool {
 	switch e {
-	case TariffNameBasic:
+	case Basic:
 		return true
-	case TariffNameBusiness:
+	case Business:
 		return true
-	case TariffNamePro:
+	case Pro:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ListAdminSubscriptionPaymentsParamsStatus.
+// Defines values for ListAdminUsersParamsRole.
 const (
-	ListAdminSubscriptionPaymentsParamsStatusFailed          ListAdminSubscriptionPaymentsParamsStatus = "failed"
-	ListAdminSubscriptionPaymentsParamsStatusPartialRefunded ListAdminSubscriptionPaymentsParamsStatus = "partial_refunded"
-	ListAdminSubscriptionPaymentsParamsStatusPending         ListAdminSubscriptionPaymentsParamsStatus = "pending"
-	ListAdminSubscriptionPaymentsParamsStatusRefunded        ListAdminSubscriptionPaymentsParamsStatus = "refunded"
-	ListAdminSubscriptionPaymentsParamsStatusSucceeded       ListAdminSubscriptionPaymentsParamsStatus = "succeeded"
+	Admin ListAdminUsersParamsRole = "admin"
+	Owner ListAdminUsersParamsRole = "owner"
 )
 
-// Valid indicates whether the value is a known member of the ListAdminSubscriptionPaymentsParamsStatus enum.
-func (e ListAdminSubscriptionPaymentsParamsStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the ListAdminUsersParamsRole enum.
+func (e ListAdminUsersParamsRole) Valid() bool {
 	switch e {
-	case ListAdminSubscriptionPaymentsParamsStatusFailed:
+	case Admin:
 		return true
-	case ListAdminSubscriptionPaymentsParamsStatusPartialRefunded:
+	case Owner:
 		return true
-	case ListAdminSubscriptionPaymentsParamsStatusPending:
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAdminUserPropertiesParamsStatus.
+const (
+	Active   ListAdminUserPropertiesParamsStatus = "active"
+	All      ListAdminUserPropertiesParamsStatus = "all"
+	Archived ListAdminUserPropertiesParamsStatus = "archived"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminUserPropertiesParamsStatus enum.
+func (e ListAdminUserPropertiesParamsStatus) Valid() bool {
+	switch e {
+	case Active:
 		return true
-	case ListAdminSubscriptionPaymentsParamsStatusRefunded:
+	case All:
 		return true
-	case ListAdminSubscriptionPaymentsParamsStatusSucceeded:
+	case Archived:
 		return true
 	default:
 		return false
@@ -869,29 +734,183 @@ type AddressSuggestionsResponse struct {
 	Suggestions []AddressSuggestion `json:"suggestions"`
 }
 
-// AdminSubscriptionPayment defines model for AdminSubscriptionPayment.
-type AdminSubscriptionPayment struct {
-	AmountKopecks int                            `json:"amountKopecks"`
-	CreatedAt     time.Time                      `json:"createdAt"`
-	Id            openapi_types.UUID             `json:"id"`
-	Period        AdminSubscriptionPaymentPeriod `json:"period"`
-	Provider      string                         `json:"provider"`
-	Status        AdminSubscriptionPaymentStatus `json:"status"`
-	Tariff        Tariff                         `json:"tariff"`
-	UserId        openapi_types.UUID             `json:"userId"`
-	UserPhone     string                         `json:"userPhone"`
+// AdminLease defines model for AdminLease.
+type AdminLease struct {
+	Comment              *string             `json:"comment,omitempty"`
+	CreatedAt            time.Time           `json:"createdAt"`
+	DepositAmountKopecks int                 `json:"depositAmountKopecks"`
+	EndDate              *openapi_types.Date `json:"endDate,omitempty"`
+	Id                   openapi_types.UUID  `json:"id"`
+	OwnerId              openapi_types.UUID  `json:"ownerId"`
+	PaymentDay           int                 `json:"paymentDay"`
+	PropertyId           openapi_types.UUID  `json:"propertyId"`
+	RentAmountKopecks    int                 `json:"rentAmountKopecks"`
+	StartDate            openapi_types.Date  `json:"startDate"`
+	Status               LeaseStatus         `json:"status"`
+	TenantContact        *AdminTenantContact `json:"tenantContact,omitempty"`
+	UpdatedAt            time.Time           `json:"updatedAt"`
 }
 
-// AdminSubscriptionPaymentPeriod defines model for AdminSubscriptionPayment.Period.
-type AdminSubscriptionPaymentPeriod string
+// AdminLeaseResponse defines model for AdminLeaseResponse.
+type AdminLeaseResponse struct {
+	Lease AdminLease `json:"lease"`
+}
 
-// AdminSubscriptionPaymentStatus defines model for AdminSubscriptionPayment.Status.
-type AdminSubscriptionPaymentStatus string
+// AdminLeasesResponse defines model for AdminLeasesResponse.
+type AdminLeasesResponse struct {
+	Items []AdminLease `json:"items"`
+	Total int          `json:"total"`
+}
+
+// AdminOperation defines model for AdminOperation.
+type AdminOperation struct {
+	AmountKopecks        int                               `json:"amountKopecks"`
+	Category             OperationCategory                 `json:"category"`
+	Comment              *string                           `json:"comment,omitempty"`
+	CreatedAt            time.Time                         `json:"createdAt"`
+	Id                   openapi_types.UUID                `json:"id"`
+	IsException          bool                              `json:"isException"`
+	LeaseId              *openapi_types.UUID               `json:"leaseId,omitempty"`
+	Name                 string                            `json:"name"`
+	OperationDate        openapi_types.Date                `json:"operationDate"`
+	OwnerId              openapi_types.UUID                `json:"ownerId"`
+	PropertyId           openapi_types.UUID                `json:"propertyId"`
+	RecurringOperationId *openapi_types.UUID               `json:"recurringOperationId,omitempty"`
+	ReminderOffsetDays   *AdminOperationReminderOffsetDays `json:"reminderOffsetDays,omitempty"`
+	Status               OperationStatus                   `json:"status"`
+	Type                 OperationType                     `json:"type"`
+	UpdatedAt            time.Time                         `json:"updatedAt"`
+}
+
+// AdminOperationReminderOffsetDays defines model for AdminOperation.ReminderOffsetDays.
+type AdminOperationReminderOffsetDays int
+
+// AdminOperationResponse defines model for AdminOperationResponse.
+type AdminOperationResponse struct {
+	Operation AdminOperation `json:"operation"`
+}
+
+// AdminOperationsResponse defines model for AdminOperationsResponse.
+type AdminOperationsResponse struct {
+	Items []AdminOperation `json:"items"`
+	Total int              `json:"total"`
+}
+
+// AdminPropertiesResponse defines model for AdminPropertiesResponse.
+type AdminPropertiesResponse struct {
+	Items []AdminProperty `json:"items"`
+	Total int             `json:"total"`
+}
+
+// AdminProperty defines model for AdminProperty.
+type AdminProperty struct {
+	Address     string                 `json:"address"`
+	CreatedAt   time.Time              `json:"createdAt"`
+	Description *string                `json:"description,omitempty"`
+	Id          openapi_types.UUID     `json:"id"`
+	Name        string                 `json:"name"`
+	Occupancy   AdminPropertyOccupancy `json:"occupancy"`
+	OwnerId     openapi_types.UUID     `json:"ownerId"`
+	Photos      *[]PropertyPhoto       `json:"photos,omitempty"`
+	Status      PropertyStatus         `json:"status"`
+	Type        PropertyType           `json:"type"`
+	UpdatedAt   time.Time              `json:"updatedAt"`
+}
+
+// AdminPropertyOccupancy defines model for AdminProperty.Occupancy.
+type AdminPropertyOccupancy string
+
+// AdminPropertyResponse defines model for AdminPropertyResponse.
+type AdminPropertyResponse struct {
+	Property AdminProperty `json:"property"`
+}
+
+// AdminSubscriptionPayment defines model for AdminSubscriptionPayment.
+type AdminSubscriptionPayment struct {
+	AmountKopecks         int                            `json:"amountKopecks"`
+	CreatedAt             time.Time                      `json:"createdAt"`
+	Id                    openapi_types.UUID             `json:"id"`
+	PaymentMethodId       *openapi_types.UUID            `json:"paymentMethodId,omitempty"`
+	Period                AdminSubscriptionPaymentPeriod `json:"period"`
+	Provider              string                         `json:"provider"`
+	RefundedAmountKopecks *int                           `json:"refundedAmountKopecks,omitempty"`
+	Status                SubscriptionPaymentStatus      `json:"status"`
+	SucceededAt           *time.Time                     `json:"succeededAt,omitempty"`
+	Tariff                Tariff                         `json:"tariff"`
+	UserId                openapi_types.UUID             `json:"userId"`
+	UserPhone             string                         `json:"userPhone"`
+}
+
+// AdminSubscriptionPaymentPeriod defines model for AdminSubscriptionPaymentPeriod.
+type AdminSubscriptionPaymentPeriod string
 
 // AdminSubscriptionPaymentsResponse defines model for AdminSubscriptionPaymentsResponse.
 type AdminSubscriptionPaymentsResponse struct {
 	Items []AdminSubscriptionPayment `json:"items"`
 	Total int                        `json:"total"`
+}
+
+// AdminTenantContact defines model for AdminTenantContact.
+type AdminTenantContact struct {
+	Comment    *string            `json:"comment,omitempty"`
+	CreatedAt  time.Time          `json:"createdAt"`
+	Email      *string            `json:"email,omitempty"`
+	Id         openapi_types.UUID `json:"id"`
+	Name       string             `json:"name"`
+	OwnerId    openapi_types.UUID `json:"ownerId"`
+	Patronymic *string            `json:"patronymic,omitempty"`
+	Phone      *string            `json:"phone,omitempty"`
+	Surname    *string            `json:"surname,omitempty"`
+	UpdatedAt  time.Time          `json:"updatedAt"`
+}
+
+// AdminTenantContactResponse defines model for AdminTenantContactResponse.
+type AdminTenantContactResponse struct {
+	Contact AdminTenantContact `json:"contact"`
+}
+
+// AdminTenantContactsResponse defines model for AdminTenantContactsResponse.
+type AdminTenantContactsResponse struct {
+	Items []AdminTenantContact `json:"items"`
+	Total int                  `json:"total"`
+}
+
+// AdminUser defines model for AdminUser.
+type AdminUser struct {
+	CreatedAt  time.Time          `json:"createdAt"`
+	Email      *string            `json:"email,omitempty"`
+	Id         openapi_types.UUID `json:"id"`
+	Name       *string            `json:"name,omitempty"`
+	Patronymic *string            `json:"patronymic,omitempty"`
+	Phone      string             `json:"phone"`
+	Role       AdminUserRole      `json:"role"`
+	Surname    *string            `json:"surname,omitempty"`
+	UpdatedAt  time.Time          `json:"updatedAt"`
+}
+
+// AdminUserRole defines model for AdminUser.Role.
+type AdminUserRole string
+
+// AdminUserResponse defines model for AdminUserResponse.
+type AdminUserResponse struct {
+	Stats        AdminUserStats `json:"stats"`
+	Subscription *Subscription  `json:"subscription"`
+	User         AdminUser      `json:"user"`
+}
+
+// AdminUserStats defines model for AdminUserStats.
+type AdminUserStats struct {
+	ActivePropertiesCount   int `json:"activePropertiesCount"`
+	ArchivedPropertiesCount int `json:"archivedPropertiesCount"`
+	LeasesCount             int `json:"leasesCount"`
+	OperationsCount         int `json:"operationsCount"`
+	TenantContactsCount     int `json:"tenantContactsCount"`
+}
+
+// AdminUsersResponse defines model for AdminUsersResponse.
+type AdminUsersResponse struct {
+	Items []AdminUser `json:"items"`
+	Total int         `json:"total"`
 }
 
 // AutoRenewRequest defines model for AutoRenewRequest.
@@ -907,15 +926,9 @@ type ChangePhoneRequest struct {
 
 // ChangeTariffRequest defines model for ChangeTariffRequest.
 type ChangeTariffRequest struct {
-	Period     ChangeTariffRequestPeriod     `json:"period"`
-	TariffName ChangeTariffRequestTariffName `json:"tariffName"`
+	Period     AdminSubscriptionPaymentPeriod `json:"period"`
+	TariffName TariffName                     `json:"tariffName"`
 }
-
-// ChangeTariffRequestPeriod defines model for ChangeTariffRequest.Period.
-type ChangeTariffRequestPeriod string
-
-// ChangeTariffRequestTariffName defines model for ChangeTariffRequest.TariffName.
-type ChangeTariffRequestTariffName string
 
 // ChangeTariffResponse defines model for ChangeTariffResponse.
 type ChangeTariffResponse struct {
@@ -992,13 +1005,13 @@ type LeaseResponse struct {
 	PropertyId           openapi_types.UUID     `json:"property_id"`
 	RentAmountKopecks    int                    `json:"rent_amount_kopecks"`
 	StartDate            openapi_types.Date     `json:"start_date"`
-	Status               LeaseResponseStatus    `json:"status"`
+	Status               LeaseStatus            `json:"status"`
 	TenantContact        *TenantContactResponse `json:"tenant_contact"`
 	UpdatedAt            time.Time              `json:"updated_at"`
 }
 
-// LeaseResponseStatus defines model for LeaseResponse.Status.
-type LeaseResponseStatus string
+// LeaseStatus defines model for LeaseStatus.
+type LeaseStatus string
 
 // LeaseUpdateRequest defines model for LeaseUpdateRequest.
 type LeaseUpdateRequest struct {
@@ -1141,14 +1154,11 @@ type PropertiesResponse struct {
 
 // PropertyCreateRequest defines model for PropertyCreateRequest.
 type PropertyCreateRequest struct {
-	Address     string                    `json:"address"`
-	Description *string                   `json:"description,omitempty"`
-	Name        string                    `json:"name"`
-	Type        PropertyCreateRequestType `json:"type"`
+	Address     string       `json:"address"`
+	Description *string      `json:"description,omitempty"`
+	Name        string       `json:"name"`
+	Type        PropertyType `json:"type"`
 }
-
-// PropertyCreateRequestType defines model for PropertyCreateRequest.Type.
-type PropertyCreateRequestType string
 
 // PropertyLeasesResponse defines model for PropertyLeasesResponse.
 type PropertyLeasesResponse struct {
@@ -1180,34 +1190,28 @@ type PropertyResponse struct {
 	Name        string                    `json:"name"`
 	Occupancy   PropertyResponseOccupancy `json:"occupancy"`
 	Photos      *[]PropertyPhoto          `json:"photos,omitempty"`
-	Status      PropertyResponseStatus    `json:"status"`
-	Type        PropertyResponseType      `json:"type"`
+	Status      PropertyStatus            `json:"status"`
+	Type        PropertyType              `json:"type"`
 	UpdatedAt   time.Time                 `json:"updated_at"`
 }
 
 // PropertyResponseOccupancy defines model for PropertyResponse.Occupancy.
 type PropertyResponseOccupancy string
 
-// PropertyResponseStatus defines model for PropertyResponse.Status.
-type PropertyResponseStatus string
+// PropertyStatus defines model for PropertyStatus.
+type PropertyStatus string
 
-// PropertyResponseType defines model for PropertyResponse.Type.
-type PropertyResponseType string
+// PropertyType defines model for PropertyType.
+type PropertyType string
 
 // PropertyUpdateRequest defines model for PropertyUpdateRequest.
 type PropertyUpdateRequest struct {
-	Address     *string                      `json:"address,omitempty"`
-	Description *string                      `json:"description,omitempty"`
-	Name        *string                      `json:"name,omitempty"`
-	Status      *PropertyUpdateRequestStatus `json:"status,omitempty"`
-	Type        *PropertyUpdateRequestType   `json:"type,omitempty"`
+	Address     *string         `json:"address,omitempty"`
+	Description *string         `json:"description,omitempty"`
+	Name        *string         `json:"name,omitempty"`
+	Status      *PropertyStatus `json:"status,omitempty"`
+	Type        *PropertyType   `json:"type,omitempty"`
 }
-
-// PropertyUpdateRequestStatus defines model for PropertyUpdateRequest.Status.
-type PropertyUpdateRequestStatus string
-
-// PropertyUpdateRequestType defines model for PropertyUpdateRequest.Type.
-type PropertyUpdateRequestType string
 
 // RecurringOperationCreateRequest defines model for RecurringOperationCreateRequest.
 type RecurringOperationCreateRequest struct {
@@ -1353,43 +1357,38 @@ type SendPhoneCodeRequest struct {
 
 // Subscription defines model for Subscription.
 type Subscription struct {
-	ActivePaymentMethod *PaymentMethod             `json:"activePaymentMethod,omitempty"`
-	AutoRenewEnabled    bool                       `json:"autoRenewEnabled"`
-	PendingChangeAt     *time.Time                 `json:"pendingChangeAt,omitempty"`
-	PendingPeriod       *SubscriptionPendingPeriod `json:"pendingPeriod,omitempty"`
-	PendingTariff       *Tariff                    `json:"pendingTariff,omitempty"`
-	Status              SubscriptionStatus         `json:"status"`
-	Tariff              Tariff                     `json:"tariff"`
-	ValidUntil          *time.Time                 `json:"validUntil,omitempty"`
+	ActivePaymentMethod *PaymentMethod                  `json:"activePaymentMethod,omitempty"`
+	AutoRenewEnabled    bool                            `json:"autoRenewEnabled"`
+	CurrentPeriod       *AdminSubscriptionPaymentPeriod `json:"currentPeriod,omitempty"`
+	PendingChangeAt     *time.Time                      `json:"pendingChangeAt,omitempty"`
+	PendingPeriod       *AdminSubscriptionPaymentPeriod `json:"pendingPeriod,omitempty"`
+	PendingTariff       *Tariff                         `json:"pendingTariff,omitempty"`
+	Status              SubscriptionStatus              `json:"status"`
+	Tariff              Tariff                          `json:"tariff"`
+	ValidUntil          *time.Time                      `json:"validUntil,omitempty"`
 }
-
-// SubscriptionPendingPeriod defines model for Subscription.PendingPeriod.
-type SubscriptionPendingPeriod string
-
-// SubscriptionStatus defines model for Subscription.Status.
-type SubscriptionStatus string
 
 // SubscriptionPayment defines model for SubscriptionPayment.
 type SubscriptionPayment struct {
-	AmountKopecks int                       `json:"amountKopecks"`
-	CreatedAt     time.Time                 `json:"createdAt"`
-	Id            openapi_types.UUID        `json:"id"`
-	Period        SubscriptionPaymentPeriod `json:"period"`
-	Provider      string                    `json:"provider"`
-	Status        SubscriptionPaymentStatus `json:"status"`
-	Tariff        Tariff                    `json:"tariff"`
+	AmountKopecks int                            `json:"amountKopecks"`
+	CreatedAt     time.Time                      `json:"createdAt"`
+	Id            openapi_types.UUID             `json:"id"`
+	Period        AdminSubscriptionPaymentPeriod `json:"period"`
+	Provider      string                         `json:"provider"`
+	Status        SubscriptionPaymentStatus      `json:"status"`
+	Tariff        Tariff                         `json:"tariff"`
 }
 
-// SubscriptionPaymentPeriod defines model for SubscriptionPayment.Period.
-type SubscriptionPaymentPeriod string
-
-// SubscriptionPaymentStatus defines model for SubscriptionPayment.Status.
+// SubscriptionPaymentStatus defines model for SubscriptionPaymentStatus.
 type SubscriptionPaymentStatus string
 
 // SubscriptionPaymentsResponse defines model for SubscriptionPaymentsResponse.
 type SubscriptionPaymentsResponse struct {
 	Items []SubscriptionPayment `json:"items"`
 }
+
+// SubscriptionStatus defines model for SubscriptionStatus.
+type SubscriptionStatus string
 
 // Tariff defines model for Tariff.
 type Tariff struct {
@@ -1399,7 +1398,7 @@ type Tariff struct {
 	YearlyPriceKopecks  int        `json:"yearlyPriceKopecks"`
 }
 
-// TariffName defines model for Tariff.Name.
+// TariffName defines model for TariffName.
 type TariffName string
 
 // TariffsResponse defines model for TariffsResponse.
@@ -1500,13 +1499,56 @@ type sessionCookieContextKey string
 
 // ListAdminSubscriptionPaymentsParams defines parameters for ListAdminSubscriptionPayments.
 type ListAdminSubscriptionPaymentsParams struct {
-	Status *ListAdminSubscriptionPaymentsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
-	Limit  *int                                       `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int                                       `form:"offset,omitempty" json:"offset,omitempty"`
+	UserId *openapi_types.UUID        `form:"user_id,omitempty" json:"user_id,omitempty"`
+	Status *SubscriptionPaymentStatus `form:"status,omitempty" json:"status,omitempty"`
+	Limit  *int                       `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int                       `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
-// ListAdminSubscriptionPaymentsParamsStatus defines parameters for ListAdminSubscriptionPayments.
-type ListAdminSubscriptionPaymentsParamsStatus string
+// ListAdminUsersParams defines parameters for ListAdminUsers.
+type ListAdminUsersParams struct {
+	Limit              *int                      `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset             *int                      `form:"offset,omitempty" json:"offset,omitempty"`
+	Phone              *string                   `form:"phone,omitempty" json:"phone,omitempty"`
+	Email              *string                   `form:"email,omitempty" json:"email,omitempty"`
+	Role               *ListAdminUsersParamsRole `form:"role,omitempty" json:"role,omitempty"`
+	SubscriptionStatus *SubscriptionStatus       `form:"subscription_status,omitempty" json:"subscription_status,omitempty"`
+}
+
+// ListAdminUsersParamsRole defines parameters for ListAdminUsers.
+type ListAdminUsersParamsRole string
+
+// ListAdminUserLeasesParams defines parameters for ListAdminUserLeases.
+type ListAdminUserLeasesParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// ListAdminUserOperationsParams defines parameters for ListAdminUserOperations.
+type ListAdminUserOperationsParams struct {
+	Limit      *int                `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset     *int                `form:"offset,omitempty" json:"offset,omitempty"`
+	Status     *OperationStatus    `form:"status,omitempty" json:"status,omitempty"`
+	Type       *OperationType      `form:"type,omitempty" json:"type,omitempty"`
+	PropertyId *openapi_types.UUID `form:"property_id,omitempty" json:"property_id,omitempty"`
+	LeaseId    *openapi_types.UUID `form:"lease_id,omitempty" json:"lease_id,omitempty"`
+}
+
+// ListAdminUserPropertiesParams defines parameters for ListAdminUserProperties.
+type ListAdminUserPropertiesParams struct {
+	Limit  *int                                 `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int                                 `form:"offset,omitempty" json:"offset,omitempty"`
+	Status *ListAdminUserPropertiesParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// ListAdminUserPropertiesParamsStatus defines parameters for ListAdminUserProperties.
+type ListAdminUserPropertiesParamsStatus string
+
+// ListAdminUserTenantContactsParams defines parameters for ListAdminUserTenantContacts.
+type ListAdminUserTenantContactsParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
 
 // GetAddressSuggestionsParams defines parameters for GetAddressSuggestions.
 type GetAddressSuggestionsParams struct {
@@ -1647,6 +1689,15 @@ type HandlePaymentWebhookJSONRequestBody HandlePaymentWebhookJSONBody
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
+	// (GET /admin/leases/{id})
+	GetAdminLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /admin/operations/{id})
+	GetAdminOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /admin/properties/{id})
+	GetAdminProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
 	// (GET /admin/subscription/payments)
 	ListAdminSubscriptionPayments(w http.ResponseWriter, r *http.Request, params ListAdminSubscriptionPaymentsParams)
 
@@ -1655,6 +1706,27 @@ type ServerInterface interface {
 
 	// (POST /admin/subscription/payments/{paymentId}/sync)
 	SyncSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId openapi_types.UUID)
+
+	// (GET /admin/tenant-contacts/{id})
+	GetAdminTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /admin/users)
+	ListAdminUsers(w http.ResponseWriter, r *http.Request, params ListAdminUsersParams)
+
+	// (GET /admin/users/{id})
+	GetAdminUser(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /admin/users/{id}/leases)
+	ListAdminUserLeases(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserLeasesParams)
+
+	// (GET /admin/users/{id}/operations)
+	ListAdminUserOperations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserOperationsParams)
+
+	// (GET /admin/users/{id}/properties)
+	ListAdminUserProperties(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserPropertiesParams)
+
+	// (GET /admin/users/{id}/tenant-contacts)
+	ListAdminUserTenantContacts(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserTenantContactsParams)
 
 	// (POST /auth/email/send)
 	SendEmailCode(w http.ResponseWriter, r *http.Request)
@@ -1856,6 +1928,21 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
+// (GET /admin/leases/{id})
+func (_ Unimplemented) GetAdminLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/operations/{id})
+func (_ Unimplemented) GetAdminOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/properties/{id})
+func (_ Unimplemented) GetAdminProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /admin/subscription/payments)
 func (_ Unimplemented) ListAdminSubscriptionPayments(w http.ResponseWriter, r *http.Request, params ListAdminSubscriptionPaymentsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -1868,6 +1955,41 @@ func (_ Unimplemented) RefundSubscriptionPayment(w http.ResponseWriter, r *http.
 
 // (POST /admin/subscription/payments/{paymentId}/sync)
 func (_ Unimplemented) SyncSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/tenant-contacts/{id})
+func (_ Unimplemented) GetAdminTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/users)
+func (_ Unimplemented) ListAdminUsers(w http.ResponseWriter, r *http.Request, params ListAdminUsersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/users/{id})
+func (_ Unimplemented) GetAdminUser(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/users/{id}/leases)
+func (_ Unimplemented) ListAdminUserLeases(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserLeasesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/users/{id}/operations)
+func (_ Unimplemented) ListAdminUserOperations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserOperationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/users/{id}/properties)
+func (_ Unimplemented) ListAdminUserProperties(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserPropertiesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/users/{id}/tenant-contacts)
+func (_ Unimplemented) ListAdminUserTenantContacts(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserTenantContactsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2205,6 +2327,102 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
+// GetAdminLease operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminLease(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminLease(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdminOperation operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminOperation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdminProperty operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminProperty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminProperty(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListAdminSubscriptionPayments operation middleware
 func (siw *ServerInterfaceWrapper) ListAdminSubscriptionPayments(w http.ResponseWriter, r *http.Request) {
 
@@ -2219,6 +2437,19 @@ func (siw *ServerInterfaceWrapper) ListAdminSubscriptionPayments(w http.Response
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListAdminSubscriptionPaymentsParams
+
+	// ------------- Optional query parameter "user_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "user_id", r.URL.Query(), &params.UserId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "user_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_id", Err: err})
+		}
+		return
+	}
 
 	// ------------- Optional query parameter "status" -------------
 
@@ -2325,6 +2556,483 @@ func (siw *ServerInterfaceWrapper) SyncSubscriptionPayment(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SyncSubscriptionPayment(w, r, paymentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdminTenantContact operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminTenantContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminTenantContact(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAdminUsers operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminUsersParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "phone" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "phone", r.URL.Query(), &params.Phone, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "phone"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "phone", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "email" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "email", r.URL.Query(), &params.Email, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "email"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "email", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "role" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "role", r.URL.Query(), &params.Role, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "role"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "role", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "subscription_status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "subscription_status", r.URL.Query(), &params.SubscriptionStatus, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "subscription_status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "subscription_status", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminUsers(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdminUser operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminUser(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminUser(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAdminUserLeases operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminUserLeases(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminUserLeasesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminUserLeases(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAdminUserOperations operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminUserOperations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminUserOperationsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "property_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "property_id", r.URL.Query(), &params.PropertyId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "property_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "property_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "lease_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "lease_id", r.URL.Query(), &params.LeaseId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lease_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lease_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminUserOperations(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAdminUserProperties operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminUserProperties(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminUserPropertiesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminUserProperties(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAdminUserTenantContacts operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminUserTenantContacts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminUserTenantContactsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminUserTenantContacts(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4480,6 +5188,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/leases/{id}", wrapper.GetAdminLease)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/operations/{id}", wrapper.GetAdminOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/properties/{id}", wrapper.GetAdminProperty)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/subscription/payments", wrapper.ListAdminSubscriptionPayments)
 	})
 	r.Group(func(r chi.Router) {
@@ -4487,6 +5204,27 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/admin/subscription/payments/{paymentId}/sync", wrapper.SyncSubscriptionPayment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/tenant-contacts/{id}", wrapper.GetAdminTenantContact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/users", wrapper.ListAdminUsers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/users/{id}", wrapper.GetAdminUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/users/{id}/leases", wrapper.ListAdminUserLeases)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/users/{id}/operations", wrapper.ListAdminUserOperations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/users/{id}/properties", wrapper.ListAdminUserProperties)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/users/{id}/tenant-contacts", wrapper.ListAdminUserTenantContacts)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/email/send", wrapper.SendEmailCode)
@@ -4692,98 +5430,113 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"7D1bk9u2en+Fw/ahnWot+ZLmZPPkOEnriTfe8a7bhxyPBktCEs6SAA8A2lY9+u8d4kKCJEiCEklJaz0l",
+	"XoHAh++GD98N3/yAxAnBEHPmX3/zKWQJwQyKf/wCwg/wnylkPPtXQDCHWPwvSJIIBYAjguf/YARnf2PB",
+	"BsYg+79/pXDlX/v/Mi+mnstf2fyWkocIxv5ut5v5IWQBRUk2jX+dreZRtdxu5r8heBWhYJKl87V2M/93",
+	"Qh9QGEI8xcLFYruZ/xZzSDGI7iD9DOlvlBI6BQx6WY+JdT0oFt7N/D8J/52kOJwCiD8J91Zisd3Mv0sf",
+	"8t9+iUjwCCeBwVzWQ8x7kEv/7FGI4RePEy+DAOEUenHKAUd47YWAgwzke0JuAN4qcWFTgHtPiBcDvNVC",
+	"wzI4PmKQ8g2h6P+mwVlpvexn9U025eswvAXbGGJ+A/mGmLokoSSBlCOpZxJKPqMQ0nvyKMWuvMYH8MXT",
+	"QzyejfFWhHpsi4MNJZikLP+Zef8Gn62feSvwCP/92d/x2zUmFIZifDGGbwD3UgY94D0A/Hi1IjT2VhH5",
+	"4rE02HiAefdXfwDGwLO/Y3/m820C/WufcYrwWmxS/YU8/ANKpVHfqlSj9b0GBK8QjT/SKPsXTqMIPETQ",
+	"v+Y0hbWlZn5iztpJp9LgJkApZOwuXa8hk/itQYj4NvtvDZbPIEqh5ZfdzM9YENGM5f5Swz65LM6a8cSK",
+	"Qdk/EYcx69p/fXMFCgClYFuD1VzFDnGM8DsI7JSMYyVanWQMKAQchq/F6IzdAPev/RBweMVRDH3LJyFM",
+	"CEP8dUxSzP8gCQwemYF8hDlcQ6GnIQ5/BRzWpvZn3YChsPRZmqLQBgz5giF96zZWseyvYGsHV2Fx6zgd",
+	"hdgFCYwDypvQUJuUccDTTn4ShL+TQzNOghhg/oZgDqRZAqLo/cq//quLK2OE70vf7j5VSbOb+WkS9uOR",
+	"Ci8L9GlCldCc79dEkw2zDVxXoqnJzCbQ7eLTLOiRlq5OHEo5rG5bft++eoueyRWLo4Yp4KiqlpnPCQeR",
+	"jT2rlBJL6fGNoL9PIAV2HQ26BSIAHK4J3XZtKV/ljf4g+3hc3eaodRD77WsAE40C9fsDIREEQrcL2tv1",
+	"SCfYGMTQeswRjRBnbdJLO/bVfkFKs3/kZNpzuxTGCIeQvl+tGMwEWbANxGnsX//1fPZy9uOnxlnKatZB",
+	"cebAGspTTOX42X02eGSVKL40xERxxKwiW1V+MHSpyZ69tWK+12bVREz579RKhbaoYqGYpxuaYTWlAdPo",
+	"2vI2B3bQLahpt9PtYGtR99KwtaqrvUxL43r1bTAjsVmjBkGaABxsDZXjryjMgBO/IRgaaNlTsW4IJ+7E",
+	"1ci+zT4T0NuxkBPbTfPpafspPv3VSHpPKTal8TQzGZqsIFBvPaZBbxa6xGDrHuJW2VI+SyMkpvtG3YT3",
+	"M5xGs2dKl/k9z/EEUtTtCWhCyK38WtohwhtiFVgKVykOYVi7dw1lIFhAKySGpUEAYdhKgk48cUDRatUF",
+	"x70clYkcc9Y02dDbDcEOvhA5gVwkp13dxMgFMadKDpC5nMmbfcTgNucZrXxjgvnGn/lbCKhV8zZNNezh",
+	"ahPZ8c/Z++o9flK/DowBiqY5dns5bTgleBujwM0tqdm/cyRLqQawc+w4x17PA63EHa1+XM0+fZ0/Faj1",
+	"TG4QDSuAFchGF72PTJ44FVyekBQ5eOT3k5T6IUsiaOpkwbjCPosRtirlyWUpUceOALW3JGXEbnHwc8Dd",
+	"mDSb506MFjh4KF1e3Hyw5kHT4H1VnOkETQ1b4usKcDO1xVb83GksVMzUgKPPsLjSvsnsBbu5CmiwQZ9h",
+	"6DRYOMzaBuS+grZBJUd488AKjux7at5AGVr7qnWAW7E9rPKUnDCqzkw5+QAx/NIYOoU44+LQ5h6trKZH",
+	"2tZ5swF4DYWR2bhSQEKprr6COMkEx3/+4uWrH/7Tb1N6xeD/+PGnn35aLBbPn7940al8tN4RazYDLK33",
+	"5rDyQFclab//qTRv93VCjKxuyZgkvwh072zYKPJeV05bFPl3hAEO4AeYEMp13OAD+WIB9JAohBCM5WPb",
+	"ZX0Pt3KVMDU/cHnZT137v8nuUtbNw68JxAy27wDhgMQdY+R1zSUUkVCyQrxttsr29U2wAsasBnxt7k7E",
+	"FNfOMlpWlMROm+HEYVhlP2Jy8Wk3fNp1NSrtuilSBCaWTsZqg2dsKcaOQMdmNfSwXZoC7nR0NuoOy0n6",
+	"sF3mrN9/8lww7TObfsn+k5vMY5nf7eyxiYvWe/3AuZef1HhDe5zUlOWNz0oENNDdyRL3OYRHk5qqMTUI",
+	"34vQ/htxzWkxhHL/UAy+voN4nTHoi8Vi0ZzFs5QeP3M/IVyBNOL+9WLmxwijOLsFLmb2/J5l6BqLVkf9",
+	"MpTpNzH4Kmd++dxY5vnsYCUk00cs+2rfi8g/cd+NtPmXykUygHo01rfvoIzBRh5pM816uw+XoH9emAXz",
+	"/Thn0NSwZb8IiObO0ZjwYMY7IEFsGfTNELO7HNuSxHpwjNWvU5KJnIK1HVQTx9oFp4Ezy1QvMX1pP42y",
+	"dpfTQrvKwBeAOMLrpYDKnynfgp9vlS2zv8i8DJLdQDkMDVeD1bsm1voo4GnW/REEdFmnc67MVyBihTAZ",
+	"qUqGWhhNpPuL21jis6fettN/MK9NWXN35QbLKW1cedOi/r9Tx3TZKevuiu3j1O70UNtoVXcsGDvL2D9T",
+	"gHyTKUBhQWY6iaMICXpmCyYAURHE/ZqPVKalofIo5Cm146YAoN2s7GtJDZXf2W3DCjfssie7GtP+YJs0",
+	"99u6KxWdwrgkIocx02qsXi2y8GIIMPMw8fQHP3vP5y/nP3oZSsI0gh7A3t3NXf67LAgRtTTZnN4DXBEK",
+	"Pb6BXg6ml0H1LLtXSN5ZzNyTJsdwUpWSFY2ztoLXVpF4hxi/I7R8glVmWGbYLbbd8Gvlr4AF7bLQrD9d",
+	"DqOpU5t72efOuc1L6JDc3CB2A2Q3u8tdPwu/twGvEpyXBWTosBTnqn44jyTnA016w4gvW/d7q45SprPB",
+	"rP0s+CqWjNM3gTjM9jPzyWdIw1RERoAAmsIANhrqZQwaE+YnuD6gW7/uMPWnVERP7wwWFyXmZUcq/IqY",
+	"qJWtHscU6gOZibNW/z7pKdvMsC3Xjg1gy5hQaFfc/S4l9TPR4k6OUIx4ySa0uvAw/MoVZaoGZDf+7N85",
+	"xrAlgPkkswJFNqVwW61qPTgfKEQsicD2BrBH67HnfCq/lp4EK2FbcmYbvCw6mdMEz1ilK6GzhKfBrsGV",
+	"MuG9r8G6LLwGTgi5ugTXEYwZBzhouHhKXfw2tP5anMoW2Uc8ss+ptUI7vdQhKafJl2rY9MBlJrUM+oMo",
+	"IqbqumoW5SSlI2LRXSvSfVJZDp8XP/wwa6aMe2FEBQ/2soY2vJymO0lDV5w8d2kcA9pSUwGiaJmpwqVL",
+	"dFnE9KKt01hxghRuwz1DB8qeWwr3YtCSbabGyYyLwDGRrGE/s0asWAGyr95GH1kqVGcax6oBmatTjKPI",
+	"zbLPPmwDq4VLxCmzzCus3aIRFba2RSEc6tF6xrRKSuZ0CtAOLSo7gSKyA++VvWrHSgzX755Y2bMZ7NG2",
+	"UgwyjSCyELpiOSVcmHMlgPJYen0pEZlC+Z+yzWxIKiHP7mY0QCCSNi0SS34BFOoRa0DBWt5Y6aO8xUYA",
+	"t0PTdeM8iWN5Oha13b4+1Ordz9Zt3itS53plPyC9Q6QCId3dp1QJFm1VLVi0tTLw1J53CIKNt4Y4IwEM",
+	"Cyf8np6BvsHLCd31BmifnMThCXvOp8hWGcmpPmwOzAGS2t/9PpzPfL/8mtoxn4CUNRzr5+1fL6XQlHNi",
+	"TJIbtlUfA6quKno7uNtPTpAk0Xa5oiR2J/PltB3xtG3zsTObkz3/UfRDXKU8pdB2zLJTPmcdGH8wD0/L",
+	"8bu/u+eDaK5gqTjqIallVngv/gdEXnaVQSDyZP8GT37nIeypT595b1ceiRHnMJyJmMsqjbLPxPr5eObp",
+	"BhAZI7Qxup0ekstaUmT3MQ4+Z4LIK/c5I4IlwofFv4uQojzy4dcEUXVPE3+oZgraJHEFUCTg5DBOuIOO",
+	"nMIKiSFjYA2XDyS09+nUA5qd4sLLp3bVRoVuR9+hMfshcwscEgQGyzXQSrUfEzORbnkAvllLEJ1Jt4bk",
+	"WWGR4ABGUZMpBegatgiUb0WXlh7rlIMbWiaMJQ1g5iWbhKjyfkVY6gLd18SSmq3DsMrPb8eTsIKF8udt",
+	"cAx4zlVU9v6n2x3E4W8xQNEbEjajKM+SdU5LbagQlhM1ASIqmmVFbSs4w9Qrt0NxpPUrmbnWNgMH9Jie",
+	"+UDXqP/WXIo+8zNNUupEdGD3Kqn1JGkPaROlJhoYrvuezaf6N80y/K491/oMIhR+xBxF+2LNWtlu6uQa",
+	"S3Rx5om2a5ui1doA/dL6ccBwHcrac1eaQbZbL7rpm2nC6GuIDLNkV5tl/iebBTJmwzKnXmXux2Rdlm2+",
+	"sDUFIvKknqLotOoKxdPST2b7TmeTNeYK3FIUwFaxwz3bYWiPR9fM9hwPG/x2YK3r2ChwX+rqoTH/ABgK",
+	"JJtnaE8ZwuWkkiquB+OvQkPvyVKlKkL3Gubm1lr7xxDLpUg9So+MYqD2Q0eM6sTCEVIjRg+SDF1fhqQH",
+	"pCnnMQKMj4CmoUIpp9O1cLhrr9J5GobSNmeVm0/BcCYla5kYBhX7XXlL4tRVHHuOSqV9x8Npd3uJ997K",
+	"/iPrdEPkKC87i8Xl3EPMY1w8jYSwF5EvkAaAifq2Kh2co6K9PywTtPfnBll7fmsj+/9Ailbbbs+FboPW",
+	"g8P3cmm0ND+ToHZ7Ffbq2HZQYzbh4gxSivj2LmN81ekRMoYIfkPIIxJroIwPA/lPzT961NLU9CBBf8Ct",
+	"fHcM4ZVIvlRebf81hTgE3m0EsHi/6/XtW3/mf4aUqfjYs+fPFspHjUGC/Gv/5bPFs5dSn24EZHNR0jyX",
+	"fQbn31C4y/66llUQxHxxw/8vyI3HX8R9BMSQQ8rEcSi2lM1bbEgVMmnkSU4sHlzrqob/NCs/xvhisRjs",
+	"QTfLuzyWt93EKE8gx5Mp/eK6+UoCYps/B3huPB0pPnne/Un5Kbnso5fdH5UeUHy1eNX9Rf6q4W7m/+Cy",
+	"FduzjCanC/pXePyvT7tP2RjFYEVk1Y3J3hv+9vNnNEvwtInZjHLrC8MdwHDFQeDGcLdFS7Dz57d6QU0T",
+	"u+mA4oXbDuI2s/3HXCUTsEaee4cYb3xeoIEB/5nCIrXqWrRbVv28nNluZp+qFEjsZrAWR2zTCro0slgg",
+	"77XwYjErkoqeLxZdyRb2BfKaS8sKHc3lxhfGVpdso2CaHKXTU5gXIS1vpyqiR5W4+be8z+9uLv3k4lJA",
+	"mEUKG7OQnI6AoqHwwSeBINEvKpdlEL7rTLDa7eS9psT3r+pXZfVZng31xI6HV4ufuj8wn0Y/He5mWxw0",
+	"8/bdFgcnwNmu7KUfsi5If+GXXvwiu81dqW5zjiZv+emTp2D3NvgYm85YiTVPYe1iAh/EgplF6mDyikco",
+	"3GzckzYbG6bU7sFiRkcrXPs8e3+oXqYpvnNtWth4HzDOjeUBl4P8VjC62JcfNmkUd8GhFxO6LLFuR8VH",
+	"+brP+Z8QpReZWjnlchwMxFwquOB2NMj+JFOw2sVX0RQRcVSlMi5yDgr1HISkCJC4CUpR6nURll4WWk+L",
+	"ptbjsmleXZbRb1Zd1NdgTZZfbjiYXLro6jSDY656pxCVi+4ZRPeUkya6dU/RAe6iew7VPUXXaRBFRpfp",
+	"Io9Nd/kR3b1s97ipwonI2TIoGOoioYNIaMW/5yam5Ty+i6geyaZuSKdsl6Cya/IiRvuJUco3c+FYmzPY",
+	"FgoslWz648TkrGWhu3J6oUoN7w6cZHN4TBXg7MUTPQMZr144fHBPyA3AW7UOU1FGkwyfReJmMyEqOagj",
+	"kaIh09WJGMMph5v21MOUbyDm2dTi7N9AECoH+x3kV0UqabPDeDelvjiUPyKyJilv5ox38ncX4XhH1msY",
+	"enL43njrjYReWklu9yqz6Dq2/FqYhd27fh1FnlqSedEZoECESmqKOYQJhZLplflRV9V54veIqrqWXH40",
+	"VX2oZEk81zVvF6YrSfaj6uL9sH3RxYPr4hCEgIM5S9dryGS+ttGUtTlGJIbcFV+5RXj1P5tvHNW6FuGj",
+	"lv9+OfVNuLrHdlNejPYMRE5pvo9vW6/kY8hzKl5DbmOO0rPJbnyhnjB3uIg29ZNp8NGSg2Ydk73s741b",
+	"OEsN9BTixz2okWKR+Qo8wiszM+BKpYlJ/0RA8ArRuNmWeSMH/A4e4b55aUcOLYMwRLLJnOH+LFfX5UVg",
+	"NaLpRDeFpwMSKXtdsqVOd4i/5mHX0fi7O7L4rhpOHIWrZ00MKkqCdW3bGJaO5WV1Jyvn+bAQdJLAU9XR",
+	"J+duMhXHL6odiLMmc6xwfBLFjY50LiW47EW0fsrITToBDzZ10shK72mpM5IKKBetT3zRcWQN1RPhPFTA",
+	"KJxY0Rlz/Yh6m4kjR3xPKqR4Wv6Jkl09b32lnrduKSbKfhdI+VV+8uQ5QO3Tk6i5KAvFNeK/sv5M9Sjt",
+	"trzzdqZOTKNWOFnOqTdntXBPseUTMj8yOsp+Kk324Q30j+aGfCM7iIoA8Yl6hjrst5ux7lb1ZkAn5UDO",
+	"wDuOTXVy9WoxVAGJQHSubTGnxO+3qp5mDKYxVjhJrhGQeRJPp802+0UcJmU3BnF4pftBNWeBVPpljx5g",
+	"rHXmPl5GyOkyiiuxHXPo21Ln4dckEkwiDSqnRO9+j5zrR5nqD2NuRVevzHLzdzMnUCz5pP2AqT5eeBg4",
+	"xgtQ+wJkvn7UCdIEKfMqEjVM5OngWRqe7zhWaUBTlrOM8/WshMgk805EtPZII5WZo6PnkRoLLBbHTCx1",
+	"q5l4byuUGC1WaGnxFkLtMitr4V/F34/c4+2V7Rmpovnak3JrzRovtE+m0Z5Tj7339u56ZxH8mJ5Swxu+",
+	"DS8zTnzt6skql2CIRb33CIicC+PWsjhOiAfPKtDS+2K4Lw/GgD5eIdzNijeAPubIfFt8cGHIfRkyQ73o",
+	"nZ7j8gnpOseC2FId7GiEcau+vLWVXB4hg8roozuGAaGnP2oelUt7XT3maWZTGd2VVX1ye0mqqmE+JYHR",
+	"MNmLlUe7JffoS/1UWlL3Epfzu5dNTqbxtOpRb2W92ORyJ7MoE1MX289opfS+S82SN9J4wgzgkOqfPyE4",
+	"Wae1KTigu7wg5wOFoxNLO6pS0rjqsjSOAd26mAqFx/9OffRE6FvbmBOpjU5RGoknTvYUd+rwj3rId6nF",
+	"cwQ9WT2uI9hv3bsCFtLxy7YXVxRrHdr35/yyFU4oj+MUEidOK9PhkkNwmjkE3ork7d22J3ZJb/FK9gtB",
+	"DaQVx46hHtUH2jd+dU5e0MmP+WRDOGEtJl8SEaC9p9vbbPTJMHKcRhwlgPJ5Ns1VCDgoc1E5mLJCESyt",
+	"+YCwvKe0v7sqvvtkLbWf3vEvKWBP2ebESwW5pub20wjRtrP4/Jv471uX9LCjsfvMPrkEfIJHkQQPlRLQ",
+	"TpKFDuWIPJn1yvGW80F/cOzrzrjFc7VNtpfRqeHVrthnaqjVt/8ELLb6po5qutXB6clhF2tOKLYhFJh/",
+	"BqpkvIj4zOdgnQm1sbiBm2Y0O2aY76lNpkg1t4nV4UnnR7cBOynanIl+KsRanJCiPb1sCAcCt2ZLHJHK",
+	"UxzsR82gOJzfvvu0isNOpHkCUtYSurvNfr7ouTrfCbyFFx5C4l7M0hi2tRrKfr9wUZ2LJOa+MzZyaTLU",
+	"1V/ogCDZE3uxZZLeRe4XTLXO/Jv+37du1x452EkjFDNPcemRa3kBwAGMoqdUYNth9R6JImPYvBK6I1u6",
+	"EggXKX3iRu1okRyz23db7qG5jTHdWaV1WtqjleCezJUyfisjc19zkHJyRSGGX4ShaNc992S9juDrlJMP",
+	"YuQ4CiGf/9AWRq/zPR1HZMcVu8lZRJ6xLeXZ4vd26bVQyfxgkHP8qaHdqa/dPaBotRq1sZ1c4kgHdBmE",
+	"5kNajlBN7jyEEUcXwT+QA9XLHFcx5BsSdlSDyLE3auiYWd6llVpzvdVjGQr+Q2JQE/Q7tddZhWFpv2Md",
+	"vZVljiTsdTBcieuBMIShR6h+GUU6cj5+eHekttJnJdmOUdAqJ55GALTCCKce+zwJWs/Fq+CgrdPJazXi",
+	"LIiutxM+2XuaomL7IWx5EYtNdZPW67Xp7JLJr3d0ysdyRgYuLMt2xN+rMSPiWi3RbQOfPkJ7vEFfe3p+",
+	"PPw6v65+3/ik+hHa5JTAHsk6LK1x1IzDEiTuNDq/PMNRHLEVwevsG1PlrbOOCu/LOufXR+Y4ZBtZ7Rw1",
+	"SrQv71wCRnvpqS/wYUPII5vnT8MmlHxGIaS75vvKfwMcRvq28r9yBteUfzF3qwgMyPI9338dlsv7LD7z",
+	"OfzK50kEEO54lLwqBwr/XkJJABmD4c+eBtt7IOHWQ8zTeL9iCQzQCgWiMaXgkcyolPRKaeRf+xvOk+v5",
+	"PCIBiDaE8eu/Lf628Hefdv8fAAD//w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
