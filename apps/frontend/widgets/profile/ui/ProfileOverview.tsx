@@ -5,10 +5,9 @@ import {useRouter} from 'next/navigation';
 import {Card} from '@heroui/react/card';
 import {Skeleton} from '@heroui/react/skeleton';
 import {toast} from 'react-toastify';
-import {IconLink} from '@/shared/ui/icon-link';
 import {Button} from '@/shared/ui/button';
 import {Icon} from '@/shared/ui/icon';
-import {ArrowLeft, StarColored} from '@/shared/assets/icons';
+import {StarColored} from '@/shared/assets/icons';
 import {useLogout, useMe} from '@/features/auth/api/hooks';
 import {ROUTES} from '@/shared/config/routes';
 import type {User} from '@/entities/user/model/types';
@@ -49,15 +48,6 @@ export function ProfileOverview(): JSX.Element {
 
     return (
         <div className={styles.page}>
-            <header className={styles.header}>
-                <IconLink
-                    href={ROUTES.dashboard}
-                    aria-label="Назад"
-                    icon={<ArrowLeft/>}
-                />
-                <h1 className={styles.title}>Профиль</h1>
-            </header>
-
             {isError ? (
                 <div className={styles.error}>
                     <p className={styles.errorText}>Не удалось загрузить профиль</p>

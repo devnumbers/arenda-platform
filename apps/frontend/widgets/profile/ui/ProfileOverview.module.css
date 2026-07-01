@@ -5,21 +5,6 @@
   width: 100%;
 }
 
-.header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 0;
-}
-
-.title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 22px;
-  color: var(--color-text);
-}
-
 .userCard {
   display: flex;
   flex-direction: column;
