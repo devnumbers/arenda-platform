@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
+import { PageHeader } from '@/shared/ui/page-header';
+import { PageShell } from '@/shared/ui/page-shell';
+import { ROUTES } from '@/shared/config/routes';
 import { AccountOverview } from '@/widgets/profile';
-import styles from './page.module.css';
 
 export const metadata: Metadata = {
   title: 'Аккаунт — Arenda Platform',
@@ -9,10 +11,9 @@ export const metadata: Metadata = {
 
 export default function AccountPage() {
   return (
-    <div className={styles.root}>
-      <div className={styles.content}>
-        <AccountOverview />
-      </div>
-    </div>
+    <PageShell>
+      <PageHeader title="Аккаунт" backHref={ROUTES.profile} />
+      <AccountOverview />
+    </PageShell>
   );
 }
