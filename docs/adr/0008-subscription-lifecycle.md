@@ -31,7 +31,8 @@ A subscription has one of four statuses:
   can fix the payment method.
 - `blocked` — grace period expired without payment; data mutations are blocked.
 - `cancelled` — the owner explicitly turned off auto-renew or the subscription
-  was otherwise terminated; data mutations are blocked.
+  was otherwise terminated; data mutations are allowed until the end of the
+  already paid period and blocked afterwards.
 
 Status transitions are managed by the billing application service and the
 scheduled billing worker.
@@ -74,8 +75,9 @@ the same forced-downgrade logic applies.
 
 ### 5. Readonly mode and recovery paths
 
-When a subscription cannot mutate data (`blocked` or `cancelled`), HTTP
-middleware returns `403 SubscriptionBlocked` for mutating requests. The following
+When a subscription cannot mutate data (`blocked`, or `cancelled` with an expired
+`validUntil`), HTTP middleware returns `403 SubscriptionBlocked` for mutating
+requests. The following
 paths are exempt so the owner can recover:
 
 - `/auth/*`
