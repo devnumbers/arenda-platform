@@ -159,3 +159,17 @@ ON CONFLICT (reminder_id) DO NOTHING;
 UPDATE sent_sms_reminders
 SET provider_response = $1
 WHERE reminder_id = $2;
+
+-- name: IsEmailReminderSent :one
+SELECT EXISTS (
+    SELECT 1 FROM sent_email_reminders WHERE reminder_id = $1
+);
+
+-- name: SaveSentEmailReminder :execrows
+INSERT INTO sent_email_reminders (
+    id, reminder_id, owner_id, email, subject, plain_body, sent_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (reminder_id) DO NOTHING;
+
+-- name: DeleteSentEmailReminder :exec
+DELETE FROM sent_email_reminders WHERE reminder_id = $1;

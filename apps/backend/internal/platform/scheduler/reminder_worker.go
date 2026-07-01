@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -26,10 +25,11 @@ type Backoff interface {
 	Next(attempt int) time.Duration
 }
 
-// ReminderWorker polls for due reminders and dispatches them through a Notifier.
+// ReminderWorker polls for due reminders and dispatches them through Notifiers.
 type ReminderWorker struct {
 	repo            application.ReminderRepository
-	notifier        application.Notifier
+	renderer        *mailer.Renderer
+	notifiers       map[application.Channel]application.Notifier
 	resolver        application.ContactResolver
 	db              transaction.Beginner
 	clock           clock.Clock
@@ -43,7 +43,8 @@ type ReminderWorker struct {
 // NewReminderWorker creates a new reminder dispatch worker.
 func NewReminderWorker(
 	repo application.ReminderRepository,
-	notifier application.Notifier,
+	renderer *mailer.Renderer,
+	notifiers map[application.Channel]application.Notifier,
 	resolver application.ContactResolver,
 	db transaction.Beginner,
 	clock clock.Clock,
@@ -58,7 +59,8 @@ func NewReminderWorker(
 	}
 	return &ReminderWorker{
 		repo:            repo,
-		notifier:        notifier,
+		renderer:        renderer,
+		notifiers:       notifiers,
 		resolver:        resolver,
 		db:              db,
 		clock:           clock,
@@ -155,42 +157,69 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 	dispatchCtx, cancel := context.WithTimeout(ctx, w.dispatchTimeout)
 	defer cancel()
 
-	alreadySent, err := w.repo.IsSMSReminderSent(dispatchCtx, r.ID)
-	if err != nil {
-		return fmt.Errorf("check sent sms reminder: %w", err)
-	}
-	if alreadySent {
-		w.logger.InfoContext(dispatchCtx, "reminder already sent, skipping notification", "reminder_id", r.ID, "event_type", r.EventType)
-		return w.finalizeAlreadySent(dispatchCtx, r, now)
-	}
-
 	contact, err := w.resolver.Resolve(dispatchCtx, r.OwnerID)
 	if err != nil {
 		w.logger.ErrorContext(dispatchCtx, "resolve contact failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
-		return w.finalizeFailure(dispatchCtx, r, now)
-	}
-	if contact.Channel != application.ChannelSMS {
-		w.logger.ErrorContext(dispatchCtx, "unsupported contact channel", "reminder_id", r.ID, "event_type", r.EventType, "channel", contact.Channel)
+		if errors.Is(err, application.ErrNoContact) {
+			return w.finalizeCancel(dispatchCtx, r)
+		}
 		return w.finalizeFailure(dispatchCtx, r, now)
 	}
 
-	// Insert the audit row before contacting the provider. The audit row is the
-	// source of truth for at-most-once delivery.
+	notifier, ok := w.notifiers[contact.Channel]
+	if !ok {
+		w.logger.ErrorContext(dispatchCtx, "unsupported contact channel", "reminder_id", r.ID, "event_type", r.EventType, "channel", contact.Channel)
+		return fmt.Errorf("unsupported contact channel: %s", contact.Channel)
+	}
+
+	// TODO: re-add SMS dispatch here when ContactResolver supports ChannelSMS.
+	return w.dispatchEmailReminder(dispatchCtx, r, now, contact, notifier)
+}
+
+func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Reminder, now time.Time, contact application.Contact, notifier application.Notifier) error {
+	// Defensive check: the worker-level sending status already ensures a single
+	// processing attempt, but this guards against duplicate sends after
+	// stale-sending recovery or concurrent dispatch races.
+	alreadySent, err := w.repo.IsEmailReminderSent(ctx, r.ID)
+	if err != nil {
+		return fmt.Errorf("check sent email reminder: %w", err)
+	}
+	if alreadySent {
+		w.logger.InfoContext(ctx, "reminder already sent, skipping notification", "reminder_id", r.ID, "event_type", r.EventType)
+		return w.finalizeAlreadySent(ctx, r, now)
+	}
+
+	plain, _, err := w.renderer.Render("reminder", map[string]any{
+		"Subject": r.MessageTitle,
+		"Title":   r.MessageTitle,
+		"Body":    r.MessageBody,
+	})
+	if err != nil {
+		return fmt.Errorf("render reminder email: %w", err)
+	}
+
 	id, err := uuid.NewRandom()
 	if err != nil {
-		return fmt.Errorf("generate sent sms id: %w", err)
-	}
-	err = w.repo.SaveSentSMSReminder(dispatchCtx, id, r.ID, r.OwnerID, contact.Address, r.MessageBody, "", now)
-	if errors.Is(err, application.ErrDuplicateSMSReminder) || isUniqueViolation(err) {
-		w.logger.InfoContext(dispatchCtx, "reminder already sent, skipping notification", "reminder_id", r.ID, "event_type", r.EventType)
-		return w.finalizeAlreadySent(dispatchCtx, r, now)
-	}
-	if err != nil {
-		w.logger.ErrorContext(dispatchCtx, "save sent sms reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
-		return w.finalizeFailure(dispatchCtx, r, now)
+		return fmt.Errorf("generate sent email id: %w", err)
 	}
 
-	providerResponse, err := w.notifier.Notify(dispatchCtx, application.Notification{
+	if err := w.repo.SaveSentEmailReminder(ctx, application.SaveSentEmailReminderParams{
+		ID:         id,
+		ReminderID: r.ID,
+		OwnerID:    r.OwnerID,
+		Email:      contact.Email,
+		Subject:    r.MessageTitle,
+		PlainBody:  plain,
+		SentAt:     now,
+	}); errors.Is(err, application.ErrDuplicateEmailReminder) {
+		w.logger.InfoContext(ctx, "reminder already sent, skipping notification", "reminder_id", r.ID, "event_type", r.EventType)
+		return w.finalizeAlreadySent(ctx, r, now)
+	} else if err != nil {
+		w.logger.ErrorContext(ctx, "save sent email reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+		return w.finalizeFailure(ctx, r, now)
+	}
+
+	providerResponse, _, err := notifier.Notify(ctx, application.Notification{
 		RecipientID: r.OwnerID,
 		ReminderID:  r.ID,
 		EventType:   r.EventType,
@@ -199,14 +228,17 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 		Contact:     &contact,
 	})
 	if err != nil {
-		w.logger.ErrorContext(dispatchCtx, "notify reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
-		return w.finalizeFailure(dispatchCtx, r, now)
+		w.logger.ErrorContext(ctx, "notify reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+		if delErr := w.repo.DeleteSentEmailReminder(ctx, r.ID); delErr != nil {
+			w.logger.ErrorContext(ctx, "failed to delete email audit row after send failure", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(delErr))
+		}
+		return w.finalizeFailure(ctx, r, now)
 	}
 
-	return w.finalizeSuccess(dispatchCtx, r, now, providerResponse)
+	return w.finalizeSuccess(ctx, r, now, providerResponse, application.ChannelEmail)
 }
 
-func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time, providerResponse string) error {
+func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time, providerResponse string, channel application.Channel) error {
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin finalize transaction: %w", err)
@@ -219,8 +251,10 @@ func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder,
 		return fmt.Errorf("mark reminder sent: %w", err)
 	}
 
-	if err := txRepo.UpdateSMSProviderResponse(ctx, r.ID, providerResponse); err != nil {
-		return fmt.Errorf("update sms provider response: %w", err)
+	if channel == application.ChannelSMS {
+		if err := txRepo.UpdateSMSProviderResponse(ctx, r.ID, providerResponse); err != nil {
+			return fmt.Errorf("update sms provider response: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -267,6 +301,24 @@ func (w *ReminderWorker) finalizeFailure(ctx context.Context, r domain.Reminder,
 
 	if err := txRepo.MarkFailed(ctx, r.ID, next, terminal); err != nil {
 		return fmt.Errorf("mark reminder failed: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit finalize transaction: %w", err)
+	}
+	return nil
+}
+
+func (w *ReminderWorker) finalizeCancel(ctx context.Context, r domain.Reminder) error {
+	tx, err := w.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin finalize transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := w.repo.WithTx(tx)
+	if _, err := txRepo.CancelByIDAndOwner(ctx, r.OwnerID, r.ID); err != nil {
+		return fmt.Errorf("cancel reminder: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -333,11 +385,4 @@ func (w *ReminderWorker) recoverStaleSending(ctx context.Context, now time.Time)
 		}
 	}
 	return nil
-}
-
-func isUniqueViolation(err error) bool {
-	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
-		return pgErr.Code == pgerrcode.UniqueViolation
-	}
-	return false
 }

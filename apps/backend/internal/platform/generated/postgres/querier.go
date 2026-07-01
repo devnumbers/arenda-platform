@@ -58,6 +58,7 @@ type Querier interface {
 	DeletePaymentMethodByID(ctx context.Context, id pgtype.UUID) error
 	DeletePropertyPhoto(ctx context.Context, id pgtype.UUID) error
 	DeleteRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) error
+	DeleteSentEmailReminder(ctx context.Context, reminderID pgtype.UUID) error
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) error
@@ -114,9 +115,11 @@ type Querier interface {
 	GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone string) (User, error)
 	GetUserPhoneByID(ctx context.Context, id pgtype.UUID) (GetUserPhoneByIDRow, error)
+	GetVerifiedEmailByUserID(ctx context.Context, id pgtype.UUID) (pgtype.Text, error)
 	HasDepositReturnForLease(ctx context.Context, leaseID pgtype.UUID) (bool, error)
 	HasReminderForLeaseEvent(ctx context.Context, arg HasReminderForLeaseEventParams) (bool, error)
 	HasReminderForOperationEvent(ctx context.Context, arg HasReminderForOperationEventParams) (bool, error)
+	IsEmailReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
 	IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Property, error)
 	ListAllPendingOperationsWithPastDate(ctx context.Context, arg ListAllPendingOperationsWithPastDateParams) ([]Operation, error)
@@ -179,6 +182,7 @@ type Querier interface {
 	MarkSubscriptionPaymentSucceeded(ctx context.Context, arg MarkSubscriptionPaymentSucceededParams) (SubscriptionPayment, error)
 	ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error)
 	SaveOrReplaceOperationReminder(ctx context.Context, arg SaveOrReplaceOperationReminderParams) (int64, error)
+	SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) (int64, error)
 	SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperationParams) (Operation, error)
 	SoftDeleteRecurringOperation(ctx context.Context, arg SoftDeleteRecurringOperationParams) (RecurringOperation, error)
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)

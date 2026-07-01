@@ -277,6 +277,16 @@ type Reminder struct {
 	UpdatedAt            pgtype.Timestamptz     `json:"updated_at"`
 }
 
+type SentEmailReminder struct {
+	ID         pgtype.UUID        `json:"id"`
+	ReminderID pgtype.UUID        `json:"reminder_id"`
+	OwnerID    pgtype.UUID        `json:"owner_id"`
+	Email      string             `json:"email"`
+	Subject    string             `json:"subject"`
+	PlainBody  string             `json:"plain_body"`
+	SentAt     pgtype.Timestamptz `json:"sent_at"`
+}
+
 type SentSmsReminder struct {
 	ID               pgtype.UUID        `json:"id"`
 	ReminderID       pgtype.UUID        `json:"reminder_id"`

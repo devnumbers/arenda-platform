@@ -11,16 +11,19 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 type fakeReminderRepoForWorker struct {
-	reminders          []domain.Reminder
-	isSMSReminderSent  bool
-	saveSentSMSErr     error
-	markFailedErr      error
-	getByIDUnscoped    domain.Reminder
-	markSendingPending error
+	reminders           []domain.Reminder
+	isSMSReminderSent   bool
+	isEmailReminderSent bool
+	saveSentSMSErr      error
+	saveSentEmailErr    error
+	markFailedErr       error
+	getByIDUnscoped     domain.Reminder
+	markSendingPending  error
 }
 
 func (r *fakeReminderRepoForWorker) Save(context.Context, domain.Reminder) error { return nil }
@@ -73,6 +76,15 @@ func (r *fakeReminderRepoForWorker) UpdateSMSProviderResponse(context.Context, u
 func (r *fakeReminderRepoForWorker) IsSMSReminderSent(context.Context, uuid.UUID) (bool, error) {
 	return r.isSMSReminderSent, nil
 }
+func (r *fakeReminderRepoForWorker) SaveSentEmailReminder(context.Context, application.SaveSentEmailReminderParams) error {
+	return r.saveSentEmailErr
+}
+func (r *fakeReminderRepoForWorker) IsEmailReminderSent(context.Context, uuid.UUID) (bool, error) {
+	return r.isEmailReminderSent, nil
+}
+func (r *fakeReminderRepoForWorker) DeleteSentEmailReminder(context.Context, uuid.UUID) error {
+	return nil
+}
 func (r *fakeReminderRepoForWorker) ResetReminderSending(context.Context, uuid.UUID) error {
 	return nil
 }
@@ -100,14 +112,14 @@ type fakeNotifier struct {
 	notifyErr error
 }
 
-func (n *fakeNotifier) Notify(context.Context, application.Notification) (string, error) {
-	return "", n.notifyErr
+func (n *fakeNotifier) Notify(context.Context, application.Notification) (string, string, error) {
+	return "", "", n.notifyErr
 }
 
 type fakeContactResolver struct{}
 
 func (fakeContactResolver) Resolve(context.Context, uuid.UUID) (application.Contact, error) {
-	return application.Contact{Channel: application.ChannelSMS, Address: "+79991234567"}, nil
+	return application.Contact{Channel: application.ChannelEmail, Email: "owner@example.com"}, nil
 }
 
 type fakeTxForWorker struct{}
@@ -140,16 +152,24 @@ func TestReminderWorker_DispatchReminder_SanitizesProviderError(t *testing.T) {
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 
 	repo := &fakeReminderRepoForWorker{
-		isSMSReminderSent:  false,
-		markSendingPending: nil,
+		isEmailReminderSent: false,
+		markSendingPending:  nil,
 	}
 	notifier := &fakeNotifier{
-		notifyErr: errors.New("sms provider error: token=secret123 card 1234-5678-9012-3456 phone +79991234567"),
+		notifyErr: errors.New("smtp provider error: token=secret123 card 1234-5678-9012-3456 phone +79991234567"),
+	}
+
+	renderer, err := mailer.NewRenderer("../../../templates/email")
+	if err != nil {
+		t.Fatalf("load email templates: %v", err)
 	}
 
 	w := NewReminderWorker(
 		repo,
-		notifier,
+		renderer,
+		map[application.Channel]application.Notifier{
+			application.ChannelEmail: notifier,
+		},
 		fakeContactResolver{},
 		fakeBeginnerForWorker{},
 		fakeClockForWorker{now: now},
@@ -177,7 +197,7 @@ func TestReminderWorker_DispatchReminder_SanitizesProviderError(t *testing.T) {
 	forbidden := []string{
 		"token=secret123",
 		"1234-5678-9012-3456",
-		"+79991234567",
+		"owner@example.com",
 	}
 	for _, s := range forbidden {
 		if bytes.Contains([]byte(logs), []byte(s)) {

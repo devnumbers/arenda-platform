@@ -182,6 +182,15 @@ func (q *Queries) CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSRe
 	return result.RowsAffected(), nil
 }
 
+const deleteSentEmailReminder = `-- name: DeleteSentEmailReminder :exec
+DELETE FROM sent_email_reminders WHERE reminder_id = $1
+`
+
+func (q *Queries) DeleteSentEmailReminder(ctx context.Context, reminderID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteSentEmailReminder, reminderID)
+	return err
+}
+
 const getReminderByIDAndOwner = `-- name: GetReminderByIDAndOwner :one
 SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders WHERE id = $1 AND owner_id = $2
 `
@@ -278,6 +287,19 @@ type HasReminderForOperationEventParams struct {
 
 func (q *Queries) HasReminderForOperationEvent(ctx context.Context, arg HasReminderForOperationEventParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasReminderForOperationEvent, arg.OwnerID, arg.OperationID, arg.EventType)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const isEmailReminderSent = `-- name: IsEmailReminderSent :one
+SELECT EXISTS (
+    SELECT 1 FROM sent_email_reminders WHERE reminder_id = $1
+)
+`
+
+func (q *Queries) IsEmailReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isEmailReminderSent, reminderID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -806,6 +828,39 @@ func (q *Queries) SaveOrReplaceOperationReminder(ctx context.Context, arg SaveOr
 		arg.MessageTitle,
 		arg.MessageBody,
 		arg.CreatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const saveSentEmailReminder = `-- name: SaveSentEmailReminder :execrows
+INSERT INTO sent_email_reminders (
+    id, reminder_id, owner_id, email, subject, plain_body, sent_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (reminder_id) DO NOTHING
+`
+
+type SaveSentEmailReminderParams struct {
+	ID         pgtype.UUID        `json:"id"`
+	ReminderID pgtype.UUID        `json:"reminder_id"`
+	OwnerID    pgtype.UUID        `json:"owner_id"`
+	Email      string             `json:"email"`
+	Subject    string             `json:"subject"`
+	PlainBody  string             `json:"plain_body"`
+	SentAt     pgtype.Timestamptz `json:"sent_at"`
+}
+
+func (q *Queries) SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, saveSentEmailReminder,
+		arg.ID,
+		arg.ReminderID,
+		arg.OwnerID,
+		arg.Email,
+		arg.Subject,
+		arg.PlainBody,
+		arg.SentAt,
 	)
 	if err != nil {
 		return 0, err

@@ -11,10 +11,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -488,6 +488,56 @@ func (r *ReminderRepository) IsSMSReminderSent(ctx context.Context, reminderID u
 		return false, fmt.Errorf("check sent sms reminder: %w", err)
 	}
 	return exists, nil
+}
+
+// SaveSentEmailReminder records a successfully sent email reminder for audit. It
+// returns ErrDuplicateEmailReminder when an audit row for the same reminder_id
+// already exists.
+func (r *ReminderRepository) SaveSentEmailReminder(ctx context.Context, arg application.SaveSentEmailReminderParams) error {
+	rows, err := r.q().SaveSentEmailReminder(ctx, postgres.SaveSentEmailReminderParams{
+		ID:         pgconv.UUIDToPgtype(arg.ID),
+		ReminderID: pgconv.UUIDToPgtype(arg.ReminderID),
+		OwnerID:    pgconv.UUIDToPgtype(arg.OwnerID),
+		Email:      arg.Email,
+		Subject:    arg.Subject,
+		PlainBody:  arg.PlainBody,
+		SentAt:     pgtype.Timestamptz{Time: arg.SentAt, Valid: true},
+	})
+	if err != nil {
+		if isDuplicateEmailReminderError(err) {
+			return application.ErrDuplicateEmailReminder
+		}
+		return fmt.Errorf("create sent email reminder: %w", err)
+	}
+	if rows == 0 {
+		return application.ErrDuplicateEmailReminder
+	}
+	return nil
+}
+
+func isDuplicateEmailReminderError(err error) bool {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		return pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "uq_sent_email_reminders_reminder_id"
+	}
+	return false
+}
+
+// IsEmailReminderSent reports whether an audit row already exists for the given reminder.
+func (r *ReminderRepository) IsEmailReminderSent(ctx context.Context, reminderID uuid.UUID) (bool, error) {
+	exists, err := r.q().IsEmailReminderSent(ctx, pgconv.UUIDToPgtype(reminderID))
+	if err != nil {
+		return false, fmt.Errorf("check sent email reminder: %w", err)
+	}
+	return exists, nil
+}
+
+// DeleteSentEmailReminder removes the sent email audit row for a reminder.
+// It is used to roll back the audit insert when the external send fails.
+func (r *ReminderRepository) DeleteSentEmailReminder(ctx context.Context, reminderID uuid.UUID) error {
+	if err := r.q().DeleteSentEmailReminder(ctx, pgconv.UUIDToPgtype(reminderID)); err != nil {
+		return fmt.Errorf("delete sent email reminder: %w", err)
+	}
+	return nil
 }
 
 func toDomain(row postgres.Reminder) domain.Reminder {

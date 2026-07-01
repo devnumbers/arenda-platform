@@ -33,6 +33,9 @@ type ReminderRepository interface {
 	SaveSentSMSReminder(ctx context.Context, id, reminderID, ownerID uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error
 	UpdateSMSProviderResponse(ctx context.Context, reminderID uuid.UUID, response string) error
 	IsSMSReminderSent(ctx context.Context, reminderID uuid.UUID) (bool, error)
+	SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) error
+	IsEmailReminderSent(ctx context.Context, reminderID uuid.UUID) (bool, error)
+	DeleteSentEmailReminder(ctx context.Context, reminderID uuid.UUID) error
 	ResetReminderSending(ctx context.Context, id uuid.UUID) error
 	MarkSendingReminderPending(ctx context.Context, id uuid.UUID, nextAttemptAt time.Time) error
 	CancelByIDAndOwner(ctx context.Context, ownerID, reminderID uuid.UUID) (bool, error)
@@ -50,9 +53,20 @@ type ListFilter struct {
 	Offset int
 }
 
+// SaveSentEmailReminderParams contains the data recorded when an email reminder is sent.
+type SaveSentEmailReminderParams struct {
+	ID         uuid.UUID
+	ReminderID uuid.UUID
+	OwnerID    uuid.UUID
+	Email      string
+	Subject    string
+	PlainBody  string
+	SentAt     time.Time
+}
+
 // Notifier dispatches a notification to a recipient.
 type Notifier interface {
-	Notify(ctx context.Context, n Notification) (providerResponse string, err error)
+	Notify(ctx context.Context, n Notification) (providerResponse, renderedPlainBody string, err error)
 }
 
 // SMSSender sends an SMS message to a phone number.
@@ -63,11 +77,6 @@ type SMSSender interface {
 // ContactResolver resolves the delivery channel and address for an owner.
 type ContactResolver interface {
 	Resolve(ctx context.Context, ownerID uuid.UUID) (Contact, error)
-}
-
-// UserContactProvider returns contact information for a user by ID.
-type UserContactProvider interface {
-	PhoneByID(ctx context.Context, userID uuid.UUID) (string, error)
 }
 
 // Notification is a channel-agnostic outbound message.
@@ -83,14 +92,16 @@ type Notification struct {
 // Contact is a resolved delivery endpoint.
 type Contact struct {
 	Channel Channel
-	Address string
+	Phone   string
+	Email   string
 }
 
 // Channel identifies a delivery channel.
 type Channel string
 
 const (
-	ChannelSMS Channel = "sms"
+	ChannelSMS   Channel = "sms"
+	ChannelEmail Channel = "email"
 )
 
 // ReminderScheduler is the port used by other bounded contexts to create and cancel reminders transactionally.

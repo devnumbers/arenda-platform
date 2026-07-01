@@ -25,20 +25,20 @@ import (
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leasespg "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/postgres"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
+	emailnotifier "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/email"
 	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
-	notificationsms "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/sms"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/cleaner"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
+	platformgenerated "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	mailerfake "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/fake"
 	mailersmtp "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/smtp"
-	platformnotifications "github.com/nambers/arenda-planform/apps/backend/internal/platform/notifications"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/dadata"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
@@ -312,11 +312,13 @@ func run(fallback *slog.Logger) error {
 		realClock{},
 		appLogger,
 	)
-	userContactProvider := platformnotifications.NewContactProvider(identityUserRepo)
-	contactResolver := notificationspg.NewContactResolver(userContactProvider)
-	smsSenderAdapter := platformnotifications.NewSMSSenderAdapter(smsSender)
-	smsNotifier := notificationsms.NewNotifier(contactResolver, smsSenderAdapter, appLogger)
-	reminderWorker := scheduler.NewReminderWorker(reminderRepo, smsNotifier, contactResolver, platformpostgres.NewBeginner(pool, appLogger), realClock{}, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, appLogger)
+	queries := platformgenerated.New(db)
+	contactResolver := notificationspg.NewContactResolver(queries)
+	emailNotifier := emailnotifier.NewNotifier(emailMailer, renderer)
+	notifiers := map[notificationsapp.Channel]notificationsapp.Notifier{
+		notificationsapp.ChannelEmail: emailNotifier,
+	}
+	reminderWorker := scheduler.NewReminderWorker(reminderRepo, renderer, notifiers, contactResolver, platformpostgres.NewBeginner(pool, appLogger), realClock{}, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, appLogger)
 	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, realClock{}, 1*time.Hour, 100, appLogger)
 	billingWorker := scheduler.NewBillingWorker(billingService, pool, realClock{}, cfg.BillingWorkerInterval, appLogger)
 	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(billingService, pool, realClock{}, cfg.PaymentReconciliationWorkerInterval, appLogger)

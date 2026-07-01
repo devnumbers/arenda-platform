@@ -596,6 +596,19 @@ func (q *Queries) GetUserPhoneByID(ctx context.Context, id pgtype.UUID) (GetUser
 	return i, err
 }
 
+const getVerifiedEmailByUserID = `-- name: GetVerifiedEmailByUserID :one
+SELECT email
+FROM users
+WHERE id = $1 AND email_verified_at IS NOT NULL
+`
+
+func (q *Queries) GetVerifiedEmailByUserID(ctx context.Context, id pgtype.UUID) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getVerifiedEmailByUserID, id)
+	var email pgtype.Text
+	err := row.Scan(&email)
+	return email, err
+}
+
 const listUsersAdmin = `-- name: ListUsersAdmin :many
 SELECT u.id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.created_at, u.updated_at, u.phone_encrypted, u.email_verified_at, us.status AS subscription_status
 FROM users u

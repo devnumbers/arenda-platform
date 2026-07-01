@@ -113,6 +113,11 @@ WHERE s.token_hash = $1 AND s.expires_at > $2;
 -- name: GetUserPhoneByID :one
 SELECT phone, phone_encrypted FROM users WHERE id = $1;
 
+-- name: GetVerifiedEmailByUserID :one
+SELECT email
+FROM users
+WHERE id = $1 AND email_verified_at IS NOT NULL;
+
 -- name: UpdateUser :one
 UPDATE users
 SET name = $2,
