@@ -1,6 +1,12 @@
 import { toast } from '@heroui/react/toast';
 import { ApiError } from '@/shared/api/errors';
 
+/**
+ * Project wrapper around Hero UI `toast`.
+ * Use `notify` everywhere instead of importing `toast` directly so that
+ * timeouts, error formatting, and Russian copy stay consistent.
+ */
+
 export type ToastOptions = {
   description?: string;
   duration?: number;
@@ -26,6 +32,19 @@ function normalizeError(error: unknown): string {
   return 'Произошла ошибка';
 }
 
+function error(title: string, options?: ToastOptions): void;
+function error(error: unknown, options?: ToastOptions): void;
+function error(titleOrError: string | unknown, options?: ToastOptions): void {
+  const title =
+    typeof titleOrError === 'string'
+      ? titleOrError
+      : normalizeError(titleOrError);
+  toast.danger(title, {
+    description: options?.description,
+    timeout: options?.duration ?? DEFAULT_DURATIONS.error,
+  });
+}
+
 export const notify = {
   success: (title: string, options?: ToastOptions) =>
     toast.success(title, {
@@ -33,16 +52,7 @@ export const notify = {
       timeout: options?.duration ?? DEFAULT_DURATIONS.success,
     }),
 
-  error: (titleOrError: string | unknown, options?: ToastOptions) => {
-    const title =
-      typeof titleOrError === 'string'
-        ? titleOrError
-        : normalizeError(titleOrError);
-    return toast.danger(title, {
-      description: options?.description,
-      timeout: options?.duration ?? DEFAULT_DURATIONS.error,
-    });
-  },
+  error,
 
   info: (title: string, options?: ToastOptions) =>
     toast.info(title, {
