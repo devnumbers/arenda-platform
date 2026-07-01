@@ -822,6 +822,166 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAdminUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/properties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminUserProperties"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/leases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminUserLeases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/tenant-contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminUserTenantContacts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminUserOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/properties/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAdminProperty"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/leases/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAdminLease"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenant-contacts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAdminTenantContact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/operations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAdminOperation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/fake-subscription-payment/{id}/confirm": {
         parameters: {
             query?: never;
@@ -906,24 +1066,22 @@ export interface components {
             code: string;
         };
         Tariff: {
-            /** @enum {string} */
-            name: "basic" | "pro" | "business";
+            name: components["schemas"]["TariffName"];
             activePropertyLimit: number;
             monthlyPriceKopecks: number;
             yearlyPriceKopecks: number;
         };
         Subscription: {
             tariff: components["schemas"]["Tariff"];
-            /** @enum {string} */
-            status: "active" | "grace" | "blocked" | "cancelled";
+            status: components["schemas"]["SubscriptionStatus"];
             /** Format: date-time */
             validUntil?: string | null;
             autoRenewEnabled: boolean;
+            currentPeriod?: components["schemas"]["AdminSubscriptionPaymentPeriod"];
             pendingTariff?: components["schemas"]["Tariff"];
             /** Format: date-time */
             pendingChangeAt?: string | null;
-            /** @enum {string|null} */
-            pendingPeriod?: "month" | "year" | null;
+            pendingPeriod?: components["schemas"]["AdminSubscriptionPaymentPeriod"];
             activePaymentMethod?: components["schemas"]["PaymentMethod"];
         };
         PaymentMethod: {
@@ -939,20 +1097,16 @@ export interface components {
             /** Format: uuid */
             id: string;
             tariff: components["schemas"]["Tariff"];
-            /** @enum {string} */
-            period: "month" | "year";
+            period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
             amountKopecks: number;
-            /** @enum {string} */
-            status: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded";
+            status: components["schemas"]["SubscriptionPaymentStatus"];
             provider: string;
             /** Format: date-time */
             createdAt: string;
         };
         ChangeTariffRequest: {
-            /** @enum {string} */
-            tariffName: "basic" | "pro" | "business";
-            /** @enum {string} */
-            period: "month" | "year";
+            tariffName: components["schemas"]["TariffName"];
+            period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
         };
         ChangeTariffResponse: {
             /** Format: uuid */
@@ -986,21 +1140,166 @@ export interface components {
             /** Format: uuid */
             id: string;
             tariff: components["schemas"]["Tariff"];
-            /** @enum {string} */
-            period: "month" | "year";
+            period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
             amountKopecks: number;
-            /** @enum {string} */
-            status: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded";
+            status: components["schemas"]["SubscriptionPaymentStatus"];
             provider: string;
             /** Format: uuid */
             userId: string;
             userPhone: string;
+            refundedAmountKopecks?: number | null;
+            /** Format: date-time */
+            succeededAt?: string | null;
+            /** Format: uuid */
+            paymentMethodId?: string | null;
             /** Format: date-time */
             createdAt: string;
         };
         AdminSubscriptionPaymentsResponse: {
             items: components["schemas"]["AdminSubscriptionPayment"][];
             total: number;
+        };
+        AdminUser: {
+            /** Format: uuid */
+            id: string;
+            phone: string;
+            email?: string | null;
+            /** @enum {string} */
+            role: "owner" | "admin";
+            name?: string | null;
+            surname?: string | null;
+            patronymic?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AdminUserStats: {
+            activePropertiesCount: number;
+            archivedPropertiesCount: number;
+            leasesCount: number;
+            tenantContactsCount: number;
+            operationsCount: number;
+        };
+        AdminUserResponse: {
+            user: components["schemas"]["AdminUser"];
+            subscription: components["schemas"]["Subscription"] | null;
+            stats: components["schemas"]["AdminUserStats"];
+        };
+        AdminUsersResponse: {
+            items: components["schemas"]["AdminUser"][];
+            total: number;
+        };
+        AdminProperty: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ownerId: string;
+            name: string;
+            type: components["schemas"]["PropertyType"];
+            address: string;
+            description?: string | null;
+            status: components["schemas"]["PropertyStatus"];
+            /** @enum {string} */
+            occupancy: "free" | "occupied";
+            photos?: components["schemas"]["PropertyPhoto"][] | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AdminPropertiesResponse: {
+            items: components["schemas"]["AdminProperty"][];
+            total: number;
+        };
+        AdminLease: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ownerId: string;
+            /** Format: uuid */
+            propertyId: string;
+            tenantContact?: components["schemas"]["AdminTenantContact"] | null;
+            status: components["schemas"]["LeaseStatus"];
+            /** Format: date */
+            startDate: string;
+            /** Format: date */
+            endDate?: string | null;
+            rentAmountKopecks: number;
+            depositAmountKopecks: number;
+            paymentDay: number;
+            comment?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AdminLeasesResponse: {
+            items: components["schemas"]["AdminLease"][];
+            total: number;
+        };
+        AdminTenantContact: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ownerId: string;
+            name: string;
+            surname?: string | null;
+            patronymic?: string | null;
+            phone?: string | null;
+            email?: string | null;
+            comment?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AdminTenantContactsResponse: {
+            items: components["schemas"]["AdminTenantContact"][];
+            total: number;
+        };
+        AdminOperation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ownerId: string;
+            /** Format: uuid */
+            propertyId: string;
+            /** Format: uuid */
+            leaseId?: string | null;
+            /** Format: uuid */
+            recurringOperationId?: string | null;
+            type: components["schemas"]["OperationType"];
+            category: components["schemas"]["OperationCategory"];
+            name: string;
+            amountKopecks: number;
+            /** Format: date */
+            operationDate: string;
+            status: components["schemas"]["OperationStatus"];
+            comment?: string | null;
+            isException: boolean;
+            /** @enum {integer|null} */
+            reminderOffsetDays?: 1 | 3 | 7 | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AdminOperationsResponse: {
+            items: components["schemas"]["AdminOperation"][];
+            total: number;
+        };
+        AdminPropertyResponse: {
+            property: components["schemas"]["AdminProperty"];
+        };
+        AdminLeaseResponse: {
+            lease: components["schemas"]["AdminLease"];
+        };
+        AdminTenantContactResponse: {
+            contact: components["schemas"]["AdminTenantContact"];
+        };
+        AdminOperationResponse: {
+            operation: components["schemas"]["AdminOperation"];
         };
         Problem: {
             type: string;
@@ -1019,30 +1318,25 @@ export interface components {
         };
         PropertyCreateRequest: {
             name: string;
-            /** @enum {string} */
-            type: "apartment" | "room" | "apartments" | "house" | "commercial" | "office" | "warehouse" | "garage" | "parking" | "land";
+            type: components["schemas"]["PropertyType"];
             address: string;
             description?: string;
         };
         PropertyUpdateRequest: {
             name?: string;
-            /** @enum {string} */
-            type?: "apartment" | "room" | "apartments" | "house" | "commercial" | "office" | "warehouse" | "garage" | "parking" | "land";
+            type?: components["schemas"]["PropertyType"];
             address?: string;
             description?: string;
-            /** @enum {string} */
-            status?: "active" | "maintenance";
+            status?: components["schemas"]["PropertyStatus"];
         };
         PropertyResponse: {
             /** Format: uuid */
             id: string;
             name: string;
-            /** @enum {string} */
-            type: "apartment" | "room" | "apartments" | "house" | "commercial" | "office" | "warehouse" | "garage" | "parking" | "land";
+            type: components["schemas"]["PropertyType"];
             address: string;
             description?: string;
-            /** @enum {string} */
-            status: "active" | "maintenance" | "archived";
+            status: components["schemas"]["PropertyStatus"];
             /** @enum {string} */
             occupancy: "free" | "occupied";
             photos?: components["schemas"]["PropertyPhoto"][];
@@ -1109,8 +1403,7 @@ export interface components {
             /** Format: uuid */
             owner_id: string;
             tenant_contact: components["schemas"]["TenantContactResponse"] | null;
-            /** @enum {string} */
-            status: "awaiting_start" | "active" | "requires_action" | "completed" | "archived";
+            status: components["schemas"]["LeaseStatus"];
             /** Format: date */
             start_date: string;
             /** Format: date */
@@ -1168,6 +1461,20 @@ export interface components {
         PropertiesResponse: {
             items: components["schemas"]["PropertyResponse"][];
         };
+        /** @enum {string} */
+        PropertyType: "apartment" | "room" | "apartments" | "house" | "commercial" | "office" | "warehouse" | "garage" | "parking" | "land";
+        /** @enum {string} */
+        PropertyStatus: "active" | "maintenance" | "archived";
+        /** @enum {string} */
+        LeaseStatus: "awaiting_start" | "active" | "requires_action" | "completed" | "archived";
+        /** @enum {string} */
+        SubscriptionStatus: "active" | "grace" | "blocked" | "cancelled";
+        /** @enum {string} */
+        SubscriptionPaymentStatus: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded";
+        /** @enum {string} */
+        AdminSubscriptionPaymentPeriod: "month" | "year";
+        /** @enum {string} */
+        TariffName: "basic" | "pro" | "business";
         /** @enum {string} */
         OperationType: "income" | "expense";
         /** @enum {string} */
@@ -3100,7 +3407,8 @@ export interface operations {
     listAdminSubscriptionPayments: {
         parameters: {
             query?: {
-                status?: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded";
+                user_id?: string;
+                status?: components["schemas"]["SubscriptionPaymentStatus"];
                 limit?: number;
                 offset?: number;
             };
@@ -3177,6 +3485,297 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAdminUsers: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                phone?: string;
+                email?: string;
+                role?: "owner" | "admin";
+                subscription_status?: components["schemas"]["SubscriptionStatus"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin users list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUsersResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getAdminUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin user details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAdminUserProperties: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                status?: "active" | "archived" | "all";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin user properties list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPropertiesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAdminUserLeases: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin user leases list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminLeasesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAdminUserTenantContacts: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin user tenant contacts list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTenantContactsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAdminUserOperations: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                status?: components["schemas"]["OperationStatus"];
+                type?: components["schemas"]["OperationType"];
+                property_id?: string;
+                lease_id?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin user operations list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOperationsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getAdminProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin property details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPropertyResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getAdminLease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin lease details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminLeaseResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getAdminTenantContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin tenant contact details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTenantContactResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getAdminOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin operation details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOperationResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
         };
     };
