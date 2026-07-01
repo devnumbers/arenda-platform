@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { TenantCreateWizard } from '@/widgets/tenants';
-import styles from './page.module.css';
+import { PageShell } from '@/shared/ui/page-shell';
 
 export const metadata: Metadata = {
   title: 'Добавить арендатора — Arenda Platform',
@@ -9,10 +9,8 @@ export const metadata: Metadata = {
 
 export default function TenantsNewPage() {
   return (
-    <div className={styles.root}>
-      <div className={styles.content}>
-        <TenantCreateWizard />
-      </div>
-    </div>
+    <PageShell>
+      <TenantCreateWizard />
+    </PageShell>
   );
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { LeaseCreateWizard } from '@/widgets/leases';
-import styles from './page.module.css';
+import { PageShell } from '@/shared/ui/page-shell';
 
 export const metadata: Metadata = {
   title: 'Создать аренду — Arenda Platform',
@@ -16,10 +16,8 @@ export default async function LeasesNewPage({ searchParams }: LeasesNewPageProps
   const propertyId = Array.isArray(rawPropertyId) ? rawPropertyId[0] : rawPropertyId;
 
   return (
-    <div className={styles.root}>
-      <div className={styles.content}>
-        <LeaseCreateWizard propertyId={propertyId} />
-      </div>
-    </div>
+    <PageShell>
+      <LeaseCreateWizard propertyId={propertyId} />
+    </PageShell>
   );
 }

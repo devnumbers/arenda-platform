@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { TenantEditForm } from '@/widgets/tenants';
-import styles from './page.module.css';
+import { PageShell } from '@/shared/ui/page-shell';
 
 export const metadata: Metadata = {
   title: 'Редактировать арендатора — Arenda Platform',
@@ -15,10 +15,8 @@ export default async function TenantEditPage({ params }: TenantEditPageProps) {
   const { id } = await params;
 
   return (
-    <div className={styles.root}>
-      <div className={styles.content}>
-        <TenantEditForm tenantId={id} />
-      </div>
-    </div>
+    <PageShell>
+      <TenantEditForm tenantId={id} />
+    </PageShell>
   );
 }

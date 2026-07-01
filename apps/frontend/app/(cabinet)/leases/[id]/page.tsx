@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { LeaseDetailPage } from '@/widgets/leases';
-import styles from './page.module.css';
+import { PageShell } from '@/shared/ui/page-shell';
 
 export const metadata: Metadata = {
   title: 'Аренда — Arenda Platform',
@@ -14,10 +14,8 @@ export default async function LeasePage({
 }) {
   const { id } = await params;
   return (
-    <div className={styles.root}>
-      <div className={styles.content}>
-        <LeaseDetailPage id={id} />
-      </div>
-    </div>
+    <PageShell>
+      <LeaseDetailPage id={id} />
+    </PageShell>
   );
 }

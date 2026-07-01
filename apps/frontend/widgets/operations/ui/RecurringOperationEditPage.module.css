@@ -47,11 +47,11 @@
   color: var(--color-error);
 }
 
-.deleteButton:hover:not(:disabled):not(.disabled) {
+.deleteButton:hover:not(:disabled) {
   background-color: color-mix(in srgb, var(--color-error-bg) 90%, var(--color-error));
 }
 
-.deleteButton:active:not(:disabled):not(.disabled) {
+.deleteButton:active:not(:disabled) {
   background-color: color-mix(in srgb, var(--color-error-bg) 80%, var(--color-error));
 }
 

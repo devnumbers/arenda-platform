@@ -3,6 +3,7 @@
 import { useMemo, type JSX } from 'react';
 import { useTenantContacts } from '@/features/tenant-contacts/api';
 import { PageHeader } from '@/shared/ui/page-header';
+import { PageShell } from '@/shared/ui/page-shell';
 import { LinkButton } from '@/shared/ui/link-button';
 import { ROUTES } from '@/shared/config/routes';
 import { TenantSection } from './TenantSection';
@@ -34,8 +35,8 @@ export function TenantsPage(): JSX.Element {
   }
 
   return (
-    <div className={styles.root}>
-      <div className={styles.content}>
+    <PageShell>
+      <div className={styles.root}>
         <PageHeader
           title="Арендаторы"
           backHref={ROUTES.dashboard}
@@ -49,6 +50,6 @@ export function TenantsPage(): JSX.Element {
         <TenantSection title="Текущие арендаторы" tenants={active} />
         <TenantSection title="Прошлые арендаторы" tenants={past} />
       </div>
-    </div>
+    </PageShell>
   );
 }
