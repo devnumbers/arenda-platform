@@ -209,7 +209,9 @@ export function TariffChangeForm(): JSX.Element {
               </div>
 
               <p className={styles.limit}>
-                До {tariff.activePropertyLimit} объектов
+                {tariff.activePropertyLimit < 0
+                  ? 'Неограниченно'
+                  : `До ${tariff.activePropertyLimit} объектов`}
               </p>
 
               <Button
