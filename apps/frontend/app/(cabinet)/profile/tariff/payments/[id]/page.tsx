@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
-import { IconLink } from '@/shared/ui/icon-link';
-import { ArrowLeft } from '@/shared/assets/icons';
-import { PaymentDetail } from '@/widgets/profile';
+import { PageHeader } from '@/shared/ui/page-header';
+import { PageShell } from '@/shared/ui/page-shell';
 import { ROUTES } from '@/shared/config/routes';
-import styles from './page.module.css';
+import { PaymentDetail } from '@/widgets/profile';
 
 export const metadata: Metadata = {
   title: 'Операция — Arenda Platform',
@@ -18,18 +17,9 @@ export default async function PaymentDetailPage({
   const { id } = await params;
 
   return (
-    <div className={styles.root}>
-      <div className={styles.content}>
-        <header className={styles.header}>
-          <IconLink
-            href={ROUTES.profilePayments}
-            aria-label="Назад"
-            icon={<ArrowLeft />}
-          />
-          <h1 className={styles.title}>Операция</h1>
-        </header>
-        <PaymentDetail id={id} />
-      </div>
-    </div>
+    <PageShell>
+      <PageHeader title="Операция" backHref={ROUTES.profilePayments} />
+      <PaymentDetail id={id} />
+    </PageShell>
   );
 }

@@ -3,8 +3,8 @@
 import { useCallback, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
-import { IconLink } from '@/shared/ui/icon-link';
-import { ArrowLeft } from '@/shared/assets/icons';
+import { PageHeader } from '@/shared/ui/page-header';
+import { PageShell } from '@/shared/ui/page-shell';
 import { Button } from '@/shared/ui/button';
 import { useAddPaymentMethod } from '@/features/billing/api/hooks';
 import { ROUTES } from '@/shared/config/routes';
@@ -34,46 +34,37 @@ export default function AddPaymentMethodPage(): JSX.Element {
   }, [add, router]);
 
   return (
-    <div className={styles.root}>
-      <div className={styles.content}>
-        <header className={styles.header}>
-          <IconLink
-            href={ROUTES.profilePaymentMethods}
-            aria-label="Назад"
-            icon={<ArrowLeft />}
-          />
-          <h1 className={styles.title}>Добавить карту</h1>
-        </header>
-        <section className={styles.section}>
-          {add.isError ? (
-            <div className={styles.error}>
-              <p className={styles.errorText}>
-                Не удалось подключить банковскую форму
-              </p>
-              <Button
-                onClick={startAdd}
-                variant="secondary"
-                loading={add.isPending}
-              >
-                Повторить
-              </Button>
-            </div>
-          ) : add.isPending ? (
-            <Button loading fullWidth size="large" variant="primary">
-              Подключаем банковскую форму…
-            </Button>
-          ) : (
+    <PageShell>
+      <PageHeader title="Добавить карту" backHref={ROUTES.profilePaymentMethods} />
+      <section className={styles.section}>
+        {add.isError ? (
+          <div className={styles.error}>
+            <p className={styles.errorText}>
+              Не удалось подключить банковскую форму
+            </p>
             <Button
               onClick={startAdd}
-              fullWidth
-              size="large"
-              variant="primary"
+              variant="secondary"
+              loading={add.isPending}
             >
-              Подключить банковскую форму
+              Повторить
             </Button>
-          )}
-        </section>
-      </div>
-    </div>
+          </div>
+        ) : add.isPending ? (
+          <Button loading fullWidth size="large" variant="primary">
+            Подключаем банковскую форму…
+          </Button>
+        ) : (
+          <Button
+            onClick={startAdd}
+            fullWidth
+            size="large"
+            variant="primary"
+          >
+            Подключить банковскую форму
+          </Button>
+        )}
+      </section>
+    </PageShell>
   );
 }

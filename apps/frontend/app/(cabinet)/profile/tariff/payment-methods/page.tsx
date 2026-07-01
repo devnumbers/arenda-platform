@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
-import { IconLink } from '@/shared/ui/icon-link';
-import { ArrowLeft } from '@/shared/assets/icons';
-import { PaymentMethodList } from '@/widgets/profile';
+import { PageHeader } from '@/shared/ui/page-header';
+import { PageShell } from '@/shared/ui/page-shell';
 import { ROUTES } from '@/shared/config/routes';
-import styles from './page.module.css';
+import { PaymentMethodList } from '@/widgets/profile';
 
 export const metadata: Metadata = {
   title: 'Способы оплаты — Arenda Platform',
@@ -22,18 +21,9 @@ export default async function PaymentMethodsPage({
     typeof params.addCard === 'string' ? params.addCard : undefined;
 
   return (
-    <div className={styles.root}>
-      <div className={styles.content}>
-        <header className={styles.header}>
-          <IconLink
-            href={ROUTES.profileTariff}
-            aria-label="Назад"
-            icon={<ArrowLeft />}
-          />
-          <h1 className={styles.title}>Способы оплаты</h1>
-        </header>
-        <PaymentMethodList addCardResult={addCardResult} />
-      </div>
-    </div>
+    <PageShell>
+      <PageHeader title="Способы оплаты" backHref={ROUTES.profileTariff} />
+      <PaymentMethodList addCardResult={addCardResult} />
+    </PageShell>
   );
 }

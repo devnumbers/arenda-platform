@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import fs from 'node:fs';
 import path from 'node:path';
-import { IconLink } from '@/shared/ui/icon-link';
-import { ArrowLeft } from '@/shared/assets/icons';
+import { PageHeader } from '@/shared/ui/page-header';
+import { PageShell } from '@/shared/ui/page-shell';
 import { ROUTES } from '@/shared/config/routes';
 import { MarkdownContent } from '@/shared/ui/markdown-content';
 import styles from './page.module.css';
@@ -19,20 +19,11 @@ export default function SupportPage() {
   );
 
   return (
-    <div className={styles.root}>
-      <div className={styles.content}>
-        <header className={styles.header}>
-          <IconLink
-            href={ROUTES.profile}
-            aria-label="Назад"
-            icon={<ArrowLeft />}
-          />
-          <h1 className={styles.title}>Поддержка</h1>
-        </header>
-        <section className={styles.section}>
-          <MarkdownContent>{content}</MarkdownContent>
-        </section>
-      </div>
-    </div>
+    <PageShell>
+      <PageHeader title="Поддержка" backHref={ROUTES.profile} />
+      <section className={styles.section}>
+        <MarkdownContent>{content}</MarkdownContent>
+      </section>
+    </PageShell>
   );
 }

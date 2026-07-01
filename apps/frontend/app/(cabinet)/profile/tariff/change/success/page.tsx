@@ -1,18 +1,19 @@
 import type { Metadata } from 'next';
+import { PageHeader } from '@/shared/ui/page-header';
+import { PageShell } from '@/shared/ui/page-shell';
+import { ROUTES } from '@/shared/config/routes';
 import { TariffChangeSuccess } from '@/widgets/profile';
-import styles from './page.module.css';
 
 export const metadata: Metadata = {
-  title: 'Тариф изменен — Arenda Platform',
+  title: 'Тариф изменён — Arenda Platform',
   description: 'Подтверждение смены тарифа',
 };
 
 export default function TariffChangeSuccessPage() {
   return (
-    <div className={styles.root}>
-      <div className={styles.content}>
-        <TariffChangeSuccess />
-      </div>
-    </div>
+    <PageShell>
+      <PageHeader title="Тариф изменён" backHref={ROUTES.profileTariff} />
+      <TariffChangeSuccess />
+    </PageShell>
   );
 }
