@@ -27,9 +27,7 @@ import { ApiError } from '@/shared/api/errors';
 import { TextField } from '@/shared/ui/text-field';
 import { DatePickerField } from '@/shared/ui/date-picker-field';
 import { Button } from '@/shared/ui/button';
-import { IconLink } from '@/shared/ui/icon-link';
-import { Icon } from '@/shared/ui/icon';
-import { ArrowLeft } from '@/shared/assets/icons';
+import { PageHeader } from '@/shared/ui/page-header';
 import { PropertyDetailSection } from '@/widgets/property-detail';
 import { OperationListItem } from '@/widgets/operations/ui/OperationListItem';
 import { StatusBadge } from '@/widgets/dashboard/ui/StatusBadge';
@@ -100,52 +98,6 @@ type FormErrors = {
 export type LeaseDetailPageProps = {
   readonly id: string;
 };
-
-function LeaseDetailHeader({
-  lease,
-  isEditing,
-  readonly,
-  onToggleEdit,
-}: {
-  readonly lease: LeaseResponse;
-  readonly isEditing: boolean;
-  readonly readonly: boolean;
-  readonly onToggleEdit: () => void;
-}): JSX.Element {
-  const propertyQuery = useProperty(lease.property_id);
-  const propertyName = propertyQuery.data?.name ?? 'Объект';
-
-  return (
-    <header className={styles.header}>
-      <IconLink
-        href={ROUTES.property(lease.property_id)}
-        aria-label="Назад"
-        icon={
-          <Icon size="m">
-            <ArrowLeft />
-          </Icon>
-        }
-      />
-      <NextLink
-        href={ROUTES.property(lease.property_id)}
-        className={styles.headerMain}
-      >
-        <h1 className={styles.title}>{propertyName}</h1>
-        <StatusBadge status={lease.status} />
-      </NextLink>
-      {!readonly && (
-        <Button
-          type="button"
-          variant="secondary"
-          size="small"
-          onClick={onToggleEdit}
-        >
-          {isEditing ? 'Отмена' : 'Редактировать'}
-        </Button>
-      )}
-    </header>
-  );
-}
 
 function formatTenantName(contact: {
   name: string;
@@ -555,6 +507,8 @@ export function LeaseDetailPage({ id }: LeaseDetailPageProps): JSX.Element {
   const returnDeposit = useReturnDeposit();
 
   const lease = leaseQuery.data;
+  const propertyQuery = useProperty(lease?.property_id ?? '');
+  const propertyName = propertyQuery.data?.name ?? 'Объект';
   const rentOperations = useMemo(
     () => rentOperationsQuery.data?.items ?? [],
     [rentOperationsQuery.data],
@@ -622,6 +576,16 @@ export function LeaseDetailPage({ id }: LeaseDetailPageProps): JSX.Element {
     );
   }
 
+  const title = lease ? (
+    <NextLink
+      href={ROUTES.property(lease.property_id)}
+      className={styles.titleLink}
+    >
+      <span className={styles.title}>{propertyName}</span>
+      <StatusBadge status={lease.status} />
+    </NextLink>
+  ) : null;
+
   return (
     <div className={styles.root}>
       <SubscriptionReadonlyBanner />
@@ -634,11 +598,21 @@ export function LeaseDetailPage({ id }: LeaseDetailPageProps): JSX.Element {
 
       {!isLoading && !isError && lease && (
         <>
-          <LeaseDetailHeader
-            lease={lease}
-            isEditing={isEditing}
-            readonly={readonly}
-            onToggleEdit={handleToggleEdit}
+          <PageHeader
+            title={title}
+            backHref={ROUTES.property(lease.property_id)}
+            actions={
+              !readonly && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="small"
+                  onClick={handleToggleEdit}
+                >
+                  {isEditing ? 'Отмена' : 'Редактировать'}
+                </Button>
+              )
+            }
           />
 
           {isEditing ? (
