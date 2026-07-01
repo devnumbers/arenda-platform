@@ -2,12 +2,12 @@
 
 import {type JSX, useMemo} from 'react';
 import {Icon} from '@/shared/ui/icon';
+import {PageHeader} from '@/shared/ui/page-header';
 import {ArrowRight, Plus} from '@/shared/assets/icons';
 import {LinkButton} from '@/shared/ui/link-button';
 import {ROUTES} from '@/shared/config/routes';
 import {useFinanceReport} from '@/features/finance/api/hooks';
 import {useOperations} from '@/features/operations/api/hooks';
-import {OperationListItem} from '@/widgets/operations/ui/OperationListItem';
 import {formatDateForApi} from '@/entities/operation/lib/dates';
 import {FinanceEmptyState} from './FinanceEmptyState';
 import {FinanceLoading} from './FinanceLoading';
@@ -110,23 +110,25 @@ export function FinancePage(): JSX.Element {
 
     return (
         <div className={styles.root}>
-            <div className={styles.header}>
-                <h1 className={styles.title}>Финансы</h1>
-                {!readonly && (
-                    <LinkButton
-                        href={ROUTES.financeCreateOperation}
-                        variant="primary"
-                        size="medium"
-                        leftIcon={
-                            <Icon size="s">
-                                <Plus/>
-                            </Icon>
-                        }
-                    >
-                        Добавить операцию
-                    </LinkButton>
-                )}
-            </div>
+            <PageHeader
+                title="Финансы"
+                actions={
+                    !readonly && (
+                        <LinkButton
+                            href={ROUTES.financeCreateOperation}
+                            variant="primary"
+                            size="small"
+                            leftIcon={
+                                <Icon size="s">
+                                    <Plus/>
+                                </Icon>
+                            }
+                        >
+                            Добавить операцию
+                        </LinkButton>
+                    )
+                }
+            />
 
             <SubscriptionReadonlyBanner/>
 
@@ -152,33 +154,6 @@ export function FinancePage(): JSX.Element {
                                     profitKopecks={report.totals.profit_kopecks}
                                 />
                             )}
-
-                            {/*<section className={sectionStyles.section}>*/}
-                            {/*    <div className={styles.sectionHeader}>*/}
-                            {/*        <h2 className={sectionStyles.sectionTitle}>Последние операции</h2>*/}
-                            {/*        <LinkButton*/}
-                            {/*            href={ROUTES.financeOperations}*/}
-                            {/*            variant="clear"*/}
-                            {/*            size="small"*/}
-                            {/*            rightIcon={*/}
-                            {/*                <Icon size="s">*/}
-                            {/*                    <ArrowRight/>*/}
-                            {/*                </Icon>*/}
-                            {/*            }*/}
-                            {/*            className={styles.linkAll}*/}
-                            {/*        >*/}
-                            {/*            Смотреть все*/}
-                            {/*        </LinkButton>*/}
-                            {/*    </div>*/}
-
-                            {/*    <ul className={sectionStyles.operationsList}>*/}
-                            {/*        {operations.map((operation) => (*/}
-                            {/*            <li key={operation.id}>*/}
-                            {/*                <OperationListItem operation={operation} variant="dashboard"/>*/}
-                            {/*            </li>*/}
-                            {/*        ))}*/}
-                            {/*    </ul>*/}
-                            {/*</section>*/}
 
                             <FinanceOperationsPreview
                                 title="Просроченные операции"

@@ -5,50 +5,6 @@
   padding: 84px 20px 96px;
 }
 
-.title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 500;
-  line-height: 24px;
-  color: #1e1e1e;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.sectionHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.linkAll.linkAll {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0;
-  font-size: var(--font-size-text-m);
-  line-height: var(--line-height-text-m);
-  color: var(--color-text-muted);
-  text-decoration: none;
-  background: transparent;
-}
-
-.linkAll.linkAll:hover {
-  background: transparent;
-  color: var(--color-text);
-}
-
-.linkAll svg {
-  width: 16px;
-  height: 16px;
-}
-
 .quickLinks {
   display: flex;
   flex-direction: column;

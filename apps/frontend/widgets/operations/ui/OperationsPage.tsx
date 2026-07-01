@@ -4,6 +4,7 @@ import {type JSX, useMemo} from 'react';
 import {usePathname, useRouter, useSearchParams} from 'next/navigation';
 import NextLink from 'next/link';
 import {Plus} from '@/shared/assets/icons';
+import {PageHeader} from '@/shared/ui/page-header';
 import {Icon} from '@/shared/ui/icon';
 import {Button} from '@/shared/ui/button';
 import {LinkButton} from '@/shared/ui/link-button';
@@ -338,23 +339,25 @@ export function OperationsPage(): JSX.Element {
 
     return (
         <div className={styles.root}>
-            <div className={styles.header}>
-                <h1 className={styles.title}>Операции</h1>
-                {!readonly && (
-                    <LinkButton
-                        href={ROUTES.financeCreateOperation}
-                        variant="primary"
-                        size="medium"
-                        leftIcon={
-                            <Icon size="s">
-                                <Plus/>
-                            </Icon>
-                        }
-                    >
-                        Добавить операцию
-                    </LinkButton>
-                )}
-            </div>
+            <PageHeader
+                title="Операции"
+                actions={
+                    !readonly && (
+                        <LinkButton
+                            href={ROUTES.financeCreateOperation}
+                            variant="primary"
+                            size="small"
+                            leftIcon={
+                                <Icon size="s">
+                                    <Plus/>
+                                </Icon>
+                            }
+                        >
+                            Добавить операцию
+                        </LinkButton>
+                    )
+                }
+            />
 
             <SubscriptionReadonlyBanner/>
 
