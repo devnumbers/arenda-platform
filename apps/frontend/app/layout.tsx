@@ -1,11 +1,10 @@
 import type { Metadata } from 'next';
 import type { JSX } from 'react';
 import { Inter } from 'next/font/google';
-import { ToastContainer } from 'react-toastify';
 import { I18nProvider } from '@/shared/providers/i18n-provider';
 import { QueryProvider } from '@/shared/providers/query-provider';
+import { ToastProvider } from '@/shared/ui/toast';
 import '../shared/styles/tokens.css';
-import 'react-toastify/dist/ReactToastify.css';
 import './globals.css';
 
 const inter = Inter({
@@ -30,7 +29,7 @@ export default function RootLayout({
         <I18nProvider locale="ru-RU">
           <QueryProvider>
             {children}
-            <ToastContainer position="bottom-right" />
+            <ToastProvider />
           </QueryProvider>
         </I18nProvider>
       </body>
