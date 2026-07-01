@@ -9,7 +9,7 @@ import { useCreateLease } from '@/features/leases/api';
 import { ApiError } from '@/shared/api/errors';
 import { ROUTES } from '@/shared/config/routes';
 import { useLeaseCreateDraft, type LeaseCreateStep } from '../lib/use-lease-create-draft';
-import { LeaseCreateHeader } from './LeaseCreateHeader';
+import { WizardHeader } from '@/shared/ui/wizard-header';
 import { LeasePriceStep } from './LeasePriceStep';
 import { LeaseDatesStep } from './LeaseDatesStep';
 import { LeaseSuccessStep } from './LeaseSuccessStep';
@@ -124,7 +124,7 @@ export function LeaseCreateWizard({ propertyId }: LeaseCreateWizardProps): JSX.E
 
   return (
     <div className={styles.root}>
-      <LeaseCreateHeader step={draft.step} onBack={handleBack} onCancel={handleCancel} />
+      <WizardHeader title="Создание аренды" step={draft.step} totalSteps={2} onBack={handleBack} onCancel={handleCancel} />
       <div className={styles.content}>
         {draft.step === 1 && (
           <LeasePriceStep
