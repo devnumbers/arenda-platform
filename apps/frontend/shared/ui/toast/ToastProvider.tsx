@@ -3,34 +3,36 @@
 import type { JSX } from 'react';
 import { Toast, Spinner, type ToastContentValue } from '@heroui/react';
 import type { QueuedToast } from 'react-aria-components';
-import './toast.css';
+import clsx from 'clsx';
+import styles from './ToastProvider.module.css';
 
 function renderToast({ toast }: { toast: QueuedToast<ToastContentValue> }): JSX.Element {
   const { actionProps, description, indicator, isLoading, title, variant } = toast.content ?? {};
+
+  // Hero UI uses the `accent` variant for info toasts; normalize it to `info`
+  // so the project CSS data attribute matches the public toast API.
   const dataVariant = variant === 'accent' ? 'info' : variant ?? 'default';
 
   return (
     <Toast
       toast={toast}
       variant={variant}
-      className="toast-base toast-wrapper"
+      className={clsx(styles.toast, styles.wrapper)}
       data-variant={dataVariant}
     >
-      {indicator === null ? null : (
-        <Toast.Indicator variant={variant} className="toast-icon">
+      {(indicator !== null || isLoading) && (
+        <Toast.Indicator variant={variant} className={styles.icon}>
           {isLoading ? <Spinner color="current" size="sm" /> : indicator}
         </Toast.Indicator>
       )}
-      <Toast.Content className="toast-content">
-        {!!title && <Toast.Title className="toast-title">{title}</Toast.Title>}
+      <Toast.Content className={styles.content}>
+        {!!title && <Toast.Title className={styles.title}>{title}</Toast.Title>}
         {!!description && (
-          <Toast.Description className="toast-description">{description}</Toast.Description>
+          <Toast.Description className={styles.description}>{description}</Toast.Description>
         )}
-        {actionProps?.children ? (
-          <Toast.ActionButton {...actionProps}>{actionProps.children}</Toast.ActionButton>
-        ) : null}
+        {actionProps?.children && <Toast.ActionButton {...actionProps} />}
       </Toast.Content>
-      <Toast.CloseButton className="toast-close-button" />
+      <Toast.CloseButton className={styles.closeButton} />
     </Toast>
   );
 }
@@ -40,7 +42,7 @@ export function ToastProvider(): JSX.Element {
     <Toast.Provider
       placement="bottom end"
       maxVisibleToasts={4}
-      className="toast-region"
+      className={styles.region}
     >
       {renderToast}
     </Toast.Provider>
