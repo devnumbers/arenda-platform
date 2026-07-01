@@ -4,7 +4,7 @@ import type {JSX} from 'react';
 import NextLink from 'next/link';
 import {LinkButton} from '@/shared/ui/link-button';
 import {Icon} from '@/shared/ui/icon';
-import {ClockSmall, Objects, UserSmall} from '@/shared/assets/icons';
+import {ClockSmall, UserSmall} from '@/shared/assets/icons';
 import {ROUTES} from '@/shared/config/routes';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {formatCurrentLeaseMonth, formatLeaseRemainingDuration,} from '@/shared/lib/format-lease-card-values';
@@ -12,6 +12,7 @@ import {getDisplayStatus} from '@/features/properties/lib/property-statuses';
 import type {PropertyWithLease} from '../lib/use-property-list-data';
 import {LeaseProgressBar} from './LeaseProgressBar';
 import {PropertyStatusBadge} from './PropertyStatusBadge';
+import {PropertyThumbnail} from './PropertyThumbnail';
 import styles from './PropertyCard.module.css';
 
 export type PropertyCardProps = {
@@ -78,7 +79,7 @@ function getPropertyAction(property: PropertyWithLease): PropertyAction {
     return {
         kind: 'single',
         label: 'Оплатить',
-        href: ROUTES.propertyOperations(property.id),
+        href: `${ROUTES.financeOperations}?property_id=${property.id}`,
         variant: 'clear',
     };
 }
@@ -111,11 +112,7 @@ export function PropertyCard({property}: PropertyCardProps): JSX.Element {
                     <h3 className={styles.title}>{property.name}</h3>
                     {displayStatus && <PropertyStatusBadge status={displayStatus}/>}
                 </div>
-                <div className={styles.thumbnail}>
-                    <Icon size="l">
-                        <Objects/>
-                    </Icon>
-                </div>
+                <PropertyThumbnail size="small"/>
             </NextLink>
 
             {showLeaseInfo && (
@@ -135,13 +132,13 @@ export function PropertyCard({property}: PropertyCardProps): JSX.Element {
 
                     <div className={styles.leaseRow}>
             <span className={styles.tenant}>
-              <Icon size="xs">
+              <Icon size="s">
                 <UserSmall/>
               </Icon>
                 {lease.tenantName}
             </span>
                         <span className={styles.month}>
-              <Icon size="xs">
+              <Icon size="s">
                 <ClockSmall/>
               </Icon>
                             {monthLabel}

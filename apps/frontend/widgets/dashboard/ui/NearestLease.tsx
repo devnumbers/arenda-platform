@@ -1,16 +1,18 @@
 'use client';
 
 import type {JSX} from 'react';
+import NextLink from 'next/link';
 import {Card} from '@heroui/react/card';
 import {Skeleton} from '@heroui/react/skeleton';
 import {Icon} from '@/shared/ui/icon';
-import {ArrowRight, BoldWallet, ClockSmall, Key, UserSmall} from '@/shared/assets/icons';
+import {BoldWallet, ClockSmall, Key, UserSmall} from '@/shared/assets/icons';
 import type {components} from '@/shared/api/generated';
 import type {Property} from '@/entities/property/model/types';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {ROUTES} from '@/shared/config/routes';
 import {formatCurrentLeaseMonth, formatLeaseRemainingDuration,} from '@/shared/lib/format-lease-card-values';
 import {EmptyState} from '@/shared/ui/empty-state';
+import {PropertyThumbnail} from '@/widgets/properties/ui/PropertyThumbnail';
 import {SectionHeader} from './SectionHeader';
 import {StatusBadge} from './StatusBadge';
 import {LeaseProgress} from './LeaseProgress';
@@ -90,6 +92,7 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
     }
 
     const propertyName = getPropertyName(lease.property_id, properties);
+    const propertyHref = lease.property_id ? ROUTES.property(lease.property_id) : ROUTES.properties;
     const tenantName = lease.tenant_contact?.name ?? null;
     const amount = formatMoneyKopecks(lease.rent_amount_kopecks, {round: true});
     const remaining = formatLeaseRemainingDuration(lease.start_date, lease.end_date);
@@ -101,10 +104,14 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
             <Card className={styles.card}>
                 <div className={styles.header}>
                     <div className={styles.info}>
-                        <span className={styles.propertyName}>{propertyName}</span>
+                        <NextLink href={propertyHref} className={styles.propertyLink}>
+                            <span className={styles.propertyName}>{propertyName}</span>
+                        </NextLink>
                         <StatusBadge status={lease.status}/>
                     </div>
-                    <div className={styles.image}/>
+                    <NextLink href={propertyHref} aria-label={propertyName} className={styles.propertyLink}>
+                        <PropertyThumbnail size="medium"/>
+                    </NextLink>
                 </div>
                 <div className={styles.amountRow}>
                     <span className={styles.amount}>{amount}</span>
@@ -133,14 +140,14 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
                     href={lease.property_id ? ROUTES.propertyLeases(lease.property_id) : ROUTES.properties}
                     icon={
                         <Icon size="l">
-                            <ArrowRight/>
+                            <Key/>
                         </Icon>
                     }
                     label="Все аренды"
                     variant="filled"
                 />
                 <IconActionCard
-                    href={lease.property_id ? ROUTES.propertyOperations(lease.property_id) : ROUTES.finance}
+                    href={`${ROUTES.financeOperations}?property_id=${lease.property_id}`}
                     icon={
                         <Icon size="l">
                             <BoldWallet/>

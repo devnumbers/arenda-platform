@@ -383,11 +383,7 @@ export function PropertiesToolbar({
                                 className={styles.chip}
                                 variant="secondary"
                                 size="tiny"
-                                rightIcon={
-                                    <Icon size="s">
-                                        <Cancel/>
-                                    </Icon>
-                                }
+
                                 onClick={chip.onRemove}
                             >
                                 {chip.label}

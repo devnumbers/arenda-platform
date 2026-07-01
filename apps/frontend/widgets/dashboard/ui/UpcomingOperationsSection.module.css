@@ -11,13 +11,10 @@
 }
 
 .card {
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 20px;
-  border: 1px solid #e7e9ec;
-  border-radius: 24px;
-  background: var(--color-white);
   box-shadow: none;
 }
 
@@ -33,8 +30,3 @@
   border-radius: 24px;
 }
 
-@media (min-width: 1200px) {
-  .card {
-    padding: 24px;
-  }
-}

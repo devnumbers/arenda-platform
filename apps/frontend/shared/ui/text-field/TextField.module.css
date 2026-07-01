@@ -85,6 +85,7 @@
   width: 100%;
   padding: 10px 16px;
   border: none;
+  height: 56px;
   background: transparent;
   color: inherit;
   font-family: inherit;
@@ -133,7 +134,7 @@
 .field:focus-within .floatingLabel,
 .input:not(:placeholder-shown) + .floatingLabel,
 .textarea:not(:placeholder-shown) + .floatingLabel {
-  top: 8px;
+  top: 4px;
   transform: translateY(0);
   font-size: var(--font-size-text-s);
   line-height: var(--line-height-text-s);

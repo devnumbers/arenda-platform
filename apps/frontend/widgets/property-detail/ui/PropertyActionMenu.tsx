@@ -1,7 +1,7 @@
 'use client';
 
 import {type JSX, useState} from 'react';
-import {Popover, PopoverContent, PopoverTrigger,} from '@heroui/react';
+import {Popover, PopoverContent, PopoverDialog, PopoverTrigger,} from '@heroui/react';
 import {IconButton} from '@/shared/ui/icon-button';
 import {Menu} from '@/shared/assets/icons';
 import type {PropertyStatus} from '@/entities/property/model/types';
@@ -37,31 +37,33 @@ export function PropertyActionMenu({
                 offset={8}
                 className={styles.menu}
             >
-                {status !== 'archived' && (
+                <PopoverDialog aria-label="Действия с объектом" className={styles.dialog}>
+                    {status !== 'archived' && (
+                        <button
+                            type="button"
+                            className={styles.item}
+                            onClick={() => handleAction(onEdit)}
+                        >
+                            Редактировать объект
+                        </button>
+                    )}
+                    {status !== 'archived' && (
+                        <button
+                            type="button"
+                            className={styles.item}
+                            onClick={() => handleAction(onToggleMaintenance)}
+                        >
+                            {status === 'maintenance' ? 'Вернуть в работу' : 'На ремонт'}
+                        </button>
+                    )}
                     <button
                         type="button"
                         className={styles.item}
-                        onClick={() => handleAction(onEdit)}
+                        onClick={() => handleAction(onToggleArchive)}
                     >
-                        Редактировать объект
+                        {status === 'archived' ? 'Вернуть из архива' : 'Перевести в архив'}
                     </button>
-                )}
-                {status !== 'archived' && (
-                    <button
-                        type="button"
-                        className={styles.item}
-                        onClick={() => handleAction(onToggleMaintenance)}
-                    >
-                        {status === 'maintenance' ? 'Вернуть в работу' : 'На ремонт'}
-                    </button>
-                )}
-                <button
-                    type="button"
-                    className={styles.item}
-                    onClick={() => handleAction(onToggleArchive)}
-                >
-                    {status === 'archived' ? 'Вернуть из архива' : 'Перевести в архив'}
-                </button>
+                </PopoverDialog>
             </PopoverContent>
         </Popover>
     );

@@ -163,7 +163,7 @@
 @media (min-width: 768px) {
   .root {
     gap: 32px;
-    padding: 96px 0;
+    padding: 0 0 96px;
   }
 
   .details {

@@ -1,15 +1,15 @@
 .menu {
-  position: absolute;
-  top: 72px;
-  right: 16px;
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
   min-width: 220px;
   padding: 8px;
   border-radius: 16px;
   background: #ffffff;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.dialog {
+  display: inline-flex;
+  flex-direction: column;
+  padding: 0;
 }
 
 .item {

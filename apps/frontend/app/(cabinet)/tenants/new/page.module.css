@@ -1,17 +1,17 @@
 .root {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 84px 20px 96px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 84px 20px 96px;
 }
 
 .content {
-  width: 100%;
-  max-width: 560px;
+    width: 100%;
+    max-width: 560px;
 }
 
 @media (min-width: 768px) {
-  .root {
-    padding: 96px 0;
-  }
+    .root {
+        padding: 0 0 96px;
+    }
 }

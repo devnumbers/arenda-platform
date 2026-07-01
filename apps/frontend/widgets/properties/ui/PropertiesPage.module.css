@@ -28,3 +28,7 @@
     padding: 0 0 96px;
   }
 }
+
+.rootNoTopPadding {
+  padding-top: 0;
+}

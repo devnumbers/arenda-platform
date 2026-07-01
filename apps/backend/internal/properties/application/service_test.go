@@ -67,10 +67,14 @@ type lockingFakePropertyRepo struct {
 	tx   *fakePropertyTx
 }
 
-func newLockingFakePropertyRepo(p domain.Property) *lockingFakePropertyRepo {
+func newLockingFakePropertyRepo(properties ...domain.Property) *lockingFakePropertyRepo {
+	data := make(map[uuid.UUID]domain.Property, len(properties))
+	for _, p := range properties {
+		data[p.ID] = p
+	}
 	return &lockingFakePropertyRepo{
 		lock: &sync.Mutex{},
-		data: map[uuid.UUID]domain.Property{p.ID: p},
+		data: data,
 	}
 }
 
@@ -149,7 +153,7 @@ func (r *lockingFakePropertyRepo) Unarchive(_ context.Context, id, _ uuid.UUID) 
 func (r *lockingFakePropertyRepo) CountActiveByOwner(_ context.Context, _ uuid.UUID) (int, error) {
 	count := 0
 	for _, p := range r.data {
-		if p.Status == domain.PropertyStatusActive {
+		if p.Status != domain.PropertyStatusArchived {
 			count++
 		}
 	}
@@ -238,7 +242,6 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 
 var _ PropertyRepository = (*lockingFakePropertyRepo)(nil)
 var _ OccupancyProvider = fakeOccupancyProvider{}
-
 
 type fakeSubscriptionLimiter struct {
 	limit int
@@ -340,7 +343,7 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 	propertyA := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	propertyB := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 
-	repo := newLockingFakePropertyRepo(domain.Property{})
+	repo := newLockingFakePropertyRepo()
 	repo.data[propertyA] = domain.Property{
 		ID:      propertyA,
 		OwnerID: ownerID,
@@ -569,7 +572,7 @@ func TestPropertyService_ListPropertyLeases_PropertyNotFound(t *testing.T) {
 	missingPropertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	now := time.Now()
 
-	repo := newLockingFakePropertyRepo(domain.Property{})
+	repo := newLockingFakePropertyRepo()
 	svc := NewPropertyService(
 		repo,
 		fakePropertyPhotoRepo{},
@@ -594,7 +597,7 @@ func TestPropertyService_ListArchivedProperties(t *testing.T) {
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	archivedID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
-	repo := newLockingFakePropertyRepo(domain.Property{})
+	repo := newLockingFakePropertyRepo()
 	repo.data[archivedID] = domain.Property{
 		ID:      archivedID,
 		OwnerID: ownerID,

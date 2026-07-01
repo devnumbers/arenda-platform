@@ -31,8 +31,8 @@ export function PropertyDepositReturnModal({
   };
 
   return (
-    <Modal>
-      <Modal.Backdrop isOpen={isOpen} onOpenChange={handleOpenChange}>
+    <Modal isOpen={isOpen} onOpenChange={handleOpenChange}>
+      <Modal.Backdrop>
         <Modal.Container placement="center" size="sm">
           <Modal.Dialog aria-label="Возврат залога">
             <Modal.Header>

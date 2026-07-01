@@ -5,9 +5,19 @@ import type {JSX} from 'react';
 import {useCallback, useMemo, useState} from 'react';
 import {toast} from 'react-toastify';
 import {ROUTES} from '@/shared/config/routes';
-import {useArchiveProperty, useProperty, useUnarchiveProperty, useUpdateProperty} from '@/features/properties/api/hooks';
+import {
+    useArchiveProperty,
+    useProperty,
+    useUnarchiveProperty,
+    useUpdateProperty
+} from '@/features/properties/api/hooks';
 import {useCompleteLease, usePropertyLeases, useReturnDeposit,} from '@/features/leases/api/hooks';
-import {useOperations, useOperationsByProperty, usePropertyOperationsSummary, type OperationsFilters,} from '@/features/operations/api/hooks';
+import {
+    type OperationsFilters,
+    useOperations,
+    useOperationsByProperty,
+    usePropertyOperationsSummary,
+} from '@/features/operations/api/hooks';
 import {ApiError} from '@/shared/api/errors';
 import {findCurrentLease, findLastLease, getPropertyPageStatus,} from '../lib/get-property-page-status';
 import {PropertyDetailHeader} from './PropertyDetailHeader';
@@ -211,7 +221,7 @@ export function PropertyDetailPage(): JSX.Element {
                 }
             />
 
-            <PropertyGallery photos={property.photos} alt={property.name}/>
+            <PropertyGallery />
 
             <PropertyStatusSection
                 property={property}

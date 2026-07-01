@@ -1,18 +1,18 @@
 'use client';
 
-import type { JSX, ReactNode } from 'react';
+import type {JSX, ReactNode} from 'react';
 import NextLink from 'next/link';
 import clsx from 'clsx';
 import styles from './EntityCard.module.css';
 
 export type EntityCardProps = {
-  readonly imageUrl?: string | null;
-  readonly placeholderIcon?: ReactNode;
-  readonly title: string;
-  readonly subtitle?: string;
-  readonly href?: string;
-  readonly size?: 'small' | 'medium';
-  readonly className?: string;
+    readonly imageUrl?: string | null;
+    readonly placeholderIcon?: ReactNode;
+    readonly title: string;
+    readonly subtitle?: string;
+    readonly href?: string;
+    readonly size?: 'small' | 'medium';
+    readonly className?: string;
 };
 
 export function EntityCard({
@@ -44,15 +44,15 @@ export function EntityCard({
     </>
   );
 
-  const cardClassName = clsx(styles.root, className);
+    const cardClassName = clsx(styles.root, className);
 
-  if (href) {
-    return (
-      <NextLink href={href} className={cardClassName}>
-        {content}
-      </NextLink>
-    );
-  }
+    if (href) {
+        return (
+            <NextLink href={href} className={cardClassName}>
+                {content}
+            </NextLink>
+        );
+    }
 
-  return <div className={cardClassName}>{content}</div>;
+    return <div className={cardClassName}>{content}</div>;
 }

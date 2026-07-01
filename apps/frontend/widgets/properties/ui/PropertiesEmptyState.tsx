@@ -16,7 +16,7 @@ export function PropertiesEmptyState(): JSX.Element {
       actionHref={ROUTES.propertyNew}
       actionText="Создать объект"
       actionIcon={
-        <Icon size="s">
+        <Icon size="m">
           <HomeAdd />
         </Icon>
       }

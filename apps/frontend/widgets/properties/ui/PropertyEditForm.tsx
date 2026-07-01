@@ -10,12 +10,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 import { ROUTES } from '@/shared/config/routes';
-import {
-  useProperty,
-  useUpdateProperty,
-  useUploadPropertyPhoto,
-  useDeletePropertyPhoto,
-} from '@/features/properties/api';
+import {useProperty, useUpdateProperty} from '@/features/properties/api';
 import { TextField } from '@/shared/ui/text-field';
 import { Button } from '@/shared/ui/button';
 import { IconLink } from '@/shared/ui/icon-link';
@@ -23,7 +18,6 @@ import { ArrowLeft } from '@/shared/assets/icons';
 import type { PropertyType } from '@/entities/property/model/types';
 import { PropertyTypeSelect } from './PropertyTypeSelect';
 import { AddressField } from './AddressField';
-import { PhotoGrid } from './PhotoGrid';
 import styles from './PropertyEditForm.module.css';
 
 const MAX_NAME_LENGTH = 50;
@@ -68,15 +62,11 @@ export function PropertyEditForm({
 
   const propertyQuery = useProperty(propertyId);
   const updateProperty = useUpdateProperty();
-  const uploadPhoto = useUploadPropertyPhoto();
-  const deletePhoto = useDeletePropertyPhoto();
 
   const [type, setType] = useState<PropertyType | undefined>(undefined);
   const [address, setAddress] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [newPhotos, setNewPhotos] = useState<File[]>([]);
-  const [deletedPhotoIds, setDeletedPhotoIds] = useState<string[]>([]);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const hasInitialized = useRef(false);
 
@@ -93,10 +83,7 @@ export function PropertyEditForm({
     hasInitialized.current = true;
   }, [propertyQuery.data]);
 
-  const isSubmitting =
-    updateProperty.isPending ||
-    uploadPhoto.isPending ||
-    deletePhoto.isPending;
+  const isSubmitting = updateProperty.isPending;
 
   const isNameValid = name.trim().length > 0;
   const isAddressValid = address.trim().length > 0;
@@ -109,10 +96,6 @@ export function PropertyEditForm({
   const addressError = submitAttempted && !isAddressValid ? 'Укажите адрес' : undefined;
   const nameError = submitAttempted && !isNameValid ? 'Укажите название' : undefined;
 
-  const handleDeleteExisting = (photoId: string) => {
-    setDeletedPhotoIds((prev) => [...prev, photoId]);
-  };
-
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -121,35 +104,15 @@ export function PropertyEditForm({
     if (!canSubmit || !type) return;
 
     try {
-      const operations: Promise<unknown>[] = [
-        updateProperty.mutateAsync({
-          id: propertyId,
-          data: {
-            name: name.trim(),
-            type,
-            address: address.trim(),
-            description: description.trim() || undefined,
-          },
-        }),
-      ];
-
-      if (deletedPhotoIds.length > 0) {
-        operations.push(
-          ...deletedPhotoIds.map((photoId) =>
-            deletePhoto.mutateAsync({ propertyId, photoId }),
-          ),
-        );
-      }
-
-      if (newPhotos.length > 0) {
-        operations.push(
-          ...newPhotos.map((file) =>
-            uploadPhoto.mutateAsync({ propertyId, file }),
-          ),
-        );
-      }
-
-      await Promise.all(operations);
+      await updateProperty.mutateAsync({
+        id: propertyId,
+        data: {
+          name: name.trim(),
+          type,
+          address: address.trim(),
+          description: description.trim() || undefined,
+        },
+      });
 
       toast.success('Объект обновлён');
       router.push(ROUTES.property(propertyId));
@@ -170,11 +133,6 @@ export function PropertyEditForm({
       />
     );
   }
-
-  const existingPhotos =
-    propertyQuery.data.photos?.filter(
-      (photo) => !deletedPhotoIds.includes(photo.id),
-    ) ?? [];
 
   return (
     <form className={styles.root} onSubmit={handleSubmit}>
@@ -211,17 +169,6 @@ export function PropertyEditForm({
             onChange={(event) => setDescription(event.currentTarget.value)}
           />
         </div>
-      </section>
-
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Фотографии</h2>
-        <PhotoGrid
-          existingPhotos={existingPhotos}
-          newPhotos={newPhotos}
-          onNewPhotosChange={setNewPhotos}
-          onDeleteExisting={handleDeleteExisting}
-          isUploading={uploadPhoto.isPending}
-        />
       </section>
 
       <Button

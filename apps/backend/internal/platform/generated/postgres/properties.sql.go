@@ -41,7 +41,7 @@ func (q *Queries) ArchiveProperty(ctx context.Context, arg ArchivePropertyParams
 
 const countActivePropertiesByOwner = `-- name: CountActivePropertiesByOwner :one
 SELECT COUNT(*) FROM properties
-WHERE owner_id = $1 AND status = 'active'
+WHERE owner_id = $1 AND status IN ('active', 'maintenance')
 `
 
 func (q *Queries) CountActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) (int64, error) {
@@ -53,7 +53,7 @@ func (q *Queries) CountActivePropertiesByOwner(ctx context.Context, ownerID pgty
 
 const countActivePropertiesByOwnerAdmin = `-- name: CountActivePropertiesByOwnerAdmin :one
 SELECT COUNT(*) FROM properties
-WHERE owner_id = $1 AND status = 'active'
+WHERE owner_id = $1 AND status IN ('active', 'maintenance')
 `
 
 func (q *Queries) CountActivePropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error) {
@@ -208,7 +208,7 @@ func (q *Queries) GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetP
 
 const listActivePropertiesByOwner = `-- name: ListActivePropertiesByOwner :many
 SELECT id, owner_id, name, type, address, description, status, created_at, updated_at FROM properties
-WHERE owner_id = $1 AND status = 'active'
+WHERE owner_id = $1 AND status IN ('active', 'maintenance')
 ORDER BY updated_at DESC
 `
 

@@ -25,7 +25,7 @@ import (
 
 // fakePropertyRepoForHandlers satisfies propertiesapp.PropertyRepository.
 // fakeLeasesAppPropertyRepo wraps the same data for leasesapp.PropertyRepository.
-// Only GetByIDAndOwner, ExistsByOwner, CountActiveByOwner and WithTx are functional.
+// Only GetByIDAndOwner, ExistsByOwner, CountActiveByOwner (non-archived) and WithTx are functional.
 type fakePropertyRepoForHandlers struct {
 	mu         sync.Mutex
 	properties map[uuid.UUID]propertiesdomain.Property
@@ -90,7 +90,7 @@ func (r *fakePropertyRepoForHandlers) CountActiveByOwner(_ context.Context, _ uu
 	defer r.mu.Unlock()
 	count := 0
 	for _, p := range r.properties {
-		if p.Status == propertiesdomain.PropertyStatusActive {
+		if p.Status != propertiesdomain.PropertyStatusArchived {
 			count++
 		}
 	}

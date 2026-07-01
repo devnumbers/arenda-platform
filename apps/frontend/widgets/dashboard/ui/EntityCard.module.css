@@ -40,6 +40,10 @@
   max-width: 72px;
 }
 
+.thumbnail{
+  background: none;
+}
+
 .title,
 .subtitle {
   display: -webkit-box;

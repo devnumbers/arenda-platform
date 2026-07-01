@@ -12,7 +12,7 @@ FOR UPDATE;
 
 -- name: ListActivePropertiesByOwner :many
 SELECT * FROM properties
-WHERE owner_id = $1 AND status = 'active'
+WHERE owner_id = $1 AND status IN ('active', 'maintenance')
 ORDER BY updated_at DESC;
 
 -- name: ListArchivedPropertiesByOwner :many
@@ -38,7 +38,7 @@ RETURNING *;
 
 -- name: CountActivePropertiesByOwner :one
 SELECT COUNT(*) FROM properties
-WHERE owner_id = $1 AND status = 'active';
+WHERE owner_id = $1 AND status IN ('active', 'maintenance');
 
 -- name: ListPropertiesByOwnerAdmin :many
 SELECT * FROM properties
@@ -57,7 +57,7 @@ SELECT * FROM properties WHERE id = $1;
 
 -- name: CountActivePropertiesByOwnerAdmin :one
 SELECT COUNT(*) FROM properties
-WHERE owner_id = $1 AND status = 'active';
+WHERE owner_id = $1 AND status IN ('active', 'maintenance');
 
 -- name: CountArchivedPropertiesByOwnerAdmin :one
 SELECT COUNT(*) FROM properties

@@ -41,13 +41,12 @@
   color: var(--color-text);
 }
 
-.image {
-  flex-shrink: 0;
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
-  background: var(--color-secondary-pressed);
+.propertyLink {
+  text-decoration: none;
+  color: inherit;
 }
+
+
 
 .amountRow {
   display: flex;
@@ -146,7 +145,6 @@
     line-height: 1.375rem;
   }
 
-  .image,
   .imageSkeleton {
     width: 64px;
     height: 64px;
