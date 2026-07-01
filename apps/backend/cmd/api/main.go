@@ -190,6 +190,7 @@ func run(fallback *slog.Logger) error {
 			Username: cfg.SMTPUser,
 			Password: cfg.SMTPPass,
 			From:     cfg.SMTPFrom,
+			FromName: cfg.SMTPFromName,
 			Timeout:  cfg.SMTPTimeout,
 		})
 	case "fake":

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"mime"
 	"net"
 	"net/smtp"
 	"strings"
@@ -14,6 +15,9 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 )
 
+// DefaultFromName is used when the SMTP configuration does not specify a display name.
+const DefaultFromName = "Arenda Platform"
+
 // Config holds connection details for an SMTP server.
 type Config struct {
 	Host     string
@@ -21,6 +25,7 @@ type Config struct {
 	Username string
 	Password string
 	From     string
+	FromName string
 	Timeout  time.Duration
 }
 
@@ -125,16 +130,41 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
 	return nil
 }
 
+func encodeHeader(s string) string {
+	return mime.QEncoding.Encode("UTF-8", s)
+}
+
+// quoteDisplayName quotes a display name per RFC 5322.
+// It leaves RFC 2047 encoded-words (starting with "=?") unquoted.
+func quoteDisplayName(s string) string {
+	if strings.HasPrefix(s, "=?") {
+		return s
+	}
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return fmt.Sprintf("\"%s\"", s)
+}
+
 func (s *Sender) buildMessage(msg mailer.Message) []byte {
 	boundary := uuid.NewString()
 	messageID := fmt.Sprintf("<%s@%s>", uuid.NewString(), s.cfg.Host)
 	date := time.Now().UTC().Format(time.RFC1123Z)
 
+	fromName := s.cfg.FromName
+	if fromName == "" {
+		fromName = DefaultFromName
+	}
+	encodedName := encodeHeader(fromName)
+	// RFC 5322 requires quoting display names that contain spaces.
+	// mime.QEncoding.Encode returns the raw string for ASCII, so we add quotes
+	// ourselves; RFC 2047 encoded-words must not be wrapped in quotes.
+	fromHeader := fmt.Sprintf("%s <%s>", quoteDisplayName(encodedName), s.cfg.From)
+
 	var buf bytes.Buffer
 	headers := []string{
-		"From: " + s.cfg.From,
+		"From: " + fromHeader,
 		"To: " + strings.Join(msg.To, ", "),
-		"Subject: " + msg.Subject,
+		"Subject: " + encodeHeader(msg.Subject),
 		"Date: " + date,
 		"Message-ID: " + messageID,
 		"MIME-Version: 1.0",

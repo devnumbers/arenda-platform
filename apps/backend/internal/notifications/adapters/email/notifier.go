@@ -19,6 +19,10 @@ func NewNotifier(sender mailer.Sender, renderer *mailer.Renderer) *Notifier {
 	return &Notifier{sender: sender, renderer: renderer}
 }
 
+func reminderSubject(title string) string {
+	return "Напоминание от Arenda: " + title
+}
+
 // Notify sends a reminder email.
 func (n *Notifier) Notify(ctx context.Context, notification application.Notification) (string, string, error) {
 	if notification.Contact == nil || notification.Contact.Email == "" {
@@ -36,7 +40,7 @@ func (n *Notifier) Notify(ctx context.Context, notification application.Notifica
 
 	msg := mailer.Message{
 		To:       []string{notification.Contact.Email},
-		Subject:  notification.Title,
+		Subject:  reminderSubject(notification.Title),
 		TextBody: plain,
 		HTMLBody: html,
 	}

@@ -56,6 +56,7 @@ type Config struct {
 	SMTPUser                            string
 	SMTPPass                            string
 	SMTPFrom                            string
+	SMTPFromName                        string
 	SMTPTimeout                         time.Duration
 }
 
@@ -96,6 +97,7 @@ func Load() (Config, error) {
 		SMTPUser:          os.Getenv("SMTP_USER"),
 		SMTPPass:          os.Getenv("SMTP_PASS"),
 		SMTPFrom:          os.Getenv("SMTP_FROM"),
+		SMTPFromName:      os.Getenv("SMTP_FROM_NAME"),
 		PaymentProvider:   os.Getenv("PAYMENT_PROVIDER"),
 		SMTPTimeout:       10 * time.Second,
 		AppBaseURL:        os.Getenv("APP_BASE_URL"),
