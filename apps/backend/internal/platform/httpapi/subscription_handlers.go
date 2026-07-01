@@ -393,6 +393,10 @@ func subscriptionResponse(view billingapp.SubscriptionView) openapi.Subscription
 		AutoRenewEnabled: sub.AutoRenewEnabled,
 		PendingChangeAt:  sub.PendingChangeAt,
 	}
+	if sub.CurrentPeriod != nil {
+		period := openapi.AdminSubscriptionPaymentPeriod(*sub.CurrentPeriod)
+		resp.CurrentPeriod = &period
+	}
 	if view.PendingTariff != nil {
 		pt := tariffResponse(*view.PendingTariff)
 		resp.PendingTariff = &pt
