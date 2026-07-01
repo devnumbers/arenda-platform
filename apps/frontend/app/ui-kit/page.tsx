@@ -6,6 +6,7 @@ import {Button} from '@/shared/ui/button';
 import {IconButton} from '@/shared/ui/icon-button';
 import {IconLink} from '@/shared/ui/icon-link';
 import {LinkButton} from '@/shared/ui/link-button';
+import {notify} from '@/shared/lib/toast';
 import {TextField} from '@/shared/ui/text-field';
 import {ArrowRight, Home, Loading, Search, Settings, Support,} from '@/shared/assets/icons';
 import styles from './page.module.css';
@@ -179,6 +180,38 @@ export default function UiKitPage(): JSX.Element {
                         fullWidth
                         placeholder="Spans the full width of its container"
                     />
+                </div>
+            </section>
+
+            <section className={styles.section}>
+                <h2 className={styles.sectionTitle}>Toast</h2>
+                <div className={styles.grid}>
+                    <Button onClick={() => notify.success('Успех', {description: 'Данные сохранены'})}>
+                        Success
+                    </Button>
+                    <Button onClick={() => notify.error('Ошибка', {description: 'Что-то пошло не так'})}>
+                        Error
+                    </Button>
+                    <Button onClick={() => notify.info('Инфо', {description: 'Полезная информация'})}>
+                        Info
+                    </Button>
+                    <Button onClick={() => notify.warning('Внимание', {description: 'Проверьте данные'})}>
+                        Warning
+                    </Button>
+                    <Button
+                        onClick={() =>
+                            notify.promise(
+                                new Promise((resolve) => setTimeout(resolve, 2000)),
+                                {
+                                    loading: 'Загрузка...',
+                                    success: 'Готово',
+                                    error: 'Ошибка',
+                                },
+                            )
+                        }
+                    >
+                        Promise
+                    </Button>
                 </div>
             </section>
         </main>
