@@ -197,12 +197,14 @@ export function TariffChangeForm(): JSX.Element {
 
               <div className={styles.priceRow}>
                 <span className={styles.price}>
-                  {formatMoneyKopecks(tariff.monthlyPriceKopecks)}
-                  <span className={styles.period}>/мес</span>
-                </span>
-                <span className={styles.price}>
-                  {formatMoneyKopecks(tariff.yearlyPriceKopecks)}
-                  <span className={styles.period}>/год</span>
+                  {formatMoneyKopecks(
+                    period === 'year'
+                      ? tariff.yearlyPriceKopecks
+                      : tariff.monthlyPriceKopecks,
+                  )}
+                  <span className={styles.period}>
+                    {period === 'year' ? '/год' : '/мес'}
+                  </span>
                 </span>
               </div>
 
