@@ -145,9 +145,11 @@ export function PaymentMethodList({
         (error as ApiError).detail ?? 'Не удалось удалить карту',
     });
 
-    promise.finally(() => {
-      setDeletingId(null);
-    });
+    promise
+      .finally(() => {
+        setDeletingId(null);
+      })
+      .catch(() => {}); // error is already reported by notify.promise
   }, [deletingId, remove]);
 
   const deletingMethod = items?.find((method) => method.id === deletingId);

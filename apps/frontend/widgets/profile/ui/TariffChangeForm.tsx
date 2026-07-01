@@ -148,7 +148,8 @@ export function TariffChangeForm(): JSX.Element {
         })
         .finally(() => {
           setSelectedTariff(null);
-        });
+        })
+        .catch(() => {}); // error is already reported by notify.promise
     },
     [changeTariff, period, router],
   );
