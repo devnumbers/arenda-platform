@@ -32,21 +32,21 @@ function normalizeError(error: unknown): string {
   return 'Произошла ошибка';
 }
 
-function error(title: string, options?: ToastOptions): void;
-function error(error: unknown, options?: ToastOptions): void;
-function error(titleOrError: string | unknown, options?: ToastOptions): void {
+function error(title: string, options?: ToastOptions): string;
+function error(error: unknown, options?: ToastOptions): string;
+function error(titleOrError: string | unknown, options?: ToastOptions): string {
   const title =
     typeof titleOrError === 'string'
       ? titleOrError
       : normalizeError(titleOrError);
-  toast.danger(title, {
+  return toast.danger(title, {
     description: options?.description,
     timeout: options?.duration ?? DEFAULT_DURATIONS.error,
   });
 }
 
 export const notify = {
-  success: (title: string, options?: ToastOptions) =>
+  success: (title: string, options?: ToastOptions): string =>
     toast.success(title, {
       description: options?.description,
       timeout: options?.duration ?? DEFAULT_DURATIONS.success,
@@ -54,13 +54,13 @@ export const notify = {
 
   error,
 
-  info: (title: string, options?: ToastOptions) =>
+  info: (title: string, options?: ToastOptions): string =>
     toast.info(title, {
       description: options?.description,
       timeout: options?.duration ?? DEFAULT_DURATIONS.info,
     }),
 
-  warning: (title: string, options?: ToastOptions) =>
+  warning: (title: string, options?: ToastOptions): string =>
     toast.warning(title, {
       description: options?.description,
       timeout: options?.duration ?? DEFAULT_DURATIONS.warning,
@@ -73,5 +73,5 @@ export const notify = {
       success: string | ((data: T) => string);
       error: string | ((error: unknown) => string);
     },
-  ) => toast.promise(promise, options),
+  ): string => toast.promise(promise, options),
 };
