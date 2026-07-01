@@ -9,7 +9,7 @@ import {
   type JSX,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'react-toastify';
+import { notify } from '@/shared/lib/toast';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
 import {
@@ -369,7 +369,7 @@ function LeaseEditForm({
       { id: lease.id, data },
       {
         onSuccess: onCancel,
-        onError: (error) => toast.error(formatErrorMessage(error)),
+        onError: (error) => notify.error(error),
       },
     );
   };
@@ -553,8 +553,12 @@ export function LeaseDetailPage({ id }: LeaseDetailPageProps): JSX.Element {
     if (!confirm('Завершить аренду?')) {
       return;
     }
-    completeLease.mutate(id, {
-      onError: (error) => toast.error(formatErrorMessage(error)),
+
+    void notify.promise(completeLease.mutateAsync(id), {
+      loading: 'Завершаем аренду...',
+      success: 'Аренда завершена',
+      error: (error) =>
+        (error as ApiError).detail ?? 'Не удалось завершить аренду',
     });
   }, [completeLease, id]);
 
@@ -562,8 +566,12 @@ export function LeaseDetailPage({ id }: LeaseDetailPageProps): JSX.Element {
     if (!confirm('Вернуть залог?')) {
       return;
     }
-    returnDeposit.mutate(id, {
-      onError: (error) => toast.error(formatErrorMessage(error)),
+
+    void notify.promise(returnDeposit.mutateAsync(id), {
+      loading: 'Возвращаем залог...',
+      success: 'Залог возвращён',
+      error: (error) =>
+        (error as ApiError).detail ?? 'Не удалось вернуть залог',
     });
   }, [returnDeposit, id]);
 

@@ -10,7 +10,7 @@ import {
 import { useParams, useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import { Modal } from '@heroui/react';
-import { toast } from 'react-toastify';
+import { notify } from '@/shared/lib/toast';
 import { PageHeader } from '@/shared/ui/page-header';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
@@ -360,18 +360,24 @@ function RecurringOperationEditPageContent({
   };
 
   const handleConfirmDelete = () => {
-    deleteOperation.mutate(
-      { id, propertyId: operation.property_id },
-      {
-        onSuccess: () => {
-          setIsDeleteModalOpen(false);
-          router.push(ROUTES.financeOperations);
-        },
-        onError: (error) => {
-          toast.error(formatErrorMessage(error));
-        },
-      },
-    );
+    const promise = deleteOperation.mutateAsync({
+      id,
+      propertyId: operation.property_id,
+    });
+
+    void notify.promise(promise, {
+      loading: 'Удаляем серию...',
+      success: 'Серия удалена',
+      error: (error) =>
+        (error as ApiError).detail ?? 'Не удалось удалить серию',
+    });
+
+    promise
+      .then(() => {
+        setIsDeleteModalOpen(false);
+        router.push(ROUTES.financeOperations);
+      })
+      .catch(() => {}); // error is already reported by notify.promise
   };
 
   return (
