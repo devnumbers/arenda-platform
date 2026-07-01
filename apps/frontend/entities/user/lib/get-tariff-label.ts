@@ -1,6 +1,6 @@
 export const TARIFF_LABELS: Record<string, string> = {
   basic: 'Базовый',
-  pro: 'Pro',
+  pro: 'Про',
   business: 'Бизнес',
 };
 
