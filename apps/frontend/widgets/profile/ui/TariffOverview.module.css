@@ -23,13 +23,8 @@
   color: var(--color-text);
 }
 
-.priceRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
 .price {
+  margin: 0;
   font-size: var(--font-size-text-m);
   font-weight: 500;
   line-height: var(--line-height-text-m);
@@ -91,11 +86,6 @@
 
 .cancelled {
   color: var(--color-text-muted);
-}
-
-.switchWrapper {
-  display: flex;
-  align-items: center;
 }
 
 .actions {

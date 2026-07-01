@@ -3,14 +3,12 @@
 import { useCallback, type JSX } from 'react';
 import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
-import { Switch } from '@heroui/react/switch';
 import { Skeleton } from '@heroui/react/skeleton';
 import { toast } from 'react-toastify';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import {
   useSubscription,
-  useToggleAutoRenew,
   useCancelSubscription,
 } from '@/features/billing/api/hooks';
 import { ROUTES } from '@/shared/config/routes';
@@ -49,28 +47,7 @@ export function TariffOverview(): JSX.Element {
     isError,
     refetch,
   } = useSubscription();
-  const toggle = useToggleAutoRenew();
   const cancel = useCancelSubscription();
-
-  const handleToggle = useCallback(
-    (enabled: boolean) => {
-      if (!subscription) {
-        return;
-      }
-
-      toggle.mutate(
-        { enabled },
-        {
-          onError: (error) => {
-            toast.error(
-              error.detail || 'Не удалось изменить настройки автопродления',
-            );
-          },
-        },
-      );
-    },
-    [subscription, toggle],
-  );
 
   const handleCancel = useCallback(() => {
     cancel.mutate(undefined, {
@@ -101,6 +78,28 @@ export function TariffOverview(): JSX.Element {
   const isPaid = isPaidTariff(subscription.tariff.name);
   const isCancelled = subscription.status === 'cancelled';
 
+  const priceDisplay = (() => {
+    if (subscription.currentPeriod === 'month') {
+      return (
+        <>
+          {formatMoneyKopecks(subscription.tariff.monthlyPriceKopecks)}
+          <span className={styles.period}>/мес</span>
+        </>
+      );
+    }
+
+    if (subscription.currentPeriod === 'year') {
+      return (
+        <>
+          {formatMoneyKopecks(subscription.tariff.yearlyPriceKopecks)}
+          <span className={styles.period}>/год</span>
+        </>
+      );
+    }
+
+    return 'Бесплатно';
+  })();
+
   return (
     <div className={styles.root}>
       <Card className={styles.card}>
@@ -108,16 +107,7 @@ export function TariffOverview(): JSX.Element {
           {getTariffLabel(subscription.tariff.name)}
         </h2>
 
-        <div className={styles.priceRow}>
-          <span className={styles.price}>
-            {formatMoneyKopecks(subscription.tariff.monthlyPriceKopecks)}
-            <span className={styles.period}>/мес</span>
-          </span>
-          <span className={styles.price}>
-            {formatMoneyKopecks(subscription.tariff.yearlyPriceKopecks)}
-            <span className={styles.period}>/год</span>
-          </span>
-        </div>
+        <div className={styles.price}>{priceDisplay}</div>
 
         <dl className={styles.details}>
           <div className={styles.row}>
@@ -135,22 +125,14 @@ export function TariffOverview(): JSX.Element {
           <div className={styles.row}>
             <dt className={styles.label}>Действует до</dt>
             <dd className={styles.value}>
-              {subscription.validUntil
-                ? formatDate(subscription.validUntil)
-                : '—'}
+              {formatDate(subscription.validUntil)}
             </dd>
           </div>
 
           <div className={styles.row}>
             <dt className={styles.label}>Автопродление</dt>
-            <dd className={styles.switchWrapper}>
-              <Switch
-                aria-label="Автопродление"
-                isSelected={subscription.autoRenewEnabled}
-                onChange={handleToggle}
-                isDisabled={toggle.isPending || isCancelled}
-                size="sm"
-              />
+            <dd className={styles.value}>
+              {subscription.autoRenewEnabled ? 'Включено' : 'Отключено'}
             </dd>
           </div>
         </dl>
