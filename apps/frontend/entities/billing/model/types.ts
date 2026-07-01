@@ -47,6 +47,7 @@ export type Subscription = {
   pendingTariff?: Tariff;
   autoRenewEnabled: boolean;
   validUntil?: string;
+  currentPeriod?: PaymentPeriod;
   activePaymentMethod?: PaymentMethod;
   pendingChangeAt?: string;
   pendingPeriod?: PaymentPeriod;

@@ -53,6 +53,9 @@ export function mapSubscriptionResponse(
       : undefined,
     autoRenewEnabled: response.autoRenewEnabled,
     validUntil: response.validUntil ?? undefined,
+    currentPeriod: response.currentPeriod
+      ? (response.currentPeriod as PaymentPeriod)
+      : undefined,
     activePaymentMethod: response.activePaymentMethod
       ? mapPaymentMethodResponse(response.activePaymentMethod)
       : undefined,
