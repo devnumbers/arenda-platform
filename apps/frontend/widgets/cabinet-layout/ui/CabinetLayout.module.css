@@ -8,7 +8,6 @@
   display: flex;
   justify-content: center;
   min-height: 100vh;
-  padding-right: 240px;
 }
 
 .content {
@@ -20,6 +19,7 @@
 @media (min-width: 1200px) {
   .main {
     margin-left: 240px;
+    padding-right: 240px;
   }
 
   .content {
