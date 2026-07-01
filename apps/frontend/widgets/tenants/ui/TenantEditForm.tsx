@@ -12,6 +12,7 @@ import { ApiError } from '@/shared/api/errors';
 import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
+import { PageHeader } from '@/shared/ui/page-header';
 import type { components } from '@/shared/api/generated';
 import { TenantForm, type TenantContactFormData } from './TenantForm';
 import styles from './TenantEditForm.module.css';
@@ -214,7 +215,10 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
 
   return (
     <>
-      <h1 className={styles.title}>Редактирование арендатора</h1>
+      <PageHeader
+        title="Редактирование арендатора"
+        backHref={ROUTES.tenant(tenantId)}
+      />
       <TenantForm
         initialData={initialData}
         submitLabel="Сохранить изменения"
