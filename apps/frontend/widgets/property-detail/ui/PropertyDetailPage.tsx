@@ -3,7 +3,7 @@
 import {useParams, useRouter} from 'next/navigation';
 import type {JSX} from 'react';
 import {useCallback, useMemo, useState} from 'react';
-import {toast} from 'react-toastify';
+import { notify } from '@/shared/lib/toast';
 import {ROUTES} from '@/shared/config/routes';
 import {
     useArchiveProperty,
@@ -39,7 +39,7 @@ import {PropertyDetailError} from './PropertyDetailError';
 import styles from './PropertyDetailPage.module.css';
 
 function showMutationError(error: ApiError): void {
-    toast.error(error.detail ?? 'Ошибка');
+    notify.error(error);
 }
 
 export function PropertyDetailPage(): JSX.Element {

@@ -8,7 +8,7 @@ import {
   type JSX,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'react-toastify';
+import { notify } from '@/shared/lib/toast';
 import { ROUTES } from '@/shared/config/routes';
 import {useProperty, useUpdateProperty} from '@/features/properties/api';
 import { TextField } from '@/shared/ui/text-field';
@@ -113,10 +113,10 @@ export function PropertyEditForm({
         },
       });
 
-      toast.success('Объект обновлён');
+      notify.success('Объект обновлён');
       router.push(ROUTES.property(propertyId));
     } catch {
-      toast.error('Не удалось сохранить изменения');
+      notify.error('Не удалось сохранить изменения');
     }
   };
 

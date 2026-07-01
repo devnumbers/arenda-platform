@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'react-toastify';
+import { notify } from '@/shared/lib/toast';
 import {
   useTenantContact,
   useUpdateTenantContact,
@@ -179,7 +179,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
           id: tenantId,
           data: payload,
         });
-        toast.success('Арендатор обновлён');
+        notify.success('Арендатор обновлён');
         router.push(ROUTES.tenant(tenantId));
       } catch (error: unknown) {
         const message =
@@ -189,7 +189,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
               ? error.message
               : 'Не удалось сохранить изменения. Попробуйте ещё раз.';
         setSubmitError(message);
-        toast.error(message);
+        notify.error(message);
       }
     },
     [router, tenant, tenantId, updateTenantContact],
