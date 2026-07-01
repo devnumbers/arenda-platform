@@ -2,10 +2,9 @@
 
 import { useMemo, type JSX } from 'react';
 import { useTenantContacts } from '@/features/tenant-contacts/api';
+import { PageHeader } from '@/shared/ui/page-header';
 import { LinkButton } from '@/shared/ui/link-button';
-import { IconLink } from '@/shared/ui/icon-link';
 import { ROUTES } from '@/shared/config/routes';
-import { ArrowLeft } from '@/shared/assets/icons';
 import { TenantSection } from './TenantSection';
 import { TenantsLoading } from './TenantsLoading';
 import { TenantsError } from './TenantsError';
@@ -37,13 +36,15 @@ export function TenantsPage(): JSX.Element {
   return (
     <div className={styles.root}>
       <div className={styles.content}>
-        <header className={styles.header}>
-          <IconLink href={ROUTES.dashboard} aria-label="Назад" icon={<ArrowLeft />} />
-          <h1 className={styles.title}>Арендаторы</h1>
-          <LinkButton href={ROUTES.tenantNew} variant="secondary" size="small">
-            Добавить
-          </LinkButton>
-        </header>
+        <PageHeader
+          title="Арендаторы"
+          backHref={ROUTES.dashboard}
+          actions={
+            <LinkButton href={ROUTES.tenantNew} variant="primary" size="small">
+              Добавить
+            </LinkButton>
+          }
+        />
 
         <TenantSection title="Текущие арендаторы" tenants={active} />
         <TenantSection title="Прошлые арендаторы" tenants={past} />
