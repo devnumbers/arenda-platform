@@ -144,7 +144,7 @@ export function TariffChangeForm(): JSX.Element {
             return;
           }
 
-          router.push(ROUTES.profileTariffChangeSuccess);
+          return router.push(ROUTES.profileTariffChangeSuccess);
         })
         .finally(() => {
           setSelectedTariff(null);
