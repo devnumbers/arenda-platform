@@ -1,7 +1,7 @@
 'use client';
 
-import { type ChangeEvent, type JSX } from 'react';
-import { TextField } from '@/shared/ui/text-field';
+import type { JSX } from 'react';
+import { DatePickerField } from '@/shared/ui/date-picker-field';
 import { type ScheduleData, type ScheduleErrors } from '../model/types';
 import { FrequencySelect } from './FrequencySelect';
 import styles from './OperationScheduleStep.module.css';
@@ -25,12 +25,12 @@ export function OperationScheduleStep({
 }: OperationScheduleStepProps): JSX.Element {
   const recurring = isRecurring(data.frequency);
 
-  const handleDateChange = (event: ChangeEvent<HTMLInputElement>) => {
-    onChange({ ...data, date: event.currentTarget.value || undefined });
+  const handleDateChange = (value: string) => {
+    onChange({ ...data, date: value || undefined });
   };
 
-  const handleEndDateChange = (event: ChangeEvent<HTMLInputElement>) => {
-    onChange({ ...data, endDate: event.currentTarget.value || undefined });
+  const handleEndDateChange = (value: string) => {
+    onChange({ ...data, endDate: value || undefined });
   };
 
   return (
@@ -43,24 +43,22 @@ export function OperationScheduleStep({
           error={errors?.frequency}
           disabled={readonly}
         />
-        <TextField
+        <DatePickerField
           label={recurring ? 'Дата первого повтора' : 'Дата операции'}
-          type="date"
-          required
-          fullWidth
-          disabled={readonly}
           value={data.date ?? ''}
           onChange={handleDateChange}
+          required
+          disabled={readonly}
+          fullWidth
           error={errors?.date}
         />
         {recurring && (
-          <TextField
+          <DatePickerField
             label="Дата окончания (необязательно)"
-            type="date"
-            fullWidth
-            disabled={readonly}
             value={data.endDate ?? ''}
             onChange={handleEndDateChange}
+            disabled={readonly}
+            fullWidth
             error={errors?.endDate}
           />
         )}

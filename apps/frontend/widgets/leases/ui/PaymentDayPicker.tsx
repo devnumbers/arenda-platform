@@ -1,21 +1,26 @@
 'use client';
 
-import type { JSX, KeyboardEvent } from 'react';
-import { useId, useRef, useState } from 'react';
+import type { JSX } from 'react';
+import { useId, useState } from 'react';
+import { parseDate, type CalendarDate } from '@internationalized/date';
 import {
-  Drawer,
-  DrawerBackdrop,
-  DrawerBody,
-  DrawerCloseTrigger,
-  DrawerContent,
-  DrawerDialog,
-  DrawerHeader,
-  DrawerHeading,
-} from '@heroui/react/drawer';
+  Popover,
+  PopoverContent,
+  PopoverDialog,
+  PopoverTrigger,
+} from '@heroui/react/popover';
+import { Calendar } from '@heroui/react/calendar';
 import { Button } from '@/shared/ui/button';
 import styles from './PaymentDayPicker.module.css';
 
-const DAYS: ReadonlyArray<number> = Array.from({ length: 31 }, (_, i) => i + 1);
+const REFERENCE_DATE = '2026-01-01';
+const MIN_DATE = '2026-01-01';
+const MAX_DATE = '2026-01-31';
+
+function dayToDate(day: number | undefined): CalendarDate | null {
+  if (day === undefined || day < 1 || day > 31) return null;
+  return parseDate(`${REFERENCE_DATE.slice(0, 8)}${String(day).padStart(2, '0')}`);
+}
 
 export type PaymentDayPickerProps = {
   readonly value?: number;
@@ -25,49 +30,11 @@ export type PaymentDayPickerProps = {
 export function PaymentDayPicker({ value, onChange }: PaymentDayPickerProps): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
   const triggerId = useId();
-  const gridRef = useRef<HTMLDivElement>(null);
 
-  const handleSelect = (day: number) => {
-    onChange(day);
+  const handleChange = (date: CalendarDate | null) => {
+    if (!date) return;
+    onChange(date.day);
     setIsOpen(false);
-  };
-
-  const moveFocus = (nextDay: number) => {
-    const target = gridRef.current?.querySelector<HTMLButtonElement>(`[data-day="${nextDay}"]`);
-    target?.focus();
-  };
-
-  const handleDayKeyDown = (event: KeyboardEvent<HTMLButtonElement>, day: number) => {
-    const index = day - 1;
-    let nextIndex = index;
-
-    switch (event.key) {
-      case 'ArrowLeft':
-        nextIndex = Math.max(0, index - 1);
-        break;
-      case 'ArrowRight':
-        nextIndex = Math.min(DAYS.length - 1, index + 1);
-        break;
-      case 'ArrowUp':
-        nextIndex = Math.max(0, index - 7);
-        break;
-      case 'ArrowDown':
-        nextIndex = Math.min(DAYS.length - 1, index + 7);
-        break;
-      case 'Home':
-        nextIndex = 0;
-        break;
-      case 'End':
-        nextIndex = DAYS.length - 1;
-        break;
-      default:
-        return;
-    }
-
-    event.preventDefault();
-    const nextDay = DAYS[nextIndex];
-    onChange(nextDay);
-    moveFocus(nextDay);
   };
 
   return (
@@ -75,59 +42,43 @@ export function PaymentDayPicker({ value, onChange }: PaymentDayPickerProps): JS
       <label htmlFor={triggerId} className={styles.label}>
         День оплаты <span className={styles.required}>*</span>
       </label>
-      <Button
-        id={triggerId}
-        type="button"
-        variant="secondary"
-        size="large"
-        fullWidth
-        aria-haspopup="dialog"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen(true)}
-        className={styles.trigger}
-      >
-        {value ? `${value}-е число` : 'Выбрать'}
-      </Button>
-      <Drawer isOpen={isOpen} onOpenChange={setIsOpen}>
-        <DrawerBackdrop />
-        <DrawerContent placement="bottom">
-          <DrawerDialog>
-            <DrawerCloseTrigger aria-label="Закрыть" />
-            <DrawerHeader className={styles.drawerHeader}>
-              <DrawerHeading>День оплаты</DrawerHeading>
-            </DrawerHeader>
-            <DrawerBody className={styles.drawerBody}>
-              <div
-                ref={gridRef}
-                className={styles.grid}
-                role="radiogroup"
-                aria-label="День оплаты"
-              >
-                {DAYS.map((day) => {
-                  const selected = value === day;
-                  const tabbable = selected || (value === undefined && day === 1);
-
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      role="radio"
-                      data-day={day}
-                      aria-checked={selected}
-                      tabIndex={tabbable ? 0 : -1}
-                      className={`${styles.day} ${selected ? styles.dayActive : ''}`}
-                      onClick={() => handleSelect(day)}
-                      onKeyDown={(event) => handleDayKeyDown(event, day)}
-                    >
-                      {day}
-                    </button>
-                  );
-                })}
-              </div>
-            </DrawerBody>
-          </DrawerDialog>
-        </DrawerContent>
-      </Drawer>
+      <Popover isOpen={isOpen} onOpenChange={setIsOpen}>
+        <PopoverTrigger>
+          <Button
+            id={triggerId}
+            type="button"
+            variant="secondary"
+            size="large"
+            fullWidth
+            aria-haspopup="dialog"
+            aria-expanded={isOpen}
+            className={styles.trigger}
+          >
+            {value ? `${value}-е число` : 'Выбрать'}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className={styles.popover}>
+          <PopoverDialog aria-label="День оплаты">
+            <Calendar
+              aria-label="Выбрать день оплаты"
+              value={dayToDate(value)}
+              onChange={handleChange}
+              defaultFocusedValue={parseDate(REFERENCE_DATE)}
+              minValue={parseDate(MIN_DATE)}
+              maxValue={parseDate(MAX_DATE)}
+            >
+              <Calendar.Grid>
+                <Calendar.GridHeader>
+                  {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
+                </Calendar.GridHeader>
+                <Calendar.GridBody>
+                  {(date) => <Calendar.Cell date={date} />}
+                </Calendar.GridBody>
+              </Calendar.Grid>
+            </Calendar>
+          </PopoverDialog>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

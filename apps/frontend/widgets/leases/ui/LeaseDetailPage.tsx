@@ -25,6 +25,7 @@ import { useSubscription } from '@/features/subscription/api/hooks';
 import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import { ApiError } from '@/shared/api/errors';
 import { TextField } from '@/shared/ui/text-field';
+import { DatePickerField } from '@/shared/ui/date-picker-field';
 import { Button } from '@/shared/ui/button';
 import { IconLink } from '@/shared/ui/icon-link';
 import { Icon } from '@/shared/ui/icon';
@@ -445,21 +446,20 @@ function LeaseEditForm({
             </select>
           </div>
 
-          <TextField
+          <DatePickerField
             label="Начало аренды"
-            type="date"
+            value={form.startDate}
+            onChange={(value) => setForm((prev) => ({ ...prev, startDate: value }))}
             required
             fullWidth
-            value={form.startDate}
-            onChange={handleChange('startDate')}
             error={errors.startDate}
           />
-          <TextField
+          <DatePickerField
             label="Конец аренды"
-            type="date"
-            fullWidth
             value={form.endDate}
-            onChange={handleChange('endDate')}
+            onChange={(value) => setForm((prev) => ({ ...prev, endDate: value }))}
+            minValue={form.startDate}
+            fullWidth
             error={errors.endDate}
           />
           <TextField

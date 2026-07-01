@@ -16,6 +16,7 @@ import { Icon } from '@/shared/ui/icon';
 import { IconLink } from '@/shared/ui/icon-link';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
+import { DatePickerField } from '@/shared/ui/date-picker-field';
 import { ROUTES } from '@/shared/config/routes';
 import { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/generated';
@@ -261,8 +262,7 @@ function RecurringOperationEditPageContent({
     setForm((prev) => ({ ...prev, amount: value }));
   };
 
-  const handleEndDateChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const value = event.currentTarget.value;
+  const handleEndDateChange = (value: string) => {
     setForm((prev) => ({ ...prev, endDate: value }));
   };
 
@@ -421,13 +421,12 @@ function RecurringOperationEditPageContent({
           onChange={(periodicity) => setForm((prev) => ({ ...prev, periodicity }))}
           disabled={readonly}
         />
-        <TextField
+        <DatePickerField
           label="Дата окончания (необязательно)"
-          type="date"
-          fullWidth
-          disabled={readonly}
           value={form.endDate}
           onChange={handleEndDateChange}
+          disabled={readonly}
+          fullWidth
           error={errors.endDate}
         />
         <TextField

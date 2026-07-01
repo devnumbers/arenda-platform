@@ -57,6 +57,10 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
 		return fmt.Errorf("empty message body")
 	}
 
+	if msg.Subject == "" {
+		return fmt.Errorf("email subject is required")
+	}
+
 	body := s.buildMessage(msg)
 
 	addr := fmt.Sprintf("%s:%s", s.cfg.Host, s.cfg.Port)
@@ -145,9 +149,20 @@ func quoteDisplayName(s string) string {
 	return fmt.Sprintf("\"%s\"", s)
 }
 
+// messageIDDomain returns the domain part of the From address to use in the
+// Message-ID header. A Message-ID domain aligned with the From domain is less
+// likely to be flagged by spam filters.
+func messageIDDomain(from, fallback string) string {
+	parts := strings.SplitN(from, "@", 2)
+	if len(parts) == 2 && parts[1] != "" {
+		return parts[1]
+	}
+	return fallback
+}
+
 func (s *Sender) buildMessage(msg mailer.Message) []byte {
 	boundary := uuid.NewString()
-	messageID := fmt.Sprintf("<%s@%s>", uuid.NewString(), s.cfg.Host)
+	messageID := fmt.Sprintf("<%s@%s>", uuid.NewString(), messageIDDomain(s.cfg.From, s.cfg.Host))
 	date := time.Now().UTC().Format(time.RFC1123Z)
 
 	fromName := s.cfg.FromName

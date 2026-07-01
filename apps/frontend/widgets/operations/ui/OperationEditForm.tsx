@@ -14,6 +14,7 @@ import { Icon } from '@/shared/ui/icon';
 import { IconLink } from '@/shared/ui/icon-link';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
+import { DatePickerField } from '@/shared/ui/date-picker-field';
 import { ROUTES } from '@/shared/config/routes';
 import { ApiError } from '@/shared/api/errors';
 import {
@@ -139,8 +140,7 @@ function OperationEditFormContent({
     setForm((prev) => ({ ...prev, amount: value }));
   };
 
-  const handleDateChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const value = event.currentTarget.value;
+  const handleDateChange = (value: string) => {
     setForm((prev) => ({ ...prev, operation_date: value }));
   };
 
@@ -251,13 +251,12 @@ function OperationEditFormContent({
           onChange={handleAmountChange}
           error={errors.amount}
         />
-        <TextField
+        <DatePickerField
           label="Дата операции"
-          type="date"
-          required
-          fullWidth
           value={form.operation_date}
           onChange={handleDateChange}
+          required
+          fullWidth
           error={errors.operation_date}
         />
         <TextField
