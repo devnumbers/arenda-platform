@@ -16,6 +16,7 @@ import { getTariffLabel } from '@/entities/user/lib/get-tariff-label';
 import { isPaidTariff } from '@/entities/user/lib/is-paid-tariff';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { formatDate } from '@/shared/lib/format-date';
+import type { Subscription } from '@/entities/billing/model/types';
 import styles from './TariffOverview.module.css';
 
 const STATUS_LABELS: Record<
@@ -27,6 +28,21 @@ const STATUS_LABELS: Record<
   blocked: 'Заблокирована',
   cancelled: 'Отменена',
 };
+
+function getAutoRenewState(
+  subscription: Subscription,
+): 'enabled' | 'disabled' | 'no-card' {
+  if (!subscription.autoRenewEnabled) return 'disabled';
+  if (!subscription.activePaymentMethod) return 'no-card';
+  return 'enabled';
+}
+
+function isExpiringSoon(validUntil?: string): boolean {
+  if (!validUntil) return false;
+  const diffMs = new Date(validUntil).getTime() - Date.now();
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  return diffDays >= 0 && diffDays <= 7;
+}
 
 function TariffOverviewSkeleton(): JSX.Element {
   return (
@@ -97,6 +113,15 @@ export function TariffOverview(): JSX.Element {
       );
     }
 
+    if (isPaid) {
+      return (
+        <>
+          {formatMoneyKopecks(subscription.tariff.monthlyPriceKopecks)}
+          <span className={styles.period}>/мес</span>
+        </>
+      );
+    }
+
     return 'Бесплатно';
   })();
 
@@ -136,7 +161,35 @@ export function TariffOverview(): JSX.Element {
             </dd>
           </div>
         </dl>
+
+        {getAutoRenewState(subscription) === 'no-card' &&
+          (subscription.status === 'active' || subscription.status === 'grace') && (
+            <p className={styles.hint}>
+              Для автопродления нужна основная карта.{" "}
+              <LinkButton
+                href={ROUTES.profilePaymentMethods}
+                variant="clear"
+                size="tiny"
+                className={styles.hintLink}
+              >
+                Добавить
+              </LinkButton>
+            </p>
+          )}
       </Card>
+
+      {subscription.pendingTariff && subscription.pendingChangeAt && (
+        <div className={styles.banner}>
+          С {formatDate(subscription.pendingChangeAt)} тариф изменится на{" "}
+          {getTariffLabel(subscription.pendingTariff.name)}.
+        </div>
+      )}
+
+      {isExpiringSoon(subscription.validUntil) && (
+        <div className={clsx(styles.banner, styles.bannerWarning)}>
+          Подписка закончится {formatDate(subscription.validUntil)}.
+        </div>
+      )}
 
       <div className={styles.actions}>
         <LinkButton
