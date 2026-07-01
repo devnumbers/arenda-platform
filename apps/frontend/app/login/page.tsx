@@ -2,7 +2,7 @@
 
 import {type JSX, useState} from "react";
 import {useRouter} from "next/navigation";
-import {toast} from "react-toastify";
+import {notify} from "@/shared/lib/toast";
 import {AuthForm} from "@/features/auth/ui/auth-form";
 import {useSendEmailCode, useVerifyEmailCode,} from "@/features/auth/api/hooks";
 import {normalizePhone} from "@/features/auth/lib/normalize-phone";
@@ -43,7 +43,7 @@ export default function LoginPage(): JSX.Element {
                     setStep("code");
                 },
                 onError: (error) => {
-                    toast.error(error.detail);
+                    notify.error(error);
                 },
             },
         );
@@ -61,7 +61,7 @@ export default function LoginPage(): JSX.Element {
                     router.push("/dashboard");
                 },
                 onError: (error) => {
-                    toast.error(error.detail ?? "Неверный код");
+                    notify.error(error);
                 },
             },
         );
@@ -89,7 +89,7 @@ export default function LoginPage(): JSX.Element {
             {phone: normalizePhone(phone), email},
             {
                 onError: (error) => {
-                    toast.error(error.detail);
+                    notify.error(error);
                 },
             },
         );

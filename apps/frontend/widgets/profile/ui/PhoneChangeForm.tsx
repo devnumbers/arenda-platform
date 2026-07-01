@@ -8,7 +8,7 @@ import {
   type JSX,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'react-toastify';
+import { notify } from '@/shared/lib/toast';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import { useMe } from '@/features/auth/api/hooks';
@@ -104,7 +104,7 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
         { phone: normalizedPhone, code },
         {
           onSuccess: () => {
-            toast.success('Номер телефона изменён');
+            notify.success('Номер телефона изменён');
             router.push(ROUTES.profileAccount);
           },
         },

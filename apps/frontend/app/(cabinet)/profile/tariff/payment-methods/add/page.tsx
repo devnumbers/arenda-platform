@@ -2,7 +2,7 @@
 
 import { useCallback, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'react-toastify';
+import { notify } from '@/shared/lib/toast';
 import { PageHeader } from '@/shared/ui/page-header';
 import { PageShell } from '@/shared/ui/page-shell';
 import { Button } from '@/shared/ui/button';
@@ -27,7 +27,7 @@ export default function AddPaymentMethodPage(): JSX.Element {
           router.push(ROUTES.profilePaymentMethods);
         },
         onError: (error) => {
-          toast.error(error.detail || 'Не удалось начать добавление карты');
+          notify.error(error);
         },
       },
     );

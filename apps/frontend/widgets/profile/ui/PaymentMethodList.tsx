@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
 import { Modal } from '@heroui/react';
-import { toast } from 'react-toastify';
+import { notify } from '@/shared/lib/toast';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import {
@@ -105,10 +105,10 @@ export function PaymentMethodList({
 
   useEffect(() => {
     if (addCardResult === 'success') {
-      toast.success('Карта успешно добавлена');
+      notify.success('Карта успешно добавлена');
       void refetch();
     } else if (addCardResult === 'fail') {
-      toast.error('Не удалось добавить карту. Попробуйте снова.');
+      notify.error('Не удалось добавить карту. Попробуйте снова.');
     }
 
     if (addCardResult === 'success' || addCardResult === 'fail') {
@@ -122,12 +122,10 @@ export function PaymentMethodList({
     (id: string) => {
       activate.mutate(id, {
         onSuccess: () => {
-          toast.success('Карта назначена основной');
+          notify.success('Карта назначена основной');
         },
         onError: (error) => {
-          toast.error(
-            error.detail || 'Не удалось сделать карту основной',
-          );
+          notify.error(error);
         },
       });
     },
@@ -141,11 +139,11 @@ export function PaymentMethodList({
 
     remove.mutate(deletingId, {
       onSuccess: () => {
-        toast.success('Карта удалена');
+        notify.success('Карта удалена');
         setDeletingId(null);
       },
       onError: (error) => {
-        toast.error(error.detail || 'Не удалось удалить карту');
+        notify.error(error);
         setDeletingId(null);
       },
     });

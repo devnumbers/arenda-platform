@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState, type ChangeEvent, type FormEvent, type JSX } from 'react';
-import { toast } from 'react-toastify';
+import { notify } from '@/shared/lib/toast';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import { useMe } from '@/features/auth/api/hooks';
@@ -81,7 +81,7 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
       updateMe.mutate(payload, {
         onSuccess: () => {
           setSubmitError(undefined);
-          toast.success('Данные сохранены');
+          notify.success('Данные сохранены');
         },
         onError: (error) => {
           if (error.status === 409 && /email is already in use/i.test(error.detail ?? '')) {
