@@ -5,7 +5,7 @@ import {useRouter} from 'next/navigation';
 import {ROUTES} from '@/shared/config/routes';
 import {useCreateProperty} from '@/features/properties/api';
 import {type CreateStep, usePropertyCreateDraft,} from '@/widgets/properties/lib/use-property-create-draft';
-import {PropertyCreateHeader} from './PropertyCreateHeader';
+import {WizardHeader} from '@/shared/ui/wizard-header';
 import {PropertyAddressStep} from './PropertyAddressStep';
 import {PropertyInfoStep} from './PropertyInfoStep';
 import {PropertySuccessStep} from './PropertySuccessStep';
@@ -83,8 +83,10 @@ export function PropertyCreateWizard(): JSX.Element {
 
     return (
         <div className={styles.root}>
-            <PropertyCreateHeader
+            <WizardHeader
+                title="Создание объекта"
                 step={draft.step}
+                totalSteps={3}
                 onBack={handleBack}
                 onCancel={handleCancel}
             />
