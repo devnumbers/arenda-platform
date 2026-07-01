@@ -4,11 +4,10 @@ import type { JSX } from 'react';
 import { useMemo } from 'react';
 import NextLink from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft } from '@/shared/assets/icons';
 import type { components } from '@/shared/api/generated';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import { IconLink } from '@/shared/ui/icon-link';
+import { PageHeader } from '@/shared/ui/page-header';
 import { LinkButton } from '@/shared/ui/link-button';
 import { useProperty } from '@/features/properties/api/hooks';
 import { usePropertyLeases } from '@/features/leases/api/hooks';
@@ -129,30 +128,30 @@ export function PropertyLeasesPage(): JSX.Element {
     leasesQuery.refetch();
   };
 
+  const title = (
+    <div className={styles.heading}>
+      <span className={styles.eyebrow}>{propertyName}</span>
+      <span className={styles.title}>Все аренды</span>
+    </div>
+  );
+
   return (
     <div className={styles.root}>
-      <header className={styles.header}>
-        <div className={styles.headerLeft}>
-          <IconLink
-            href={ROUTES.property(id)}
-            aria-label="Назад"
-            icon={<ArrowLeft />}
-          />
-          <div className={styles.heading}>
-            <span className={styles.eyebrow}>{propertyName}</span>
-            <h1 className={styles.title}>Все аренды</h1>
-          </div>
-        </div>
-        {canCreateLease && (
-          <LinkButton
-            href={`${ROUTES.leaseNew}?propertyId=${id}`}
-            variant="primary"
-            size="medium"
-          >
-            Создать аренду
-          </LinkButton>
-        )}
-      </header>
+      <PageHeader
+        title={title}
+        backHref={ROUTES.property(id)}
+        actions={
+          canCreateLease && (
+            <LinkButton
+              href={`${ROUTES.leaseNew}?propertyId=${id}`}
+              variant="primary"
+              size="small"
+            >
+              Создать аренду
+            </LinkButton>
+          )
+        }
+      />
 
       {isLoading && <FinanceLoading />}
 

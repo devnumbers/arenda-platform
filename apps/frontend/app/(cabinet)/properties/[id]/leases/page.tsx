@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
+import { PageShell } from '@/shared/ui/page-shell';
 import { PropertyLeasesPage } from '@/widgets/property-detail';
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 
@@ -10,8 +11,10 @@ export const metadata: Metadata = {
 
 export default function PropertyLeasesRoutePage() {
   return (
-    <Suspense fallback={<FinanceLoading />}>
-      <PropertyLeasesPage />
-    </Suspense>
+    <PageShell>
+      <Suspense fallback={<FinanceLoading />}>
+        <PropertyLeasesPage />
+      </Suspense>
+    </PageShell>
   );
 }

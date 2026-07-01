@@ -2,9 +2,9 @@
 
 import { useMemo, useState, type JSX } from 'react';
 import { useParams } from 'next/navigation';
-import { Plus, ArrowLeft } from '@/shared/assets/icons';
+import { Plus } from '@/shared/assets/icons';
 import { Icon } from '@/shared/ui/icon';
-import { IconLink } from '@/shared/ui/icon-link';
+import { PageHeader } from '@/shared/ui/page-header';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import { ROUTES } from '@/shared/config/routes';
@@ -113,30 +113,26 @@ export function PropertyOperationsPage(): JSX.Element {
 
   return (
     <div className={styles.root}>
-      <header className={styles.header}>
-        <div className={styles.headerLeft}>
-          <IconLink
-            href={ROUTES.property(id)}
-            aria-label="Назад"
-            icon={<ArrowLeft />}
-          />
-          <h1 className={styles.title}>{propertyName}</h1>
-        </div>
-        {!readonly && (
-          <LinkButton
-            href={`${ROUTES.financeCreateOperation}?propertyId=${id}`}
-            variant="primary"
-            size="medium"
-            leftIcon={
-              <Icon size="s">
-                <Plus />
-              </Icon>
-            }
-          >
-            Добавить операцию
-          </LinkButton>
-        )}
-      </header>
+      <PageHeader
+        title={propertyName}
+        backHref={ROUTES.property(id)}
+        actions={
+          !readonly && (
+            <LinkButton
+              href={`${ROUTES.financeCreateOperation}?propertyId=${id}`}
+              variant="primary"
+              size="small"
+              leftIcon={
+                <Icon size="s">
+                  <Plus />
+                </Icon>
+              }
+            >
+              Добавить операцию
+            </LinkButton>
+          )
+        }
+      />
 
       <SubscriptionReadonlyBanner />
 

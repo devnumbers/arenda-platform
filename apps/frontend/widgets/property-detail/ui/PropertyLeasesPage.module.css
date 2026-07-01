@@ -2,21 +2,6 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding: 84px 20px 96px;
-}
-
-.header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.headerLeft {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
 }
 
 .heading {
@@ -36,7 +21,6 @@
 }
 
 .title {
-  margin: 0;
   color: var(--color-text);
   font-size: 24px;
   font-weight: 500;
@@ -147,14 +131,6 @@
 }
 
 @media (max-width: 520px) {
-  .header {
-    flex-direction: column;
-  }
-
-  .header > a {
-    align-self: stretch;
-  }
-
   .cardHeader {
     flex-direction: column;
   }
@@ -163,7 +139,6 @@
 @media (min-width: 768px) {
   .root {
     gap: 32px;
-    padding: 0 0 96px;
   }
 
   .details {
