@@ -13,8 +13,7 @@ import { ROUTES } from '@/shared/config/routes';
 import {useProperty, useUpdateProperty} from '@/features/properties/api';
 import { TextField } from '@/shared/ui/text-field';
 import { Button } from '@/shared/ui/button';
-import { IconLink } from '@/shared/ui/icon-link';
-import { ArrowLeft } from '@/shared/assets/icons';
+import { PageHeader } from '@/shared/ui/page-header';
 import type { PropertyType } from '@/entities/property/model/types';
 import { PropertyTypeSelect } from './PropertyTypeSelect';
 import { AddressField } from './AddressField';
@@ -136,15 +135,7 @@ export function PropertyEditForm({
 
   return (
     <form className={styles.root} onSubmit={handleSubmit}>
-      <header className={styles.header}>
-        <IconLink
-          href={ROUTES.property(propertyId)}
-          aria-label="Назад"
-          icon={<ArrowLeft />}
-        />
-        <h1 className={styles.title}>Информация об объекте</h1>
-        <div className={styles.headerPlaceholder} />
-      </header>
+      <PageHeader title="Информация об объекте" backHref={ROUTES.property(propertyId)} />
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Данные</h2>

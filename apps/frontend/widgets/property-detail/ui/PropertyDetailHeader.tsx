@@ -1,29 +1,12 @@
-'use client';
+import type { JSX, ReactNode } from 'react';
+import { PageHeader } from '@/shared/ui/page-header';
+import { ROUTES } from '@/shared/config/routes';
 
-import type {JSX, ReactNode} from 'react';
-import {IconLink} from '@/shared/ui/icon-link';
-import {ArrowLeft} from '@/shared/assets/icons';
-import {ROUTES} from '@/shared/config/routes';
-import styles from './PropertyDetailHeader.module.css';
+export interface PropertyDetailHeaderProps {
+  title?: string;
+  actions?: ReactNode;
+}
 
-export type PropertyDetailHeaderProps = {
-    readonly title?: string;
-    readonly actions?: ReactNode;
-};
-
-export function PropertyDetailHeader({
-                                         title = 'Мой объект',
-                                         actions,
-                                     }: PropertyDetailHeaderProps): JSX.Element {
-    return (
-        <header className={styles.root}>
-            <IconLink
-                href={ROUTES.properties}
-                aria-label="Назад"
-                icon={<ArrowLeft/>}
-            />
-            <h1 className={styles.title}>{title}</h1>
-            {actions}
-        </header>
-    );
+export function PropertyDetailHeader({ title = 'Мой объект', actions }: PropertyDetailHeaderProps): JSX.Element {
+  return <PageHeader title={title} backHref={ROUTES.properties} actions={actions} />;
 }
