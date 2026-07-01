@@ -15,6 +15,7 @@ import {
 } from '@/features/billing/api/hooks';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDate } from '@/shared/lib/format-date';
+import { ApiError } from '@/shared/api/errors';
 import styles from './PaymentMethodList.module.css';
 
 type DeleteModalProps = {
@@ -120,13 +121,11 @@ export function PaymentMethodList({
 
   const handleActivate = useCallback(
     (id: string) => {
-      activate.mutate(id, {
-        onSuccess: () => {
-          notify.success('Карта назначена основной');
-        },
-        onError: (error) => {
-          notify.error(error.detail ?? 'Не удалось сделать карту основной');
-        },
+      void notify.promise(activate.mutateAsync(id), {
+        loading: 'Делаем карту основной...',
+        success: 'Карта стала основной',
+        error: (error) =>
+          (error as ApiError).detail ?? 'Не удалось сделать карту основной',
       });
     },
     [activate],
@@ -137,15 +136,17 @@ export function PaymentMethodList({
       return;
     }
 
-    remove.mutate(deletingId, {
-      onSuccess: () => {
-        notify.success('Карта удалена');
-        setDeletingId(null);
-      },
-      onError: (error) => {
-        notify.error(error.detail ?? 'Не удалось удалить карту');
-        setDeletingId(null);
-      },
+    const promise = remove.mutateAsync(deletingId);
+
+    void notify.promise(promise, {
+      loading: 'Удаляем карту...',
+      success: 'Карта удалена',
+      error: (error) =>
+        (error as ApiError).detail ?? 'Не удалось удалить карту',
+    });
+
+    promise.finally(() => {
+      setDeletingId(null);
     });
   }, [deletingId, remove]);
 

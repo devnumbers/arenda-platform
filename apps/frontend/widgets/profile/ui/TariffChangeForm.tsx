@@ -21,6 +21,7 @@ import { getTariffLabel } from '@/entities/user/lib/get-tariff-label';
 import { type TariffName } from '@/entities/user/model/types';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { ROUTES } from '@/shared/config/routes';
+import { ApiError } from '@/shared/api/errors';
 import styles from './TariffChangeForm.module.css';
 
 type Period = 'month' | 'year';
@@ -127,25 +128,27 @@ export function TariffChangeForm(): JSX.Element {
     (tariffName: TariffName) => {
       setSelectedTariff(tariffName);
 
-      changeTariff.mutate(
-        { tariffName, period },
-        {
-          onSuccess: (data) => {
-            setSelectedTariff(null);
+      const promise = changeTariff.mutateAsync({ tariffName, period });
 
-            if (data.confirmUrl) {
-              window.location.assign(data.confirmUrl);
-              return;
-            }
+      void notify.promise(promise, {
+        loading: 'Меняем тариф...',
+        success: 'Тариф изменён',
+        error: (error) =>
+          (error as ApiError).detail ?? 'Не удалось сменить тариф',
+      });
 
-            router.push(ROUTES.profileTariffChangeSuccess);
-          },
-          onError: (error) => {
-            setSelectedTariff(null);
-            notify.error(error.detail ?? 'Не удалось сменить тариф');
-          },
-        },
-      );
+      promise
+        .then((data) => {
+          if (data?.confirmUrl) {
+            window.location.href = data.confirmUrl;
+            return;
+          }
+
+          router.push(ROUTES.profileTariffChangeSuccess);
+        })
+        .finally(() => {
+          setSelectedTariff(null);
+        });
     },
     [changeTariff, period, router],
   );
