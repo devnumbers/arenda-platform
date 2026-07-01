@@ -4,7 +4,7 @@ import { useCallback, type JSX } from 'react';
 import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
-import { toast } from 'react-toastify';
+import { notify } from '@/shared/lib/toast';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import {
@@ -17,6 +17,7 @@ import { isPaidTariff } from '@/entities/user/lib/is-paid-tariff';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { formatDate } from '@/shared/lib/format-date';
 import type { Subscription } from '@/entities/billing/model/types';
+import { ApiError } from '@/shared/api/errors';
 import styles from './TariffOverview.module.css';
 
 const STATUS_LABELS: Record<
@@ -66,13 +67,11 @@ export function TariffOverview(): JSX.Element {
   const cancel = useCancelSubscription();
 
   const handleCancel = useCallback(() => {
-    cancel.mutate(undefined, {
-      onSuccess: () => {
-        toast.success('Подписка отменена');
-      },
-      onError: (error) => {
-        toast.error(error.detail || 'Не удалось отменить подписку');
-      },
+    void notify.promise(cancel.mutateAsync(undefined), {
+      loading: 'Отменяем подписку...',
+      success: 'Подписка отменена',
+      error: (error) =>
+        (error as ApiError).detail ?? 'Не удалось отменить подписку',
     });
   }, [cancel]);
 

@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
-import { toast } from 'react-toastify';
+import { notify } from '@/shared/lib/toast';
 import { Button } from '@/shared/ui/button';
 import {
   useTariffs,
@@ -142,7 +142,7 @@ export function TariffChangeForm(): JSX.Element {
           },
           onError: (error) => {
             setSelectedTariff(null);
-            toast.error(error.detail || 'Не удалось сменить тариф');
+            notify.error(error.detail ?? 'Не удалось сменить тариф');
           },
         },
       );
