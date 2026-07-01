@@ -20,6 +20,7 @@ export function PageHeader({ backHref, title, actions, className }: PageHeaderPr
             href={backHref}
             aria-label="Назад"
             icon={<ArrowLeft />}
+            variant="icon-black"
           />
         )}
         <h1 className={styles.title}>{title}</h1>

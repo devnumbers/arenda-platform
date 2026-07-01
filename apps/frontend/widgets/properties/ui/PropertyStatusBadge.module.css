@@ -2,6 +2,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  width: fit-content;
+  height: 26px;
   padding: 0 12px 0 6px;
   border-radius: 8px;
   background: #ffffff;

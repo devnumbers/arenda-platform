@@ -605,7 +605,7 @@ export function LeaseDetailPage({ id }: LeaseDetailPageProps): JSX.Element {
               !readonly && (
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="primary"
                   size="small"
                   onClick={handleToggleEdit}
                 >

@@ -61,7 +61,7 @@ export function TenantDetailPage({ id }: TenantDetailPageProps): JSX.Element {
   const fullName = getTenantContactFullName(tenant);
 
   const headerActions = (
-    <LinkButton href={ROUTES.tenantEdit(id)} variant="secondary" size="small">
+    <LinkButton href={ROUTES.tenantEdit(id)} variant="primary" size="small">
       Редактировать
     </LinkButton>
   );

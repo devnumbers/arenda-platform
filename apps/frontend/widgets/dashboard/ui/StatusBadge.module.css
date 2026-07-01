@@ -1,5 +1,9 @@
 .root {
   display: inline-flex;
+
+  width: fit-content;
+  height: 26px;
+
   align-items: center;
   gap: 4px;
   padding: 0 12px 0 6px;
