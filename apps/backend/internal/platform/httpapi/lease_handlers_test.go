@@ -304,7 +304,7 @@ func TestLeaseHandlers_ReturnLeaseDeposit(t *testing.T) {
 	if resp.DepositAmountKopecks != 50000 {
 		t.Fatalf("expected deposit 50000, got %d", resp.DepositAmountKopecks)
 	}
-	if resp.Status != openapi.LeaseResponseStatus(domain.LeaseStatusCompleted) {
+	if resp.Status != openapi.LeaseStatusCompleted {
 		t.Fatalf("expected completed status, got %s", resp.Status)
 	}
 

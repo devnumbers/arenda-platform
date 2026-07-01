@@ -11,6 +11,35 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countUsersAdmin = `-- name: CountUsersAdmin :one
+SELECT COUNT(*)
+FROM users u
+LEFT JOIN user_subscriptions us ON us.user_id = u.id
+WHERE ($1::text = '' OR u.phone = $1::text)
+  AND ($2::text = '' OR LOWER(u.email) LIKE LOWER('%' || $2 || '%'))
+  AND ($3::text = '' OR u.role = $3::text)
+  AND ($4::text = '' OR us.status = $4::text)
+`
+
+type CountUsersAdminParams struct {
+	Phone              string `json:"phone"`
+	Email              string `json:"email"`
+	Role               string `json:"role"`
+	SubscriptionStatus string `json:"subscription_status"`
+}
+
+func (q *Queries) CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsersAdmin,
+		arg.Phone,
+		arg.Email,
+		arg.Role,
+		arg.SubscriptionStatus,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createLoginCode = `-- name: CreateLoginCode :exec
 INSERT INTO login_codes (id, phone, email, code_hash, expires_at, user_id, purpose, phone_encrypted)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -565,6 +594,82 @@ func (q *Queries) GetUserPhoneByID(ctx context.Context, id pgtype.UUID) (GetUser
 	var i GetUserPhoneByIDRow
 	err := row.Scan(&i.Phone, &i.PhoneEncrypted)
 	return i, err
+}
+
+const listUsersAdmin = `-- name: ListUsersAdmin :many
+SELECT u.id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.created_at, u.updated_at, u.phone_encrypted, u.email_verified_at, us.status AS subscription_status
+FROM users u
+LEFT JOIN user_subscriptions us ON us.user_id = u.id
+WHERE ($1::text = '' OR u.phone = $1::text)
+  AND ($2::text = '' OR LOWER(u.email) LIKE LOWER('%' || $2 || '%'))
+  AND ($3::text = '' OR u.role = $3::text)
+  AND ($4::text = '' OR us.status = $4::text)
+ORDER BY u.created_at DESC
+LIMIT $6::int OFFSET $5::int
+`
+
+type ListUsersAdminParams struct {
+	Phone              string `json:"phone"`
+	Email              string `json:"email"`
+	Role               string `json:"role"`
+	SubscriptionStatus string `json:"subscription_status"`
+	Offset             int32  `json:"offset"`
+	Limit              int32  `json:"limit"`
+}
+
+type ListUsersAdminRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	Phone              string             `json:"phone"`
+	Role               string             `json:"role"`
+	Name               pgtype.Text        `json:"name"`
+	Surname            pgtype.Text        `json:"surname"`
+	Patronymic         pgtype.Text        `json:"patronymic"`
+	Email              pgtype.Text        `json:"email"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	PhoneEncrypted     bool               `json:"phone_encrypted"`
+	EmailVerifiedAt    pgtype.Timestamptz `json:"email_verified_at"`
+	SubscriptionStatus pgtype.Text        `json:"subscription_status"`
+}
+
+func (q *Queries) ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error) {
+	rows, err := q.db.Query(ctx, listUsersAdmin,
+		arg.Phone,
+		arg.Email,
+		arg.Role,
+		arg.SubscriptionStatus,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUsersAdminRow{}
+	for rows.Next() {
+		var i ListUsersAdminRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Phone,
+			&i.Role,
+			&i.Name,
+			&i.Surname,
+			&i.Patronymic,
+			&i.Email,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PhoneEncrypted,
+			&i.EmailVerifiedAt,
+			&i.SubscriptionStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const markLoginCodeUsed = `-- name: MarkLoginCodeUsed :exec

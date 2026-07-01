@@ -57,3 +57,16 @@ WHERE tc.owner_id = $1
 ORDER BY
     CASE WHEN l.status IN ('awaiting_start', 'active', 'requires_action') THEN 0 ELSE 1 END,
     l.updated_at DESC;
+
+-- name: ListTenantContactsByOwnerAdmin :many
+SELECT * FROM tenant_contacts
+WHERE owner_id = $1
+ORDER BY updated_at DESC
+LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
+
+-- name: CountTenantContactsByOwnerAdmin :one
+SELECT COUNT(*) FROM tenant_contacts
+WHERE owner_id = $1;
+
+-- name: GetTenantContactByIDAdmin :one
+SELECT * FROM tenant_contacts WHERE id = $1;

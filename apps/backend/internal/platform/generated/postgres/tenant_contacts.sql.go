@@ -11,6 +11,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countTenantContactsByOwnerAdmin = `-- name: CountTenantContactsByOwnerAdmin :one
+SELECT COUNT(*) FROM tenant_contacts
+WHERE owner_id = $1
+`
+
+func (q *Queries) CountTenantContactsByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countTenantContactsByOwnerAdmin, ownerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createTenantContact = `-- name: CreateTenantContact :one
 INSERT INTO tenant_contacts (owner_id, name, surname, patronymic, phone, email, comment)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -37,6 +49,28 @@ func (q *Queries) CreateTenantContact(ctx context.Context, arg CreateTenantConta
 		arg.Email,
 		arg.Comment,
 	)
+	var i TenantContact
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Surname,
+		&i.Patronymic,
+		&i.Phone,
+		&i.Email,
+		&i.Comment,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTenantContactByIDAdmin = `-- name: GetTenantContactByIDAdmin :one
+SELECT id, owner_id, name, surname, patronymic, phone, email, comment, created_at, updated_at FROM tenant_contacts WHERE id = $1
+`
+
+func (q *Queries) GetTenantContactByIDAdmin(ctx context.Context, id pgtype.UUID) (TenantContact, error) {
+	row := q.db.QueryRow(ctx, getTenantContactByIDAdmin, id)
 	var i TenantContact
 	err := row.Scan(
 		&i.ID,
@@ -130,6 +164,50 @@ ORDER BY updated_at DESC
 
 func (q *Queries) ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]TenantContact, error) {
 	rows, err := q.db.Query(ctx, listTenantContactsByOwner, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TenantContact{}
+	for rows.Next() {
+		var i TenantContact
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Name,
+			&i.Surname,
+			&i.Patronymic,
+			&i.Phone,
+			&i.Email,
+			&i.Comment,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTenantContactsByOwnerAdmin = `-- name: ListTenantContactsByOwnerAdmin :many
+SELECT id, owner_id, name, surname, patronymic, phone, email, comment, created_at, updated_at FROM tenant_contacts
+WHERE owner_id = $1
+ORDER BY updated_at DESC
+LIMIT $3::int OFFSET $2::int
+`
+
+type ListTenantContactsByOwnerAdminParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Offset  int32       `json:"offset"`
+	Limit   int32       `json:"limit"`
+}
+
+func (q *Queries) ListTenantContactsByOwnerAdmin(ctx context.Context, arg ListTenantContactsByOwnerAdminParams) ([]TenantContact, error) {
+	rows, err := q.db.Query(ctx, listTenantContactsByOwnerAdmin, arg.OwnerID, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

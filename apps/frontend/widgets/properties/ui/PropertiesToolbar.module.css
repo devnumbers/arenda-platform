@@ -43,8 +43,8 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
   background: #f1f3f6;
   color: #1e1e1e;
@@ -84,6 +84,7 @@
 
 .chip {
   border-radius: 10px;
+  padding: 6px 10px;
 }
 
 .reset {
@@ -128,4 +129,9 @@
 
 .popoverOption {
   justify-content: flex-start;
+}
+
+:global(.popover__dialog) .options {
+  flex-direction: column;
+  flex-wrap: nowrap;
 }

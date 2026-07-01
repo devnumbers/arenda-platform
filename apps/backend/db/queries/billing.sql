@@ -140,6 +140,12 @@ RETURNING *;
 -- name: GetSubscriptionPaymentByID :one
 SELECT * FROM subscription_payments WHERE id = $1;
 
+-- name: GetSubscriptionPaymentByIDAdmin :one
+SELECT sp.*, u.phone AS user_phone
+FROM subscription_payments sp
+JOIN users u ON sp.user_id = u.id
+WHERE sp.id = $1;
+
 -- name: GetSubscriptionPaymentByIDForUpdate :one
 SELECT * FROM subscription_payments WHERE id = $1 FOR UPDATE;
 
@@ -270,12 +276,14 @@ LIMIT $2;
 SELECT sp.*, u.phone AS user_phone
 FROM subscription_payments sp
 JOIN users u ON sp.user_id = u.id
-WHERE ($1::text = '' OR sp.status = $1::text)
+WHERE (sqlc.arg('status')::text = '' OR sp.status = sqlc.arg('status')::text)
+  AND (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id')::uuid)
 ORDER BY sp.created_at DESC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
 -- name: CountSubscriptionPaymentsAdmin :one
 SELECT COUNT(*)
 FROM subscription_payments sp
 JOIN users u ON sp.user_id = u.id
-WHERE ($1::text = '' OR sp.status = $1::text);
+WHERE (sqlc.arg('status')::text = '' OR sp.status = sqlc.arg('status')::text)
+  AND (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id')::uuid);

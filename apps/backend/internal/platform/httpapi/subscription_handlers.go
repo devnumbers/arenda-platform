@@ -402,7 +402,7 @@ func subscriptionResponse(view billingapp.SubscriptionView) openapi.Subscription
 		resp.PendingTariff = &pt
 	}
 	if sub.PendingPeriod != nil {
-		period := openapi.SubscriptionPendingPeriod(*sub.PendingPeriod)
+		period := openapi.AdminSubscriptionPaymentPeriod(*sub.PendingPeriod)
 		resp.PendingPeriod = &period
 	}
 	if view.ActivePaymentMethod != nil {
@@ -419,6 +419,17 @@ func paymentMethodResponse(pm domain.PaymentMethod) *openapi.PaymentMethod {
 		IsActive:    pm.IsActive,
 		CreatedAt:   pm.CreatedAt,
 	}
+}
+
+// GetAdminSubscriptionPayment implements GET /admin/subscription/payments/{paymentId}.
+func (h *SubscriptionHandlers) GetAdminSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId uuid.UUID) {
+	view, err := h.billing.GetPayment(r.Context(), paymentId)
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, adminSubscriptionPaymentResponse(view))
 }
 
 // RefundSubscriptionPayment implements POST /admin/subscription/payments/{paymentId}/refund.
@@ -448,7 +459,7 @@ func subscriptionPaymentResponse(view billingapp.SubscriptionPaymentView) openap
 	return openapi.SubscriptionPayment{
 		Id:            p.ID,
 		Tariff:        tariffResponse(view.Tariff),
-		Period:        openapi.SubscriptionPaymentPeriod(p.Period),
+		Period:        openapi.AdminSubscriptionPaymentPeriod(p.Period),
 		AmountKopecks: int(p.AmountKopecks),
 		Status:        openapi.SubscriptionPaymentStatus(p.Status),
 		Provider:      string(p.Provider),
@@ -458,17 +469,25 @@ func subscriptionPaymentResponse(view billingapp.SubscriptionPaymentView) openap
 
 func adminSubscriptionPaymentResponse(view billingapp.AdminSubscriptionPaymentView) openapi.AdminSubscriptionPayment {
 	p := view.Payment
-	return openapi.AdminSubscriptionPayment{
+	resp := openapi.AdminSubscriptionPayment{
 		Id:            p.ID,
 		Tariff:        tariffResponse(view.Tariff),
 		Period:        openapi.AdminSubscriptionPaymentPeriod(p.Period),
 		AmountKopecks: int(p.AmountKopecks),
-		Status:        openapi.AdminSubscriptionPaymentStatus(p.Status),
+		Status:        openapi.SubscriptionPaymentStatus(p.Status),
 		Provider:      string(p.Provider),
 		UserId:        p.UserID,
 		UserPhone:     view.UserPhone,
 		CreatedAt:     p.CreatedAt,
+		UpdatedAt:     p.UpdatedAt,
+		SucceededAt:   p.SucceededAt,
+		PaymentMethodId: p.PaymentMethodID,
 	}
+	if p.RefundedAmountKopecks != nil {
+		v := int(*p.RefundedAmountKopecks)
+		resp.RefundedAmountKopecks = &v
+	}
+	return resp
 }
 
 // SyncSubscriptionPayment implements POST /admin/subscription/payments/{paymentId}/sync.
@@ -495,6 +514,9 @@ func (h *SubscriptionHandlers) ListAdminSubscriptionPayments(w http.ResponseWrit
 	}
 	if params.Status != nil {
 		filters.Status = string(*params.Status)
+	}
+	if params.UserId != nil {
+		filters.UserID = *params.UserId
 	}
 
 	views, total, err := h.billing.ListAllPayments(r.Context(), filters)

@@ -240,6 +240,13 @@ func (r *testSubscriptionPaymentRepo) GetByID(_ context.Context, id uuid.UUID) (
 	return domain.SubscriptionPayment{}, billingapp.ErrNotFound
 }
 
+func (r *testSubscriptionPaymentRepo) GetByIDAdmin(_ context.Context, id uuid.UUID) (billingapp.SubscriptionPaymentWithUser, error) {
+	if p, ok := r.payments[id]; ok {
+		return billingapp.SubscriptionPaymentWithUser{Payment: p, UserPhone: ""}, nil
+	}
+	return billingapp.SubscriptionPaymentWithUser{}, billingapp.ErrNotFound
+}
+
 func (r *testSubscriptionPaymentRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error) {
 	return r.GetByID(ctx, id)
 }
@@ -272,7 +279,7 @@ func (r *testSubscriptionPaymentRepo) ListPendingPayments(_ context.Context, _ t
 	return nil, nil
 }
 
-func (r *testSubscriptionPaymentRepo) ListAll(_ context.Context, _ string, _, _ int) ([]billingapp.SubscriptionPaymentWithUser, int64, error) {
+func (r *testSubscriptionPaymentRepo) ListAll(_ context.Context, _ string, _ uuid.UUID, _, _ int) ([]billingapp.SubscriptionPaymentWithUser, int64, error) {
 	return nil, 0, nil
 }
 
@@ -598,7 +605,7 @@ func TestSubscriptionHandlers_GetSubscription(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp.Tariff.Name != openapi.TariffNameBasic {
+	if resp.Tariff.Name != openapi.Basic {
 		t.Errorf("expected tariff basic, got %s", resp.Tariff.Name)
 	}
 	if resp.Status != openapi.SubscriptionStatusActive {

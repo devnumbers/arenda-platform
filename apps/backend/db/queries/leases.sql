@@ -82,3 +82,15 @@ LIMIT sqlc.arg('limit')::int;
 SELECT * FROM leases
 WHERE property_id = $1 AND owner_id = $2
 ORDER BY updated_at DESC;
+
+-- name: ListLeasesByOwnerAdmin :many
+SELECT * FROM leases
+WHERE owner_id = $1
+ORDER BY updated_at DESC
+LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
+
+-- name: CountLeasesByOwnerAdmin :one
+SELECT COUNT(*) FROM leases
+WHERE owner_id = $1;
+
+-- GetLeaseByIDAdmin is implemented by the existing GetLeaseByID query (no owner filter).

@@ -88,7 +88,6 @@ function FilterGroup({
 }): JSX.Element {
     return (
         <fieldset className={styles.group}>
-            <legend className={styles.groupTitle}>{title}</legend>
             <div className={styles.options}>{children}</div>
         </fieldset>
     );
@@ -350,7 +349,7 @@ export function PropertiesToolbar({
                         className={styles.addButton}
                         aria-label="Добавить объект"
                     >
-                        <Icon size="s">
+                        <Icon size="m">
                             <HomeAdd/>
                         </Icon>
                     </NextLink>
@@ -385,7 +384,7 @@ export function PropertiesToolbar({
                                 variant="secondary"
                                 size="tiny"
                                 rightIcon={
-                                    <Icon size="xs">
+                                    <Icon size="s">
                                         <Cancel/>
                                     </Icon>
                                 }

@@ -39,3 +39,26 @@ RETURNING *;
 -- name: CountActivePropertiesByOwner :one
 SELECT COUNT(*) FROM properties
 WHERE owner_id = $1 AND status = 'active';
+
+-- name: ListPropertiesByOwnerAdmin :many
+SELECT * FROM properties
+WHERE owner_id = $1
+  AND (sqlc.arg('status')::text = '' OR status = sqlc.arg('status')::text)
+ORDER BY updated_at DESC
+LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
+
+-- name: CountPropertiesByOwnerAdmin :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1
+  AND (sqlc.arg('status')::text = '' OR status = sqlc.arg('status')::text);
+
+-- name: GetPropertyByIDAdmin :one
+SELECT * FROM properties WHERE id = $1;
+
+-- name: CountActivePropertiesByOwnerAdmin :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND status = 'active';
+
+-- name: CountArchivedPropertiesByOwnerAdmin :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND status = 'archived';

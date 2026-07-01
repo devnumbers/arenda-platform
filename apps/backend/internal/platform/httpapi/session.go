@@ -101,6 +101,8 @@ func (fallbackClock) Now() time.Time { return time.Now().UTC() }
 var publicSessionSkippedPaths = []string{
 	"/auth/phone/send",
 	"/auth/phone/verify",
+	"/auth/email/send",
+	"/auth/email/verify",
 	"/webhooks/",
 	"/internal/perf/",
 }

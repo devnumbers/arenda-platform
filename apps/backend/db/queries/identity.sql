@@ -143,3 +143,25 @@ SET email = $2,
     updated_at = now()
 WHERE id = $1
 RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted;
+
+-- name: ListUsersAdmin :many
+SELECT u.*, us.status AS subscription_status
+FROM users u
+LEFT JOIN user_subscriptions us ON us.user_id = u.id
+WHERE (sqlc.arg('phone')::text = '' OR u.phone = sqlc.arg('phone')::text)
+  AND (sqlc.arg('email')::text = '' OR LOWER(u.email) LIKE LOWER('%' || sqlc.arg('email') || '%'))
+  AND (sqlc.arg('role')::text = '' OR u.role = sqlc.arg('role')::text)
+  AND (sqlc.arg('subscription_status')::text = '' OR us.status = sqlc.arg('subscription_status')::text)
+ORDER BY u.created_at DESC
+LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
+
+-- name: CountUsersAdmin :one
+SELECT COUNT(*)
+FROM users u
+LEFT JOIN user_subscriptions us ON us.user_id = u.id
+WHERE (sqlc.arg('phone')::text = '' OR u.phone = sqlc.arg('phone')::text)
+  AND (sqlc.arg('email')::text = '' OR LOWER(u.email) LIKE LOWER('%' || sqlc.arg('email') || '%'))
+  AND (sqlc.arg('role')::text = '' OR u.role = sqlc.arg('role')::text)
+  AND (sqlc.arg('subscription_status')::text = '' OR us.status = sqlc.arg('subscription_status')::text);
+
+-- GetUserByIDAdmin is implemented by the existing GetUserByID query (no owner filter).

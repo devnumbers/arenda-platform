@@ -419,9 +419,9 @@ func (h *PropertyHandlers) propertyResponse(ctx context.Context, ownerID uuid.UU
 	resp := openapi.PropertyResponse{
 		Id:        property.ID,
 		Name:      property.Name,
-		Type:      openapi.PropertyResponseType(property.Type),
+		Type:      openapi.PropertyType(property.Type),
 		Address:   property.Address,
-		Status:    openapi.PropertyResponseStatus(property.Status),
+		Status:    openapi.PropertyStatus(property.Status),
 		Occupancy: openapi.PropertyResponseOccupancy(property.Occupancy),
 		CreatedAt: property.CreatedAt,
 		UpdatedAt: property.UpdatedAt,

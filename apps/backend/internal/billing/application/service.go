@@ -139,7 +139,7 @@ func (s *BillingService) GetSubscription(ctx context.Context, userID uuid.UUID) 
 		return SubscriptionView{}, fmt.Errorf("get last succeeded payment: %w", err)
 	}
 	if err == nil {
-		period := domain.SubscriptionPeriod(lastPayment.Period)
+		period := lastPayment.Period
 		sub.CurrentPeriod = &period
 		view.Subscription = sub
 	}
@@ -611,6 +611,31 @@ func (s *BillingService) ListPayments(ctx context.Context, userID uuid.UUID) ([]
 	return views, nil
 }
 
+// GetPayment returns a single subscription payment for admin view.
+func (s *BillingService) GetPayment(ctx context.Context, paymentID uuid.UUID) (AdminSubscriptionPaymentView, error) {
+	p, err := s.subscriptionPayments.GetByIDAdmin(ctx, paymentID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return AdminSubscriptionPaymentView{}, ErrPaymentNotFound
+		}
+		return AdminSubscriptionPaymentView{}, fmt.Errorf("get payment: %w", err)
+	}
+
+	tariff, err := s.tariffs.GetByID(ctx, p.Payment.TariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return AdminSubscriptionPaymentView{}, ErrTariffNotFound
+		}
+		return AdminSubscriptionPaymentView{}, fmt.Errorf("get payment tariff: %w", err)
+	}
+
+	return AdminSubscriptionPaymentView{
+		Payment:   p.Payment,
+		Tariff:    tariff,
+		UserPhone: p.UserPhone,
+	}, nil
+}
+
 // ListAllPayments returns all subscription payments for admin view.
 func (s *BillingService) ListAllPayments(ctx context.Context, filters ListAllPaymentsFilters) ([]AdminSubscriptionPaymentView, int64, error) {
 	if filters.Limit <= 0 {
@@ -632,7 +657,7 @@ func (s *BillingService) ListAllPayments(ctx context.Context, filters ListAllPay
 		return nil, 0, fmt.Errorf("%w: invalid status filter", ErrInvalidFilter)
 	}
 
-	payments, total, err := s.subscriptionPayments.ListAll(ctx, filters.Status, filters.Limit, filters.Offset)
+	payments, total, err := s.subscriptionPayments.ListAll(ctx, filters.Status, filters.UserID, filters.Limit, filters.Offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list all payments: %w", err)
 	}

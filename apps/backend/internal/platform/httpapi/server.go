@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
@@ -22,6 +23,7 @@ import (
 type Deps struct {
 	Auth                  *identityapp.AuthService
 	Billing               *billingapp.BillingService
+	Admin                 *adminapp.AdminService
 	Sessions              identityapp.SessionRepository
 	Properties            *propertiesapp.PropertyService
 	AddressSuggester      propertiesapp.AddressSuggester
@@ -89,6 +91,7 @@ func New(deps Deps) http.Handler {
 	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
 	subscriptionHandlers := NewSubscriptionHandlers(deps.Billing, deps.Logger, deps.DevMode)
 	financeHandlers := NewFinanceHandlers(deps.Operations)
+	adminHandlers := NewAdminHandlers(deps.Admin, deps.Billing, deps.Logger)
 
 	handler := &composedHandler{
 		AuthHandlers:               authHandlers,
@@ -99,6 +102,7 @@ func New(deps Deps) http.Handler {
 		ReminderHandlers:           reminderHandlers,
 		SubscriptionHandlers:       subscriptionHandlers,
 		FinanceHandlers:            financeHandlers,
+		AdminHandlers:              adminHandlers,
 	}
 
 	// The generated OpenAPI router has no per-route middleware support, so we
@@ -116,8 +120,19 @@ func New(deps Deps) http.Handler {
 		ErrorHandlerFunc: openAPIErrorHandler,
 	}
 	r.With(AdminOnlyMiddleware).Get("/admin/subscription/payments", wrapper.ListAdminSubscriptionPayments)
+	r.With(AdminOnlyMiddleware).Get("/admin/subscription/payments/{paymentId}", wrapper.GetAdminSubscriptionPayment)
 	r.With(AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/refund", wrapper.RefundSubscriptionPayment)
 	r.With(AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/sync", wrapper.SyncSubscriptionPayment)
+	r.With(AdminOnlyMiddleware).Get("/admin/users", wrapper.ListAdminUsers)
+	r.With(AdminOnlyMiddleware).Get("/admin/users/{id}", wrapper.GetAdminUser)
+	r.With(AdminOnlyMiddleware).Get("/admin/users/{id}/properties", wrapper.ListAdminUserProperties)
+	r.With(AdminOnlyMiddleware).Get("/admin/users/{id}/leases", wrapper.ListAdminUserLeases)
+	r.With(AdminOnlyMiddleware).Get("/admin/users/{id}/tenant-contacts", wrapper.ListAdminUserTenantContacts)
+	r.With(AdminOnlyMiddleware).Get("/admin/users/{id}/operations", wrapper.ListAdminUserOperations)
+	r.With(AdminOnlyMiddleware).Get("/admin/properties/{id}", wrapper.GetAdminProperty)
+	r.With(AdminOnlyMiddleware).Get("/admin/leases/{id}", wrapper.GetAdminLease)
+	r.With(AdminOnlyMiddleware).Get("/admin/tenant-contacts/{id}", wrapper.GetAdminTenantContact)
+	r.With(AdminOnlyMiddleware).Get("/admin/operations/{id}", wrapper.GetAdminOperation)
 
 	// T-Kassa redirects the user here after the add-card bank form. Redirect them
 	// back to the frontend payment-methods page with a query flag so the UI can
@@ -175,4 +190,5 @@ type composedHandler struct {
 	*ReminderHandlers
 	*SubscriptionHandlers
 	*FinanceHandlers
+	*AdminHandlers
 }

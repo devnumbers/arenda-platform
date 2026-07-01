@@ -60,6 +60,7 @@ type AdminSubscriptionPaymentView struct {
 // ListAllPaymentsFilters carries optional filters for the admin list endpoint.
 type ListAllPaymentsFilters struct {
 	Status string
+	UserID uuid.UUID
 	Limit  int
 	Offset int
 }

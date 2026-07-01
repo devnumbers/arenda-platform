@@ -65,6 +65,35 @@ func (r *SubscriptionPaymentRepository) GetByID(ctx context.Context, id uuid.UUI
 	return mapSubscriptionPayment(row), nil
 }
 
+// GetByIDAdmin returns a subscription payment by ID together with the user's phone.
+func (r *SubscriptionPaymentRepository) GetByIDAdmin(ctx context.Context, id uuid.UUID) (application.SubscriptionPaymentWithUser, error) {
+	row, err := r.q().GetSubscriptionPaymentByIDAdmin(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.SubscriptionPaymentWithUser{}, application.ErrNotFound
+		}
+		return application.SubscriptionPaymentWithUser{}, fmt.Errorf("get subscription payment by id admin: %w", err)
+	}
+	return mapSubscriptionPaymentWithUser(postgres.SubscriptionPayment{
+		ID:                    row.ID,
+		UserID:                row.UserID,
+		SubscriptionID:        row.SubscriptionID,
+		TariffID:              row.TariffID,
+		PaymentMethodID:       row.PaymentMethodID,
+		Period:                row.Period,
+		AmountKopecks:         row.AmountKopecks,
+		Provider:              row.Provider,
+		ProviderPaymentID:     row.ProviderPaymentID,
+		PaymentUrl:            row.PaymentUrl,
+		Status:                row.Status,
+		RefundedAmountKopecks: row.RefundedAmountKopecks,
+		ErrorCode:             row.ErrorCode,
+		CreatedAt:             row.CreatedAt,
+		UpdatedAt:             row.UpdatedAt,
+		SucceededAt:           row.SucceededAt,
+	}, row.UserPhone), nil
+}
+
 // GetByIDForUpdate returns a subscription payment by ID, locking the row for update.
 func (r *SubscriptionPaymentRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error) {
 	row, err := r.q().GetSubscriptionPaymentByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
@@ -126,9 +155,11 @@ func (r *SubscriptionPaymentRepository) ListPendingPayments(ctx context.Context,
 }
 
 // ListAll returns all subscription payments for admin view.
-func (r *SubscriptionPaymentRepository) ListAll(ctx context.Context, status string, limit, offset int) ([]application.SubscriptionPaymentWithUser, int64, error) {
+func (r *SubscriptionPaymentRepository) ListAll(ctx context.Context, status string, userID uuid.UUID, limit, offset int) ([]application.SubscriptionPaymentWithUser, int64, error) {
+	pgUserID := pgtype.UUID{Bytes: userID, Valid: userID != uuid.Nil}
 	rows, err := r.q().ListSubscriptionPaymentsAdmin(ctx, postgres.ListSubscriptionPaymentsAdminParams{
-		Column1: status,
+		Status: status,
+		UserID: pgUserID,
 		//nolint:gosec // Limit and offset are validated by the HTTP layer.
 		Limit: int32(limit),
 		//nolint:gosec // Limit and offset are validated by the HTTP layer.
@@ -140,13 +171,30 @@ func (r *SubscriptionPaymentRepository) ListAll(ctx context.Context, status stri
 
 	items := make([]application.SubscriptionPaymentWithUser, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, application.SubscriptionPaymentWithUser{
-			Payment:   mapListSubscriptionPaymentsAdminRow(row),
-			UserPhone: row.UserPhone,
-		})
+		items = append(items, mapSubscriptionPaymentWithUser(postgres.SubscriptionPayment{
+			ID:                    row.ID,
+			UserID:                row.UserID,
+			SubscriptionID:        row.SubscriptionID,
+			TariffID:              row.TariffID,
+			PaymentMethodID:       row.PaymentMethodID,
+			Period:                row.Period,
+			AmountKopecks:         row.AmountKopecks,
+			Provider:              row.Provider,
+			ProviderPaymentID:     row.ProviderPaymentID,
+			PaymentUrl:            row.PaymentUrl,
+			Status:                row.Status,
+			RefundedAmountKopecks: row.RefundedAmountKopecks,
+			ErrorCode:             row.ErrorCode,
+			CreatedAt:             row.CreatedAt,
+			UpdatedAt:             row.UpdatedAt,
+			SucceededAt:           row.SucceededAt,
+		}, row.UserPhone))
 	}
 
-	total, err := r.q().CountSubscriptionPaymentsAdmin(ctx, status)
+	total, err := r.q().CountSubscriptionPaymentsAdmin(ctx, postgres.CountSubscriptionPaymentsAdminParams{
+		Status: status,
+		UserID: pgUserID,
+	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("count subscription payments admin: %w", err)
 	}
@@ -364,23 +412,9 @@ func mapSubscriptionPayments(rows []postgres.SubscriptionPayment) []domain.Subsc
 	return result
 }
 
-func mapListSubscriptionPaymentsAdminRow(row postgres.ListSubscriptionPaymentsAdminRow) domain.SubscriptionPayment {
-	return mapSubscriptionPayment(postgres.SubscriptionPayment{
-		ID:                    row.ID,
-		UserID:                row.UserID,
-		SubscriptionID:        row.SubscriptionID,
-		TariffID:              row.TariffID,
-		PaymentMethodID:       row.PaymentMethodID,
-		Period:                row.Period,
-		AmountKopecks:         row.AmountKopecks,
-		Provider:              row.Provider,
-		ProviderPaymentID:     row.ProviderPaymentID,
-		PaymentUrl:            row.PaymentUrl,
-		Status:                row.Status,
-		RefundedAmountKopecks: row.RefundedAmountKopecks,
-		ErrorCode:             row.ErrorCode,
-		CreatedAt:             row.CreatedAt,
-		UpdatedAt:             row.UpdatedAt,
-		SucceededAt:           row.SucceededAt,
-	})
+func mapSubscriptionPaymentWithUser(payment postgres.SubscriptionPayment, phone string) application.SubscriptionPaymentWithUser {
+	return application.SubscriptionPaymentWithUser{
+		Payment:   mapSubscriptionPayment(payment),
+		UserPhone: phone,
+	}
 }

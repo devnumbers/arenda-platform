@@ -16,10 +16,16 @@ SELECT COUNT(*)
 FROM subscription_payments sp
 JOIN users u ON sp.user_id = u.id
 WHERE ($1::text = '' OR sp.status = $1::text)
+  AND ($2::uuid IS NULL OR sp.user_id = $2::uuid)
 `
 
-func (q *Queries) CountSubscriptionPaymentsAdmin(ctx context.Context, dollar_1 string) (int64, error) {
-	row := q.db.QueryRow(ctx, countSubscriptionPaymentsAdmin, dollar_1)
+type CountSubscriptionPaymentsAdminParams struct {
+	Status string      `json:"status"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSubscriptionPaymentsAdmin, arg.Status, arg.UserID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -446,6 +452,58 @@ func (q *Queries) GetSubscriptionPaymentByID(ctx context.Context, id pgtype.UUID
 	return i, err
 }
 
+const getSubscriptionPaymentByIDAdmin = `-- name: GetSubscriptionPaymentByIDAdmin :one
+SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id, sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.status, sp.error_code, sp.created_at, sp.updated_at, sp.payment_url, sp.succeeded_at, sp.refunded_amount_kopecks, u.phone AS user_phone
+FROM subscription_payments sp
+JOIN users u ON sp.user_id = u.id
+WHERE sp.id = $1
+`
+
+type GetSubscriptionPaymentByIDAdminRow struct {
+	ID                    pgtype.UUID        `json:"id"`
+	UserID                pgtype.UUID        `json:"user_id"`
+	SubscriptionID        pgtype.UUID        `json:"subscription_id"`
+	TariffID              pgtype.UUID        `json:"tariff_id"`
+	PaymentMethodID       pgtype.UUID        `json:"payment_method_id"`
+	Period                string             `json:"period"`
+	AmountKopecks         int64              `json:"amount_kopecks"`
+	Provider              string             `json:"provider"`
+	ProviderPaymentID     pgtype.Text        `json:"provider_payment_id"`
+	Status                string             `json:"status"`
+	ErrorCode             pgtype.Text        `json:"error_code"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	PaymentUrl            pgtype.Text        `json:"payment_url"`
+	SucceededAt           pgtype.Timestamptz `json:"succeeded_at"`
+	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
+	UserPhone             string             `json:"user_phone"`
+}
+
+func (q *Queries) GetSubscriptionPaymentByIDAdmin(ctx context.Context, id pgtype.UUID) (GetSubscriptionPaymentByIDAdminRow, error) {
+	row := q.db.QueryRow(ctx, getSubscriptionPaymentByIDAdmin, id)
+	var i GetSubscriptionPaymentByIDAdminRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SubscriptionID,
+		&i.TariffID,
+		&i.PaymentMethodID,
+		&i.Period,
+		&i.AmountKopecks,
+		&i.Provider,
+		&i.ProviderPaymentID,
+		&i.Status,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PaymentUrl,
+		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
+		&i.UserPhone,
+	)
+	return i, err
+}
+
 const getSubscriptionPaymentByIDForUpdate = `-- name: GetSubscriptionPaymentByIDForUpdate :one
 SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks FROM subscription_payments WHERE id = $1 FOR UPDATE
 `
@@ -802,14 +860,16 @@ SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id
 FROM subscription_payments sp
 JOIN users u ON sp.user_id = u.id
 WHERE ($1::text = '' OR sp.status = $1::text)
+  AND ($2::uuid IS NULL OR sp.user_id = $2::uuid)
 ORDER BY sp.created_at DESC
-LIMIT $2 OFFSET $3
+LIMIT $4::int OFFSET $3::int
 `
 
 type ListSubscriptionPaymentsAdminParams struct {
-	Column1 string `json:"column_1"`
-	Limit   int32  `json:"limit"`
-	Offset  int32  `json:"offset"`
+	Status string      `json:"status"`
+	UserID pgtype.UUID `json:"user_id"`
+	Offset int32       `json:"offset"`
+	Limit  int32       `json:"limit"`
 }
 
 type ListSubscriptionPaymentsAdminRow struct {
@@ -833,7 +893,12 @@ type ListSubscriptionPaymentsAdminRow struct {
 }
 
 func (q *Queries) ListSubscriptionPaymentsAdmin(ctx context.Context, arg ListSubscriptionPaymentsAdminParams) ([]ListSubscriptionPaymentsAdminRow, error) {
-	rows, err := q.db.Query(ctx, listSubscriptionPaymentsAdmin, arg.Column1, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listSubscriptionPaymentsAdmin,
+		arg.Status,
+		arg.UserID,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}

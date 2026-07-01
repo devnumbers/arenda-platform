@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	adminpg "github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters/postgres"
+	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	paymentfake "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/fake"
 	paymenttkassa "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/tkassa"
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
@@ -273,6 +275,9 @@ func run(fallback *slog.Logger) error {
 		propertyService,
 	)
 
+	adminRepo := adminpg.NewAdminRepository(db, encryptor, realClock{}, occupancyProvider)
+	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billingService, realClock{})
+
 	leasePropertyRepo := leasespg.NewPropertyRepository(db)
 	tenantContactRepo := leasespg.NewTenantContactRepository(db)
 
@@ -348,6 +353,7 @@ func run(fallback *slog.Logger) error {
 	handler := httpapi.New(httpapi.Deps{
 		Auth:                  authService,
 		Billing:               billingService,
+		Admin:                 adminService,
 		Sessions:              identitySessionRepo,
 		Properties:            propertyService,
 		AddressSuggester:      dadataClient,

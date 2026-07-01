@@ -318,6 +318,14 @@ func (r *fakeSubscriptionPaymentRepo) GetByID(_ context.Context, id uuid.UUID) (
 	return p, nil
 }
 
+func (r *fakeSubscriptionPaymentRepo) GetByIDAdmin(_ context.Context, id uuid.UUID) (SubscriptionPaymentWithUser, error) {
+	p, ok := r.payments[id]
+	if !ok {
+		return SubscriptionPaymentWithUser{}, ErrNotFound
+	}
+	return SubscriptionPaymentWithUser{Payment: p, UserPhone: ""}, nil
+}
+
 func (r *fakeSubscriptionPaymentRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error) {
 	p, err := r.GetByID(ctx, id)
 	if err != nil {
@@ -388,7 +396,7 @@ func (r *fakeSubscriptionPaymentRepo) ListPendingPayments(_ context.Context, cre
 	return out, nil
 }
 
-func (r *fakeSubscriptionPaymentRepo) ListAll(_ context.Context, _ string, _, _ int) ([]SubscriptionPaymentWithUser, int64, error) {
+func (r *fakeSubscriptionPaymentRepo) ListAll(_ context.Context, _ string, _ uuid.UUID, _, _ int) ([]SubscriptionPaymentWithUser, int64, error) {
 	return nil, 0, nil
 }
 

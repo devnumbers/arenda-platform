@@ -1,9 +1,11 @@
 COMPOSE_LOCAL := docker compose -f docker-compose.local.yml
 BACKEND_DIR := apps/backend
+ADMIN_DIR := apps/admin
 GOLANGCI_LINT_VERSION := v2.12.2
 
 .PHONY: local-infra-up local-infra-down local-infra-reset backend-run backend-lint check-bruno-coverage check-backend-env check-migrate-env migrate-up migrate-down \
-        perf-db-up perf-db-down perf-db-reset perf-backend-run perf-seed perf-sustainable perf-breakdown
+        perf-db-up perf-db-down perf-db-reset perf-backend-run perf-seed perf-sustainable perf-breakdown \
+        admin-install admin-dev admin-build admin-typecheck
 
 local-infra-up:
 	$(COMPOSE_LOCAL) up -d
@@ -31,6 +33,18 @@ check-migrate-env:
 
 backend-lint:
 	cd $(BACKEND_DIR) && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --config ../../.golangci.yml ./...
+
+admin-install:
+	cd $(ADMIN_DIR) && npm install
+
+admin-dev:
+	cd $(ADMIN_DIR) && npm run dev
+
+admin-build:
+	cd $(ADMIN_DIR) && npm run build
+
+admin-typecheck:
+	cd $(ADMIN_DIR) && npm run typecheck
 
 check-bruno-coverage:
 	./tools/e2e/check-bruno-coverage.sh

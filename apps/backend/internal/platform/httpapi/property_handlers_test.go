@@ -840,7 +840,7 @@ func TestPropertyHandlers_ListArchivedProperties(t *testing.T) {
 	if resp.Items[0].Id != archivedID {
 		t.Errorf("expected property %s, got %s", archivedID, resp.Items[0].Id)
 	}
-	if resp.Items[0].Status != openapi.PropertyResponseStatusArchived {
+	if resp.Items[0].Status != openapi.PropertyStatusArchived {
 		t.Errorf("expected archived status, got %q", resp.Items[0].Status)
 	}
 }

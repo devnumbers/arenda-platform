@@ -51,6 +51,48 @@ func (q *Queries) CountActivePropertiesByOwner(ctx context.Context, ownerID pgty
 	return count, err
 }
 
+const countActivePropertiesByOwnerAdmin = `-- name: CountActivePropertiesByOwnerAdmin :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND status = 'active'
+`
+
+func (q *Queries) CountActivePropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countActivePropertiesByOwnerAdmin, ownerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countArchivedPropertiesByOwnerAdmin = `-- name: CountArchivedPropertiesByOwnerAdmin :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND status = 'archived'
+`
+
+func (q *Queries) CountArchivedPropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countArchivedPropertiesByOwnerAdmin, ownerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPropertiesByOwnerAdmin = `-- name: CountPropertiesByOwnerAdmin :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1
+  AND ($2::text = '' OR status = $2::text)
+`
+
+type CountPropertiesByOwnerAdminParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Status  string      `json:"status"`
+}
+
+func (q *Queries) CountPropertiesByOwnerAdmin(ctx context.Context, arg CountPropertiesByOwnerAdminParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPropertiesByOwnerAdmin, arg.OwnerID, arg.Status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createProperty = `-- name: CreateProperty :one
 INSERT INTO properties (owner_id, name, type, address, description, status)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -75,6 +117,27 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 		arg.Description,
 		arg.Status,
 	)
+	var i Property
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Type,
+		&i.Address,
+		&i.Description,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPropertyByIDAdmin = `-- name: GetPropertyByIDAdmin :one
+SELECT id, owner_id, name, type, address, description, status, created_at, updated_at FROM properties WHERE id = $1
+`
+
+func (q *Queries) GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (Property, error) {
+	row := q.db.QueryRow(ctx, getPropertyByIDAdmin, id)
 	var i Property
 	err := row.Scan(
 		&i.ID,
@@ -187,6 +250,56 @@ ORDER BY updated_at DESC
 
 func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Property, error) {
 	rows, err := q.db.Query(ctx, listArchivedPropertiesByOwner, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Property{}
+	for rows.Next() {
+		var i Property
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Name,
+			&i.Type,
+			&i.Address,
+			&i.Description,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPropertiesByOwnerAdmin = `-- name: ListPropertiesByOwnerAdmin :many
+SELECT id, owner_id, name, type, address, description, status, created_at, updated_at FROM properties
+WHERE owner_id = $1
+  AND ($2::text = '' OR status = $2::text)
+ORDER BY updated_at DESC
+LIMIT $4::int OFFSET $3::int
+`
+
+type ListPropertiesByOwnerAdminParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Status  string      `json:"status"`
+	Offset  int32       `json:"offset"`
+	Limit   int32       `json:"limit"`
+}
+
+func (q *Queries) ListPropertiesByOwnerAdmin(ctx context.Context, arg ListPropertiesByOwnerAdminParams) ([]Property, error) {
+	rows, err := q.db.Query(ctx, listPropertiesByOwnerAdmin,
+		arg.OwnerID,
+		arg.Status,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}

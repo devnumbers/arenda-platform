@@ -63,13 +63,14 @@ type PaymentMethodRepository interface {
 type SubscriptionPaymentRepository interface {
 	Create(ctx context.Context, payment domain.SubscriptionPayment) (domain.SubscriptionPayment, error)
 	GetByID(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)
+	GetByIDAdmin(ctx context.Context, id uuid.UUID) (SubscriptionPaymentWithUser, error)
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
 	ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
 	GetLastSucceededBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) (domain.SubscriptionPayment, error)
 	ListPendingUpgradePayments(ctx context.Context, createdBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error)
 	ListPendingPayments(ctx context.Context, createdBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error)
-	ListAll(ctx context.Context, status string, limit, offset int) ([]SubscriptionPaymentWithUser, int64, error)
+	ListAll(ctx context.Context, status string, userID uuid.UUID, limit, offset int) ([]SubscriptionPaymentWithUser, int64, error)
 	MarkSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, errorCode *string, now time.Time) error
 	MarkRefunded(ctx context.Context, id uuid.UUID, status domain.PaymentStatus, amountKopecks int64, now time.Time) error

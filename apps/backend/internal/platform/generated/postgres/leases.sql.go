@@ -44,6 +44,18 @@ func (q *Queries) CompleteLease(ctx context.Context, arg CompleteLeaseParams) (L
 	return i, err
 }
 
+const countLeasesByOwnerAdmin = `-- name: CountLeasesByOwnerAdmin :one
+SELECT COUNT(*) FROM leases
+WHERE owner_id = $1
+`
+
+func (q *Queries) CountLeasesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countLeasesByOwnerAdmin, ownerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countOpenLeasesByProperty = `-- name: CountOpenLeasesByProperty :one
 SELECT COUNT(*) FROM leases
 WHERE property_id = $1
@@ -273,6 +285,53 @@ ORDER BY updated_at DESC
 
 func (q *Queries) ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Lease, error) {
 	rows, err := q.db.Query(ctx, listLeasesByOwner, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Lease{}
+	for rows.Next() {
+		var i Lease
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.TenantContactID,
+			&i.Status,
+			&i.StartDate,
+			&i.EndDate,
+			&i.RentAmountKopecks,
+			&i.DepositAmountKopecks,
+			&i.PaymentDay,
+			&i.Comment,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeasesByOwnerAdmin = `-- name: ListLeasesByOwnerAdmin :many
+SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
+WHERE owner_id = $1
+ORDER BY updated_at DESC
+LIMIT $3::int OFFSET $2::int
+`
+
+type ListLeasesByOwnerAdminParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Offset  int32       `json:"offset"`
+	Limit   int32       `json:"limit"`
+}
+
+func (q *Queries) ListLeasesByOwnerAdmin(ctx context.Context, arg ListLeasesByOwnerAdminParams) ([]Lease, error) {
+	rows, err := q.db.Query(ctx, listLeasesByOwnerAdmin, arg.OwnerID, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
