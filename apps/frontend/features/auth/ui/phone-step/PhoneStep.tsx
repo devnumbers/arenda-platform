@@ -1,19 +1,17 @@
-'use client';
+"use client";
 
-import { type ChangeEvent, type JSX } from 'react';
-import { formatPhoneInput } from '@/shared/lib/phone';
-import { Clock, Support } from '@/shared/assets/icons';
-import { Button } from '@/shared/ui/button';
-import { TextField } from '@/shared/ui/text-field';
-import { formatTimer } from '@/features/auth/lib/format-timer';
-import styles from './PhoneStep.module.css';
+import { type ChangeEvent, type JSX } from "react";
+import { formatPhoneInput } from "@/shared/lib/phone";
+import { Support } from "@/shared/assets/icons";
+import { Button } from "@/shared/ui/button";
+import { TextField } from "@/shared/ui/text-field";
+import styles from "./PhoneStep.module.css";
 
 export type PhoneStepProps = {
   phone: string;
   onPhoneChange: (value: string) => void;
   onSubmit: () => void;
   isLoading: boolean;
-  resendTimer?: number;
 };
 
 export function PhoneStep({
@@ -21,7 +19,6 @@ export function PhoneStep({
   onPhoneChange,
   onSubmit,
   isLoading,
-  resendTimer = 0,
 }: PhoneStepProps): JSX.Element {
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     onPhoneChange(formatPhoneInput(event.target.value));
@@ -55,26 +52,18 @@ export function PhoneStep({
           size="large"
           fullWidth
           loading={isLoading}
-          disabled={phone.length < 18 || isLoading || resendTimer > 0}
-          subtitle={
-            resendTimer > 0 ? (
-              <span className={styles.timerRow}>
-                <Clock className={styles.timerIcon} />
-                <span className={styles.timerText}>{formatTimer(resendTimer)}</span>
-              </span>
-            ) : undefined
-          }
+          disabled={phone.length < 18 || isLoading}
         >
-          {resendTimer > 0 ? 'Отправить новый код' : 'Войти'}
+          Войти
         </Button>
       </form>
 
       <p className={styles.legal}>
-        Нажимая кнопку «Войти», я принимаю{' '}
+        Нажимая кнопку «Войти», я принимаю{" "}
         <a className={styles.legalLink} href="#">
           политику конфиденциальности
-        </a>{' '}
-        и{' '}
+        </a>{" "}
+        и{" "}
         <a className={styles.legalLink} href="#">
           соглашаюсь на обработку персональных данных
         </a>
@@ -86,7 +75,7 @@ export function PhoneStep({
         fullWidth
         leftIcon={<Support />}
         onClick={() => {
-          window.location.href = 'mailto:support@hatus.ru';
+          window.location.href = "mailto:support@hatus.ru";
         }}
       >
         Написать в поддержку
@@ -94,4 +83,3 @@ export function PhoneStep({
     </div>
   );
 }
-

@@ -198,12 +198,15 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 		return fmt.Errorf("commit tx: %w", err)
 	}
 
+	s.logger.InfoContext(ctx, "sending login code via email", "email", email.String(), "phone", phone.String())
 	if err := s.emailSender.Send(ctx, email, code); err != nil {
+		s.logger.ErrorContext(ctx, "failed to send login code via email", slog.String("email", email.String()), slog.String("error", err.Error()))
 		if delErr := s.codes.DeleteByID(ctx, loginCode.ID); delErr != nil {
 			return fmt.Errorf("send code failed and cleanup failed: send %w, cleanup %w", err, delErr)
 		}
 		return fmt.Errorf("send code: %w", err)
 	}
+	s.logger.InfoContext(ctx, "login code sent via email", "email", email.String())
 	return nil
 }
 

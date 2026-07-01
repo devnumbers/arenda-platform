@@ -54,6 +54,7 @@ type Config struct {
 	SMTPUser                            string
 	SMTPPass                            string
 	SMTPFrom                            string
+	SMTPTimeout                         time.Duration
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -93,6 +94,7 @@ func Load() (Config, error) {
 		SMTPPass:          os.Getenv("SMTP_PASS"),
 		SMTPFrom:          os.Getenv("SMTP_FROM"),
 		PaymentProvider:   os.Getenv("PAYMENT_PROVIDER"),
+		SMTPTimeout:       10 * time.Second,
 		AppBaseURL:        os.Getenv("APP_BASE_URL"),
 		TKassaTerminalKey: os.Getenv("T_KASSA_TERMINAL_KEY"),
 		TKassaPassword:    os.Getenv("T_KASSA_PASSWORD"),
@@ -195,8 +197,8 @@ func Load() (Config, error) {
 		IPBurst:             40,
 		PhoneSendPerHour:    5,
 		PhoneVerifyPer15Min: 10,
-		EmailSendPerHour:    5,
-		EmailVerifyPer15Min: 10,
+		EmailSendPerHour:    60,
+		EmailVerifyPer15Min: 30,
 	}
 	if v := os.Getenv("RATE_LIMIT_IP_RPS"); v != "" {
 		rps, err := strconv.ParseFloat(v, 64)
@@ -365,6 +367,16 @@ func Load() (Config, error) {
 		}
 		if cfg.SMTPFrom == "" {
 			return Config{}, fmt.Errorf("SMTP_FROM is required when EMAIL_SENDER=smtp")
+		}
+		if v := os.Getenv("SMTP_TIMEOUT"); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid SMTP_TIMEOUT %q: %w", v, err)
+			}
+			if d <= 0 {
+				return Config{}, fmt.Errorf("SMTP_TIMEOUT must be positive")
+			}
+			cfg.SMTPTimeout = d
 		}
 	}
 

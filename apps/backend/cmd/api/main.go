@@ -185,6 +185,7 @@ func run(fallback *slog.Logger) error {
 			Username: cfg.SMTPUser,
 			Password: cfg.SMTPPass,
 			From:     cfg.SMTPFrom,
+			Timeout:  cfg.SMTPTimeout,
 		})
 	default:
 		return fmt.Errorf("unsupported EMAIL_SENDER: %s", cfg.EmailSender)
@@ -325,9 +326,18 @@ func run(fallback *slog.Logger) error {
 	defer phoneSendLimiter.Stop()
 	phoneVerifyLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.PhoneVerifyPer15Min)/(15*60), cfg.RateLimit.PhoneVerifyPer15Min, 1*time.Hour)
 	defer phoneVerifyLimiter.Stop()
-	emailSendLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.EmailSendPerHour)/3600, cfg.RateLimit.EmailSendPerHour, 1*time.Hour)
+	emailSendBurst := 5
+	if cfg.RateLimit.EmailSendPerHour < emailSendBurst {
+		emailSendBurst = cfg.RateLimit.EmailSendPerHour
+	}
+	emailSendLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.EmailSendPerHour)/3600, emailSendBurst, 1*time.Hour)
 	defer emailSendLimiter.Stop()
-	emailVerifyLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.EmailVerifyPer15Min)/(15*60), cfg.RateLimit.EmailVerifyPer15Min, 1*time.Hour)
+
+	emailVerifyBurst := 10
+	if cfg.RateLimit.EmailVerifyPer15Min < emailVerifyBurst {
+		emailVerifyBurst = cfg.RateLimit.EmailVerifyPer15Min
+	}
+	emailVerifyLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.EmailVerifyPer15Min)/(15*60), emailVerifyBurst, 1*time.Hour)
 	defer emailVerifyLimiter.Stop()
 
 	var poolStats func() httpapi.DBPoolSnapshot

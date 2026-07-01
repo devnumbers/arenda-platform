@@ -417,13 +417,13 @@ func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Reques
 	if err := h.auth.SendPhoneChangeCode(r.Context(), userID, phone); err != nil {
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
-			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Новый номер не должен совпадать с текущим"))
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "new phone must differ from current phone"))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Номер телефона уже используется"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "phone number already in use"))
 		case errors.Is(err, application.ErrUserBlocked):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит попыток, попробуйте позже"))
+			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "too many attempts, please try again later"))
 		case errors.Is(err, application.ErrCodeSentTooRecently):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Код отправлен слишком часто, подождите немного"))
+			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "code sent too recently, please wait"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -470,15 +470,15 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
-			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Новый номер не должен совпадать с текущим"))
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "new phone must differ from current phone"))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Номер телефона уже используется"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "phone number already in use"))
 		case errors.Is(err, application.ErrUserBlocked),
 			errors.Is(err, domain.ErrTooManyAttempts):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит попыток, попробуйте позже"))
+			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "too many attempts, please try again later"))
 		case errors.Is(err, domain.ErrLoginCodeInvalid),
 			errors.Is(err, application.ErrNotFound):
-			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный код"))
+			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "invalid code"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
