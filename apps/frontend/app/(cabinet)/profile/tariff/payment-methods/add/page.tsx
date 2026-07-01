@@ -27,7 +27,7 @@ export default function AddPaymentMethodPage(): JSX.Element {
           router.push(ROUTES.profilePaymentMethods);
         },
         onError: (error) => {
-          notify.error(error);
+          notify.error(error.detail ?? 'Не удалось начать добавление карты');
         },
       },
     );

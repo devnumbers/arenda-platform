@@ -61,7 +61,7 @@ export default function LoginPage(): JSX.Element {
                     router.push("/dashboard");
                 },
                 onError: (error) => {
-                    notify.error(error);
+                    notify.error(error.detail ?? 'Неверный код');
                 },
             },
         );

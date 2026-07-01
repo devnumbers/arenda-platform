@@ -125,7 +125,7 @@ export function PaymentMethodList({
           notify.success('Карта назначена основной');
         },
         onError: (error) => {
-          notify.error(error);
+          notify.error(error.detail ?? 'Не удалось сделать карту основной');
         },
       });
     },
@@ -143,7 +143,7 @@ export function PaymentMethodList({
         setDeletingId(null);
       },
       onError: (error) => {
-        notify.error(error);
+        notify.error(error.detail ?? 'Не удалось удалить карту');
         setDeletingId(null);
       },
     });
