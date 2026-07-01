@@ -1944,6 +1944,10 @@ components:
           nullable: true
         autoRenewEnabled:
           type: boolean
+        currentPeriod:
+          type: string
+          enum: [month, year]
+          nullable: true
         pendingTariff:
           $ref: '#/components/schemas/Tariff'
           nullable: true
