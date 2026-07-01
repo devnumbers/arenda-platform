@@ -5,7 +5,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { TariffChangeSuccess } from '@/widgets/profile';
 
 export const metadata: Metadata = {
-  title: 'Тариф изменён — Arenda Platform',
+  title: 'Тариф изменён — Рентли',
   description: 'Подтверждение смены тарифа',
 };
 

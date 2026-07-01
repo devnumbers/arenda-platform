@@ -16,7 +16,7 @@ import (
 )
 
 // DefaultFromName is used when the SMTP configuration does not specify a display name.
-const DefaultFromName = "Arenda Platform"
+const DefaultFromName = "Рентли"
 
 // Config holds connection details for an SMTP server.
 type Config struct {

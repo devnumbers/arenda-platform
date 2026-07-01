@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { TenantsPage } from '@/widgets/tenants';
 
 export const metadata: Metadata = {
-  title: 'Арендаторы — Arenda Platform',
+  title: 'Арендаторы — Рентли',
   description: 'Список арендаторов',
 };
 

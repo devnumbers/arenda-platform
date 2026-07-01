@@ -3,7 +3,7 @@ import { TenantCreateWizard } from '@/widgets/tenants';
 import { PageShell } from '@/shared/ui/page-shell';
 
 export const metadata: Metadata = {
-  title: 'Добавить арендатора — Arenda Platform',
+  title: 'Добавить арендатора — Рентли',
   description: 'Добавление нового арендатора',
 };
 

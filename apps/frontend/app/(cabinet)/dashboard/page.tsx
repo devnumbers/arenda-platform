@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { DashboardPage } from '@/widgets/dashboard';
 
 export const metadata: Metadata = {
-  title: 'Главная — Arenda Platform',
+  title: 'Главная — Рентли',
   description: 'Главная страница личного кабинета',
 };
 

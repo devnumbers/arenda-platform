@@ -5,7 +5,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { AccountOverview } from '@/widgets/profile';
 
 export const metadata: Metadata = {
-  title: 'Аккаунт — Arenda Platform',
+  title: 'Аккаунт — Рентли',
   description: 'Управление аккаунтом пользователя',
 };
 

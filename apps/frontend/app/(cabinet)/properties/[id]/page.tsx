@@ -8,7 +8,7 @@ type PropertyDetailRoutePageProps = {
 };
 
 export const metadata: Metadata = {
-  title: 'Мой объект — Arenda Platform',
+  title: 'Мой объект — Рентли',
   description: 'Просмотр объекта недвижимости',
 };
 

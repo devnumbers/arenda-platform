@@ -9,7 +9,7 @@ import { ROUTES } from '@/shared/config/routes';
 import styles from './page.module.css';
 
 export const metadata: Metadata = {
-  title: 'Информация — Arenda Platform',
+  title: 'Информация — Рентли',
   description: 'Правовая информация и документы',
 };
 

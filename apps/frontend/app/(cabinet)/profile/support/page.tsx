@@ -8,7 +8,7 @@ import { MarkdownContent } from '@/shared/ui/markdown-content';
 import styles from './page.module.css';
 
 export const metadata: Metadata = {
-  title: 'Поддержка — Arenda Platform',
+  title: 'Поддержка — Рентли',
   description: 'Контакты службы поддержки',
 };
 

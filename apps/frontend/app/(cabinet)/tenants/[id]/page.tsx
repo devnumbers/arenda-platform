@@ -3,7 +3,7 @@ import { TenantDetailPage } from '@/widgets/tenant-detail';
 import { PageShell } from '@/shared/ui/page-shell';
 
 export const metadata: Metadata = {
-  title: 'Арендатор — Arenda Platform',
+  title: 'Арендатор — Рентли',
   description: 'Просмотр данных арендатора',
 };
 

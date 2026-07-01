@@ -5,7 +5,7 @@ import { PropertyLeasesPage } from '@/widgets/property-detail';
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 
 export const metadata: Metadata = {
-  title: 'Аренды объекта — Arenda Platform',
+  title: 'Аренды объекта — Рентли',
   description: 'История аренд по объекту недвижимости',
 };
 

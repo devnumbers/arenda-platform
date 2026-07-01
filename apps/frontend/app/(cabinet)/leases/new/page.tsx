@@ -3,7 +3,7 @@ import { LeaseCreateWizard } from '@/widgets/leases';
 import { PageShell } from '@/shared/ui/page-shell';
 
 export const metadata: Metadata = {
-  title: 'Создать аренду — Arenda Platform',
+  title: 'Создать аренду — Рентли',
 };
 
 type LeasesNewPageProps = {

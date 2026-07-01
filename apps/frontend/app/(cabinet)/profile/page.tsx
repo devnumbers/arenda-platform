@@ -4,7 +4,7 @@ import { PageShell } from '@/shared/ui/page-shell';
 import { ProfileOverview } from '@/widgets/profile';
 
 export const metadata: Metadata = {
-  title: 'Профиль — Arenda Platform',
+  title: 'Профиль — Рентли',
   description: 'Страница профиля пользователя',
 };
 

@@ -5,7 +5,7 @@ import { RecurringOperationEditPage } from '@/widgets/operations/ui/RecurringOpe
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 
 export const metadata: Metadata = {
-  title: 'Редактирование серии — Arenda Platform',
+  title: 'Редактирование серии — Рентли',
 };
 
 export default function FinanceRecurringOperationEditPage() {

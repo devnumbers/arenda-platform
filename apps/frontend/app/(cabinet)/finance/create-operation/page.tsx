@@ -3,7 +3,7 @@ import { PageShell } from '@/shared/ui/page-shell';
 import { OperationCreateWizard } from '@/widgets/operations';
 
 export const metadata: Metadata = {
-  title: 'Создание операции — Arenda Platform',
+  title: 'Создание операции — Рентли',
   description: 'Создание операции дохода или расхода',
 };
 

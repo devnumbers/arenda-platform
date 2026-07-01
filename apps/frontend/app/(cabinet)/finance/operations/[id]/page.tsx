@@ -5,7 +5,7 @@ import { OperationDetailPage } from '@/widgets/operations/ui/OperationDetailPage
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 
 export const metadata: Metadata = {
-  title: 'Операция — Arenda Platform',
+  title: 'Операция — Рентли',
   description: 'Детали финансовой операции',
 };
 

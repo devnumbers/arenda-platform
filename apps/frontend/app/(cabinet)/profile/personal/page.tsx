@@ -6,7 +6,7 @@ import { PersonalDataForm } from '@/widgets/profile/ui/PersonalDataForm';
 import styles from './page.module.css';
 
 export const metadata: Metadata = {
-  title: 'Мои данные — Arenda Platform',
+  title: 'Мои данные — Рентли',
   description: 'Редактирование персональных данных',
 };
 

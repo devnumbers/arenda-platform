@@ -5,7 +5,7 @@ import { OperationEditForm } from '@/widgets/operations';
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 
 export const metadata: Metadata = {
-  title: 'Редактирование операции — Arenda Platform',
+  title: 'Редактирование операции — Рентли',
 };
 
 export default function FinanceOperationEditPage() {

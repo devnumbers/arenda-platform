@@ -20,7 +20,7 @@ func NewNotifier(sender mailer.Sender, renderer *mailer.Renderer) *Notifier {
 }
 
 func reminderSubject(title string) string {
-	return "Напоминание от Arenda: " + title
+	return "Напоминание от Рентли: " + title
 }
 
 // Notify sends a reminder email.

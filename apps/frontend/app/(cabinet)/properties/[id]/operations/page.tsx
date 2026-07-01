@@ -5,7 +5,7 @@ import { PropertyOperationsPage } from '@/widgets/property-detail';
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 
 export const metadata: Metadata = {
-  title: 'Финансы объекта — Arenda Platform',
+  title: 'Финансы объекта — Рентли',
   description: 'Финансовые операции по объекту недвижимости',
 };
 

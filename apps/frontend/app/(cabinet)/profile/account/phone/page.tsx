@@ -6,7 +6,7 @@ import { PhoneChangeForm } from '@/widgets/profile';
 import styles from './page.module.css';
 
 export const metadata: Metadata = {
-  title: 'Изменение телефона — Arenda Platform',
+  title: 'Изменение телефона — Рентли',
   description: 'Изменение номера телефона пользователя',
 };
 

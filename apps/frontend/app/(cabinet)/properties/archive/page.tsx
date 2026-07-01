@@ -5,7 +5,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { PropertiesPage, PropertiesLoading } from '@/widgets/properties';
 
 export const metadata: Metadata = {
-  title: 'Архивные объекты — Arenda Platform',
+  title: 'Архивные объекты — Рентли',
   description: 'Архивные объекты',
 };
 

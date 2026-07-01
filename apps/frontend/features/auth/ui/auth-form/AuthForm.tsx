@@ -151,7 +151,7 @@ export function AuthForm({
                 <div className={styles.topBar}>
                     <IconButton
                         variant="primary-icon"
-                        size="medium"
+                        size="large"
                         aria-label="Закрыть"
                         icon={<Cancel/>}
                         onClick={onClose}
@@ -162,7 +162,7 @@ export function AuthForm({
                 <div className={clsx(styles.topBar, styles.topBarCode)}>
                     <IconButton
                         variant="primary-icon"
-                        size="medium"
+                        size="large"
                         aria-label="Назад"
                         icon={<ArrowLeft/>}
                         onClick={
@@ -172,7 +172,7 @@ export function AuthForm({
                     />
                     <IconButton
                         variant="primary-icon"
-                        size="medium"
+                        size="large"
                         aria-label="Написать в поддержку"
                         icon={<Support/>}
                         onClick={() => {

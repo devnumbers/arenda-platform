@@ -4,7 +4,7 @@ import { PageHeader } from '@/shared/ui/page-header';
 import { PropertiesPage, PropertiesLoading } from '@/widgets/properties';
 
 export const metadata: Metadata = {
-  title: 'Мои объекты — Arenda Platform',
+  title: 'Мои объекты — Рентли',
   description: 'Список объектов',
 };
 

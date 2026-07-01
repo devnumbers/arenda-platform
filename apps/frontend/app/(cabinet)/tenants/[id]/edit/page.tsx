@@ -3,7 +3,7 @@ import { TenantEditForm } from '@/widgets/tenants';
 import { PageShell } from '@/shared/ui/page-shell';
 
 export const metadata: Metadata = {
-  title: 'Редактировать арендатора — Arenda Platform',
+  title: 'Редактировать арендатора — Рентли',
   description: 'Изменение информации об арендаторе',
 };
 

@@ -3,7 +3,7 @@ import { PageShell } from '@/shared/ui/page-shell';
 import { PropertyEditForm } from '@/widgets/properties';
 
 export const metadata: Metadata = {
-  title: 'Редактировать объект — Arenda Platform',
+  title: 'Редактировать объект — Рентли',
   description: 'Изменение информации об объекте недвижимости',
 };
 

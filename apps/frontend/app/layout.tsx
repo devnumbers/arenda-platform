@@ -15,7 +15,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Arenda Platform',
+  title: 'Рентли',
   description: 'Управление арендной недвижимостью',
 };
 

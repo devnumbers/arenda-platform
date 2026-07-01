@@ -5,7 +5,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { PaymentList } from '@/widgets/profile';
 
 export const metadata: Metadata = {
-  title: 'История операций — Arenda Platform',
+  title: 'История операций — Рентли',
   description: 'История операций по тарифу',
 };
 

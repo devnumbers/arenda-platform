@@ -5,7 +5,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { PaymentMethodList } from '@/widgets/profile';
 
 export const metadata: Metadata = {
-  title: 'Способы оплаты — Arenda Platform',
+  title: 'Способы оплаты — Рентли',
   description: 'Управление способами оплаты',
 };
 

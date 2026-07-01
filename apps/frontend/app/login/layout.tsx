@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
-  title: 'Вход — Arenda Platform',
+  title: 'Вход — Рентли',
   description: 'Войдите по номеру телефона',
 };
 

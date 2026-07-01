@@ -6,7 +6,7 @@ import { TariffChangeForm } from '@/widgets/profile';
 import styles from './page.module.css';
 
 export const metadata: Metadata = {
-  title: 'Сменить тариф — Arenda Platform',
+  title: 'Сменить тариф — Рентли',
   description: 'Выбор нового тарифа и периода оплаты',
 };
 

@@ -3,7 +3,7 @@ import { LeaseDetailPage } from '@/widgets/leases';
 import { PageShell } from '@/shared/ui/page-shell';
 
 export const metadata: Metadata = {
-  title: 'Аренда — Arenda Platform',
+  title: 'Аренда — Рентли',
   description: 'Просмотр и редактирование аренды',
 };
 

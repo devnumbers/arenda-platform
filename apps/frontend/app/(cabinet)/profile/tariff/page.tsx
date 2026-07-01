@@ -5,7 +5,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { TariffOverview } from '@/widgets/profile';
 
 export const metadata: Metadata = {
-  title: 'Тариф — Arenda Platform',
+  title: 'Тариф — Рентли',
   description: 'Управление тарифом и подпиской',
 };
 

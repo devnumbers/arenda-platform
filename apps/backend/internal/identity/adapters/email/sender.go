@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	loginCodeSubject = "Код для входа в Arenda"
+	loginCodeSubject = "Код для входа в Рентли"
 	loginCodeTTL     = "5 минут"
 )
 
