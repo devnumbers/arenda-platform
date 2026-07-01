@@ -1,6 +1,7 @@
 package email
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/smtp"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 )
 
@@ -41,20 +43,15 @@ func (s *SMTPSender) Send(ctx context.Context, email domain.Email, code string) 
 		timeout = 10 * time.Second
 	}
 
-	addr := fmt.Sprintf("%s:%s", s.cfg.Host, s.cfg.Port)
-	subject := "Код для входа в Arenda"
-	body := fmt.Sprintf("Ваш код для входа: %s\n\nКод действителен 5 минут.", code)
-	msg := []byte("To: " + email.String() + "\r\n" +
-		"Subject: " + subject + "\r\n" +
-		"Content-Type: text/plain; charset=UTF-8\r\n" +
-		"\r\n" +
-		body + "\r\n")
+	msg, err := s.buildMessage(email.String(), code)
+	if err != nil {
+		return fmt.Errorf("build message: %w", err)
+	}
 
+	addr := fmt.Sprintf("%s:%s", s.cfg.Host, s.cfg.Port)
 	dialer := &net.Dialer{Timeout: timeout}
 
 	var conn net.Conn
-	var err error
-
 	switch s.cfg.Port {
 	case "465":
 		// SMTPS: TLS handshake happens immediately after TCP connect.
@@ -118,4 +115,58 @@ func (s *SMTPSender) Send(ctx context.Context, email domain.Email, code string) 
 	}
 
 	return nil
+}
+
+func (s *SMTPSender) buildMessage(to, code string) ([]byte, error) {
+	subject := "Код для входа в Arenda"
+	plainBody := fmt.Sprintf("Здравствуйте!\n\nКод для входа в личный кабинет Arenda: %s\n\nКод действителен 5 минут.\n\nЕсли вы не запрашивали код, просто проигнорируйте это письмо.", code)
+	htmlBody := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Код для входа в Arenda</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; line-height: 1.5; color: #1a1a1a;">
+<p>Здравствуйте!</p>
+<p>Код для входа в личный кабинет Arenda:</p>
+<p style="font-size: 28px; font-weight: bold; letter-spacing: 4px; margin: 16px 0;">%s</p>
+<p>Код действителен 5 минут.</p>
+<p style="color: #666; font-size: 14px;">Если вы не запрашивали код, просто проигнорируйте это письмо.</p>
+</body>
+</html>`, code)
+
+	boundary := uuid.NewString()
+	messageID := fmt.Sprintf("<%s@%s>", uuid.NewString(), s.cfg.Host)
+	date := time.Now().UTC().Format(time.RFC1123Z)
+
+	var buf bytes.Buffer
+	headers := []string{
+		"From: " + s.cfg.From,
+		"To: " + to,
+		"Subject: " + subject,
+		"Date: " + date,
+		"Message-ID: " + messageID,
+		"MIME-Version: 1.0",
+		"Content-Type: multipart/alternative; boundary=\"" + boundary + "\"",
+		"Reply-To: " + s.cfg.From,
+	}
+	for _, h := range headers {
+		fmt.Fprintf(&buf, "%s\r\n", h)
+	}
+	fmt.Fprint(&buf, "\r\n")
+
+	fmt.Fprintf(&buf, "--%s\r\n", boundary)
+	fmt.Fprintf(&buf, "Content-Type: text/plain; charset=UTF-8\r\n")
+	fmt.Fprintf(&buf, "Content-Transfer-Encoding: 8bit\r\n\r\n")
+	fmt.Fprintf(&buf, "%s\r\n\r\n", plainBody)
+
+	fmt.Fprintf(&buf, "--%s\r\n", boundary)
+	fmt.Fprintf(&buf, "Content-Type: text/html; charset=UTF-8\r\n")
+	fmt.Fprintf(&buf, "Content-Transfer-Encoding: 8bit\r\n\r\n")
+	fmt.Fprintf(&buf, "%s\r\n\r\n", htmlBody)
+
+	fmt.Fprintf(&buf, "--%s--\r\n", boundary)
+
+	return buf.Bytes(), nil
 }
