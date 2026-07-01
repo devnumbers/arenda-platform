@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useCreateTenantContact } from '@/features/tenant-contacts/api';
 import { ApiError } from '@/shared/api/errors';
 import { ROUTES } from '@/shared/config/routes';
+import { WizardHeader } from '@/shared/ui/wizard-header';
 import { useTenantCreateDraft } from '../lib/use-tenant-create-draft';
-import { TenantCreateHeader } from './TenantCreateHeader';
 import { TenantFormStep } from './TenantFormStep';
 import { TenantSuccessStep } from './TenantSuccessStep';
 import styles from './TenantCreateWizard.module.css';
@@ -78,7 +78,12 @@ export function TenantCreateWizard(): JSX.Element {
   if (!isLoaded) {
     return (
       <div className={styles.root}>
-        <TenantCreateHeader onClose={handleClose} />
+        <WizardHeader
+          title="Добавление арендатора"
+          step={1}
+          totalSteps={1}
+          onCancel={handleClose}
+        />
         <div className={styles.content}>Загрузка…</div>
       </div>
     );
@@ -103,7 +108,12 @@ export function TenantCreateWizard(): JSX.Element {
 
   return (
     <div className={styles.root}>
-      <TenantCreateHeader onClose={handleClose} />
+      <WizardHeader
+        title="Добавление арендатора"
+        step={1}
+        totalSteps={1}
+        onCancel={handleClose}
+      />
       <div className={styles.content}>
         <TenantFormStep
           initialData={{
