@@ -133,6 +133,17 @@ func (s *BillingService) GetSubscription(ctx context.Context, userID uuid.UUID) 
 	}
 
 	view := SubscriptionView{Subscription: sub, Tariff: tariff}
+
+	lastPayment, err := s.subscriptionPayments.GetLastSucceededBySubscriptionID(ctx, sub.ID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return SubscriptionView{}, fmt.Errorf("get last succeeded payment: %w", err)
+	}
+	if err == nil {
+		period := domain.SubscriptionPeriod(lastPayment.Period)
+		sub.CurrentPeriod = &period
+		view.Subscription = sub
+	}
+
 	if sub.PendingTariffID != nil {
 		pending, err := s.tariffs.GetByID(ctx, *sub.PendingTariffID)
 		if err != nil {
