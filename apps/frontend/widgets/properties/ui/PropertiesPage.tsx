@@ -16,12 +16,10 @@ import {PropertiesErrorState} from './PropertiesErrorState';
 import {PropertiesArchiveLink} from './PropertiesArchiveLink';
 import type {PropertyFilters, PropertySort} from '../lib/filter-types';
 import type {PropertyType} from '@/entities/property/model/types';
-import clsx from 'clsx';
 import styles from './PropertiesPage.module.css';
 
 export type PropertiesPageProps = {
     readonly mode?: PropertiesViewMode;
-    readonly hideTitle?: boolean;
 };
 
 const initialSort: PropertySort = 'name_asc';
@@ -46,7 +44,7 @@ function parseSortFromSearchParams(searchParams: URLSearchParams): PropertySort 
     return value === 'name_asc' || value === 'name_desc' ? value : initialSort;
 }
 
-export function PropertiesPage({mode = 'active', hideTitle = false}: PropertiesPageProps): JSX.Element {
+export function PropertiesPage({mode = 'active'}: PropertiesPageProps): JSX.Element {
     const {data, isLoading, isFetching, isError, refetch} = usePropertyListData(mode);
     const subscriptionQuery = useSubscription();
     const router = useRouter();
@@ -107,7 +105,6 @@ export function PropertiesPage({mode = 'active', hideTitle = false}: PropertiesP
     );
 
     const isEmpty = !isLoading && !isError && visible.length === 0;
-    const title = mode === 'archived' ? 'Архивные объекты' : 'Мои объекты';
 
     const canAdd = useMemo(() => {
         if (!subscriptionQuery.data) return true;
@@ -117,8 +114,7 @@ export function PropertiesPage({mode = 'active', hideTitle = false}: PropertiesP
     }, [subscriptionQuery.data, data]);
 
     return (
-        <div className={clsx(styles.root, hideTitle && styles.rootNoTopPadding)}>
-            {!hideTitle && <h1 className={styles.title}>{title}</h1>}
+        <div className={styles.root}>
             <PropertiesToolbar mode={mode} filters={filters} sort={sort} onChange={handleChange} canAdd={canAdd}/>
 
             {isLoading && <PropertiesLoading/>}

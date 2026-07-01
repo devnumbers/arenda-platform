@@ -1,30 +1,22 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import { IconLink } from '@/shared/ui/icon-link';
-import { ArrowLeft } from '@/shared/assets/icons';
+import { PageHeader } from '@/shared/ui/page-header';
+import { PageShell } from '@/shared/ui/page-shell';
 import { ROUTES } from '@/shared/config/routes';
-import { PropertiesLoading, PropertiesPage } from '@/widgets/properties';
-import styles from './page.module.css';
+import { PropertiesPage, PropertiesLoading } from '@/widgets/properties';
 
 export const metadata: Metadata = {
   title: 'Архивные объекты — Arenda Platform',
-  description: 'Архивные объекты недвижимости',
+  description: 'Архивные объекты',
 };
 
 export default function PropertiesArchivePage() {
   return (
-    <div>
-      <header className={styles.header}>
-        <IconLink
-          href={ROUTES.properties}
-          aria-label="Назад"
-          icon={<ArrowLeft />}
-        />
-        <h1 className={styles.title}>Архивные объекты</h1>
-      </header>
+    <PageShell>
+      <PageHeader title="Архивные объекты" backHref={ROUTES.properties} />
       <Suspense fallback={<PropertiesLoading />}>
-        <PropertiesPage mode="archived" hideTitle />
+        <PropertiesPage mode="archived" />
       </Suspense>
-    </div>
+    </PageShell>
   );
 }
