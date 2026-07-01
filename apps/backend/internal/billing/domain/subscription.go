@@ -34,6 +34,7 @@ type Subscription struct {
 	PendingChangeAt       *time.Time
 	PendingPeriod         *SubscriptionPeriod
 	ActivePaymentMethodID *uuid.UUID
+	CurrentPeriod         *SubscriptionPeriod
 }
 
 // NewOwnerSubscription creates a free basic subscription for a newly-registered owner.
