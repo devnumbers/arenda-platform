@@ -30,7 +30,9 @@ function renderToast({ toast }: { toast: QueuedToast<ToastContentValue> }): JSX.
         {!!description && (
           <Toast.Description className={styles.description}>{description}</Toast.Description>
         )}
-        {actionProps?.children && <Toast.ActionButton {...actionProps} />}
+        {actionProps?.children && (
+          <Toast.ActionButton className={styles.actionButton} {...actionProps} />
+        )}
       </Toast.Content>
       <Toast.CloseButton className={styles.closeButton} />
     </Toast>
