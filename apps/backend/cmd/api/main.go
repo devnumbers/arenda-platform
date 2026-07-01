@@ -35,6 +35,9 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
+	mailerfake "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/fake"
+	mailersmtp "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/smtp"
 	platformnotifications "github.com/nambers/arenda-planform/apps/backend/internal/platform/notifications"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/dadata"
@@ -87,6 +90,11 @@ func run(fallback *slog.Logger) error {
 		return err
 	}
 	appLogger := slog.New(logHandler)
+
+	renderer, err := mailer.NewRenderer(cfg.EmailTemplatesDir)
+	if err != nil {
+		return fmt.Errorf("failed to load email templates: %w", err)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -173,15 +181,10 @@ func run(fallback *slog.Logger) error {
 		return fmt.Errorf("unsupported SMS_SENDER: %s", cfg.SMSSender)
 	}
 
-	var emailSender identityapp.EmailSender
+	var emailMailer mailer.Sender
 	switch cfg.EmailSender {
-	case "fake":
-		if cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
-			return fmt.Errorf("EMAIL_SENDER=fake is only allowed in local or dev environments")
-		}
-		emailSender = identityemail.NewFakeSender(appLogger)
 	case "smtp":
-		emailSender = identityemail.NewSMTPSender(identityemail.SMTPConfig{
+		emailMailer = mailersmtp.NewSender(mailersmtp.Config{
 			Host:     cfg.SMTPHost,
 			Port:     cfg.SMTPPort,
 			Username: cfg.SMTPUser,
@@ -189,9 +192,13 @@ func run(fallback *slog.Logger) error {
 			From:     cfg.SMTPFrom,
 			Timeout:  cfg.SMTPTimeout,
 		})
+	case "fake":
+		emailMailer = mailerfake.NewFakeSender(appLogger)
 	default:
 		return fmt.Errorf("unsupported EMAIL_SENDER: %s", cfg.EmailSender)
 	}
+
+	emailSender := identityemail.NewLoginCodeSender(emailMailer, renderer)
 
 	authService := identityapp.NewAuthService(
 		identityUserRepo,

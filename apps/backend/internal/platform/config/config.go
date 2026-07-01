@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +50,7 @@ type Config struct {
 	PhotoStoragePathStyle               bool
 	PhotoStorageS3Enabled               bool
 	EmailSender                         string
+	EmailTemplatesDir                   string
 	SMTPHost                            string
 	SMTPPort                            string
 	SMTPUser                            string
@@ -88,6 +90,7 @@ func Load() (Config, error) {
 		MigrationsDir:     os.Getenv("MIGRATIONS_DIR"),
 		SMSSender:         os.Getenv("SMS_SENDER"),
 		EmailSender:       os.Getenv("EMAIL_SENDER"),
+		EmailTemplatesDir: os.Getenv("EMAIL_TEMPLATES_DIR"),
 		SMTPHost:          os.Getenv("SMTP_HOST"),
 		SMTPPort:          os.Getenv("SMTP_PORT"),
 		SMTPUser:          os.Getenv("SMTP_USER"),
@@ -356,6 +359,17 @@ func Load() (Config, error) {
 			cfg.EmailSender = "fake"
 		} else {
 			return Config{}, fmt.Errorf("EMAIL_SENDER is required for APP_ENV=%s", cfg.AppEnv)
+		}
+	}
+	if cfg.EmailSender == "fake" && cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
+		return Config{}, fmt.Errorf("EMAIL_SENDER=fake is not allowed for APP_ENV=%s", cfg.AppEnv)
+	}
+	if cfg.EmailTemplatesDir == "" {
+		cfg.EmailTemplatesDir = "apps/backend/templates/email"
+	}
+	if cfg.EmailSender == "smtp" && cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
+		if !filepath.IsAbs(cfg.EmailTemplatesDir) {
+			return Config{}, fmt.Errorf("EMAIL_TEMPLATES_DIR must be an absolute path in %s environment", cfg.AppEnv)
 		}
 	}
 	if cfg.EmailSender == "smtp" {
