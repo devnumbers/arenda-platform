@@ -45,7 +45,7 @@ export function ReminderSection({
           <Checkbox.Control className={styles.checkboxControl}>
             <Checkbox.Indicator className={styles.checkboxIndicator} />
           </Checkbox.Control>
-          <span>Добавить SMS-напоминание</span>
+          <span>Добавить напоминание на email</span>
         </Checkbox.Content>
       </Checkbox>
 
@@ -82,6 +82,9 @@ export function ReminderSection({
               );
             })}
           </div>
+          <p className={styles.hint}>
+            Напоминание придёт на подтверждённый email владельца.
+          </p>
         </div>
       )}
     </div>
