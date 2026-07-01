@@ -6,9 +6,7 @@ import { Modal } from '@heroui/react';
 import type { components } from '@/shared/api/generated';
 import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
-import { IconLink } from '@/shared/ui/icon-link';
-import { Icon } from '@/shared/ui/icon';
-import { ArrowLeft } from '@/shared/assets/icons';
+import { PageHeader } from '@/shared/ui/page-header';
 import {
   useCompleteOperation,
   useDeleteOperation,
@@ -189,7 +187,7 @@ function OperationDetailCard({
   return (
     <section className={styles.card}>
       <div className={styles.cardHeader}>
-        <h1 className={styles.name}>{operation.name}</h1>
+        <h2 className={styles.name}>{operation.name}</h2>
         <span className={`${styles.status} ${statusClass}`}>
           {getOperationStatusLabel(operation.status)}
         </span>
@@ -323,20 +321,7 @@ export function OperationDetailPage(): JSX.Element {
 
   return (
     <div className={styles.root}>
-      <div className={styles.header}>
-        <IconLink
-          href={ROUTES.financeOperations}
-          variant="icon-black"
-          size="medium"
-          icon={
-            <Icon size="m">
-              <ArrowLeft />
-            </Icon>
-          }
-          aria-label="Назад к списку операций"
-        />
-        <span className={styles.title}>Операция</span>
-      </div>
+      <PageHeader title="Операция" backHref={ROUTES.financeOperations} />
 
       <SubscriptionReadonlyBanner />
 

@@ -3,15 +3,11 @@
 import {
   type ChangeEvent,
   type FormEvent,
-  useEffect,
-  useRef,
   useState,
   type JSX,
 } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft } from '@/shared/assets/icons';
-import { Icon } from '@/shared/ui/icon';
-import { IconLink } from '@/shared/ui/icon-link';
+import { PageHeader } from '@/shared/ui/page-header';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import { DatePickerField } from '@/shared/ui/date-picker-field';
@@ -321,13 +317,6 @@ export function OperationEditForm(): JSX.Element {
   const { data, isLoading, isError, refetch, isFetching } = useOperation(id ?? '');
   const { data: subscription } = useSubscription();
   const readonly = isSubscriptionReadonly(subscription);
-  const initialized = useRef(false);
-
-  useEffect(() => {
-    if (data) {
-      initialized.current = true;
-    }
-  }, [data]);
 
   if (!id) {
     return (
@@ -342,20 +331,10 @@ export function OperationEditForm(): JSX.Element {
 
   return (
     <div className={styles.root}>
-      <header className={styles.header}>
-        <IconLink
-          href={ROUTES.financeOperation(id)}
-          variant="icon-black"
-          size="medium"
-          icon={
-            <Icon size="m">
-              <ArrowLeft />
-            </Icon>
-          }
-          aria-label="Назад к операции"
-        />
-        <h1 className={styles.title}>Редактирование операции</h1>
-      </header>
+      <PageHeader
+        title="Редактирование операции"
+        backHref={ROUTES.financeOperation(id)}
+      />
 
       <SubscriptionReadonlyBanner />
 

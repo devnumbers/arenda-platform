@@ -11,9 +11,7 @@ import { useParams, useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import { Modal } from '@heroui/react';
 import { toast } from 'react-toastify';
-import { ArrowLeft } from '@/shared/assets/icons';
-import { Icon } from '@/shared/ui/icon';
-import { IconLink } from '@/shared/ui/icon-link';
+import { PageHeader } from '@/shared/ui/page-header';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import { DatePickerField } from '@/shared/ui/date-picker-field';
@@ -530,20 +528,10 @@ export function RecurringOperationEditPage(): JSX.Element {
 
   return (
     <div className={styles.root}>
-      <header className={styles.header}>
-        <IconLink
-          href={ROUTES.financeOperations}
-          variant="icon-black"
-          size="medium"
-          icon={
-            <Icon size="m">
-              <ArrowLeft />
-            </Icon>
-          }
-          aria-label="Назад к операциям"
-        />
-        <h1 className={styles.title}>Редактирование серии</h1>
-      </header>
+      <PageHeader
+        title="Редактирование серии"
+        backHref={ROUTES.financeOperations}
+      />
 
       <SubscriptionReadonlyBanner />
 
