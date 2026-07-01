@@ -2,9 +2,8 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { Button } from '@/shared/ui/button';
-import { IconButton } from '@/shared/ui/icon-button';
+import { WizardHeader } from '@/shared/ui/wizard-header';
 import { ROUTES } from '@/shared/config/routes';
 import {
   expenseCategories,
@@ -270,42 +269,13 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
   return (
     <div className={styles.root}>
       <SubscriptionReadonlyBanner />
-      <header className={styles.header}>
-        <div className={styles.topRow}>
-          <IconButton
-            variant="icon-black"
-            size="small"
-            icon={<ArrowLeft />}
-            aria-label="Назад"
-            onClick={handleBack}
-            className={styles.iconButton}
-          />
-          <h1 className={styles.title}>Создание операции</h1>
-          <IconButton
-            variant="icon-black"
-            size="small"
-            icon={<Cancel />}
-            aria-label="Отменить"
-            onClick={handleCancel}
-            className={styles.iconButton}
-          />
-        </div>
-        <div className={styles.progressRow}>
-          <span className={styles.badge}>{currentStepNumber} из 3</span>
-          <div
-            className={styles.progressBar}
-            role="progressbar"
-            aria-label={`Шаг ${currentStepNumber} из 3`}
-            aria-valuenow={currentStepNumber}
-            aria-valuemin={1}
-            aria-valuemax={3}
-          >
-            <div className={`${styles.segment} ${currentStepNumber >= 1 ? styles.active : ''}`} />
-            <div className={`${styles.segment} ${currentStepNumber >= 2 ? styles.active : ''}`} />
-            <div className={`${styles.segment} ${currentStepNumber >= 3 ? styles.active : ''}`} />
-          </div>
-        </div>
-      </header>
+      <WizardHeader
+        title="Создание операции"
+        step={currentStepNumber}
+        totalSteps={3}
+        onBack={handleBack}
+        onCancel={handleCancel}
+      />
 
       <div className={styles.content}>
         {step === 'basic' && (

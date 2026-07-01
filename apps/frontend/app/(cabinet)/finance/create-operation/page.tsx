@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
+import { PageShell } from '@/shared/ui/page-shell';
 import { OperationCreateWizard } from '@/widgets/operations';
-import styles from './page.module.css';
 
 export const metadata: Metadata = {
   title: 'Создание операции — Arenda Platform',
@@ -17,8 +17,8 @@ export default async function CreateOperationPage({
   const selectedPropertyId = typeof propertyId === 'string' ? propertyId : undefined;
 
   return (
-    <div className={styles.root}>
+    <PageShell>
       <OperationCreateWizard type={operationType} propertyId={selectedPropertyId} />
-    </div>
+    </PageShell>
   );
 }
