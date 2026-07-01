@@ -25,6 +25,10 @@
   padding: 0;
 }
 
+.arrowLeft{
+  transform: scaleX(-1);
+}
+
 .periodLabel {
   min-width: 0;
   font-size: var(--font-size-text-l);

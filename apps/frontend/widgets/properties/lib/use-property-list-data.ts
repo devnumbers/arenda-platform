@@ -8,10 +8,9 @@ import { ApiError } from '@/shared/api/errors';
 import { mapLeaseResponse } from '@/entities/lease/model/mappers';
 import type { Property } from '@/entities/property/model/types';
 import type { Lease } from '@/entities/lease/model/types';
+import { getEffectiveLeaseStatus, isOpenLease } from '@/entities/lease/lib/status';
 
-export type PropertyWithLease = Property & {
-  lastLease?: Lease;
-};
+export type PropertyWithLease = Property;
 
 type UsePropertyListDataReturn = {
   data: PropertyWithLease[] | undefined;
@@ -26,11 +25,19 @@ type UsePropertyListDataReturn = {
 };
 
 function compareLeaseRelevance(a: Lease, b: Lease): number {
-  // Active leases always beat completed ones. Among the same status,
-  // the later start_date wins. Invalid/unparseable start dates are
-  // treated as older than valid dates.
-  if (a.status === 'active' && b.status !== 'active') return 1;
-  if (a.status !== 'active' && b.status === 'active') return -1;
+  const statusPriority: Record<Lease['status'], number> = {
+    requires_action: 3,
+    active: 2,
+    awaiting_start: 1,
+    completed: 0,
+    archived: 0,
+  };
+  const aStatus = getEffectiveLeaseStatus(a);
+  const bStatus = getEffectiveLeaseStatus(b);
+
+  if (statusPriority[aStatus] !== statusPriority[bStatus]) {
+    return statusPriority[aStatus] - statusPriority[bStatus];
+  }
 
   const aStart = a.startDate ? new Date(a.startDate).getTime() : NaN;
   const bStart = b.startDate ? new Date(b.startDate).getTime() : NaN;
@@ -63,30 +70,30 @@ export function usePropertyListData(mode: PropertiesViewMode): UsePropertyListDa
   const data = useMemo<PropertyWithLease[] | undefined>(() => {
     if (!sourceQuery.data) return undefined;
 
-    // Index the best lease candidate per property in a single O(L) pass.
-    // The candidate is either the current active lease or, if none exists,
-    // the most recently started completed lease. The final join is O(P).
-    const bestLeaseByProperty = new Map<string, Lease>();
+    const openLeaseByProperty = new Map<string, Lease>();
 
     for (const lease of leasesQuery.data ?? []) {
       const mappedLease = mapLeaseResponse(lease);
-      if (mappedLease.status !== 'active' && mappedLease.status !== 'completed') {
+      if (!isOpenLease(mappedLease)) {
         continue;
       }
 
-      const current = bestLeaseByProperty.get(mappedLease.propertyId);
+      const effectiveLease = {
+        ...mappedLease,
+        status: getEffectiveLeaseStatus(mappedLease),
+      };
+      const current = openLeaseByProperty.get(effectiveLease.propertyId);
 
-      if (!current || compareLeaseRelevance(mappedLease, current) > 0) {
-        bestLeaseByProperty.set(mappedLease.propertyId, mappedLease);
+      if (!current || compareLeaseRelevance(effectiveLease, current) > 0) {
+        openLeaseByProperty.set(effectiveLease.propertyId, effectiveLease);
       }
     }
 
     return sourceQuery.data.map((property) => {
-      const bestLease = bestLeaseByProperty.get(property.id);
+      const activeLease = openLeaseByProperty.get(property.id) ?? null;
       return {
         ...property,
-        activeLease: bestLease?.status === 'active' ? bestLease : null,
-        lastLease: bestLease,
+        activeLease,
       };
     });
   }, [sourceQuery.data, leasesQuery.data]);

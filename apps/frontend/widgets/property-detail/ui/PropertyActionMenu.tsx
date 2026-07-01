@@ -30,7 +30,7 @@ export function PropertyActionMenu({
     return (
         <Popover isOpen={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger>
-                <IconButton aria-label="Действия" icon={<Menu/>}/>
+                <IconButton variant={'secondary'} size={'large'}  aria-label="Действия" icon={<Menu/>}/>
             </PopoverTrigger>
             <PopoverContent
                 placement="bottom end"

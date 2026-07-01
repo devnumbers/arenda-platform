@@ -5,9 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { propertyKeys, useProperty } from '@/features/properties/api';
 import { useTenantContacts } from '@/features/tenant-contacts/api/hooks';
-import { useCreateLease } from '@/features/leases/api';
+import { useCreateLease, usePropertyLeases } from '@/features/leases/api';
+import { isOpenLeaseStatus } from '@/entities/lease/lib/status';
 import { ApiError } from '@/shared/api/errors';
 import { ROUTES } from '@/shared/config/routes';
+import { Button } from '@/shared/ui/button';
+import { LinkButton } from '@/shared/ui/link-button';
 import { useLeaseCreateDraft, type LeaseCreateStep } from '../lib/use-lease-create-draft';
 import { WizardHeader } from '@/shared/ui/wizard-header';
 import { LeasePriceStep } from './LeasePriceStep';
@@ -43,6 +46,7 @@ export function LeaseCreateWizard({ propertyId }: LeaseCreateWizardProps): JSX.E
   const [createdLeaseId, setCreatedLeaseId] = useState<string | undefined>(undefined);
 
   const propertyQuery = useProperty(propertyId ?? '');
+  const propertyLeasesQuery = usePropertyLeases(propertyId ?? '');
   const tenantContactsQuery = useTenantContacts();
   const createLease = useCreateLease();
 
@@ -51,14 +55,14 @@ export function LeaseCreateWizard({ propertyId }: LeaseCreateWizardProps): JSX.E
       router.replace(ROUTES.properties);
       return;
     }
-    if (propertyQuery.isError) {
-      router.replace(ROUTES.properties);
-      return;
-    }
-    if (propertyQuery.data && propertyQuery.data.occupancy !== 'free') {
-      router.replace(ROUTES.properties);
-    }
-  }, [propertyId, propertyQuery.isError, propertyQuery.data, router]);
+  }, [propertyId, router]);
+
+  const openLease = propertyLeasesQuery.data?.items.find((lease) =>
+    isOpenLeaseStatus(lease.status),
+  );
+  const isPropertyBlocked =
+    propertyQuery.data !== undefined && propertyQuery.data.status !== 'active';
+  const isLeaseBlocked = openLease !== undefined;
 
   const handleCancel = () => {
     router.push(ROUTES.properties);
@@ -118,6 +122,86 @@ export function LeaseCreateWizard({ propertyId }: LeaseCreateWizardProps): JSX.E
           onAddLater={() => router.push(ROUTES.properties)}
           leaseId={createdLeaseId ?? ''}
         />
+      </div>
+    );
+  }
+
+  if (propertyQuery.isPending || propertyLeasesQuery.isPending) {
+    return (
+      <div className={styles.root}>
+        <WizardHeader
+          title="Создание аренды"
+          step={draft.step}
+          totalSteps={2}
+          onBack={handleBack}
+          onCancel={handleCancel}
+        />
+      </div>
+    );
+  }
+
+  if (propertyQuery.isError || propertyLeasesQuery.isError || !propertyQuery.data) {
+    return (
+      <div className={styles.root}>
+        <WizardHeader
+          title="Создание аренды"
+          step={draft.step}
+          totalSteps={2}
+          onBack={handleBack}
+          onCancel={handleCancel}
+        />
+        <div className={styles.content}>
+          <div className={styles.blocked}>
+            <h2 className={styles.blockedTitle}>Не удалось проверить объект</h2>
+            <p className={styles.blockedText}>
+              Повторите загрузку, чтобы проверить доступность объекта для новой аренды.
+            </p>
+            <Button
+              type="button"
+              variant="primary"
+              size="medium"
+              onClick={() => {
+                void propertyQuery.refetch();
+                void propertyLeasesQuery.refetch();
+              }}
+            >
+              Повторить
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPropertyBlocked || isLeaseBlocked) {
+    return (
+      <div className={styles.root}>
+        <WizardHeader
+          title="Создание аренды"
+          step={draft.step}
+          totalSteps={2}
+          onBack={handleBack}
+          onCancel={handleCancel}
+        />
+        <div className={styles.content}>
+          <div className={styles.blocked}>
+            <h2 className={styles.blockedTitle}>
+              {isLeaseBlocked ? 'У объекта уже есть открытая аренда' : 'Аренда недоступна'}
+            </h2>
+            <p className={styles.blockedText}>
+              {isLeaseBlocked
+                ? 'Завершите текущую аренду перед созданием новой.'
+                : 'Создать аренду можно только для активного объекта.'}
+            </p>
+            <LinkButton
+              href={openLease ? ROUTES.lease(openLease.id) : ROUTES.properties}
+              variant="primary"
+              size="medium"
+            >
+              {openLease ? 'Открыть аренду' : 'К объектам'}
+            </LinkButton>
+          </div>
+        </div>
       </div>
     );
   }

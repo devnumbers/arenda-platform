@@ -20,6 +20,7 @@ import {
   startOfYear,
 } from '@/entities/operation/lib/dates';
 import styles from './OperationFilters.module.css';
+import clsx from "clsx";
 
 export type OperationPeriod = 'all' | 'month' | 'quarter' | 'year' | 'custom';
 
@@ -326,13 +327,13 @@ export function OperationFilters({
                     <Button
                         variant="icon-black"
                         size="small"
-                        className={styles.periodArrow}
+                        className={clsx(styles.periodArrow, styles.arrowLeft)}
                         aria-label="Предыдущий период"
                         disabled={!canMovePeriod}
                         onClick={() => handleMovePeriod(-1)}
                     >
                         <Icon size="s">
-                            <ArrowLeft/>
+                            <ArrowRight/>
                         </Icon>
                     </Button>
 

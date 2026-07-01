@@ -15,6 +15,7 @@ import type {PropertyPageStatus} from '../lib/get-property-page-status';
 import {formatAwaitingStart} from '../lib/format-awaiting-start';
 import {formatOverdueCount} from '../lib/format-overdue-count';
 import {PropertyDetailSection} from './PropertyDetailSection';
+import {getEffectiveLeaseStatus} from '@/entities/lease/lib/status';
 import styles from './PropertyLeaseCard.module.css';
 
 type LeaseResponse = components['schemas']['LeaseResponse'];
@@ -25,6 +26,7 @@ export type PropertyLeaseCardProps = {
     readonly status: PropertyPageStatus;
     readonly propertyId: string;
     readonly onPayRent?: () => void;
+    readonly onEndLease?: () => void;
     readonly isPayRentLoading?: boolean;
 };
 
@@ -34,29 +36,37 @@ export function PropertyLeaseCard({
                                       status,
                                       propertyId,
                                       onPayRent,
+                                      onEndLease,
                                       isPayRentLoading = false,
                                   }: PropertyLeaseCardProps): JSX.Element {
     const leaseNewHref = `${ROUTES.leaseNew}?propertyId=${propertyId}`;
+    const effectiveLeaseStatus = lease
+        ? getEffectiveLeaseStatus({
+            status: lease.status,
+            startDate: lease.start_date,
+            endDate: lease.end_date ?? undefined,
+        })
+        : undefined;
     const progressEndDate = lease?.end_date ?? lease?.start_date;
     const remaining = lease
         ? formatLeaseRemainingDuration(lease.start_date, lease.end_date)
         : '';
     const monthLabel = lease
-        ? lease.status === 'awaiting_start'
+        ? effectiveLeaseStatus === 'awaiting_start'
             ? formatAwaitingStart(lease.start_date)
-            : formatCurrentLeaseMonth(lease.start_date, lease.status)
+            : formatCurrentLeaseMonth(lease.start_date, effectiveLeaseStatus ?? lease.status)
         : '';
-    const showRentActions = status === 'rented' || status === 'requires_action';
-    const showRenewAction = status === 'finished';
+    const showRentActions = status === 'rented';
+    const showResolveActions = status === 'requires_action' && lease;
     const showCreateAction = status === 'free';
     const showUnavailableState =
         status !== 'awaiting_start' &&
         !showRentActions &&
-        !showRenewAction &&
+        !showResolveActions &&
         !showCreateAction;
     const showActions =
         showRentActions ||
-        showRenewAction ||
+        showResolveActions ||
         showCreateAction ||
         showUnavailableState;
 
@@ -105,7 +115,7 @@ export function PropertyLeaseCard({
                 </NextLink>
             ) : (
                 <div className={styles.empty}>
-                    <p className={styles.emptyText}>Аренда не создана</p>
+                    <p className={styles.emptyText}>Объект свободен</p>
                 </div>
             )}
 
@@ -140,14 +150,29 @@ export function PropertyLeaseCard({
                                 Все операции
                             </LinkButton>
                         </>
-                    ) : showRenewAction ? (
-                        <LinkButton href={leaseNewHref} variant="primary" fullWidth>
-                            Продлить
-                        </LinkButton>
+                    ) : showResolveActions ? (
+                        <>
+                            <LinkButton href={ROUTES.lease(lease.id)} variant="primary" fullWidth>
+                                Продлить текущую
+                            </LinkButton>
+                            <Button
+                                variant="secondary"
+                                fullWidth
+                                onClick={onEndLease}
+                                type="button"
+                            >
+                                Завершить аренду
+                            </Button>
+                        </>
                     ) : showCreateAction ? (
-                        <LinkButton href={leaseNewHref} variant="primary" fullWidth>
-                            Создать аренду
-                        </LinkButton>
+                        <>
+                            <LinkButton href={leaseNewHref} variant="primary" fullWidth>
+                                Создать аренду
+                            </LinkButton>
+                            <LinkButton href={ROUTES.propertyLeases(propertyId)} variant="secondary" fullWidth>
+                                История аренд
+                            </LinkButton>
+                        </>
                     ) : (
                         <span className={styles.disabledText}>
               Аренда недоступна в этом статусе

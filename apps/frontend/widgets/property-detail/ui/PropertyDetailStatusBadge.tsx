@@ -30,7 +30,6 @@ const config: Record<
     color: '#2B7FFF',
     icon: StatusInfo,
   },
-  finished: { label: 'Аренда завершена', color: '#2B7FFF', icon: StatusInfo },
   free: { label: 'Не арендована', color: '#A1A3A6', icon: StatusDoor },
   maintenance: { label: 'На ремонте', color: '#EBB800', icon: StatusWarning },
   archived: { label: 'В архиве', color: '#A1A3A6', icon: StatusDoor },

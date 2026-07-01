@@ -24,11 +24,17 @@ export function applyFiltersAndSort(
       const display = getDisplayStatus(
         p.status,
         p.occupancy,
-        p.lastLease?.status,
+        p.activeLease?.status,
       );
-      return display && display !== 'overdue'
-        ? filters.statuses.includes(display)
-        : false;
+      if (!display || display === 'overdue') {
+        return false;
+      }
+      const filterStatus =
+        display === 'requires_action' || display === 'awaiting_start'
+          ? 'rented'
+          : display;
+
+      return filters.statuses.includes(filterStatus);
     });
   }
 

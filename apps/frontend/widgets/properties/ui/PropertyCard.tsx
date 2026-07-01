@@ -44,16 +44,11 @@ function getPropertyAction(property: PropertyWithLease): PropertyAction {
     const displayStatus = getDisplayStatus(
         property.status,
         property.occupancy,
-        property.lastLease?.status,
+        property.activeLease?.status,
     );
 
-    if (displayStatus === 'maintenance' || displayStatus === 'finished') {
-        return {
-            kind: 'single',
-            label: 'Возобновить',
-            href: ROUTES.tenants,
-            variant: 'clear',
-        };
+    if (displayStatus === 'maintenance') {
+        return null;
     }
 
     if (displayStatus === 'free') {
@@ -66,13 +61,23 @@ function getPropertyAction(property: PropertyWithLease): PropertyAction {
     }
 
     const lease = property.activeLease;
-    if (!lease?.endDate) return null;
+    if (!lease) return null;
+
+    if (displayStatus === 'requires_action') {
+        return {
+            kind: 'double',
+            secondary: {label: 'Продлить', href: ROUTES.lease(lease.id)},
+            primary: {label: 'Завершить', href: ROUTES.lease(lease.id)},
+        };
+    }
+
+    if (!lease.endDate) return null;
 
     if (displayStatus === 'rented' && getDaysRemaining(lease.endDate) <= 30) {
         return {
             kind: 'double',
-            secondary: {label: 'Продлить', href: ROUTES.finance},
-            primary: {label: 'Завершить', href: ROUTES.tenants},
+            secondary: {label: 'Продлить', href: ROUTES.lease(lease.id)},
+            primary: {label: 'Завершить', href: ROUTES.lease(lease.id)},
         };
     }
 
@@ -89,7 +94,7 @@ export function PropertyCard({property}: PropertyCardProps): JSX.Element {
     const displayStatus = getDisplayStatus(
         property.status,
         property.occupancy,
-        property.lastLease?.status,
+        property.activeLease?.status,
     );
     const action = getPropertyAction(property);
 
@@ -126,7 +131,7 @@ export function PropertyCard({property}: PropertyCardProps): JSX.Element {
                         <LeaseProgressBar
                             startDate={lease.startDate}
                             endDate={lease.endDate}
-                            active={lease.status === 'active'}
+                            active={lease.status === 'active' || lease.status === 'requires_action'}
                         />
                     )}
 

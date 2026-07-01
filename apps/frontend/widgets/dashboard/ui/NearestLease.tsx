@@ -12,6 +12,7 @@ import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {ROUTES} from '@/shared/config/routes';
 import {formatCurrentLeaseMonth, formatLeaseRemainingDuration,} from '@/shared/lib/format-lease-card-values';
 import {EmptyState} from '@/shared/ui/empty-state';
+import { getEffectiveLeaseStatus, isOpenLeaseStatus } from '@/entities/lease/lib/status';
 import {PropertyThumbnail} from '@/widgets/properties/ui/PropertyThumbnail';
 import {SectionHeader} from './SectionHeader';
 import {StatusBadge} from './StatusBadge';
@@ -33,10 +34,18 @@ function getNearestLease(leases: LeaseResponse[] | undefined): LeaseResponse | u
     }
 
     const active = leases
-        .filter((lease) => lease.status === 'active' || lease.status === 'requires_action')
+        .map((lease) => ({
+            ...lease,
+            status: getEffectiveLeaseStatus({
+                status: lease.status,
+                startDate: lease.start_date,
+                endDate: lease.end_date ?? undefined,
+            }),
+        }))
+        .filter((lease) => isOpenLeaseStatus(lease.status))
         .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
 
-    return active[0] ?? leases[0];
+    return active[0];
 }
 
 function getPropertyName(
@@ -48,6 +57,14 @@ function getPropertyName(
 
 export function NearestLease({leases, properties, isLoading}: NearestLeaseProps): JSX.Element {
     const lease = getNearestLease(leases);
+    const hasLeaseHistory = (leases?.length ?? 0) > 0;
+    const availableProperty = properties?.find(
+        (property) => property.status === 'active' && property.occupancy === 'free',
+    );
+    const emptyActionHref = availableProperty
+        ? `${ROUTES.leaseNew}?propertyId=${availableProperty.id}`
+        : ROUTES.properties;
+    const emptyActionText = availableProperty ? 'Создать аренду' : 'К объектам';
 
     if (isLoading) {
         return (
@@ -79,13 +96,17 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
     if (!lease) {
         return (
             <section className={styles.section}>
-                <SectionHeader title="Ближайшая аренда" href={ROUTES.leaseNew}/>
+                <SectionHeader title="Ближайшая аренда" href={emptyActionHref}/>
                 <EmptyState
                     icon={<Key/>}
-                    entities="аренд"
-                    subtitle="Добавьте первую аренду, чтобы видеть её здесь"
-                    actionHref={ROUTES.leaseNew}
-                    actionText="Добавить аренду"
+                    title={hasLeaseHistory ? 'Нет открытой аренды' : 'Нет аренд'}
+                    subtitle={
+                        hasLeaseHistory
+                            ? 'Создайте новую аренду для свободного объекта'
+                            : 'Добавьте первую аренду, чтобы видеть её здесь'
+                    }
+                    actionHref={emptyActionHref}
+                    actionText={emptyActionText}
                 />
             </section>
         );

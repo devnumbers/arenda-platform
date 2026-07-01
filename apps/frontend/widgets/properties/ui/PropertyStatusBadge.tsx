@@ -15,10 +15,11 @@ type StatusConfig = {
 
 const config: Record<DisplayStatus, StatusConfig> = {
   rented: { label: 'Арендован', color: '#34C771', icon: StatusGood },
+  requires_action: { label: 'Требует действия', color: '#FF4646', icon: StatusDanger },
+  awaiting_start: { label: 'Скоро начнётся', color: '#2B7FFF', icon: StatusInfo },
   free: { label: 'Не арендован', color: '#A1A3A6', icon: StatusDoor },
   maintenance: { label: 'На ремонте', color: '#EBB800', icon: StatusWarning },
   overdue: { label: '1 просроченная операция', color: '#FF4646', icon: StatusDanger },
-  finished: { label: 'Аренда завершена', color: '#2B7FFF', icon: StatusInfo },
 };
 
 export function PropertyStatusBadge({ status }: PropertyStatusBadgeProps): JSX.Element {

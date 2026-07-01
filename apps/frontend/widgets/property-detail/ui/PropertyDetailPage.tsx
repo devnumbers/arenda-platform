@@ -19,7 +19,7 @@ import {
     usePropertyOperationsSummary,
 } from '@/features/operations/api/hooks';
 import {ApiError} from '@/shared/api/errors';
-import {findCurrentLease, findLastLease, getPropertyPageStatus,} from '../lib/get-property-page-status';
+import {findCurrentLease, getPropertyPageStatus,} from '../lib/get-property-page-status';
 import {PropertyDetailHeader} from './PropertyDetailHeader';
 import {PropertyGallery} from './PropertyGallery';
 import {PropertyStatusSection} from './PropertyStatusSection';
@@ -72,7 +72,10 @@ export function PropertyDetailPage(): JSX.Element {
         [property, leases],
     );
     const currentLease = useMemo(() => findCurrentLease(leases), [leases]);
-    const lastLease = useMemo(() => findLastLease(leases), [leases]);
+    const selectedLease = useMemo(
+        () => leases.find((lease) => lease.id === selectedLeaseId),
+        [leases, selectedLeaseId],
+    );
     const payableRentFilters = useMemo<OperationsFilters>(
         () => ({
             lease_id: currentLease?.id,
@@ -139,12 +142,12 @@ export function PropertyDetailPage(): JSX.Element {
     }, [selectedLeaseId, completeLease]);
 
     const handleDepositReturn = useCallback(() => {
-        const leaseId = lastLease?.id ?? selectedLeaseId;
+        const leaseId = selectedLeaseId || currentLease?.id;
         if (leaseId) {
             setSelectedLeaseId(leaseId);
             setDepositOpen(true);
         }
-    }, [lastLease, selectedLeaseId]);
+    }, [currentLease?.id, selectedLeaseId]);
 
     const confirmDepositReturn = useCallback(() => {
         if (!selectedLeaseId) return;
@@ -221,7 +224,7 @@ export function PropertyDetailPage(): JSX.Element {
                 }
             />
 
-            <PropertyGallery />
+            <PropertyGallery/>
 
             <PropertyStatusSection
                 property={property}
@@ -230,12 +233,13 @@ export function PropertyDetailPage(): JSX.Element {
             />
 
             <PropertyLeaseCard
-                lease={currentLease ?? lastLease}
+                lease={currentLease}
                 status={pageStatus}
                 overdueRentCount={summaryQuery.data?.overdue_rent_count ?? 0}
                 propertyId={id}
                 onPayRent={handlePayRent}
                 isPayRentLoading={isPayRentLoading}
+                onEndLease={handleEndLease}
             />
 
             <PropertyTenantCard lease={property.activeLease}/>
@@ -271,7 +275,11 @@ export function PropertyDetailPage(): JSX.Element {
                 isOpen={depositOpen}
                 onClose={() => setDepositOpen(false)}
                 onConfirm={confirmDepositReturn}
-                depositAmountKopecks={lastLease?.deposit_amount_kopecks ?? 0}
+                depositAmountKopecks={
+                    selectedLease?.deposit_amount_kopecks ??
+                    currentLease?.deposit_amount_kopecks ??
+                    0
+                }
             />
 
             {successBannerOpen && (

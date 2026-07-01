@@ -1,14 +1,21 @@
 import type { PropertyStatus, Occupancy } from '@/entities/property/model/types';
 import type { LeaseStatus } from '@/entities/lease/model/types';
 
-export type DisplayStatus = 'rented' | 'free' | 'maintenance' | 'overdue' | 'finished';
+export type DisplayStatus =
+  | 'rented'
+  | 'requires_action'
+  | 'awaiting_start'
+  | 'free'
+  | 'maintenance'
+  | 'overdue';
 
 export const displayStatusLabels: Record<DisplayStatus, string> = {
   rented: 'Арендован',
+  requires_action: 'Требует действия',
+  awaiting_start: 'Скоро начнётся',
   free: 'Не арендован',
   maintenance: 'На ремонте',
   overdue: '1 просроченная операция',
-  finished: 'Аренда завершена',
 };
 
 export function getDisplayStatus(
@@ -19,15 +26,15 @@ export function getDisplayStatus(
   if (status === 'archived') return null;
   if (status === 'maintenance') return 'maintenance';
   if (leaseStatus === 'active') return 'rented';
-  if (leaseStatus === 'completed') return 'finished';
+  if (leaseStatus === 'requires_action') return 'requires_action';
+  if (leaseStatus === 'awaiting_start') return 'awaiting_start';
   return occupancy === 'occupied' ? 'rented' : 'free';
 }
 
-export type StatusFilterValue = 'rented' | 'free' | 'maintenance' | 'finished';
+export type StatusFilterValue = 'rented' | 'free' | 'maintenance';
 
 export const statusFilterOptions: { value: StatusFilterValue; label: string }[] = [
   { value: 'rented', label: 'Аренда' },
   { value: 'free', label: 'Без аренды' },
   { value: 'maintenance', label: 'На ремонте' },
-  { value: 'finished', label: 'Аренда завершена' },
 ];

@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { PageHeader } from '@/shared/ui/page-header';
 import { DashboardPage } from '@/widgets/dashboard';
 
 export const metadata: Metadata = {
@@ -10,7 +9,6 @@ export const metadata: Metadata = {
 export default function DashboardRoutePage() {
   return (
     <>
-      <PageHeader title="Главная" />
       <DashboardPage />
     </>
   );

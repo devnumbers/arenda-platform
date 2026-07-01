@@ -341,6 +341,7 @@ export function OperationsPage(): JSX.Element {
         <div className={styles.root}>
             <PageHeader
                 title="Операции"
+                backHref={ROUTES.finance}
                 actions={
                     !readonly && (
                         <LinkButton

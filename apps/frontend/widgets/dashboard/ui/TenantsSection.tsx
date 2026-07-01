@@ -5,6 +5,7 @@ import { Skeleton } from '@heroui/react/skeleton';
 import { Icon } from '@/shared/ui/icon';
 import { Arendators } from '@/shared/assets/icons';
 import type { components } from '@/shared/api/generated';
+import { getEffectiveLeaseStatus, isOpenLeaseStatus } from '@/entities/lease/lib/status';
 import { SectionHeader } from './SectionHeader';
 import { EntityCard } from './EntityCard';
 import { IconActionCard } from './IconActionCard';
@@ -22,6 +23,15 @@ export function TenantsSection({ leases, isLoading }: TenantsSectionProps): JSX.
   const tenants = useMemo(() => {
     const seen = new Map<string, TenantContactResponse>();
     for (const lease of leases ?? []) {
+      const effectiveStatus = getEffectiveLeaseStatus({
+        status: lease.status,
+        startDate: lease.start_date,
+        endDate: lease.end_date ?? undefined,
+      });
+      if (!isOpenLeaseStatus(effectiveStatus)) {
+        continue;
+      }
+
       const contact = lease.tenant_contact;
       if (contact && !seen.has(contact.id)) {
         seen.set(contact.id, contact);

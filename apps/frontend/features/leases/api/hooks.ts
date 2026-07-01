@@ -11,6 +11,7 @@ import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { leaseKeys } from './keys';
 import { operationKeys } from '@/features/operations/api/keys';
+import { propertyKeys } from '@/features/properties/api/keys';
 import type { components } from '@/shared/api/generated';
 
 type LeaseResponse = components['schemas']['LeaseResponse'];
@@ -62,8 +63,15 @@ export function useCreateLease(): UseMutationResult<
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    onSuccess: () => {
+    onSuccess: (lease) => {
       queryClient.invalidateQueries({ queryKey: leaseKeys.all });
+      if (lease.property_id) {
+        queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+        queryClient.invalidateQueries({ queryKey: propertyKeys.detail(lease.property_id) });
+        queryClient.invalidateQueries({
+          queryKey: leaseKeys.byProperty(lease.property_id),
+        });
+      }
     },
   });
 }
@@ -87,6 +95,8 @@ export function useUpdateLease(): UseMutationResult<
         queryKey: operationKeys.operations({ lease_id: id }),
       });
       if (lease.property_id) {
+        queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+        queryClient.invalidateQueries({ queryKey: propertyKeys.detail(lease.property_id) });
         queryClient.invalidateQueries({
           queryKey: leaseKeys.byProperty(lease.property_id),
         });
@@ -119,6 +129,8 @@ export function useCompleteLease(): UseMutationResult<
         queryKey: operationKeys.operations({ lease_id: lease.id }),
       });
       if (lease.property_id) {
+        queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+        queryClient.invalidateQueries({ queryKey: propertyKeys.detail(lease.property_id) });
         queryClient.invalidateQueries({
           queryKey: leaseKeys.byProperty(lease.property_id),
         });
