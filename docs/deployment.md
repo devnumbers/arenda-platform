@@ -183,6 +183,33 @@ esac
 - `git clean -ffdx` в deploy директории удаляет любой drift checkout-а. В этих
   директориях должны храниться только файлы репозитория и целевой `.env.*`.
 
+## T-Bank TLS Certificates
+
+Backend image включает публичные CA-сертификаты, которые T-Bank требует для
+серверных API-запросов к T-Kassa endpoint-ам:
+
+- `Russian Trusted Root CA`
+- `Russian Trusted Sub CA`
+
+Официальные источники и checksum хранятся в
+`apps/backend/certs/tbank/README.md`. Сертификаты добавляются в Docker image на
+этапе сборки через `/usr/local/share/ca-certificates/` и `update-ca-certificates`;
+на host вручную их ставить не нужно.
+
+HARICA roots уже входят в текущий Debian `ca-certificates` runtime image. Если
+будущая base image перестанет их содержать, добавить HARICA нужно тем же
+механизмом из официального T-Bank bundle.
+
+Проверка TLS из backend image:
+
+```bash
+docker buildx build --load -f apps/backend/Dockerfile -t arenda-backend:tkassa-ca .
+docker run --rm --entrypoint curl arenda-backend:tkassa-ca -Iv https://rest-api-test.tinkoff.ru/v2/Init
+```
+
+Для stage T-Bank также требует добавить IP сервера `80.78.254.79` в белый список
+тестовой среды для URL `rest-api-test.tinkoff.ru`.
+
 ## Rollback
 
 ```bash

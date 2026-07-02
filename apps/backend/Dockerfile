@@ -18,6 +18,9 @@ RUN apt-get update \
     && groupadd --system --gid 10001 arenda \
     && useradd --system --uid 10001 --gid arenda --home-dir /app --shell /usr/sbin/nologin arenda
 
+COPY apps/backend/certs/tbank/*.crt /usr/local/share/ca-certificates/tbank/
+RUN update-ca-certificates
+
 WORKDIR /app
 
 COPY --from=build /out/arenda-api /app/arenda-api
