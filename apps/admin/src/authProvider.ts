@@ -1,4 +1,5 @@
 import { AuthProvider, fetchUtils } from 'react-admin';
+import { normalizePhone } from './phone';
 
 const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api';
 
@@ -55,10 +56,11 @@ const fetchMe = async (): Promise<MeResponse> => {
 
 export const authProvider: AuthProvider = {
   login: async ({ phone, email, code }) => {
+    const normalizedPhone = normalizePhone(String(phone ?? ''));
     try {
       await httpClient(`${API_PREFIX}/auth/email/verify`, {
         method: 'POST',
-        body: JSON.stringify({ phone, email, code }),
+        body: JSON.stringify({ phone: normalizedPhone, email, code }),
       });
     } catch (error) {
       throw new Error(messageOf(error, 'Не удалось подтвердить код'));

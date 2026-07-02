@@ -10,6 +10,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { formatPhoneInput, isValidPhone, normalizePhone } from './phone';
 
 const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api';
 
@@ -42,9 +43,16 @@ export const LoginPage = () => {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isPhoneValid = isValidPhone(phone);
 
   const handleSendCode = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const normalizedPhone = normalizePhone(phone);
+    if (!isPhoneValid) {
+      setError('Введите корректный номер телефона');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -53,7 +61,7 @@ export const LoginPage = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ phone, email }),
+        body: JSON.stringify({ phone: normalizedPhone, email }),
       });
 
       if (!response.ok) {
@@ -71,11 +79,17 @@ export const LoginPage = () => {
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const normalizedPhone = normalizePhone(phone);
+    if (!isPhoneValid) {
+      setError('Введите корректный номер телефона');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      await login({ phone, email, code }, '/');
+      await login({ phone: normalizedPhone, email, code }, '/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка входа');
     } finally {
@@ -114,8 +128,9 @@ export const LoginPage = () => {
                 name="phone"
                 autoComplete="tel"
                 autoFocus
+                placeholder="+7 (000) 000-00-00"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
               />
               <TextField
                 margin="normal"
@@ -133,7 +148,7 @@ export const LoginPage = () => {
                 fullWidth
                 variant="contained"
                 sx={{ mt: 3, mb: 2 }}
-                disabled={loading || !phone || !email}
+                disabled={loading || !isPhoneValid || !email}
               >
                 {loading ? <CircularProgress size={24} /> : 'Отправить код'}
               </Button>
