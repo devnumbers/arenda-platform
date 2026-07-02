@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import type { JSX, ReactNode } from 'react';
 import { Inter, Manrope } from 'next/font/google';
 import { I18nProvider } from '@/shared/providers/i18n-provider';
@@ -23,6 +23,12 @@ const manrope = Manrope({
 export const metadata: Metadata = {
     title: 'Рентли',
     description: 'Управление арендной недвижимостью',
+};
+
+export const viewport: Viewport = {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
 };
 
 export default function RootLayout({
