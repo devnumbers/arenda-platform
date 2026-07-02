@@ -21,7 +21,7 @@ import (
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityemail "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/email"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
-	fakesms "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/sms"
+	identitysms "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/sms"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leasespg "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/postgres"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
@@ -176,7 +176,9 @@ func run(fallback *slog.Logger) error {
 		if cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
 			return fmt.Errorf("SMS_SENDER=fake is only allowed in local or dev environments")
 		}
-		smsSender = fakesms.NewFakeSender(appLogger)
+		smsSender = identitysms.NewFakeSender(appLogger)
+	case "disabled":
+		smsSender = identitysms.NewDisabledSender()
 	default:
 		return fmt.Errorf("unsupported SMS_SENDER: %s", cfg.SMSSender)
 	}

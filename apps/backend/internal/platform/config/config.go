@@ -347,9 +347,9 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("DB_MIN_CONNS must not exceed DB_MAX_CONNS")
 	}
 
-	allowedSenders := map[string]bool{"": true, "fake": true}
+	allowedSenders := map[string]bool{"": true, "fake": true, "disabled": true}
 	if !allowedSenders[cfg.SMSSender] {
-		return Config{}, fmt.Errorf("invalid SMS_SENDER %q: must be empty or fake", cfg.SMSSender)
+		return Config{}, fmt.Errorf("invalid SMS_SENDER %q: must be empty, fake, or disabled", cfg.SMSSender)
 	}
 
 	allowedEmailSenders := map[string]bool{"": true, "fake": true, "smtp": true}

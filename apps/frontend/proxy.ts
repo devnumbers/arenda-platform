@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:8080';
-const SESSION_COOKIE_NAME = 'session_id';
+const SESSION_COOKIE_NAMES = ['__Host-session_id', 'session_id'] as const;
 const ME_TIMEOUT_MS = 5000;
 
-export async function proxy(request: NextRequest) {
-  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
+function hasSessionCookie(request: NextRequest): boolean {
+  return SESSION_COOKIE_NAMES.some((name) => request.cookies.has(name));
+}
 
+export async function proxy(request: NextRequest) {
   const redirectToLogin = () => {
     const from = request.nextUrl.pathname + request.nextUrl.search;
     const loginUrl = new URL('/login', request.url);
@@ -14,7 +16,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   };
 
-  if (!sessionCookie) {
+  if (!hasSessionCookie(request)) {
     return redirectToLogin();
   }
 

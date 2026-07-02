@@ -1,0 +1,11 @@
+export const imgHeroBg = '/landing/hero-bg.png';
+export const imgLogo3D = '/landing/logo-3d.png';
+export const imgSetting01 = '/landing/setting-01.png';
+export const imgPhoneFrame = '/landing/phone-frame.png';
+export const imgFeature1 = '/landing/feature-1.png';
+export const imgFeature2 = '/landing/feature-2.png';
+export const imgFeature3 = '/landing/feature-3.png';
+export const imgFeature4 = '/landing/feature-4.png';
+export const imgFeature5 = '/landing/feature-5.png';
+export const imgCtaBg = '/landing/cta-bg.png';
+export const imgLogo = '/landing/logo.png';

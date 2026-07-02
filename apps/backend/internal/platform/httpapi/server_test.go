@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -42,5 +43,25 @@ func TestAddCardReturnHandler(t *testing.T) {
 				t.Errorf("Location header: got %q, want %q", got, tc.wantLocation)
 			}
 		})
+	}
+}
+
+func TestHealthHandler(t *testing.T) {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+
+	healthHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+		t.Errorf("Content-Type: got %q, want application/json", got)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("Cache-Control: got %q, want no-store", got)
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"status":"ok"}` {
+		t.Errorf("body: got %q, want health JSON", got)
 	}
 }

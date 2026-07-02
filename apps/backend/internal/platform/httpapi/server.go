@@ -79,6 +79,8 @@ func New(deps Deps) http.Handler {
 	r.Use(SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
 	r.Use(readonlyMiddleware(deps.Billing, deps.Logger, deps.Clock))
 
+	r.Get("/healthz", healthHandler)
+
 	if deps.DBPoolStats != nil {
 		r.Get("/internal/perf/db-pool", dbPoolDiagnosticsHandler(deps.DBPoolStats))
 	}

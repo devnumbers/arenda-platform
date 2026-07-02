@@ -1,0 +1,108 @@
+name: arenda-prod
+
+x-env-file: &prod-env-file
+  - path: .env.prod
+    required: false
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.00
+    logging: *default-logging
+    env_file: *prod-env-file
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-postgres}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks:
+      - arenda-prod
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.00
+    logging: *default-logging
+    env_file: *prod-env-file
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:18080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    networks:
+      - arenda-prod
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.75
+    logging: *default-logging
+    environment:
+      BACKEND_URL: http://backend:8080
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:13000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    networks:
+      - arenda-prod
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        VITE_API_PREFIX: /api
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    logging: *default-logging
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:13001:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - arenda-prod
+
+networks:
+  arenda-prod:
+    name: arenda-prod
+
+volumes:
+  postgres-data:

@@ -1,0 +1,105 @@
+name: Deploy Stage
+
+on:
+  push:
+    branches:
+      - dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-stage
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-24.04
+    needs: ci
+    steps:
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.STAGE_SSH_PRIVATE_KEY }}
+
+      - name: Deploy exact SHA
+        env:
+          DEPLOY_HOST: ${{ secrets.STAGE_SSH_HOST }}
+          DEPLOY_USER: ${{ secrets.STAGE_SSH_USER }}
+          DEPLOY_DIR: /opt/arenda/stage
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ssh -o StrictHostKeyChecking=accept-new "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_DIR='${DEPLOY_DIR}' DEPLOY_SHA='${DEPLOY_SHA}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          git fetch --prune origin +refs/heads/dev:refs/remotes/origin/dev
+          git checkout --detach --force "${DEPLOY_SHA}"
+          git reset --hard "${DEPLOY_SHA}"
+          git clean -ffdx -e .env.stage
+          current_sha="$(git rev-parse HEAD)"
+          if [ "${current_sha}" != "${DEPLOY_SHA}" ]; then
+            echo "Expected checkout ${DEPLOY_SHA}, got ${current_sha}" >&2
+            exit 1
+          fi
+          test -f .env.stage
+          chmod 600 .env.stage
+          docker compose -f docker-compose.stage.yml config >/dev/null
+          docker compose -f docker-compose.stage.yml up -d --build --remove-orphans
+          docker compose -f docker-compose.stage.yml ps
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:28080/healthz | grep -q '"status":"ok"'
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:23000/login >/dev/null
+          test "$(curl -fsS --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:23001/healthz)" = "ok"
+          REMOTE
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+
+          require_body() {
+            local url="$1"
+            local needle="$2"
+            local body
+            body="$(curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${url}")"
+            if ! grep -qi "${needle}" <<<"${body}"; then
+              echo "${body}"
+              echo "Expected ${url} to contain ${needle}" >&2
+              exit 1
+            fi
+          }
+
+          require_exact() {
+            local url="$1"
+            local expected="$2"
+            local body
+            body="$(curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${url}")"
+            if [ "${body}" != "${expected}" ]; then
+              echo "${body}"
+              echo "Expected ${url} to return ${expected}" >&2
+              exit 1
+            fi
+          }
+
+          require_status() {
+            local url="$1"
+            local expected="$2"
+            local output="$3"
+            local status
+            status="$(curl -sS --retry 10 --retry-delay 3 --retry-all-errors -o "${output}" -w '%{http_code}' "${url}")"
+            if [ "${status}" != "${expected}" ]; then
+              cat "${output}"
+              echo "Expected ${url} to return ${expected}, got ${status}" >&2
+              exit 1
+            fi
+          }
+
+          require_body https://dev.rentlee.ru/login "<html"
+          require_body https://admin.dev.rentlee.ru/ 'id="root"'
+          require_exact https://admin.dev.rentlee.ru/healthz "ok"
+          require_body https://dev.rentlee.ru/api/healthz '"status":"ok"'
+          require_status https://dev.rentlee.ru/api/me "401" /tmp/arenda-stage-me.out

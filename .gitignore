@@ -4,6 +4,8 @@
 .env.*
 !.env.example
 !.env.perf.example
+!.env.stage.example
+!.env.prod.example
 *.exe
 node_modules/
 *.log

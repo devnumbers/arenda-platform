@@ -1,0 +1,121 @@
+name: Deploy Prod
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-24.04
+    needs: ci
+    steps:
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+
+      - name: Deploy exact SHA
+        env:
+          DEPLOY_HOST: ${{ secrets.PROD_SSH_HOST }}
+          DEPLOY_USER: ${{ secrets.PROD_SSH_USER }}
+          DEPLOY_DIR: /opt/arenda/prod
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ssh -o StrictHostKeyChecking=accept-new "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_DIR='${DEPLOY_DIR}' DEPLOY_SHA='${DEPLOY_SHA}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          git fetch --prune origin +refs/heads/master:refs/remotes/origin/master
+          git checkout --detach --force "${DEPLOY_SHA}"
+          git reset --hard "${DEPLOY_SHA}"
+          git clean -ffdx -e .env.prod
+          current_sha="$(git rev-parse HEAD)"
+          if [ "${current_sha}" != "${DEPLOY_SHA}" ]; then
+            echo "Expected checkout ${DEPLOY_SHA}, got ${current_sha}" >&2
+            exit 1
+          fi
+          test -f .env.prod
+          chmod 600 .env.prod
+          docker compose -f docker-compose.prod.yml config >/dev/null
+          docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+          docker compose -f docker-compose.prod.yml ps
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:18080/healthz | grep -q '"status":"ok"'
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:13000/login >/dev/null
+          test "$(curl -fsS --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:13001/healthz)" = "ok"
+          REMOTE
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+
+          require_body() {
+            local url="$1"
+            local needle="$2"
+            local body
+            body="$(curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${url}")"
+            if ! grep -qi "${needle}" <<<"${body}"; then
+              echo "${body}"
+              echo "Expected ${url} to contain ${needle}" >&2
+              exit 1
+            fi
+          }
+
+          require_exact() {
+            local url="$1"
+            local expected="$2"
+            local body
+            body="$(curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${url}")"
+            if [ "${body}" != "${expected}" ]; then
+              echo "${body}"
+              echo "Expected ${url} to return ${expected}" >&2
+              exit 1
+            fi
+          }
+
+          require_status() {
+            local url="$1"
+            local expected="$2"
+            local output="$3"
+            local status
+            status="$(curl -sS --retry 10 --retry-delay 3 --retry-all-errors -o "${output}" -w '%{http_code}' "${url}")"
+            if [ "${status}" != "${expected}" ]; then
+              cat "${output}"
+              echo "Expected ${url} to return ${expected}, got ${status}" >&2
+              exit 1
+            fi
+          }
+
+          require_redirect() {
+            local url="$1"
+            local expected_prefix="$2"
+            local result
+            result="$(curl -sS --retry 10 --retry-delay 3 --retry-all-errors -o /tmp/arenda-www.out -w '%{http_code} %{redirect_url}' "${url}")"
+            case "${result}" in
+              30[18]\ ${expected_prefix}*) ;;
+              *)
+                cat /tmp/arenda-www.out
+                echo "Expected ${url} to redirect permanently to ${expected_prefix}, got ${result}" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          require_body https://rentlee.ru/login "<html"
+          require_body https://admin.rentlee.ru/ 'id="root"'
+          require_exact https://admin.rentlee.ru/healthz "ok"
+          require_body https://rentlee.ru/api/healthz '"status":"ok"'
+          require_status https://rentlee.ru/api/me "401" /tmp/arenda-prod-me.out
+          require_redirect https://www.rentlee.ru/ https://rentlee.ru

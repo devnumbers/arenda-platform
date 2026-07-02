@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: apps/backend/go.sum
+
+      - name: Lint
+        run: make backend-lint
+
+      - name: Test
+        run: go test ./apps/backend/...
+
+      - name: Vet
+        run: go vet ./apps/backend/...
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Install
+        working-directory: apps/frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: apps/frontend
+        run: npm run build
+
+      - name: Lint
+        working-directory: apps/frontend
+        run: npm run lint
+
+  admin:
+    name: Admin
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/admin/package-lock.json
+
+      - name: Install
+        working-directory: apps/admin
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: apps/admin
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: apps/admin
+        run: npm run build
+
+  docker:
+    name: Docker
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate stage compose
+        run: docker compose -f docker-compose.stage.yml config >/dev/null
+
+      - name: Validate prod compose
+        run: docker compose -f docker-compose.prod.yml config >/dev/null
+
+      - name: Build backend image
+        run: docker buildx build --load -f apps/backend/Dockerfile -t arenda-backend:ci .
+
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: arenda-backend:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: "true"
+          vuln-type: "os,library"
+          severity: "HIGH,CRITICAL"
+
+      - name: Build frontend image
+        run: docker buildx build --load -f apps/frontend/Dockerfile -t arenda-frontend:ci .
+
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: arenda-frontend:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: "true"
+          vuln-type: "os,library"
+          severity: "HIGH,CRITICAL"
+
+      - name: Build admin image
+        run: docker buildx build --load -f apps/admin/Dockerfile -t arenda-admin:ci .
+
+      - name: Scan admin image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: arenda-admin:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: "true"
+          vuln-type: "os,library"
+          severity: "HIGH,CRITICAL"
