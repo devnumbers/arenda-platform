@@ -102,7 +102,7 @@ jobs:
         run: docker buildx build --load -f apps/backend/Dockerfile -t arenda-backend:ci .
 
       - name: Scan backend image
-        uses: aquasecurity/trivy-action
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: arenda-backend:ci
           format: table
@@ -128,7 +128,7 @@ jobs:
         run: docker buildx build --load -f apps/admin/Dockerfile -t arenda-admin:ci .
 
       - name: Scan admin image
-        uses: aquasecurity/trivy-actio
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: arenda-admin:ci
           format: table
