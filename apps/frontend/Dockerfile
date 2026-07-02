@@ -26,7 +26,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV PORT=3000
 
-RUN addgroup -S nextjs && adduser -S nextjs -G nextjs
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && addgroup -S nextjs \
+    && adduser -S nextjs -G nextjs
 
 COPY --from=build --chown=nextjs:nextjs /app/apps/frontend/public ./public
 COPY --from=build --chown=nextjs:nextjs /app/apps/frontend/.next/standalone ./
