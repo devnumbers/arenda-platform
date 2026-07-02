@@ -6,9 +6,10 @@
 ## Окружения
 
 - `dev` branch -> stage: `/opt/arenda/stage`, compose project `arenda-stage`.
-- `master` branch -> prod: `/opt/arenda/prod`, compose project `arenda-prod`.
+- `main` branch -> prod: `/opt/arenda/prod`, compose project `arenda-prod`.
 - Stage backend использует `APP_ENV=dev`, чтобы T-Kassa sandbox был допустим текущей валидацией конфигурации.
 - Prod backend использует `APP_ENV=production`.
+- Stage/prod директории на сервере принадлежат `root:root`; деплой выполняется под `root`.
 - Настоящие `.env.stage` и `.env.prod` хранятся только на сервере с правами `600`.
 
 ## DNS
@@ -24,22 +25,35 @@
 ## Server Bootstrap
 
 ```bash
-sudo mkdir -p /opt/arenda/stage /opt/arenda/prod
-sudo chown -R deploy:deploy /opt/arenda
+mkdir -p /opt/arenda/stage /opt/arenda/prod
+chown -R root:root /opt/arenda
 
 cd /opt/arenda/stage
-git clone git@github.com:<owner>/<repo>.git .
+git clone git@github.com:devnumbers/arenda-platform.git .
 cp .env.stage.example .env.stage
 chmod 600 .env.stage
 
 cd /opt/arenda/prod
-git clone git@github.com:<owner>/<repo>.git .
+git clone git@github.com:devnumbers/arenda-platform.git .
 cp .env.prod.example .env.prod
 chmod 600 .env.prod
 ```
 
 В `.env.stage` и `.env.prod` заменить все `replace-*` значения. Пароль в
-`DATABASE_URL` должен совпадать с `POSTGRES_PASSWORD`.
+`DATABASE_URL` должен совпадать с `POSTGRES_PASSWORD`. Для production
+`APP_BASE_URL` должен быть `https://rentlee.ru`, а `T_KASSA_BASE_URL` -
+`https://securepay.tinkoff.ru/v2/`.
+
+Для production-терминала T-Bank указать URL уведомлений:
+
+```text
+https://rentlee.ru/webhooks/payment/tkassa
+```
+
+`SuccessURL` и `FailURL` backend передаёт в T-Bank динамически из
+`APP_BASE_URL` для каждого платежа. Если `REGRU_S3_PUBLIC_BASE_URL` указывает
+на `https://cdn.rentlee.ru`, этот DNS/публичный URL должен быть настроен до
+запуска backend; иначе указать рабочий публичный URL REG.RU S3.
 
 ## Caddyfile
 
@@ -136,7 +150,7 @@ Prod:
 ```bash
 cd /opt/arenda/prod
 DEPLOY_SHA=<sha>
-git fetch --prune origin +refs/heads/master:refs/remotes/origin/master
+git fetch --prune origin +refs/heads/main:refs/remotes/origin/main
 git checkout --detach --force "$DEPLOY_SHA"
 git reset --hard "$DEPLOY_SHA"
 git clean -ffdx -e .env.prod
