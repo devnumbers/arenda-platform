@@ -48,6 +48,7 @@ type Config struct {
 	PhotoStorageSecretKey               string
 	PhotoStoragePublicBaseURL           string
 	PhotoStoragePathStyle               bool
+	PhotoStorageProvider                string
 	PhotoStorageS3Enabled               bool
 	EmailSender                         string
 	EmailTemplatesDir                   string
@@ -490,6 +491,7 @@ func Load() (Config, error) {
 	cfg.PhotoStorageAccessKey = os.Getenv("REGRU_S3_ACCESS_KEY")
 	cfg.PhotoStorageSecretKey = os.Getenv("REGRU_S3_SECRET_KEY")
 	cfg.PhotoStoragePublicBaseURL = os.Getenv("REGRU_S3_PUBLIC_BASE_URL")
+	cfg.PhotoStorageProvider = strings.ToLower(strings.TrimSpace(os.Getenv("PHOTO_STORAGE_PROVIDER")))
 
 	cfg.PhotoStoragePathStyle = true
 	if v := os.Getenv("REGRU_S3_PATH_STYLE"); v != "" {
@@ -514,17 +516,24 @@ func Load() (Config, error) {
 			break
 		}
 	}
-	if cfg.AppEnv == "local" {
-		if s3Complete {
-			cfg.PhotoStorageS3Enabled = true
-		} else if cfg.PhotoStoragePublicBaseURL == "" {
-			cfg.PhotoStoragePublicBaseURL = cfg.AppBaseURL + "/uploads"
+	if cfg.PhotoStorageProvider == "" {
+		if cfg.AppEnv == "local" && !s3Complete {
+			cfg.PhotoStorageProvider = "fake"
+		} else {
+			cfg.PhotoStorageProvider = "s3"
 		}
-	} else {
+	}
+	switch cfg.PhotoStorageProvider {
+	case "fake":
+		cfg.PhotoStorageS3Enabled = false
+		cfg.PhotoStoragePublicBaseURL = strings.TrimRight(cfg.AppBaseURL, "/") + "/uploads"
+	case "s3":
 		if !s3Complete {
-			return Config{}, fmt.Errorf("REGRU_S3_ENDPOINT, REGRU_S3_BUCKET, REGRU_S3_ACCESS_KEY, REGRU_S3_SECRET_KEY and REGRU_S3_PUBLIC_BASE_URL are required for APP_ENV=%s", cfg.AppEnv)
+			return Config{}, fmt.Errorf("REGRU_S3_ENDPOINT, REGRU_S3_BUCKET, REGRU_S3_ACCESS_KEY, REGRU_S3_SECRET_KEY and REGRU_S3_PUBLIC_BASE_URL are required for PHOTO_STORAGE_PROVIDER=s3 and APP_ENV=%s; set PHOTO_STORAGE_PROVIDER=fake only for temporary launches without photo uploads", cfg.AppEnv)
 		}
 		cfg.PhotoStorageS3Enabled = true
+	default:
+		return Config{}, fmt.Errorf("invalid PHOTO_STORAGE_PROVIDER %q: must be fake or s3", cfg.PhotoStorageProvider)
 	}
 
 	cfg.BillingWorkerInterval = time.Hour

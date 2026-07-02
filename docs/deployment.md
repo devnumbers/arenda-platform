@@ -55,6 +55,11 @@ https://rentlee.ru/webhooks/payment/tkassa
 на `https://cdn.rentlee.ru`, этот DNS/публичный URL должен быть настроен до
 запуска backend; иначе указать рабочий публичный URL REG.RU S3.
 
+`PHOTO_STORAGE_PROVIDER=s3` включает REG.RU S3 и требует заполненные
+`REGRU_S3_*` значения. Для временного production-запуска без готового S3 можно
+поставить `PHOTO_STORAGE_PROVIDER=fake`: backend запустится без проверки бакета,
+но загрузку фотографий объектов в таком режиме использовать нельзя.
+
 ## Caddyfile
 
 ```caddyfile
