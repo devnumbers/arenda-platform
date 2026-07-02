@@ -115,7 +115,7 @@ jobs:
         run: docker buildx build --load -f apps/frontend/Dockerfile -t arenda-frontend:ci .
 
       - name: Scan frontend image
-        uses: aquasecurity/trivy-action
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: arenda-frontend:ci
           format: table
