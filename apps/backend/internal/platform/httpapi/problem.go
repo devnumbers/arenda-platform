@@ -34,7 +34,7 @@ func internalError(ctx context.Context, err error) openapi.Problem {
 	loggerFromContext(ctx).ErrorContext(ctx, "internal server error",
 		slog.String("error", sanitizeError(err)),
 	)
-	return problem(ctx, "Internal Server Error", "An internal error occurred")
+	return problem(ctx, "Internal Server Error", "Произошла внутренняя ошибка. Попробуйте позже.")
 }
 
 // UserFacingDetail maps known domain errors to fixed, non-sensitive messages
@@ -44,93 +44,93 @@ func UserFacingDetail(err error) (string, bool) {
 	switch {
 	// Identity / auth.
 	case errors.Is(err, identityapp.ErrUserBlocked):
-		return "user is temporarily blocked", true
+		return "Пользователь временно заблокирован", true
 	case errors.Is(err, identityapp.ErrCodeSentTooRecently):
-		return "code sent too recently", true
+		return "Код отправлен слишком недавно", true
 	case errors.Is(err, identityapp.ErrPhoneAlreadyTaken):
-		return "phone number is already in use", true
+		return "Этот номер телефона уже используется", true
 	case errors.Is(err, identityapp.ErrPhoneUnchanged):
-		return "new phone must differ from current phone", true
+		return "Новый номер должен отличаться от текущего", true
 	case errors.Is(err, identitydomain.ErrTooManyAttempts):
-		return "too many attempts", true
+		return "Слишком много попыток", true
 	case errors.Is(err, identityapp.ErrPhoneLoginDeprecated):
-		return "phone login is no longer supported", true
+		return "Вход по телефону больше не поддерживается", true
 
 	// Properties.
 	case errors.Is(err, propertiesapp.ErrInvalidInput):
-		return "invalid property input", true
+		return "Некорректные данные объекта", true
 	case errors.Is(err, propertiesapp.ErrInvalidTransition):
-		return "invalid property status transition", true
+		return "Некорректный переход статуса объекта", true
 	case errors.Is(err, propertiesapp.ErrNotFound):
-		return "not found", true
+		return "Не найдено", true
 	case errors.Is(err, propertiesapp.ErrLimitExceeded):
-		return "active property limit exceeded", true
+		return "Превышен лимит активных объектов", true
 	case errors.Is(err, propertiesapp.ErrArchivedProperty):
-		return "cannot modify an archived property", true
+		return "Нельзя изменить архивный объект", true
 	case errors.Is(err, propertiesapp.ErrAlreadyArchived):
-		return "property is already archived", true
+		return "Объект уже в архиве", true
 	case errors.Is(err, propertiesapp.ErrNotArchived):
-		return "property is not archived", true
+		return "Объект не в архиве", true
 	case errors.Is(err, propertiesapp.ErrPropertyHasOpenLease):
-		return "property has an open lease", true
+		return "У объекта есть открытая аренда", true
 
 	// Leases.
 	case errors.Is(err, leasesapp.ErrInvalidInput):
-		return "invalid input", true
+		return "Некорректные данные", true
 	case errors.Is(err, leasesapp.ErrInvalidTransition):
-		return "invalid lease status transition", true
+		return "Некорректный переход статуса аренды", true
 	case errors.Is(err, leasesapp.ErrNotFound):
-		return "not found", true
+		return "Не найдено", true
 	case errors.Is(err, leasesapp.ErrPropertyNotAvailable):
-		return "property is not available for a lease", true
+		return "Объект недоступен для аренды", true
 	case errors.Is(err, leasesapp.ErrOpenLeaseExists):
-		return "property already has an open lease", true
+		return "У объекта уже есть открытая аренда", true
 	case errors.Is(err, leasesapp.ErrAlreadyCompleted):
-		return "lease is already completed", true
+		return "Аренда уже завершена", true
 	case errors.Is(err, leasesapp.ErrOperationAlreadyCompleted):
-		return "operation is already completed", true
+		return "Операция уже завершена", true
 	case errors.Is(err, leasesapp.ErrRecurringOperationLeaseCreated):
-		return "recurring operation created by a lease cannot be deleted", true
+		return "Серию, созданную договором аренды, нельзя удалить", true
 	case errors.Is(err, leasesapp.ErrArchivedLease):
-		return "cannot modify an archived lease", true
+		return "Нельзя изменить архивную аренду", true
 	case errors.Is(err, leasesapp.ErrTenantContactNotFound):
-		return "tenant contact not found", true
+		return "Арендатор не найден", true
 	case errors.Is(err, leasesapp.ErrDuplicatePhone):
-		return "tenant contact with this phone already exists", true
+		return "Арендатор с таким телефоном уже существует", true
 
 	// Billing / subscriptions.
 	case errors.Is(err, billingdomain.ErrInvalidAmount):
-		return "amount must be positive", true
+		return "Сумма должна быть больше нуля", true
 	case errors.Is(err, billingdomain.ErrInvalidPeriod):
-		return "period must be month or year", true
+		return "Период должен быть месяц или год", true
 	case errors.Is(err, billingdomain.ErrAlreadyOnTariff):
-		return "already on selected tariff", true
+		return "Вы уже на выбранном тарифе", true
 	case errors.Is(err, billingdomain.ErrInvalidTariffChange):
-		return "invalid tariff change", true
+		return "Некорректная смена тарифа", true
 	case errors.Is(err, billingdomain.ErrInvalidSubscriptionState):
-		return "invalid subscription state", true
+		return "Некорректное состояние подписки", true
 	case errors.Is(err, billingdomain.ErrInvalidPaymentStatus):
-		return "payment cannot be refunded in its current status", true
+		return "Возврат платежа невозможен в текущем статусе", true
 	case errors.Is(err, billingdomain.ErrCannotEnableAutoRenew):
-		return "cannot enable auto-renew without a validity period", true
+		return "Нельзя включить автопродление без срока действия", true
 	case errors.Is(err, billingapp.ErrPaymentMethodInUse):
-		return "payment method is in use", true
+		return "Способ оплаты используется", true
 	case errors.Is(err, billingapp.ErrPaymentMethodAlreadyExists):
-		return "payment method already exists", true
+		return "Способ оплаты уже добавлен", true
 	case errors.Is(err, billingapp.ErrInvalidFilter):
-		return "invalid filter", true
+		return "Некорректный фильтр", true
 
 	// Notifications / reminders.
 	case errors.Is(err, notificationsapp.ErrInvalidReminderDate):
-		return "invalid reminder date", true
+		return "Некорректная дата напоминания", true
 	case errors.Is(err, notificationsapp.ErrReminderNotPending):
-		return "reminder is not pending", true
+		return "Напоминание не в статусе ожидания", true
 	case errors.Is(err, notificationsapp.ErrConcurrentUpdate):
-		return "reminder changed concurrently", true
+		return "Напоминание изменено одновременно", true
 	case errors.Is(err, notificationsapp.ErrDuplicateSMSReminder):
-		return "sms reminder already sent", true
+		return "SMS-напоминание уже отправлено", true
 	case errors.Is(err, notificationsapp.ErrNotFound):
-		return "not found", true
+		return "Не найдено", true
 	}
 
 	return "", false
@@ -165,5 +165,5 @@ func stringPtr(s string) *string {
 
 // openAPIErrorHandler converts OpenAPI path/header/param errors into RFC 7807 problems.
 func openAPIErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request parameter"))
+	writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректный параметр запроса"))
 }

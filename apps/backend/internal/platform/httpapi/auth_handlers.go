@@ -62,19 +62,19 @@ func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 	var body openapi.SendPhoneCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	phone, err := domain.NewPhone(body.Phone)
 	if err != nil {
 		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "invalid phone"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
 		return
 	}
 
 	if h.phoneSend != nil && !h.phoneSend.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "rate limit exceeded"))
+		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
 		return
 	}
 
@@ -108,26 +108,26 @@ func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 	var body openapi.SendEmailCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	phone, err := domain.NewPhone(body.Phone)
 	if err != nil {
 		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "invalid phone"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
 		return
 	}
 
 	email, err := domain.NewEmail(body.Email)
 	if err != nil {
 		h.logger.WarnContext(r.Context(), "invalid email in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "invalid email"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "Некорректная почта"))
 		return
 	}
 
 	if h.emailSend != nil && !h.emailSend.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "rate limit exceeded"))
+		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
 		return
 	}
 
@@ -141,7 +141,7 @@ func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 			}
 			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
 		case errors.Is(err, application.ErrEmailDoesNotMatch):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "email does not match the phone number"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Почта не соответствует номеру телефона"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -156,26 +156,26 @@ func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
 	var body openapi.VerifyEmailCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	phone, err := domain.NewPhone(body.Phone)
 	if err != nil {
 		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "invalid phone"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
 		return
 	}
 
 	email, err := domain.NewEmail(body.Email)
 	if err != nil {
 		h.logger.WarnContext(r.Context(), "invalid email in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "invalid email"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "Некорректная почта"))
 		return
 	}
 
 	if h.emailVerify != nil && !h.emailVerify.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "rate limit exceeded"))
+		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
 		return
 	}
 
@@ -192,7 +192,7 @@ func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
 			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
 		case errors.Is(err, domain.ErrLoginCodeInvalid),
 			errors.Is(err, application.ErrNotFound):
-			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "invalid phone, email or code"))
+			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный телефон, почта или код"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -208,19 +208,19 @@ func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 	var body openapi.VerifyPhoneCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	phone, err := domain.NewPhone(body.Phone)
 	if err != nil {
 		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "invalid phone"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
 		return
 	}
 
 	if h.phoneVerify != nil && !h.phoneVerify.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "rate limit exceeded"))
+		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
 		return
 	}
 
@@ -244,7 +244,7 @@ func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
 		case errors.Is(err, domain.ErrLoginCodeInvalid),
 			errors.Is(err, application.ErrNotFound):
-			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "invalid phone or code"))
+			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный телефон или код"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -259,7 +259,7 @@ func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 	token := sessionTokenFromRequest(r, h.cookieSecure)
 	if token == "" {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -275,7 +275,7 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandlers) LogoutAll(w http.ResponseWriter, r *http.Request) {
 	userID, ok := UserIDFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -293,7 +293,7 @@ func (h *AuthHandlers) LogoutAll(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 	userID, ok := UserIDFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -303,7 +303,7 @@ func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 		user, err = h.auth.Me(r.Context(), userID)
 		if err != nil {
 			if errors.Is(err, application.ErrNotFound) {
-				writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session invalid"))
+				writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Сессия недействительна"))
 				return
 			}
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
@@ -332,7 +332,7 @@ func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	userID, ok := UserIDFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -346,7 +346,7 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	var body updateMeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -359,11 +359,11 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidEmail):
-			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "invalid email format"))
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "Некорректный формат email"))
 		case errors.Is(err, application.ErrEmailAlreadyTaken):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Email is already in use"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Этот email уже используется"))
 		case errors.Is(err, application.ErrNotFound):
-			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session invalid"))
+			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Сессия недействительна"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -391,39 +391,39 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Request) {
 	userID, ok := UserIDFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.SendPhoneChangeCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	phone, err := domain.NewPhone(body.Phone)
 	if err != nil {
 		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "invalid phone"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
 		return
 	}
 
 	if h.phoneSend != nil && !h.phoneSend.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "rate limit exceeded"))
+		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
 		return
 	}
 
 	if err := h.auth.SendPhoneChangeCode(r.Context(), userID, phone); err != nil {
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
-			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "new phone must differ from current phone"))
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Новый номер должен отличаться от текущего"))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "phone number already in use"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Этот номер телефона уже используется"))
 		case errors.Is(err, application.ErrUserBlocked):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "too many attempts, please try again later"))
+			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Слишком много попыток"))
 		case errors.Is(err, application.ErrCodeSentTooRecently):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "code sent too recently, please wait"))
+			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Код отправлен слишком недавно"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -437,32 +437,32 @@ func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Reques
 func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 	userID, ok := UserIDFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	token := sessionTokenFromRequest(r, h.cookieSecure)
 	if token == "" {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.ChangePhoneRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	phone, err := domain.NewPhone(body.Phone)
 	if err != nil {
 		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "invalid phone"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
 		return
 	}
 
 	if h.phoneVerify != nil && !h.phoneVerify.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "rate limit exceeded"))
+		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
 		return
 	}
 
@@ -470,15 +470,15 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
-			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "new phone must differ from current phone"))
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Новый номер должен отличаться от текущего"))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "phone number already in use"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Этот номер телефона уже используется"))
 		case errors.Is(err, application.ErrUserBlocked),
 			errors.Is(err, domain.ErrTooManyAttempts):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "too many attempts, please try again later"))
+			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Слишком много попыток"))
 		case errors.Is(err, domain.ErrLoginCodeInvalid),
 			errors.Is(err, application.ErrNotFound):
-			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "invalid code"))
+			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный код"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}

@@ -27,7 +27,7 @@ func NewAdminHandlers(adminService *adminapp.AdminService, billing *billingapp.B
 func (h *AdminHandlers) handleAdminError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, adminapp.ErrNotFound):
-		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "resource not found"))
+		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "Ресурс не найден"))
 	case errors.Is(err, adminapp.ErrInvalidFilter):
 		detail, ok := UserFacingDetail(err)
 		if !ok {

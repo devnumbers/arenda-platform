@@ -42,7 +42,7 @@ func (h *ReminderHandlers) handleReminderError(w http.ResponseWriter, r *http.Re
 	switch {
 	case errors.Is(err, notificationsapp.ErrNotFound),
 		errors.Is(err, leasesapp.ErrNotFound):
-		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", resource+" not found"))
+		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", notFoundMessage(resource)))
 	case errors.Is(err, notificationsapp.ErrInvalidReminderDate),
 		errors.Is(err, notificationsapp.ErrReminderNotPending),
 		errors.Is(err, leasesapp.ErrInvalidInput):
@@ -53,7 +53,7 @@ func (h *ReminderHandlers) handleReminderError(w http.ResponseWriter, r *http.Re
 		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, notificationsapp.ErrConcurrentUpdate):
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "reminder changed concurrently"))
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Напоминание изменено одновременно"))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 	}
@@ -63,7 +63,7 @@ func (h *ReminderHandlers) handleReminderError(w http.ResponseWriter, r *http.Re
 func (h *ReminderHandlers) ListLeaseReminders(w http.ResponseWriter, r *http.Request, leaseId uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -89,7 +89,7 @@ func (h *ReminderHandlers) ListLeaseReminders(w http.ResponseWriter, r *http.Req
 func (h *ReminderHandlers) ListReminders(w http.ResponseWriter, r *http.Request, params openapi.ListRemindersParams) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -130,14 +130,14 @@ func (h *ReminderHandlers) ListReminders(w http.ResponseWriter, r *http.Request,
 func (h *ReminderHandlers) UpdateReminder(w http.ResponseWriter, r *http.Request, reminderId uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.ReminderUpdateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update reminder request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -154,7 +154,7 @@ func (h *ReminderHandlers) UpdateReminder(w http.ResponseWriter, r *http.Request
 func (h *ReminderHandlers) DeleteReminder(w http.ResponseWriter, r *http.Request, reminderId uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -164,6 +164,17 @@ func (h *ReminderHandlers) DeleteReminder(w http.ResponseWriter, r *http.Request
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func notFoundMessage(resource string) string {
+	switch resource {
+	case "lease":
+		return "Аренда не найдена"
+	case "reminder":
+		return "Напоминание не найдено"
+	default:
+		return "Не найдено"
+	}
 }
 
 func reminderResponse(r notificationsdomain.Reminder) openapi.ReminderResponse {
@@ -192,4 +203,3 @@ func reminderResponse(r notificationsdomain.Reminder) openapi.ReminderResponse {
 		UpdatedAt:            r.UpdatedAt,
 	}
 }
-

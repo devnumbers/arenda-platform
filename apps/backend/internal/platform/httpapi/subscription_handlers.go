@@ -30,7 +30,7 @@ func NewSubscriptionHandlers(billing *billingapp.BillingService, logger *slog.Lo
 func (h *SubscriptionHandlers) ListTariffs(w http.ResponseWriter, r *http.Request) {
 	_, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -51,7 +51,7 @@ func (h *SubscriptionHandlers) ListTariffs(w http.ResponseWriter, r *http.Reques
 func (h *SubscriptionHandlers) GetSubscription(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -68,14 +68,14 @@ func (h *SubscriptionHandlers) GetSubscription(w http.ResponseWriter, r *http.Re
 func (h *SubscriptionHandlers) ToggleAutoRenew(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.AutoRenewRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode auto-renew request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -91,7 +91,7 @@ func (h *SubscriptionHandlers) ToggleAutoRenew(w http.ResponseWriter, r *http.Re
 func (h *SubscriptionHandlers) CancelSubscription(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -107,14 +107,14 @@ func (h *SubscriptionHandlers) CancelSubscription(w http.ResponseWriter, r *http
 func (h *SubscriptionHandlers) ChangeTariff(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.ChangeTariffRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode change tariff request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -142,7 +142,7 @@ func (h *SubscriptionHandlers) ChangeTariff(w http.ResponseWriter, r *http.Reque
 func (h *SubscriptionHandlers) ListSubscriptionPayments(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -163,7 +163,7 @@ func (h *SubscriptionHandlers) ListSubscriptionPayments(w http.ResponseWriter, r
 func (h *SubscriptionHandlers) ListPaymentMethods(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -184,14 +184,14 @@ func (h *SubscriptionHandlers) ListPaymentMethods(w http.ResponseWriter, r *http
 func (h *SubscriptionHandlers) AddPaymentMethod(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.AddPaymentMethodRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode add payment method request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -219,7 +219,7 @@ func (h *SubscriptionHandlers) AddPaymentMethod(w http.ResponseWriter, r *http.R
 func (h *SubscriptionHandlers) DeletePaymentMethod(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -235,7 +235,7 @@ func (h *SubscriptionHandlers) DeletePaymentMethod(w http.ResponseWriter, r *htt
 func (h *SubscriptionHandlers) ActivatePaymentMethod(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -250,7 +250,7 @@ func (h *SubscriptionHandlers) ActivatePaymentMethod(w http.ResponseWriter, r *h
 // ConfirmFakeSubscriptionPayment implements POST /internal/fake-subscription-payment/{id}/confirm.
 func (h *SubscriptionHandlers) ConfirmFakeSubscriptionPayment(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	if !h.DevMode {
-		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "endpoint not available"))
+		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "Метод недоступен"))
 		return
 	}
 
@@ -343,7 +343,7 @@ func (h *SubscriptionHandlers) handleBillingError(w http.ResponseWriter, r *http
 		errors.Is(err, billingapp.ErrSubscriptionNotFound),
 		errors.Is(err, billingapp.ErrPaymentNotFound),
 		errors.Is(err, billingapp.ErrPaymentMethodNotFound):
-		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "resource not found"))
+		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "Ресурс не найден"))
 	case errors.Is(err, billingapp.ErrAlreadyOnTariff),
 		errors.Is(err, billingapp.ErrInvalidTariffChange),
 		errors.Is(err, billingapp.ErrPaymentMethodInUse),
@@ -367,9 +367,9 @@ func (h *SubscriptionHandlers) handleBillingError(w http.ResponseWriter, r *http
 		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, context.DeadlineExceeded):
-		writeProblem(w, http.StatusGatewayTimeout, problem(r.Context(), "Gateway timeout", "request timed out"))
+		writeProblem(w, http.StatusGatewayTimeout, problem(r.Context(), "Gateway timeout", "Время ожидания запроса истекло"))
 	case errors.Is(err, context.Canceled):
-		writeProblem(w, 499, problem(r.Context(), "Client closed request", "client closed request"))
+		writeProblem(w, 499, problem(r.Context(), "Client closed request", "Запрос отменён клиентом"))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 	}
@@ -438,7 +438,7 @@ func (h *SubscriptionHandlers) RefundSubscriptionPayment(w http.ResponseWriter, 
 	var body openapi.RefundSubscriptionPaymentRequest
 	if err := decodeJSONBody(w, r, &body); err != nil && !errors.Is(err, io.EOF) {
 		h.logger.ErrorContext(r.Context(), "failed to decode refund payment request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 	if body.AmountKopecks != nil {
@@ -470,17 +470,17 @@ func subscriptionPaymentResponse(view billingapp.SubscriptionPaymentView) openap
 func adminSubscriptionPaymentResponse(view billingapp.AdminSubscriptionPaymentView) openapi.AdminSubscriptionPayment {
 	p := view.Payment
 	resp := openapi.AdminSubscriptionPayment{
-		Id:            p.ID,
-		Tariff:        tariffResponse(view.Tariff),
-		Period:        openapi.AdminSubscriptionPaymentPeriod(p.Period),
-		AmountKopecks: int(p.AmountKopecks),
-		Status:        openapi.SubscriptionPaymentStatus(p.Status),
-		Provider:      string(p.Provider),
-		UserId:        p.UserID,
-		UserPhone:     view.UserPhone,
-		CreatedAt:     p.CreatedAt,
-		UpdatedAt:     p.UpdatedAt,
-		SucceededAt:   p.SucceededAt,
+		Id:              p.ID,
+		Tariff:          tariffResponse(view.Tariff),
+		Period:          openapi.AdminSubscriptionPaymentPeriod(p.Period),
+		AmountKopecks:   int(p.AmountKopecks),
+		Status:          openapi.SubscriptionPaymentStatus(p.Status),
+		Provider:        string(p.Provider),
+		UserId:          p.UserID,
+		UserPhone:       view.UserPhone,
+		CreatedAt:       p.CreatedAt,
+		UpdatedAt:       p.UpdatedAt,
+		SucceededAt:     p.SucceededAt,
 		PaymentMethodId: p.PaymentMethodID,
 	}
 	if p.RefundedAmountKopecks != nil {

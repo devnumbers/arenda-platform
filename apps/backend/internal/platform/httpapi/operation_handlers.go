@@ -41,7 +41,7 @@ func (h *OperationHandlers) handleOperationError(w http.ResponseWriter, r *http.
 		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
-		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "operation not found"))
+		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "Операция не найдена"))
 	case errors.Is(err, leasesapp.ErrOperationAlreadyCompleted):
 		detail, ok := UserFacingDetail(err)
 		if !ok {
@@ -90,14 +90,14 @@ func operationSortFromQuery(sort *openapi.OperationListSort) leasesapp.Operation
 func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.OperationCreateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create operation request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -131,7 +131,7 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID, params openapi.ListOperationsByPropertyParams) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -179,7 +179,7 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Request, params openapi.ListOperationsParams) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -236,7 +236,7 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 func (h *OperationHandlers) GetOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -253,14 +253,14 @@ func (h *OperationHandlers) GetOperation(w http.ResponseWriter, r *http.Request,
 func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.OperationUpdateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update operation request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -295,7 +295,7 @@ func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Reque
 func (h *OperationHandlers) DeleteOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -311,7 +311,7 @@ func (h *OperationHandlers) DeleteOperation(w http.ResponseWriter, r *http.Reque
 func (h *OperationHandlers) CompleteOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -331,7 +331,7 @@ func (h *OperationHandlers) CompleteOperation(w http.ResponseWriter, r *http.Req
 func (h *OperationHandlers) MarkOperationIncomplete(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 

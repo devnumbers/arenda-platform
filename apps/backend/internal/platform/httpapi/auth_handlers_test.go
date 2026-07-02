@@ -107,7 +107,7 @@ func TestAuthHandlers_UpdateMe_Returns409ForDuplicateEmail(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&p); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
-	if p.Title != "Conflict" || p.Detail == nil || *p.Detail != "Email is already in use" || p.Status != http.StatusConflict {
+	if p.Title != "Conflict" || p.Detail == nil || *p.Detail != "Этот email уже используется" || p.Status != http.StatusConflict {
 		t.Fatalf("unexpected problem response: %+v", p)
 	}
 }

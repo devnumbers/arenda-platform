@@ -19,7 +19,7 @@ func NewFinanceHandlers(svc *leasesapp.OperationService) *FinanceHandlers {
 func (h *FinanceHandlers) GetFinanceReport(w http.ResponseWriter, r *http.Request, params openapi.GetFinanceReportParams) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 

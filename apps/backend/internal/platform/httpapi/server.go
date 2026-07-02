@@ -173,7 +173,7 @@ func rateLimitMiddleware(limiter *RateLimiter) func(http.Handler) http.Handler {
 				ip = r.RemoteAddr
 			}
 			if !limiter.Allow(ip) {
-				writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too Many Requests", "rate limit exceeded"))
+				writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too Many Requests", "Превышен лимит запросов"))
 				return
 			}
 			next.ServeHTTP(w, r)

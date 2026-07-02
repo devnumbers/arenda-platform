@@ -19,7 +19,7 @@ export async function apiClient<T>(
       headers,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Network request failed';
+    const message = error instanceof Error ? error.message : 'Не удалось выполнить запрос. Проверьте подключение к интернету.';
     throw new ApiError('network_error', message, undefined, undefined, error);
   }
 
@@ -27,7 +27,7 @@ export async function apiClient<T>(
 
   if (!response.ok) {
     let code = 'unknown';
-    let detail = `Request failed with status ${response.status}`;
+    let detail = `Ошибка сервера (код ${response.status})`;
 
     const contentType = response.headers.get('Content-Type');
     if (contentType?.includes('application/problem+json')) {
@@ -36,7 +36,7 @@ export async function apiClient<T>(
         code = String(problem.code ?? problem.type ?? code);
         detail = String(problem.detail ?? problem.title ?? detail);
       } catch {
-        detail = `Request failed with status ${response.status}`;
+        detail = `Ошибка сервера (код ${response.status})`;
       }
     }
 

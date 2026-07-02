@@ -24,7 +24,7 @@ function normalizeError(error: unknown): string {
     return error.detail || 'Произошла ошибка';
   }
   if (error instanceof Error) {
-    return error.message;
+    return 'Произошла ошибка';
   }
   if (typeof error === 'string') {
     return error;

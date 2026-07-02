@@ -84,7 +84,7 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
           notify.success('Данные сохранены');
         },
         onError: (error) => {
-          if (error.status === 409 && /email is already in use/i.test(error.detail ?? '')) {
+          if (error.status === 409 && /почта уже используется/i.test(error.detail ?? '')) {
             setSubmitError('duplicate_email');
           } else {
             setSubmitError(error.detail);

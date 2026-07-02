@@ -33,7 +33,7 @@ func (h *RecurringOperationHandlers) handleRecurringOperationError(w http.Respon
 		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
-		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "recurring operation not found"))
+		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "Серийная операция не найдена"))
 	case errors.Is(err, leasesapp.ErrRecurringOperationLeaseCreated):
 		detail, ok := UserFacingDetail(err)
 		if !ok {
@@ -50,14 +50,14 @@ func (h *RecurringOperationHandlers) handleRecurringOperationError(w http.Respon
 func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.RecurringOperationCreateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create recurring operation request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -99,7 +99,7 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 func (h *RecurringOperationHandlers) ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *RecurringOperationHandlers) ListRecurringOperationsByProperty(w http.Re
 func (h *RecurringOperationHandlers) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *RecurringOperationHandlers) ListRecurringOperations(w http.ResponseWrit
 func (h *RecurringOperationHandlers) GetRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -160,7 +160,7 @@ func (h *RecurringOperationHandlers) GetRecurringOperation(w http.ResponseWriter
 func (h *RecurringOperationHandlers) DeleteRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -176,14 +176,14 @@ func (h *RecurringOperationHandlers) DeleteRecurringOperation(w http.ResponseWri
 func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.RecurringOperationUpdateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update recurring operation request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -230,7 +230,7 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 func (h *RecurringOperationHandlers) PauseRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -247,7 +247,7 @@ func (h *RecurringOperationHandlers) PauseRecurringOperation(w http.ResponseWrit
 func (h *RecurringOperationHandlers) ResumeRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 

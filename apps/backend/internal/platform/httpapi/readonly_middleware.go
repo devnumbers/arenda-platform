@@ -101,7 +101,7 @@ func readonlyMiddleware(billing *billingapp.BillingService, logger *slog.Logger,
 					slog.String("user_id", userID.String()),
 					slog.String("method", r.Method),
 					slog.String("path", path))
-				writeProblem(w, http.StatusForbidden, problem(r.Context(), "Subscription blocked", "subscription is blocked; renew to continue"))
+				writeProblem(w, http.StatusForbidden, problem(r.Context(), "Subscription blocked", "Подписка заблокирована. Продлите её, чтобы продолжить"))
 				return
 			}
 

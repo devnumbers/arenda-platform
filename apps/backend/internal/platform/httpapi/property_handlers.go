@@ -40,19 +40,19 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, propertiesapp.ErrNotFound), errors.Is(err, leasesapp.ErrNotFound):
-		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "property not found"))
+		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "Объект не найден"))
 	case errors.Is(err, propertiesapp.ErrLimitExceeded):
-		writeProblem(w, http.StatusPaymentRequired, problem(r.Context(), "Limit exceeded", "active property limit exceeded"))
+		writeProblem(w, http.StatusPaymentRequired, problem(r.Context(), "Limit exceeded", "Превышен лимит активных объектов"))
 	case errors.Is(err, propertiesapp.ErrArchivedProperty):
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "cannot modify an archived property"))
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Нельзя изменить архивный объект"))
 	case errors.Is(err, propertiesapp.ErrAlreadyArchived):
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property is already archived"))
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Объект уже в архиве"))
 	case errors.Is(err, propertiesapp.ErrNotArchived):
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property is not archived"))
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Объект не в архиве"))
 	case errors.Is(err, propertiesapp.ErrPropertyHasOpenLease):
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property has an open lease"))
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "У объекта есть открытая аренда"))
 	case errors.Is(err, propertiesapp.ErrPhotoLimitReached):
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property photo limit reached"))
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Достигнут лимит фотографий объекта"))
 	case isInvalidStatusTransition(err), errors.Is(err, propertiesapp.ErrInvalidTransition):
 		detail, ok := UserFacingDetail(err)
 		if !ok {
@@ -76,14 +76,14 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PropertyCreateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create property request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -118,7 +118,7 @@ func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request
 func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -146,7 +146,7 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -174,7 +174,7 @@ func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http
 func (h *PropertyHandlers) GetProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -197,14 +197,14 @@ func (h *PropertyHandlers) GetProperty(w http.ResponseWriter, r *http.Request, i
 func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PropertyUpdateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update property request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -235,7 +235,7 @@ func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request
 func (h *PropertyHandlers) ArchiveProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -258,7 +258,7 @@ func (h *PropertyHandlers) ArchiveProperty(w http.ResponseWriter, r *http.Reques
 func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -281,7 +281,7 @@ func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Requ
 func (h *PropertyHandlers) ListPropertyLeases(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -314,7 +314,7 @@ func (h *PropertyHandlers) ListPropertyLeases(w http.ResponseWriter, r *http.Req
 func (h *PropertyHandlers) GetPropertyOperationsSummary(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -337,14 +337,14 @@ func (h *PropertyHandlers) GetPropertyOperationsSummary(w http.ResponseWriter, r
 func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	//nolint:gosec // 6 MiB memory bound for multipart form parsing; file size validated by the service.
 	if err := r.ParseMultipartForm(6 << 20); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to parse multipart form", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid multipart form"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректная форма загрузки файла"))
 		return
 	}
 	defer func() { _ = r.MultipartForm.RemoveAll() }()
@@ -352,7 +352,7 @@ func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Re
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to get file from form", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "file is required"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Требуется файл"))
 		return
 	}
 	defer func() { _ = file.Close() }()
@@ -376,7 +376,7 @@ func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Re
 func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId, photoId uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -392,14 +392,14 @@ func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Re
 func (h *PropertyHandlers) GetAddressSuggestions(w http.ResponseWriter, r *http.Request, params openapi.GetAddressSuggestionsParams) {
 	_, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	suggestions, err := h.addressSuggester.SuggestAddresses(r.Context(), params.Query)
 	if err != nil {
 		if errors.Is(err, propertiesapp.ErrInvalidInput) {
-			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid address query"))
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректный запрос адреса"))
 			return
 		}
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))

@@ -41,11 +41,11 @@ func (h *LeaseHandlers) handleLeaseError(w http.ResponseWriter, r *http.Request,
 		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
-		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "lease not found"))
+		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "Аренда не найдена"))
 	case errors.Is(err, leasesapp.ErrPropertyNotAvailable):
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property is not available for lease"))
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Объект недоступен для аренды"))
 	case errors.Is(err, leasesapp.ErrOpenLeaseExists):
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "property already has an open lease"))
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "У объекта уже есть открытая аренда"))
 	case errors.Is(err, leasesapp.ErrAlreadyCompleted),
 		errors.Is(err, leasesapp.ErrArchivedLease),
 		errors.Is(err, leasesapp.ErrInvalidTransition),
@@ -72,14 +72,14 @@ func (h *LeaseHandlers) handleLeaseError(w http.ResponseWriter, r *http.Request,
 func (h *LeaseHandlers) CreateLease(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.LeaseCreateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create lease request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -117,7 +117,7 @@ func (h *LeaseHandlers) CreateLease(w http.ResponseWriter, r *http.Request) {
 func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -150,7 +150,7 @@ func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
 func (h *LeaseHandlers) GetLease(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -173,14 +173,14 @@ func (h *LeaseHandlers) GetLease(w http.ResponseWriter, r *http.Request, id uuid
 func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.LeaseUpdateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update lease request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -220,7 +220,7 @@ func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id u
 func (h *LeaseHandlers) CompleteLease(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -243,7 +243,7 @@ func (h *LeaseHandlers) CompleteLease(w http.ResponseWriter, r *http.Request, id
 func (h *LeaseHandlers) ReturnLeaseDeposit(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -266,14 +266,14 @@ func (h *LeaseHandlers) ReturnLeaseDeposit(w http.ResponseWriter, r *http.Reques
 func (h *LeaseHandlers) CreateTenantContact(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.TenantContactCreateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create tenant contact request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -299,7 +299,7 @@ func (h *LeaseHandlers) CreateTenantContact(w http.ResponseWriter, r *http.Reque
 func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -344,7 +344,7 @@ func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Reques
 func (h *LeaseHandlers) GetTenantContact(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -361,14 +361,14 @@ func (h *LeaseHandlers) GetTenantContact(w http.ResponseWriter, r *http.Request,
 func (h *LeaseHandlers) UpdateTenantContact(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "session required"))
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.TenantContactUpdateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update tenant contact request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "invalid request body"))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -400,7 +400,7 @@ func handleTenantContactError(w http.ResponseWriter, r *http.Request, err error)
 		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
-		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "tenant contact not found"))
+		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "Арендатор не найден"))
 	case errors.Is(err, leasesapp.ErrDuplicatePhone):
 		detail, ok := UserFacingDetail(err)
 		if !ok {

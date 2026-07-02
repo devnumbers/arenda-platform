@@ -12,7 +12,7 @@ async function handler(
   const { path } = await params;
 
   if (path.length === 0 || path.some((segment) => segment === '' || segment === '..')) {
-    return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
+    return NextResponse.json({ error: 'Некорректный запрос' }, { status: 400 });
   }
 
   const targetPath = `/${path.join('/')}`;
@@ -59,7 +59,7 @@ async function handler(
       headers: responseHeaders,
     });
   } catch {
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 502 });
+    return NextResponse.json({ error: 'Ошибка сервера' }, { status: 502 });
   } finally {
     clearTimeout(timeoutId);
   }
