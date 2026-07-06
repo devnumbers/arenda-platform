@@ -128,11 +128,13 @@ export function AuthForm({
 
     const handleChangePhone = useCallback(() => {
         setStep("phone");
+        setCode("");
         onChangePhone?.();
     }, [onChangePhone, setStep]);
 
     const handleChangeEmail = useCallback(() => {
         setStep("email");
+        setCode("");
         onChangeEmail?.();
     }, [onChangeEmail, setStep]);
 

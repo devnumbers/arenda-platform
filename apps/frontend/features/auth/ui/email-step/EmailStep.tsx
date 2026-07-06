@@ -67,7 +67,7 @@ export function EmailStep({
                     remainingSeconds={resendTimer}
                     loading={isLoading}
                     disabled={!isValid || isLoading || resendTimer > 0}
-                    timerLabel={(seconds) => `Отправить новый код`}
+                    timerLabel={() => `Отправить новый код`}
                 >
                     Получить код
                 </SendCodeButton>
