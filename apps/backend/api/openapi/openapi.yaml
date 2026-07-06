@@ -2268,6 +2268,9 @@ components:
       type: apiKey
       in: cookie
       name: session_id
+      description: >
+        The actual cookie name depends on the `cookieSecure` setting:
+        `session_id` when insecure and `__Host-session_id` when secure.
 
   schemas:
     SendPhoneCodeRequest:

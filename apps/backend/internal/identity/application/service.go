@@ -165,8 +165,10 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 	}
 	// Anti-enumeration: if the phone is registered to a different verified email,
 	// respond identically to the success path without sending a code.
-	if userErr == nil && user.Email != nil && *user.Email != email.String() {
-		return nil
+	if userErr == nil {
+		if user.Email == nil || *user.Email != email.String() {
+			return nil
+		}
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -222,8 +224,16 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 	s.logger.InfoContext(ctx, "sending login code via email")
 	if err := s.emailSender.Send(ctx, email, code); err != nil {
 		s.logger.ErrorContext(ctx, "failed to send login code via email", slog.String("error", sanitize.Error(err)))
-		if delErr := s.codes.DeleteByID(ctx, loginCode.ID); delErr != nil {
-			return fmt.Errorf("send code failed and cleanup failed: send %w, cleanup %w", err, delErr)
+		var delErr error
+		for attempt := 1; attempt <= 3; attempt++ {
+			delErr = s.codes.DeleteByID(ctx, loginCode.ID)
+			if delErr == nil {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if delErr != nil {
+			s.logger.ErrorContext(ctx, "failed to clean up login code after send failure", slog.String("error", sanitize.Error(delErr)))
 		}
 		return fmt.Errorf("send code: %w", err)
 	}
@@ -298,6 +308,9 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, e
 			return domain.RawSession{}, domain.User{}, fmt.Errorf("save user: %w", createErr)
 		}
 	} else {
+		if user.Email == nil {
+			return domain.RawSession{}, domain.User{}, ErrEmailDoesNotMatch
+		}
 		if user.Email != nil && *user.Email != email.String() {
 			return domain.RawSession{}, domain.User{}, ErrEmailDoesNotMatch
 		}

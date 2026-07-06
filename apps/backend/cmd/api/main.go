@@ -340,9 +340,19 @@ func run(fallback *slog.Logger) error {
 
 	ipLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.IPRPS), cfg.RateLimit.IPBurst, 1*time.Hour)
 	defer ipLimiter.Stop()
-	phoneSendLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.PhoneSendPerHour)/3600, cfg.RateLimit.PhoneSendPerHour, 1*time.Hour)
+
+	phoneSendBurst := 1
+	if cfg.RateLimit.PhoneSendPerHour < phoneSendBurst {
+		phoneSendBurst = cfg.RateLimit.PhoneSendPerHour
+	}
+	phoneSendLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.PhoneSendPerHour)/3600, phoneSendBurst, 1*time.Hour)
 	defer phoneSendLimiter.Stop()
-	phoneVerifyLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.PhoneVerifyPer15Min)/(15*60), cfg.RateLimit.PhoneVerifyPer15Min, 1*time.Hour)
+
+	phoneVerifyBurst := 5
+	if cfg.RateLimit.PhoneVerifyPer15Min < phoneVerifyBurst {
+		phoneVerifyBurst = cfg.RateLimit.PhoneVerifyPer15Min
+	}
+	phoneVerifyLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.PhoneVerifyPer15Min)/(15*60), phoneVerifyBurst, 1*time.Hour)
 	defer phoneVerifyLimiter.Stop()
 	emailSendBurst := 5
 	if cfg.RateLimit.EmailSendPerHour < emailSendBurst {
@@ -358,9 +368,18 @@ func run(fallback *slog.Logger) error {
 	emailVerifyLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.EmailVerifyPer15Min)/(15*60), emailVerifyBurst, 1*time.Hour)
 	defer emailVerifyLimiter.Stop()
 
-	phoneChangeSendLimiter := httpapi.NewRateLimiter(rate.Every(time.Hour/time.Duration(cfg.RateLimit.PhoneChangeSendPerHour)), cfg.RateLimit.PhoneChangeSendPerHour, 1*time.Hour)
+	phoneChangeSendBurst := 3
+	if cfg.RateLimit.PhoneChangeSendPerHour < phoneChangeSendBurst {
+		phoneChangeSendBurst = cfg.RateLimit.PhoneChangeSendPerHour
+	}
+	phoneChangeSendLimiter := httpapi.NewRateLimiter(rate.Every(time.Hour/time.Duration(cfg.RateLimit.PhoneChangeSendPerHour)), phoneChangeSendBurst, 1*time.Hour)
 	defer phoneChangeSendLimiter.Stop()
-	phoneChangeVerifyLimiter := httpapi.NewRateLimiter(rate.Every(15*time.Minute/time.Duration(cfg.RateLimit.PhoneChangeVerifyPer15Min)), cfg.RateLimit.PhoneChangeVerifyPer15Min, 1*time.Hour)
+
+	phoneChangeVerifyBurst := 5
+	if cfg.RateLimit.PhoneChangeVerifyPer15Min < phoneChangeVerifyBurst {
+		phoneChangeVerifyBurst = cfg.RateLimit.PhoneChangeVerifyPer15Min
+	}
+	phoneChangeVerifyLimiter := httpapi.NewRateLimiter(rate.Every(15*time.Minute/time.Duration(cfg.RateLimit.PhoneChangeVerifyPer15Min)), phoneChangeVerifyBurst, 1*time.Hour)
 	defer phoneChangeVerifyLimiter.Stop()
 
 	var poolStats func() httpapi.DBPoolSnapshot

@@ -62,19 +62,23 @@ func (r *UserRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (do
 	return r.mapUser(ctx, row)
 }
 
-func (r *UserRepository) GetPhoneByID(ctx context.Context, id uuid.UUID) (string, error) {
+func (r *UserRepository) GetPhoneByID(ctx context.Context, id uuid.UUID) (domain.Phone, error) {
 	row, err := r.q().GetUserPhoneByID(ctx, pgconv.UUIDToPgtype(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", application.ErrNotFound
+			return domain.Phone{}, application.ErrNotFound
 		}
-		return "", err
+		return domain.Phone{}, err
 	}
 	phone, err := decryptPhone(ctx, r.enc, row.Phone, row.PhoneEncrypted)
 	if err != nil {
-		return "", err
+		return domain.Phone{}, err
 	}
-	return phone, nil
+	parsed, err := domain.NewPhone(phone)
+	if err != nil {
+		return domain.Phone{}, err
+	}
+	return parsed, nil
 }
 
 func (r *UserRepository) GetByPhone(ctx context.Context, phone domain.Phone) (domain.User, error) {
