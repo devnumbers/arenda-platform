@@ -12,7 +12,7 @@ import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {ROUTES} from '@/shared/config/routes';
 import {formatCurrentLeaseMonth, formatLeaseRemainingDuration,} from '@/shared/lib/format-lease-card-values';
 import {EmptyState} from '@/shared/ui/empty-state';
-import { getEffectiveLeaseStatus, isOpenLeaseStatus } from '@/entities/lease/lib/status';
+import {getEffectiveLeaseStatus, isOpenLeaseStatus,} from '@/entities/lease/lib/status';
 import {PropertyThumbnail} from '@/widgets/properties/ui/PropertyThumbnail';
 import {SectionHeader} from './SectionHeader';
 import {StatusBadge} from './StatusBadge';
@@ -113,7 +113,7 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
     }
 
     const propertyName = getPropertyName(lease.property_id, properties);
-    const propertyHref = lease.property_id ? ROUTES.property(lease.property_id) : ROUTES.properties;
+    const leaseHref = lease.id ? ROUTES.lease(lease.id) : ROUTES.properties;
     const tenantName = lease.tenant_contact?.name ?? null;
     const amount = formatMoneyKopecks(lease.rent_amount_kopecks, {round: true});
     const remaining = formatLeaseRemainingDuration(lease.start_date, lease.end_date);
@@ -121,41 +121,39 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
 
     return (
         <section className={styles.section}>
-            <SectionHeader title="Ближайшая аренда" href={ROUTES.properties}/>
-            <Card className={styles.card}>
-                <div className={styles.header}>
-                    <div className={styles.info}>
-                        <NextLink href={propertyHref} className={styles.propertyLink}>
+            <SectionHeader title="Ближайшая аренда" href={leaseHref}/>
+            <NextLink href={leaseHref} className={styles.cardLink}>
+                <Card className={styles.card}>
+                    <div className={styles.header}>
+                        <div className={styles.info}>
                             <span className={styles.propertyName}>{propertyName}</span>
-                        </NextLink>
-                        <StatusBadge status={lease.status}/>
-                    </div>
-                    <NextLink href={propertyHref} aria-label={propertyName} className={styles.propertyLink}>
+                            <StatusBadge status={lease.status}/>
+                        </div>
                         <PropertyThumbnail size="medium"/>
-                    </NextLink>
-                </div>
-                <div className={styles.amountRow}>
-                    <span className={styles.amount}>{amount}</span>
-                    <span className={styles.duration}>{remaining}</span>
-                </div>
-                <LeaseProgress startDate={lease.start_date} endDate={lease.end_date}/>
-                <div className={styles.footer}>
+                    </div>
+                    <div className={styles.amountRow}>
+                        <span className={styles.amount}>{amount}</span>
+                        <span className={styles.duration}>{remaining}</span>
+                    </div>
+                    <LeaseProgress startDate={lease.start_date} endDate={lease.end_date}/>
+                    <div className={styles.footer}>
           <span className={styles.footerItem}>
             <Icon size="s">
               <UserSmall/>
             </Icon>
               {tenantName ?? 'Нет арендатора'}
           </span>
-                    {currentMonth && (
-                        <span className={styles.footerItem}>
+                        {currentMonth && (
+                            <span className={styles.footerItem}>
               <Icon size="s">
                 <ClockSmall/>
               </Icon>
-                            {currentMonth}
+                                {currentMonth}
             </span>
-                    )}
-                </div>
-            </Card>
+                        )}
+                    </div>
+                </Card>
+            </NextLink>
             <div className={styles.actions}>
                 <IconActionCard
                     href={lease.property_id ? ROUTES.propertyLeases(lease.property_id) : ROUTES.properties}
