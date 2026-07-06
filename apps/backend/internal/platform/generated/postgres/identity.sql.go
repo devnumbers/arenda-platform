@@ -434,6 +434,25 @@ func (q *Queries) GetLoginAttemptByPhone(ctx context.Context, phone string) (Log
 	return i, err
 }
 
+const getLoginAttemptByPhoneForUpdate = `-- name: GetLoginAttemptByPhoneForUpdate :one
+SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted FROM login_attempts WHERE phone = $1 FOR UPDATE
+`
+
+func (q *Queries) GetLoginAttemptByPhoneForUpdate(ctx context.Context, phone string) (LoginAttempt, error) {
+	row := q.db.QueryRow(ctx, getLoginAttemptByPhoneForUpdate, phone)
+	var i LoginAttempt
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.Failures,
+		&i.FirstFailureAt,
+		&i.LastFailureAt,
+		&i.UserID,
+		&i.PhoneEncrypted,
+	)
+	return i, err
+}
+
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
 SELECT s.id, s.token_hash, s.expires_at, s.created_at, s.last_used_at,
        u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.email_verified_at, u.phone_encrypted

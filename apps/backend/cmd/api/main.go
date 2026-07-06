@@ -214,6 +214,7 @@ func run(fallback *slog.Logger) error {
 		onboardingService,
 		platformpostgres.NewBeginner(pool, appLogger),
 		appLogger,
+		encryptor,
 	)
 
 	propertyRepo := propertiespg.NewPropertyRepository(db)

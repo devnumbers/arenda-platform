@@ -55,6 +55,9 @@ DELETE FROM login_codes t WHERE t.ctid IN (
 -- name: GetLoginAttemptByPhone :one
 SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted FROM login_attempts WHERE phone = $1;
 
+-- name: GetLoginAttemptByPhoneForUpdate :one
+SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted FROM login_attempts WHERE phone = $1 FOR UPDATE;
+
 -- name: UpsertLoginAttempt :exec
 INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
 VALUES ($1, $2, $3, $4, $5, $6)

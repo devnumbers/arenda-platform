@@ -11,8 +11,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
+
+type tokenHasher interface {
+	HashToken(plaintext string) string
+}
 
 var (
 	ErrUserBlocked          = errors.New("user is temporarily blocked")
@@ -42,9 +47,10 @@ type AuthService struct {
 	onboarding  OnboardingService
 	db          txBeginner
 	logger      *slog.Logger
+	hasher      tokenHasher
 }
 
-func NewAuthService(users UserRepository, codes LoginCodeRepository, attempts AttemptRepository, sessions SessionRepository, smsSender SMSSender, emailSender EmailSender, clock Clock, onboarding OnboardingService, db txBeginner, logger *slog.Logger) *AuthService {
+func NewAuthService(users UserRepository, codes LoginCodeRepository, attempts AttemptRepository, sessions SessionRepository, smsSender SMSSender, emailSender EmailSender, clock Clock, onboarding OnboardingService, db txBeginner, logger *slog.Logger, hasher tokenHasher) *AuthService {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -59,7 +65,12 @@ func NewAuthService(users UserRepository, codes LoginCodeRepository, attempts At
 		onboarding:  onboarding,
 		db:          db,
 		logger:      logger,
+		hasher:      hasher,
 	}
+}
+
+func (s *AuthService) hashCode(purpose string, phone domain.Phone, email domain.Email, code string) string {
+	return s.hasher.HashToken("login_code:" + purpose + ":" + phone.String() + ":" + email.String() + ":" + code)
 }
 
 func (s *AuthService) SendCode(ctx context.Context, phone domain.Phone) error {
@@ -106,7 +117,7 @@ func (s *AuthService) sendCode(ctx context.Context, phone domain.Phone, purpose 
 	if err != nil {
 		return fmt.Errorf("generate code: %w", err)
 	}
-	loginCode, err := domain.NewLoginCode(phone, domain.EmailFrom(""), code, purpose, userID, now)
+	loginCode, err := domain.NewLoginCode(phone, domain.EmailFrom(""), s.hashCode(purpose, phone, domain.EmailFrom(""), code), purpose, userID, now)
 	if err != nil {
 		return fmt.Errorf("create login code: %w", err)
 	}
@@ -148,7 +159,7 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 		return fmt.Errorf("get user: %w", userErr)
 	}
 	if userErr == nil && user.Email != nil && *user.Email != email.String() {
-		return ErrEmailDoesNotMatch
+		return nil
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -185,7 +196,7 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 		userID = &user.ID
 	}
 
-	loginCode, err := domain.NewLoginCode(phone, email, code, domain.LoginCodePurposeLogin, userID, now)
+	loginCode, err := domain.NewLoginCode(phone, email, s.hashCode(domain.LoginCodePurposeLogin, phone, email, code), domain.LoginCodePurposeLogin, userID, now)
 	if err != nil {
 		return fmt.Errorf("create login code: %w", err)
 	}
@@ -198,32 +209,34 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 		return fmt.Errorf("commit tx: %w", err)
 	}
 
-	s.logger.InfoContext(ctx, "sending login code via email", "email", email.String(), "phone", phone.String())
+	s.logger.InfoContext(ctx, "sending login code via email")
 	if err := s.emailSender.Send(ctx, email, code); err != nil {
-		s.logger.ErrorContext(ctx, "failed to send login code via email", slog.String("email", email.String()), slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to send login code via email", slog.String("error", sanitize.Error(err)))
 		if delErr := s.codes.DeleteByID(ctx, loginCode.ID); delErr != nil {
 			return fmt.Errorf("send code failed and cleanup failed: send %w, cleanup %w", err, delErr)
 		}
 		return fmt.Errorf("send code: %w", err)
 	}
-	s.logger.InfoContext(ctx, "login code sent via email", "email", email.String())
+	s.logger.InfoContext(ctx, "login code sent via email")
 	return nil
 }
 
 func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, email domain.Email, code string) (domain.RawSession, domain.User, error) {
 	now := s.clock.Now()
 
+	window, err := s.attempts.GetByPhone(ctx, phone)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return domain.RawSession{}, domain.User{}, fmt.Errorf("get attempts: %w", err)
+	}
+	if window.Blocked(now) {
+		return domain.RawSession{}, domain.User{}, ErrUserBlocked
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.RawSession{}, domain.User{}, fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-
-	txAttempts := s.attempts.WithTx(tx)
-	window, err := txAttempts.GetByPhone(ctx, phone)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("get attempts: %w", err)
-	}
 
 	txCodes := s.codes.WithTx(tx)
 	txUsers := s.users.WithTx(tx)
@@ -232,7 +245,7 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, e
 	loginCode, err := txCodes.GetLatestByPhoneAndEmail(ctx, phone, email, domain.LoginCodePurposeLogin, now)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			if recErr := s.recordFailure(ctx, txAttempts, phone, uuid.Nil, window, now); recErr != nil {
+			if _, recErr := s.attempts.IncrementFailures(ctx, phone, uuid.Nil, now); recErr != nil {
 				if errors.Is(recErr, domain.ErrTooManyAttempts) || errors.Is(recErr, ErrUserBlocked) {
 					return domain.RawSession{}, domain.User{}, recErr
 				}
@@ -243,8 +256,8 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, e
 		return domain.RawSession{}, domain.User{}, fmt.Errorf("get code: %w", err)
 	}
 
-	if err := loginCode.Verify(code, now); err != nil {
-		if recErr := s.recordFailure(ctx, txAttempts, phone, uuid.Nil, window, now); recErr != nil {
+	if err := loginCode.Verify(s.hashCode(domain.LoginCodePurposeLogin, phone, email, code), now); err != nil {
+		if _, recErr := s.attempts.IncrementFailures(ctx, phone, uuid.Nil, now); recErr != nil {
 			if errors.Is(recErr, domain.ErrTooManyAttempts) || errors.Is(recErr, ErrUserBlocked) {
 				return domain.RawSession{}, domain.User{}, recErr
 			}
@@ -275,7 +288,10 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, e
 			return domain.RawSession{}, domain.User{}, fmt.Errorf("save user: %w", createErr)
 		}
 	} else {
-		if user.Email == nil || *user.Email != email.String() || user.EmailVerifiedAt == nil {
+		if user.Email != nil && *user.Email != email.String() {
+			return domain.RawSession{}, domain.User{}, ErrEmailDoesNotMatch
+		}
+		if user.Email == nil || (user.Email != nil && *user.Email == email.String() && user.EmailVerifiedAt == nil) {
 			verifiedAt := now
 			updated, updateErr := txUsers.UpdateEmailVerified(ctx, user.ID, email.String(), &verifiedAt)
 			if updateErr != nil {
@@ -302,7 +318,7 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, e
 	}
 
 	if err := s.attempts.DeleteByPhone(ctx, phone); err != nil {
-		s.logger.ErrorContext(ctx, "failed to reset login attempts", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to reset login attempts", slog.String("error", sanitize.Error(err)))
 	}
 
 	return raw, user, nil
@@ -381,6 +397,14 @@ func (s *AuthService) SendPhoneChangeCode(ctx context.Context, userID uuid.UUID,
 func (s *AuthService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhone domain.Phone, code, tokenHash string) (domain.User, error) {
 	now := s.clock.Now()
 
+	window, err := s.attempts.GetByPhone(ctx, newPhone)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return domain.User{}, fmt.Errorf("get attempts: %w", err)
+	}
+	if window.Blocked(now) {
+		return domain.User{}, ErrUserBlocked
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("begin tx: %w", err)
@@ -408,15 +432,10 @@ func (s *AuthService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhon
 		return domain.User{}, ErrPhoneAlreadyTaken
 	}
 
-	window, err := txAttempts.GetByPhone(ctx, newPhone)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return domain.User{}, fmt.Errorf("get attempts: %w", err)
-	}
-
 	loginCode, err := txCodes.GetLatestByPhoneAndUserID(ctx, newPhone, domain.LoginCodePurposePhoneChange, userID, now)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			if recErr := s.recordFailure(ctx, txAttempts, newPhone, userID, window, now); recErr != nil {
+			if _, recErr := s.attempts.IncrementFailures(ctx, newPhone, userID, now); recErr != nil {
 				if errors.Is(recErr, domain.ErrTooManyAttempts) || errors.Is(recErr, ErrUserBlocked) {
 					return domain.User{}, recErr
 				}
@@ -427,8 +446,8 @@ func (s *AuthService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhon
 		return domain.User{}, fmt.Errorf("get code: %w", err)
 	}
 
-	if err := loginCode.Verify(code, now); err != nil {
-		if recErr := s.recordFailure(ctx, txAttempts, newPhone, userID, window, now); recErr != nil {
+	if err := loginCode.Verify(s.hashCode(domain.LoginCodePurposePhoneChange, newPhone, domain.EmailFrom(""), code), now); err != nil {
+		if _, recErr := s.attempts.IncrementFailures(ctx, newPhone, userID, now); recErr != nil {
 			if errors.Is(recErr, domain.ErrTooManyAttempts) || errors.Is(recErr, ErrUserBlocked) {
 				return domain.User{}, recErr
 			}
@@ -463,17 +482,6 @@ func (s *AuthService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhon
 	}
 
 	return updated, nil
-}
-
-func (s *AuthService) recordFailure(ctx context.Context, attempts AttemptRepository, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow, now time.Time) error {
-	if err := window.RecordFailure(now); err != nil {
-		// Still save the window so the block is persisted
-		if saveErr := attempts.Save(ctx, phone, userID, window); saveErr != nil {
-			return fmt.Errorf("save attempts: %w", saveErr)
-		}
-		return err
-	}
-	return attempts.Save(ctx, phone, userID, window)
 }
 
 func generateCode() (string, error) {

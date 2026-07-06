@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -38,7 +38,7 @@ type LoginCode struct {
 	CreatedAt time.Time
 }
 
-func NewLoginCode(phone Phone, email Email, code, purpose string, userID *uuid.UUID, now time.Time) (LoginCode, error) {
+func NewLoginCode(phone Phone, email Email, codeHash, purpose string, userID *uuid.UUID, now time.Time) (LoginCode, error) {
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return LoginCode{}, fmt.Errorf("generate login code id: %w", err)
@@ -49,24 +49,32 @@ func NewLoginCode(phone Phone, email Email, code, purpose string, userID *uuid.U
 		Phone:     phone,
 		Email:     email,
 		Purpose:   purpose,
-		CodeHash:  hashLoginCode(phone.String(), email.String(), code),
+		CodeHash:  codeHash,
 		ExpiresAt: now.Add(LoginCodeTTL),
 		Used:      false,
 		CreatedAt: now,
 	}, nil
 }
 
-func (c *LoginCode) Verify(code string, now time.Time) error {
-	if c.Used || now.After(c.ExpiresAt) || hashLoginCode(c.Phone.String(), c.Email.String(), code) != c.CodeHash {
+func (c *LoginCode) Verify(codeHash string, now time.Time) error {
+	if c.Used || now.After(c.ExpiresAt) {
 		return ErrLoginCodeInvalid
 	}
+
+	expected, err := hex.DecodeString(c.CodeHash)
+	if err != nil {
+		return ErrLoginCodeInvalid
+	}
+	actual, err := hex.DecodeString(codeHash)
+	if err != nil {
+		return ErrLoginCodeInvalid
+	}
+	if len(expected) != len(actual) || subtle.ConstantTimeCompare(expected, actual) != 1 {
+		return ErrLoginCodeInvalid
+	}
+
 	c.Used = true
 	return nil
-}
-
-func hashLoginCode(phone, email, code string) string {
-	sum := sha256.Sum256([]byte(phone + ":" + email + ":" + code))
-	return hex.EncodeToString(sum[:])
 }
 
 type AttemptWindow struct {

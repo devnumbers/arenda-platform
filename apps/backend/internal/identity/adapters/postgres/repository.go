@@ -448,6 +448,52 @@ func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, userID
 	})
 }
 
+func (r *AttemptRepository) IncrementFailures(ctx context.Context, phone domain.Phone, userID uuid.UUID, now time.Time) (domain.AttemptWindow, error) {
+	b, ok := r.db.(interface {
+		Begin(ctx context.Context) (transaction.Tx, error)
+	})
+	if !ok {
+		return domain.AttemptWindow{}, fmt.Errorf("attempt repository not backed by a connection pool")
+	}
+
+	tx, err := b.Begin(ctx)
+	if err != nil {
+		return domain.AttemptWindow{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := &AttemptRepository{db: tx.(postgres.DBTX), enc: r.enc}
+
+	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	if err != nil {
+		return domain.AttemptWindow{}, err
+	}
+
+	row, err := txRepo.q().GetLoginAttemptByPhoneForUpdate(ctx, encryptedPhone)
+	var window domain.AttemptWindow
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return domain.AttemptWindow{}, err
+		}
+		window = domain.NewAttemptWindow(now)
+	} else {
+		window = domain.AttemptWindow{
+			Failures:       int(row.Failures),
+			FirstFailureAt: row.FirstFailureAt.Time,
+			LastFailureAt:  row.LastFailureAt.Time,
+		}
+	}
+
+	recErr := window.RecordFailure(now)
+	if saveErr := txRepo.Save(ctx, phone, userID, window); saveErr != nil {
+		return domain.AttemptWindow{}, fmt.Errorf("save attempts: %w", saveErr)
+	}
+	if commitErr := tx.Commit(ctx); commitErr != nil {
+		return domain.AttemptWindow{}, fmt.Errorf("commit tx: %w", commitErr)
+	}
+	return window, recErr
+}
+
 func (r *AttemptRepository) DeleteByPhone(ctx context.Context, phone domain.Phone) error {
 	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
 	if err != nil {

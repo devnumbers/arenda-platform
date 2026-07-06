@@ -55,6 +55,8 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Слишком много попыток", true
 	case errors.Is(err, identityapp.ErrPhoneLoginDeprecated):
 		return "Вход по телефону больше не поддерживается", true
+	case errors.Is(err, identityapp.ErrEmailDoesNotMatch):
+		return "Некорректные учётные данные", true
 
 	// Properties.
 	case errors.Is(err, propertiesapp.ErrInvalidInput):

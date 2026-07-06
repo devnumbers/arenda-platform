@@ -140,8 +140,6 @@ func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
-		case errors.Is(err, application.ErrEmailDoesNotMatch):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Почта не соответствует номеру телефона"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -193,6 +191,13 @@ func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, domain.ErrLoginCodeInvalid),
 			errors.Is(err, application.ErrNotFound):
 			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный телефон, почта или код"))
+		case errors.Is(err, application.ErrEmailDoesNotMatch):
+			detail, ok := UserFacingDetail(err)
+			if !ok {
+				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+				return
+			}
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}

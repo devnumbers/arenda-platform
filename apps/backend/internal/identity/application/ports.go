@@ -54,6 +54,7 @@ type LoginCodeRepository interface {
 type AttemptRepository interface {
 	GetByPhone(ctx context.Context, phone domain.Phone) (domain.AttemptWindow, error)
 	Save(ctx context.Context, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow) error
+	IncrementFailures(ctx context.Context, phone domain.Phone, userID uuid.UUID, now time.Time) (domain.AttemptWindow, error)
 	DeleteByPhone(ctx context.Context, phone domain.Phone) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 	DeleteStaleBefore(ctx context.Context, before time.Time) error

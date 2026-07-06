@@ -148,6 +148,15 @@ func (db *InstrumentedPool) CopyFrom(ctx context.Context, tableName pgx.Identifi
 	return db.pool.CopyFrom(ctx, tableName, columnNames, rowSrc)
 }
 
+// Begin starts a new transaction on the underlying pool.
+func (db *InstrumentedPool) Begin(ctx context.Context) (*InstrumentedTx, error) {
+	tx, err := db.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return NewInstrumentedTx(tx, db.inst.logger), nil
+}
+
 func (tx *InstrumentedTx) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
 	queryStart := time.Now()
 	tag, err := tx.tx.Exec(ctx, sql, args...)
