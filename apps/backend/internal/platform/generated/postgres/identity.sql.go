@@ -189,6 +189,50 @@ func (q *Queries) DeleteExpiredLoginCodesBatch(ctx context.Context, arg DeleteEx
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredLoginCodesByPhoneAndEmail = `-- name: DeleteExpiredLoginCodesByPhoneAndEmail :exec
+DELETE FROM login_codes
+WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false AND expires_at < $4
+`
+
+type DeleteExpiredLoginCodesByPhoneAndEmailParams struct {
+	Phone     pgtype.Text        `json:"phone"`
+	Email     pgtype.Text        `json:"email"`
+	Purpose   string             `json:"purpose"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) DeleteExpiredLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndEmailParams) error {
+	_, err := q.db.Exec(ctx, deleteExpiredLoginCodesByPhoneAndEmail,
+		arg.Phone,
+		arg.Email,
+		arg.Purpose,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const deleteExpiredLoginCodesByPhoneAndUserID = `-- name: DeleteExpiredLoginCodesByPhoneAndUserID :exec
+DELETE FROM login_codes
+WHERE phone = $1 AND user_id = $2 AND purpose = $3 AND used = false AND expires_at < $4
+`
+
+type DeleteExpiredLoginCodesByPhoneAndUserIDParams struct {
+	Phone     pgtype.Text        `json:"phone"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Purpose   string             `json:"purpose"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) DeleteExpiredLoginCodesByPhoneAndUserID(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndUserIDParams) error {
+	_, err := q.db.Exec(ctx, deleteExpiredLoginCodesByPhoneAndUserID,
+		arg.Phone,
+		arg.UserID,
+		arg.Purpose,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
 const deleteExpiredSessions = `-- name: DeleteExpiredSessions :exec
 DELETE FROM sessions WHERE expires_at < $1
 `

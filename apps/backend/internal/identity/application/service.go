@@ -107,6 +107,9 @@ func (s *AuthService) sendCode(ctx context.Context, phone domain.Phone, purpose 
 	}
 
 	txCodes := s.codes.WithTx(tx)
+	if err := txCodes.DeleteExpiredByPhoneAndUserID(ctx, phone, userID, purpose, now); err != nil {
+		return fmt.Errorf("delete expired login codes: %w", err)
+	}
 
 	latest, err := txCodes.GetLatestByPhoneAndUserID(ctx, phone, purpose, userID, now)
 	if err != nil && !errors.Is(err, ErrNotFound) {
@@ -188,6 +191,9 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 	}
 
 	txCodes := s.codes.WithTx(tx)
+	if err := txCodes.DeleteExpiredByPhoneAndEmail(ctx, phone, email, domain.LoginCodePurposeLogin, now); err != nil {
+		return fmt.Errorf("delete expired login codes: %w", err)
+	}
 	latest, err := txCodes.GetLatestByPhoneAndEmail(ctx, phone, email, domain.LoginCodePurposeLogin, now)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("get latest code: %w", err)

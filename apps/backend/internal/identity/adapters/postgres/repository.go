@@ -303,6 +303,32 @@ func (r *LoginCodeRepository) GetLatestByPhoneAndUserID(ctx context.Context, pho
 	return r.mapLoginCode(ctx, toLoginCodeRowUserID(row))
 }
 
+func (r *LoginCodeRepository) DeleteExpiredByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose string, before time.Time) error {
+	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	if err != nil {
+		return err
+	}
+	return r.q().DeleteExpiredLoginCodesByPhoneAndEmail(ctx, postgres.DeleteExpiredLoginCodesByPhoneAndEmailParams{
+		Phone:     pgtype.Text{String: encryptedPhone, Valid: true},
+		Email:     pgtype.Text{String: email.String(), Valid: true},
+		Purpose:   purpose,
+		ExpiresAt: pgtype.Timestamptz{Time: before, Valid: true},
+	})
+}
+
+func (r *LoginCodeRepository) DeleteExpiredByPhoneAndUserID(ctx context.Context, phone domain.Phone, userID uuid.UUID, purpose string, before time.Time) error {
+	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	if err != nil {
+		return err
+	}
+	return r.q().DeleteExpiredLoginCodesByPhoneAndUserID(ctx, postgres.DeleteExpiredLoginCodesByPhoneAndUserIDParams{
+		Phone:     pgtype.Text{String: encryptedPhone, Valid: true},
+		UserID:    pgconv.UUIDToPgtype(userID),
+		Purpose:   purpose,
+		ExpiresAt: pgtype.Timestamptz{Time: before, Valid: true},
+	})
+}
+
 func (r *LoginCodeRepository) MarkUsedByID(ctx context.Context, id uuid.UUID) error {
 	return r.q().MarkLoginCodeUsed(ctx, pgconv.UUIDToPgtype(id))
 }

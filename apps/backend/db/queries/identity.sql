@@ -35,6 +35,14 @@ FOR UPDATE;
 INSERT INTO login_codes (id, phone, email, code_hash, expires_at, user_id, purpose, phone_encrypted)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 
+-- name: DeleteExpiredLoginCodesByPhoneAndEmail :exec
+DELETE FROM login_codes
+WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false AND expires_at < $4;
+
+-- name: DeleteExpiredLoginCodesByPhoneAndUserID :exec
+DELETE FROM login_codes
+WHERE phone = $1 AND user_id = $2 AND purpose = $3 AND used = false AND expires_at < $4;
+
 -- name: MarkLoginCodeUsed :exec
 UPDATE login_codes SET used = true WHERE id = $1;
 

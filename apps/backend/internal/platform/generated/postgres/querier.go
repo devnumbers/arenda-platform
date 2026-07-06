@@ -45,6 +45,8 @@ type Querier interface {
 	DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error
 	DeleteExpiredLoginCodes(ctx context.Context, expiresAt pgtype.Timestamptz) error
 	DeleteExpiredLoginCodesBatch(ctx context.Context, arg DeleteExpiredLoginCodesBatchParams) (int64, error)
+	DeleteExpiredLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndEmailParams) error
+	DeleteExpiredLoginCodesByPhoneAndUserID(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndUserIDParams) error
 	DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error
 	DeleteExpiredSessionsBatch(ctx context.Context, arg DeleteExpiredSessionsBatchParams) (int64, error)
 	DeleteFutureGeneratedOperations(ctx context.Context, arg DeleteFutureGeneratedOperationsParams) error
