@@ -79,7 +79,7 @@ func (s *AuthService) SendCode(ctx context.Context, phone domain.Phone) error {
 	return ErrPhoneLoginDeprecated
 }
 
-func (s *AuthService) sendCode(ctx context.Context, phone domain.Phone, purpose string, userID *uuid.UUID) error {
+func (s *AuthService) sendCode(ctx context.Context, phone domain.Phone, purpose string, userID uuid.UUID) error {
 	now := s.clock.Now()
 
 	window, err := s.attempts.GetByPhone(ctx, phone)
@@ -107,7 +107,7 @@ func (s *AuthService) sendCode(ctx context.Context, phone domain.Phone, purpose 
 
 	txCodes := s.codes.WithTx(tx)
 
-	latest, err := txCodes.GetLatestByPhoneAndUserID(ctx, phone, purpose, *userID, now)
+	latest, err := txCodes.GetLatestByPhoneAndUserID(ctx, phone, purpose, userID, now)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("get latest code: %w", err)
 	}
@@ -119,7 +119,7 @@ func (s *AuthService) sendCode(ctx context.Context, phone domain.Phone, purpose 
 	if err != nil {
 		return fmt.Errorf("generate code: %w", err)
 	}
-	loginCode, err := domain.NewLoginCode(phone, domain.EmailFrom(""), s.hashCode(purpose, phone, domain.EmailFrom(""), code), purpose, userID, now)
+	loginCode, err := domain.NewLoginCode(phone, domain.EmailFrom(""), s.hashCode(purpose, phone, domain.EmailFrom(""), code), purpose, &userID, now)
 	if err != nil {
 		return fmt.Errorf("create login code: %w", err)
 	}
@@ -401,7 +401,7 @@ func (s *AuthService) SendPhoneChangeCode(ctx context.Context, userID uuid.UUID,
 		return ErrPhoneAlreadyTaken
 	}
 
-	return s.sendCode(ctx, newPhone, domain.LoginCodePurposePhoneChange, &userID)
+	return s.sendCode(ctx, newPhone, domain.LoginCodePurposePhoneChange, userID)
 }
 
 func (s *AuthService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhone domain.Phone, code, tokenHash string) (domain.User, error) {

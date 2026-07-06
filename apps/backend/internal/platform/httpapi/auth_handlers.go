@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/google/uuid"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
@@ -272,12 +273,29 @@ func (h *AuthHandlers) LogoutAll(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.auth.LogoutAll(r.Context(), userID); err != nil {
 		h.logger.ErrorContext(r.Context(), "logout all failed", slog.String("error", sanitizeError(err)))
+		clearSessionCookie(w, h.cookieSecure)
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		return
 	}
 
 	clearSessionCookie(w, h.cookieSecure)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *AuthHandlers) enrichSubscription(ctx context.Context, userID uuid.UUID, resp *openapi.MeResponse) error {
+	if h.billing == nil {
+		return nil
+	}
+	view, err := h.billing.GetSubscription(ctx, userID)
+	if err != nil {
+		if errors.Is(err, billingapp.ErrSubscriptionNotFound) {
+			return nil
+		}
+		return err
+	}
+	s := subscriptionResponse(view)
+	resp.Subscription = &s
+	return nil
 }
 
 // GetMe implements GET /me.
@@ -303,17 +321,9 @@ func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := meResponse(user)
-	if h.billing != nil {
-		view, err := h.billing.GetSubscription(r.Context(), userID)
-		if err != nil {
-			if !errors.Is(err, billingapp.ErrSubscriptionNotFound) {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-		} else {
-			s := subscriptionResponse(view)
-			resp.Subscription = &s
-		}
+	if err := h.enrichSubscription(r.Context(), userID, &resp); err != nil {
+		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+		return
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, resp)
@@ -371,17 +381,9 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := meResponse(user)
-	if h.billing != nil {
-		view, err := h.billing.GetSubscription(r.Context(), userID)
-		if err != nil {
-			if !errors.Is(err, billingapp.ErrSubscriptionNotFound) {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-		} else {
-			s := subscriptionResponse(view)
-			resp.Subscription = &s
-		}
+	if err := h.enrichSubscription(r.Context(), userID, &resp); err != nil {
+		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+		return
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, resp)

@@ -5,11 +5,6 @@
   width: 100%;
 }
 
-.logo {
-  width: 92px;
-  height: auto;
-}
-
 .header {
   display: flex;
   flex-direction: column;
@@ -45,8 +40,4 @@
   flex-direction: column;
   gap: 12px;
   width: 100%;
-}
-
-.btn{
-  align-items: center;
 }
