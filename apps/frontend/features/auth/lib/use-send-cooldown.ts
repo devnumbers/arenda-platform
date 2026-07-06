@@ -9,7 +9,6 @@ type CooldownStore = {
   subscribe: (listener: Listener) => () => void;
   getSnapshot: () => number;
   getServerSnapshot: () => number;
-  recordSend: () => void;
   recordSendWithRemainingSeconds: (remainingSeconds: number) => void;
 };
 
@@ -122,10 +121,6 @@ function createCooldownStore(): CooldownStore {
     return 0;
   }
 
-  function recordSend() {
-    recordSendAt(Date.now());
-  }
-
   function recordSendAt(timestamp: number) {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(STORAGE_KEY, String(timestamp));
@@ -140,7 +135,7 @@ function createCooldownStore(): CooldownStore {
     recordSendAt(sendAt);
   }
 
-  return { subscribe, getSnapshot, getServerSnapshot, recordSend, recordSendWithRemainingSeconds };
+  return { subscribe, getSnapshot, getServerSnapshot, recordSendWithRemainingSeconds };
 }
 
 const cooldownStore = createCooldownStore();
@@ -154,7 +149,6 @@ export function useSendCooldown() {
 
   return {
     remainingSeconds,
-    recordSend: cooldownStore.recordSend,
     recordSendWithRemainingSeconds: cooldownStore.recordSendWithRemainingSeconds,
   };
 }

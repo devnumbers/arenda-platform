@@ -32,12 +32,13 @@ export default function LoginPage(): JSX.Element {
     };
 
     const handleSendEmail = () => {
-        if (!email || !isPhoneValid(phone)) {
+        const trimmedEmail = email.trim();
+        if (!trimmedEmail || !isPhoneValid(phone)) {
             return;
         }
 
         sendEmailCode.mutate(
-            {phone: normalizePhone(phone), email},
+            {phone: normalizePhone(phone), email: trimmedEmail},
             {
                 onSuccess: (data) => {
                     recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
@@ -54,12 +55,13 @@ export default function LoginPage(): JSX.Element {
     };
 
     const handleVerifyCode = (code: string) => {
-        if (code.length !== 6 || !isPhoneValid(phone) || !email) {
+        const trimmedEmail = email.trim();
+        if (code.length !== 6 || !isPhoneValid(phone) || !trimmedEmail) {
             return;
         }
 
         verifyEmailCode.mutate(
-            {phone: normalizePhone(phone), email, code},
+            {phone: normalizePhone(phone), email: trimmedEmail, code},
             {
                 onSuccess: () => {
                     router.push("/dashboard");
@@ -84,12 +86,13 @@ export default function LoginPage(): JSX.Element {
     };
 
     const handleResend = () => {
-        if (!isPhoneValid(phone) || !email) {
+        const trimmedEmail = email.trim();
+        if (!isPhoneValid(phone) || !trimmedEmail) {
             return;
         }
 
         sendEmailCode.mutate(
-            {phone: normalizePhone(phone), email},
+            {phone: normalizePhone(phone), email: trimmedEmail},
             {
                 onSuccess: (data) => {
                     recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);

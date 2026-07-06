@@ -361,14 +361,14 @@ func run(fallback *slog.Logger) error {
 	}
 	phoneVerifyLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.PhoneVerifyPer15Min)/(15*60), phoneVerifyBurst, 1*time.Hour)
 	defer phoneVerifyLimiter.Stop()
-	emailSendBurst := 5
+	emailSendBurst := 3
 	if cfg.RateLimit.EmailSendPerHour < emailSendBurst {
 		emailSendBurst = cfg.RateLimit.EmailSendPerHour
 	}
 	emailSendLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.EmailSendPerHour)/3600, emailSendBurst, 1*time.Hour)
 	defer emailSendLimiter.Stop()
 
-	emailVerifyBurst := 10
+	emailVerifyBurst := 5
 	if cfg.RateLimit.EmailVerifyPer15Min < emailVerifyBurst {
 		emailVerifyBurst = cfg.RateLimit.EmailVerifyPer15Min
 	}
