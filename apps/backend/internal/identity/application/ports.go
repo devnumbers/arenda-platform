@@ -73,7 +73,3 @@ type SessionRepository interface {
 	DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	WithTx(tx transaction.Tx) SessionRepository
 }
-
-type OnboardingService interface {
-	SetupDefaultSubscription(ctx context.Context, tx transaction.Tx, userID uuid.UUID) error
-}

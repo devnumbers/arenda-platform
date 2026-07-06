@@ -141,7 +141,7 @@ func run(fallback *slog.Logger) error {
 
 	tariffRepo := billingpg.NewTariffRepository(db, cfg.TariffCacheTTL, clock.Real{})
 	subscriptionRepo := billingpg.NewSubscriptionRepository(db)
-	onboardingService := billingpg.NewOnboardingService(tariffRepo, subscriptionRepo)
+	onboardingService := billingpg.NewOnboardingService(tariffRepo, subscriptionRepo, platformpostgres.NewBeginner(pool, appLogger))
 	paymentMethodRepo := billingpg.NewPaymentMethodRepository(db, encryptor)
 	subscriptionPaymentRepo := billingpg.NewSubscriptionPaymentRepository(db)
 	appLogger.InfoContext(ctx, "billing repositories initialized",

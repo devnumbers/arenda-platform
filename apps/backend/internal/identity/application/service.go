@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
@@ -45,13 +46,13 @@ type AuthService struct {
 	smsSender   SMSSender
 	emailSender EmailSender
 	clock       Clock
-	onboarding  OnboardingService
+	onboarding  billingapp.OnboardingService
 	db          txBeginner
 	logger      *slog.Logger
 	hasher      tokenHasher
 }
 
-func NewAuthService(users UserRepository, codes LoginCodeRepository, attempts AttemptRepository, sessions SessionRepository, smsSender SMSSender, emailSender EmailSender, clock Clock, onboarding OnboardingService, db txBeginner, logger *slog.Logger, hasher tokenHasher) *AuthService {
+func NewAuthService(users UserRepository, codes LoginCodeRepository, attempts AttemptRepository, sessions SessionRepository, smsSender SMSSender, emailSender EmailSender, clock Clock, onboarding billingapp.OnboardingService, db txBeginner, logger *slog.Logger, hasher tokenHasher) *AuthService {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -162,6 +163,8 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 	if userErr != nil && !errors.Is(userErr, ErrNotFound) {
 		return fmt.Errorf("get user: %w", userErr)
 	}
+	// Anti-enumeration: if the phone is registered to a different verified email,
+	// respond identically to the success path without sending a code.
 	if userErr == nil && user.Email != nil && *user.Email != email.String() {
 		return nil
 	}
@@ -308,10 +311,6 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, e
 		}
 	}
 
-	if err := s.onboarding.SetupDefaultSubscription(ctx, tx, user.ID); err != nil {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("create subscription: %w", err)
-	}
-
 	raw, err := domain.NewSession(user.ID, now)
 	if err != nil {
 		return domain.RawSession{}, domain.User{}, fmt.Errorf("create session: %w", err)
@@ -322,6 +321,10 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, e
 
 	if err := tx.Commit(ctx); err != nil {
 		return domain.RawSession{}, domain.User{}, fmt.Errorf("commit tx: %w", err)
+	}
+
+	if err := s.onboarding.SetupDefaultSubscription(ctx, user.ID); err != nil {
+		s.logger.ErrorContext(ctx, "failed to setup default subscription", slog.String("error", sanitize.Error(err)))
 	}
 
 	if err := s.attempts.DeleteByPhone(ctx, phone); err != nil {

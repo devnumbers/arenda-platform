@@ -212,7 +212,7 @@ func (r *UserRepository) mapUser(ctx context.Context, row postgres.User) (domain
 	}
 	return domain.User{
 		ID:              pgconv.UUIDFromPgtype(row.ID),
-		Phone:           domain.Phone(phone),
+		Phone:           domain.PhoneFrom(phone),
 		Role:            domain.Role(row.Role),
 		Name:            pgconv.TextToPtrString(row.Name),
 		Surname:         pgconv.TextToPtrString(row.Surname),
@@ -377,7 +377,7 @@ func (r *LoginCodeRepository) mapLoginCode(ctx context.Context, row loginCodeRow
 	return domain.LoginCode{
 		ID:        pgconv.UUIDFromPgtype(row.id),
 		UserID:    pgconv.UUIDFromPgtypePtr(row.userID),
-		Phone:     domain.Phone(phone),
+		Phone:     domain.PhoneFrom(phone),
 		Email:     email,
 		Purpose:   row.purpose,
 		CodeHash:  row.codeHash,
@@ -604,7 +604,7 @@ func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string
 			LastUsedAt: row.LastUsedAt.Time,
 		}, domain.User{
 			ID:              pgconv.UUIDFromPgtype(row.UserID),
-			Phone:           domain.Phone(phone),
+			Phone:           domain.PhoneFrom(phone),
 			Role:            domain.Role(row.Role),
 			Name:            pgconv.TextToPtrString(row.Name),
 			Surname:         pgconv.TextToPtrString(row.Surname),

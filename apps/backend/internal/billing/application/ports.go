@@ -113,6 +113,11 @@ type Provider interface {
 	WebhookResponse() []byte
 }
 
+// OnboardingService creates default billing state for newly-registered owners.
+type OnboardingService interface {
+	SetupDefaultSubscription(ctx context.Context, userID uuid.UUID) error
+}
+
 type InitRequest struct {
 	PaymentID              uuid.UUID
 	AmountKopecks          int64

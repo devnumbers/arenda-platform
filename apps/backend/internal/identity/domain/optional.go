@@ -18,3 +18,10 @@ func (o *Optional[T]) UnmarshalJSON(data []byte) error {
 	}
 	return json.Unmarshal(data, &o.Value)
 }
+
+func (o Optional[T]) MarshalJSON() ([]byte, error) {
+	if !o.Set {
+		return []byte("null"), nil
+	}
+	return json.Marshal(o.Value)
+}

@@ -324,19 +324,26 @@ func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(r.Context(), w, http.StatusOK, resp)
 }
 
+type updateMeRequest struct {
+	Email      *string `json:"email,omitempty"`
+	Name       *string `json:"name,omitempty"`
+	Surname    *string `json:"surname,omitempty"`
+	Patronymic *string `json:"patronymic,omitempty"`
+}
+
+func optionalStringFromPtr(s *string) domain.Optional[string] {
+	if s == nil {
+		return domain.Optional[string]{Set: false}
+	}
+	return domain.Optional[string]{Value: *s, Set: true}
+}
+
 // UpdateMe implements PATCH /me.
 func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	userID, ok := UserIDFromContext(r.Context())
 	if !ok {
 		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
-	}
-
-	type updateMeRequest struct {
-		Name       domain.Optional[string] `json:"name"`
-		Surname    domain.Optional[string] `json:"surname"`
-		Patronymic domain.Optional[string] `json:"patronymic"`
-		Email      domain.Optional[string] `json:"email"`
 	}
 
 	var body updateMeRequest
@@ -346,12 +353,14 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.auth.UpdateUser(r.Context(), userID, application.UpdateUserCommand{
-		Name:       body.Name,
-		Surname:    body.Surname,
-		Patronymic: body.Patronymic,
-		Email:      body.Email,
-	})
+	cmd := application.UpdateUserCommand{
+		Email:      optionalStringFromPtr(body.Email),
+		Name:       optionalStringFromPtr(body.Name),
+		Surname:    optionalStringFromPtr(body.Surname),
+		Patronymic: optionalStringFromPtr(body.Patronymic),
+	}
+
+	user, err := h.auth.UpdateUser(r.Context(), userID, cmd)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidEmail):
