@@ -121,6 +121,9 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.U
 		EmailVerifiedAt: pgconv.TimePtrToPgtype(user.EmailVerifiedAt),
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return r.GetByPhone(ctx, user.Phone)
+		}
 		return domain.User{}, err
 	}
 	return r.mapUser(ctx, postgres.User{

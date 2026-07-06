@@ -30,16 +30,19 @@ func (a *userAuthenticator) Authenticate(ctx context.Context, tx transaction.Tx,
 	txUsers := a.users.WithTx(tx)
 	txSessions := a.sessions.WithTx(tx)
 
+	emailStr := email.String()
+	isNewUser := false
+
 	user, err := txUsers.GetByPhone(ctx, phone)
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {
 			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("get user: %w", err)
 		}
+		isNewUser = true
 		newUser, createErr := domain.NewOwner(phone)
 		if createErr != nil {
 			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("create user: %w", createErr)
 		}
-		emailStr := email.String()
 		newUser.Email = &emailStr
 		verifiedAt := now
 		newUser.EmailVerifiedAt = &verifiedAt
@@ -47,25 +50,27 @@ func (a *userAuthenticator) Authenticate(ctx context.Context, tx transaction.Tx,
 		if createErr != nil {
 			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("save user: %w", createErr)
 		}
-		return a.createSession(ctx, txSessions, user, true, now)
+		if user.ID != newUser.ID {
+			isNewUser = false
+		}
 	}
 
 	if user.Email == nil {
 		return domain.RawSession{}, domain.User{}, false, ErrEmailDoesNotMatch
 	}
-	if *user.Email != email.String() {
+	if *user.Email != emailStr {
 		return domain.RawSession{}, domain.User{}, false, ErrEmailDoesNotMatch
 	}
 	if user.EmailVerifiedAt == nil {
 		verifiedAt := now
-		updated, updateErr := txUsers.UpdateEmailVerified(ctx, user.ID, email.String(), &verifiedAt)
+		updated, updateErr := txUsers.UpdateEmailVerified(ctx, user.ID, emailStr, &verifiedAt)
 		if updateErr != nil {
 			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("update user email: %w", updateErr)
 		}
 		user = updated
 	}
 
-	return a.createSession(ctx, txSessions, user, false, now)
+	return a.createSession(ctx, txSessions, user, isNewUser, now)
 }
 
 func (a *userAuthenticator) createSession(ctx context.Context, txSessions SessionRepository, user domain.User, isNewUser bool, now time.Time) (domain.RawSession, domain.User, bool, error) {

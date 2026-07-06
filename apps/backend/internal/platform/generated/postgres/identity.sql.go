@@ -104,11 +104,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, phone, role, phone_encrypted, email, email_verified_at)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (phone) DO UPDATE SET
-    phone = EXCLUDED.phone,
-    phone_encrypted = EXCLUDED.phone_encrypted,
-    email = EXCLUDED.email,
-    email_verified_at = EXCLUDED.email_verified_at
+ON CONFLICT (phone) DO NOTHING
 RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted
 `
 
