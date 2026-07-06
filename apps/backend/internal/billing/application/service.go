@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
@@ -27,6 +28,7 @@ type BillingService struct {
 	clock                clock.Clock
 	log                  *slog.Logger
 	callbackBaseURL      string
+	onboarding           OnboardingService
 }
 
 // NewBillingService creates a new billing application service.
@@ -41,6 +43,7 @@ func NewBillingService(
 	log *slog.Logger,
 	callbackBaseURL string,
 	propertyArchiver PropertyArchiver,
+	onboarding OnboardingService,
 ) *BillingService {
 	if log == nil {
 		log = slog.Default()
@@ -56,7 +59,14 @@ func NewBillingService(
 		clock:                clock,
 		log:                  log,
 		callbackBaseURL:      callbackBaseURL,
+		onboarding:           onboarding,
 	}
+}
+
+// OnUserRegistered handles the identity.UserRegistered event by setting up the
+// default subscription for a newly-created user.
+func (s *BillingService) OnUserRegistered(ctx context.Context, event identityapp.UserRegistered) error {
+	return s.onboarding.SetupDefaultSubscription(ctx, event.UserID)
 }
 
 func upgradePaymentDescription(name domain.TariffName, period domain.SubscriptionPeriod) string {

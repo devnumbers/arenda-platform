@@ -692,6 +692,7 @@ func newTestDeps(t *testing.T) *testDeps {
 		discardLogger(),
 		"http://localhost",
 		d.propertyArchiver,
+		nil,
 	)
 	return d
 }
@@ -2412,6 +2413,7 @@ func newTestDepsWithLogger(t *testing.T, log *slog.Logger) *testDeps {
 		log,
 		"http://localhost",
 		d.propertyArchiver,
+		nil,
 	)
 	return d
 }

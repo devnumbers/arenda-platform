@@ -31,6 +31,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/cleaner"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
 	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	platformgenerated "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
@@ -162,6 +163,8 @@ func run(fallback *slog.Logger) error {
 	identityAttemptRepo := identitypg.NewAttemptRepository(db, encryptor)
 	identitySessionRepo := identitypg.NewSessionRepository(db, encryptor)
 	identitySessionService := identityapp.NewSessionService(identitySessionRepo)
+	userAuthenticator := identityapp.NewUserAuthenticator(identityUserRepo, identitySessionRepo, realClock{})
+	eventDispatcher := events.NewInProcessDispatcher()
 
 	if cfg.EncryptionKey != "" {
 		if err := backfillPhoneEncryption(ctx, db, encryptor, appLogger); err != nil {
@@ -212,7 +215,8 @@ func run(fallback *slog.Logger) error {
 		smsSender,
 		emailSender,
 		realClock{},
-		onboardingService,
+		userAuthenticator,
+		eventDispatcher,
 		platformpostgres.NewBeginner(pool, appLogger),
 		appLogger,
 		encryptor,
@@ -285,7 +289,9 @@ func run(fallback *slog.Logger) error {
 		appLogger,
 		cfg.AppBaseURL,
 		propertyService,
+		onboardingService,
 	)
+	eventDispatcher.OnUserRegistered(billingService.OnUserRegistered)
 
 	adminRepo := adminpg.NewAdminRepository(db, encryptor, realClock{}, occupancyProvider)
 	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billingService, realClock{})

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
@@ -39,35 +38,37 @@ type txBeginner interface {
 }
 
 type AuthService struct {
-	users       UserRepository
-	codes       LoginCodeRepository
-	attempts    AttemptRepository
-	sessions    SessionRepository
-	smsSender   SMSSender
-	emailSender EmailSender
-	clock       Clock
-	onboarding  billingapp.OnboardingService
-	db          txBeginner
-	logger      *slog.Logger
-	hasher      tokenHasher
+	users         UserRepository
+	codes         LoginCodeRepository
+	attempts      AttemptRepository
+	sessions      SessionRepository
+	smsSender     SMSSender
+	emailSender   EmailSender
+	clock         Clock
+	authenticator UserAuthenticator
+	publisher     EventPublisher
+	db            txBeginner
+	logger        *slog.Logger
+	hasher        tokenHasher
 }
 
-func NewAuthService(users UserRepository, codes LoginCodeRepository, attempts AttemptRepository, sessions SessionRepository, smsSender SMSSender, emailSender EmailSender, clock Clock, onboarding billingapp.OnboardingService, db txBeginner, logger *slog.Logger, hasher tokenHasher) *AuthService {
+func NewAuthService(users UserRepository, codes LoginCodeRepository, attempts AttemptRepository, sessions SessionRepository, smsSender SMSSender, emailSender EmailSender, clock Clock, authenticator UserAuthenticator, publisher EventPublisher, db txBeginner, logger *slog.Logger, hasher tokenHasher) *AuthService {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &AuthService{
-		users:       users,
-		codes:       codes,
-		attempts:    attempts,
-		sessions:    sessions,
-		smsSender:   smsSender,
-		emailSender: emailSender,
-		clock:       clock,
-		onboarding:  onboarding,
-		db:          db,
-		logger:      logger,
-		hasher:      hasher,
+		users:         users,
+		codes:         codes,
+		attempts:      attempts,
+		sessions:      sessions,
+		smsSender:     smsSender,
+		emailSender:   emailSender,
+		clock:         clock,
+		authenticator: authenticator,
+		publisher:     publisher,
+		db:            db,
+		logger:        logger,
+		hasher:        hasher,
 	}
 }
 
@@ -259,8 +260,6 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, e
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txCodes := s.codes.WithTx(tx)
-	txUsers := s.users.WithTx(tx)
-	txSessions := s.sessions.WithTx(tx)
 
 	loginCode, err := txCodes.GetLatestByPhoneAndEmail(ctx, phone, email, domain.LoginCodePurposeLogin, now)
 	if err != nil {
@@ -290,54 +289,19 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, e
 		return domain.RawSession{}, domain.User{}, fmt.Errorf("mark code used: %w", err)
 	}
 
-	user, err := txUsers.GetByPhone(ctx, phone)
+	raw, user, isNewUser, err := s.authenticator.Authenticate(ctx, tx, phone, email, now)
 	if err != nil {
-		if !errors.Is(err, ErrNotFound) {
-			return domain.RawSession{}, domain.User{}, fmt.Errorf("get user: %w", err)
-		}
-		newUser, createErr := domain.NewOwner(phone)
-		if createErr != nil {
-			return domain.RawSession{}, domain.User{}, fmt.Errorf("create user: %w", createErr)
-		}
-		emailStr := email.String()
-		newUser.Email = &emailStr
-		verifiedAt := now
-		newUser.EmailVerifiedAt = &verifiedAt
-		user, createErr = txUsers.Create(ctx, newUser)
-		if createErr != nil {
-			return domain.RawSession{}, domain.User{}, fmt.Errorf("save user: %w", createErr)
-		}
-	} else {
-		if user.Email == nil {
-			return domain.RawSession{}, domain.User{}, ErrEmailDoesNotMatch
-		}
-		if user.Email != nil && *user.Email != email.String() {
-			return domain.RawSession{}, domain.User{}, ErrEmailDoesNotMatch
-		}
-		if user.Email == nil || (user.Email != nil && *user.Email == email.String() && user.EmailVerifiedAt == nil) {
-			verifiedAt := now
-			updated, updateErr := txUsers.UpdateEmailVerified(ctx, user.ID, email.String(), &verifiedAt)
-			if updateErr != nil {
-				return domain.RawSession{}, domain.User{}, fmt.Errorf("update user email: %w", updateErr)
-			}
-			user = updated
-		}
-	}
-
-	raw, err := domain.NewSession(user.ID, now)
-	if err != nil {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("create session: %w", err)
-	}
-	if err := txSessions.Create(ctx, raw.Session); err != nil {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("save session: %w", err)
+		return domain.RawSession{}, domain.User{}, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return domain.RawSession{}, domain.User{}, fmt.Errorf("commit tx: %w", err)
 	}
 
-	if err := s.onboarding.SetupDefaultSubscription(ctx, user.ID); err != nil {
-		s.logger.ErrorContext(ctx, "failed to setup default subscription", slog.String("error", sanitize.Error(err)))
+	if isNewUser {
+		if err := s.publisher.PublishUserRegistered(ctx, UserRegistered{UserID: user.ID, Phone: phone, Email: email, At: now}); err != nil {
+			s.logger.ErrorContext(ctx, "failed to publish user registered event", slog.String("error", sanitize.Error(err)))
+		}
 	}
 
 	if err := s.attempts.DeleteByPhone(ctx, phone); err != nil {
