@@ -21,7 +21,6 @@ type Config struct {
 	DatabaseURL                         string
 	MigrationsDir                       string
 	CookieSecure                        bool
-	SMSSender                           string
 	PaymentProvider                     string
 	AppBaseURL                          string
 	TKassaTerminalKey                   string
@@ -92,7 +91,6 @@ func Load() (Config, error) {
 		LogFormat:         os.Getenv("LOG_FORMAT"),
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		MigrationsDir:     os.Getenv("MIGRATIONS_DIR"),
-		SMSSender:         os.Getenv("SMS_SENDER"),
 		EmailSender:       os.Getenv("EMAIL_SENDER"),
 		EmailTemplatesDir: os.Getenv("EMAIL_TEMPLATES_DIR"),
 		SMTPHost:          os.Getenv("SMTP_HOST"),
@@ -374,11 +372,6 @@ func Load() (Config, error) {
 	}
 	if cfg.DBPool.MinConns > cfg.DBPool.MaxConns {
 		return Config{}, fmt.Errorf("DB_MIN_CONNS must not exceed DB_MAX_CONNS")
-	}
-
-	allowedSenders := map[string]bool{"": true, "fake": true, "disabled": true}
-	if !allowedSenders[cfg.SMSSender] {
-		return Config{}, fmt.Errorf("invalid SMS_SENDER %q: must be empty, fake, or disabled", cfg.SMSSender)
 	}
 
 	allowedEmailSenders := map[string]bool{"": true, "fake": true, "smtp": true}

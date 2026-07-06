@@ -21,7 +21,6 @@ import (
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityemail "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/email"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
-	identitysms "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/sms"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leasespg "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/postgres"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
@@ -31,9 +30,9 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/cleaner"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
 	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
 	platformgenerated "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
@@ -174,19 +173,6 @@ func run(fallback *slog.Logger) error {
 		appLogger.WarnContext(ctx, "skipping phone encryption backfill: ENCRYPTION_KEY is empty")
 	}
 
-	var smsSender identityapp.SMSSender
-	switch cfg.SMSSender {
-	case "", "fake":
-		if cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
-			return fmt.Errorf("SMS_SENDER=fake is only allowed in local or dev environments")
-		}
-		smsSender = identitysms.NewFakeSender(appLogger)
-	case "disabled":
-		smsSender = identitysms.NewDisabledSender()
-	default:
-		return fmt.Errorf("unsupported SMS_SENDER: %s", cfg.SMSSender)
-	}
-
 	var emailMailer mailer.Sender
 	switch cfg.EmailSender {
 	case "smtp":
@@ -205,14 +191,13 @@ func run(fallback *slog.Logger) error {
 		return fmt.Errorf("unsupported EMAIL_SENDER: %s", cfg.EmailSender)
 	}
 
-	emailSender := identityemail.NewLoginCodeSender(emailMailer, renderer)
+	emailSender := identityemail.NewSender(emailMailer, renderer)
 
 	authService := identityapp.NewAuthService(
 		identityUserRepo,
 		identityCodeRepo,
 		identityAttemptRepo,
 		identitySessionRepo,
-		smsSender,
 		emailSender,
 		realClock{},
 		userAuthenticator,

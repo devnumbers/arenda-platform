@@ -53,8 +53,6 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Новый номер должен отличаться от текущего", true
 	case errors.Is(err, identitydomain.ErrTooManyAttempts):
 		return "Слишком много попыток", true
-	case errors.Is(err, identityapp.ErrPhoneLoginDeprecated):
-		return "Вход по телефону больше не поддерживается", true
 	case errors.Is(err, identityapp.ErrEmailDoesNotMatch):
 		return "Некорректные учётные данные", true
 	case errors.Is(err, identityapp.ErrEmailAlreadyTaken):

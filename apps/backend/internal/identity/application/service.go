@@ -21,13 +21,12 @@ type tokenHasher interface {
 }
 
 var (
-	ErrUserBlocked          = errors.New("user is temporarily blocked")
-	ErrCodeSentTooRecently  = errors.New("code sent too recently")
-	ErrPhoneAlreadyTaken    = errors.New("phone already taken")
-	ErrPhoneUnchanged       = errors.New("new phone must differ from current phone")
-	ErrEmailAlreadyTaken    = errors.New("email already taken")
-	ErrEmailDoesNotMatch    = errors.New("email does not match the phone number")
-	ErrPhoneLoginDeprecated = errors.New("phone login is no longer supported")
+	ErrUserBlocked         = errors.New("user is temporarily blocked")
+	ErrCodeSentTooRecently = errors.New("code sent too recently")
+	ErrPhoneAlreadyTaken   = errors.New("phone already taken")
+	ErrPhoneUnchanged      = errors.New("new phone must differ from current phone")
+	ErrEmailAlreadyTaken   = errors.New("email already taken")
+	ErrEmailDoesNotMatch   = errors.New("email does not match the phone number")
 )
 
 const minSendInterval = 1 * time.Minute
@@ -42,8 +41,7 @@ type AuthService struct {
 	codes         LoginCodeRepository
 	attempts      AttemptRepository
 	sessions      SessionRepository
-	smsSender     SMSSender
-	emailSender   EmailSender
+	codeSender    LoginCodeSender
 	clock         Clock
 	authenticator UserAuthenticator
 	publisher     EventPublisher
@@ -52,7 +50,7 @@ type AuthService struct {
 	hasher        tokenHasher
 }
 
-func NewAuthService(users UserRepository, codes LoginCodeRepository, attempts AttemptRepository, sessions SessionRepository, smsSender SMSSender, emailSender EmailSender, clock Clock, authenticator UserAuthenticator, publisher EventPublisher, db txBeginner, logger *slog.Logger, hasher tokenHasher) *AuthService {
+func NewAuthService(users UserRepository, codes LoginCodeRepository, attempts AttemptRepository, sessions SessionRepository, codeSender LoginCodeSender, clock Clock, authenticator UserAuthenticator, publisher EventPublisher, db txBeginner, logger *slog.Logger, hasher tokenHasher) *AuthService {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -61,8 +59,7 @@ func NewAuthService(users UserRepository, codes LoginCodeRepository, attempts At
 		codes:         codes,
 		attempts:      attempts,
 		sessions:      sessions,
-		smsSender:     smsSender,
-		emailSender:   emailSender,
+		codeSender:    codeSender,
 		clock:         clock,
 		authenticator: authenticator,
 		publisher:     publisher,
@@ -76,95 +73,9 @@ func (s *AuthService) hashCode(purpose string, phone domain.Phone, email domain.
 	return s.hasher.HashToken("login_code:" + purpose + ":" + phone.String() + ":" + email.String() + ":" + code)
 }
 
-func (s *AuthService) SendCode(ctx context.Context, phone domain.Phone) error {
-	return ErrPhoneLoginDeprecated
-}
-
-func (s *AuthService) sendCode(ctx context.Context, phone domain.Phone, purpose string, userID uuid.UUID) error {
-	now := s.clock.Now()
-
-	window, err := s.attempts.GetByPhone(ctx, phone)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("get attempts: %w", err)
-	}
-	if window.Blocked(now) {
-		return ErrUserBlocked
-	}
-
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txAttempts := s.attempts.WithTx(tx)
-	reload, err := txAttempts.GetByPhone(ctx, phone)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("get attempts: %w", err)
-	}
-	if reload.Blocked(now) {
-		return ErrUserBlocked
-	}
-
-	txCodes := s.codes.WithTx(tx)
-	if err := txCodes.DeleteExpiredByPhoneAndUserID(ctx, phone, userID, purpose, now); err != nil {
-		return fmt.Errorf("delete expired login codes: %w", err)
-	}
-
-	latest, err := txCodes.GetLatestByPhoneAndUserID(ctx, phone, purpose, userID, now)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("get latest code: %w", err)
-	}
-	if !errors.Is(err, ErrNotFound) && !latest.Used && latest.ExpiresAt.After(now) && now.Sub(latest.CreatedAt) < minSendInterval {
-		return ErrCodeSentTooRecently
-	}
-
-	if err := txCodes.DeleteUnusedByPhoneAndUserID(ctx, phone, userID, purpose); err != nil {
-		return fmt.Errorf("delete unused login codes: %w", err)
-	}
-
-	code, err := generateCode()
-	if err != nil {
-		return fmt.Errorf("generate code: %w", err)
-	}
-	loginCode, err := domain.NewLoginCode(phone, domain.Email{}, s.hashCode(purpose, phone, domain.Email{}, code), purpose, &userID, now)
-	if err != nil {
-		return fmt.Errorf("create login code: %w", err)
-	}
-
-	if err := txCodes.Save(ctx, loginCode); err != nil {
-		if isUniqueViolation(err) {
-			return ErrCodeSentTooRecently
-		}
-		return fmt.Errorf("save code: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-
-	if err := s.smsSender.Send(ctx, phone, fmt.Sprintf("Код подтверждения: %s", code)); err != nil {
-		if delErr := s.codes.DeleteByID(ctx, loginCode.ID); delErr != nil {
-			return fmt.Errorf("send code failed and cleanup failed: send %w, cleanup %w", err, delErr)
-		}
-		return fmt.Errorf("send code: %w", err)
-	}
-	return nil
-}
-
-func (s *AuthService) VerifyCode(ctx context.Context, phone domain.Phone, code string) (domain.RawSession, domain.User, error) {
-	return domain.RawSession{}, domain.User{}, ErrPhoneLoginDeprecated
-}
-
-func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, email domain.Email) error {
-	now := s.clock.Now()
-
-	window, err := s.attempts.GetByPhone(ctx, phone)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("get attempts: %w", err)
-	}
-	if window.Blocked(now) {
-		return ErrUserBlocked
+func (s *AuthService) SendCode(ctx context.Context, phone domain.Phone, email domain.Email, purpose string) error {
+	if _, err := s.checkNotBlocked(ctx, phone); err != nil {
+		return err
 	}
 
 	user, userErr := s.users.GetByPhone(ctx, phone)
@@ -172,26 +83,37 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 		return fmt.Errorf("get user: %w", userErr)
 	}
 
+	var userID *uuid.UUID
+	if userErr == nil {
+		userID = &user.ID
+	}
+
+	return s.sendCode(ctx, phone, email, purpose, userID)
+}
+
+func (s *AuthService) sendCode(ctx context.Context, phone domain.Phone, email domain.Email, purpose string, userID *uuid.UUID) error {
+	now := s.clock.Now()
+
+	if _, err := s.checkNotBlocked(ctx, phone); err != nil {
+		return err
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	txAttempts := s.attempts.WithTx(tx)
-	reload, err := txAttempts.GetByPhone(ctx, phone)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("get attempts: %w", err)
-	}
-	if reload.Blocked(now) {
-		return ErrUserBlocked
+	if _, err := s.checkNotBlockedTx(ctx, tx, phone); err != nil {
+		return err
 	}
 
 	txCodes := s.codes.WithTx(tx)
-	if err := txCodes.DeleteExpiredByPhoneAndEmail(ctx, phone, email, domain.LoginCodePurposeLogin, now); err != nil {
+	if err := txCodes.DeleteExpiredByPhoneAndEmail(ctx, phone, email, purpose, now); err != nil {
 		return fmt.Errorf("delete expired login codes: %w", err)
 	}
-	latest, err := txCodes.GetLatestByPhoneAndEmail(ctx, phone, email, domain.LoginCodePurposeLogin, now)
+
+	latest, err := txCodes.GetLatestByPhoneAndEmail(ctx, phone, email, purpose, now)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("get latest code: %w", err)
 	}
@@ -199,21 +121,16 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 		return ErrCodeSentTooRecently
 	}
 
-	if err := txCodes.DeleteUnusedByPhoneAndEmail(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
+	if err := txCodes.DeleteUnusedByPhoneAndEmail(ctx, phone, email, purpose); err != nil {
 		return fmt.Errorf("delete unused login codes: %w", err)
 	}
 
-	code, err := generateCode()
+	plaintextCode, err := generateCode()
 	if err != nil {
 		return fmt.Errorf("generate code: %w", err)
 	}
 
-	var userID *uuid.UUID
-	if userErr == nil {
-		userID = &user.ID
-	}
-
-	loginCode, err := domain.NewLoginCode(phone, email, s.hashCode(domain.LoginCodePurposeLogin, phone, email, code), domain.LoginCodePurposeLogin, userID, now)
+	loginCode, err := domain.NewLoginCode(phone, email, s.hashCode(purpose, phone, email, plaintextCode), purpose, userID, now)
 	if err != nil {
 		return fmt.Errorf("create login code: %w", err)
 	}
@@ -225,10 +142,10 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 		return fmt.Errorf("save code: %w", err)
 	}
 
-	s.logger.InfoContext(ctx, "sending login code via email")
-	if err := s.emailSender.Send(ctx, email, code); err != nil {
-		s.logger.ErrorContext(ctx, "failed to send login code via email", slog.String("error", sanitize.Error(err)))
+	s.logger.InfoContext(ctx, "sending login code", slog.String("purpose", purpose))
+	if err := s.codeSender.Send(ctx, phone, email, plaintextCode); err != nil {
 		_ = tx.Rollback(ctx)
+		s.logger.ErrorContext(ctx, "failed to send login code", slog.String("error", sanitize.Error(err)))
 		return fmt.Errorf("send code: %w", err)
 	}
 
@@ -236,19 +153,15 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 		return fmt.Errorf("commit tx: %w", err)
 	}
 
-	s.logger.InfoContext(ctx, "login code sent via email")
+	s.logger.InfoContext(ctx, "login code sent", slog.String("purpose", purpose))
 	return nil
 }
 
-func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, email domain.Email, code string) (domain.RawSession, domain.User, error) {
+func (s *AuthService) VerifyLoginCode(ctx context.Context, phone domain.Phone, email domain.Email, code string) (domain.RawSession, domain.User, error) {
 	now := s.clock.Now()
 
-	window, err := s.attempts.GetByPhone(ctx, phone)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("get attempts: %w", err)
-	}
-	if window.Blocked(now) {
-		return domain.RawSession{}, domain.User{}, ErrUserBlocked
+	if _, err := s.checkNotBlocked(ctx, phone); err != nil {
+		return domain.RawSession{}, domain.User{}, err
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -257,34 +170,8 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, e
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	txCodes := s.codes.WithTx(tx)
-
-	loginCode, err := txCodes.GetLatestByPhoneAndEmail(ctx, phone, email, domain.LoginCodePurposeLogin, now)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			if _, recErr := s.attempts.IncrementFailures(ctx, phone, uuid.Nil, now); recErr != nil {
-				if errors.Is(recErr, domain.ErrTooManyAttempts) || errors.Is(recErr, ErrUserBlocked) {
-					return domain.RawSession{}, domain.User{}, recErr
-				}
-				return domain.RawSession{}, domain.User{}, fmt.Errorf("verify code: %w", recErr)
-			}
-			return domain.RawSession{}, domain.User{}, domain.ErrLoginCodeInvalid
-		}
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("get code: %w", err)
-	}
-
-	if err := loginCode.Verify(s.hashCode(domain.LoginCodePurposeLogin, phone, email, code), now); err != nil {
-		if _, recErr := s.attempts.IncrementFailures(ctx, phone, uuid.Nil, now); recErr != nil {
-			if errors.Is(recErr, domain.ErrTooManyAttempts) || errors.Is(recErr, ErrUserBlocked) {
-				return domain.RawSession{}, domain.User{}, recErr
-			}
-			return domain.RawSession{}, domain.User{}, fmt.Errorf("verify code: %w", recErr)
-		}
+	if err := s.verifyCode(ctx, tx, phone, email, code, domain.LoginCodePurposeLogin, uuid.Nil); err != nil {
 		return domain.RawSession{}, domain.User{}, err
-	}
-
-	if err := txCodes.MarkUsedByID(ctx, loginCode.ID); err != nil {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("mark code used: %w", err)
 	}
 
 	raw, user, isNewUser, err := s.authenticator.Authenticate(ctx, tx, phone, email, now)
@@ -307,6 +194,69 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, e
 	}
 
 	return raw, user, nil
+}
+
+func (s *AuthService) verifyCode(ctx context.Context, tx transaction.Tx, phone domain.Phone, email domain.Email, code, purpose string, failureUserID uuid.UUID) error {
+	now := s.clock.Now()
+
+	txCodes := s.codes.WithTx(tx)
+	loginCode, err := txCodes.GetLatestByPhoneAndEmail(ctx, phone, email, purpose, now)
+	if errors.Is(err, ErrNotFound) {
+		return s.recordVerifyFailure(ctx, phone, failureUserID, now)
+	}
+	if err != nil {
+		return fmt.Errorf("get code: %w", err)
+	}
+
+	if err := loginCode.Verify(s.hashCode(purpose, phone, email, code), now); err != nil {
+		return s.recordVerifyFailure(ctx, phone, failureUserID, now)
+	}
+
+	if err := txCodes.MarkUsedByID(ctx, loginCode.ID); err != nil {
+		return fmt.Errorf("mark code used: %w", err)
+	}
+
+	return nil
+}
+
+func (s *AuthService) recordVerifyFailure(ctx context.Context, phone domain.Phone, userID uuid.UUID, now time.Time) error {
+	if _, err := s.attempts.IncrementFailures(ctx, phone, userID, now); err != nil {
+		return s.mapAttemptError(err, "increment failures")
+	}
+	return domain.ErrLoginCodeInvalid
+}
+
+func (s *AuthService) mapAttemptError(err error, op string) error {
+	if errors.Is(err, domain.ErrTooManyAttempts) || errors.Is(err, ErrUserBlocked) {
+		return err
+	}
+	return fmt.Errorf("%s: %w", op, err)
+}
+
+func (s *AuthService) checkNotBlocked(ctx context.Context, phone domain.Phone) (domain.AttemptWindow, error) {
+	now := s.clock.Now()
+
+	window, err := s.attempts.GetByPhone(ctx, phone)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return domain.AttemptWindow{}, fmt.Errorf("get attempts: %w", err)
+	}
+	if window.Blocked(now) {
+		return domain.AttemptWindow{}, ErrUserBlocked
+	}
+	return window, nil
+}
+
+func (s *AuthService) checkNotBlockedTx(ctx context.Context, tx transaction.Tx, phone domain.Phone) (domain.AttemptWindow, error) {
+	now := s.clock.Now()
+
+	window, err := s.attempts.WithTx(tx).GetByPhone(ctx, phone)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return domain.AttemptWindow{}, fmt.Errorf("get attempts: %w", err)
+	}
+	if window.Blocked(now) {
+		return domain.AttemptWindow{}, ErrUserBlocked
+	}
+	return window, nil
 }
 
 func (s *AuthService) Logout(ctx context.Context, tokenHash string) error {
@@ -376,18 +326,17 @@ func (s *AuthService) SendPhoneChangeCode(ctx context.Context, userID uuid.UUID,
 		return ErrPhoneAlreadyTaken
 	}
 
-	return s.sendCode(ctx, newPhone, domain.LoginCodePurposePhoneChange, userID)
+	email, err := s.userEmail(user)
+	if err != nil {
+		return err
+	}
+
+	return s.sendCode(ctx, newPhone, email, domain.LoginCodePurposePhoneChange, &user.ID)
 }
 
 func (s *AuthService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhone domain.Phone, code, tokenHash string) (domain.User, error) {
-	now := s.clock.Now()
-
-	window, err := s.attempts.GetByPhone(ctx, newPhone)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return domain.User{}, fmt.Errorf("get attempts: %w", err)
-	}
-	if window.Blocked(now) {
-		return domain.User{}, ErrUserBlocked
+	if _, err := s.checkNotBlocked(ctx, newPhone); err != nil {
+		return domain.User{}, err
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -397,10 +346,6 @@ func (s *AuthService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhon
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	users := s.users.WithTx(tx)
-	txCodes := s.codes.WithTx(tx)
-	txAttempts := s.attempts.WithTx(tx)
-	sessions := s.sessions.WithTx(tx)
-
 	user, err := users.GetByIDForUpdate(ctx, userID)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("get user: %w", err)
@@ -417,32 +362,13 @@ func (s *AuthService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhon
 		return domain.User{}, ErrPhoneAlreadyTaken
 	}
 
-	loginCode, err := txCodes.GetLatestByPhoneAndUserID(ctx, newPhone, domain.LoginCodePurposePhoneChange, userID, now)
+	email, err := s.userEmail(user)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			if _, recErr := s.attempts.IncrementFailures(ctx, newPhone, userID, now); recErr != nil {
-				if errors.Is(recErr, domain.ErrTooManyAttempts) || errors.Is(recErr, ErrUserBlocked) {
-					return domain.User{}, recErr
-				}
-				return domain.User{}, fmt.Errorf("verify code: %w", recErr)
-			}
-			return domain.User{}, domain.ErrLoginCodeInvalid
-		}
-		return domain.User{}, fmt.Errorf("get code: %w", err)
-	}
-
-	if err := loginCode.Verify(s.hashCode(domain.LoginCodePurposePhoneChange, newPhone, domain.Email{}, code), now); err != nil {
-		if _, recErr := s.attempts.IncrementFailures(ctx, newPhone, userID, now); recErr != nil {
-			if errors.Is(recErr, domain.ErrTooManyAttempts) || errors.Is(recErr, ErrUserBlocked) {
-				return domain.User{}, recErr
-			}
-			return domain.User{}, fmt.Errorf("verify code: %w", recErr)
-		}
 		return domain.User{}, err
 	}
 
-	if err := txCodes.MarkUsedByID(ctx, loginCode.ID); err != nil {
-		return domain.User{}, fmt.Errorf("mark code used: %w", err)
+	if err := s.verifyCode(ctx, tx, newPhone, email, code, domain.LoginCodePurposePhoneChange, userID); err != nil {
+		return domain.User{}, err
 	}
 
 	updated, err := users.UpdatePhone(ctx, userID, newPhone)
@@ -450,18 +376,20 @@ func (s *AuthService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhon
 		return domain.User{}, fmt.Errorf("update phone: %w", err)
 	}
 
+	sessions := s.sessions.WithTx(tx)
 	if err := sessions.DeleteByUserIDExcept(ctx, userID, tokenHash); err != nil {
 		return domain.User{}, fmt.Errorf("delete other sessions: %w", err)
 	}
 
+	txCodes := s.codes.WithTx(tx)
 	if err := txCodes.DeleteByUserID(ctx, userID); err != nil {
 		return domain.User{}, fmt.Errorf("clear login codes: %w", err)
 	}
 
+	txAttempts := s.attempts.WithTx(tx)
 	if err := txAttempts.DeleteByUserID(ctx, userID); err != nil {
 		return domain.User{}, fmt.Errorf("clear login attempts: %w", err)
 	}
-
 	if err := txAttempts.DeleteByPhone(ctx, newPhone); err != nil {
 		return domain.User{}, fmt.Errorf("reset new phone attempts: %w", err)
 	}
@@ -471,6 +399,17 @@ func (s *AuthService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhon
 	}
 
 	return updated, nil
+}
+
+func (s *AuthService) userEmail(user domain.User) (domain.Email, error) {
+	if user.Email == nil {
+		return domain.Email{}, ErrEmailDoesNotMatch
+	}
+	email, err := domain.EmailFrom(*user.Email)
+	if err != nil {
+		return domain.Email{}, fmt.Errorf("parse user email: %w", err)
+	}
+	return email, nil
 }
 
 func generateCode() (string, error) {

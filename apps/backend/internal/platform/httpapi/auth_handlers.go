@@ -70,6 +70,9 @@ func NewAuthHandlers(
 }
 
 // SendPhoneCode implements POST /auth/phone/send.
+//
+// Phone-only login was removed in the identity refactor; the endpoint is kept
+// only to satisfy the generated OpenAPI contract and returns 410 Gone.
 func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 	var body openapi.SendPhoneCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
@@ -78,36 +81,13 @@ func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	phone, err := domain.NewPhone(body.Phone)
-	if err != nil {
+	if _, err := domain.NewPhone(body.Phone); err != nil {
 		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
 		return
 	}
 
-	if h.phoneSend != nil && !h.phoneSend.Allow(phone.String()) {
-		writeTooManyRequests(w, r, "Превышен лимит запросов")
-		return
-	}
-
-	if err := h.auth.SendCode(r.Context(), phone); err != nil {
-		switch {
-		case errors.Is(err, application.ErrPhoneLoginDeprecated):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusGone, problem(r.Context(), "Gone", detail))
-		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
-			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Превышен лимит запросов"))
-		default:
-			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-		}
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
+	writeProblem(w, http.StatusGone, problem(r.Context(), "Gone", "Вход по телефону больше не поддерживается"))
 }
 
 // sendCodeResponse is the JSON body returned by successful code-send endpoints.
@@ -143,7 +123,7 @@ func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.auth.SendEmailCode(r.Context(), phone, email); err != nil {
+	if err := h.auth.SendCode(r.Context(), phone, email, domain.LoginCodePurposeLogin); err != nil {
 		switch {
 		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
 			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Превышен лимит запросов"))
@@ -184,7 +164,7 @@ func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	raw, user, err := h.auth.VerifyEmailCode(r.Context(), phone, email, body.Code)
+	raw, user, err := h.auth.VerifyLoginCode(r.Context(), phone, email, body.Code)
 	if err != nil {
 		switch {
 		case errors.Is(err, application.ErrUserBlocked),
@@ -206,6 +186,9 @@ func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
 }
 
 // VerifyPhoneCode implements POST /auth/phone/verify.
+//
+// Phone-only login was removed in the identity refactor; the endpoint is kept
+// only to satisfy the generated OpenAPI contract and returns 410 Gone.
 func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 	var body openapi.VerifyPhoneCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
@@ -214,42 +197,13 @@ func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	phone, err := domain.NewPhone(body.Phone)
-	if err != nil {
+	if _, err := domain.NewPhone(body.Phone); err != nil {
 		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
 		return
 	}
 
-	if h.phoneVerify != nil && !h.phoneVerify.Allow(phone.String()) {
-		writeTooManyRequests(w, r, "Превышен лимит запросов")
-		return
-	}
-
-	raw, user, err := h.auth.VerifyCode(r.Context(), phone, body.Code)
-	if err != nil {
-		switch {
-		case errors.Is(err, application.ErrPhoneLoginDeprecated):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusGone, problem(r.Context(), "Gone", detail))
-		case errors.Is(err, application.ErrUserBlocked),
-			errors.Is(err, domain.ErrTooManyAttempts):
-			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Превышен лимит запросов"))
-		case errors.Is(err, domain.ErrLoginCodeInvalid),
-			errors.Is(err, application.ErrNotFound):
-			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный телефон или код"))
-		default:
-			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-		}
-		return
-	}
-
-	setSessionCookie(w, raw.Token, raw.Session.ExpiresAt, h.cookieSecure)
-	writeJSON(r.Context(), w, http.StatusOK, meResponse(user))
+	writeProblem(w, http.StatusGone, problem(r.Context(), "Gone", "Вход по телефону больше не поддерживается"))
 }
 
 // Logout implements POST /auth/logout.

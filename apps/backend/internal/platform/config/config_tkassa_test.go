@@ -199,7 +199,6 @@ func TestTKassaBaseURLAcceptsProductionURL(t *testing.T) {
 	setRequiredLocalEnv(t)
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
-	t.Setenv("SMS_SENDER", "disabled")
 	t.Setenv("PAYMENT_PROVIDER", "tkassa")
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
@@ -212,8 +211,5 @@ func TestTKassaBaseURLAcceptsProductionURL(t *testing.T) {
 	}
 	if cfg.TKassaBaseURL != "https://securepay.tinkoff.ru/v2/" {
 		t.Fatalf("expected production T_KASSA_BASE_URL, got %q", cfg.TKassaBaseURL)
-	}
-	if cfg.SMSSender != "disabled" {
-		t.Fatalf("expected SMS_SENDER disabled, got %q", cfg.SMSSender)
 	}
 }

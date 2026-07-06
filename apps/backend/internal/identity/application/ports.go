@@ -18,12 +18,8 @@ var (
 // Clock is re-exported from the shared clock package for backwards compatibility.
 type Clock = clock.Clock
 
-type SMSSender interface {
-	Send(ctx context.Context, phone domain.Phone, message string) error
-}
-
-type EmailSender interface {
-	Send(ctx context.Context, email domain.Email, code string) error
+type LoginCodeSender interface {
+	Send(ctx context.Context, phone domain.Phone, email domain.Email, code string) error
 }
 
 type UserRepository interface {
