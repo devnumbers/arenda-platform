@@ -161,6 +161,7 @@ func run(fallback *slog.Logger) error {
 	identityCodeRepo := identitypg.NewLoginCodeRepository(db, encryptor)
 	identityAttemptRepo := identitypg.NewAttemptRepository(db, encryptor)
 	identitySessionRepo := identitypg.NewSessionRepository(db, encryptor)
+	identitySessionService := identityapp.NewSessionService(identitySessionRepo)
 
 	if cfg.EncryptionKey != "" {
 		if err := backfillPhoneEncryption(ctx, db, encryptor, appLogger); err != nil {
@@ -391,7 +392,7 @@ func run(fallback *slog.Logger) error {
 		Auth:                     authService,
 		Billing:                  billingService,
 		Admin:                    adminService,
-		Sessions:                 identitySessionRepo,
+		Sessions:                 identitySessionService,
 		Properties:               propertyService,
 		AddressSuggester:         dadataClient,
 		Leases:                   leaseService,

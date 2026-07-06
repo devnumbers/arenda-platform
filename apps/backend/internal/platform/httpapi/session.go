@@ -117,7 +117,7 @@ func isPublicSessionSkippedPath(path string) bool {
 }
 
 // SessionMiddleware loads the authenticated user from the session cookie into the request context.
-func SessionMiddleware(logger *slog.Logger, sessions application.SessionRepository, secure bool, clock clock.Clock) func(http.Handler) http.Handler {
+func SessionMiddleware(logger *slog.Logger, sessions application.SessionService, secure bool, clock clock.Clock) func(http.Handler) http.Handler {
 	if clock == nil {
 		clock = fallbackClock{}
 	}
@@ -135,7 +135,7 @@ func SessionMiddleware(logger *slog.Logger, sessions application.SessionReposito
 			}
 
 			now := clock.Now()
-			session, user, err := sessions.GetByTokenHash(r.Context(), hashSessionToken(token), now)
+			session, user, err := sessions.Load(r.Context(), hashSessionToken(token), now)
 			if err != nil {
 				if errors.Is(err, application.ErrNotFound) {
 					clearSessionCookie(w, secure)

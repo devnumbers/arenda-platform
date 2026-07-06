@@ -24,7 +24,7 @@ type Deps struct {
 	Auth                     *identityapp.AuthService
 	Billing                  *billingapp.BillingService
 	Admin                    *adminapp.AdminService
-	Sessions                 identityapp.SessionRepository
+	Sessions                 identityapp.SessionService
 	Properties               *propertiesapp.PropertyService
 	AddressSuggester         propertiesapp.AddressSuggester
 	Leases                   *leasesapp.LeaseService
