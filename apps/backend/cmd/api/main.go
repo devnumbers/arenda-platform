@@ -358,36 +358,43 @@ func run(fallback *slog.Logger) error {
 	emailVerifyLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.EmailVerifyPer15Min)/(15*60), emailVerifyBurst, 1*time.Hour)
 	defer emailVerifyLimiter.Stop()
 
+	phoneChangeSendLimiter := httpapi.NewRateLimiter(rate.Every(time.Hour/time.Duration(cfg.RateLimit.PhoneChangeSendPerHour)), cfg.RateLimit.PhoneChangeSendPerHour, 1*time.Hour)
+	defer phoneChangeSendLimiter.Stop()
+	phoneChangeVerifyLimiter := httpapi.NewRateLimiter(rate.Every(15*time.Minute/time.Duration(cfg.RateLimit.PhoneChangeVerifyPer15Min)), cfg.RateLimit.PhoneChangeVerifyPer15Min, 1*time.Hour)
+	defer phoneChangeVerifyLimiter.Stop()
+
 	var poolStats func() httpapi.DBPoolSnapshot
 	if cfg.AppEnv == "local" {
 		poolStats = dbPoolStats(pool)
 	}
 
 	handler := httpapi.New(httpapi.Deps{
-		Auth:                  authService,
-		Billing:               billingService,
-		Admin:                 adminService,
-		Sessions:              identitySessionRepo,
-		Properties:            propertyService,
-		AddressSuggester:      dadataClient,
-		Leases:                leaseService,
-		TenantContacts:        tenantContactService,
-		Operations:            operationService,
-		RecurringOperations:   recurringOperationService,
-		Reminders:             reminderService,
-		AppBaseURL:            cfg.AppBaseURL,
-		CookieSecure:          cfg.CookieSecure,
-		Logger:                appLogger,
-		Clock:                 realClock{},
-		LogSuccessfulRequests: cfg.LogSuccessfulRequests,
-		IPRateLimiter:         ipLimiter,
-		PhoneSendLimiter:      phoneSendLimiter,
-		PhoneVerifyLimiter:    phoneVerifyLimiter,
-		EmailSendLimiter:      emailSendLimiter,
-		EmailVerifyLimiter:    emailVerifyLimiter,
-		DBPoolStats:           poolStats,
-		DevMode:               cfg.AppEnv == "local" && cfg.PaymentProvider == "fake",
-		TrustedProxies:        cfg.TrustedProxies,
+		Auth:                     authService,
+		Billing:                  billingService,
+		Admin:                    adminService,
+		Sessions:                 identitySessionRepo,
+		Properties:               propertyService,
+		AddressSuggester:         dadataClient,
+		Leases:                   leaseService,
+		TenantContacts:           tenantContactService,
+		Operations:               operationService,
+		RecurringOperations:      recurringOperationService,
+		Reminders:                reminderService,
+		AppBaseURL:               cfg.AppBaseURL,
+		CookieSecure:             cfg.CookieSecure,
+		Logger:                   appLogger,
+		Clock:                    realClock{},
+		LogSuccessfulRequests:    cfg.LogSuccessfulRequests,
+		IPRateLimiter:            ipLimiter,
+		PhoneSendLimiter:         phoneSendLimiter,
+		PhoneVerifyLimiter:       phoneVerifyLimiter,
+		EmailSendLimiter:         emailSendLimiter,
+		EmailVerifyLimiter:       emailVerifyLimiter,
+		PhoneChangeSendLimiter:   phoneChangeSendLimiter,
+		PhoneChangeVerifyLimiter: phoneChangeVerifyLimiter,
+		DBPoolStats:              poolStats,
+		DevMode:                  cfg.AppEnv == "local" && cfg.PaymentProvider == "fake",
+		TrustedProxies:           cfg.TrustedProxies,
 	})
 
 	server := &http.Server{

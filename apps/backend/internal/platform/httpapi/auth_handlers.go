@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
@@ -14,6 +15,10 @@ import (
 )
 
 const maxRequestBodySize = 16 << 10 // 16 KiB
+
+// retryAfterSeconds is the cooldown clients should wait before retrying a
+// rate-limited auth request. It matches the service-layer minSendInterval.
+const retryAfterSeconds = 60
 
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
@@ -24,14 +29,16 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 
 // AuthHandlers implements the generated non-strict ServerInterface.
 type AuthHandlers struct {
-	auth         *application.AuthService
-	billing      *billingapp.BillingService
-	cookieSecure bool
-	logger       *slog.Logger
-	phoneSend    *RateLimiter
-	phoneVerify  *RateLimiter
-	emailSend    *RateLimiter
-	emailVerify  *RateLimiter
+	auth              *application.AuthService
+	billing           *billingapp.BillingService
+	cookieSecure      bool
+	logger            *slog.Logger
+	phoneSend         *RateLimiter
+	phoneVerify       *RateLimiter
+	emailSend         *RateLimiter
+	emailVerify       *RateLimiter
+	phoneChangeSend   *RateLimiter
+	phoneChangeVerify *RateLimiter
 }
 
 // NewAuthHandlers creates HTTP handlers for the auth API.
@@ -44,16 +51,20 @@ func NewAuthHandlers(
 	phoneVerify *RateLimiter,
 	emailSend *RateLimiter,
 	emailVerify *RateLimiter,
+	phoneChangeSend *RateLimiter,
+	phoneChangeVerify *RateLimiter,
 ) *AuthHandlers {
 	return &AuthHandlers{
-		auth:         auth,
-		billing:      billing,
-		cookieSecure: cookieSecure,
-		logger:       logger,
-		phoneSend:    phoneSend,
-		phoneVerify:  phoneVerify,
-		emailSend:    emailSend,
-		emailVerify:  emailVerify,
+		auth:              auth,
+		billing:           billing,
+		cookieSecure:      cookieSecure,
+		logger:            logger,
+		phoneSend:         phoneSend,
+		phoneVerify:       phoneVerify,
+		emailSend:         emailSend,
+		emailVerify:       emailVerify,
+		phoneChangeSend:   phoneChangeSend,
+		phoneChangeVerify: phoneChangeVerify,
 	}
 }
 
@@ -74,7 +85,7 @@ func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.phoneSend != nil && !h.phoneSend.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
+		writeTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
 
@@ -88,12 +99,7 @@ func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 			}
 			writeProblem(w, http.StatusGone, problem(r.Context(), "Gone", detail))
 		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
+			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Превышен лимит запросов"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -126,20 +132,15 @@ func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.emailSend != nil && !h.emailSend.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
+	if h.emailSend != nil && !h.emailSend.Allow(email.String()) {
+		writeTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
 
 	if err := h.auth.SendEmailCode(r.Context(), phone, email); err != nil {
 		switch {
 		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
+			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Превышен лимит запросов"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -172,8 +173,8 @@ func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.emailVerify != nil && !h.emailVerify.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
+	if h.emailVerify != nil && !h.emailVerify.Allow(email.String()) {
+		writeTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
 
@@ -182,12 +183,7 @@ func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, application.ErrUserBlocked),
 			errors.Is(err, domain.ErrTooManyAttempts):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
+			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Превышен лимит запросов"))
 		case errors.Is(err, domain.ErrLoginCodeInvalid),
 			errors.Is(err, application.ErrNotFound):
 			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный телефон, почта или код"))
@@ -225,7 +221,7 @@ func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.phoneVerify != nil && !h.phoneVerify.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
+		writeTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
 
@@ -241,12 +237,7 @@ func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
 			writeProblem(w, http.StatusGone, problem(r.Context(), "Gone", detail))
 		case errors.Is(err, application.ErrUserBlocked),
 			errors.Is(err, domain.ErrTooManyAttempts):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
+			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Превышен лимит запросов"))
 		case errors.Is(err, domain.ErrLoginCodeInvalid),
 			errors.Is(err, application.ErrNotFound):
 			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный телефон или код"))
@@ -414,8 +405,8 @@ func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if h.phoneSend != nil && !h.phoneSend.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
+	if h.phoneChangeSend != nil && !h.phoneChangeSend.Allow(phone.String()) {
+		writeTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
 
@@ -426,9 +417,9 @@ func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Reques
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
 			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Этот номер телефона уже используется"))
 		case errors.Is(err, application.ErrUserBlocked):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Слишком много попыток"))
+			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Слишком много попыток"))
 		case errors.Is(err, application.ErrCodeSentTooRecently):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Код отправлен слишком недавно"))
+			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Код отправлен слишком недавно"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -466,8 +457,8 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.phoneVerify != nil && !h.phoneVerify.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
+	if h.phoneChangeVerify != nil && !h.phoneChangeVerify.Allow(phone.String()) {
+		writeTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
 
@@ -480,7 +471,7 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Этот номер телефона уже используется"))
 		case errors.Is(err, application.ErrUserBlocked),
 			errors.Is(err, domain.ErrTooManyAttempts):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Слишком много попыток"))
+			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Слишком много попыток"))
 		case errors.Is(err, domain.ErrLoginCodeInvalid),
 			errors.Is(err, application.ErrNotFound):
 			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный код"))
@@ -511,4 +502,20 @@ func writeJSON(ctx context.Context, w http.ResponseWriter, status int, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		loggerFromContext(ctx).ErrorContext(ctx, "failed to encode JSON response", slog.String("error", sanitizeError(err)))
 	}
+}
+
+// writeTooManyRequests writes a 429 RFC 7807 problem response with a
+// Retry-After header so clients can back off before retrying.
+func writeTooManyRequests(w http.ResponseWriter, r *http.Request, detail string) {
+	w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds))
+	writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
+}
+
+// userFacingDetailOrDefault returns a user-facing message for err if one is
+// defined, otherwise returns the provided default.
+func userFacingDetailOrDefault(ctx context.Context, err error, defaultDetail string) string {
+	if detail, ok := UserFacingDetail(err); ok {
+		return detail
+	}
+	return defaultDetail
 }

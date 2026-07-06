@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -123,6 +124,9 @@ func (s *AuthService) sendCode(ctx context.Context, phone domain.Phone, purpose 
 	}
 
 	if err := txCodes.Save(ctx, loginCode); err != nil {
+		if isUniqueViolation(err) {
+			return ErrCodeSentTooRecently
+		}
 		return fmt.Errorf("save code: %w", err)
 	}
 
@@ -202,6 +206,9 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 	}
 
 	if err := txCodes.Save(ctx, loginCode); err != nil {
+		if isUniqueViolation(err) {
+			return ErrCodeSentTooRecently
+		}
 		return fmt.Errorf("save code: %w", err)
 	}
 
@@ -490,4 +497,11 @@ func generateCode() (string, error) {
 		return "", fmt.Errorf("generate random code: %w", err)
 	}
 	return fmt.Sprintf("%06d", n.Int64()), nil
+}
+
+// isUniqueViolation reports whether err is a PostgreSQL unique violation.
+// It is used to convert concurrent code creation races into a user-friendly
+// rate-limit response.
+func isUniqueViolation(err error) bool {
+	return pgerr.IsUniqueViolation(err)
 }

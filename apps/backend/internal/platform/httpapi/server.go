@@ -21,30 +21,32 @@ import (
 
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
-	Auth                  *identityapp.AuthService
-	Billing               *billingapp.BillingService
-	Admin                 *adminapp.AdminService
-	Sessions              identityapp.SessionRepository
-	Properties            *propertiesapp.PropertyService
-	AddressSuggester      propertiesapp.AddressSuggester
-	Leases                *leasesapp.LeaseService
-	TenantContacts        *leasesapp.TenantContactService
-	Operations            *leasesapp.OperationService
-	RecurringOperations   *leasesapp.RecurringOperationService
-	Reminders             *notificationsapp.ReminderService
-	AppBaseURL            string
-	CookieSecure          bool
-	Logger                *slog.Logger
-	Clock                 clock.Clock
-	LogSuccessfulRequests bool
-	IPRateLimiter         *RateLimiter
-	PhoneSendLimiter      *RateLimiter
-	PhoneVerifyLimiter    *RateLimiter
-	EmailSendLimiter      *RateLimiter
-	EmailVerifyLimiter    *RateLimiter
-	DBPoolStats           func() DBPoolSnapshot
-	DevMode               bool
-	TrustedProxies        []string
+	Auth                     *identityapp.AuthService
+	Billing                  *billingapp.BillingService
+	Admin                    *adminapp.AdminService
+	Sessions                 identityapp.SessionRepository
+	Properties               *propertiesapp.PropertyService
+	AddressSuggester         propertiesapp.AddressSuggester
+	Leases                   *leasesapp.LeaseService
+	TenantContacts           *leasesapp.TenantContactService
+	Operations               *leasesapp.OperationService
+	RecurringOperations      *leasesapp.RecurringOperationService
+	Reminders                *notificationsapp.ReminderService
+	AppBaseURL               string
+	CookieSecure             bool
+	Logger                   *slog.Logger
+	Clock                    clock.Clock
+	LogSuccessfulRequests    bool
+	IPRateLimiter            *RateLimiter
+	PhoneSendLimiter         *RateLimiter
+	PhoneVerifyLimiter       *RateLimiter
+	EmailSendLimiter         *RateLimiter
+	EmailVerifyLimiter       *RateLimiter
+	PhoneChangeSendLimiter   *RateLimiter
+	PhoneChangeVerifyLimiter *RateLimiter
+	DBPoolStats              func() DBPoolSnapshot
+	DevMode                  bool
+	TrustedProxies           []string
 }
 
 const slowRequestThreshold = 500 * time.Millisecond
@@ -85,7 +87,7 @@ func New(deps Deps) http.Handler {
 		r.Get("/internal/perf/db-pool", dbPoolDiagnosticsHandler(deps.DBPoolStats))
 	}
 
-	authHandlers := NewAuthHandlers(deps.Auth, deps.Billing, deps.CookieSecure, deps.Logger, deps.PhoneSendLimiter, deps.PhoneVerifyLimiter, deps.EmailSendLimiter, deps.EmailVerifyLimiter)
+	authHandlers := NewAuthHandlers(deps.Auth, deps.Billing, deps.CookieSecure, deps.Logger, deps.PhoneSendLimiter, deps.PhoneVerifyLimiter, deps.EmailSendLimiter, deps.EmailVerifyLimiter, deps.PhoneChangeSendLimiter, deps.PhoneChangeVerifyLimiter)
 	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Logger)
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger)
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Logger)
@@ -173,6 +175,7 @@ func rateLimitMiddleware(limiter *RateLimiter) func(http.Handler) http.Handler {
 				ip = r.RemoteAddr
 			}
 			if !limiter.Allow(ip) {
+				w.Header().Set("Retry-After", "60")
 				writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too Many Requests", "Превышен лимит запросов"))
 				return
 			}
