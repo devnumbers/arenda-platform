@@ -167,13 +167,6 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 	if userErr != nil && !errors.Is(userErr, ErrNotFound) {
 		return fmt.Errorf("get user: %w", userErr)
 	}
-	// Anti-enumeration: if the phone is registered to a different verified email,
-	// respond identically to the success path without sending a code.
-	if userErr == nil {
-		if user.Email == nil || *user.Email != email.String() {
-			return nil
-		}
-	}
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
