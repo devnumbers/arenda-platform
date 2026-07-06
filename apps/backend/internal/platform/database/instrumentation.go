@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/requestctx"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 const (
@@ -149,7 +150,7 @@ func (db *InstrumentedPool) CopyFrom(ctx context.Context, tableName pgx.Identifi
 }
 
 // Begin starts a new transaction on the underlying pool.
-func (db *InstrumentedPool) Begin(ctx context.Context) (*InstrumentedTx, error) {
+func (db *InstrumentedPool) Begin(ctx context.Context) (transaction.Tx, error) {
 	tx, err := db.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
