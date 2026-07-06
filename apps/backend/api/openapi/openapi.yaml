@@ -5,67 +5,15 @@ info:
 servers:
   - url: http://localhost:8080
 paths:
-  /auth/phone/send:
+  /auth/send:
     post:
-      operationId: sendPhoneCode
-      deprecated: true
+      operationId: sendCode
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SendPhoneCodeRequest'
-      responses:
-        '204':
-          description: Code sent
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-        '410':
-          $ref: '#/components/responses/Gone'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-  /auth/phone/verify:
-    post:
-      operationId: verifyPhoneCode
-      deprecated: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/VerifyPhoneCodeRequest'
-      responses:
-        '200':
-          description: Authenticated
-          headers:
-            Set-Cookie:
-              schema:
-                type: string
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MeResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-        '410':
-          $ref: '#/components/responses/Gone'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-  /auth/email/send:
-    post:
-      operationId: sendEmailCode
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SendEmailCodeRequest'
+              $ref: '#/components/schemas/SendCodeRequest'
       responses:
         '200':
           description: Code sent
@@ -79,15 +27,15 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /auth/email/verify:
+  /auth/verify:
     post:
-      operationId: verifyEmailCode
+      operationId: verifyCode
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/VerifyEmailCodeRequest'
+              $ref: '#/components/schemas/VerifyCodeRequest'
       responses:
         '200':
           description: Authenticated
@@ -2277,28 +2225,8 @@ components:
         `session_id` when insecure and `__Host-session_id` when secure.
 
   schemas:
-    SendPhoneCodeRequest:
-      type: object
-      required: [phone]
-      properties:
-        phone:
-          type: string
-          example: '+79990001122'
 
-    VerifyPhoneCodeRequest:
-      type: object
-      required: [phone, code]
-      properties:
-        phone:
-          type: string
-        code:
-          type: string
-          minLength: 6
-          maxLength: 6
-          pattern: '^\d{6}$'
-          example: '123456'
-
-    SendEmailCodeRequest:
+    SendCodeRequest:
       type: object
       required:
         - phone
@@ -2318,7 +2246,7 @@ components:
           type: integer
           description: Seconds before another code can be requested
 
-    VerifyEmailCodeRequest:
+    VerifyCodeRequest:
       type: object
       required:
         - phone

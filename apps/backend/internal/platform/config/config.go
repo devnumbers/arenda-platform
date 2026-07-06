@@ -64,8 +64,6 @@ type Config struct {
 type RateLimit struct {
 	IPRPS                     float64
 	IPBurst                   int
-	PhoneSendPerHour          int
-	PhoneVerifyPer15Min       int
 	EmailSendPerHour          int
 	EmailVerifyPer15Min       int
 	PhoneChangeSendPerHour    int
@@ -201,8 +199,6 @@ func Load() (Config, error) {
 	cfg.RateLimit = RateLimit{
 		IPRPS:                     20,
 		IPBurst:                   40,
-		PhoneSendPerHour:          5,
-		PhoneVerifyPer15Min:       10,
 		EmailSendPerHour:          60,
 		EmailVerifyPer15Min:       30,
 		PhoneChangeSendPerHour:    5,
@@ -221,20 +217,6 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("invalid RATE_LIMIT_IP_BURST %q: %w", v, err)
 		}
 		cfg.RateLimit.IPBurst = burst
-	}
-	if v := os.Getenv("RATE_LIMIT_PHONE_SEND_PER_HOUR"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return Config{}, fmt.Errorf("invalid RATE_LIMIT_PHONE_SEND_PER_HOUR %q: %w", v, err)
-		}
-		cfg.RateLimit.PhoneSendPerHour = n
-	}
-	if v := os.Getenv("RATE_LIMIT_PHONE_VERIFY_PER_15MIN"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return Config{}, fmt.Errorf("invalid RATE_LIMIT_PHONE_VERIFY_PER_15MIN %q: %w", v, err)
-		}
-		cfg.RateLimit.PhoneVerifyPer15Min = n
 	}
 	if v := os.Getenv("RATE_LIMIT_EMAIL_SEND_PER_HOUR"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -257,7 +239,7 @@ func Load() (Config, error) {
 		}
 		cfg.RateLimit.PhoneChangeSendPerHour = n
 	} else if cfg.RateLimit.PhoneChangeSendPerHour <= 0 {
-		cfg.RateLimit.PhoneChangeSendPerHour = cfg.RateLimit.PhoneSendPerHour
+		cfg.RateLimit.PhoneChangeSendPerHour = 5
 	}
 	if v := os.Getenv("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -266,19 +248,13 @@ func Load() (Config, error) {
 		}
 		cfg.RateLimit.PhoneChangeVerifyPer15Min = n
 	} else if cfg.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
-		cfg.RateLimit.PhoneChangeVerifyPer15Min = cfg.RateLimit.PhoneVerifyPer15Min
+		cfg.RateLimit.PhoneChangeVerifyPer15Min = 10
 	}
 	if cfg.RateLimit.IPRPS <= 0 {
 		return Config{}, fmt.Errorf("RATE_LIMIT_IP_RPS must be positive")
 	}
 	if cfg.RateLimit.IPBurst <= 0 {
 		return Config{}, fmt.Errorf("RATE_LIMIT_IP_BURST must be positive")
-	}
-	if cfg.RateLimit.PhoneSendPerHour <= 0 {
-		return Config{}, fmt.Errorf("RATE_LIMIT_PHONE_SEND_PER_HOUR must be positive")
-	}
-	if cfg.RateLimit.PhoneVerifyPer15Min <= 0 {
-		return Config{}, fmt.Errorf("RATE_LIMIT_PHONE_VERIFY_PER_15MIN must be positive")
 	}
 	if cfg.RateLimit.EmailSendPerHour <= 0 {
 		return Config{}, fmt.Errorf("RATE_LIMIT_EMAIL_SEND_PER_HOUR must be positive")

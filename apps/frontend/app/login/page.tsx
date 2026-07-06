@@ -4,7 +4,7 @@ import {type JSX} from "react";
 import {useRouter} from "next/navigation";
 import {notify} from "@/shared/lib/toast";
 import {AuthForm} from "@/features/auth/ui/auth-form";
-import {useSendEmailCode, useVerifyEmailCode,} from "@/features/auth/api/hooks";
+import {useSendCode, useVerifyCode} from "@/features/auth/api/hooks";
 import {normalizePhone, isPhoneValid} from "@/shared/lib/phone";
 import {useSendCooldown} from "@/features/auth/lib/use-send-cooldown";
 import {useLoginDraft} from "@/features/auth/lib/use-login-draft";
@@ -16,8 +16,8 @@ export default function LoginPage(): JSX.Element {
     const {draft, setDraft, clearDraft, isLoaded} = useLoginDraft();
     const {remainingSeconds: resendTimer, recordSendWithRemainingSeconds} = useSendCooldown();
 
-    const sendEmailCode = useSendEmailCode();
-    const verifyEmailCode = useVerifyEmailCode();
+    const sendCode = useSendCode();
+    const verifyCode = useVerifyCode();
 
     const handleSendPhone = (formattedPhone: string) => {
         if (!isPhoneValid(formattedPhone)) {
@@ -33,7 +33,7 @@ export default function LoginPage(): JSX.Element {
             return;
         }
 
-        sendEmailCode.mutate(
+        sendCode.mutate(
             {phone: normalizePhone(draft.phone), email: trimmedEmail},
             {
                 onSuccess: (data) => {
@@ -56,7 +56,7 @@ export default function LoginPage(): JSX.Element {
             return;
         }
 
-        verifyEmailCode.mutate(
+        verifyCode.mutate(
             {phone: normalizePhone(draft.phone), email: trimmedEmail, code},
             {
                 onSuccess: () => {
@@ -88,7 +88,7 @@ export default function LoginPage(): JSX.Element {
             return;
         }
 
-        sendEmailCode.mutate(
+        sendCode.mutate(
             {phone: normalizePhone(draft.phone), email: trimmedEmail},
             {
                 onSuccess: (data) => {
@@ -128,9 +128,9 @@ export default function LoginPage(): JSX.Element {
                         onPhoneChange={(phone) => setDraft((prev) => ({...prev, phone}))}
                         email={draft.email}
                         onEmailChange={(email) => setDraft((prev) => ({...prev, email}))}
-                        isSendingEmail={sendEmailCode.isPending}
-                        isVerifying={verifyEmailCode.isPending}
-                        isResending={sendEmailCode.isPending}
+                        isSendingEmail={sendCode.isPending}
+                        isVerifying={verifyCode.isPending}
+                        isResending={sendCode.isPending}
                         resendTimer={resendTimer}
                     />
                     )}

@@ -34,8 +34,6 @@ type AuthHandlers struct {
 	billing           *billingapp.BillingService
 	cookieSecure      bool
 	logger            *slog.Logger
-	phoneSend         *RateLimiter
-	phoneVerify       *RateLimiter
 	emailSend         *RateLimiter
 	emailVerify       *RateLimiter
 	phoneChangeSend   *RateLimiter
@@ -48,8 +46,6 @@ func NewAuthHandlers(
 	billing *billingapp.BillingService,
 	cookieSecure bool,
 	logger *slog.Logger,
-	phoneSend *RateLimiter,
-	phoneVerify *RateLimiter,
 	emailSend *RateLimiter,
 	emailVerify *RateLimiter,
 	phoneChangeSend *RateLimiter,
@@ -60,8 +56,6 @@ func NewAuthHandlers(
 		billing:           billing,
 		cookieSecure:      cookieSecure,
 		logger:            logger,
-		phoneSend:         phoneSend,
-		phoneVerify:       phoneVerify,
 		emailSend:         emailSend,
 		emailVerify:       emailVerify,
 		phoneChangeSend:   phoneChangeSend,
@@ -69,35 +63,14 @@ func NewAuthHandlers(
 	}
 }
 
-// SendPhoneCode implements POST /auth/phone/send.
-//
-// Phone-only login was removed in the identity refactor; the endpoint is kept
-// only to satisfy the generated OpenAPI contract and returns 410 Gone.
-func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
-	var body openapi.SendPhoneCodeRequest
-	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
-		return
-	}
-
-	if _, err := domain.NewPhone(body.Phone); err != nil {
-		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
-		return
-	}
-
-	writeProblem(w, http.StatusGone, problem(r.Context(), "Gone", "Вход по телефону больше не поддерживается"))
-}
-
 // sendCodeResponse is the JSON body returned by successful code-send endpoints.
 type sendCodeResponse struct {
 	RetryAfter int `json:"retryAfter"`
 }
 
-// SendEmailCode implements POST /auth/email/send.
-func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
-	var body openapi.SendEmailCodeRequest
+// SendCode implements POST /auth/send.
+func (h *AuthHandlers) SendCode(w http.ResponseWriter, r *http.Request) {
+	var body openapi.SendCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
@@ -136,9 +109,9 @@ func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 	writeJSON(r.Context(), w, http.StatusOK, sendCodeResponse{RetryAfter: retryAfterSeconds})
 }
 
-// VerifyEmailCode implements POST /auth/email/verify.
-func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
-	var body openapi.VerifyEmailCodeRequest
+// VerifyCode implements POST /auth/verify.
+func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
+	var body openapi.VerifyCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
@@ -183,27 +156,6 @@ func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
 
 	setSessionCookie(w, raw.Token, raw.Session.ExpiresAt, h.cookieSecure)
 	writeJSON(r.Context(), w, http.StatusOK, meResponse(user))
-}
-
-// VerifyPhoneCode implements POST /auth/phone/verify.
-//
-// Phone-only login was removed in the identity refactor; the endpoint is kept
-// only to satisfy the generated OpenAPI contract and returns 410 Gone.
-func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
-	var body openapi.VerifyPhoneCodeRequest
-	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
-		return
-	}
-
-	if _, err := domain.NewPhone(body.Phone); err != nil {
-		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
-		return
-	}
-
-	writeProblem(w, http.StatusGone, problem(r.Context(), "Gone", "Вход по телефону больше не поддерживается"))
 }
 
 // Logout implements POST /auth/logout.

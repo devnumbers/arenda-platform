@@ -38,8 +38,6 @@ type Deps struct {
 	Clock                    clock.Clock
 	LogSuccessfulRequests    bool
 	IPRateLimiter            *RateLimiter
-	PhoneSendLimiter         *RateLimiter
-	PhoneVerifyLimiter       *RateLimiter
 	EmailSendLimiter         *RateLimiter
 	EmailVerifyLimiter       *RateLimiter
 	PhoneChangeSendLimiter   *RateLimiter
@@ -87,7 +85,7 @@ func New(deps Deps) http.Handler {
 		r.Get("/internal/perf/db-pool", dbPoolDiagnosticsHandler(deps.DBPoolStats))
 	}
 
-	authHandlers := NewAuthHandlers(deps.Auth, deps.Billing, deps.CookieSecure, deps.Logger, deps.PhoneSendLimiter, deps.PhoneVerifyLimiter, deps.EmailSendLimiter, deps.EmailVerifyLimiter, deps.PhoneChangeSendLimiter, deps.PhoneChangeVerifyLimiter)
+	authHandlers := NewAuthHandlers(deps.Auth, deps.Billing, deps.CookieSecure, deps.Logger, deps.EmailSendLimiter, deps.EmailVerifyLimiter, deps.PhoneChangeSendLimiter, deps.PhoneChangeVerifyLimiter)
 	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Logger)
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger)
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Logger)

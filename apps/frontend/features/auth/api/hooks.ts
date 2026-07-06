@@ -15,11 +15,9 @@ import type { User } from '@/entities/user/model/types';
 import { mapMeResponse } from '@/entities/user/model/mappers';
 
 type MeResponse = components['schemas']['MeResponse'];
-type SendPhoneCodeRequest = components['schemas']['SendPhoneCodeRequest'];
-type VerifyPhoneCodeRequest = components['schemas']['VerifyPhoneCodeRequest'];
-type SendEmailCodeRequest = components['schemas']['SendEmailCodeRequest'];
+type SendCodeRequest = components['schemas']['SendCodeRequest'];
 type SendCodeResponse = components['schemas']['SendCodeResponse'];
-type VerifyEmailCodeRequest = components['schemas']['VerifyEmailCodeRequest'];
+type VerifyCodeRequest = components['schemas']['VerifyCodeRequest'];
 
 export function useMe(): UseQueryResult<User, ApiError> {
   return useQuery({
@@ -32,61 +30,29 @@ export function useMe(): UseQueryResult<User, ApiError> {
   });
 }
 
-export function useSendPhoneCode(): UseMutationResult<
-  void,
-  ApiError,
-  SendPhoneCodeRequest
-> {
-  return useMutation({
-    mutationFn: (data: SendPhoneCodeRequest) =>
-      apiClient<void>('/auth/phone/send', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
-  });
-}
-
-export function useVerifyPhoneCode(): UseMutationResult<
-  MeResponse,
-  ApiError,
-  VerifyPhoneCodeRequest
-> {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: VerifyPhoneCodeRequest) =>
-      apiClient<MeResponse>('/auth/phone/verify', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: authKeys.me });
-    },
-  });
-}
-
-export function useSendEmailCode(): UseMutationResult<
+export function useSendCode(): UseMutationResult<
   SendCodeResponse,
   ApiError,
-  SendEmailCodeRequest
+  SendCodeRequest
 > {
   return useMutation({
-    mutationFn: (data: SendEmailCodeRequest) =>
-      apiClient<SendCodeResponse>('/auth/email/send', {
+    mutationFn: (data: SendCodeRequest) =>
+      apiClient<SendCodeResponse>('/auth/send', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
   });
 }
 
-export function useVerifyEmailCode(): UseMutationResult<
+export function useVerifyCode(): UseMutationResult<
   MeResponse,
   ApiError,
-  VerifyEmailCodeRequest
+  VerifyCodeRequest
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: VerifyEmailCodeRequest) =>
-      apiClient<MeResponse>('/auth/email/verify', {
+    mutationFn: (data: VerifyCodeRequest) =>
+      apiClient<MeResponse>('/auth/verify', {
         method: 'POST',
         body: JSON.stringify(data),
       }),

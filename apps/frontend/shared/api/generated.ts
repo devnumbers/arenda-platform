@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/auth/phone/send": {
+    "/auth/send": {
         parameters: {
             query?: never;
             header?: never;
@@ -13,15 +13,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @deprecated */
-        post: operations["sendPhoneCode"];
+        post: operations["sendCode"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/auth/phone/verify": {
+    "/auth/verify": {
         parameters: {
             query?: never;
             header?: never;
@@ -30,40 +29,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @deprecated */
-        post: operations["verifyPhoneCode"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/email/send": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["sendEmailCode"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/email/verify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["verifyEmailCode"];
+        post: operations["verifyCode"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1034,16 +1000,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        SendPhoneCodeRequest: {
-            /** @example +79990001122 */
-            phone: string;
-        };
-        VerifyPhoneCodeRequest: {
-            phone: string;
-            /** @example 123456 */
-            code: string;
-        };
-        SendEmailCodeRequest: {
+        SendCodeRequest: {
             phone: string;
             email: string;
         };
@@ -1051,7 +1008,7 @@ export interface components {
             /** @description Seconds before another code can be requested */
             retryAfter: number;
         };
-        VerifyEmailCodeRequest: {
+        VerifyCodeRequest: {
             phone: string;
             email: string;
             code: string;
@@ -1825,7 +1782,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    sendPhoneCode: {
+    sendCode: {
         parameters: {
             query?: never;
             header?: never;
@@ -1834,63 +1791,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SendPhoneCodeRequest"];
-            };
-        };
-        responses: {
-            /** @description Code sent */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            400: components["responses"]["BadRequest"];
-            410: components["responses"]["Gone"];
-            429: components["responses"]["TooManyRequests"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    verifyPhoneCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VerifyPhoneCodeRequest"];
-            };
-        };
-        responses: {
-            /** @description Authenticated */
-            200: {
-                headers: {
-                    "Set-Cookie"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MeResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            410: components["responses"]["Gone"];
-            429: components["responses"]["TooManyRequests"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    sendEmailCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SendEmailCodeRequest"];
+                "application/json": components["schemas"]["SendCodeRequest"];
             };
         };
         responses: {
@@ -1908,7 +1809,7 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
-    verifyEmailCode: {
+    verifyCode: {
         parameters: {
             query?: never;
             header?: never;
@@ -1917,7 +1818,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["VerifyEmailCodeRequest"];
+                "application/json": components["schemas"]["VerifyCodeRequest"];
             };
         };
         responses: {
