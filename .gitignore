@@ -7,6 +7,7 @@
 !.env.stage.example
 !.env.prod.example
 *.exe
+api
 node_modules/
 *.log
 .tmp
