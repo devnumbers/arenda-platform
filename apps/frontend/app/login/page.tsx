@@ -5,7 +5,7 @@ import {useRouter} from "next/navigation";
 import {notify} from "@/shared/lib/toast";
 import {AuthForm} from "@/features/auth/ui/auth-form";
 import {useSendEmailCode, useVerifyEmailCode,} from "@/features/auth/api/hooks";
-import {normalizePhone} from "@/features/auth/lib/normalize-phone";
+import {normalizePhone, isPhoneValid} from "@/shared/lib/phone";
 import {useSendCooldown} from "@/features/auth/lib/use-send-cooldown";
 import styles from "./LoginPage.module.css";
 
@@ -16,13 +16,13 @@ export default function LoginPage(): JSX.Element {
     const [step, setStep] = useState<Step>("phone");
     const [phone, setPhone] = useState("");
     const [email, setEmail] = useState("");
-    const {remainingSeconds: resendTimer, recordSend} = useSendCooldown();
+    const {remainingSeconds: resendTimer, recordSend, recordSendWithRemainingSeconds} = useSendCooldown();
 
     const sendEmailCode = useSendEmailCode();
     const verifyEmailCode = useVerifyEmailCode();
 
     const handleSendPhone = (formattedPhone: string) => {
-        if (formattedPhone.length < 18) {
+        if (!isPhoneValid(formattedPhone)) {
             return;
         }
 
@@ -31,18 +31,21 @@ export default function LoginPage(): JSX.Element {
     };
 
     const handleSendEmail = () => {
-        if (!email || phone.length < 18) {
+        if (!email || !isPhoneValid(phone)) {
             return;
         }
 
-        recordSend();
         sendEmailCode.mutate(
             {phone: normalizePhone(phone), email},
             {
                 onSuccess: () => {
+                    recordSend();
                     setStep("code");
                 },
                 onError: (error) => {
+                    if (error.status === 429 && typeof error.retryAfter === 'number') {
+                        recordSendWithRemainingSeconds(error.retryAfter);
+                    }
                     notify.error(error);
                 },
             },
@@ -50,7 +53,7 @@ export default function LoginPage(): JSX.Element {
     };
 
     const handleVerifyCode = (code: string) => {
-        if (code.length !== 6 || phone.length < 18 || !email) {
+        if (code.length !== 6 || !isPhoneValid(phone) || !email) {
             return;
         }
 
@@ -61,7 +64,7 @@ export default function LoginPage(): JSX.Element {
                     router.push("/dashboard");
                 },
                 onError: (error) => {
-                    notify.error(error.detail ?? 'Неверный код');
+                    notify.error(error);
                 },
             },
         );
@@ -80,15 +83,20 @@ export default function LoginPage(): JSX.Element {
     };
 
     const handleResend = () => {
-        if (phone.length < 18 || !email) {
+        if (!isPhoneValid(phone) || !email) {
             return;
         }
 
-        recordSend();
         sendEmailCode.mutate(
             {phone: normalizePhone(phone), email},
             {
+                onSuccess: () => {
+                    recordSend();
+                },
                 onError: (error) => {
+                    if (error.status === 429 && typeof error.retryAfter === 'number') {
+                        recordSendWithRemainingSeconds(error.retryAfter);
+                    }
                     notify.error(error);
                 },
             },

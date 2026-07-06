@@ -40,7 +40,19 @@ export async function apiClient<T>(
       }
     }
 
-    throw new ApiError(code, detail, requestId, response.status);
+    const retryAfterRaw = response.headers.get('Retry-After');
+    const retryAfter = retryAfterRaw ? Number(retryAfterRaw) : NaN;
+    const validRetryAfter =
+      Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined;
+
+    throw new ApiError(
+      code,
+      detail,
+      requestId,
+      response.status,
+      undefined,
+      validRetryAfter,
+    );
   }
 
   if (response.status === 204) {

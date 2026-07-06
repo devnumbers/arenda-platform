@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { RESEND_TIMEOUT } from './constants';
 
-const STORAGE_KEY = 'arenda:lastSmsSendAt';
+const STORAGE_KEY = 'arenda:lastAuthCodeSentAt';
 
 type Listener = () => void;
 
@@ -10,6 +10,7 @@ type CooldownStore = {
   getSnapshot: () => number;
   getServerSnapshot: () => number;
   recordSend: () => void;
+  recordSendWithRemainingSeconds: (remainingSeconds: number) => void;
 };
 
 function getStoredSendAt(): number | null {
@@ -122,14 +123,24 @@ function createCooldownStore(): CooldownStore {
   }
 
   function recordSend() {
+    recordSendAt(Date.now());
+  }
+
+  function recordSendAt(timestamp: number) {
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(STORAGE_KEY, String(Date.now()));
+      window.localStorage.setItem(STORAGE_KEY, String(timestamp));
     }
     stop();
     start();
   }
 
-  return { subscribe, getSnapshot, getServerSnapshot, recordSend };
+  function recordSendWithRemainingSeconds(remainingSeconds: number) {
+    const clamped = Math.max(0, Math.min(RESEND_TIMEOUT, remainingSeconds));
+    const sendAt = Date.now() - (RESEND_TIMEOUT - clamped) * 1000;
+    recordSendAt(sendAt);
+  }
+
+  return { subscribe, getSnapshot, getServerSnapshot, recordSend, recordSendWithRemainingSeconds };
 }
 
 const cooldownStore = createCooldownStore();
@@ -141,5 +152,9 @@ export function useSendCooldown() {
     cooldownStore.getServerSnapshot,
   );
 
-  return { remainingSeconds, recordSend: cooldownStore.recordSend };
+  return {
+    remainingSeconds,
+    recordSend: cooldownStore.recordSend,
+    recordSendWithRemainingSeconds: cooldownStore.recordSendWithRemainingSeconds,
+  };
 }

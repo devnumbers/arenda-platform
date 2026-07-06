@@ -20,3 +20,9 @@ export function normalizePhone(formatted: string): string {
   if (digits === '' || digits === '7') return '';
   return digits.startsWith('7') ? `+${digits}` : `+7${digits}`;
 }
+
+const FORMATTED_PHONE_PATTERN = /^\+7 \(9\d{2}\) \d{3}-\d{2}-\d{2}$/;
+
+export function isPhoneValid(formatted: string): boolean {
+  return FORMATTED_PHONE_PATTERN.test(formatted);
+}

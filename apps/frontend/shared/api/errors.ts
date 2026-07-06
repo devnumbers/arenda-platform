@@ -5,6 +5,7 @@ export class ApiError extends Error {
     public requestId?: string,
     public status?: number,
     public cause?: unknown,
+    public retryAfter?: number,
   ) {
     super(detail, { cause });
     this.name = 'ApiError';

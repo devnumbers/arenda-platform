@@ -1,7 +1,7 @@
 "use client";
 
 import {type ChangeEvent, type JSX} from "react";
-import {formatPhoneInput} from "@/shared/lib/phone";
+import {formatPhoneInput, isPhoneValid} from "@/shared/lib/phone";
 import {Support} from "@/shared/assets/icons";
 import {Button} from "@/shared/ui/button";
 import {TextField} from "@/shared/ui/text-field";
@@ -52,7 +52,7 @@ export function PhoneStep({
                     size="large"
                     fullWidth
                     loading={isLoading}
-                    disabled={phone.length < 18 || isLoading}
+                    disabled={!isPhoneValid(phone) || isLoading}
                 >
                     Войти
                 </Button>

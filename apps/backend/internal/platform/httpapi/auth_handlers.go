@@ -188,12 +188,7 @@ func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, application.ErrNotFound):
 			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный телефон, почта или код"))
 		case errors.Is(err, application.ErrEmailDoesNotMatch):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Некорректные учётные данные")))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -366,7 +361,7 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, domain.ErrInvalidEmail):
 			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "Некорректный формат email"))
 		case errors.Is(err, application.ErrEmailAlreadyTaken):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Этот email уже используется"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Этот email уже используется")))
 		case errors.Is(err, application.ErrNotFound):
 			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Сессия недействительна"))
 		default:
@@ -422,9 +417,9 @@ func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Reques
 	if err := h.auth.SendPhoneChangeCode(r.Context(), userID, phone); err != nil {
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
-			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Новый номер должен отличаться от текущего"))
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", userFacingDetailOrDefault(r.Context(), err, "Новый номер должен отличаться от текущего")))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Этот номер телефона уже используется"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Этот номер телефона уже используется")))
 		case errors.Is(err, application.ErrUserBlocked):
 			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Слишком много попыток"))
 		case errors.Is(err, application.ErrCodeSentTooRecently):
@@ -475,9 +470,9 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
-			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Новый номер должен отличаться от текущего"))
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", userFacingDetailOrDefault(r.Context(), err, "Новый номер должен отличаться от текущего")))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Этот номер телефона уже используется"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Этот номер телефона уже используется")))
 		case errors.Is(err, application.ErrUserBlocked),
 			errors.Is(err, domain.ErrTooManyAttempts):
 			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Слишком много попыток"))

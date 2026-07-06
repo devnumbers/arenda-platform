@@ -1,7 +1,6 @@
 'use client';
 
 import {type ChangeEvent, type JSX, useState} from 'react';
-import {formatTimer} from '@/features/auth/lib/format-timer';
 import {SendCodeButton} from '@/features/auth/ui/send-code-button';
 import {TextField} from '@/shared/ui/text-field';
 import styles from './EmailStep.module.css';

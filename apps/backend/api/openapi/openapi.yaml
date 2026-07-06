@@ -22,6 +22,10 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /auth/phone/verify:
     post:
       operationId: verifyPhoneCode
@@ -49,6 +53,10 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /auth/email/send:
     post:
       operationId: sendEmailCode
@@ -63,10 +71,10 @@ paths:
           description: Code sent
         '400':
           $ref: '#/components/responses/BadRequest'
-        '409':
-          $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /auth/email/verify:
     post:
       operationId: verifyEmailCode
@@ -91,8 +99,12 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /auth/logout:
     post:
       operationId: logout
@@ -121,6 +133,8 @@ paths:
                 type: string
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /me:
     get:
       operationId: getMe
@@ -184,6 +198,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /me/phone/change:
     post:
       operationId: changePhone
@@ -2270,6 +2286,9 @@ components:
           type: string
         code:
           type: string
+          minLength: 6
+          maxLength: 6
+          pattern: '^\d{6}$'
           example: '123456'
 
     SendEmailCodeRequest:
@@ -2296,6 +2315,9 @@ components:
           type: string
         code:
           type: string
+          minLength: 6
+          maxLength: 6
+          pattern: '^\d{6}$'
 
     MeResponse:
       type: object
@@ -2363,6 +2385,9 @@ components:
           example: '+79990001122'
         code:
           type: string
+          minLength: 6
+          maxLength: 6
+          pattern: '^\d{6}$'
           example: '123456'
 
     Tariff:
@@ -3733,12 +3758,23 @@ components:
             $ref: '#/components/schemas/Problem'
     TooManyRequests:
       description: Too many requests
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying the request
+          schema:
+            type: integer
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Problem'
     Conflict:
       description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Gone:
+      description: Gone
       content:
         application/json:
           schema:
