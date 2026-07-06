@@ -29,7 +29,15 @@ FOR UPDATE;
 
 -- name: CreateLoginCode :exec
 INSERT INTO login_codes (id, phone, email, code_hash, expires_at, user_id, purpose, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (phone, email, purpose) WHERE used = false
+DO UPDATE SET
+    id = EXCLUDED.id,
+    code_hash = EXCLUDED.code_hash,
+    expires_at = EXCLUDED.expires_at,
+    user_id = EXCLUDED.user_id,
+    phone_encrypted = EXCLUDED.phone_encrypted,
+    created_at = now();
 
 -- name: DeleteExpiredLoginCodesByPhoneAndEmail :exec
 DELETE FROM login_codes
@@ -38,6 +46,14 @@ WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false AND expires_at
 -- name: DeleteExpiredLoginCodesByPhoneAndUserID :exec
 DELETE FROM login_codes
 WHERE phone = $1 AND user_id = $2 AND purpose = $3 AND used = false AND expires_at < $4;
+
+-- name: DeleteUnusedLoginCodesByPhoneAndEmail :exec
+DELETE FROM login_codes
+WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false;
+
+-- name: DeleteUnusedLoginCodesByPhoneAndUserID :exec
+DELETE FROM login_codes
+WHERE phone = $1 AND purpose = $2 AND user_id = $3 AND used = false;
 
 -- name: MarkLoginCodeUsed :exec
 UPDATE login_codes SET used = true WHERE id = $1;

@@ -70,6 +70,8 @@ type Querier interface {
 	DeleteUneditedFutureOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedFutureOperationsByRecurringOperationParams) error
 	DeleteUneditedOperationsByLease(ctx context.Context, arg DeleteUneditedOperationsByLeaseParams) error
 	DeleteUneditedOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedOperationsByRecurringOperationParams) error
+	DeleteUnusedLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndEmailParams) error
+	DeleteUnusedLoginCodesByPhoneAndUserID(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndUserIDParams) error
 	GetFinanceReportByCategory(ctx context.Context, arg GetFinanceReportByCategoryParams) ([]GetFinanceReportByCategoryRow, error)
 	GetFinanceReportByMonth(ctx context.Context, arg GetFinanceReportByMonthParams) ([]GetFinanceReportByMonthRow, error)
 	GetFinanceReportByProperty(ctx context.Context, arg GetFinanceReportByPropertyParams) ([]GetFinanceReportByPropertyRow, error)

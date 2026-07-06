@@ -332,6 +332,30 @@ func (r *LoginCodeRepository) DeleteExpiredByPhoneAndUserID(ctx context.Context,
 	})
 }
 
+func (r *LoginCodeRepository) DeleteUnusedByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose string) error {
+	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	if err != nil {
+		return err
+	}
+	return r.q().DeleteUnusedLoginCodesByPhoneAndEmail(ctx, postgres.DeleteUnusedLoginCodesByPhoneAndEmailParams{
+		Phone:   pgtype.Text{String: encryptedPhone, Valid: true},
+		Email:   pgtype.Text{String: email.String(), Valid: true},
+		Purpose: purpose,
+	})
+}
+
+func (r *LoginCodeRepository) DeleteUnusedByPhoneAndUserID(ctx context.Context, phone domain.Phone, userID uuid.UUID, purpose string) error {
+	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	if err != nil {
+		return err
+	}
+	return r.q().DeleteUnusedLoginCodesByPhoneAndUserID(ctx, postgres.DeleteUnusedLoginCodesByPhoneAndUserIDParams{
+		Phone:   pgtype.Text{String: encryptedPhone, Valid: true},
+		Purpose: purpose,
+		UserID:  pgconv.UUIDToPgtype(userID),
+	})
+}
+
 func (r *LoginCodeRepository) MarkUsedByID(ctx context.Context, id uuid.UUID) error {
 	return r.q().MarkLoginCodeUsed(ctx, pgconv.UUIDToPgtype(id))
 }

@@ -50,6 +50,8 @@ type LoginCodeRepository interface {
 	DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	DeleteExpiredByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose string, before time.Time) error
 	DeleteExpiredByPhoneAndUserID(ctx context.Context, phone domain.Phone, userID uuid.UUID, purpose string, before time.Time) error
+	DeleteUnusedByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose string) error
+	DeleteUnusedByPhoneAndUserID(ctx context.Context, phone domain.Phone, userID uuid.UUID, purpose string) error
 	WithTx(tx transaction.Tx) LoginCodeRepository
 }
 

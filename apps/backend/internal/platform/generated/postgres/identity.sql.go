@@ -43,6 +43,14 @@ func (q *Queries) CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams
 const createLoginCode = `-- name: CreateLoginCode :exec
 INSERT INTO login_codes (id, phone, email, code_hash, expires_at, user_id, purpose, phone_encrypted)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (phone, email, purpose) WHERE used = false
+DO UPDATE SET
+    id = EXCLUDED.id,
+    code_hash = EXCLUDED.code_hash,
+    expires_at = EXCLUDED.expires_at,
+    user_id = EXCLUDED.user_id,
+    phone_encrypted = EXCLUDED.phone_encrypted,
+    created_at = now()
 `
 
 type CreateLoginCodeParams struct {
@@ -351,6 +359,38 @@ func (q *Queries) DeleteStaleLoginAttemptsBatch(ctx context.Context, arg DeleteS
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteUnusedLoginCodesByPhoneAndEmail = `-- name: DeleteUnusedLoginCodesByPhoneAndEmail :exec
+DELETE FROM login_codes
+WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false
+`
+
+type DeleteUnusedLoginCodesByPhoneAndEmailParams struct {
+	Phone   pgtype.Text `json:"phone"`
+	Email   pgtype.Text `json:"email"`
+	Purpose string      `json:"purpose"`
+}
+
+func (q *Queries) DeleteUnusedLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndEmailParams) error {
+	_, err := q.db.Exec(ctx, deleteUnusedLoginCodesByPhoneAndEmail, arg.Phone, arg.Email, arg.Purpose)
+	return err
+}
+
+const deleteUnusedLoginCodesByPhoneAndUserID = `-- name: DeleteUnusedLoginCodesByPhoneAndUserID :exec
+DELETE FROM login_codes
+WHERE phone = $1 AND purpose = $2 AND user_id = $3 AND used = false
+`
+
+type DeleteUnusedLoginCodesByPhoneAndUserIDParams struct {
+	Phone   pgtype.Text `json:"phone"`
+	Purpose string      `json:"purpose"`
+	UserID  pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteUnusedLoginCodesByPhoneAndUserID(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndUserIDParams) error {
+	_, err := q.db.Exec(ctx, deleteUnusedLoginCodesByPhoneAndUserID, arg.Phone, arg.Purpose, arg.UserID)
+	return err
 }
 
 const getLatestLoginCodeByPhoneAndEmailAndPurpose = `-- name: GetLatestLoginCodeByPhoneAndEmailAndPurpose :one

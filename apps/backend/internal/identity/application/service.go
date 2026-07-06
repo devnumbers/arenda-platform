@@ -119,6 +119,10 @@ func (s *AuthService) sendCode(ctx context.Context, phone domain.Phone, purpose 
 		return ErrCodeSentTooRecently
 	}
 
+	if err := txCodes.DeleteUnusedByPhoneAndUserID(ctx, phone, userID, purpose); err != nil {
+		return fmt.Errorf("delete unused login codes: %w", err)
+	}
+
 	code, err := generateCode()
 	if err != nil {
 		return fmt.Errorf("generate code: %w", err)
@@ -193,6 +197,10 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 	}
 	if !errors.Is(err, ErrNotFound) && !latest.Used && latest.ExpiresAt.After(now) && now.Sub(latest.CreatedAt) < minSendInterval {
 		return ErrCodeSentTooRecently
+	}
+
+	if err := txCodes.DeleteUnusedByPhoneAndEmail(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
+		return fmt.Errorf("delete unused login codes: %w", err)
 	}
 
 	code, err := generateCode()
