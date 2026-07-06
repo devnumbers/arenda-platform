@@ -7,6 +7,7 @@ import {AuthForm} from "@/features/auth/ui/auth-form";
 import {useSendEmailCode, useVerifyEmailCode,} from "@/features/auth/api/hooks";
 import {normalizePhone, isPhoneValid} from "@/shared/lib/phone";
 import {useSendCooldown} from "@/features/auth/lib/use-send-cooldown";
+import {RESEND_TIMEOUT} from "@/features/auth/lib/constants";
 import styles from "./LoginPage.module.css";
 
 type Step = "phone" | "email" | "code";
@@ -16,7 +17,7 @@ export default function LoginPage(): JSX.Element {
     const [step, setStep] = useState<Step>("phone");
     const [phone, setPhone] = useState("");
     const [email, setEmail] = useState("");
-    const {remainingSeconds: resendTimer, recordSend, recordSendWithRemainingSeconds} = useSendCooldown();
+    const {remainingSeconds: resendTimer, recordSendWithRemainingSeconds} = useSendCooldown();
 
     const sendEmailCode = useSendEmailCode();
     const verifyEmailCode = useVerifyEmailCode();
@@ -38,8 +39,8 @@ export default function LoginPage(): JSX.Element {
         sendEmailCode.mutate(
             {phone: normalizePhone(phone), email},
             {
-                onSuccess: () => {
-                    recordSend();
+                onSuccess: (data) => {
+                    recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
                     setStep("code");
                 },
                 onError: (error) => {
@@ -90,8 +91,8 @@ export default function LoginPage(): JSX.Element {
         sendEmailCode.mutate(
             {phone: normalizePhone(phone), email},
             {
-                onSuccess: () => {
-                    recordSend();
+                onSuccess: (data) => {
+                    recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
                 },
                 onError: (error) => {
                     if (error.status === 429 && typeof error.retryAfter === 'number') {

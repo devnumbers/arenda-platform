@@ -18,6 +18,7 @@ type MeResponse = components['schemas']['MeResponse'];
 type SendPhoneCodeRequest = components['schemas']['SendPhoneCodeRequest'];
 type VerifyPhoneCodeRequest = components['schemas']['VerifyPhoneCodeRequest'];
 type SendEmailCodeRequest = components['schemas']['SendEmailCodeRequest'];
+type SendCodeResponse = components['schemas']['SendCodeResponse'];
 type VerifyEmailCodeRequest = components['schemas']['VerifyEmailCodeRequest'];
 
 export function useMe(): UseQueryResult<User, ApiError> {
@@ -64,13 +65,13 @@ export function useVerifyPhoneCode(): UseMutationResult<
 }
 
 export function useSendEmailCode(): UseMutationResult<
-  void,
+  SendCodeResponse,
   ApiError,
   SendEmailCodeRequest
 > {
   return useMutation({
     mutationFn: (data: SendEmailCodeRequest) =>
-      apiClient<void>('/auth/email/send', {
+      apiClient<SendCodeResponse>('/auth/email/send', {
         method: 'POST',
         body: JSON.stringify(data),
       }),

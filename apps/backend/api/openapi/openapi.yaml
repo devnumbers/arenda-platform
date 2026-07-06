@@ -67,8 +67,12 @@ paths:
             schema:
               $ref: '#/components/schemas/SendEmailCodeRequest'
       responses:
-        '204':
+        '200':
           description: Code sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendCodeResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '429':
@@ -2304,6 +2308,15 @@ components:
           type: string
         email:
           type: string
+
+    SendCodeResponse:
+      type: object
+      required:
+        - retryAfter
+      properties:
+        retryAfter:
+          type: integer
+          description: Seconds before another code can be requested
 
     VerifyEmailCodeRequest:
       type: object

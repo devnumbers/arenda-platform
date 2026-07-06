@@ -1047,6 +1047,10 @@ export interface components {
             phone: string;
             email: string;
         };
+        SendCodeResponse: {
+            /** @description Seconds before another code can be requested */
+            retryAfter: number;
+        };
         VerifyEmailCodeRequest: {
             phone: string;
             email: string;
@@ -1891,11 +1895,13 @@ export interface operations {
         };
         responses: {
             /** @description Code sent */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["SendCodeResponse"];
+                };
             };
             400: components["responses"]["BadRequest"];
             429: components["responses"]["TooManyRequests"];

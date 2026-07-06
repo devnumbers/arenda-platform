@@ -110,6 +110,11 @@ func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// sendCodeResponse is the JSON body returned by successful code-send endpoints.
+type sendCodeResponse struct {
+	RetryAfter int `json:"retryAfter"`
+}
+
 // SendEmailCode implements POST /auth/email/send.
 func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 	var body openapi.SendEmailCodeRequest
@@ -148,7 +153,7 @@ func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	writeJSON(r.Context(), w, http.StatusOK, sendCodeResponse{RetryAfter: retryAfterSeconds})
 }
 
 // VerifyEmailCode implements POST /auth/email/verify.
