@@ -218,26 +218,17 @@ func (s *AuthService) SendEmailCode(ctx context.Context, phone domain.Phone, ema
 		return fmt.Errorf("save code: %w", err)
 	}
 
+	s.logger.InfoContext(ctx, "sending login code via email")
+	if err := s.emailSender.Send(ctx, email, code); err != nil {
+		s.logger.ErrorContext(ctx, "failed to send login code via email", slog.String("error", sanitize.Error(err)))
+		_ = tx.Rollback(ctx)
+		return fmt.Errorf("send code: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
 	}
 
-	s.logger.InfoContext(ctx, "sending login code via email")
-	if err := s.emailSender.Send(ctx, email, code); err != nil {
-		s.logger.ErrorContext(ctx, "failed to send login code via email", slog.String("error", sanitize.Error(err)))
-		var delErr error
-		for attempt := 1; attempt <= 3; attempt++ {
-			delErr = s.codes.DeleteByID(ctx, loginCode.ID)
-			if delErr == nil {
-				break
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-		if delErr != nil {
-			s.logger.ErrorContext(ctx, "failed to clean up login code after send failure", slog.String("error", sanitize.Error(delErr)))
-		}
-		return fmt.Errorf("send code: %w", err)
-	}
 	s.logger.InfoContext(ctx, "login code sent via email")
 	return nil
 }
