@@ -1,10 +1,10 @@
 'use client';
 
-import {type ChangeEvent, type JSX, useEffect, useRef,} from 'react';
-import {ArrowLeft, Clock} from '@/shared/assets/icons';
+import {type ChangeEvent, type JSX, useEffect, useRef} from 'react';
+import {ArrowLeft} from '@/shared/assets/icons';
+import {SendCodeButton} from '@/features/auth/ui/send-code-button';
 import {Button} from '@/shared/ui/button';
 import {TextField} from '@/shared/ui/text-field';
-import {formatTimer} from '@/features/auth/lib/format-timer';
 import styles from './CodeStep.module.css';
 
 export type CodeStepProps = {
@@ -76,24 +76,14 @@ export function CodeStep({
             </div>
 
             <div className={styles.buttons}>
-                <Button
-                    variant="primary"
-                    size="large"
-                    fullWidth
-                    disabled={resendTimer > 0 || isResending}
+                <SendCodeButton
+                    remainingSeconds={resendTimer}
                     loading={isResending}
+                    disabled={isResending}
                     onClick={onResend}
-                    subtitle={
-                        resendTimer > 0 ? (
-                            <span className={styles.timerRow}>
-                <Clock className={styles.timerIcon}/>
-                <span className={styles.timerText}>{formatTimer(resendTimer)}</span>
-              </span>
-                        ) : undefined
-                    }
                 >
                     Отправить новый код
-                </Button>
+                </SendCodeButton>
 
                 <Button
                     variant="clear"

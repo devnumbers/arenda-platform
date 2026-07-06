@@ -199,6 +199,7 @@ export function AuthForm({
                         onEmailChange={handleEmailChange}
                         onSubmit={handleSendEmail}
                         isLoading={isSendingEmail}
+                        resendTimer={resendTimer}
                     />
                 </StepTransition>
             )}

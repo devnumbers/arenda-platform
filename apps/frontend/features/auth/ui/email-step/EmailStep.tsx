@@ -1,7 +1,8 @@
 'use client';
 
 import {type ChangeEvent, type JSX, useState} from 'react';
-import {Button} from '@/shared/ui/button';
+import {formatTimer} from '@/features/auth/lib/format-timer';
+import {SendCodeButton} from '@/features/auth/ui/send-code-button';
 import {TextField} from '@/shared/ui/text-field';
 import styles from './EmailStep.module.css';
 
@@ -12,6 +13,7 @@ export type EmailStepProps = {
     onEmailChange: (value: string) => void;
     onSubmit: () => void;
     isLoading: boolean;
+    resendTimer?: number;
 };
 
 export function EmailStep({
@@ -19,6 +21,7 @@ export function EmailStep({
                               onEmailChange,
                               onSubmit,
                               isLoading,
+                              resendTimer = 0,
                           }: EmailStepProps): JSX.Element {
     const [touched, setTouched] = useState(false);
     const trimmed = email.trim();
@@ -59,16 +62,15 @@ export function EmailStep({
                     fullWidth
                 />
 
-                <Button
+                <SendCodeButton
                     type="submit"
-                    variant="primary"
-                    size="large"
-                    fullWidth
+                    remainingSeconds={resendTimer}
                     loading={isLoading}
-                    disabled={!isValid || isLoading}
+                    disabled={!isValid || isLoading || resendTimer > 0}
+                    timerLabel={(seconds) => `Отправить новый код`}
                 >
                     Получить код
-                </Button>
+                </SendCodeButton>
             </form>
         </div>
     );
