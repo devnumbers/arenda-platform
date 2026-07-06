@@ -2,7 +2,6 @@
 
 import {type ReactNode, useCallback, useEffect, useState} from "react";
 import clsx from "clsx";
-import {formatPhoneInput} from "@/shared/lib/phone";
 import {ArrowLeft, Cancel, Support} from "@/shared/assets/icons";
 import {IconButton} from "@/shared/ui/icon-button";
 import {PhoneStep} from "../phone-step/PhoneStep";
@@ -23,6 +22,8 @@ export type AuthFormProps = {
     onChangeEmail?: () => void;
     onResend?: () => void;
     onClose?: () => void;
+    phone?: string;
+    onPhoneChange?: (value: string) => void;
     email?: string;
     onEmailChange?: (value: string) => void;
     isSending?: boolean;
@@ -67,6 +68,8 @@ export function AuthForm({
                              onChangeEmail,
                              onResend,
                              onClose,
+                             phone: controlledPhone,
+                             onPhoneChange,
                              email: controlledEmail,
                              onEmailChange,
                              isSending = false,
@@ -76,11 +79,13 @@ export function AuthForm({
                              resendTimer = 0,
                          }: AuthFormProps) {
     const [internalStep, setInternalStep] = useState<AuthStep>(initialStep);
-    const [phone, setPhone] = useState("");
+    const [internalPhone, setInternalPhone] = useState("");
     const [internalEmail, setInternalEmail] = useState("");
     const [code, setCode] = useState("");
 
     const effectiveStep = controlledStep ?? internalStep;
+    const isPhoneControlled = controlledPhone !== undefined;
+    const phone = isPhoneControlled ? controlledPhone : internalPhone;
     const isEmailControlled = controlledEmail !== undefined;
     const email = isEmailControlled ? controlledEmail : internalEmail;
 
@@ -92,9 +97,16 @@ export function AuthForm({
         [onStepChange],
     );
 
-    const handlePhoneChange = useCallback((value: string) => {
-        setPhone(formatPhoneInput(value));
-    }, []);
+    const handlePhoneChange = useCallback(
+        (value: string) => {
+            if (isPhoneControlled) {
+                onPhoneChange?.(value);
+            } else {
+                setInternalPhone(value);
+            }
+        },
+        [isPhoneControlled, onPhoneChange],
+    );
 
     const handleEmailChange = useCallback(
         (value: string) => {

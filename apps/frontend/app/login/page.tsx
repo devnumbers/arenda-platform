@@ -1,22 +1,19 @@
 "use client";
 
-import {type JSX, useState} from "react";
+import {type JSX} from "react";
 import {useRouter} from "next/navigation";
 import {notify} from "@/shared/lib/toast";
 import {AuthForm} from "@/features/auth/ui/auth-form";
 import {useSendEmailCode, useVerifyEmailCode,} from "@/features/auth/api/hooks";
 import {normalizePhone, isPhoneValid} from "@/shared/lib/phone";
 import {useSendCooldown} from "@/features/auth/lib/use-send-cooldown";
+import {useLoginDraft} from "@/features/auth/lib/use-login-draft";
 import {RESEND_TIMEOUT} from "@/features/auth/lib/constants";
 import styles from "./LoginPage.module.css";
 
-type Step = "phone" | "email" | "code";
-
 export default function LoginPage(): JSX.Element {
     const router = useRouter();
-    const [step, setStep] = useState<Step>("phone");
-    const [phone, setPhone] = useState("");
-    const [email, setEmail] = useState("");
+    const {draft, setDraft, clearDraft, isLoaded} = useLoginDraft();
     const {remainingSeconds: resendTimer, recordSendWithRemainingSeconds} = useSendCooldown();
 
     const sendEmailCode = useSendEmailCode();
@@ -27,22 +24,21 @@ export default function LoginPage(): JSX.Element {
             return;
         }
 
-        setPhone(formattedPhone);
-        setStep("email");
+        setDraft((prev) => ({...prev, phone: formattedPhone, step: "email"}));
     };
 
     const handleSendEmail = () => {
-        const trimmedEmail = email.trim();
-        if (!trimmedEmail || !isPhoneValid(phone)) {
+        const trimmedEmail = draft.email.trim();
+        if (!trimmedEmail || !isPhoneValid(draft.phone)) {
             return;
         }
 
         sendEmailCode.mutate(
-            {phone: normalizePhone(phone), email: trimmedEmail},
+            {phone: normalizePhone(draft.phone), email: trimmedEmail},
             {
                 onSuccess: (data) => {
                     recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
-                    setStep("code");
+                    setDraft((prev) => ({...prev, step: "code"}));
                 },
                 onError: (error) => {
                     if (error.status === 429 && typeof error.retryAfter === 'number') {
@@ -55,16 +51,17 @@ export default function LoginPage(): JSX.Element {
     };
 
     const handleVerifyCode = (code: string) => {
-        const trimmedEmail = email.trim();
-        if (code.length !== 6 || !isPhoneValid(phone) || !trimmedEmail) {
+        const trimmedEmail = draft.email.trim();
+        if (code.length !== 6 || !isPhoneValid(draft.phone) || !trimmedEmail) {
             return;
         }
 
         verifyEmailCode.mutate(
-            {phone: normalizePhone(phone), email: trimmedEmail, code},
+            {phone: normalizePhone(draft.phone), email: trimmedEmail, code},
             {
                 onSuccess: () => {
                     router.push("/dashboard");
+                    clearDraft();
                 },
                 onError: (error) => {
                     notify.error(error);
@@ -74,11 +71,11 @@ export default function LoginPage(): JSX.Element {
     };
 
     const handleChangePhone = () => {
-        setStep("phone");
+        setDraft((prev) => ({...prev, step: "phone"}));
     };
 
     const handleChangeEmail = () => {
-        setStep("email");
+        setDraft((prev) => ({...prev, step: "email"}));
     };
 
     const handleClose = () => {
@@ -86,13 +83,13 @@ export default function LoginPage(): JSX.Element {
     };
 
     const handleResend = () => {
-        const trimmedEmail = email.trim();
-        if (!isPhoneValid(phone) || !trimmedEmail) {
+        const trimmedEmail = draft.email.trim();
+        if (!isPhoneValid(draft.phone) || !trimmedEmail) {
             return;
         }
 
         sendEmailCode.mutate(
-            {phone: normalizePhone(phone), email: trimmedEmail},
+            {phone: normalizePhone(draft.phone), email: trimmedEmail},
             {
                 onSuccess: (data) => {
                     recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
@@ -114,9 +111,12 @@ export default function LoginPage(): JSX.Element {
             </section>
             <section className={styles.right}>
                 <div className={styles.formWrapper}>
-                    <AuthForm
-                        step={step}
-                        onStepChange={setStep}
+                    {!isLoaded ? (
+                        <div>Загрузка…</div>
+                    ) : (
+                        <AuthForm
+                        step={draft.step}
+                        onStepChange={(step) => setDraft((prev) => ({...prev, step}))}
                         onSendPhone={handleSendPhone}
                         onSendEmail={handleSendEmail}
                         onVerifyCode={handleVerifyCode}
@@ -124,13 +124,16 @@ export default function LoginPage(): JSX.Element {
                         onChangeEmail={handleChangeEmail}
                         onResend={handleResend}
                         onClose={handleClose}
-                        email={email}
-                        onEmailChange={setEmail}
+                        phone={draft.phone}
+                        onPhoneChange={(phone) => setDraft((prev) => ({...prev, phone}))}
+                        email={draft.email}
+                        onEmailChange={(email) => setDraft((prev) => ({...prev, email}))}
                         isSendingEmail={sendEmailCode.isPending}
                         isVerifying={verifyEmailCode.isPending}
                         isResending={sendEmailCode.isPending}
                         resendTimer={resendTimer}
                     />
+                    )}
                 </div>
             </section>
             <div className={styles.bgLogo} aria-hidden="true"/>
