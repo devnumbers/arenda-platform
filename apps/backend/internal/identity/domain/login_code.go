@@ -13,7 +13,7 @@ import (
 const (
 	LoginCodeTTL          = 5 * time.Minute
 	LoginAttemptWindowTTL = 30 * time.Minute
-	MaxLoginFailures      = 5
+	MaxLoginFailures      = 15
 )
 
 const (
