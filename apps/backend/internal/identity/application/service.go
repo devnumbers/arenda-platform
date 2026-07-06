@@ -284,6 +284,10 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, e
 		return domain.RawSession{}, domain.User{}, err
 	}
 
+	if err := s.attempts.WithTx(tx).DeleteByPhone(ctx, phone); err != nil {
+		return domain.RawSession{}, domain.User{}, fmt.Errorf("reset login attempts: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.RawSession{}, domain.User{}, fmt.Errorf("commit tx: %w", err)
 	}
@@ -292,10 +296,6 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, phone domain.Phone, e
 		if err := s.publisher.PublishUserRegistered(ctx, UserRegistered{UserID: user.ID, Phone: phone, Email: email, At: now}); err != nil {
 			s.logger.ErrorContext(ctx, "failed to publish user registered event", slog.String("error", sanitize.Error(err)))
 		}
-	}
-
-	if err := s.attempts.DeleteByPhone(ctx, phone); err != nil {
-		s.logger.ErrorContext(ctx, "failed to reset login attempts", slog.String("error", sanitize.Error(err)))
 	}
 
 	return raw, user, nil
@@ -452,6 +452,10 @@ func (s *AuthService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhon
 
 	if err := txAttempts.DeleteByUserID(ctx, userID); err != nil {
 		return domain.User{}, fmt.Errorf("clear login attempts: %w", err)
+	}
+
+	if err := txAttempts.DeleteByPhone(ctx, newPhone); err != nil {
+		return domain.User{}, fmt.Errorf("reset new phone attempts: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
