@@ -9,16 +9,6 @@ type Optional[T any] struct {
 	Set   bool
 }
 
-func (o *Optional[T]) UnmarshalJSON(data []byte) error {
-	o.Set = true
-	if string(data) == "null" {
-		var zero T
-		o.Value = zero
-		return nil
-	}
-	return json.Unmarshal(data, &o.Value)
-}
-
 func (o Optional[T]) MarshalJSON() ([]byte, error) {
 	if !o.Set {
 		return []byte("null"), nil

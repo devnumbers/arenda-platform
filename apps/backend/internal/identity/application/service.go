@@ -119,7 +119,7 @@ func (s *AuthService) sendCode(ctx context.Context, phone domain.Phone, purpose 
 	if err != nil {
 		return fmt.Errorf("generate code: %w", err)
 	}
-	loginCode, err := domain.NewLoginCode(phone, domain.EmailFrom(""), s.hashCode(purpose, phone, domain.EmailFrom(""), code), purpose, &userID, now)
+	loginCode, err := domain.NewLoginCode(phone, domain.Email{}, s.hashCode(purpose, phone, domain.Email{}, code), purpose, &userID, now)
 	if err != nil {
 		return fmt.Errorf("create login code: %w", err)
 	}
@@ -469,7 +469,7 @@ func (s *AuthService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhon
 		return domain.User{}, fmt.Errorf("get code: %w", err)
 	}
 
-	if err := loginCode.Verify(s.hashCode(domain.LoginCodePurposePhoneChange, newPhone, domain.EmailFrom(""), code), now); err != nil {
+	if err := loginCode.Verify(s.hashCode(domain.LoginCodePurposePhoneChange, newPhone, domain.Email{}, code), now); err != nil {
 		if _, recErr := s.attempts.IncrementFailures(ctx, newPhone, userID, now); recErr != nil {
 			if errors.Is(recErr, domain.ErrTooManyAttempts) || errors.Is(recErr, ErrUserBlocked) {
 				return domain.User{}, recErr

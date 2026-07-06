@@ -329,13 +329,6 @@ func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(r.Context(), w, http.StatusOK, resp)
 }
 
-type updateMeRequest struct {
-	Email      *string `json:"email,omitempty"`
-	Name       *string `json:"name,omitempty"`
-	Surname    *string `json:"surname,omitempty"`
-	Patronymic *string `json:"patronymic,omitempty"`
-}
-
 func optionalStringFromPtr(s *string) domain.Optional[string] {
 	if s == nil {
 		return domain.Optional[string]{Set: false}
@@ -351,7 +344,7 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body updateMeRequest
+	var body openapi.UserUpdateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))

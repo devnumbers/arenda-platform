@@ -376,7 +376,11 @@ func (r *LoginCodeRepository) mapLoginCode(ctx context.Context, row loginCodeRow
 	}
 	email := domain.Email{}
 	if row.email.Valid {
-		email = domain.EmailFrom(row.email.String)
+		parsed, err := domain.EmailFrom(row.email.String)
+		if err != nil {
+			return domain.LoginCode{}, fmt.Errorf("invalid email in DB: %w", err)
+		}
+		email = parsed
 	}
 	return domain.LoginCode{
 		ID:        pgconv.UUIDFromPgtype(row.id),

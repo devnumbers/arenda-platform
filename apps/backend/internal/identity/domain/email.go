@@ -23,9 +23,13 @@ func NewEmail(raw string) (Email, error) {
 }
 
 // EmailFrom creates an Email from a already-normalized address.
-// It is intended for trusted sources such as the database.
-func EmailFrom(normalized string) Email {
-	return Email{value: normalized}
+// It is intended for trusted sources such as the database; an invalid value
+// still returns an error so callers do not silently propagate corrupt data.
+func EmailFrom(normalized string) (Email, error) {
+	if normalized == "" {
+		return Email{}, nil
+	}
+	return NewEmail(normalized)
 }
 
 func NormalizeEmail(raw string) (string, error) {
