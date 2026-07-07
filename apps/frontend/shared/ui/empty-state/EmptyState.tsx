@@ -14,6 +14,7 @@ export type EmptyStateProps = {
     readonly actionHref?: string;
     readonly actionText?: string;
     readonly actionIcon?: ReactNode;
+    readonly actionNode?: ReactNode;
     readonly title?: string;
 };
 
@@ -26,6 +27,7 @@ export function EmptyState({
                                actionHref,
                                actionText,
                                actionIcon,
+                               actionNode,
                                title,
                            }: EmptyStateProps): JSX.Element {
     const sizedIcon = isValidElement(icon)
@@ -50,7 +52,9 @@ export function EmptyState({
                 <h3 className={styles.title}>{title ?? `Нет ${entities ?? ''}`}</h3>
                 <p className={styles.subtitle}>{subtitle}</p>
             </div>
-            {actionHref && actionText && (
+            {actionNode ? (
+                actionNode
+            ) : actionHref && actionText && (
                 <LinkButton
                     href={actionHref}
                     variant="primary"
