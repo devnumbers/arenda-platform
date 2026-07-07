@@ -21,10 +21,10 @@ import (
 
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
-	Auth                     *identityapp.AuthenticationService
-	PhoneChange              *identityapp.PhoneChangeService
-	Profile                  *identityapp.ProfileService
-	Logout                   *identityapp.LogoutService
+	Auth                     identityapp.Authenticator
+	PhoneChange              identityapp.PhoneChanger
+	Profile                  identityapp.Profiler
+	Logout                   identityapp.Logout
 	Sessions                 identityapp.SessionService
 	MeEnricher               MeEnricher
 	Billing                  *billingapp.BillingService

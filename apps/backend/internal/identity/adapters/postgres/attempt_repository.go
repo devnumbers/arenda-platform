@@ -14,28 +14,28 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	pgen "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // AttemptRepository persists login attempt windows.
 type AttemptRepository struct {
-	db  postgres.DBTX
+	db  pgen.DBTX
 	enc encryption.Encryptor
 }
 
 // NewAttemptRepository creates a new attempt repository.
-func NewAttemptRepository(db postgres.DBTX, enc encryption.Encryptor) *AttemptRepository {
+func NewAttemptRepository(db pgen.DBTX, enc encryption.Encryptor) *AttemptRepository {
 	return &AttemptRepository{db: db, enc: enc}
 }
 
-func (r *AttemptRepository) q() *postgres.Queries {
-	return postgres.New(r.db)
+func (r *AttemptRepository) q() *pgen.Queries {
+	return pgen.New(r.db)
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *AttemptRepository) WithTx(tx transaction.Tx) (application.AttemptRepository, error) {
-	dbtx, ok := tx.(postgres.DBTX)
+	dbtx, ok := tx.(pgen.DBTX)
 	if !ok {
 		return nil, fmt.Errorf("identity.AttemptRepository.WithTx: %T is not a postgres.DBTX", tx)
 	}
@@ -52,7 +52,7 @@ func (r *AttemptRepository) GetByPhone(ctx context.Context, phone domain.Phone) 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.AttemptWindow{}, application.ErrNotFound
 		}
-		return domain.AttemptWindow{}, err
+		return domain.AttemptWindow{}, fmt.Errorf("get login attempt by phone: %w", err)
 	}
 	return domain.AttemptWindow{
 		Failures:       int(row.Failures),
@@ -71,7 +71,7 @@ func (r *AttemptRepository) GetByPhoneForUpdate(ctx context.Context, phone domai
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.AttemptWindow{}, application.ErrNotFound
 		}
-		return domain.AttemptWindow{}, err
+		return domain.AttemptWindow{}, fmt.Errorf("get login attempt by phone for update: %w", err)
 	}
 	return domain.AttemptWindow{
 		Failures:       int(row.Failures),
@@ -81,25 +81,25 @@ func (r *AttemptRepository) GetByPhoneForUpdate(ctx context.Context, phone domai
 }
 
 func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow) error {
-	failures := window.Failures
-	if failures < 0 {
-		failures = 0
-	}
-	if failures > math.MaxInt32 {
-		failures = math.MaxInt32
-	}
 	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
 	if err != nil {
 		return err
 	}
-	return r.q().UpsertLoginAttempt(ctx, postgres.UpsertLoginAttemptParams{
+	failures := window.Failures
+	if failures > math.MaxInt32 {
+		failures = math.MaxInt32
+	}
+	if err := r.q().UpsertLoginAttempt(ctx, pgen.UpsertLoginAttemptParams{
 		Phone:          encryptedPhone,
 		Failures:       int32(failures),
 		FirstFailureAt: pgtype.Timestamptz{Time: window.FirstFailureAt, Valid: true},
 		LastFailureAt:  pgtype.Timestamptz{Time: window.LastFailureAt, Valid: true},
 		UserID:         pgconv.UUIDToPgtype(userID),
 		PhoneEncrypted: !r.enc.IsNoop(),
-	})
+	}); err != nil {
+		return fmt.Errorf("upsert login attempt: %w", err)
+	}
+	return nil
 }
 
 func (r *AttemptRepository) DeleteByPhone(ctx context.Context, phone domain.Phone) error {
@@ -107,20 +107,26 @@ func (r *AttemptRepository) DeleteByPhone(ctx context.Context, phone domain.Phon
 	if err != nil {
 		return err
 	}
-	return r.q().DeleteLoginAttemptByPhone(ctx, encryptedPhone)
+	if err := r.q().DeleteLoginAttemptByPhone(ctx, encryptedPhone); err != nil {
+		return fmt.Errorf("delete login attempt by phone: %w", err)
+	}
+	return nil
 }
 
 func (r *AttemptRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
-	return r.q().DeleteLoginAttemptsByUserID(ctx, pgconv.UUIDToPgtype(userID))
-}
-
-func (r *AttemptRepository) DeleteStaleBefore(ctx context.Context, before time.Time) error {
-	return r.q().DeleteStaleLoginAttempts(ctx, pgtype.Timestamptz{Time: before, Valid: true})
+	if err := r.q().DeleteLoginAttemptsByUserID(ctx, pgconv.UUIDToPgtype(userID)); err != nil {
+		return fmt.Errorf("delete login attempts by user id: %w", err)
+	}
+	return nil
 }
 
 func (r *AttemptRepository) DeleteStaleBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error) {
-	return r.q().DeleteStaleLoginAttemptsBatch(ctx, postgres.DeleteStaleLoginAttemptsBatchParams{
+	n, err := r.q().DeleteStaleLoginAttemptsBatch(ctx, pgen.DeleteStaleLoginAttemptsBatchParams{
 		LastFailureAt: pgtype.Timestamptz{Time: before, Valid: true},
 		Limit:         batchSize,
 	})
+	if err != nil {
+		return 0, fmt.Errorf("delete stale login attempts batch: %w", err)
+	}
+	return n, nil
 }

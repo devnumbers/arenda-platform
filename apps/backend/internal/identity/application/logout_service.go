@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/google/uuid"
 )
@@ -12,15 +11,11 @@ import (
 type LogoutService struct {
 	sessions SessionRepository
 	hasher   TokenHasher
-	logger   *slog.Logger
 }
 
 // NewLogoutService creates a LogoutService.
-func NewLogoutService(sessions SessionRepository, hasher TokenHasher, logger *slog.Logger) *LogoutService {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return &LogoutService{sessions: sessions, hasher: hasher, logger: logger}
+func NewLogoutService(sessions SessionRepository, hasher TokenHasher) *LogoutService {
+	return &LogoutService{sessions: sessions, hasher: hasher}
 }
 
 // Logout deletes the session associated with the raw token.

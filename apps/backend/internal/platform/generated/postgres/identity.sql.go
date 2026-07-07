@@ -165,15 +165,6 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
-const deleteExpiredLoginCodes = `-- name: DeleteExpiredLoginCodes :exec
-DELETE FROM login_codes WHERE expires_at < $1
-`
-
-func (q *Queries) DeleteExpiredLoginCodes(ctx context.Context, expiresAt pgtype.Timestamptz) error {
-	_, err := q.db.Exec(ctx, deleteExpiredLoginCodes, expiresAt)
-	return err
-}
-
 const deleteExpiredLoginCodesBatch = `-- name: DeleteExpiredLoginCodesBatch :execrows
 DELETE FROM login_codes t WHERE t.ctid IN (
     SELECT s.ctid FROM login_codes s WHERE s.expires_at < $1 LIMIT $2
@@ -212,15 +203,6 @@ func (q *Queries) DeleteExpiredLoginCodesByPhoneAndEmail(ctx context.Context, ar
 		arg.Purpose,
 		arg.ExpiresAt,
 	)
-	return err
-}
-
-const deleteExpiredSessions = `-- name: DeleteExpiredSessions :exec
-DELETE FROM sessions WHERE expires_at < $1
-`
-
-func (q *Queries) DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error {
-	_, err := q.db.Exec(ctx, deleteExpiredSessions, expiresAt)
 	return err
 }
 
@@ -308,15 +290,6 @@ type DeleteSessionsByUserIDExceptParams struct {
 
 func (q *Queries) DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) error {
 	_, err := q.db.Exec(ctx, deleteSessionsByUserIDExcept, arg.UserID, arg.TokenHash)
-	return err
-}
-
-const deleteStaleLoginAttempts = `-- name: DeleteStaleLoginAttempts :exec
-DELETE FROM login_attempts WHERE last_failure_at < $1
-`
-
-func (q *Queries) DeleteStaleLoginAttempts(ctx context.Context, lastFailureAt pgtype.Timestamptz) error {
-	_, err := q.db.Exec(ctx, deleteStaleLoginAttempts, lastFailureAt)
 	return err
 }
 
@@ -496,31 +469,6 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, arg GetSessionByTok
 	return i, err
 }
 
-const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at
-FROM users
-WHERE LOWER(email) = LOWER($1)
-`
-
-func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByEmail, lower)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Phone,
-		&i.Role,
-		&i.Name,
-		&i.Surname,
-		&i.Patronymic,
-		&i.Email,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.PhoneEncrypted,
-		&i.EmailVerifiedAt,
-	)
-	return i, err
-}
-
 const getUserByID = `-- name: GetUserByID :one
 SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE id = $1
 `
@@ -610,22 +558,6 @@ func (q *Queries) GetUserByPhoneForUpdate(ctx context.Context, phone string) (Us
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
 	)
-	return i, err
-}
-
-const getUserPhoneByID = `-- name: GetUserPhoneByID :one
-SELECT phone, phone_encrypted FROM users WHERE id = $1
-`
-
-type GetUserPhoneByIDRow struct {
-	Phone          string `json:"phone"`
-	PhoneEncrypted bool   `json:"phone_encrypted"`
-}
-
-func (q *Queries) GetUserPhoneByID(ctx context.Context, id pgtype.UUID) (GetUserPhoneByIDRow, error) {
-	row := q.db.QueryRow(ctx, getUserPhoneByID, id)
-	var i GetUserPhoneByIDRow
-	err := row.Scan(&i.Phone, &i.PhoneEncrypted)
 	return i, err
 }
 
@@ -748,17 +680,19 @@ SET name = $2,
     surname = $3,
     patronymic = $4,
     email = $5,
+    email_verified_at = $6,
     updated_at = now()
 WHERE id = $1
 RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at
 `
 
 type UpdateUserParams struct {
-	ID         pgtype.UUID `json:"id"`
-	Name       pgtype.Text `json:"name"`
-	Surname    pgtype.Text `json:"surname"`
-	Patronymic pgtype.Text `json:"patronymic"`
-	Email      pgtype.Text `json:"email"`
+	ID              pgtype.UUID        `json:"id"`
+	Name            pgtype.Text        `json:"name"`
+	Surname         pgtype.Text        `json:"surname"`
+	Patronymic      pgtype.Text        `json:"patronymic"`
+	Email           pgtype.Text        `json:"email"`
+	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
@@ -768,6 +702,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		arg.Surname,
 		arg.Patronymic,
 		arg.Email,
+		arg.EmailVerifiedAt,
 	)
 	var i User
 	err := row.Scan(

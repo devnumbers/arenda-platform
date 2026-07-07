@@ -15,32 +15,109 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	pgen "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // UserRepository persists users.
 type UserRepository struct {
-	db  postgres.DBTX
+	db  pgen.DBTX
 	enc encryption.Encryptor
 }
 
 // NewUserRepository creates a new user repository.
-func NewUserRepository(db postgres.DBTX, enc encryption.Encryptor) *UserRepository {
+func NewUserRepository(db pgen.DBTX, enc encryption.Encryptor) *UserRepository {
 	return &UserRepository{db: db, enc: enc}
 }
 
-func (r *UserRepository) q() *postgres.Queries {
-	return postgres.New(r.db)
+func (r *UserRepository) q() *pgen.Queries {
+	return pgen.New(r.db)
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *UserRepository) WithTx(tx transaction.Tx) (application.UserRepository, error) {
-	dbtx, ok := tx.(postgres.DBTX)
+	dbtx, ok := tx.(pgen.DBTX)
 	if !ok {
 		return nil, fmt.Errorf("identity.UserRepository.WithTx: %T is not a postgres.DBTX", tx)
 	}
 	return NewUserRepository(dbtx, r.enc), nil
+}
+
+// userRow is the canonical shape of a user as returned by our queries.
+type userRow struct {
+	ID              pgtype.UUID
+	Phone           string
+	Role            string
+	Name            pgtype.Text
+	Surname         pgtype.Text
+	Patronymic      pgtype.Text
+	Email           pgtype.Text
+	EmailVerifiedAt pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	PhoneEncrypted  bool
+}
+
+func userRowFromGeneratedUser(u pgen.User) userRow {
+	return userRow{
+		ID:              u.ID,
+		Phone:           u.Phone,
+		Role:            u.Role,
+		Name:            u.Name,
+		Surname:         u.Surname,
+		Patronymic:      u.Patronymic,
+		Email:           u.Email,
+		EmailVerifiedAt: u.EmailVerifiedAt,
+		CreatedAt:       u.CreatedAt,
+		UpdatedAt:       u.UpdatedAt,
+		PhoneEncrypted:  u.PhoneEncrypted,
+	}
+}
+
+func userRowFromCreateUserRow(row pgen.CreateUserRow) userRow {
+	return userRow{
+		ID:              row.ID,
+		Phone:           row.Phone,
+		Role:            row.Role,
+		Name:            row.Name,
+		Surname:         row.Surname,
+		Patronymic:      row.Patronymic,
+		Email:           row.Email,
+		EmailVerifiedAt: row.EmailVerifiedAt,
+		CreatedAt:       row.CreatedAt,
+		UpdatedAt:       row.UpdatedAt,
+		PhoneEncrypted:  row.PhoneEncrypted,
+	}
+}
+
+func userRowFromUpdateUserEmailVerifiedRow(row pgen.UpdateUserEmailVerifiedRow) userRow {
+	return userRow{
+		ID:              row.ID,
+		Phone:           row.Phone,
+		Role:            row.Role,
+		Name:            row.Name,
+		Surname:         row.Surname,
+		Patronymic:      row.Patronymic,
+		Email:           row.Email,
+		EmailVerifiedAt: row.EmailVerifiedAt,
+		CreatedAt:       row.CreatedAt,
+		UpdatedAt:       row.UpdatedAt,
+		PhoneEncrypted:  row.PhoneEncrypted,
+	}
+}
+
+func userRowFromGetSessionByTokenHashRow(row pgen.GetSessionByTokenHashRow) userRow {
+	return userRow{
+		ID:              row.UserID,
+		Phone:           row.Phone,
+		Role:            row.Role,
+		Name:            row.Name,
+		Surname:         row.Surname,
+		Patronymic:      row.Patronymic,
+		Email:           row.Email,
+		EmailVerifiedAt: row.EmailVerifiedAt,
+		PhoneEncrypted:  row.PhoneEncrypted,
+	}
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
@@ -49,9 +126,9 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.User{}, application.ErrNotFound
 		}
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("get user by id: %w", err)
 	}
-	return r.mapUser(ctx, row)
+	return mapUser(ctx, r.enc, userRowFromGeneratedUser(row))
 }
 
 func (r *UserRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.User, error) {
@@ -60,28 +137,9 @@ func (r *UserRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (do
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.User{}, application.ErrNotFound
 		}
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("get user by id for update: %w", err)
 	}
-	return r.mapUser(ctx, row)
-}
-
-func (r *UserRepository) GetPhoneByID(ctx context.Context, id uuid.UUID) (domain.Phone, error) {
-	row, err := r.q().GetUserPhoneByID(ctx, pgconv.UUIDToPgtype(id))
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Phone{}, application.ErrNotFound
-		}
-		return domain.Phone{}, err
-	}
-	phone, err := decryptPhone(ctx, r.enc, row.Phone, row.PhoneEncrypted)
-	if err != nil {
-		return domain.Phone{}, err
-	}
-	parsed, err := domain.NewPhone(phone)
-	if err != nil {
-		return domain.Phone{}, err
-	}
-	return parsed, nil
+	return mapUser(ctx, r.enc, userRowFromGeneratedUser(row))
 }
 
 func (r *UserRepository) GetByPhone(ctx context.Context, phone domain.Phone) (domain.User, error) {
@@ -94,9 +152,9 @@ func (r *UserRepository) GetByPhone(ctx context.Context, phone domain.Phone) (do
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.User{}, application.ErrNotFound
 		}
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("get user by phone: %w", err)
 	}
-	return r.mapUser(ctx, row)
+	return mapUser(ctx, r.enc, userRowFromGeneratedUser(row))
 }
 
 func (r *UserRepository) GetByPhoneForUpdate(ctx context.Context, phone domain.Phone) (domain.User, error) {
@@ -109,20 +167,9 @@ func (r *UserRepository) GetByPhoneForUpdate(ctx context.Context, phone domain.P
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.User{}, application.ErrNotFound
 		}
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("get user by phone for update: %w", err)
 	}
-	return r.mapUser(ctx, row)
-}
-
-func (r *UserRepository) GetByEmail(ctx context.Context, email domain.Email) (domain.User, error) {
-	row, err := r.q().GetUserByEmail(ctx, email.String())
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.User{}, application.ErrNotFound
-		}
-		return domain.User{}, err
-	}
-	return r.mapUser(ctx, row)
+	return mapUser(ctx, r.enc, userRowFromGeneratedUser(row))
 }
 
 func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.User, error) {
@@ -130,7 +177,7 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.U
 	if err != nil {
 		return domain.User{}, err
 	}
-	row, err := r.q().CreateUser(ctx, postgres.CreateUserParams{
+	row, err := r.q().CreateUser(ctx, pgen.CreateUserParams{
 		ID:              pgconv.UUIDToPgtype(user.ID),
 		Phone:           encryptedPhone,
 		Role:            user.Role.String(),
@@ -142,30 +189,19 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.U
 		if errors.Is(err, pgx.ErrNoRows) {
 			return r.GetByPhone(ctx, user.Phone)
 		}
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("create user: %w", err)
 	}
-	return r.mapUser(ctx, postgres.User{
-		ID:              row.ID,
-		Phone:           row.Phone,
-		Role:            row.Role,
-		Name:            row.Name,
-		Surname:         row.Surname,
-		Patronymic:      row.Patronymic,
-		Email:           row.Email,
-		EmailVerifiedAt: row.EmailVerifiedAt,
-		CreatedAt:       row.CreatedAt,
-		UpdatedAt:       row.UpdatedAt,
-		PhoneEncrypted:  row.PhoneEncrypted,
-	})
+	return mapUser(ctx, r.enc, userRowFromCreateUserRow(row))
 }
 
 func (r *UserRepository) Update(ctx context.Context, user domain.User) (domain.User, error) {
-	row, err := r.q().UpdateUser(ctx, postgres.UpdateUserParams{
-		ID:         pgconv.UUIDToPgtype(user.ID),
-		Name:       pgconv.StringPtrToPgtype(user.Name),
-		Surname:    pgconv.StringPtrToPgtype(user.Surname),
-		Patronymic: pgconv.StringPtrToPgtype(user.Patronymic),
-		Email:      emailPtrToPgtype(user.Email),
+	row, err := r.q().UpdateUser(ctx, pgen.UpdateUserParams{
+		ID:              pgconv.UUIDToPgtype(user.ID),
+		Name:            pgconv.StringPtrToPgtype(user.Name),
+		Surname:         pgconv.StringPtrToPgtype(user.Surname),
+		Patronymic:      pgconv.StringPtrToPgtype(user.Patronymic),
+		Email:           emailPtrToPgtype(user.Email),
+		EmailVerifiedAt: pgconv.TimePtrToPgtype(user.EmailVerifiedAt),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -175,9 +211,9 @@ func (r *UserRepository) Update(ctx context.Context, user domain.User) (domain.U
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return domain.User{}, application.ErrEmailAlreadyTaken
 		}
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("update user: %w", err)
 	}
-	return r.mapUser(ctx, row)
+	return mapUser(ctx, r.enc, userRowFromGeneratedUser(row))
 }
 
 func (r *UserRepository) UpdatePhone(ctx context.Context, id uuid.UUID, phone domain.Phone) (domain.User, error) {
@@ -185,7 +221,7 @@ func (r *UserRepository) UpdatePhone(ctx context.Context, id uuid.UUID, phone do
 	if err != nil {
 		return domain.User{}, err
 	}
-	row, err := r.q().UpdateUserPhone(ctx, postgres.UpdateUserPhoneParams{
+	row, err := r.q().UpdateUserPhone(ctx, pgen.UpdateUserPhoneParams{
 		ID:             pgconv.UUIDToPgtype(id),
 		Phone:          encryptedPhone,
 		PhoneEncrypted: !r.enc.IsNoop(),
@@ -198,13 +234,13 @@ func (r *UserRepository) UpdatePhone(ctx context.Context, id uuid.UUID, phone do
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return domain.User{}, application.ErrPhoneAlreadyTaken
 		}
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("update user phone: %w", err)
 	}
-	return r.mapUser(ctx, row)
+	return mapUser(ctx, r.enc, userRowFromGeneratedUser(row))
 }
 
 func (r *UserRepository) UpdateEmailVerified(ctx context.Context, id uuid.UUID, email *domain.Email, verifiedAt *time.Time) (domain.User, error) {
-	row, err := r.q().UpdateUserEmailVerified(ctx, postgres.UpdateUserEmailVerifiedParams{
+	row, err := r.q().UpdateUserEmailVerified(ctx, pgen.UpdateUserEmailVerifiedParams{
 		ID:              pgconv.UUIDToPgtype(id),
 		Email:           emailPtrToPgtype(email),
 		EmailVerifiedAt: pgconv.TimePtrToPgtype(verifiedAt),
@@ -213,25 +249,13 @@ func (r *UserRepository) UpdateEmailVerified(ctx context.Context, id uuid.UUID, 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.User{}, application.ErrNotFound
 		}
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("update user email verified: %w", err)
 	}
-	return r.mapUser(ctx, postgres.User{
-		ID:              row.ID,
-		Phone:           row.Phone,
-		Role:            row.Role,
-		Name:            row.Name,
-		Surname:         row.Surname,
-		Patronymic:      row.Patronymic,
-		Email:           row.Email,
-		EmailVerifiedAt: row.EmailVerifiedAt,
-		CreatedAt:       row.CreatedAt,
-		UpdatedAt:       row.UpdatedAt,
-		PhoneEncrypted:  row.PhoneEncrypted,
-	})
+	return mapUser(ctx, r.enc, userRowFromUpdateUserEmailVerifiedRow(row))
 }
 
-func (r *UserRepository) mapUser(ctx context.Context, row postgres.User) (domain.User, error) {
-	phone, err := decryptPhone(ctx, r.enc, row.Phone, row.PhoneEncrypted)
+func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain.User, error) {
+	phone, err := decryptPhone(ctx, enc, row.Phone, row.PhoneEncrypted)
 	if err != nil {
 		return domain.User{}, err
 	}

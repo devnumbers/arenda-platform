@@ -52,9 +52,6 @@ DELETE FROM login_codes WHERE id = $1;
 -- name: DeleteLoginCodesByUserID :exec
 DELETE FROM login_codes WHERE user_id = $1;
 
--- name: DeleteExpiredLoginCodes :exec
-DELETE FROM login_codes WHERE expires_at < $1;
-
 -- name: DeleteExpiredLoginCodesBatch :execrows
 DELETE FROM login_codes t WHERE t.ctid IN (
     SELECT s.ctid FROM login_codes s WHERE s.expires_at < $1 LIMIT $2
@@ -82,9 +79,6 @@ DELETE FROM login_attempts WHERE phone = $1;
 -- name: DeleteLoginAttemptsByUserID :exec
 DELETE FROM login_attempts WHERE user_id = $1;
 
--- name: DeleteStaleLoginAttempts :exec
-DELETE FROM login_attempts WHERE last_failure_at < $1;
-
 -- name: DeleteStaleLoginAttemptsBatch :execrows
 DELETE FROM login_attempts t WHERE t.ctid IN (
     SELECT a.ctid FROM login_attempts a WHERE a.last_failure_at < $1 LIMIT $2
@@ -106,9 +100,6 @@ DELETE FROM sessions WHERE user_id = $1;
 -- name: DeleteSessionsByUserIDExcept :exec
 DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2;
 
--- name: DeleteExpiredSessions :exec
-DELETE FROM sessions WHERE expires_at < $1;
-
 -- name: DeleteExpiredSessionsBatch :execrows
 DELETE FROM sessions t WHERE t.ctid IN (
     SELECT s.ctid FROM sessions s WHERE s.expires_at < $1 LIMIT $2
@@ -121,9 +112,6 @@ FROM sessions s
 JOIN users u ON s.user_id = u.id
 WHERE s.token_hash = $1 AND s.expires_at > $2;
 
--- name: GetUserPhoneByID :one
-SELECT phone, phone_encrypted FROM users WHERE id = $1;
-
 -- name: GetVerifiedEmailByUserID :one
 SELECT email
 FROM users
@@ -135,6 +123,7 @@ SET name = $2,
     surname = $3,
     patronymic = $4,
     email = $5,
+    email_verified_at = $6,
     updated_at = now()
 WHERE id = $1
 RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at;
@@ -146,11 +135,6 @@ SET phone = $2,
     updated_at = now()
 WHERE id = $1
 RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at;
-
--- name: GetUserByEmail :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at
-FROM users
-WHERE LOWER(email) = LOWER($1);
 
 -- name: UpdateUserEmailVerified :one
 UPDATE users

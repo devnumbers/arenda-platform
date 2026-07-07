@@ -21,11 +21,11 @@ type LoginCodeSender interface {
 
 type UserRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.User, error)
+	// GetByIDForUpdate acquires a row-level pessimistic lock and must only be called inside a transaction.
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetByPhone(ctx context.Context, phone domain.Phone) (domain.User, error)
+	// GetByPhoneForUpdate acquires a row-level pessimistic lock and must only be called inside a transaction.
 	GetByPhoneForUpdate(ctx context.Context, phone domain.Phone) (domain.User, error)
-	GetByEmail(ctx context.Context, email domain.Email) (domain.User, error)
-	GetPhoneByID(ctx context.Context, id uuid.UUID) (domain.Phone, error)
 	Create(ctx context.Context, user domain.User) (domain.User, error)
 	Update(ctx context.Context, user domain.User) (domain.User, error)
 	UpdatePhone(ctx context.Context, id uuid.UUID, phone domain.Phone) (domain.User, error)
@@ -39,7 +39,6 @@ type LoginCodeRepository interface {
 	MarkUsedByID(ctx context.Context, id uuid.UUID) error
 	DeleteByID(ctx context.Context, id uuid.UUID) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
-	DeleteExpiredBefore(ctx context.Context, before time.Time) error
 	DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	DeleteExpiredByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, before time.Time) error
 	DeleteUnusedByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error
@@ -48,11 +47,11 @@ type LoginCodeRepository interface {
 
 type AttemptRepository interface {
 	GetByPhone(ctx context.Context, phone domain.Phone) (domain.AttemptWindow, error)
+	// GetByPhoneForUpdate acquires a row-level pessimistic lock and must only be called inside a transaction.
 	GetByPhoneForUpdate(ctx context.Context, phone domain.Phone) (domain.AttemptWindow, error)
 	Save(ctx context.Context, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow) error
 	DeleteByPhone(ctx context.Context, phone domain.Phone) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
-	DeleteStaleBefore(ctx context.Context, before time.Time) error
 	DeleteStaleBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	WithTx(tx transaction.Tx) (AttemptRepository, error)
 }
@@ -64,7 +63,6 @@ type SessionRepository interface {
 	DeleteByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 	DeleteByUserIDExcept(ctx context.Context, userID uuid.UUID, tokenHash string) error
-	DeleteExpiredBefore(ctx context.Context, before time.Time) error
 	DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	WithTx(tx transaction.Tx) (SessionRepository, error)
 }

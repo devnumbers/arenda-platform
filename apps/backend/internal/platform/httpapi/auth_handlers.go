@@ -35,10 +35,10 @@ type MeEnricher func(ctx context.Context, userID uuid.UUID, resp *openapi.MeResp
 
 // AuthHandlers implements the generated non-strict ServerInterface.
 type AuthHandlers struct {
-	auth              *application.AuthenticationService
-	phoneChange       *application.PhoneChangeService
-	profile           *application.ProfileService
-	logout            *application.LogoutService
+	auth              application.Authenticator
+	phoneChange       application.PhoneChanger
+	profile           application.Profiler
+	logout            application.Logout
 	cookieSecure      bool
 	logger            *slog.Logger
 	emailSend         *RateLimiter
@@ -50,10 +50,10 @@ type AuthHandlers struct {
 
 // NewAuthHandlers creates HTTP handlers for the auth API.
 func NewAuthHandlers(
-	auth *application.AuthenticationService,
-	phoneChange *application.PhoneChangeService,
-	profile *application.ProfileService,
-	logout *application.LogoutService,
+	auth application.Authenticator,
+	phoneChange application.PhoneChanger,
+	profile application.Profiler,
+	logout application.Logout,
 	cookieSecure bool,
 	logger *slog.Logger,
 	emailSend *RateLimiter,

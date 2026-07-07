@@ -3,28 +3,21 @@ package application
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // ProfileService provides read and update operations for the user's own profile.
 type ProfileService struct {
-	users  UserRepository
-	clock  clock.Clock
-	db     transaction.Beginner
-	logger *slog.Logger
+	users UserRepository
+	db    transaction.Beginner
 }
 
 // NewProfileService creates a ProfileService.
-func NewProfileService(users UserRepository, clock clock.Clock, db transaction.Beginner, logger *slog.Logger) *ProfileService {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return &ProfileService{users: users, clock: clock, db: db, logger: logger}
+func NewProfileService(users UserRepository, db transaction.Beginner) *ProfileService {
+	return &ProfileService{users: users, db: db}
 }
 
 // Me returns the user profile.
@@ -60,20 +53,15 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cm
 	}
 
 	emailChanged := cmd.Email != nil && user.Email != nil && user.Email.String() != oldEmail
+	if emailChanged {
+		user.EmailVerifiedAt = nil
+	}
 
 	updated, err := users.Update(ctx, user)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("update user: %w", err)
 	}
 	user = updated
-
-	if emailChanged {
-		updated, err := users.UpdateEmailVerified(ctx, userID, user.Email, nil)
-		if err != nil {
-			return domain.User{}, fmt.Errorf("reset email verification: %w", err)
-		}
-		user = updated
-	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return domain.User{}, fmt.Errorf("commit tx: %w", err)

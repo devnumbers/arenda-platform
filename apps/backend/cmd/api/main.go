@@ -196,12 +196,14 @@ func run(fallback *slog.Logger) error {
 		identityCodeRepo,
 		identityAttemptRepo,
 		identitySessionRepo,
-		emailSender,
-		clock.Real{},
-		identityEventPublisher,
-		platformpostgres.NewBeginner(pool, appLogger),
-		appLogger,
-		encryptor,
+		identityapp.AuthenticationServiceConfig{
+			CodeSender: emailSender,
+			Clock:      clock.Real{},
+			Publisher:  identityEventPublisher,
+			DB:         platformpostgres.NewBeginner(pool, appLogger),
+			Logger:     appLogger,
+			Hasher:     encryptor,
+		},
 	)
 
 	phoneChangeService := identityapp.NewPhoneChangeService(
@@ -209,24 +211,22 @@ func run(fallback *slog.Logger) error {
 		identityCodeRepo,
 		identityAttemptRepo,
 		identitySessionRepo,
-		emailSender,
-		clock.Real{},
-		platformpostgres.NewBeginner(pool, appLogger),
-		appLogger,
-		encryptor,
+		identityapp.PhoneChangeServiceConfig{
+			Sender: emailSender,
+			Clock:  clock.Real{},
+			DB:     platformpostgres.NewBeginner(pool, appLogger),
+			Hasher: encryptor,
+		},
 	)
 
 	profileService := identityapp.NewProfileService(
 		identityUserRepo,
-		clock.Real{},
 		platformpostgres.NewBeginner(pool, appLogger),
-		appLogger,
 	)
 
 	logoutService := identityapp.NewLogoutService(
 		identitySessionRepo,
 		encryptor,
-		appLogger,
 	)
 
 	propertyRepo := propertiespg.NewPropertyRepository(db)

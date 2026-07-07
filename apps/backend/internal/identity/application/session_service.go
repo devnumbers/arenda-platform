@@ -22,7 +22,7 @@ type sessionService struct {
 
 // NewSessionService creates a SessionService backed by the provided repository.
 // The hasher is used to look up sessions by the hashed value of the raw token.
-func NewSessionService(sessions SessionRepository, hasher TokenHasher) SessionService {
+func NewSessionService(sessions SessionRepository, hasher TokenHasher) *sessionService {
 	return &sessionService{sessions: sessions, hasher: hasher}
 }
 

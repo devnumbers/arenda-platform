@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
@@ -21,25 +20,31 @@ type PhoneChangeService struct {
 	sender   LoginCodeSender
 	clock    clock.Clock
 	db       transaction.Beginner
-	logger   *slog.Logger
 	hasher   TokenHasher
 }
 
+// PhoneChangeServiceConfig carries optional dependencies for PhoneChangeService.
+type PhoneChangeServiceConfig struct {
+	Sender LoginCodeSender
+	Clock  clock.Clock
+	DB     transaction.Beginner
+	Hasher TokenHasher
+}
+
 // NewPhoneChangeService creates a PhoneChangeService.
-func NewPhoneChangeService(users UserRepository, codes LoginCodeRepository, attempts AttemptRepository, sessions SessionRepository, sender LoginCodeSender, clock clock.Clock, db transaction.Beginner, logger *slog.Logger, hasher TokenHasher) *PhoneChangeService {
-	if logger == nil {
-		logger = slog.Default()
+func NewPhoneChangeService(users UserRepository, codes LoginCodeRepository, attempts AttemptRepository, sessions SessionRepository, cfg PhoneChangeServiceConfig) *PhoneChangeService {
+	if cfg.Clock == nil {
+		cfg.Clock = clock.Real{}
 	}
 	return &PhoneChangeService{
 		users:    users,
 		codes:    codes,
 		attempts: attempts,
 		sessions: sessions,
-		sender:   sender,
-		clock:    clock,
-		db:       db,
-		logger:   logger,
-		hasher:   hasher,
+		sender:   cfg.Sender,
+		clock:    cfg.Clock,
+		db:       cfg.DB,
+		hasher:   cfg.Hasher,
 	}
 }
 
@@ -67,7 +72,7 @@ func (s *PhoneChangeService) SendChangeCode(ctx context.Context, userID uuid.UUI
 		return err
 	}
 
-	flow := newLoginCodeFlow(s.codes, s.attempts, s.sender, s.clock, s.db, s.hasher, s.logger)
+	flow := newLoginCodeFlow(s.codes, s.attempts, s.sender, s.clock, s.db, s.hasher, nil)
 	return flow.sendCode(ctx, newPhone, email, domain.LoginCodePurposePhoneChange, &user.ID)
 }
 
@@ -118,7 +123,7 @@ func (s *PhoneChangeService) ChangePhone(ctx context.Context, userID uuid.UUID, 
 		return domain.User{}, err
 	}
 
-	flow := newLoginCodeFlow(s.codes, s.attempts, s.sender, s.clock, s.db, s.hasher, s.logger)
+	flow := newLoginCodeFlow(s.codes, s.attempts, s.sender, s.clock, s.db, s.hasher, nil)
 	loginCode, err := flow.verifyCode(ctx, tx, newPhone, email, domain.LoginCodePurposePhoneChange, code, userID)
 	if err != nil {
 		if errors.Is(err, domain.ErrLoginCodeInvalid) || errors.Is(err, domain.ErrTooManyAttempts) {

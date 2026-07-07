@@ -13,28 +13,29 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	pgen "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // LoginCodeRepository persists login codes.
 type LoginCodeRepository struct {
-	db  postgres.DBTX
+	db  pgen.DBTX
 	enc encryption.Encryptor
 }
 
 // NewLoginCodeRepository creates a new login code repository.
-func NewLoginCodeRepository(db postgres.DBTX, enc encryption.Encryptor) *LoginCodeRepository {
+func NewLoginCodeRepository(db pgen.DBTX, enc encryption.Encryptor) *LoginCodeRepository {
 	return &LoginCodeRepository{db: db, enc: enc}
 }
 
-func (r *LoginCodeRepository) q() *postgres.Queries {
-	return postgres.New(r.db)
+func (r *LoginCodeRepository) q() *pgen.Queries {
+	return pgen.New(r.db)
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *LoginCodeRepository) WithTx(tx transaction.Tx) (application.LoginCodeRepository, error) {
-	dbtx, ok := tx.(postgres.DBTX)
+	dbtx, ok := tx.(pgen.DBTX)
 	if !ok {
 		return nil, fmt.Errorf("identity.LoginCodeRepository.WithTx: %T is not a postgres.DBTX", tx)
 	}
@@ -46,16 +47,22 @@ func (r *LoginCodeRepository) Save(ctx context.Context, code domain.LoginCode) e
 	if err != nil {
 		return err
 	}
-	return r.q().CreateLoginCode(ctx, postgres.CreateLoginCodeParams{
+	if err := r.q().CreateLoginCode(ctx, pgen.CreateLoginCodeParams{
 		ID:             pgconv.UUIDToPgtype(code.ID),
 		Phone:          pgtype.Text{String: encryptedPhone, Valid: true},
-		Email:          pgtype.Text{String: code.Email.String(), Valid: code.Email.String() != ""},
+		Email:          pgtype.Text{String: code.Email.String(), Valid: true},
 		CodeHash:       code.CodeHash,
 		ExpiresAt:      pgtype.Timestamptz{Time: code.ExpiresAt, Valid: true},
 		UserID:         pgconv.UUIDToPgtypePtr(code.UserID),
 		Purpose:        code.Purpose.String(),
 		PhoneEncrypted: !r.enc.IsNoop(),
-	})
+	}); err != nil {
+		if pgerr.IsUniqueViolation(err) {
+			return application.ErrCodeSentTooRecently
+		}
+		return fmt.Errorf("create login code: %w", err)
+	}
+	return nil
 }
 
 func (r *LoginCodeRepository) GetLatestByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, now time.Time) (domain.LoginCode, error) {
@@ -63,7 +70,7 @@ func (r *LoginCodeRepository) GetLatestByPhoneAndEmail(ctx context.Context, phon
 	if err != nil {
 		return domain.LoginCode{}, err
 	}
-	row, err := r.q().GetLatestLoginCodeByPhoneAndEmailAndPurpose(ctx, postgres.GetLatestLoginCodeByPhoneAndEmailAndPurposeParams{
+	row, err := r.q().GetLatestLoginCodeByPhoneAndEmailAndPurpose(ctx, pgen.GetLatestLoginCodeByPhoneAndEmailAndPurposeParams{
 		Phone:     pgtype.Text{String: encryptedPhone, Valid: true},
 		Email:     pgtype.Text{String: email.String(), Valid: true},
 		Purpose:   purpose.String(),
@@ -73,7 +80,7 @@ func (r *LoginCodeRepository) GetLatestByPhoneAndEmail(ctx context.Context, phon
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.LoginCode{}, application.ErrNotFound
 		}
-		return domain.LoginCode{}, err
+		return domain.LoginCode{}, fmt.Errorf("get latest login code: %w", err)
 	}
 	return r.mapLoginCode(ctx, toLoginCodeRowPhoneEmail(row))
 }
@@ -83,12 +90,15 @@ func (r *LoginCodeRepository) DeleteExpiredByPhoneAndEmail(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	return r.q().DeleteExpiredLoginCodesByPhoneAndEmail(ctx, postgres.DeleteExpiredLoginCodesByPhoneAndEmailParams{
+	if err := r.q().DeleteExpiredLoginCodesByPhoneAndEmail(ctx, pgen.DeleteExpiredLoginCodesByPhoneAndEmailParams{
 		Phone:     pgtype.Text{String: encryptedPhone, Valid: true},
 		Email:     pgtype.Text{String: email.String(), Valid: true},
 		Purpose:   purpose.String(),
 		ExpiresAt: pgtype.Timestamptz{Time: before, Valid: true},
-	})
+	}); err != nil {
+		return fmt.Errorf("delete expired login codes by phone and email: %w", err)
+	}
+	return nil
 }
 
 func (r *LoginCodeRepository) DeleteUnusedByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error {
@@ -96,34 +106,46 @@ func (r *LoginCodeRepository) DeleteUnusedByPhoneAndEmail(ctx context.Context, p
 	if err != nil {
 		return err
 	}
-	return r.q().DeleteUnusedLoginCodesByPhoneAndEmail(ctx, postgres.DeleteUnusedLoginCodesByPhoneAndEmailParams{
+	if err := r.q().DeleteUnusedLoginCodesByPhoneAndEmail(ctx, pgen.DeleteUnusedLoginCodesByPhoneAndEmailParams{
 		Phone:   pgtype.Text{String: encryptedPhone, Valid: true},
 		Email:   pgtype.Text{String: email.String(), Valid: true},
 		Purpose: purpose.String(),
-	})
+	}); err != nil {
+		return fmt.Errorf("delete unused login codes by phone and email: %w", err)
+	}
+	return nil
 }
 
 func (r *LoginCodeRepository) MarkUsedByID(ctx context.Context, id uuid.UUID) error {
-	return r.q().MarkLoginCodeUsed(ctx, pgconv.UUIDToPgtype(id))
+	if err := r.q().MarkLoginCodeUsed(ctx, pgconv.UUIDToPgtype(id)); err != nil {
+		return fmt.Errorf("mark login code used: %w", err)
+	}
+	return nil
 }
 
 func (r *LoginCodeRepository) DeleteByID(ctx context.Context, id uuid.UUID) error {
-	return r.q().DeleteLoginCodeByID(ctx, pgconv.UUIDToPgtype(id))
+	if err := r.q().DeleteLoginCodeByID(ctx, pgconv.UUIDToPgtype(id)); err != nil {
+		return fmt.Errorf("delete login code by id: %w", err)
+	}
+	return nil
 }
 
 func (r *LoginCodeRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
-	return r.q().DeleteLoginCodesByUserID(ctx, pgconv.UUIDToPgtype(userID))
-}
-
-func (r *LoginCodeRepository) DeleteExpiredBefore(ctx context.Context, before time.Time) error {
-	return r.q().DeleteExpiredLoginCodes(ctx, pgtype.Timestamptz{Time: before, Valid: true})
+	if err := r.q().DeleteLoginCodesByUserID(ctx, pgconv.UUIDToPgtype(userID)); err != nil {
+		return fmt.Errorf("delete login codes by user id: %w", err)
+	}
+	return nil
 }
 
 func (r *LoginCodeRepository) DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error) {
-	return r.q().DeleteExpiredLoginCodesBatch(ctx, postgres.DeleteExpiredLoginCodesBatchParams{
+	n, err := r.q().DeleteExpiredLoginCodesBatch(ctx, pgen.DeleteExpiredLoginCodesBatchParams{
 		ExpiresAt: pgtype.Timestamptz{Time: before, Valid: true},
 		Limit:     batchSize,
 	})
+	if err != nil {
+		return 0, fmt.Errorf("delete expired login codes batch: %w", err)
+	}
+	return n, nil
 }
 
 type loginCodeRow struct {
@@ -139,7 +161,7 @@ type loginCodeRow struct {
 	phoneEncrypted bool
 }
 
-func toLoginCodeRowPhoneEmail(row postgres.GetLatestLoginCodeByPhoneAndEmailAndPurposeRow) loginCodeRow {
+func toLoginCodeRowPhoneEmail(row pgen.GetLatestLoginCodeByPhoneAndEmailAndPurposeRow) loginCodeRow {
 	return loginCodeRow{
 		id:             row.ID,
 		userID:         row.UserID,
