@@ -21,10 +21,14 @@ import (
 
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
-	Auth                     *identityapp.AuthService
+	Auth                     *identityapp.AuthenticationService
+	PhoneChange              *identityapp.PhoneChangeService
+	Profile                  *identityapp.ProfileService
+	Logout                   *identityapp.LogoutService
+	Sessions                 identityapp.SessionService
+	MeEnricher               MeEnricher
 	Billing                  *billingapp.BillingService
 	Admin                    *adminapp.AdminService
-	Sessions                 identityapp.SessionService
 	Properties               *propertiesapp.PropertyService
 	AddressSuggester         propertiesapp.AddressSuggester
 	Leases                   *leasesapp.LeaseService
@@ -85,7 +89,19 @@ func New(deps Deps) http.Handler {
 		r.Get("/internal/perf/db-pool", dbPoolDiagnosticsHandler(deps.DBPoolStats))
 	}
 
-	authHandlers := NewAuthHandlers(deps.Auth, deps.Billing, deps.CookieSecure, deps.Logger, deps.EmailSendLimiter, deps.EmailVerifyLimiter, deps.PhoneChangeSendLimiter, deps.PhoneChangeVerifyLimiter)
+	authHandlers := NewAuthHandlers(
+		deps.Auth,
+		deps.PhoneChange,
+		deps.Profile,
+		deps.Logout,
+		deps.CookieSecure,
+		deps.Logger,
+		deps.EmailSendLimiter,
+		deps.EmailVerifyLimiter,
+		deps.PhoneChangeSendLimiter,
+		deps.PhoneChangeVerifyLimiter,
+		deps.MeEnricher,
+	)
 	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Logger)
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger)
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Logger)

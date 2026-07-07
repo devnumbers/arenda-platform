@@ -1,12 +1,9 @@
 package domain
 
 import (
-	"errors"
 	"regexp"
 	"strings"
 )
-
-var ErrInvalidPhone = errors.New("invalid Russian phone number")
 
 var phoneRegex = regexp.MustCompile(`^(?:\+7|7|8)(9\d{9})$`)
 

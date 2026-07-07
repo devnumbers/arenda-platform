@@ -46,7 +46,6 @@ type Querier interface {
 	DeleteExpiredLoginCodes(ctx context.Context, expiresAt pgtype.Timestamptz) error
 	DeleteExpiredLoginCodesBatch(ctx context.Context, arg DeleteExpiredLoginCodesBatchParams) (int64, error)
 	DeleteExpiredLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndEmailParams) error
-	DeleteExpiredLoginCodesByPhoneAndUserID(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndUserIDParams) error
 	DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error
 	DeleteExpiredSessionsBatch(ctx context.Context, arg DeleteExpiredSessionsBatchParams) (int64, error)
 	DeleteFutureGeneratedOperations(ctx context.Context, arg DeleteFutureGeneratedOperationsParams) error
@@ -71,14 +70,12 @@ type Querier interface {
 	DeleteUneditedOperationsByLease(ctx context.Context, arg DeleteUneditedOperationsByLeaseParams) error
 	DeleteUneditedOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedOperationsByRecurringOperationParams) error
 	DeleteUnusedLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndEmailParams) error
-	DeleteUnusedLoginCodesByPhoneAndUserID(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndUserIDParams) error
 	GetFinanceReportByCategory(ctx context.Context, arg GetFinanceReportByCategoryParams) ([]GetFinanceReportByCategoryRow, error)
 	GetFinanceReportByMonth(ctx context.Context, arg GetFinanceReportByMonthParams) ([]GetFinanceReportByMonthRow, error)
 	GetFinanceReportByProperty(ctx context.Context, arg GetFinanceReportByPropertyParams) ([]GetFinanceReportByPropertyRow, error)
 	GetFinanceReportTotals(ctx context.Context, arg GetFinanceReportTotalsParams) (GetFinanceReportTotalsRow, error)
 	GetLastSucceededSubscriptionPaymentBySubscriptionID(ctx context.Context, subscriptionID pgtype.UUID) (SubscriptionPayment, error)
 	GetLatestLoginCodeByPhoneAndEmailAndPurpose(ctx context.Context, arg GetLatestLoginCodeByPhoneAndEmailAndPurposeParams) (GetLatestLoginCodeByPhoneAndEmailAndPurposeRow, error)
-	GetLatestLoginCodeByPhoneAndPurposeAndUserID(ctx context.Context, arg GetLatestLoginCodeByPhoneAndPurposeAndUserIDParams) (GetLatestLoginCodeByPhoneAndPurposeAndUserIDRow, error)
 	GetLeaseByID(ctx context.Context, id pgtype.UUID) (Lease, error)
 	GetLeaseByIDAndOwner(ctx context.Context, arg GetLeaseByIDAndOwnerParams) (Lease, error)
 	GetLeaseByIDAndOwnerForUpdate(ctx context.Context, arg GetLeaseByIDAndOwnerForUpdateParams) (Lease, error)
@@ -119,6 +116,7 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone string) (User, error)
+	GetUserByPhoneForUpdate(ctx context.Context, phone string) (User, error)
 	GetUserPhoneByID(ctx context.Context, id pgtype.UUID) (GetUserPhoneByIDRow, error)
 	GetVerifiedEmailByUserID(ctx context.Context, id pgtype.UUID) (pgtype.Text, error)
 	HasDepositReturnForLease(ctx context.Context, leaseID pgtype.UUID) (bool, error)

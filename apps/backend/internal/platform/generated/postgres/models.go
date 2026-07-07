@@ -306,18 +306,6 @@ type Session struct {
 	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
 }
 
-type SmsCode struct {
-	ID             pgtype.UUID        `json:"id"`
-	UserID         pgtype.UUID        `json:"user_id"`
-	Phone          string             `json:"phone"`
-	CodeHash       string             `json:"code_hash"`
-	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
-	Used           bool               `json:"used"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	Purpose        string             `json:"purpose"`
-	PhoneEncrypted bool               `json:"phone_encrypted"`
-}
-
 type SubscriptionPayment struct {
 	ID                    pgtype.UUID        `json:"id"`
 	UserID                pgtype.UUID        `json:"user_id"`

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -65,8 +65,12 @@ func NewBillingService(
 
 // OnUserRegistered handles the identity.UserRegistered event by setting up the
 // default subscription for a newly-created user.
-func (s *BillingService) OnUserRegistered(ctx context.Context, event identityapp.UserRegistered) error {
-	return s.onboarding.SetupDefaultSubscription(ctx, event.UserID)
+func (s *BillingService) OnUserRegistered(ctx context.Context, event any) error {
+	e, ok := event.(identityapp.UserRegistered)
+	if !ok {
+		return fmt.Errorf("unexpected event type %T", event)
+	}
+	return s.onboarding.SetupDefaultSubscription(ctx, e.UserID)
 }
 
 func upgradePaymentDescription(name domain.TariffName, period domain.SubscriptionPeriod) string {

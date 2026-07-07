@@ -3,7 +3,6 @@ package domain
 import (
 	"crypto/subtle"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"time"
 
@@ -11,19 +10,8 @@ import (
 )
 
 const (
-	LoginCodeTTL          = 5 * time.Minute
-	LoginAttemptWindowTTL = 30 * time.Minute
-	MaxLoginFailures      = 15
-)
-
-const (
-	LoginCodePurposeLogin       = "login"
-	LoginCodePurposePhoneChange = "phone_change"
-)
-
-var (
-	ErrLoginCodeInvalid = errors.New("login code invalid")
-	ErrTooManyAttempts  = errors.New("too many attempts")
+	// LoginCodeTTL is the lifetime of a newly generated login code.
+	LoginCodeTTL = 5 * time.Minute
 )
 
 type LoginCode struct {
@@ -31,14 +19,14 @@ type LoginCode struct {
 	UserID    *uuid.UUID
 	Phone     Phone
 	Email     Email
-	Purpose   string
+	Purpose   LoginCodePurpose
 	CodeHash  string
 	ExpiresAt time.Time
 	Used      bool
 	CreatedAt time.Time
 }
 
-func NewLoginCode(phone Phone, email Email, codeHash, purpose string, userID *uuid.UUID, now time.Time) (LoginCode, error) {
+func NewLoginCode(phone Phone, email Email, codeHash string, purpose LoginCodePurpose, userID *uuid.UUID, now time.Time) (LoginCode, error) {
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return LoginCode{}, fmt.Errorf("generate login code id: %w", err)
@@ -73,36 +61,19 @@ func (c *LoginCode) Verify(codeHash string, now time.Time) error {
 		return ErrLoginCodeInvalid
 	}
 
+	return nil
+}
+
+// MarkUsed marks the login code as used.
+func (c *LoginCode) MarkUsed() {
 	c.Used = true
+}
+
+// VerifyAndUse checks the code hash and, if valid, marks the code as used.
+func (c *LoginCode) VerifyAndUse(codeHash string, now time.Time) error {
+	if err := c.Verify(codeHash, now); err != nil {
+		return err
+	}
+	c.MarkUsed()
 	return nil
-}
-
-type AttemptWindow struct {
-	Failures       int
-	FirstFailureAt time.Time
-	LastFailureAt  time.Time
-}
-
-func NewAttemptWindow(now time.Time) AttemptWindow {
-	return AttemptWindow{FirstFailureAt: now, LastFailureAt: now}
-}
-
-func (w *AttemptWindow) RecordFailure(now time.Time) error {
-	if w.Failures == 0 || now.Sub(w.FirstFailureAt) > LoginAttemptWindowTTL {
-		w.FirstFailureAt = now
-		w.Failures = 0
-	}
-	w.Failures++
-	w.LastFailureAt = now
-	if w.Failures >= MaxLoginFailures {
-		return ErrTooManyAttempts
-	}
-	return nil
-}
-
-func (w *AttemptWindow) Blocked(now time.Time) bool {
-	if w.Failures < MaxLoginFailures {
-		return false
-	}
-	return now.Before(w.FirstFailureAt.Add(LoginAttemptWindowTTL))
 }

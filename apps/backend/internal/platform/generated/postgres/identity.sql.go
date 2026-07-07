@@ -43,7 +43,7 @@ func (q *Queries) CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams
 const createLoginCode = `-- name: CreateLoginCode :exec
 INSERT INTO login_codes (id, phone, email, code_hash, expires_at, user_id, purpose, phone_encrypted)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-ON CONFLICT (phone, email, purpose) WHERE used = false
+ON CONFLICT (phone, COALESCE(email, ''), purpose) WHERE used = false
 DO UPDATE SET
     id = EXCLUDED.id,
     code_hash = EXCLUDED.code_hash,
@@ -215,28 +215,6 @@ func (q *Queries) DeleteExpiredLoginCodesByPhoneAndEmail(ctx context.Context, ar
 	return err
 }
 
-const deleteExpiredLoginCodesByPhoneAndUserID = `-- name: DeleteExpiredLoginCodesByPhoneAndUserID :exec
-DELETE FROM login_codes
-WHERE phone = $1 AND user_id = $2 AND purpose = $3 AND used = false AND expires_at < $4
-`
-
-type DeleteExpiredLoginCodesByPhoneAndUserIDParams struct {
-	Phone     pgtype.Text        `json:"phone"`
-	UserID    pgtype.UUID        `json:"user_id"`
-	Purpose   string             `json:"purpose"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-}
-
-func (q *Queries) DeleteExpiredLoginCodesByPhoneAndUserID(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndUserIDParams) error {
-	_, err := q.db.Exec(ctx, deleteExpiredLoginCodesByPhoneAndUserID,
-		arg.Phone,
-		arg.UserID,
-		arg.Purpose,
-		arg.ExpiresAt,
-	)
-	return err
-}
-
 const deleteExpiredSessions = `-- name: DeleteExpiredSessions :exec
 DELETE FROM sessions WHERE expires_at < $1
 `
@@ -377,22 +355,6 @@ func (q *Queries) DeleteUnusedLoginCodesByPhoneAndEmail(ctx context.Context, arg
 	return err
 }
 
-const deleteUnusedLoginCodesByPhoneAndUserID = `-- name: DeleteUnusedLoginCodesByPhoneAndUserID :exec
-DELETE FROM login_codes
-WHERE phone = $1 AND purpose = $2 AND user_id = $3 AND used = false
-`
-
-type DeleteUnusedLoginCodesByPhoneAndUserIDParams struct {
-	Phone   pgtype.Text `json:"phone"`
-	Purpose string      `json:"purpose"`
-	UserID  pgtype.UUID `json:"user_id"`
-}
-
-func (q *Queries) DeleteUnusedLoginCodesByPhoneAndUserID(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndUserIDParams) error {
-	_, err := q.db.Exec(ctx, deleteUnusedLoginCodesByPhoneAndUserID, arg.Phone, arg.Purpose, arg.UserID)
-	return err
-}
-
 const getLatestLoginCodeByPhoneAndEmailAndPurpose = `-- name: GetLatestLoginCodeByPhoneAndEmailAndPurpose :one
 SELECT id, user_id, phone, email, code_hash, expires_at, used, created_at, purpose, phone_encrypted FROM login_codes
 WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false AND expires_at > $4
@@ -429,57 +391,6 @@ func (q *Queries) GetLatestLoginCodeByPhoneAndEmailAndPurpose(ctx context.Contex
 		arg.ExpiresAt,
 	)
 	var i GetLatestLoginCodeByPhoneAndEmailAndPurposeRow
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Phone,
-		&i.Email,
-		&i.CodeHash,
-		&i.ExpiresAt,
-		&i.Used,
-		&i.CreatedAt,
-		&i.Purpose,
-		&i.PhoneEncrypted,
-	)
-	return i, err
-}
-
-const getLatestLoginCodeByPhoneAndPurposeAndUserID = `-- name: GetLatestLoginCodeByPhoneAndPurposeAndUserID :one
-SELECT id, user_id, phone, email, code_hash, expires_at, used, created_at, purpose, phone_encrypted FROM login_codes
-WHERE phone = $1 AND purpose = $2 AND user_id = $3 AND used = false AND expires_at > $4
-ORDER BY created_at DESC
-LIMIT 1
-FOR UPDATE
-`
-
-type GetLatestLoginCodeByPhoneAndPurposeAndUserIDParams struct {
-	Phone     pgtype.Text        `json:"phone"`
-	Purpose   string             `json:"purpose"`
-	UserID    pgtype.UUID        `json:"user_id"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-}
-
-type GetLatestLoginCodeByPhoneAndPurposeAndUserIDRow struct {
-	ID             pgtype.UUID        `json:"id"`
-	UserID         pgtype.UUID        `json:"user_id"`
-	Phone          pgtype.Text        `json:"phone"`
-	Email          pgtype.Text        `json:"email"`
-	CodeHash       string             `json:"code_hash"`
-	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
-	Used           bool               `json:"used"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	Purpose        string             `json:"purpose"`
-	PhoneEncrypted bool               `json:"phone_encrypted"`
-}
-
-func (q *Queries) GetLatestLoginCodeByPhoneAndPurposeAndUserID(ctx context.Context, arg GetLatestLoginCodeByPhoneAndPurposeAndUserIDParams) (GetLatestLoginCodeByPhoneAndPurposeAndUserIDRow, error) {
-	row := q.db.QueryRow(ctx, getLatestLoginCodeByPhoneAndPurposeAndUserID,
-		arg.Phone,
-		arg.Purpose,
-		arg.UserID,
-		arg.ExpiresAt,
-	)
-	var i GetLatestLoginCodeByPhoneAndPurposeAndUserIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -662,6 +573,29 @@ SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at
 
 func (q *Queries) GetUserByPhone(ctx context.Context, phone string) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByPhone, phone)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.Role,
+		&i.Name,
+		&i.Surname,
+		&i.Patronymic,
+		&i.Email,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PhoneEncrypted,
+		&i.EmailVerifiedAt,
+	)
+	return i, err
+}
+
+const getUserByPhoneForUpdate = `-- name: GetUserByPhoneForUpdate :one
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE phone = $1 FOR UPDATE
+`
+
+func (q *Queries) GetUserByPhoneForUpdate(ctx context.Context, phone string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByPhoneForUpdate, phone)
 	var i User
 	err := row.Scan(
 		&i.ID,

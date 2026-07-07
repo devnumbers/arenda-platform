@@ -7,6 +7,9 @@ SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at
 -- name: GetUserByPhone :one
 SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE phone = $1;
 
+-- name: GetUserByPhoneForUpdate :one
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE phone = $1 FOR UPDATE;
+
 -- name: CreateUser :one
 INSERT INTO users (id, phone, role, phone_encrypted, email, email_verified_at)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -20,17 +23,10 @@ ORDER BY created_at DESC
 LIMIT 1
 FOR UPDATE;
 
--- name: GetLatestLoginCodeByPhoneAndPurposeAndUserID :one
-SELECT id, user_id, phone, email, code_hash, expires_at, used, created_at, purpose, phone_encrypted FROM login_codes
-WHERE phone = $1 AND purpose = $2 AND user_id = $3 AND used = false AND expires_at > $4
-ORDER BY created_at DESC
-LIMIT 1
-FOR UPDATE;
-
 -- name: CreateLoginCode :exec
 INSERT INTO login_codes (id, phone, email, code_hash, expires_at, user_id, purpose, phone_encrypted)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-ON CONFLICT (phone, email, purpose) WHERE used = false
+ON CONFLICT (phone, COALESCE(email, ''), purpose) WHERE used = false
 DO UPDATE SET
     id = EXCLUDED.id,
     code_hash = EXCLUDED.code_hash,
@@ -43,17 +39,9 @@ DO UPDATE SET
 DELETE FROM login_codes
 WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false AND expires_at < $4;
 
--- name: DeleteExpiredLoginCodesByPhoneAndUserID :exec
-DELETE FROM login_codes
-WHERE phone = $1 AND user_id = $2 AND purpose = $3 AND used = false AND expires_at < $4;
-
 -- name: DeleteUnusedLoginCodesByPhoneAndEmail :exec
 DELETE FROM login_codes
 WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false;
-
--- name: DeleteUnusedLoginCodesByPhoneAndUserID :exec
-DELETE FROM login_codes
-WHERE phone = $1 AND purpose = $2 AND user_id = $3 AND used = false;
 
 -- name: MarkLoginCodeUsed :exec
 UPDATE login_codes SET used = true WHERE id = $1;

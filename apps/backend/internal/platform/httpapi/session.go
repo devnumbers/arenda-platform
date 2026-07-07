@@ -2,8 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -85,12 +83,6 @@ func sessionTokenFromRequest(r *http.Request, secure bool) string {
 	return cookie.Value
 }
 
-// hashSessionToken hashes a raw session token for repository lookup.
-func hashSessionToken(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])
-}
-
 type fallbackClock struct{}
 
 func (fallbackClock) Now() time.Time { return time.Now().UTC() }
@@ -133,7 +125,7 @@ func SessionMiddleware(logger *slog.Logger, sessions application.SessionService,
 			}
 
 			now := clock.Now()
-			session, user, err := sessions.Load(r.Context(), hashSessionToken(token), now)
+			session, user, err := sessions.Load(r.Context(), token, now)
 			if err != nil {
 				if errors.Is(err, application.ErrNotFound) {
 					clearSessionCookie(w, secure)
@@ -152,13 +144,15 @@ func SessionMiddleware(logger *slog.Logger, sessions application.SessionService,
 				return
 			}
 
-			if session.Refresh(now) {
-				if err := sessions.Update(r.Context(), session); err != nil {
+			refreshedSession := session
+			if refreshedSession.Refresh(now) {
+				if err := sessions.Update(r.Context(), refreshedSession); err != nil {
 					if logger != nil {
 						logger.ErrorContext(r.Context(), "failed to refresh session", slog.String("error", sanitizeError(err)))
 					}
 				} else {
-					setSessionCookie(w, token, session.ExpiresAt, secure)
+					setSessionCookie(w, token, refreshedSession.ExpiresAt, secure)
+					session = refreshedSession
 				}
 			}
 

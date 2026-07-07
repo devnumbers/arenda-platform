@@ -28,38 +28,52 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 	return dec.Decode(dst)
 }
 
+// MeEnricher augments a MeResponse with cross-cutting data (for example, the
+// current subscription). Transport code may pass nil when no enrichment is
+// required.
+type MeEnricher func(ctx context.Context, userID uuid.UUID, resp *openapi.MeResponse) error
+
 // AuthHandlers implements the generated non-strict ServerInterface.
 type AuthHandlers struct {
-	auth              *application.AuthService
-	billing           *billingapp.BillingService
+	auth              *application.AuthenticationService
+	phoneChange       *application.PhoneChangeService
+	profile           *application.ProfileService
+	logout            *application.LogoutService
 	cookieSecure      bool
 	logger            *slog.Logger
 	emailSend         *RateLimiter
 	emailVerify       *RateLimiter
 	phoneChangeSend   *RateLimiter
 	phoneChangeVerify *RateLimiter
+	meEnricher        MeEnricher
 }
 
 // NewAuthHandlers creates HTTP handlers for the auth API.
 func NewAuthHandlers(
-	auth *application.AuthService,
-	billing *billingapp.BillingService,
+	auth *application.AuthenticationService,
+	phoneChange *application.PhoneChangeService,
+	profile *application.ProfileService,
+	logout *application.LogoutService,
 	cookieSecure bool,
 	logger *slog.Logger,
 	emailSend *RateLimiter,
 	emailVerify *RateLimiter,
 	phoneChangeSend *RateLimiter,
 	phoneChangeVerify *RateLimiter,
+	meEnricher MeEnricher,
 ) *AuthHandlers {
 	return &AuthHandlers{
 		auth:              auth,
-		billing:           billing,
+		phoneChange:       phoneChange,
+		profile:           profile,
+		logout:            logout,
 		cookieSecure:      cookieSecure,
 		logger:            logger,
 		emailSend:         emailSend,
 		emailVerify:       emailVerify,
 		phoneChangeSend:   phoneChangeSend,
 		phoneChangeVerify: phoneChangeVerify,
+		meEnricher:        meEnricher,
 	}
 }
 
@@ -100,6 +114,8 @@ func (h *AuthHandlers) SendCode(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
 			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Превышен лимит запросов"))
+		case errors.Is(err, application.ErrEmailDoesNotMatch):
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Некорректные учётные данные")))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -137,7 +153,7 @@ func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	raw, user, err := h.auth.VerifyLoginCode(r.Context(), phone, email, body.Code)
+	raw, user, err := h.auth.VerifyCode(r.Context(), phone, email, body.Code)
 	if err != nil {
 		switch {
 		case errors.Is(err, application.ErrUserBlocked),
@@ -166,8 +182,13 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.auth.Logout(r.Context(), hashSessionToken(token)); err != nil {
-		h.logger.ErrorContext(r.Context(), "logout failed", slog.String("error", sanitizeError(err)))
+	if err := h.logout.Logout(r.Context(), token); err != nil {
+		if !errors.Is(err, application.ErrNotFound) {
+			h.logger.ErrorContext(r.Context(), "logout failed", slog.String("error", sanitizeError(err)))
+			clearSessionCookie(w, h.cookieSecure)
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 	}
 
 	clearSessionCookie(w, h.cookieSecure)
@@ -182,7 +203,7 @@ func (h *AuthHandlers) LogoutAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.auth.LogoutAll(r.Context(), userID); err != nil {
+	if err := h.logout.LogoutAll(r.Context(), userID); err != nil {
 		h.logger.ErrorContext(r.Context(), "logout all failed", slog.String("error", sanitizeError(err)))
 		clearSessionCookie(w, h.cookieSecure)
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
@@ -191,22 +212,6 @@ func (h *AuthHandlers) LogoutAll(w http.ResponseWriter, r *http.Request) {
 
 	clearSessionCookie(w, h.cookieSecure)
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *AuthHandlers) enrichSubscription(ctx context.Context, userID uuid.UUID, resp *openapi.MeResponse) error {
-	if h.billing == nil {
-		return nil
-	}
-	view, err := h.billing.GetSubscription(ctx, userID)
-	if err != nil {
-		if errors.Is(err, billingapp.ErrSubscriptionNotFound) {
-			return nil
-		}
-		return err
-	}
-	s := subscriptionResponse(view)
-	resp.Subscription = &s
-	return nil
 }
 
 // GetMe implements GET /me.
@@ -220,7 +225,7 @@ func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
 		var err error
-		user, err = h.auth.Me(r.Context(), userID)
+		user, err = h.profile.Me(r.Context(), userID)
 		if err != nil {
 			if errors.Is(err, application.ErrNotFound) {
 				writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Сессия недействительна"))
@@ -232,19 +237,14 @@ func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := meResponse(user)
-	if err := h.enrichSubscription(r.Context(), userID, &resp); err != nil {
-		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-		return
+	if h.meEnricher != nil {
+		if err := h.meEnricher(r.Context(), userID, &resp); err != nil {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, resp)
-}
-
-func optionalStringFromPtr(s *string) domain.Optional[string] {
-	if s == nil {
-		return domain.Optional[string]{Set: false}
-	}
-	return domain.Optional[string]{Value: *s, Set: true}
 }
 
 // UpdateMe implements PATCH /me.
@@ -262,14 +262,14 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := application.UpdateUserCommand{
-		Email:      optionalStringFromPtr(body.Email),
-		Name:       optionalStringFromPtr(body.Name),
-		Surname:    optionalStringFromPtr(body.Surname),
-		Patronymic: optionalStringFromPtr(body.Patronymic),
+	cmd := application.UpdateProfileCommand{
+		Email:      body.Email,
+		Name:       body.Name,
+		Surname:    body.Surname,
+		Patronymic: body.Patronymic,
 	}
 
-	user, err := h.auth.UpdateUser(r.Context(), userID, cmd)
+	user, err := h.profile.UpdateProfile(r.Context(), userID, cmd)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidEmail):
@@ -285,9 +285,11 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := meResponse(user)
-	if err := h.enrichSubscription(r.Context(), userID, &resp); err != nil {
-		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-		return
+	if h.meEnricher != nil {
+		if err := h.meEnricher(r.Context(), userID, &resp); err != nil {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, resp)
@@ -320,7 +322,7 @@ func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := h.auth.SendPhoneChangeCode(r.Context(), userID, phone); err != nil {
+	if err := h.phoneChange.SendChangeCode(r.Context(), userID, phone); err != nil {
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
 			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", userFacingDetailOrDefault(r.Context(), err, "Новый номер должен отличаться от текущего")))
@@ -372,7 +374,7 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.auth.ChangePhone(r.Context(), userID, phone, body.Code, hashSessionToken(token))
+	user, err := h.phoneChange.ChangePhone(r.Context(), userID, phone, body.Code, token)
 	if err != nil {
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
@@ -395,6 +397,11 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 }
 
 func meResponse(user domain.User) openapi.MeResponse {
+	var email *string
+	if user.Email != nil {
+		s := user.Email.String()
+		email = &s
+	}
 	return openapi.MeResponse{
 		Id:         user.ID,
 		Phone:      user.Phone.String(),
@@ -402,7 +409,28 @@ func meResponse(user domain.User) openapi.MeResponse {
 		Name:       user.Name,
 		Surname:    user.Surname,
 		Patronymic: user.Patronymic,
-		Email:      user.Email,
+		Email:      email,
+	}
+}
+
+// BillingMeEnricher returns a MeEnricher that adds the current billing
+// subscription to a MeResponse. It keeps the billing-to-OpenAPI mapping in the
+// HTTP layer so the application layer does not depend on openapi types.
+func BillingMeEnricher(billing *billingapp.BillingService) MeEnricher {
+	return func(ctx context.Context, userID uuid.UUID, resp *openapi.MeResponse) error {
+		if billing == nil {
+			return nil
+		}
+		view, err := billing.GetSubscription(ctx, userID)
+		if err != nil {
+			if errors.Is(err, billingapp.ErrSubscriptionNotFound) {
+				return nil
+			}
+			return err
+		}
+		sub := subscriptionResponse(view)
+		resp.Subscription = &sub
+		return nil
 	}
 }
 

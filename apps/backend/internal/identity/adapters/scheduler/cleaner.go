@@ -1,7 +1,8 @@
-package cleaner
+package scheduler
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -22,8 +23,18 @@ type Cleaner struct {
 	logger    *slog.Logger
 }
 
-// New creates a Cleaner with the given repositories and schedule.
-func New(sessions identityapp.SessionRepository, codes identityapp.LoginCodeRepository, attempts identityapp.AttemptRepository, clock clock.Clock, interval, retention time.Duration, logger *slog.Logger) *Cleaner {
+// NewCleaner creates a Cleaner with the given repositories and schedule.
+func NewCleaner(
+	sessions identityapp.SessionRepository,
+	codes identityapp.LoginCodeRepository,
+	attempts identityapp.AttemptRepository,
+	clock clock.Clock,
+	interval, retention time.Duration,
+	logger *slog.Logger,
+) *Cleaner {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &Cleaner{
 		sessions:  sessions,
 		codes:     codes,
@@ -53,18 +64,26 @@ func (c *Cleaner) Run(ctx context.Context) {
 func (c *Cleaner) clean(ctx context.Context) {
 	before := c.clock.Now().UTC().Add(-c.retention)
 
-	c.deleteInBatches(ctx, "sms codes", before, c.codes.DeleteExpiredBeforeBatch)
+	c.deleteInBatches(ctx, "login codes", before, c.codes.DeleteExpiredBeforeBatch)
 	c.deleteInBatches(ctx, "sessions", before, c.sessions.DeleteExpiredBeforeBatch)
 	c.deleteInBatches(ctx, "login attempts", before, c.attempts.DeleteStaleBeforeBatch)
 
-	c.logger.Info("cleanup completed", slog.Time("before", before))
+	c.logger.InfoContext(ctx, "cleanup completed", slog.Time("before", before))
 }
 
-func (c *Cleaner) deleteInBatches(ctx context.Context, name string, before time.Time, deleteBatch func(context.Context, time.Time, int32) (int64, error)) {
+func (c *Cleaner) deleteInBatches(
+	ctx context.Context,
+	name string,
+	before time.Time,
+	deleteBatch func(context.Context, time.Time, int32) (int64, error),
+) {
 	for {
 		n, err := deleteBatch(ctx, before, defaultDeleteBatchSize)
 		if err != nil {
-			c.logger.Error("failed to clean expired "+name, slog.String("error", err.Error()))
+			if errors.Is(err, context.Canceled) {
+				return
+			}
+			c.logger.ErrorContext(ctx, "failed to clean expired "+name, slog.String("error", err.Error()))
 			return
 		}
 		if n == 0 {
