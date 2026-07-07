@@ -11,6 +11,7 @@ import {PageHeader} from '@/shared/ui/page-header';
 import type {PropertyType} from '@/entities/property/model/types';
 import {PropertyTypeSelect} from './PropertyTypeSelect';
 import {AddressField} from './AddressField';
+import {PropertyEditFormLoading} from './PropertyEditFormLoading';
 import styles from './PropertyEditForm.module.css';
 
 const MAX_NAME_LENGTH = 50;
@@ -115,7 +116,7 @@ export function PropertyEditForm({
     };
 
     if (propertyQuery.isPending) {
-        return <div className={styles.loading}>Загрузка...</div>;
+        return <PropertyEditFormLoading />;
     }
 
     if (propertyQuery.isError || !propertyQuery.data) {
