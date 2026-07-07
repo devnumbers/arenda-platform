@@ -1,100 +1,45 @@
 'use client';
 
-import { useMemo, useState, type JSX } from 'react';
-import clsx from 'clsx';
+import { useMemo, type JSX } from 'react';
 import {
-  Popover,
-  PopoverContent,
-  PopoverDialog,
-  PopoverTrigger,
-} from '@heroui/react';
-import {
-  incomeCategories,
-  expenseCategories,
-  type OperationType,
-  type OperationCategory,
+    incomeCategories,
+    expenseCategories,
+    type OperationType,
+    type OperationCategory,
 } from '@/entities/operation/model/types';
-import { ChevronDown } from '@/shared/assets/icons';
-import styles from './CategorySelect.module.css';
+import { Select } from '@/shared/ui/select';
 
 export type CategorySelectProps = {
-  readonly type: OperationType;
-  readonly value?: OperationCategory;
-  readonly onChange: (category: OperationCategory) => void;
-  readonly error?: string;
-  readonly disabled?: boolean;
+    readonly type: OperationType;
+    readonly value?: OperationCategory;
+    readonly onChange: (category: OperationCategory) => void;
+    readonly error?: string;
+    readonly disabled?: boolean;
 };
 
 export function CategorySelect({
-  type,
-  value,
-  onChange,
-  error,
-  disabled,
+    type,
+    value,
+    onChange,
+    error,
+    disabled,
 }: CategorySelectProps): JSX.Element {
-  const [isOpen, setIsOpen] = useState(false);
+    const options = useMemo(
+        () => (type === 'income' ? incomeCategories : expenseCategories),
+        [type]
+    );
 
-  const options = useMemo(
-    () => (type === 'income' ? incomeCategories : expenseCategories),
-    [type]
-  );
+    const label = type === 'income' ? 'Категория дохода' : 'Категория расхода';
 
-  const selectedLabel = useMemo(
-    () => options.find((option) => option.value === value)?.label ?? '',
-    [options, value]
-  );
-
-  const handleSelect = (selectedValue: OperationCategory) => {
-    onChange(selectedValue);
-    setIsOpen(false);
-  };
-
-  const label = type === 'income' ? 'Категория дохода' : 'Категория расхода';
-
-  return (
-    <Popover isOpen={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger>
-        <button
-          type="button"
-          className={clsx(styles.trigger, error && styles.error)}
-          disabled={disabled}
-          aria-label={label}
-        >
-          <span className={styles.label}>{label}</span>
-          <span className={styles.control}>
-            <span className={clsx(styles.value, !value && styles.placeholder)}>
-              {selectedLabel || 'Выберите категорию'}
-            </span>
-            <span className={styles.chevron} aria-hidden="true">
-              <ChevronDown />
-            </span>
-          </span>
-          {error && <span className={styles.errorText}>{error}</span>}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className={styles.dropdown}>
-        <PopoverDialog aria-label={label}>
-          <div
-            className={styles.list}
-            role="listbox"
-            aria-label={label}
-            aria-activedescendant={value}
-          >
-            {options.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                role="option"
-                aria-selected={value === option.value}
-                className={clsx(styles.item, value === option.value && styles.itemSelected)}
-                onClick={() => handleSelect(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </PopoverDialog>
-      </PopoverContent>
-    </Popover>
-  );
+    return (
+        <Select
+            label={label}
+            value={value}
+            options={options}
+            onChange={onChange}
+            error={error}
+            disabled={disabled}
+            placeholder="Выберите категорию"
+        />
+    );
 }
