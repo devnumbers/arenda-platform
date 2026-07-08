@@ -9,7 +9,8 @@ import { Select, type SelectOption } from '@/shared/ui/select';
 import styles from './PropertyActionMenu.module.css';
 
 export type PropertyActionMenuProps = {
-    readonly status: PropertyStatus;
+    readonly status?: PropertyStatus;
+    readonly disabled?: boolean;
     readonly onEdit: () => void;
     readonly onToggleMaintenance: () => void;
     readonly onToggleArchive: () => void;
@@ -17,6 +18,7 @@ export type PropertyActionMenuProps = {
 
 export function PropertyActionMenu({
     status,
+    disabled,
     onEdit,
     onToggleMaintenance,
     onToggleArchive,
@@ -25,17 +27,19 @@ export function PropertyActionMenu({
 
     const options = useMemo<SelectOption[]>(() => {
         const items: SelectOption[] = [];
-        if (status !== 'archived') {
+        if (status && status !== 'archived') {
             items.push({ value: 'edit', label: 'Редактировать объект' });
             items.push({
                 value: 'toggleMaintenance',
                 label: status === 'maintenance' ? 'Вернуть в работу' : 'На ремонт',
             });
         }
-        items.push({
-            value: 'toggleArchive',
-            label: status === 'archived' ? 'Вернуть из архива' : 'Перевести в архив',
-        });
+        if (status) {
+            items.push({
+                value: 'toggleArchive',
+                label: status === 'archived' ? 'Вернуть из архива' : 'Перевести в архив',
+            });
+        }
         return items;
     }, [status]);
 
@@ -65,6 +69,7 @@ export function PropertyActionMenu({
                     size="large"
                     aria-label="Действия"
                     icon={<Menu />}
+                    disabled={disabled}
                     onClick={onClick}
                 />
             )}
