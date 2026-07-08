@@ -3,7 +3,7 @@
 import {useParams, useRouter} from 'next/navigation';
 import type {JSX} from 'react';
 import {useCallback, useMemo, useState} from 'react';
-import { notify } from '@/shared/lib/toast';
+import {notify} from '@/shared/lib/toast';
 import {ROUTES} from '@/shared/config/routes';
 import {
     useArchiveProperty,

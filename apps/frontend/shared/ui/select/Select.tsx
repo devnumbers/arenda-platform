@@ -22,7 +22,7 @@ export type SelectOption<Value extends string = string> = {
 };
 
 export type SelectProps<Value extends string = string> = {
-    readonly label: string;
+    readonly label?: string;
     readonly value?: Value;
     readonly options: readonly SelectOption<Value>[];
     readonly onChange: (value: Value) => void;
@@ -42,6 +42,12 @@ export type SelectProps<Value extends string = string> = {
     readonly maxLength?: number;
     readonly open?: boolean;
     readonly onOpenChange?: (open: boolean) => void;
+    readonly dropdownAlign?: 'left' | 'right';
+    readonly dropdownClassName?: string;
+    readonly renderTrigger?: (props: {
+        isOpen: boolean;
+        onClick: () => void;
+    }) => ReactNode;
 };
 
 export function Select<Value extends string = string>({
@@ -65,6 +71,9 @@ export function Select<Value extends string = string>({
     onOpenChange,
     required,
     maxLength,
+    renderTrigger,
+    dropdownAlign = 'left',
+    dropdownClassName,
 }: SelectProps<Value>): JSX.Element {
     const [internalOpen, setInternalOpen] = useState(false);
     const isOpen = open !== undefined ? open : internalOpen;
@@ -110,7 +119,9 @@ export function Select<Value extends string = string>({
 
     return (
         <div className={styles.root} ref={wrapperRef}>
-            {searchable ? (
+            {renderTrigger ? (
+                renderTrigger({ isOpen, onClick: () => setIsOpen(!isOpen) })
+            ) : searchable ? (
                 <TextField
                     label={label}
                     value={inputValue}
@@ -142,7 +153,13 @@ export function Select<Value extends string = string>({
             )}
 
             {isOpen && canShowDropdown && (
-                <div className={styles.dropdown}>
+                <div
+                    className={clsx(
+                        styles.dropdown,
+                        dropdownAlign === 'right' ? styles.dropdownAlignRight : styles.dropdownAlignLeft,
+                        dropdownClassName
+                    )}
+                >
                     {showMessage ? (
                         <div className={styles.message}>
                             {loading ? 'Загрузка...' : emptyMessage}

@@ -1,4 +1,5 @@
 export { PropertyDetailPage } from './ui/PropertyDetailPage';
+export { PropertyActionMenu } from './ui/PropertyActionMenu';
 export { PropertyDetailLoading } from './ui/PropertyDetailLoading';
 export { PropertyDetailError } from './ui/PropertyDetailError';
 export { PropertyDetailHeader } from './ui/PropertyDetailHeader';
@@ -6,7 +7,6 @@ export { PropertyGallery } from './ui/PropertyGallery';
 export { PropertyStatusSection } from './ui/PropertyStatusSection';
 export { PropertyDetailSection } from './ui/PropertyDetailSection';
 export { PropertyDetailStatusBadge } from './ui/PropertyDetailStatusBadge';
-export { PropertyActionMenu } from './ui/PropertyActionMenu';
 export { PropertyLeaseCard } from './ui/PropertyLeaseCard';
 export { PropertyTenantCard } from './ui/PropertyTenantCard';
 export { PropertyPaymentsCard } from './ui/PropertyPaymentsCard';

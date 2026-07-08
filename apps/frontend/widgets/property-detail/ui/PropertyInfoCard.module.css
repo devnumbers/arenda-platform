@@ -4,6 +4,7 @@
   font-weight: 600;
   line-height: var(--line-height-text-l);
   color: var(--color-text);
+  overflow-wrap: break-word;
 }
 
 .description {
@@ -15,4 +16,5 @@
   line-height: var(--line-height-text-m);
   color: var(--color-text);
   white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
