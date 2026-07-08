@@ -81,7 +81,9 @@
 
 .dropdownAlignLeft {
   left: 0;
-  right: 0;
+  right: auto;
+  min-width: 100%;
+  width: max-content;
 }
 
 .dropdownAlignRight {

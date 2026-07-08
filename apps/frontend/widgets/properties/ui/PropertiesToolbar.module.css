@@ -14,7 +14,7 @@
 .desktopOnly {
   display: none;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
 .mobileOnly {
@@ -127,11 +127,3 @@
   gap: 8px;
 }
 
-.popoverOption {
-  justify-content: flex-start;
-}
-
-:global(.popover__dialog) .options {
-  flex-direction: column;
-  flex-wrap: nowrap;
-}

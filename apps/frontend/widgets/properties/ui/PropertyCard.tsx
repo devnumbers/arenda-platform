@@ -110,15 +110,16 @@ export function PropertyCard({property}: PropertyCardProps): JSX.Element {
         <article className={styles.root}>
             <NextLink
                 href={ROUTES.property(property.id)}
-                className={styles.header}
+                className={styles.cardLink}
                 aria-label={`Открыть объект ${property.name}`}
-            >
+            />
+            <div className={styles.header}>
                 <div className={styles.meta}>
                     <h3 className={styles.title}>{property.name}</h3>
                     {displayStatus && <PropertyStatusBadge status={displayStatus}/>}
                 </div>
                 <PropertyThumbnail size="small"/>
-            </NextLink>
+            </div>
 
             {showLeaseInfo && (
                 <div className={styles.lease}>

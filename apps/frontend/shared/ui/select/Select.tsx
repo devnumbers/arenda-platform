@@ -21,11 +21,9 @@ export type SelectOption<Value extends string = string> = {
     readonly label: string;
 };
 
-export type SelectProps<Value extends string = string> = {
+type SelectBaseProps<Value extends string = string> = {
     readonly label?: string;
-    readonly value?: Value;
     readonly options: readonly SelectOption<Value>[];
-    readonly onChange: (value: Value) => void;
     readonly placeholder?: string;
     readonly error?: string;
     readonly disabled?: boolean;
@@ -50,11 +48,28 @@ export type SelectProps<Value extends string = string> = {
     }) => ReactNode;
 };
 
+type SelectSingleProps<Value extends string = string> = SelectBaseProps<Value> & {
+    readonly multiple?: false;
+    readonly value?: Value;
+    readonly onChange: (value: Value) => void;
+};
+
+type SelectMultipleProps<Value extends string = string> = SelectBaseProps<Value> & {
+    readonly multiple: true;
+    readonly value?: readonly Value[];
+    readonly onChange: (value: Value[]) => void;
+};
+
+export type SelectProps<Value extends string = string> =
+    | SelectSingleProps<Value>
+    | SelectMultipleProps<Value>;
+
 export function Select<Value extends string = string>({
     label,
     value,
     options,
     onChange,
+    multiple = false,
     placeholder,
     error,
     disabled,
@@ -88,8 +103,28 @@ export function Select<Value extends string = string>({
     const wrapperRef = useRef<HTMLDivElement>(null);
 
     const selectedLabel = useMemo(
-        () => options.find((option) => option.value === value)?.label ?? '',
-        [options, value]
+        () => multiple ? '' : options.find((option) => option.value === value)?.label ?? '',
+        [multiple, options, value]
+    );
+
+    const selectedCount = useMemo(() => {
+        if (!multiple) return 0;
+        return (value as Value[] | undefined)?.length ?? 0;
+    }, [multiple, value]);
+
+    const triggerLabel = useMemo(() => {
+        if (!multiple || !label) return label;
+        return `${label}${selectedCount > 0 ? ` ${selectedCount}` : ''}`;
+    }, [label, multiple, selectedCount]);
+
+    const isSelected = useCallback(
+        (optionValue: Value) => {
+            if (multiple) {
+                return ((value as Value[] | undefined) ?? []).includes(optionValue);
+            }
+            return value === optionValue;
+        },
+        [multiple, value]
     );
 
     useEffect(() => {
@@ -106,10 +141,18 @@ export function Select<Value extends string = string>({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [setIsOpen]);
 
-    const handleSelect = (selectedValue: Value) => {
-        onChange(selectedValue);
-        setIsOpen(false);
-    };
+    const handleSelect = useCallback((selectedValue: Value) => {
+        if (multiple) {
+            const currentValues = (value as Value[] | undefined) ?? [];
+            const nextValues = currentValues.includes(selectedValue)
+                ? currentValues.filter((v) => v !== selectedValue)
+                : [...currentValues, selectedValue];
+            (onChange as (value: Value[]) => void)(nextValues);
+        } else {
+            (onChange as (value: Value) => void)(selectedValue);
+            setIsOpen(false);
+        }
+    }, [multiple, onChange, value, setIsOpen]);
 
     const showMessage = (loading || emptyMessage) && options.length === 0;
 
@@ -141,7 +184,7 @@ export function Select<Value extends string = string>({
                     onClick={() => setIsOpen(!isOpen)}
                     disabled={disabled}
                 >
-                    <span className={styles.label}>{label}</span>
+                    <span className={styles.label}>{triggerLabel}</span>
                     <span className={styles.control}>
                         <span className={styles.value}>{selectedLabel || placeholder}</span>
                         <span className={styles.chevron} aria-hidden="true">
@@ -165,17 +208,22 @@ export function Select<Value extends string = string>({
                             {loading ? 'Загрузка...' : emptyMessage}
                         </div>
                     ) : (
-                        <ul className={styles.list} role="listbox" aria-label={label}>
+                        <ul
+                            className={styles.list}
+                            role="listbox"
+                            aria-label={label}
+                            aria-multiselectable={multiple || undefined}
+                        >
                             {options.map((option, index) => (
                                 <li
                                     key={option.value}
                                     className={clsx(
                                         styles.listItem,
-                                        value === option.value && styles.listItemSelected,
+                                        isSelected(option.value) && styles.listItemSelected,
                                         activeIndex === index && styles.listItemActive
                                     )}
                                     role="option"
-                                    aria-selected={value === option.value}
+                                    aria-selected={isSelected(option.value)}
                                     data-active={activeIndex === index}
                                     onClick={() => handleSelect(option.value)}
                                 >
