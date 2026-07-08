@@ -1,6 +1,10 @@
-import type { TenantContact } from '@/entities/tenant-contact/model/types';
+type TenantName = {
+  readonly name: string;
+  readonly surname: string | null;
+  readonly patronymic: string | null;
+};
 
-export function getTenantContactFullName(tenant: TenantContact): string {
+export function getTenantContactFullName(tenant: TenantName): string {
   return [tenant.surname, tenant.name, tenant.patronymic]
     .filter(Boolean)
     .join(' ');

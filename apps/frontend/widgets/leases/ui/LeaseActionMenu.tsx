@@ -2,38 +2,36 @@
 
 import {useMemo, useState} from 'react';
 import type {JSX} from 'react';
+import {useRouter} from 'next/navigation';
 import {Menu} from '@/shared/assets/icons';
+import {ROUTES} from '@/shared/config/routes';
 import {IconButton} from '@/shared/ui/icon-button';
 import {Select, type SelectOption} from '@/shared/ui/select';
 import styles from './LeaseActionMenu.module.css';
 
 export type LeaseActionMenuProps = {
-    readonly isEditing: boolean;
+    readonly leaseId: string;
     readonly canEdit: boolean;
     readonly canComplete: boolean;
     readonly canReturnDeposit: boolean;
-    readonly onEdit: () => void;
     readonly onComplete: () => void;
     readonly onReturnDeposit: () => void;
 };
 
 export function LeaseActionMenu({
-    isEditing,
+    leaseId,
     canEdit,
     canComplete,
     canReturnDeposit,
-    onEdit,
     onComplete,
     onReturnDeposit,
 }: LeaseActionMenuProps): JSX.Element {
+    const router = useRouter();
     const [selectedAction, setSelectedAction] = useState('');
 
     const options = useMemo<SelectOption[]>(() => {
         const items: SelectOption[] = [];
-        items.push({
-            value: 'edit',
-            label: isEditing ? 'Отменить редактирование' : 'Редактировать аренду',
-        });
+        items.push({value: 'edit', label: 'Редактировать аренду'});
         if (canComplete) {
             items.push({value: 'complete', label: 'Завершить аренду'});
         }
@@ -41,10 +39,11 @@ export function LeaseActionMenu({
             items.push({value: 'returnDeposit', label: 'Вернуть залог'});
         }
         return items;
-    }, [isEditing, canComplete, canReturnDeposit]);
+    }, [canComplete, canReturnDeposit]);
 
     return (
         <Select
+            label="Действия"
             value={selectedAction}
             options={options}
             dropdownAlign="right"
@@ -52,7 +51,7 @@ export function LeaseActionMenu({
             onChange={(value) => {
                 switch (value) {
                     case 'edit':
-                        onEdit();
+                        router.push(ROUTES.leaseEdit(leaseId));
                         break;
                     case 'complete':
                         onComplete();
