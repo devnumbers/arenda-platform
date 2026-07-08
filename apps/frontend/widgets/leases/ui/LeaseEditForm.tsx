@@ -8,13 +8,15 @@ import {useLease, useUpdateLease} from '@/features/leases/api/hooks';
 import {useTenantContacts} from '@/features/tenant-contacts/api/hooks';
 import {ApiError} from '@/shared/api/errors';
 import {TextField} from '@/shared/ui/text-field';
-import {DatePickerField} from '@/shared/ui/date-picker-field';
+import {Select} from '@/shared/ui/select';
 import {Button} from '@/shared/ui/button';
 import {PageHeader} from '@/shared/ui/page-header';
 import {PropertyDetailSection} from '@/widgets/property-detail';
 import type {components} from '@/shared/api/generated';
 import type {TenantContact} from '@/entities/tenant-contact/model/types';
 import {getTenantContactFullName} from '@/entities/tenant-contact/lib/get-tenant-contact-full-name';
+import {DateSelect} from './DateSelect';
+import {PaymentDayPicker} from './PaymentDayPicker';
 import {LeaseEditFormLoading} from './LeaseEditFormLoading';
 import styles from './LeaseEditForm.module.css';
 
@@ -139,24 +141,38 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
         hasInitialized.current = true;
     }, [leaseQuery.data]);
 
-    const handleTenantChange = (event: ChangeEvent<HTMLSelectElement>) => {
-        const tenantContactId = event.currentTarget.value;
+    const handleTenantChange = (tenantContactId: string) => {
         setForm((prev) => ({...prev, tenantContactId}));
     };
 
-    const handleChange =
+    const updateField = (field: keyof FormData, value: string) => {
+        setForm((prev) => ({...prev, [field]: value}));
+        setErrors((prev) => {
+            const next = {...prev};
+            if (field in next) {
+                delete (next as Record<keyof FormData, string | undefined>)[field];
+            }
+            return next;
+        });
+    };
+
+    const handleTextChange =
         (field: keyof FormData) =>
             (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-                const value = event.currentTarget.value;
-                setForm((prev) => ({...prev, [field]: value}));
-                setErrors((prev) => {
-                    const next = {...prev};
-                    if (field in next) {
-                        delete (next as Record<keyof FormData, string | undefined>)[field];
-                    }
-                    return next;
-                });
+                updateField(field, event.currentTarget.value);
             };
+
+    const handleStartDateChange = (date: string | undefined) => {
+        updateField('startDate', date ?? '');
+    };
+
+    const handleEndDateChange = (date: string | undefined) => {
+        updateField('endDate', date ?? '');
+    };
+
+    const handlePaymentDayChange = (day: number) => {
+        updateField('paymentDay', String(day));
+    };
 
     const getFormErrors = (): FormErrors => {
         const next: FormErrors = {};
@@ -260,56 +276,45 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
                     <PropertyDetailSection>
                         <h2 className={styles.sectionTitle}>Условия аренды</h2>
                         <div className={styles.fields}>
-                            <div className={styles.selectField}>
-                                <label htmlFor="tenant-contact" className={styles.selectLabel}>
-                                    Арендатор
-                                </label>
-                                <select
-                                    id="tenant-contact"
-                                    className={styles.select}
-                                    value={form.tenantContactId}
-                                    onChange={handleTenantChange}
-                                >
-                                    <option value="">Не указан</option>
-                                    {tenantContacts?.map((contact) => (
-                                        <option key={contact.id} value={contact.id}>
-                                            {getTenantContactOptionLabel(contact)}
-                                        </option>
-                                    ))}
-                                </select>
+                            <Select
+                                label="Арендатор"
+                                placeholder="Не указан"
+                                value={form.tenantContactId}
+                                onChange={handleTenantChange}
+                                options={[
+                                    {value: '', label: 'Не указан'},
+                                    ...(tenantContacts?.map((contact) => ({
+                                        value: contact.id,
+                                        label: getTenantContactOptionLabel(contact),
+                                    })) ?? []),
+                                ]}
+                            />
+
+                            <PaymentDayPicker
+                                value={form.paymentDay ? Number(form.paymentDay) : undefined}
+                                onChange={handlePaymentDayChange}
+                                error={errors.paymentDay}
+                            />
+
+                            <div className={styles.dateRow}>
+                                <DateSelect
+                                    label="Начало аренды"
+                                    value={form.startDate || undefined}
+                                    placeholder="Выбрать дату"
+                                    onChange={handleStartDateChange}
+                                    required
+                                    error={errors.startDate}
+                                />
+                                <DateSelect
+                                    label="Конец аренды"
+                                    value={form.endDate || undefined}
+                                    placeholder="Выбрать дату"
+                                    minValue={form.startDate}
+                                    onChange={handleEndDateChange}
+                                    error={errors.endDate}
+                                />
                             </div>
 
-                            <DatePickerField
-                                label="Начало аренды"
-                                value={form.startDate}
-                                onChange={(value) => {
-                                    setForm((prev) => ({...prev, startDate: value}));
-                                    setErrors((prev) => {
-                                        const next = {...prev};
-                                        delete next.startDate;
-                                        delete next.endDate;
-                                        return next;
-                                    });
-                                }}
-                                required
-                                fullWidth
-                                error={errors.startDate}
-                            />
-                            <DatePickerField
-                                label="Конец аренды"
-                                value={form.endDate}
-                                onChange={(value) => {
-                                    setForm((prev) => ({...prev, endDate: value}));
-                                    setErrors((prev) => {
-                                        const next = {...prev};
-                                        delete next.endDate;
-                                        return next;
-                                    });
-                                }}
-                                minValue={form.startDate}
-                                fullWidth
-                                error={errors.endDate}
-                            />
                             <TextField
                                 label="Арендная плата, ₽"
                                 type="number"
@@ -318,7 +323,7 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
                                 required
                                 fullWidth
                                 value={form.rentAmount}
-                                onChange={handleChange('rentAmount')}
+                                onChange={handleTextChange('rentAmount')}
                                 error={errors.rentAmount}
                             />
                             <TextField
@@ -328,19 +333,8 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
                                 step="0.01"
                                 fullWidth
                                 value={form.depositAmount}
-                                onChange={handleChange('depositAmount')}
+                                onChange={handleTextChange('depositAmount')}
                                 error={errors.depositAmount}
-                            />
-                            <TextField
-                                label="День оплаты"
-                                type="number"
-                                min={1}
-                                max={31}
-                                required
-                                fullWidth
-                                value={form.paymentDay}
-                                onChange={handleChange('paymentDay')}
-                                error={errors.paymentDay}
                             />
                             <TextField
                                 label="Комментарий"
@@ -350,7 +344,7 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
                                 showCounter
                                 fullWidth
                                 value={form.comment}
-                                onChange={handleChange('comment')}
+                                onChange={handleTextChange('comment')}
                             />
                         </div>
                     </PropertyDetailSection>

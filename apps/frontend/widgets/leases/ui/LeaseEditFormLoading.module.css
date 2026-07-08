@@ -17,6 +17,12 @@
   gap: 24px;
 }
 
+.dateRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
 .field {
   width: 100%;
   height: 56px;
@@ -41,11 +47,4 @@
   border-radius: var(--radius-button);
   flex: 1 1 0;
   min-width: 140px;
-}
-
-@media (min-width: 768px) {
-  .title {
-    height: 36px;
-    width: 320px;
-  }
 }

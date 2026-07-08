@@ -27,6 +27,7 @@ export type DateSelectProps = {
     readonly defaultFocusedValue?: string;
     readonly renderValue?: (value: string) => ReactNode;
     readonly mode?: DateSelectMode;
+    readonly error?: string;
     readonly onChange: (date: string | undefined) => void;
 };
 
@@ -51,6 +52,7 @@ export function DateSelect({
     defaultFocusedValue,
     renderValue,
     mode = 'calendar',
+    error,
     onChange,
 }: DateSelectProps): JSX.Element {
     const triggerId = useId();
@@ -124,7 +126,7 @@ export function DateSelect({
                     <button
                         id={triggerId}
                         type="button"
-                        className={styles.trigger}
+                        className={clsx(styles.trigger, error && styles.error)}
                         aria-haspopup="dialog"
                         aria-expanded={isOpen}
                     >
@@ -140,6 +142,7 @@ export function DateSelect({
                                 <CalendarIcon/>
                             </span>
                         </span>
+                        {error && <span className={styles.errorText}>{error}</span>}
                     </button>
                 </PopoverTrigger>
                 <PopoverContent

@@ -29,6 +29,18 @@
   box-shadow: var(--focus-ring);
 }
 
+.error .control {
+  border-color: var(--color-error);
+}
+
+.errorText {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+  color: var(--color-error);
+}
+
 .label {
   display: block;
   font-size: var(--font-size-text-m);

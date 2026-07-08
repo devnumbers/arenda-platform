@@ -8,10 +8,11 @@ const REFERENCE_DATE = '2026-01-01';
 
 export type PaymentDayPickerProps = {
     readonly value?: number;
+    readonly error?: string;
     readonly onChange: (day: number) => void;
 };
 
-export function PaymentDayPicker({value, onChange}: PaymentDayPickerProps): JSX.Element {
+export function PaymentDayPicker({value, error, onChange}: PaymentDayPickerProps): JSX.Element {
     const dateValue = useMemo(() => {
         if (value === undefined || value < 1 || value > 31) return undefined;
         return `${REFERENCE_DATE.slice(0, 8)}${String(value).padStart(2, '0')}`;
@@ -32,6 +33,7 @@ export function PaymentDayPicker({value, onChange}: PaymentDayPickerProps): JSX.
             required
             defaultFocusedValue={REFERENCE_DATE}
             renderValue={() => (value ? `${value}-е число` : undefined)}
+            error={error}
         />
     );
 }

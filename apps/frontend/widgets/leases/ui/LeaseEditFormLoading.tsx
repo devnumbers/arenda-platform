@@ -15,8 +15,10 @@ export function LeaseEditFormLoading(): JSX.Element {
                 <div className={styles.fields}>
                     <Skeleton className={styles.field}/>
                     <Skeleton className={styles.field}/>
-                    <Skeleton className={styles.field}/>
-                    <Skeleton className={styles.field}/>
+                    <div className={styles.dateRow}>
+                        <Skeleton className={styles.field}/>
+                        <Skeleton className={styles.field}/>
+                    </div>
                     <Skeleton className={styles.field}/>
                     <Skeleton className={styles.field}/>
                     <Skeleton className={styles.multilineField}/>
