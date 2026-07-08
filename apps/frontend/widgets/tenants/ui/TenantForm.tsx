@@ -78,7 +78,7 @@ export function TenantForm({
     }, [comment, email, name, onChange, patronymic, phone, surname]);
 
     const isNameValid = name.trim() !== '';
-    const isPhoneValid = phone === '' || phone === '+7' || phone.length === 18;
+    const isPhoneValid = phone !== '' && phone !== '+7' && phone.length === 18;
     const isEmailValid = email === '' || EMAIL_REGEX.test(email);
     const isCommentValid = comment.length <= MAX_COMMENT_LENGTH;
 
@@ -174,6 +174,7 @@ export function TenantForm({
                 <TextField
                     label="Телефон"
                     placeholder="+7 (000) 000-00-00"
+                    required
                     value={phone}
                     onChange={handlePhoneChange}
                     error={phoneError}

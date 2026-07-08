@@ -9,6 +9,7 @@ import {WizardHeader} from '@/shared/ui/wizard-header';
 import {useTenantCreateDraft} from '../lib/use-tenant-create-draft';
 import {TenantFormStep} from './TenantFormStep';
 import {TenantSuccessStep} from './TenantSuccessStep';
+import {TenantCreateWizardLoading} from './TenantCreateWizardLoading';
 import styles from './TenantCreateWizard.module.css';
 import type {TenantContactFormData} from './TenantForm';
 
@@ -82,9 +83,10 @@ export function TenantCreateWizard(): JSX.Element {
                     title="Добавление арендатора"
                     step={1}
                     totalSteps={1}
+                    onBack={handleClose}
                     onCancel={handleClose}
                 />
-                <div className={styles.content}>Загрузка…</div>
+                <TenantCreateWizardLoading/>
             </div>
         );
     }
@@ -112,6 +114,7 @@ export function TenantCreateWizard(): JSX.Element {
                 title="Добавление арендатора"
                 step={1}
                 totalSteps={1}
+                onBack={handleClose}
                 onCancel={handleClose}
             />
             <div className={styles.content}>
