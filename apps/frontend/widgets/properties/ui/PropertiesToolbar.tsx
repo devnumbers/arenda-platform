@@ -253,7 +253,7 @@ export function PropertiesToolbar({
                         value={filters.types}
                         options={propertyTypeOptions}
                         onChange={(nextTypes) => onChange({...filters, types: nextTypes as PropertyType[]}, sort)}
-                        renderTrigger={({ isOpen, onClick }) => (
+                        renderTrigger={({isOpen, onClick}) => (
                             <Button
                                 variant={isOpen ? 'primary' : 'secondary'}
                                 size="medium"
@@ -274,8 +274,11 @@ export function PropertiesToolbar({
                             multiple
                             value={filters.statuses}
                             options={statusFilterOptions}
-                            onChange={(nextStatuses) => onChange({...filters, statuses: nextStatuses as StatusFilterValue[]}, sort)}
-                            renderTrigger={({ isOpen, onClick }) => (
+                            onChange={(nextStatuses) => onChange({
+                                ...filters,
+                                statuses: nextStatuses as StatusFilterValue[]
+                            }, sort)}
+                            renderTrigger={({isOpen, onClick}) => (
                                 <Button
                                     variant={isOpen ? 'primary' : 'secondary'}
                                     size="medium"
@@ -296,7 +299,7 @@ export function PropertiesToolbar({
                         value={sort}
                         options={sortOptions}
                         onChange={(nextSort) => onChange(filters, nextSort as PropertySort)}
-                        renderTrigger={({ isOpen, onClick }) => (
+                        renderTrigger={({isOpen, onClick}) => (
                             <Button
                                 variant={isOpen ? 'primary' : 'secondary'}
                                 size="medium"
@@ -365,16 +368,15 @@ export function PropertiesToolbar({
                 ) : (
                     <Tooltip>
                         <Tooltip.Trigger>
-                            <span
-                                className={styles.addButtonDisabled}
-                                role="button"
-                                aria-label="Добавить объект (достигнут лимит)"
-                                aria-disabled="true"
+                            <NextLink
+                                href={ROUTES.profileTariffChange}
+                                className={styles.addButton}
+                                aria-label="Сменить тариф"
                             >
-                                <Icon size="s">
+                                <Icon size="m">
                                     <HomeAdd/>
                                 </Icon>
-                            </span>
+                            </NextLink>
                         </Tooltip.Trigger>
                         <Tooltip.Content>
                             Достигнут лимит объектов по тарифу

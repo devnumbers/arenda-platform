@@ -1,14 +1,13 @@
 'use client';
 
-import type { JSX } from 'react';
-import { DatePicker } from '@heroui/react/date-picker';
-import { DateField } from '@heroui/react/date-field';
-import { Calendar } from '@heroui/react/calendar';
-import { Label } from '@heroui/react/label';
-import { parseDate, type DateValue } from '@internationalized/date';
-import { Button } from '@/shared/ui/button';
-import type { TenantContact } from '@/entities/tenant-contact/model/types';
-import { PaymentDayPicker } from './PaymentDayPicker';
+import type {JSX} from 'react';
+import {useMemo} from 'react';
+import {parseDate} from '@internationalized/date';
+import {Button} from '@/shared/ui/button';
+import {Select} from '@/shared/ui/select';
+import type {TenantContact} from '@/entities/tenant-contact/model/types';
+import {DateSelect} from './DateSelect';
+import {PaymentDayPicker} from './PaymentDayPicker';
 import styles from './LeaseDatesStep.module.css';
 
 export type LeaseDatesStepProps = {
@@ -42,17 +41,24 @@ export function LeaseDatesStep({
   isLoading,
   error,
 }: LeaseDatesStepProps): JSX.Element {
-  const handleStartChange = (value: DateValue | null) => {
-    if (!value) return;
-    onStartDateChange(value.toString());
+  const tenantContactOptions = useMemo(
+    () =>
+      tenantContacts?.map((contact) => ({
+        value: contact.id,
+        label: [contact.surname, contact.name, contact.patronymic]
+          .filter(Boolean)
+          .join(' '),
+      })) ?? [],
+    [tenantContacts]
+  );
+
+  const handleStartDateChange = (date: string | undefined) => {
+    if (!date) return;
+    onStartDateChange(date);
   };
 
-  const handleEndChange = (value: DateValue | null) => {
-    if (!value) {
-      onEndDateChange('');
-      return;
-    }
-    onEndDateChange(value.toString());
+  const handleEndDateChange = (date: string | undefined) => {
+    onEndDateChange(date ?? '');
   };
 
   const startDateValid = startDate !== undefined && startDate !== '';
@@ -73,102 +79,30 @@ export function LeaseDatesStep({
     <div className={styles.root}>
       <h2 className={styles.heading}>Даты аренды</h2>
       <div className={styles.fields}>
-        <PaymentDayPicker value={paymentDay} onChange={onPaymentDayChange} />
+        <PaymentDayPicker value={paymentDay} onChange={onPaymentDayChange}/>
         <div className={styles.dateRow}>
-          <DatePicker
-            value={startDate ? parseDate(startDate) : null}
-            onChange={handleStartChange}
-            className={styles.dateField}
-          >
-            <Label>Начало аренды</Label>
-            <DateField.Group>
-              <DateField.Input>
-                {(segment) => <DateField.Segment segment={segment} />}
-              </DateField.Input>
-              <DateField.Suffix>
-                <DatePicker.Trigger>
-                  <DatePicker.TriggerIndicator />
-                </DatePicker.Trigger>
-              </DateField.Suffix>
-            </DateField.Group>
-            <DatePicker.Popover>
-              <Calendar aria-label="Выбрать дату начала аренды">
-                <Calendar.Header>
-                  <Calendar.YearPickerTrigger>
-                    <Calendar.YearPickerTriggerHeading />
-                    <Calendar.YearPickerTriggerIndicator />
-                  </Calendar.YearPickerTrigger>
-                  <Calendar.NavButton slot="previous" />
-                  <Calendar.NavButton slot="next" />
-                </Calendar.Header>
-                <Calendar.Grid>
-                  <Calendar.GridHeader>
-                    {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
-                  </Calendar.GridHeader>
-                  <Calendar.GridBody>
-                    {(date) => <Calendar.Cell date={date} />}
-                  </Calendar.GridBody>
-                </Calendar.Grid>
-              </Calendar>
-            </DatePicker.Popover>
-          </DatePicker>
-
-          <DatePicker
-            minValue={startDate ? parseDate(startDate) : undefined}
-            value={endDate ? parseDate(endDate) : null}
-            onChange={handleEndChange}
-            className={styles.dateField}
-          >
-            <Label>Конец аренды</Label>
-            <DateField.Group>
-              <DateField.Input>
-                {(segment) => <DateField.Segment segment={segment} />}
-              </DateField.Input>
-              <DateField.Suffix>
-                <DatePicker.Trigger>
-                  <DatePicker.TriggerIndicator />
-                </DatePicker.Trigger>
-              </DateField.Suffix>
-            </DateField.Group>
-            <DatePicker.Popover>
-              <Calendar aria-label="Выбрать дату окончания аренды">
-                <Calendar.Header>
-                  <Calendar.YearPickerTrigger>
-                    <Calendar.YearPickerTriggerHeading />
-                    <Calendar.YearPickerTriggerIndicator />
-                  </Calendar.YearPickerTrigger>
-                  <Calendar.NavButton slot="previous" />
-                  <Calendar.NavButton slot="next" />
-                </Calendar.Header>
-                <Calendar.Grid>
-                  <Calendar.GridHeader>
-                    {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
-                  </Calendar.GridHeader>
-                  <Calendar.GridBody>
-                    {(date) => <Calendar.Cell date={date} />}
-                  </Calendar.GridBody>
-                </Calendar.Grid>
-              </Calendar>
-            </DatePicker.Popover>
-          </DatePicker>
+          <DateSelect
+            label="Начало аренды"
+            value={startDate}
+            onChange={handleStartDateChange}
+            required
+          />
+          <DateSelect
+            label="Конец аренды"
+            value={endDate}
+            minValue={startDate}
+            onChange={handleEndDateChange}
+          />
         </div>
 
         <div className={styles.tenantField}>
-          <Label className={styles.tenantLabel}>Арендатор</Label>
-          <select
-            className={styles.tenantSelect}
+          <Select
+            label="Арендатор"
             value={tenantContactId ?? ''}
-            onChange={(event) => onTenantContactChange(event.target.value)}
-          >
-            <option value="">Не указан</option>
-            {tenantContacts?.map((contact) => (
-              <option key={contact.id} value={contact.id}>
-                {[contact.surname, contact.name, contact.patronymic]
-                  .filter(Boolean)
-                  .join(' ')}
-              </option>
-            ))}
-          </select>
+            options={tenantContactOptions}
+            onChange={(id) => onTenantContactChange(id)}
+            placeholder="Не указан"
+          />
           <button
             type="button"
             className={styles.createTenantLink}
