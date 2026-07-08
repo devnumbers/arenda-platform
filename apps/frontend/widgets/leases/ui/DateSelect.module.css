@@ -1,5 +1,10 @@
 .root {
   position: relative;
+  width: 100%;
+}
+
+.root :global(.popover__trigger) {
+  width: 100%;
 }
 
 .trigger {
@@ -40,6 +45,7 @@
   position: relative;
   display: flex;
   align-items: center;
+  width: 100%;
   background-color: var(--color-secondary-bg);
   border: 2px solid transparent;
   border-radius: var(--radius-input);
@@ -52,12 +58,15 @@
 }
 
 .value {
+  flex: 1;
+  min-width: 0;
   font-size: var(--font-size-text-m);
   line-height: var(--line-height-text-m);
   color: var(--color-text);
+  text-align: left;
 }
 
-.chevron {
+.icon {
   position: absolute;
   right: 16px;
   top: 50%;
@@ -65,36 +74,69 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   color: var(--color-text-muted);
   pointer-events: none;
 }
 
 .popover {
+  width: auto;
+  min-width: auto;
   padding: 4px;
   background-color: var(--color-white);
   border: 1px solid var(--color-secondary-hover);
   border-radius: var(--radius-input);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: none;
 }
 
-.clearButton {
+.popover :global(.calendar__header) {
+  padding-bottom: 8px;
+}
+
+.popover :global(.calendar__header-cell) {
+  padding-bottom: 4px;
+}
+
+.popover :global(.calendar__cell) {
+  border-radius: var(--radius-button-small);
+}
+
+.daysGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
   width: 100%;
-  margin-top: 8px;
-  padding: 10px 16px;
+}
+
+.dayButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   border: none;
   border-radius: var(--radius-button-small);
   background: transparent;
   font-size: var(--font-size-text-m);
   line-height: var(--line-height-text-m);
-  font-weight: 500;
-  color: var(--color-primary);
-  text-align: center;
+  color: var(--color-text);
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
 
-.clearButton:hover {
+.dayButton:hover {
+  background-color: var(--color-secondary-bg);
+}
+
+.dayButtonSelected,
+.dayButtonSelected:hover {
   background-color: var(--color-clear-hover);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.body{
+  padding: 6px;
 }

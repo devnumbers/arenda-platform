@@ -35,6 +35,7 @@ export { default as BottomProfile } from './bottom-profile.svg';
 export { default as Filter } from './filter.svg';
 export { default as ChevronDown } from './chevron-down.svg';
 export { default as ChevronUp } from './chevron-up.svg';
+export { default as Calendar } from './calendar.svg';
 export { default as ArrowUp } from './arrow-up.svg';
 export { default as HomeAdd } from './home-add.svg';
 export { default as Plus } from './plus.svg';

@@ -2,7 +2,8 @@
 
 import type {JSX, ReactNode} from 'react';
 import {useId, useMemo, useState} from 'react';
-import {parseDate, type CalendarDate} from '@internationalized/date';
+import clsx from 'clsx';
+import {type CalendarDate, parseDate} from '@internationalized/date';
 import {
     Popover,
     PopoverContent,
@@ -10,9 +11,11 @@ import {
     PopoverTrigger,
 } from '@heroui/react/popover';
 import {Calendar} from '@heroui/react/calendar';
-import {ChevronDown, ChevronUp} from '@/shared/assets/icons';
+import {Calendar as CalendarIcon} from '@/shared/assets/icons';
 import {formatDate} from '@/shared/lib/format-date';
 import styles from './DateSelect.module.css';
+
+export type DateSelectMode = 'calendar' | 'days-grid';
 
 export type DateSelectProps = {
     readonly label: string;
@@ -23,8 +26,20 @@ export type DateSelectProps = {
     readonly maxValue?: string;
     readonly defaultFocusedValue?: string;
     readonly renderValue?: (value: string) => ReactNode;
+    readonly mode?: DateSelectMode;
     readonly onChange: (date: string | undefined) => void;
 };
+
+const DAYS = Array.from({length: 31}, (_, index) => index + 1);
+
+function getYearMonthReference(value: string | undefined, defaultFocusedValue: string | undefined): string {
+    const source = value ?? defaultFocusedValue;
+    if (source && source.length >= 7) {
+        return source.slice(0, 7);
+    }
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
 
 export function DateSelect({
     label,
@@ -35,19 +50,22 @@ export function DateSelect({
     maxValue,
     defaultFocusedValue,
     renderValue,
+    mode = 'calendar',
     onChange,
 }: DateSelectProps): JSX.Element {
     const triggerId = useId();
     const [isOpen, setIsOpen] = useState(false);
 
-    const handleChange = (date: CalendarDate | null) => {
+    const handleCalendarChange = (date: CalendarDate | null) => {
         if (!date) return;
         onChange(date.toString());
         setIsOpen(false);
     };
 
-    const handleClear = () => {
-        onChange(undefined);
+    const handleDaySelect = (day: number) => {
+        const yearMonth = getYearMonthReference(value, defaultFocusedValue);
+        const date = `${yearMonth}-${String(day).padStart(2, '0')}`;
+        onChange(date);
         setIsOpen(false);
     };
 
@@ -93,6 +111,12 @@ export function DateSelect({
         return formatDate(value);
     }, [value, renderValue]);
 
+    const selectedDay = useMemo(() => {
+        if (!value || value.length < 10) return undefined;
+        const day = Number(value.slice(8, 10));
+        return Number.isNaN(day) ? undefined : day;
+    }, [value]);
+
     return (
         <div className={styles.root}>
             <Popover isOpen={isOpen} onOpenChange={setIsOpen}>
@@ -110,49 +134,73 @@ export function DateSelect({
                         </span>
                         <span className={styles.control}>
                             <span className={styles.value}>
-                                {displayValue ?? placeholder ?? 'Выбрать'}
+                                {displayValue ?? placeholder ?? 'Выбрать дату'}
                             </span>
-                            <span className={styles.chevron} aria-hidden="true">
-                                {isOpen ? <ChevronUp/> : <ChevronDown/>}
+                            <span className={styles.icon} aria-hidden="true">
+                                <CalendarIcon/>
                             </span>
                         </span>
                     </button>
                 </PopoverTrigger>
-                <PopoverContent className={styles.popover}>
-                    <PopoverDialog aria-label={label}>
-                        <Calendar
-                            aria-label={label}
-                            value={calendarValue}
-                            onChange={handleChange}
-                            defaultFocusedValue={calendarDefaultFocusedValue}
-                            minValue={calendarMinValue}
-                            maxValue={calendarMaxValue}
-                        >
-                            <Calendar.Header>
-                                <Calendar.YearPickerTrigger>
-                                    <Calendar.YearPickerTriggerHeading/>
-                                    <Calendar.YearPickerTriggerIndicator/>
-                                </Calendar.YearPickerTrigger>
-                                <Calendar.NavButton slot="previous"/>
-                                <Calendar.NavButton slot="next"/>
-                            </Calendar.Header>
-                            <Calendar.Grid>
-                                <Calendar.GridHeader>
-                                    {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
-                                </Calendar.GridHeader>
-                                <Calendar.GridBody>
-                                    {(date) => <Calendar.Cell date={date}/>}
-                                </Calendar.GridBody>
-                            </Calendar.Grid>
-                        </Calendar>
-                        {value && (
-                            <button
-                                type="button"
-                                className={styles.clearButton}
-                                onClick={handleClear}
+                <PopoverContent
+                    className={clsx(
+                        styles.popover,
+                        mode === 'days-grid' && styles.popoverDaysGrid,
+                    )}
+                >
+                    <PopoverDialog className={styles.body} aria-label={label}>
+                        {mode === 'days-grid' ? (
+                            <div className={styles.daysGrid} role="grid" aria-label={label}>
+                                {DAYS.map((day) => {
+                                    const isSelected = selectedDay === day;
+                                    return (
+                                        <button
+                                            key={day}
+                                            type="button"
+                                            className={clsx(
+                                                styles.dayButton,
+                                                isSelected && styles.dayButtonSelected,
+                                            )}
+                                            role="gridcell"
+                                            aria-selected={isSelected}
+                                            onClick={() => handleDaySelect(day)}
+                                        >
+                                            {day}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <Calendar
+                                aria-label={label}
+                                value={calendarValue}
+                                onChange={handleCalendarChange}
+                                defaultFocusedValue={calendarDefaultFocusedValue}
+                                minValue={calendarMinValue}
+                                maxValue={calendarMaxValue}
                             >
-                                Очистить
-                            </button>
+                                <Calendar.Header>
+                                    <Calendar.YearPickerTrigger>
+                                        <Calendar.YearPickerTriggerHeading/>
+                                        <Calendar.YearPickerTriggerIndicator/>
+                                    </Calendar.YearPickerTrigger>
+                                    <Calendar.NavButton slot="previous"/>
+                                    <Calendar.NavButton slot="next"/>
+                                </Calendar.Header>
+                                <Calendar.Grid>
+                                    <Calendar.GridHeader>
+                                        {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
+                                    </Calendar.GridHeader>
+                                    <Calendar.GridBody>
+                                        {(date) => <Calendar.Cell date={date}/>}
+                                    </Calendar.GridBody>
+                                </Calendar.Grid>
+                                <Calendar.YearPickerGrid>
+                                    <Calendar.YearPickerGridBody>
+                                        {({year}) => <Calendar.YearPickerCell year={year}/>}
+                                    </Calendar.YearPickerGridBody>
+                                </Calendar.YearPickerGrid>
+                            </Calendar>
                         )}
                     </PopoverDialog>
                 </PopoverContent>

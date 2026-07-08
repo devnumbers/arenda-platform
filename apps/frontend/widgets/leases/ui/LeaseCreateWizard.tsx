@@ -4,7 +4,7 @@ import {type JSX, useEffect, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {useQueryClient} from '@tanstack/react-query';
 import {propertyKeys, useProperty} from '@/features/properties/api';
-import {useTenantContacts} from '@/features/tenant-contacts/api/hooks';
+
 import {useCreateLease, usePropertyLeases} from '@/features/leases/api';
 import {isOpenLeaseStatus} from '@/entities/lease/lib/status';
 import {ApiError} from '@/shared/api/errors';
@@ -47,7 +47,6 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
 
     const propertyQuery = useProperty(propertyId ?? '');
     const propertyLeasesQuery = usePropertyLeases(propertyId ?? '');
-    const tenantContactsQuery = useTenantContacts();
     const createLease = useCreateLease();
 
     useEffect(() => {
@@ -97,7 +96,7 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
                 payment_day: draft.paymentDay,
                 start_date: draft.startDate,
                 end_date: draft.endDate || undefined,
-                tenant_contact_id: draft.tenantContactId || undefined,
+                tenant_contact_id: undefined,
             });
 
             setCreatedLeaseId(lease.id);
@@ -227,17 +226,11 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
                         paymentDay={draft.paymentDay}
                         startDate={draft.startDate}
                         endDate={draft.endDate}
-                        tenantContactId={draft.tenantContactId}
-                        tenantContacts={tenantContactsQuery.data}
                         onPaymentDayChange={(paymentDay) =>
                             setDraft((prev) => ({...prev, paymentDay}))
                         }
                         onStartDateChange={(startDate) => setDraft((prev) => ({...prev, startDate}))}
                         onEndDateChange={(endDate) => setDraft((prev) => ({...prev, endDate}))}
-                        onTenantContactChange={(tenantContactId) =>
-                            setDraft((prev) => ({...prev, tenantContactId}))
-                        }
-                        onCreateTenant={() => router.push(ROUTES.tenantNew)}
                         onSubmit={handleSubmit}
                         isLoading={isSubmitting}
                         error={submitError}
