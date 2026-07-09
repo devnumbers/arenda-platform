@@ -4,7 +4,7 @@ import type {JSX} from 'react';
 
 import {parseDate} from '@internationalized/date';
 import {Button} from '@/shared/ui/button';
-import {DateSelect} from './DateSelect';
+import {DateSelect} from '@/shared/ui/date-select';
 import {PaymentDayPicker} from './PaymentDayPicker';
 import styles from './LeaseDatesStep.module.css';
 

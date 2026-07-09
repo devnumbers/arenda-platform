@@ -28,6 +28,7 @@ export type DateSelectProps = {
     readonly renderValue?: (value: string) => ReactNode;
     readonly mode?: DateSelectMode;
     readonly error?: string;
+    readonly disabled?: boolean;
     readonly onChange: (date: string | undefined) => void;
 };
 
@@ -53,6 +54,7 @@ export function DateSelect({
     renderValue,
     mode = 'calendar',
     error,
+    disabled,
     onChange,
 }: DateSelectProps): JSX.Element {
     const triggerId = useId();
@@ -129,6 +131,7 @@ export function DateSelect({
                         className={clsx(styles.trigger, error && styles.error)}
                         aria-haspopup="dialog"
                         aria-expanded={isOpen}
+                        disabled={disabled}
                     >
                         <span className={styles.label}>
                             {label}

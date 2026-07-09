@@ -15,7 +15,7 @@ import {PropertyDetailSection} from '@/widgets/property-detail';
 import type {components} from '@/shared/api/generated';
 import type {TenantContact} from '@/entities/tenant-contact/model/types';
 import {getTenantContactFullName} from '@/entities/tenant-contact/lib/get-tenant-contact-full-name';
-import {DateSelect} from './DateSelect';
+import {DateSelect} from '@/shared/ui/date-select';
 import {PaymentDayPicker} from './PaymentDayPicker';
 import {LeaseEditFormLoading} from './LeaseEditFormLoading';
 import styles from './LeaseEditForm.module.css';

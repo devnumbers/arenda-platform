@@ -2,7 +2,7 @@
 
 import type {JSX} from 'react';
 import {useMemo} from 'react';
-import {DateSelect} from './DateSelect';
+import {DateSelect} from '@/shared/ui/date-select';
 
 const REFERENCE_DATE = '2026-01-01';
 
