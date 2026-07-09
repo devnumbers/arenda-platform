@@ -12,6 +12,7 @@ import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
 import { notify } from '@/shared/lib/toast';
 import { Button } from '@/shared/ui/button';
+import { PageHeader } from '@/shared/ui/page-header';
 import {
   useTariffs,
   useSubscription,
@@ -154,84 +155,83 @@ export function TariffChangeForm(): JSX.Element {
     [changeTariff, period, router],
   );
 
-  if (isError) {
-    return (
-      <div className={styles.error}>
-        <p className={styles.errorText}>Не удалось загрузить данные тарифов</p>
-        <Button onClick={handleRetry} variant="secondary">
-          Повторить
-        </Button>
-      </div>
-    );
-  }
-
-  if (isPending || !tariffs || !subscription) {
-    return <TariffChangeSkeleton />;
-  }
-
-  const currentTariffName = subscription.tariff.name;
-
   return (
-    <div className={styles.root}>
-      <PeriodSelector
-        value={period}
-        onChange={setPeriod}
-        disabled={changeTariff.isPending}
-      />
+    <>
+      <PageHeader title="Сменить тариф" backHref={ROUTES.profileTariff} />
+      {isError && (
+        <div className={styles.error}>
+          <p className={styles.errorText}>Не удалось загрузить данные тарифов</p>
+          <Button onClick={handleRetry} variant="secondary">
+            Повторить
+          </Button>
+        </div>
+      )}
+      {!isError && (isPending || !tariffs || !subscription) && (
+        <TariffChangeSkeleton />
+      )}
+      {!isError && !isPending && tariffs && subscription && (
+        <div className={styles.root}>
+          <PeriodSelector
+            value={period}
+            onChange={setPeriod}
+            disabled={changeTariff.isPending}
+          />
 
-      <div className={styles.list}>
-        {tariffs.map((tariff) => {
-          const isCurrent = tariff.name === currentTariffName;
-          const isLoading =
-            changeTariff.isPending && selectedTariff === tariff.name;
+          <div className={styles.list}>
+            {tariffs.map((tariff) => {
+              const isCurrent = tariff.name === subscription.tariff.name;
+              const isLoading =
+                changeTariff.isPending && selectedTariff === tariff.name;
 
-          return (
-            <Card
-              key={tariff.name}
-              className={clsx(styles.card, isCurrent && styles.currentCard)}
-            >
-              <div className={styles.cardHeader}>
-                <h3 className={styles.tariffName}>
-                  {getTariffLabel(tariff.name)}
-                </h3>
-                {isCurrent && (
-                  <span className={styles.currentBadge}>Текущий</span>
-                )}
-              </div>
+              return (
+                <Card
+                  key={tariff.name}
+                  className={clsx(styles.card, isCurrent && styles.currentCard)}
+                >
+                  <div className={styles.cardHeader}>
+                    <h3 className={styles.tariffName}>
+                      {getTariffLabel(tariff.name)}
+                    </h3>
+                    {isCurrent && (
+                      <span className={styles.currentBadge}>Текущий</span>
+                    )}
+                  </div>
 
-              <div className={styles.priceRow}>
-                <span className={styles.price}>
-                  {formatMoneyKopecks(
-                    period === 'year'
-                      ? tariff.yearlyPriceKopecks
-                      : tariff.monthlyPriceKopecks,
-                  )}
-                  <span className={styles.period}>
-                    {period === 'year' ? '/год' : '/мес'}
-                  </span>
-                </span>
-              </div>
+                  <div className={styles.priceRow}>
+                    <span className={styles.price}>
+                      {formatMoneyKopecks(
+                        period === 'year'
+                          ? tariff.yearlyPriceKopecks
+                          : tariff.monthlyPriceKopecks,
+                      )}
+                      <span className={styles.period}>
+                        {period === 'year' ? '/год' : '/мес'}
+                      </span>
+                    </span>
+                  </div>
 
-              <p className={styles.limit}>
-                {tariff.activePropertyLimit < 0
-                  ? 'Неограниченно'
-                  : `До ${tariff.activePropertyLimit} объектов`}
-              </p>
+                  <p className={styles.limit}>
+                    {tariff.activePropertyLimit < 0
+                      ? 'Неограниченно'
+                      : `До ${tariff.activePropertyLimit} объектов`}
+                  </p>
 
-              <Button
-                variant={isCurrent ? 'secondary' : 'primary'}
-                size="large"
-                fullWidth
-                loading={isLoading}
-                disabled={isCurrent || changeTariff.isPending}
-                onClick={() => handleSelect(tariff.name)}
-              >
-                {isCurrent ? 'Текущий' : 'Выбрать'}
-              </Button>
-            </Card>
-          );
-        })}
-      </div>
-    </div>
+                  <Button
+                    variant={isCurrent ? 'secondary' : 'primary'}
+                    size="large"
+                    fullWidth
+                    loading={isLoading}
+                    disabled={isCurrent || changeTariff.isPending}
+                    onClick={() => handleSelect(tariff.name)}
+                  >
+                    {isCurrent ? 'Текущий' : 'Выбрать'}
+                  </Button>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
