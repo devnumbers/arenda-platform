@@ -114,7 +114,20 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	sub, err := s.deps.subscriptions.WithTx(tx).GetByUserIDForUpdate(ctx, userID)
+	txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+	txTariffs, err := s.deps.tariffs.WithTx(tx)
+	if err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("bind tariffs transaction: %w", err)
+	}
+	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+
+	sub, err := txSubscriptions.GetByUserIDForUpdate(ctx, userID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ChangeTariffResponse{}, ErrSubscriptionNotFound
@@ -130,7 +143,7 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 		return ChangeTariffResponse{}, ErrAlreadyOnTariff
 	}
 
-	currentTariff, err := s.deps.tariffs.WithTx(tx).GetByID(ctx, sub.TariffID)
+	currentTariff, err := txTariffs.GetByID(ctx, sub.TariffID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ChangeTariffResponse{}, ErrTariffNotFound
@@ -160,7 +173,7 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 		// Return an existing pending upgrade payment for the same tariff and
 		// period instead of creating a duplicate. The partial unique index on
 		// pending payments is the durable backstop for races.
-		pending, err := s.deps.subscriptionPayments.WithTx(tx).ListPendingSubscriptionPaymentsByUserID(ctx, userID)
+		pending, err := txSubscriptionPayments.ListPendingSubscriptionPaymentsByUserID(ctx, userID)
 		if err != nil {
 			return ChangeTariffResponse{}, fmt.Errorf("list pending subscription payments: %w", err)
 		}
@@ -185,7 +198,7 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 	if err := sub.ScheduleDowngrade(currentTariff, newTariff, req.Period, *sub.ValidUntil); err != nil {
 		return ChangeTariffResponse{}, err
 	}
-	if err := s.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return ChangeTariffResponse{}, fmt.Errorf("schedule downgrade: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -226,12 +239,16 @@ func (s *SubscriptionService) changeTariffUpgrade(
 	// Persist the pending payment before calling the external provider so the
 	// record survives a crash and the provider has an internal payment id to
 	// reference.
-	payment, err = s.deps.subscriptionPayments.WithTx(tx).Create(ctx, payment)
+	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+	payment, err = txSubscriptionPayments.Create(ctx, payment)
 	if err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
 			// A concurrent request created the pending payment first. Return the
 			// existing one instead of failing.
-			pending, listErr := s.deps.subscriptionPayments.WithTx(tx).ListPendingSubscriptionPaymentsByUserID(ctx, userID)
+			pending, listErr := txSubscriptionPayments.ListPendingSubscriptionPaymentsByUserID(ctx, userID)
 			if listErr != nil {
 				return ChangeTariffResponse{}, fmt.Errorf("list pending subscription payments: %w", listErr)
 			}
@@ -326,7 +343,12 @@ func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uui
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	sub, err := s.deps.subscriptions.WithTx(tx).GetByUserIDForUpdate(ctx, userID)
+	txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
+	sub, err := txSubscriptions.GetByUserIDForUpdate(ctx, userID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrSubscriptionNotFound
@@ -342,7 +364,7 @@ func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uui
 		return err
 	}
 
-	if err := s.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("update subscription: %w", err)
 	}
 
@@ -360,7 +382,12 @@ func (s *SubscriptionService) ToggleAutoRenew(ctx context.Context, userID uuid.U
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	sub, err := s.deps.subscriptions.WithTx(tx).GetByUserIDForUpdate(ctx, userID)
+	txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
+	sub, err := txSubscriptions.GetByUserIDForUpdate(ctx, userID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrSubscriptionNotFound
@@ -372,7 +399,7 @@ func (s *SubscriptionService) ToggleAutoRenew(ctx context.Context, userID uuid.U
 		return err
 	}
 
-	if err := s.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("update subscription: %w", err)
 	}
 

@@ -35,7 +35,11 @@ func (s *OnboardingService) SetupDefaultSubscription(ctx context.Context, userID
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	tariff, err := s.tariffs.WithTx(tx).GetByName(ctx, domain.TariffBasic)
+	txTariffs, err := s.tariffs.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind tariffs transaction: %w", err)
+	}
+	tariff, err := txTariffs.GetByName(ctx, domain.TariffBasic)
 	if err != nil {
 		return fmt.Errorf("get basic tariff: %w", err)
 	}
@@ -44,7 +48,11 @@ func (s *OnboardingService) SetupDefaultSubscription(ctx context.Context, userID
 		return fmt.Errorf("create subscription: %w", err)
 	}
 
-	if _, err := s.subscriptions.WithTx(tx).Create(ctx, sub); err != nil {
+	txSubscriptions, err := s.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+	if _, err := txSubscriptions.Create(ctx, sub); err != nil {
 		return fmt.Errorf("save subscription: %w", err)
 	}
 

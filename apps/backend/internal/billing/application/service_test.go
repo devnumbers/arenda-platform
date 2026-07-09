@@ -111,7 +111,7 @@ func (r *fakeTariffRepo) List(_ context.Context) ([]domain.Tariff, error) {
 	return out, nil
 }
 
-func (r *fakeTariffRepo) WithTx(transaction.Tx) TariffRepository { return r }
+func (r *fakeTariffRepo) WithTx(transaction.Tx) (TariffRepository, error) { return r, nil }
 
 type fakeSubscriptionRepo struct {
 	subs map[uuid.UUID]domain.Subscription
@@ -219,7 +219,7 @@ func (r *fakeSubscriptionRepo) ListPendingChanges(_ context.Context, now time.Ti
 	return out, nil
 }
 
-func (r *fakeSubscriptionRepo) WithTx(transaction.Tx) SubscriptionRepository { return r }
+func (r *fakeSubscriptionRepo) WithTx(transaction.Tx) (SubscriptionRepository, error) { return r, nil }
 
 type fakePaymentMethodRepo struct {
 	methods map[uuid.UUID]domain.PaymentMethod
@@ -289,7 +289,7 @@ func (r *fakePaymentMethodRepo) Delete(_ context.Context, userID, methodID uuid.
 	return nil
 }
 
-func (r *fakePaymentMethodRepo) WithTx(transaction.Tx) PaymentMethodRepository { return r }
+func (r *fakePaymentMethodRepo) WithTx(transaction.Tx) (PaymentMethodRepository, error) { return r, nil }
 
 type fakeSubscriptionPaymentRepo struct {
 	payments                 map[uuid.UUID]domain.SubscriptionPayment
@@ -493,7 +493,9 @@ func (r *fakeSubscriptionPaymentRepo) UpdatePaymentMethodID(_ context.Context, i
 	return p, nil
 }
 
-func (r *fakeSubscriptionPaymentRepo) WithTx(transaction.Tx) SubscriptionPaymentRepository { return r }
+func (r *fakeSubscriptionPaymentRepo) WithTx(transaction.Tx) (SubscriptionPaymentRepository, error) {
+	return r, nil
+}
 
 // --- property archiver fake ---
 

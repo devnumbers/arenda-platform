@@ -133,7 +133,12 @@ func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	payment, err := s.deps.subscriptionPayments.WithTx(tx).GetByIDForUpdate(ctx, paymentID)
+	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+
+	payment, err := txSubscriptionPayments.GetByIDForUpdate(ctx, paymentID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrPaymentNotFound
@@ -184,7 +189,12 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	payment, err := s.deps.subscriptionPayments.WithTx(tx).GetByIDForUpdate(ctx, paymentID)
+	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+
+	payment, err := txSubscriptionPayments.GetByIDForUpdate(ctx, paymentID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrPaymentNotFound
@@ -241,7 +251,12 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 	}
 	defer func() { _ = resultTx.Rollback(ctx) }()
 
-	payment, err = s.deps.subscriptionPayments.WithTx(resultTx).GetByIDForUpdate(ctx, paymentID)
+	txResultSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(resultTx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+
+	payment, err = txResultSubscriptionPayments.GetByIDForUpdate(ctx, paymentID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrPaymentNotFound
@@ -253,7 +268,7 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 		return fmt.Errorf("%w: payment status changed to %s during refund", domain.ErrInvalidPaymentStatus, payment.Status)
 	}
 
-	if err := s.deps.subscriptionPayments.WithTx(resultTx).MarkRefunded(ctx, payment.ID, s.deps.clock.Now().UTC()); err != nil {
+	if err := txResultSubscriptionPayments.MarkRefunded(ctx, payment.ID, s.deps.clock.Now().UTC()); err != nil {
 		return fmt.Errorf("mark payment refunded: %w", err)
 	}
 
@@ -328,7 +343,16 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	payment, err = s.deps.subscriptionPayments.WithTx(tx).GetByIDForUpdate(ctx, payment.ID)
+	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+	txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
+	payment, err = txSubscriptionPayments.GetByIDForUpdate(ctx, payment.ID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrPaymentNotFound
@@ -354,13 +378,13 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 
 	switch status {
 	case domain.PaymentStatusFailed:
-		sub, err := s.deps.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, payment.SubscriptionID)
+		sub, err := txSubscriptions.GetByIDForUpdate(ctx, payment.SubscriptionID)
 		if err != nil {
 			return fmt.Errorf("get subscription for failed payment sync: %w", err)
 		}
 		if sub.TariffID == payment.TariffID {
 			transitionToGrace(&sub, s.deps.clock.Now().UTC())
-			if err := s.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+			if err := txSubscriptions.Update(ctx, sub); err != nil {
 				return fmt.Errorf("transition subscription to grace after failed payment sync: %w", err)
 			}
 		}

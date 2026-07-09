@@ -119,7 +119,20 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	sub, err = r.deps.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, sub.ID)
+	txSubscriptions, err := r.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+	txSubscriptionPayments, err := r.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+	txPaymentMethods, err := r.deps.paymentMethods.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind payment methods transaction: %w", err)
+	}
+
+	sub, err = txSubscriptions.GetByIDForUpdate(ctx, sub.ID)
 	if err != nil {
 		return fmt.Errorf("get subscription for update: %w", err)
 	}
@@ -136,7 +149,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 	// If a previous succeeded payment for the same renewal tariff was not fully
 	// applied to the subscription (e.g. the best-effort renewal step failed),
 	// reconcile it now instead of creating a duplicate payment.
-	lastSucceeded, err := r.deps.subscriptionPayments.WithTx(tx).GetLastSucceededBySubscriptionID(ctx, sub.ID)
+	lastSucceeded, err := txSubscriptionPayments.GetLastSucceededBySubscriptionID(ctx, sub.ID)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("get last succeeded payment: %w", err)
 	}
@@ -156,17 +169,17 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 
 	if sub.ActivePaymentMethodID == nil {
 		transitionToGrace(&sub, now)
-		if err := r.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+		if err := txSubscriptions.Update(ctx, sub); err != nil {
 			return fmt.Errorf("transition to grace: %w", err)
 		}
 		return tx.Commit(ctx)
 	}
 
-	pm, err := r.deps.paymentMethods.WithTx(tx).GetByID(ctx, *sub.ActivePaymentMethodID)
+	pm, err := txPaymentMethods.GetByID(ctx, *sub.ActivePaymentMethodID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			transitionToGrace(&sub, now)
-			if err := r.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+			if err := txSubscriptions.Update(ctx, sub); err != nil {
 				return fmt.Errorf("transition to grace: %w", err)
 			}
 			return tx.Commit(ctx)
@@ -178,7 +191,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 	// previous run created the pending row but crashed before saving the provider
 	// reference, recover it idempotently instead of creating a duplicate.
 	var payment domain.SubscriptionPayment
-	pendingPayments, err := r.deps.subscriptionPayments.WithTx(tx).ListPendingSubscriptionPaymentsByUserID(ctx, sub.UserID)
+	pendingPayments, err := txSubscriptionPayments.ListPendingSubscriptionPaymentsByUserID(ctx, sub.UserID)
 	if err != nil {
 		return fmt.Errorf("list pending renewal payments: %w", err)
 	}
@@ -193,7 +206,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 	// update the payment method reference so the payment record matches the
 	// token that will actually be charged.
 	if payment.ID != uuid.Nil && (payment.PaymentMethodID == nil || *payment.PaymentMethodID != pm.ID) {
-		payment, err = r.deps.subscriptionPayments.WithTx(tx).UpdatePaymentMethodID(ctx, payment.ID, pm.ID)
+		payment, err = txSubscriptionPayments.UpdatePaymentMethodID(ctx, payment.ID, pm.ID)
 		if err != nil {
 			return fmt.Errorf("update pending renewal payment method: %w", err)
 		}
@@ -214,7 +227,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 			return fmt.Errorf("create renewal payment: %w", err)
 		}
 
-		payment, err = r.deps.subscriptionPayments.WithTx(tx).Create(ctx, payment)
+		payment, err = txSubscriptionPayments.Create(ctx, payment)
 		if err != nil {
 			return fmt.Errorf("save renewal payment: %w", err)
 		}
@@ -305,6 +318,15 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 	}
 	defer func() { _ = resultTx.Rollback(ctx) }()
 
+	txResultSubscriptionPayments, err := r.deps.subscriptionPayments.WithTx(resultTx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+	txResultSubscriptions, err := r.deps.subscriptions.WithTx(resultTx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
 	// Recovery opens its own transaction, so it must never run while resultTx
 	// is still open. This helper rolls back resultTx first; the deferred
 	// rollback will then return ErrTxDone, which is safely ignored.
@@ -313,7 +335,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 		return r.recoverRenewalFailure(ctx, payment.ID, sub.ID, chargeResult.ProviderPaymentID, nil, now)
 	}
 
-	payment, err = r.deps.subscriptionPayments.WithTx(resultTx).GetByIDForUpdate(ctx, payment.ID)
+	payment, err = txResultSubscriptionPayments.GetByIDForUpdate(ctx, payment.ID)
 	if err != nil {
 		if recErr := recoverWithClosedTx(); recErr != nil {
 			return fmt.Errorf("get payment for update after charge: %w; recovery failed: %w", err, recErr)
@@ -328,7 +350,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 	}
 
 	if chargeResult.ProviderPaymentID != "" {
-		if _, updateErr := r.deps.subscriptionPayments.WithTx(resultTx).UpdateProviderPaymentID(ctx, payment.ID, chargeResult.ProviderPaymentID); updateErr != nil {
+		if _, updateErr := txResultSubscriptionPayments.UpdateProviderPaymentID(ctx, payment.ID, chargeResult.ProviderPaymentID); updateErr != nil {
 			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("update renewal provider payment id: %w; recovery failed: %w", updateErr, recErr)
 			}
@@ -338,7 +360,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 
 	switch chargeResult.Status {
 	case domain.PaymentStatusSucceeded:
-		if err := r.deps.subscriptionPayments.WithTx(resultTx).MarkSucceeded(ctx, payment.ID, now); err != nil {
+		if err := txResultSubscriptionPayments.MarkSucceeded(ctx, payment.ID, now); err != nil {
 			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("mark renewal payment succeeded: %w; recovery failed: %w", err, recErr)
 			}
@@ -359,13 +381,13 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 		}
 		return nil
 	case domain.PaymentStatusFailed:
-		if err := r.deps.subscriptionPayments.WithTx(resultTx).MarkFailed(ctx, payment.ID, providerErrorCode(chargeErr), now); err != nil {
+		if err := txResultSubscriptionPayments.MarkFailed(ctx, payment.ID, providerErrorCode(chargeErr), now); err != nil {
 			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("mark renewal payment failed: %w; recovery failed: %w", err, recErr)
 			}
 			return fmt.Errorf("mark renewal payment failed: %w", err)
 		}
-		sub, err = r.deps.subscriptions.WithTx(resultTx).GetByIDForUpdate(ctx, sub.ID)
+		sub, err = txResultSubscriptions.GetByIDForUpdate(ctx, sub.ID)
 		if err != nil {
 			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("get subscription for update after failed charge: %w; recovery failed: %w", err, recErr)
@@ -373,7 +395,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 			return fmt.Errorf("get subscription for update after failed charge: %w", err)
 		}
 		transitionToGrace(&sub, now)
-		if err := r.deps.subscriptions.WithTx(resultTx).Update(ctx, sub); err != nil {
+		if err := txResultSubscriptions.Update(ctx, sub); err != nil {
 			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("transition to grace after failed renewal: %w; recovery failed: %w", err, recErr)
 			}
@@ -465,7 +487,12 @@ func (r *RenewalService) persistProviderPaymentIDHint(ctx context.Context, payme
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	payment, err := r.deps.subscriptionPayments.WithTx(tx).GetByIDForUpdate(ctx, paymentID)
+	txSubscriptionPayments, err := r.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+
+	payment, err := txSubscriptionPayments.GetByIDForUpdate(ctx, paymentID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil
@@ -473,7 +500,7 @@ func (r *RenewalService) persistProviderPaymentIDHint(ctx context.Context, payme
 		return fmt.Errorf("get payment for provider payment id hint: %w", err)
 	}
 	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID != providerPaymentIDHint {
-		if _, updateErr := r.deps.subscriptionPayments.WithTx(tx).UpdateProviderPaymentID(ctx, paymentID, providerPaymentIDHint); updateErr != nil {
+		if _, updateErr := txSubscriptionPayments.UpdateProviderPaymentID(ctx, paymentID, providerPaymentIDHint); updateErr != nil {
 			return fmt.Errorf("update provider payment id hint: %w", updateErr)
 		}
 	}
@@ -490,16 +517,25 @@ func (r *RenewalService) markRenewalFailedAndGrace(ctx context.Context, paymentI
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err := r.deps.subscriptionPayments.WithTx(tx).MarkFailed(ctx, paymentID, errorCode, now); err != nil {
+	txSubscriptionPayments, err := r.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+	txSubscriptions, err := r.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
+	if err := txSubscriptionPayments.MarkFailed(ctx, paymentID, errorCode, now); err != nil {
 		return fmt.Errorf("mark payment failed in recovery: %w", err)
 	}
 
-	sub, err := r.deps.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, subscriptionID)
+	sub, err := txSubscriptions.GetByIDForUpdate(ctx, subscriptionID)
 	if err != nil {
 		return fmt.Errorf("get subscription for recovery: %w", err)
 	}
 	transitionToGrace(&sub, now)
-	if err := r.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("transition subscription to grace in recovery: %w", err)
 	}
 
@@ -520,7 +556,12 @@ func (r *RenewalService) markRenewalSucceededAndApply(ctx context.Context, payme
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err := r.deps.subscriptionPayments.WithTx(tx).MarkSucceeded(ctx, payment.ID, now); err != nil {
+	txSubscriptionPayments, err := r.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+
+	if err := txSubscriptionPayments.MarkSucceeded(ctx, payment.ID, now); err != nil {
 		return fmt.Errorf("mark payment succeeded in recovery: %w", err)
 	}
 	payment.Status = domain.PaymentStatusSucceeded
@@ -544,12 +585,17 @@ func (r *RenewalService) transitionSubscriptionToGrace(ctx context.Context, subs
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	sub, err := r.deps.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, subscriptionID)
+	txSubscriptions, err := r.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
+	sub, err := txSubscriptions.GetByIDForUpdate(ctx, subscriptionID)
 	if err != nil {
 		return fmt.Errorf("get subscription for recovery: %w", err)
 	}
 	transitionToGrace(&sub, now)
-	if err := r.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("transition subscription to grace in recovery: %w", err)
 	}
 
@@ -563,8 +609,17 @@ func (r *RenewalService) transitionSubscriptionToGrace(ctx context.Context, subs
 }
 
 func (r *RenewalService) resolveRenewalTariffAndAmount(ctx context.Context, tx transaction.Tx, sub domain.Subscription) (domain.Tariff, domain.SubscriptionPeriod, int64, error) {
+	txTariffs, err := r.deps.tariffs.WithTx(tx)
+	if err != nil {
+		return domain.Tariff{}, "", 0, fmt.Errorf("bind tariffs transaction: %w", err)
+	}
+	txSubscriptionPayments, err := r.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return domain.Tariff{}, "", 0, fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+
 	if sub.PendingTariffID != nil && sub.PendingPeriod != nil {
-		pendingTariff, err := r.deps.tariffs.WithTx(tx).GetByID(ctx, *sub.PendingTariffID)
+		pendingTariff, err := txTariffs.GetByID(ctx, *sub.PendingTariffID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return domain.Tariff{}, "", 0, ErrTariffNotFound
@@ -578,7 +633,7 @@ func (r *RenewalService) resolveRenewalTariffAndAmount(ctx context.Context, tx t
 		return pendingTariff, *sub.PendingPeriod, amount, nil
 	}
 
-	currentTariff, err := r.deps.tariffs.WithTx(tx).GetByID(ctx, sub.TariffID)
+	currentTariff, err := txTariffs.GetByID(ctx, sub.TariffID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Tariff{}, "", 0, ErrTariffNotFound
@@ -587,7 +642,7 @@ func (r *RenewalService) resolveRenewalTariffAndAmount(ctx context.Context, tx t
 	}
 
 	period := domain.PeriodMonth
-	lastPayment, err := r.deps.subscriptionPayments.WithTx(tx).GetLastSucceededBySubscriptionID(ctx, sub.ID)
+	lastPayment, err := txSubscriptionPayments.GetLastSucceededBySubscriptionID(ctx, sub.ID)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return domain.Tariff{}, "", 0, fmt.Errorf("get last succeeded payment: %w", err)
 	}
@@ -644,7 +699,12 @@ func (r *RenewalService) downgradeToBasic(ctx context.Context, sub domain.Subscr
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	sub, err = r.deps.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, sub.ID)
+	txSubscriptions, err := r.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
+	sub, err = txSubscriptions.GetByIDForUpdate(ctx, sub.ID)
 	if err != nil {
 		return fmt.Errorf("get subscription for update: %w", err)
 	}
@@ -654,7 +714,7 @@ func (r *RenewalService) downgradeToBasic(ctx context.Context, sub domain.Subscr
 	}
 
 	applyBasicDowngrade(&sub, basicTariff.ID)
-	if err := r.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("update subscription after grace downgrade: %w", err)
 	}
 
@@ -677,7 +737,12 @@ func (r *RenewalService) expireNonRenewingSubscription(ctx context.Context, sub 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	sub, err = r.deps.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, sub.ID)
+	txSubscriptions, err := r.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
+	sub, err = txSubscriptions.GetByIDForUpdate(ctx, sub.ID)
 	if err != nil {
 		return fmt.Errorf("get subscription for update: %w", err)
 	}
@@ -693,7 +758,7 @@ func (r *RenewalService) expireNonRenewingSubscription(ctx context.Context, sub 
 	}
 
 	applyBasicDowngrade(&sub, basicTariff.ID)
-	if err := r.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("update subscription after non-renewing expiry: %w", err)
 	}
 

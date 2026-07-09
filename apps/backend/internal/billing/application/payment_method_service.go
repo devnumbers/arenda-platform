@@ -43,7 +43,12 @@ func (s *PaymentMethodService) AddPaymentMethod(ctx context.Context, userID uuid
 		}
 		defer func() { _ = tx.Rollback(ctx) }()
 
-		pm, err = s.deps.paymentMethods.WithTx(tx).Create(ctx, pm)
+		txPaymentMethods, err := s.deps.paymentMethods.WithTx(tx)
+		if err != nil {
+			return AddPaymentMethodResponse{}, fmt.Errorf("bind payment methods transaction: %w", err)
+		}
+
+		pm, err = txPaymentMethods.Create(ctx, pm)
 		if err != nil {
 			return AddPaymentMethodResponse{}, fmt.Errorf("save payment method: %w", err)
 		}
@@ -76,11 +81,20 @@ func (s *PaymentMethodService) SetActivePaymentMethod(ctx context.Context, userI
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err := s.deps.paymentMethods.WithTx(tx).SetActive(ctx, userID, methodID); err != nil {
+	txPaymentMethods, err := s.deps.paymentMethods.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind payment methods transaction: %w", err)
+	}
+	txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
+	if err := txPaymentMethods.SetActive(ctx, userID, methodID); err != nil {
 		return fmt.Errorf("set active payment method: %w", err)
 	}
 
-	sub, err := s.deps.subscriptions.WithTx(tx).GetByUserIDForUpdate(ctx, userID)
+	sub, err := txSubscriptions.GetByUserIDForUpdate(ctx, userID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrSubscriptionNotFound
@@ -88,7 +102,7 @@ func (s *PaymentMethodService) SetActivePaymentMethod(ctx context.Context, userI
 		return fmt.Errorf("get subscription: %w", err)
 	}
 	sub.ActivePaymentMethodID = &methodID
-	if err := s.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("update subscription active payment method: %w", err)
 	}
 
@@ -111,7 +125,12 @@ func (s *PaymentMethodService) DeletePaymentMethod(ctx context.Context, userID, 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	pm, err := s.deps.paymentMethods.WithTx(tx).GetByID(ctx, methodID)
+	txPaymentMethods, err := s.deps.paymentMethods.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind payment methods transaction: %w", err)
+	}
+
+	pm, err := txPaymentMethods.GetByID(ctx, methodID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrPaymentMethodNotFound
@@ -125,7 +144,7 @@ func (s *PaymentMethodService) DeletePaymentMethod(ctx context.Context, userID, 
 		return ErrPaymentMethodInUse
 	}
 
-	if err := s.deps.paymentMethods.WithTx(tx).Delete(ctx, userID, methodID); err != nil {
+	if err := txPaymentMethods.Delete(ctx, userID, methodID); err != nil {
 		return fmt.Errorf("delete payment method: %w", err)
 	}
 

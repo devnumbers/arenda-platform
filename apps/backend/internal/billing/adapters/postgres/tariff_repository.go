@@ -51,12 +51,12 @@ func (r *TariffRepository) q() *postgres.Queries {
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
-func (r *TariffRepository) WithTx(tx transaction.Tx) application.TariffRepository {
+func (r *TariffRepository) WithTx(tx transaction.Tx) (application.TariffRepository, error) {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		panic(fmt.Sprintf("billing.TariffRepository.WithTx: %T is not a postgres.DBTX", tx))
+		return nil, fmt.Errorf("billing.TariffRepository.WithTx: %T is not a postgres.DBTX", tx)
 	}
-	return NewTariffRepository(dbtx, r.ttl, r.clock)
+	return NewTariffRepository(dbtx, r.ttl, r.clock), nil
 }
 
 // GetByID returns a tariff by ID.

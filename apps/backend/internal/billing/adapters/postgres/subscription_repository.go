@@ -31,12 +31,12 @@ func (r *SubscriptionRepository) q() *postgres.Queries {
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
-func (r *SubscriptionRepository) WithTx(tx transaction.Tx) application.SubscriptionRepository {
+func (r *SubscriptionRepository) WithTx(tx transaction.Tx) (application.SubscriptionRepository, error) {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		panic(fmt.Sprintf("billing.SubscriptionRepository.WithTx: %T is not a postgres.DBTX", tx))
+		return nil, fmt.Errorf("billing.SubscriptionRepository.WithTx: %T is not a postgres.DBTX", tx)
 	}
-	return NewSubscriptionRepository(dbtx)
+	return NewSubscriptionRepository(dbtx), nil
 }
 
 // GetByID returns a subscription by ID.

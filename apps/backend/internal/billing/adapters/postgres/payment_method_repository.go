@@ -34,12 +34,12 @@ func (r *PaymentMethodRepository) q() *postgres.Queries {
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
-func (r *PaymentMethodRepository) WithTx(tx transaction.Tx) application.PaymentMethodRepository {
+func (r *PaymentMethodRepository) WithTx(tx transaction.Tx) (application.PaymentMethodRepository, error) {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		panic(fmt.Sprintf("billing.PaymentMethodRepository.WithTx: %T is not a postgres.DBTX", tx))
+		return nil, fmt.Errorf("billing.PaymentMethodRepository.WithTx: %T is not a postgres.DBTX", tx)
 	}
-	return NewPaymentMethodRepository(dbtx, r.encryptor)
+	return NewPaymentMethodRepository(dbtx, r.encryptor), nil
 }
 
 // Create inserts a new payment method. The provider token, provider card id and

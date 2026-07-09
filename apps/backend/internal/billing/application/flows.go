@@ -70,11 +70,20 @@ func applyPaymentResult(
 		return fmt.Errorf("provider payment id mismatch: expected %q, got %q", *payment.ProviderPaymentID, payload.ProviderPaymentID)
 	}
 
+	txSubscriptionPayments, err := d.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+	txPaymentMethods, err := d.paymentMethods.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind payment methods transaction: %w", err)
+	}
+
 	// If the provider payment id was not persisted during Init (e.g. recovery
 	// path or concurrent webhook), store it from the webhook payload before
 	// finalizing the payment.
 	if payment.ProviderPaymentID == nil && payload.ProviderPaymentID != "" {
-		updated, err := d.subscriptionPayments.WithTx(tx).UpdateProviderPaymentID(ctx, payment.ID, payload.ProviderPaymentID)
+		updated, err := txSubscriptionPayments.UpdateProviderPaymentID(ctx, payment.ID, payload.ProviderPaymentID)
 		if err != nil {
 			return fmt.Errorf("persist provider payment id from webhook: %w", err)
 		}
@@ -84,7 +93,7 @@ func applyPaymentResult(
 	now := d.clock.Now().UTC()
 	switch payload.Status {
 	case domain.PaymentStatusSucceeded:
-		if err := d.subscriptionPayments.WithTx(tx).MarkSucceeded(ctx, payment.ID, now); err != nil {
+		if err := txSubscriptionPayments.MarkSucceeded(ctx, payment.ID, now); err != nil {
 			return fmt.Errorf("mark payment succeeded: %w", err)
 		}
 		payment.Status = domain.PaymentStatusSucceeded
@@ -103,20 +112,20 @@ func applyPaymentResult(
 			}
 			methodID = &pm.ID
 			if payment.PaymentMethodID == nil {
-				if _, updateErr := d.subscriptionPayments.WithTx(tx).UpdatePaymentMethodAndProviderID(ctx, payment.ID, pm.ID, payload.ProviderPaymentID); updateErr != nil {
+				if _, updateErr := txSubscriptionPayments.UpdatePaymentMethodAndProviderID(ctx, payment.ID, pm.ID, payload.ProviderPaymentID); updateErr != nil {
 					return fmt.Errorf("update payment method id: %w", updateErr)
 				}
 			}
 		}
 
 		if methodID != nil {
-			if err := d.paymentMethods.WithTx(tx).SetActive(ctx, payment.UserID, *methodID); err != nil {
+			if err := txPaymentMethods.SetActive(ctx, payment.UserID, *methodID); err != nil {
 				return fmt.Errorf("activate payment method: %w", err)
 			}
 		}
 
 	case domain.PaymentStatusFailed:
-		if err := d.subscriptionPayments.WithTx(tx).MarkFailed(ctx, payment.ID, payload.ErrorCode, now); err != nil {
+		if err := txSubscriptionPayments.MarkFailed(ctx, payment.ID, payload.ErrorCode, now); err != nil {
 			return fmt.Errorf("mark payment failed: %w", err)
 		}
 		payment.Status = domain.PaymentStatusFailed
@@ -132,7 +141,7 @@ func applyPaymentResult(
 				slog.String("provider_payment_id", payload.ProviderPaymentID),
 				slog.Int64("payload_amount_kopecks", payload.AmountKopecks))
 		}
-		if err := d.subscriptionPayments.WithTx(tx).MarkRefunded(ctx, payment.ID, now); err != nil {
+		if err := txSubscriptionPayments.MarkRefunded(ctx, payment.ID, now); err != nil {
 			return fmt.Errorf("mark payment refunded: %w", err)
 		}
 		payment.Status = domain.PaymentStatusRefunded
@@ -148,7 +157,12 @@ func applyPaymentResult(
 
 // applyRefundToSubscription downgrades the subscription to basic after a refund.
 func applyRefundToSubscription(ctx context.Context, d flowDeps, tx transaction.Tx, subscriptionID uuid.UUID) error {
-	sub, err := d.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, subscriptionID)
+	txSubscriptions, err := d.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
+	sub, err := txSubscriptions.GetByIDForUpdate(ctx, subscriptionID)
 	if err != nil {
 		return fmt.Errorf("get subscription for refund: %w", err)
 	}
@@ -157,7 +171,7 @@ func applyRefundToSubscription(ctx context.Context, d flowDeps, tx transaction.T
 		return fmt.Errorf("get basic tariff for refund: %w", err)
 	}
 	applyBasicDowngrade(&sub, basicTariff.ID)
-	if err := d.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("downgrade subscription to basic after refund: %w", err)
 	}
 	if d.propertyArchiver != nil {
@@ -199,7 +213,16 @@ func applySubscriptionRenewalBestEffort(ctx context.Context, d flowDeps, subscri
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	sub, err := d.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, subscriptionID)
+	txSubscriptions, err := d.subscriptions.WithTx(tx)
+	if err != nil {
+		d.log.ErrorContext(ctx, "failed to bind subscription transaction for best-effort renewal",
+			slog.String("subscription_id", subscriptionID.String()),
+			slog.String("payment_id", payment.ID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return domain.Subscription{}, domain.Tariff{}, uuid.UUID{}, false
+	}
+
+	sub, err := txSubscriptions.GetByIDForUpdate(ctx, subscriptionID)
 	if err != nil {
 		d.log.ErrorContext(ctx, "failed to load subscription for best-effort renewal",
 			slog.String("subscription_id", subscriptionID.String()),
@@ -239,7 +262,16 @@ func applySubscriptionRenewalBestEffort(ctx context.Context, d flowDeps, subscri
 }
 
 func applyRenewalChanges(ctx context.Context, d flowDeps, tx transaction.Tx, sub domain.Subscription, payment domain.SubscriptionPayment, now time.Time) (domain.Subscription, domain.Tariff, error) {
-	renewalTariff, err := d.tariffs.WithTx(tx).GetByID(ctx, payment.TariffID)
+	txTariffs, err := d.tariffs.WithTx(tx)
+	if err != nil {
+		return domain.Subscription{}, domain.Tariff{}, fmt.Errorf("bind tariffs transaction: %w", err)
+	}
+	txSubscriptions, err := d.subscriptions.WithTx(tx)
+	if err != nil {
+		return domain.Subscription{}, domain.Tariff{}, fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
+	renewalTariff, err := txTariffs.GetByID(ctx, payment.TariffID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Subscription{}, domain.Tariff{}, ErrTariffNotFound
@@ -252,7 +284,7 @@ func applyRenewalChanges(ctx context.Context, d flowDeps, tx transaction.Tx, sub
 			return domain.Subscription{}, domain.Tariff{}, fmt.Errorf("apply renewal: %w", err)
 		}
 	} else {
-		currentTariff, err := d.tariffs.WithTx(tx).GetByID(ctx, sub.TariffID)
+		currentTariff, err := txTariffs.GetByID(ctx, sub.TariffID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return domain.Subscription{}, domain.Tariff{}, ErrTariffNotFound
@@ -264,17 +296,26 @@ func applyRenewalChanges(ctx context.Context, d flowDeps, tx transaction.Tx, sub
 		}
 	}
 
-	if err := d.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return domain.Subscription{}, domain.Tariff{}, fmt.Errorf("update subscription after renewal: %w", err)
 	}
 	return sub, renewalTariff, nil
 }
 
 func applyFreeRenewalOrDowngrade(ctx context.Context, d flowDeps, tx transaction.Tx, sub *domain.Subscription, renewalTariff domain.Tariff, period domain.SubscriptionPeriod, now time.Time) error {
+	txSubscriptions, err := d.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+	txTariffs, err := d.tariffs.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind tariffs transaction: %w", err)
+	}
+
 	// The free basic tariff has no validity period and cannot be auto-renewed.
 	if renewalTariff.Name == domain.TariffBasic {
 		applyBasicDowngrade(sub, renewalTariff.ID)
-		if err := d.subscriptions.WithTx(tx).Update(ctx, *sub); err != nil {
+		if err := txSubscriptions.Update(ctx, *sub); err != nil {
 			return fmt.Errorf("update subscription after free downgrade to basic: %w", err)
 		}
 		if d.propertyArchiver != nil {
@@ -290,7 +331,7 @@ func applyFreeRenewalOrDowngrade(ctx context.Context, d flowDeps, tx transaction
 			return fmt.Errorf("apply free renewal: %w", err)
 		}
 	} else {
-		currentTariff, err := d.tariffs.WithTx(tx).GetByID(ctx, sub.TariffID)
+		currentTariff, err := txTariffs.GetByID(ctx, sub.TariffID)
 		if err != nil {
 			return fmt.Errorf("get current tariff for free change: %w", err)
 		}
@@ -303,7 +344,7 @@ func applyFreeRenewalOrDowngrade(ctx context.Context, d flowDeps, tx transaction
 			}
 		}
 	}
-	if err := d.subscriptions.WithTx(tx).Update(ctx, *sub); err != nil {
+	if err := txSubscriptions.Update(ctx, *sub); err != nil {
 		return fmt.Errorf("update subscription after free renewal: %w", err)
 	}
 	return nil
@@ -358,7 +399,11 @@ func upsertPaymentMethodFromWebhook(ctx context.Context, d flowDeps, tx transact
 	if err != nil {
 		return domain.PaymentMethod{}, err
 	}
-	pm, err = d.paymentMethods.WithTx(tx).UpsertByTokenHash(ctx, pm)
+	txPaymentMethods, err := d.paymentMethods.WithTx(tx)
+	if err != nil {
+		return domain.PaymentMethod{}, fmt.Errorf("bind payment methods transaction: %w", err)
+	}
+	pm, err = txPaymentMethods.UpsertByTokenHash(ctx, pm)
 	if err != nil {
 		return domain.PaymentMethod{}, fmt.Errorf("upsert payment method from webhook: %w", err)
 	}
@@ -379,9 +424,18 @@ func saveProviderInitResult(ctx context.Context, d flowDeps, payment domain.Subs
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	txSubscriptionPayments, err := d.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return domain.SubscriptionPayment{}, fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+	txPaymentMethods, err := d.paymentMethods.WithTx(tx)
+	if err != nil {
+		return domain.SubscriptionPayment{}, fmt.Errorf("bind payment methods transaction: %w", err)
+	}
+
 	// Reload the payment under lock: the provider call happened outside of a
 	// transaction, so the row must be locked before the reference is persisted.
-	payment, err = d.subscriptionPayments.WithTx(tx).GetByIDForUpdate(ctx, paymentID)
+	payment, err = txSubscriptionPayments.GetByIDForUpdate(ctx, paymentID)
 	if err != nil {
 		markPaymentFailedBestEffort(ctx, d, paymentID, now)
 		return domain.SubscriptionPayment{}, fmt.Errorf("get payment for provider result: %w", err)
@@ -408,18 +462,18 @@ func saveProviderInitResult(ctx context.Context, d flowDeps, payment domain.Subs
 			markPaymentFailedBestEffort(ctx, d, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("create payment method: %w", err)
 		}
-		pm, err = d.paymentMethods.WithTx(tx).Create(ctx, pm)
+		pm, err = txPaymentMethods.Create(ctx, pm)
 		if err != nil {
 			markPaymentFailedBestEffort(ctx, d, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("save payment method: %w", err)
 		}
-		payment, err = d.subscriptionPayments.WithTx(tx).UpdatePaymentMethodAndProviderID(ctx, paymentID, pm.ID, initRes.ProviderPaymentID)
+		payment, err = txSubscriptionPayments.UpdatePaymentMethodAndProviderID(ctx, paymentID, pm.ID, initRes.ProviderPaymentID)
 		if err != nil {
 			markPaymentFailedBestEffort(ctx, d, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update payment method and provider payment id: %w", err)
 		}
 	} else {
-		payment, err = d.subscriptionPayments.WithTx(tx).UpdateProviderPaymentID(ctx, paymentID, initRes.ProviderPaymentID)
+		payment, err = txSubscriptionPayments.UpdateProviderPaymentID(ctx, paymentID, initRes.ProviderPaymentID)
 		if err != nil {
 			markPaymentFailedBestEffort(ctx, d, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update provider payment id: %w", err)
@@ -427,7 +481,7 @@ func saveProviderInitResult(ctx context.Context, d flowDeps, payment domain.Subs
 	}
 
 	if initRes.PaymentURL != "" {
-		payment, err = d.subscriptionPayments.WithTx(tx).UpdatePaymentURL(ctx, paymentID, initRes.PaymentURL)
+		payment, err = txSubscriptionPayments.UpdatePaymentURL(ctx, paymentID, initRes.PaymentURL)
 		if err != nil {
 			markPaymentFailedBestEffort(ctx, d, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update payment url: %w", err)
@@ -455,7 +509,15 @@ func markPaymentFailedBestEffort(ctx context.Context, d flowDeps, paymentID uuid
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err := d.subscriptionPayments.WithTx(tx).MarkFailed(ctx, paymentID, nil, now); err != nil {
+	txSubscriptionPayments, err := d.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		d.log.ErrorContext(ctx, "failed to bind subscription payments transaction for best-effort payment failure mark",
+			slog.String("payment_id", paymentID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+
+	if err := txSubscriptionPayments.MarkFailed(ctx, paymentID, nil, now); err != nil {
 		d.log.ErrorContext(ctx, "failed to mark payment failed in best-effort transaction",
 			slog.String("payment_id", paymentID.String()),
 			slog.String("error", sanitize.Error(err)))

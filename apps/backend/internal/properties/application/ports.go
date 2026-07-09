@@ -25,7 +25,7 @@ type AddressSuggester interface {
 
 type SubscriptionLimiter interface {
 	ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error)
-	WithTx(tx transaction.Tx) SubscriptionLimiter
+	WithTx(tx transaction.Tx) (SubscriptionLimiter, error)
 }
 
 // OccupancyProvider reports which properties have an open lease.

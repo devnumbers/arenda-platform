@@ -32,7 +32,7 @@ type TariffRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Tariff, error)
 	GetByName(ctx context.Context, name domain.TariffName) (domain.Tariff, error)
 	List(ctx context.Context) ([]domain.Tariff, error)
-	WithTx(tx transaction.Tx) TariffRepository
+	WithTx(tx transaction.Tx) (TariffRepository, error)
 }
 
 type SubscriptionRepository interface {
@@ -47,7 +47,7 @@ type SubscriptionRepository interface {
 	ListExpiredNonRenewing(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error)
 	ListExpiredCancelled(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error)
 	ListPendingChanges(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error)
-	WithTx(tx transaction.Tx) SubscriptionRepository
+	WithTx(tx transaction.Tx) (SubscriptionRepository, error)
 }
 
 type PaymentMethodRepository interface {
@@ -57,7 +57,7 @@ type PaymentMethodRepository interface {
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error)
 	SetActive(ctx context.Context, userID, methodID uuid.UUID) error
 	Delete(ctx context.Context, userID, methodID uuid.UUID) error
-	WithTx(tx transaction.Tx) PaymentMethodRepository
+	WithTx(tx transaction.Tx) (PaymentMethodRepository, error)
 }
 
 type SubscriptionPaymentRepository interface {
@@ -78,7 +78,7 @@ type SubscriptionPaymentRepository interface {
 	UpdatePaymentURL(ctx context.Context, id uuid.UUID, paymentURL string) (domain.SubscriptionPayment, error)
 	UpdatePaymentMethodAndProviderID(ctx context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
 	UpdatePaymentMethodID(ctx context.Context, id, paymentMethodID uuid.UUID) (domain.SubscriptionPayment, error)
-	WithTx(tx transaction.Tx) SubscriptionPaymentRepository
+	WithTx(tx transaction.Tx) (SubscriptionPaymentRepository, error)
 }
 
 // PropertyArchiver archives properties when a subscription is downgraded to a

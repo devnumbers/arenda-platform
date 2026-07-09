@@ -64,21 +64,30 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 		}
 		defer func() { _ = tx.Rollback(ctx) }()
 
-		pm, err = s.deps.paymentMethods.WithTx(tx).UpsertByTokenHash(ctx, pm)
+		txPaymentMethods, err := s.deps.paymentMethods.WithTx(tx)
+		if err != nil {
+			return fmt.Errorf("bind payment methods transaction: %w", err)
+		}
+		txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
+		if err != nil {
+			return fmt.Errorf("bind subscriptions transaction: %w", err)
+		}
+
+		pm, err = txPaymentMethods.UpsertByTokenHash(ctx, pm)
 		if err != nil {
 			return fmt.Errorf("upsert add card payment method: %w", err)
 		}
 
 		// A successful AddCard webhook means the saved token is valid and should
 		// become the active payment method for future renewals.
-		if err = s.deps.paymentMethods.WithTx(tx).SetActive(ctx, userID, pm.ID); err != nil {
+		if err = txPaymentMethods.SetActive(ctx, userID, pm.ID); err != nil {
 			return fmt.Errorf("activate add card payment method: %w", err)
 		}
 
 		// Link the activated card to the subscription so renewals charge the
 		// right method. A missing subscription is not fatal for AddCard itself:
 		// failing here would make T-Kassa retry the webhook indefinitely.
-		sub, err := s.deps.subscriptions.WithTx(tx).GetByUserIDForUpdate(ctx, userID)
+		sub, err := txSubscriptions.GetByUserIDForUpdate(ctx, userID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				s.deps.log.WarnContext(ctx, "add card webhook: subscription not found; skipping active method link",
@@ -89,7 +98,7 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 			}
 		} else {
 			sub.ActivePaymentMethodID = &pm.ID
-			if err := s.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+			if err := txSubscriptions.Update(ctx, sub); err != nil {
 				return fmt.Errorf("update subscription active payment method: %w", err)
 			}
 		}
@@ -103,7 +112,16 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	payment, err := s.deps.subscriptionPayments.WithTx(tx).GetByIDForUpdate(ctx, result.InternalPaymentID)
+	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+	txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
+	payment, err := txSubscriptionPayments.GetByIDForUpdate(ctx, result.InternalPaymentID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrPaymentNotFound
@@ -131,13 +149,13 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 		}
 
 		if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
-			if _, updateErr := s.deps.subscriptionPayments.WithTx(tx).UpdateProviderPaymentID(ctx, payment.ID, result.ProviderPaymentID); updateErr != nil {
+			if _, updateErr := txSubscriptionPayments.UpdateProviderPaymentID(ctx, payment.ID, result.ProviderPaymentID); updateErr != nil {
 				return fmt.Errorf("update provider payment id: %w", updateErr)
 			}
 		}
 
 		if payment.PaymentMethodID == nil {
-			if _, updateErr := s.deps.subscriptionPayments.WithTx(tx).UpdatePaymentMethodAndProviderID(ctx, payment.ID, pm.ID, result.ProviderPaymentID); updateErr != nil {
+			if _, updateErr := txSubscriptionPayments.UpdatePaymentMethodAndProviderID(ctx, payment.ID, pm.ID, result.ProviderPaymentID); updateErr != nil {
 				return fmt.Errorf("update payment method id: %w", updateErr)
 			}
 		}
@@ -151,13 +169,13 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 
 		switch result.Status {
 		case domain.PaymentStatusFailed:
-			sub, err := s.deps.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, payment.SubscriptionID)
+			sub, err := txSubscriptions.GetByIDForUpdate(ctx, payment.SubscriptionID)
 			if err != nil {
 				return fmt.Errorf("get subscription for failed webhook: %w", err)
 			}
 			if sub.TariffID == payment.TariffID {
 				transitionToGrace(&sub, s.deps.clock.Now().UTC())
-				if err := s.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+				if err := txSubscriptions.Update(ctx, sub); err != nil {
 					return fmt.Errorf("transition subscription to grace after failed webhook: %w", err)
 				}
 			}

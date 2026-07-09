@@ -114,7 +114,10 @@ func (s *PropertyService) CreateProperty(ctx context.Context, ownerID uuid.UUID,
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txRepo := s.repo.WithTx(tx)
-	txLimiter := s.limiter.WithTx(tx)
+	txLimiter, err := s.limiter.WithTx(tx)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("bind limiter transaction: %w", err)
+	}
 
 	limit, err := txLimiter.ActivePropertyLimit(ctx, ownerID)
 	if err != nil {
@@ -460,7 +463,10 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txRepo := s.repo.WithTx(tx)
-	txLimiter := s.limiter.WithTx(tx)
+	txLimiter, err := s.limiter.WithTx(tx)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("bind limiter transaction: %w", err)
+	}
 
 	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {

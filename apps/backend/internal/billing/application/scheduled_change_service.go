@@ -58,7 +58,24 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	sub, err = c.deps.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, sub.ID)
+	txSubscriptions, err := c.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+	txTariffs, err := c.deps.tariffs.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind tariffs transaction: %w", err)
+	}
+	txPaymentMethods, err := c.deps.paymentMethods.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind payment methods transaction: %w", err)
+	}
+	txSubscriptionPayments, err := c.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+
+	sub, err = txSubscriptions.GetByIDForUpdate(ctx, sub.ID)
 	if err != nil {
 		return fmt.Errorf("get subscription for update: %w", err)
 	}
@@ -67,7 +84,7 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 		return nil
 	}
 
-	pendingTariff, err := c.deps.tariffs.WithTx(tx).GetByID(ctx, *sub.PendingTariffID)
+	pendingTariff, err := txTariffs.GetByID(ctx, *sub.PendingTariffID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrTariffNotFound
@@ -103,7 +120,7 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 		sub.PendingTariffID = nil
 		sub.PendingChangeAt = nil
 		sub.PendingPeriod = nil
-		if err := c.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+		if err := txSubscriptions.Update(ctx, sub); err != nil {
 			return fmt.Errorf("clear scheduled change without payment method: %w", err)
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -116,13 +133,13 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 		return nil
 	}
 
-	pm, err := c.deps.paymentMethods.WithTx(tx).GetByID(ctx, *sub.ActivePaymentMethodID)
+	pm, err := txPaymentMethods.GetByID(ctx, *sub.ActivePaymentMethodID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			sub.PendingTariffID = nil
 			sub.PendingChangeAt = nil
 			sub.PendingPeriod = nil
-			if updateErr := c.deps.subscriptions.WithTx(tx).Update(ctx, sub); updateErr != nil {
+			if updateErr := txSubscriptions.Update(ctx, sub); updateErr != nil {
 				return fmt.Errorf("clear scheduled change with missing payment method: %w", updateErr)
 			}
 			if commitErr := tx.Commit(ctx); commitErr != nil {
@@ -151,7 +168,7 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 	if err != nil {
 		return fmt.Errorf("create scheduled change payment: %w", err)
 	}
-	payment, err = c.deps.subscriptionPayments.WithTx(tx).Create(ctx, payment)
+	payment, err = txSubscriptionPayments.Create(ctx, payment)
 	if err != nil {
 		return fmt.Errorf("save scheduled change payment: %w", err)
 	}
@@ -194,7 +211,16 @@ func (c *ScheduledChangeService) applyPaidScheduledChange(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	payment, err = c.deps.subscriptionPayments.WithTx(tx).GetByIDForUpdate(ctx, payment.ID)
+	txSubscriptionPayments, err := c.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+	txSubscriptions, err := c.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
+	payment, err = txSubscriptionPayments.GetByIDForUpdate(ctx, payment.ID)
 	if err != nil {
 		return fmt.Errorf("get scheduled change payment for update: %w", err)
 	}
@@ -202,16 +228,16 @@ func (c *ScheduledChangeService) applyPaidScheduledChange(
 	if charged {
 		if payment.Status == domain.PaymentStatusPending {
 			if chargeResult.ProviderPaymentID != "" {
-				if _, updateErr := c.deps.subscriptionPayments.WithTx(tx).UpdateProviderPaymentID(ctx, payment.ID, chargeResult.ProviderPaymentID); updateErr != nil {
+				if _, updateErr := txSubscriptionPayments.UpdateProviderPaymentID(ctx, payment.ID, chargeResult.ProviderPaymentID); updateErr != nil {
 					return fmt.Errorf("update scheduled change provider payment id: %w", updateErr)
 				}
 			}
-			if err := c.deps.subscriptionPayments.WithTx(tx).MarkSucceeded(ctx, payment.ID, now); err != nil {
+			if err := txSubscriptionPayments.MarkSucceeded(ctx, payment.ID, now); err != nil {
 				return fmt.Errorf("mark scheduled change payment succeeded: %w", err)
 			}
 		}
 
-		sub, err = c.deps.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, sub.ID)
+		sub, err = txSubscriptions.GetByIDForUpdate(ctx, sub.ID)
 		if err != nil {
 			return fmt.Errorf("get subscription for scheduled change apply: %w", err)
 		}
@@ -221,7 +247,7 @@ func (c *ScheduledChangeService) applyPaidScheduledChange(
 		sub.PendingTariffID = nil
 		sub.PendingChangeAt = nil
 		sub.PendingPeriod = nil
-		if err := c.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+		if err := txSubscriptions.Update(ctx, sub); err != nil {
 			return fmt.Errorf("apply paid scheduled change: %w", err)
 		}
 		if c.deps.propertyArchiver != nil && oldTariffID != pendingTariff.ID {
@@ -237,19 +263,19 @@ func (c *ScheduledChangeService) applyPaidScheduledChange(
 	// for a scheduled change: mark the payment failed and clear the pending
 	// fields so the worker does not charge the same row again.
 	if payment.Status == domain.PaymentStatusPending {
-		if err := c.deps.subscriptionPayments.WithTx(tx).MarkFailed(ctx, payment.ID, errorCode, now); err != nil {
+		if err := txSubscriptionPayments.MarkFailed(ctx, payment.ID, errorCode, now); err != nil {
 			return fmt.Errorf("mark scheduled change payment failed: %w", err)
 		}
 	}
 
-	sub, err = c.deps.subscriptions.WithTx(tx).GetByIDForUpdate(ctx, sub.ID)
+	sub, err = txSubscriptions.GetByIDForUpdate(ctx, sub.ID)
 	if err != nil {
 		return fmt.Errorf("get subscription for scheduled change failure: %w", err)
 	}
 	sub.PendingTariffID = nil
 	sub.PendingChangeAt = nil
 	sub.PendingPeriod = nil
-	if err := c.deps.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("clear scheduled change after failed charge: %w", err)
 	}
 

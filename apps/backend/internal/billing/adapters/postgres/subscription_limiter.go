@@ -30,12 +30,12 @@ func NewSubscriptionLimiter(db postgres.DBTX) *SubscriptionLimiter {
 // WithTx returns a limiter instance bound to the provided transaction. The
 // transaction-bound instance locks the subscription row with SELECT FOR UPDATE
 // to serialize concurrent property-limit checks.
-func (l *SubscriptionLimiter) WithTx(tx transaction.Tx) propertiesapp.SubscriptionLimiter {
+func (l *SubscriptionLimiter) WithTx(tx transaction.Tx) (propertiesapp.SubscriptionLimiter, error) {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		panic(fmt.Sprintf("billing.SubscriptionLimiter.WithTx: %T is not a postgres.DBTX", tx))
+		return nil, fmt.Errorf("billing.SubscriptionLimiter.WithTx: %T is not a postgres.DBTX", tx)
 	}
-	return &SubscriptionLimiter{db: dbtx, lock: true}
+	return &SubscriptionLimiter{db: dbtx, lock: true}, nil
 }
 
 func (l *SubscriptionLimiter) q() *postgres.Queries {

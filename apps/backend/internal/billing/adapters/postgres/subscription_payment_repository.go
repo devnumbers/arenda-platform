@@ -33,12 +33,12 @@ func (r *SubscriptionPaymentRepository) q() *postgres.Queries {
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
-func (r *SubscriptionPaymentRepository) WithTx(tx transaction.Tx) application.SubscriptionPaymentRepository {
+func (r *SubscriptionPaymentRepository) WithTx(tx transaction.Tx) (application.SubscriptionPaymentRepository, error) {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		panic(fmt.Sprintf("billing.SubscriptionPaymentRepository.WithTx: %T is not a postgres.DBTX", tx))
+		return nil, fmt.Errorf("billing.SubscriptionPaymentRepository.WithTx: %T is not a postgres.DBTX", tx)
 	}
-	return NewSubscriptionPaymentRepository(dbtx)
+	return NewSubscriptionPaymentRepository(dbtx), nil
 }
 
 // Create inserts a new subscription payment.
