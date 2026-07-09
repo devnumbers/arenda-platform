@@ -9,9 +9,9 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
   background: var(--color-secondary-bg);
   color: var(--color-text);
   text-decoration: none;
