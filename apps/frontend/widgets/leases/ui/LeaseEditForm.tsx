@@ -1,6 +1,6 @@
 'use client';
 
-import {type ChangeEvent, type FormEvent, type JSX, useEffect, useRef, useState,} from 'react';
+import {type ChangeEvent, type FormEvent, type JSX, useEffect, useMemo, useRef, useState,} from 'react';
 import {useRouter} from 'next/navigation';
 import {notify} from '@/shared/lib/toast';
 import {ROUTES} from '@/shared/config/routes';
@@ -11,6 +11,8 @@ import {TextField} from '@/shared/ui/text-field';
 import {Select} from '@/shared/ui/select';
 import {Button} from '@/shared/ui/button';
 import {PageHeader} from '@/shared/ui/page-header';
+import {IconButton} from '@/shared/ui/icon-button';
+import {Cancel} from '@/shared/assets/icons';
 import {PropertyDetailSection} from '@/widgets/property-detail';
 import type {components} from '@/shared/api/generated';
 import type {TenantContact} from '@/entities/tenant-contact/model/types';
@@ -217,7 +219,33 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
         return Object.keys(next).length === 0;
     };
 
-    const canSubmit = isFormValid() && !updateLease.isPending;
+    const hasChanges = useMemo(() => {
+        const lease = leaseQuery.data;
+        if (!lease) {
+            return false;
+        }
+
+        return (
+            form.tenantContactId !== (lease.tenant_contact?.id ?? '') ||
+            form.startDate !== lease.start_date ||
+            form.endDate !== (lease.end_date ?? '') ||
+            parseRublesToKopecks(form.rentAmount) !== lease.rent_amount_kopecks ||
+            parseRublesToKopecks(form.depositAmount) !== lease.deposit_amount_kopecks ||
+            form.paymentDay !== String(lease.payment_day) ||
+            form.comment.trim() !== (lease.comment ?? '').trim()
+        );
+    }, [
+        form.tenantContactId,
+        form.startDate,
+        form.endDate,
+        form.rentAmount,
+        form.depositAmount,
+        form.paymentDay,
+        form.comment,
+        leaseQuery.data,
+    ]);
+
+    const canSubmit = isFormValid() && !updateLease.isPending && hasChanges;
 
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -254,13 +282,21 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
         }
     };
 
-    const handleCancel = () => {
-        router.push(ROUTES.lease(leaseId));
-    };
-
     return (
         <div className={styles.root}>
-            <PageHeader title="Редактирование аренды" backHref={ROUTES.lease(leaseId)}/>
+            <PageHeader
+                title="Редактирование аренды"
+                backHref={ROUTES.lease(leaseId)}
+                actions={
+                    <IconButton
+                        variant="secondary"
+                        size="large"
+                        icon={<Cancel />}
+                        aria-label="Отменить"
+                        onClick={() => router.push(ROUTES.lease(leaseId))}
+                    />
+                }
+            />
 
             {leaseQuery.isPending && <LeaseEditFormLoading />}
 
@@ -365,15 +401,6 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
                             disabled={!canSubmit}
                         >
                             Сохранить
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="large"
-                            fullWidth
-                            onClick={handleCancel}
-                        >
-                            Отмена
                         </Button>
                     </div>
                 </form>
