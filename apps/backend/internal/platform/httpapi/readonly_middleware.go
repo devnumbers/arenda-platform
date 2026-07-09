@@ -62,7 +62,7 @@ func withCanMutateData(ctx context.Context, canMutate bool) context.Context {
 // readonlyMiddleware blocks mutating requests when the authenticated user's
 // subscription does not allow data mutations. Read operations and the recovery
 // paths listed above are always allowed.
-func readonlyMiddleware(billing *billingapp.BillingService, logger *slog.Logger, clk clock.Clock) func(http.Handler) http.Handler {
+func readonlyMiddleware(billing billingapp.Subscriber, logger *slog.Logger, clk clock.Clock) func(http.Handler) http.Handler {
 	if clk == nil {
 		clk = fallbackClock{}
 	}
@@ -110,7 +110,7 @@ func readonlyMiddleware(billing *billingapp.BillingService, logger *slog.Logger,
 	}
 }
 
-func canMutateData(ctx context.Context, billing *billingapp.BillingService, userID uuid.UUID, clk clock.Clock) (bool, error) {
+func canMutateData(ctx context.Context, billing billingapp.Subscriber, userID uuid.UUID, clk clock.Clock) (bool, error) {
 	view, err := billing.GetSubscription(ctx, userID)
 	if err != nil {
 		if errors.Is(err, billingapp.ErrSubscriptionNotFound) {

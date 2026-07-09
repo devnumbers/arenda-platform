@@ -12,20 +12,20 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 )
 
-type fakeBillingService struct {
-	scheduledErr            error
-	renewalErr              error
-	pendingUpgradeErr       error
-	expiredGraceErr         error
-	scheduledCount          int
-	renewalCount            int
-	pendingUpgradeCount     int
-	expiredGraceCount       int
-	scheduledStarted        chan struct{}
-	scheduledDelay          <-chan struct{}
+type fakeBillingRunner struct {
+	scheduledErr        error
+	renewalErr          error
+	pendingUpgradeErr   error
+	expiredGraceErr     error
+	scheduledCount      int
+	renewalCount        int
+	pendingUpgradeCount int
+	expiredGraceCount   int
+	scheduledStarted    chan struct{}
+	scheduledDelay      <-chan struct{}
 }
 
-func (s *fakeBillingService) ProcessScheduledChanges(ctx context.Context, _ time.Time) (int, error) {
+func (s *fakeBillingRunner) ProcessScheduledChanges(ctx context.Context, _ time.Time) (int, error) {
 	if s.scheduledStarted != nil {
 		select {
 		case s.scheduledStarted <- struct{}{}:
@@ -41,15 +41,15 @@ func (s *fakeBillingService) ProcessScheduledChanges(ctx context.Context, _ time
 	return s.scheduledCount, s.scheduledErr
 }
 
-func (s *fakeBillingService) ProcessRenewals(context.Context, time.Time) (int, error) {
+func (s *fakeBillingRunner) ProcessRenewals(context.Context, time.Time) (int, error) {
 	return s.renewalCount, s.renewalErr
 }
 
-func (s *fakeBillingService) ProcessExpiredGrace(context.Context, time.Time) (int, error) {
+func (s *fakeBillingRunner) ProcessExpiredGrace(context.Context, time.Time) (int, error) {
 	return s.expiredGraceCount, s.expiredGraceErr
 }
 
-func (s *fakeBillingService) ProcessPendingUpgradePayments(context.Context, time.Time) (int, error) {
+func (s *fakeBillingRunner) ProcessPendingUpgradePayments(context.Context, time.Time) (int, error) {
 	return s.pendingUpgradeCount, s.pendingUpgradeErr
 }
 
@@ -60,14 +60,15 @@ func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 
 	sensitive := "token=secret123 card 1234-5678-9012-3456 phone +79991234567"
-	svc := &fakeBillingService{
+	svc := &fakeBillingRunner{
 		scheduledErr:    errors.New("scheduled changes failed: " + sensitive),
 		renewalErr:      errors.New("renewals failed: " + sensitive),
 		expiredGraceErr: errors.New("expired grace failed: " + sensitive),
 	}
 
-	w := NewBillingWorker(nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
-	w.billing = svc
+	w := NewBillingWorker(nil, nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
+	w.renewals = svc
+	w.scheduled = svc
 
 	if err := w.tick(context.Background()); err == nil {
 		t.Fatal("expected tick to return errors")
@@ -101,9 +102,10 @@ func TestBillingWorkerTick_CallsProcessPendingUpgradePayments(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 
-	svc := &fakeBillingService{pendingUpgradeCount: 3}
-	w := NewBillingWorker(nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
-	w.billing = svc
+	svc := &fakeBillingRunner{pendingUpgradeCount: 3}
+	w := NewBillingWorker(nil, nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
+	w.renewals = svc
+	w.scheduled = svc
 
 	if err := w.tick(context.Background()); err != nil {
 		t.Fatalf("tick error: %v", err)
@@ -136,14 +138,15 @@ func TestBillingWorker_Tick_HoldsAdvisoryLockDuringWork(t *testing.T) {
 	scheduledStarted := make(chan struct{}, 1)
 	scheduledDelay := make(chan struct{})
 
-	svc := &fakeBillingService{
+	svc := &fakeBillingRunner{
 		scheduledCount:   1,
 		scheduledStarted: scheduledStarted,
 		scheduledDelay:   scheduledDelay,
 	}
 
-	w := NewBillingWorker(nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
-	w.billing = svc
+	w := NewBillingWorker(nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
+	w.renewals = svc
+	w.scheduled = svc
 
 	tickDone := make(chan error, 1)
 	go func() {

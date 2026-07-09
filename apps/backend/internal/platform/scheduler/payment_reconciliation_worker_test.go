@@ -9,10 +9,12 @@ import (
 	"testing"
 	"time"
 
+	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 )
 
 type fakePaymentReconciliationService struct {
+	billingapp.PaymentProcessor
 	count int
 	err   error
 }
@@ -29,7 +31,7 @@ func TestPaymentReconciliationWorker_Tick_LogsCount(t *testing.T) {
 
 	svc := &fakePaymentReconciliationService{count: 7}
 	w := NewPaymentReconciliationWorker(nil, nil, fakeClockForWorker{now: time.Now()}, 5*time.Minute, logger)
-	w.billing = svc
+	w.payments = svc
 
 	if err := w.tick(context.Background()); err != nil {
 		t.Fatalf("tick error: %v", err)
@@ -53,7 +55,7 @@ func TestPaymentReconciliationWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 	sensitive := "token=secret123 card 1234-5678-9012-3456 phone +79991234567"
 	svc := &fakePaymentReconciliationService{err: errors.New("reconcile failed: " + sensitive)}
 	w := NewPaymentReconciliationWorker(nil, nil, fakeClockForWorker{now: time.Now()}, 5*time.Minute, logger)
-	w.billing = svc
+	w.payments = svc
 
 	if err := w.tick(context.Background()); err == nil {
 		t.Fatal("expected tick to return error")
@@ -98,7 +100,7 @@ func TestPaymentReconciliationWorker_Tick_HoldsAdvisoryLockDuringWork(t *testing
 	}
 
 	w := NewPaymentReconciliationWorker(nil, pool, fakeClockForWorker{now: time.Now()}, 5*time.Minute, slog.New(slog.DiscardHandler))
-	w.billing = &delayedPaymentReconciliationService{
+	w.payments = &delayedPaymentReconciliationService{
 		fakePaymentReconciliationService: svc,
 		started:                          started,
 		delay:                            delay,
@@ -161,7 +163,7 @@ func TestPaymentReconciliationWorker_Run_StopsOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	svc := &fakePaymentReconciliationService{count: 0}
 	w := NewPaymentReconciliationWorker(nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
-	w.billing = svc
+	w.payments = svc
 
 	done := make(chan struct{})
 	go func() {

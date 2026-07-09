@@ -27,7 +27,11 @@ type Deps struct {
 	Logout                   identityapp.Logout
 	Sessions                 identityapp.SessionService
 	MeEnricher               MeEnricher
-	Billing                  *billingapp.BillingService
+	Tariffs                  billingapp.Tariffer
+	Subscriptions            billingapp.Subscriber
+	PaymentMethods           billingapp.PaymentMethodManager
+	Payments                 billingapp.PaymentProcessor
+	Webhooks                 billingapp.WebhookHandler
 	Admin                    *adminapp.AdminService
 	Properties               *propertiesapp.PropertyService
 	AddressSuggester         propertiesapp.AddressSuggester
@@ -81,7 +85,7 @@ func New(deps Deps) http.Handler {
 	r.Use(rateLimitMiddleware(deps.IPRateLimiter))
 	r.Use(securityHeaders(deps.CookieSecure))
 	r.Use(SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
-	r.Use(readonlyMiddleware(deps.Billing, deps.Logger, deps.Clock))
+	r.Use(readonlyMiddleware(deps.Subscriptions, deps.Logger, deps.Clock))
 
 	r.Get("/healthz", healthHandler)
 
@@ -107,9 +111,9 @@ func New(deps Deps) http.Handler {
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Logger)
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Logger)
 	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
-	subscriptionHandlers := NewSubscriptionHandlers(deps.Billing, deps.Logger, deps.DevMode)
+	subscriptionHandlers := NewSubscriptionHandlers(deps.Tariffs, deps.Subscriptions, deps.PaymentMethods, deps.Payments, deps.Webhooks, deps.Logger, deps.DevMode)
 	financeHandlers := NewFinanceHandlers(deps.Operations)
-	adminHandlers := NewAdminHandlers(deps.Admin, deps.Billing, deps.Logger)
+	adminHandlers := NewAdminHandlers(deps.Admin, deps.Logger)
 
 	handler := &composedHandler{
 		AuthHandlers:               authHandlers,

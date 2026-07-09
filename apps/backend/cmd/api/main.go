@@ -285,7 +285,7 @@ func run(fallback *slog.Logger) error {
 		Logger:    appLogger,
 	})
 
-	billingService := billingapp.NewBillingService(
+	billing := billingapp.NewServices(
 		tariffRepo,
 		subscriptionRepo,
 		paymentMethodRepo,
@@ -298,10 +298,10 @@ func run(fallback *slog.Logger) error {
 		propertyService,
 		onboardingService,
 	)
-	eventDispatcher.Subscribe(events.EventType("user_registered"), billingService.OnUserRegistered)
+	eventDispatcher.Subscribe(events.EventType("user_registered"), billing.OnUserRegistered)
 
 	adminRepo := adminpg.NewAdminRepository(db, encryptor, clock.Real{}, occupancyProvider)
-	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billingService, clock.Real{})
+	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billing.Subscriptions, clock.Real{})
 
 	leasePropertyRepo := leasespg.NewPropertyRepository(db)
 	tenantContactRepo := leasespg.NewTenantContactRepository(db)
@@ -338,8 +338,8 @@ func run(fallback *slog.Logger) error {
 	}
 	reminderWorker := scheduler.NewReminderWorker(reminderRepo, renderer, notifiers, contactResolver, platformpostgres.NewBeginner(pool, appLogger), clock.Real{}, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, appLogger)
 	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, clock.Real{}, 1*time.Hour, 100, appLogger)
-	billingWorker := scheduler.NewBillingWorker(billingService, pool, clock.Real{}, cfg.BillingWorkerInterval, appLogger)
-	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(billingService, pool, clock.Real{}, cfg.PaymentReconciliationWorkerInterval, appLogger)
+	billingWorker := scheduler.NewBillingWorker(billing.Renewals, billing.ScheduledChanges, pool, clock.Real{}, cfg.BillingWorkerInterval, appLogger)
+	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(billing.Payments, pool, clock.Real{}, cfg.PaymentReconciliationWorkerInterval, appLogger)
 	operationOverdueWorker := scheduler.NewOperationOverdueWorker(operationService, clock.Real{}, cfg.OverdueOperationWorkerInterval, 100, appLogger)
 
 	dataCleaner := identityscheduler.NewCleaner(identitySessionRepo, identityCodeRepo, identityAttemptRepo, clock.Real{}, 1*time.Hour, 7*24*time.Hour, appLogger)
@@ -394,8 +394,12 @@ func run(fallback *slog.Logger) error {
 		Profile:                  profileService,
 		Logout:                   logoutService,
 		Sessions:                 identitySessionService,
-		MeEnricher:               httpapi.BillingMeEnricher(billingService),
-		Billing:                  billingService,
+		MeEnricher:               httpapi.BillingMeEnricher(billing.Subscriptions),
+		Tariffs:                  billing.Tariffs,
+		Subscriptions:            billing.Subscriptions,
+		PaymentMethods:           billing.PaymentMethods,
+		Payments:                 billing.Payments,
+		Webhooks:                 billing.Webhooks,
 		Admin:                    adminService,
 		Properties:               propertyService,
 		AddressSuggester:         dadataClient,

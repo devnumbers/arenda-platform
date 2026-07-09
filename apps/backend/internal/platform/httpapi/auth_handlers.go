@@ -416,7 +416,7 @@ func meResponse(user domain.User) openapi.MeResponse {
 // BillingMeEnricher returns a MeEnricher that adds the current billing
 // subscription to a MeResponse. It keeps the billing-to-OpenAPI mapping in the
 // HTTP layer so the application layer does not depend on openapi types.
-func BillingMeEnricher(billing *billingapp.BillingService) MeEnricher {
+func BillingMeEnricher(billing billingapp.Subscriber) MeEnricher {
 	return func(ctx context.Context, userID uuid.UUID, resp *openapi.MeResponse) error {
 		if billing == nil {
 			return nil

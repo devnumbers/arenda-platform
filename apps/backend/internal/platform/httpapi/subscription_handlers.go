@@ -16,14 +16,34 @@ import (
 
 // SubscriptionHandlers implements the generated subscription and tariff endpoints.
 type SubscriptionHandlers struct {
-	billing *billingapp.BillingService
-	logger  *slog.Logger
-	DevMode bool
+	tariffs        billingapp.Tariffer
+	subscriptions  billingapp.Subscriber
+	paymentMethods billingapp.PaymentMethodManager
+	payments       billingapp.PaymentProcessor
+	webhooks       billingapp.WebhookHandler
+	logger         *slog.Logger
+	DevMode        bool
 }
 
 // NewSubscriptionHandlers creates HTTP handlers for the billing API.
-func NewSubscriptionHandlers(billing *billingapp.BillingService, logger *slog.Logger, devMode bool) *SubscriptionHandlers {
-	return &SubscriptionHandlers{billing: billing, logger: logger, DevMode: devMode}
+func NewSubscriptionHandlers(
+	tariffs billingapp.Tariffer,
+	subscriptions billingapp.Subscriber,
+	paymentMethods billingapp.PaymentMethodManager,
+	payments billingapp.PaymentProcessor,
+	webhooks billingapp.WebhookHandler,
+	logger *slog.Logger,
+	devMode bool,
+) *SubscriptionHandlers {
+	return &SubscriptionHandlers{
+		tariffs:        tariffs,
+		subscriptions:  subscriptions,
+		paymentMethods: paymentMethods,
+		payments:       payments,
+		webhooks:       webhooks,
+		logger:         logger,
+		DevMode:        devMode,
+	}
 }
 
 // ListTariffs implements GET /tariffs.
@@ -34,7 +54,7 @@ func (h *SubscriptionHandlers) ListTariffs(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	tariffs, err := h.billing.ListTariffs(r.Context())
+	tariffs, err := h.tariffs.ListTariffs(r.Context())
 	if err != nil {
 		h.handleBillingError(w, r, err)
 		return
@@ -55,7 +75,7 @@ func (h *SubscriptionHandlers) GetSubscription(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	view, err := h.billing.GetSubscription(r.Context(), ownerID)
+	view, err := h.subscriptions.GetSubscription(r.Context(), ownerID)
 	if err != nil {
 		h.handleBillingError(w, r, err)
 		return
@@ -79,7 +99,7 @@ func (h *SubscriptionHandlers) ToggleAutoRenew(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if err := h.billing.ToggleAutoRenew(r.Context(), ownerID, body.Enabled); err != nil {
+	if err := h.subscriptions.ToggleAutoRenew(r.Context(), ownerID, body.Enabled); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -95,7 +115,7 @@ func (h *SubscriptionHandlers) CancelSubscription(w http.ResponseWriter, r *http
 		return
 	}
 
-	if err := h.billing.CancelSubscription(r.Context(), ownerID); err != nil {
+	if err := h.subscriptions.CancelSubscription(r.Context(), ownerID); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -118,7 +138,7 @@ func (h *SubscriptionHandlers) ChangeTariff(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	res, err := h.billing.ChangeTariff(r.Context(), ownerID, billingapp.ChangeTariffRequest{
+	res, err := h.subscriptions.ChangeTariff(r.Context(), ownerID, billingapp.ChangeTariffRequest{
 		TariffName: string(body.TariffName),
 		Period:     domain.SubscriptionPeriod(body.Period),
 	})
@@ -146,7 +166,7 @@ func (h *SubscriptionHandlers) ListSubscriptionPayments(w http.ResponseWriter, r
 		return
 	}
 
-	views, err := h.billing.ListPayments(r.Context(), ownerID)
+	views, err := h.payments.ListPayments(r.Context(), ownerID)
 	if err != nil {
 		h.handleBillingError(w, r, err)
 		return
@@ -167,7 +187,7 @@ func (h *SubscriptionHandlers) ListPaymentMethods(w http.ResponseWriter, r *http
 		return
 	}
 
-	methods, err := h.billing.ListPaymentMethods(r.Context(), ownerID)
+	methods, err := h.paymentMethods.ListPaymentMethods(r.Context(), ownerID)
 	if err != nil {
 		h.handleBillingError(w, r, err)
 		return
@@ -199,7 +219,7 @@ func (h *SubscriptionHandlers) AddPaymentMethod(w http.ResponseWriter, r *http.R
 	if body.ProviderToken != nil {
 		req.ProviderToken = *body.ProviderToken
 	}
-	resp, err := h.billing.AddPaymentMethod(r.Context(), ownerID, req)
+	resp, err := h.paymentMethods.AddPaymentMethod(r.Context(), ownerID, req)
 	if err != nil {
 		h.handleBillingError(w, r, err)
 		return
@@ -223,7 +243,7 @@ func (h *SubscriptionHandlers) DeletePaymentMethod(w http.ResponseWriter, r *htt
 		return
 	}
 
-	if err := h.billing.DeletePaymentMethod(r.Context(), ownerID, id); err != nil {
+	if err := h.paymentMethods.DeletePaymentMethod(r.Context(), ownerID, id); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -239,7 +259,7 @@ func (h *SubscriptionHandlers) ActivatePaymentMethod(w http.ResponseWriter, r *h
 		return
 	}
 
-	if err := h.billing.SetActivePaymentMethod(r.Context(), ownerID, id); err != nil {
+	if err := h.paymentMethods.SetActivePaymentMethod(r.Context(), ownerID, id); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -254,7 +274,7 @@ func (h *SubscriptionHandlers) ConfirmFakeSubscriptionPayment(w http.ResponseWri
 		return
 	}
 
-	if err := h.billing.ConfirmFakePayment(r.Context(), id); err != nil {
+	if err := h.payments.ConfirmFakePayment(r.Context(), id); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -282,14 +302,14 @@ func (h *SubscriptionHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *ht
 		h.logger.ErrorContext(r.Context(), "failed to read webhook body",
 			slog.String("provider", provider),
 			slog.String("error", sanitizeError(err)))
-		writeWebhookResponse(w, h.billing.WebhookResponse())
+		writeWebhookResponse(w, h.webhooks.WebhookResponse())
 		return
 	}
 	if len(payload) > maxWebhookBody {
 		h.logger.ErrorContext(r.Context(), "webhook body exceeds size limit",
 			slog.String("provider", provider),
 			slog.Int("size", len(payload)))
-		writeWebhookResponse(w, h.billing.WebhookResponse())
+		writeWebhookResponse(w, h.webhooks.WebhookResponse())
 		return
 	}
 
@@ -300,7 +320,7 @@ func (h *SubscriptionHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *ht
 
 	// Respond immediately to satisfy the provider's timeout window, then process
 	// the webhook in a background goroutine with its own timeout and recovery.
-	writeWebhookResponse(w, h.billing.WebhookResponse())
+	writeWebhookResponse(w, h.webhooks.WebhookResponse())
 
 	reqCtx := r.Context()
 	go func() {
@@ -315,7 +335,7 @@ func (h *SubscriptionHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *ht
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(reqCtx), webhookProcessTimeout)
 		defer cancel()
 
-		if err := h.billing.HandleWebhook(ctx, provider, payload); err != nil {
+		if err := h.webhooks.HandleWebhook(ctx, provider, payload); err != nil {
 			h.logger.ErrorContext(ctx, "payment webhook processing failed",
 				slog.String("provider", provider),
 				slog.String("error", sanitizeError(err)))
@@ -423,7 +443,7 @@ func paymentMethodResponse(pm domain.PaymentMethod) *openapi.PaymentMethod {
 
 // GetAdminSubscriptionPayment implements GET /admin/subscription/payments/{paymentId}.
 func (h *SubscriptionHandlers) GetAdminSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId uuid.UUID) {
-	view, err := h.billing.GetPayment(r.Context(), paymentId)
+	view, err := h.payments.GetPayment(r.Context(), paymentId)
 	if err != nil {
 		h.handleBillingError(w, r, err)
 		return
@@ -434,7 +454,7 @@ func (h *SubscriptionHandlers) GetAdminSubscriptionPayment(w http.ResponseWriter
 
 // RefundSubscriptionPayment implements POST /admin/subscription/payments/{paymentId}/refund.
 func (h *SubscriptionHandlers) RefundSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId uuid.UUID) {
-	if err := h.billing.RefundPayment(r.Context(), paymentId); err != nil {
+	if err := h.payments.RefundPayment(r.Context(), paymentId); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -480,7 +500,7 @@ func adminSubscriptionPaymentResponse(view billingapp.AdminSubscriptionPaymentVi
 
 // SyncSubscriptionPayment implements POST /admin/subscription/payments/{paymentId}/sync.
 func (h *SubscriptionHandlers) SyncSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId uuid.UUID) {
-	if err := h.billing.SyncPendingPayment(r.Context(), paymentId); err != nil {
+	if err := h.payments.SyncPendingPayment(r.Context(), paymentId); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -507,7 +527,7 @@ func (h *SubscriptionHandlers) ListAdminSubscriptionPayments(w http.ResponseWrit
 		filters.UserID = *params.UserId
 	}
 
-	views, total, err := h.billing.ListAllPayments(r.Context(), filters)
+	views, total, err := h.payments.ListAllPayments(r.Context(), filters)
 	if err != nil {
 		h.handleBillingError(w, r, err)
 		return

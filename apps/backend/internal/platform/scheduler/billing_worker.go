@@ -17,28 +17,20 @@ import (
 // advisory lock used to ensure only one billing worker runs at a time.
 const billingWorkerLockKey int64 = 0xB111
 
-// billingService is the subset of the billing application service used by the
-// worker. It keeps the worker decoupled from the concrete service type.
-type billingService interface {
-	ProcessScheduledChanges(ctx context.Context, now time.Time) (int, error)
-	ProcessRenewals(ctx context.Context, now time.Time) (int, error)
-	ProcessPendingUpgradePayments(ctx context.Context, now time.Time) (int, error)
-	ProcessExpiredGrace(ctx context.Context, now time.Time) (int, error)
-}
-
 // BillingWorker periodically processes subscription renewals and expired grace
-// periods. It delegates the actual billing decisions to BillingService so the
+// periods. It delegates the actual billing decisions to the billing ports so the
 // worker stays a thin scheduling shell.
 type BillingWorker struct {
-	billing  billingService
-	pool     *pgxpool.Pool
-	clock    clock.Clock
-	interval time.Duration
-	logger   *slog.Logger
+	renewals  billingapp.RenewalRunner
+	scheduled billingapp.ScheduledChangeRunner
+	pool      *pgxpool.Pool
+	clock     clock.Clock
+	interval  time.Duration
+	logger    *slog.Logger
 }
 
 // NewBillingWorker creates a new billing lifecycle worker.
-func NewBillingWorker(billing *billingapp.BillingService, pool *pgxpool.Pool, clock clock.Clock, interval time.Duration, logger *slog.Logger) *BillingWorker {
+func NewBillingWorker(renewals billingapp.RenewalRunner, scheduled billingapp.ScheduledChangeRunner, pool *pgxpool.Pool, clock clock.Clock, interval time.Duration, logger *slog.Logger) *BillingWorker {
 	if interval <= 0 {
 		interval = time.Hour
 	}
@@ -46,11 +38,12 @@ func NewBillingWorker(billing *billingapp.BillingService, pool *pgxpool.Pool, cl
 		logger = slog.Default()
 	}
 	return &BillingWorker{
-		billing:  billing,
-		pool:     pool,
-		clock:    clock,
-		interval: interval,
-		logger:   logger,
+		renewals:  renewals,
+		scheduled: scheduled,
+		pool:      pool,
+		clock:     clock,
+		interval:  interval,
+		logger:    logger,
 	}
 }
 
@@ -94,28 +87,28 @@ func (w *BillingWorker) tick(ctx context.Context) error {
 
 	now := w.clock.Now().UTC()
 
-	scheduled, scheduledErr := w.billing.ProcessScheduledChanges(ctx, now)
+	scheduled, scheduledErr := w.scheduled.ProcessScheduledChanges(ctx, now)
 	if scheduledErr != nil {
 		w.logger.ErrorContext(ctx, "billing worker scheduled changes processing failed", "error", sanitize.Error(scheduledErr))
 	} else if scheduled > 0 {
 		w.logger.InfoContext(ctx, "billing worker applied scheduled changes", "count", scheduled)
 	}
 
-	renewed, renewalErr := w.billing.ProcessRenewals(ctx, now)
+	renewed, renewalErr := w.renewals.ProcessRenewals(ctx, now)
 	if renewalErr != nil {
 		w.logger.ErrorContext(ctx, "billing worker renewal processing failed", "error", sanitize.Error(renewalErr))
 	} else if renewed > 0 {
 		w.logger.InfoContext(ctx, "billing worker processed renewals", "count", renewed)
 	}
 
-	upgrades, upgradeErr := w.billing.ProcessPendingUpgradePayments(ctx, now)
+	upgrades, upgradeErr := w.renewals.ProcessPendingUpgradePayments(ctx, now)
 	if upgradeErr != nil {
 		w.logger.ErrorContext(ctx, "billing worker pending upgrade processing failed", "error", sanitize.Error(upgradeErr))
 	} else if upgrades > 0 {
 		w.logger.InfoContext(ctx, "billing worker finalized pending upgrade payments", "count", upgrades)
 	}
 
-	downgraded, graceErr := w.billing.ProcessExpiredGrace(ctx, now)
+	downgraded, graceErr := w.renewals.ProcessExpiredGrace(ctx, now)
 	if graceErr != nil {
 		w.logger.ErrorContext(ctx, "billing worker expired grace processing failed", "error", sanitize.Error(graceErr))
 	} else if downgraded > 0 {
