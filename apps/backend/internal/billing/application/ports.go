@@ -100,17 +100,55 @@ type PaymentURLProvider interface {
 	PaymentURL(ctx context.Context, paymentID uuid.UUID) (string, error)
 }
 
-// Provider abstracts the external payment processor used for subscription payments.
-type Provider interface {
-	Name() domain.PaymentProvider
+// PaymentInitiator starts a new payment at the provider.
+type PaymentInitiator interface {
 	Init(ctx context.Context, req InitRequest) (InitResult, error)
+}
+
+// PaymentCharger performs a recurrent charge using a previously saved token.
+type PaymentCharger interface {
 	Charge(ctx context.Context, req ChargeRequest) (ChargeResult, error)
+}
+
+// PaymentCanceler cancels or refunds a finalized payment.
+type PaymentCanceler interface {
 	Cancel(ctx context.Context, req CancelRequest) (CancelResult, error)
+}
+
+// PaymentStatusChecker queries the current provider-side status of a payment.
+type PaymentStatusChecker interface {
 	Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error)
+}
+
+// WebhookParser parses and verifies an incoming provider webhook payload.
+type WebhookParser interface {
 	ParseWebhook(ctx context.Context, payload []byte) (WebhookPayload, error)
+}
+
+// CardManager manages customer cards bound at the provider.
+type CardManager interface {
 	InitAddCard(ctx context.Context, req InitAddCardRequest) (InitAddCardResult, error)
 	RemoveCard(ctx context.Context, customerKey, cardID string) error
+}
+
+// WebhookResponder returns the fixed body the provider expects as a webhook ack.
+type WebhookResponder interface {
 	WebhookResponse() []byte
+}
+
+// Provider abstracts the external payment processor used for subscription payments.
+// It is the aggregate of the narrow payment capability interfaces above plus the
+// provider identity. Consumers that need only a subset should depend on the
+// narrow interface directly.
+type Provider interface {
+	PaymentInitiator
+	PaymentCharger
+	PaymentCanceler
+	PaymentStatusChecker
+	WebhookParser
+	CardManager
+	WebhookResponder
+	Name() domain.PaymentProvider
 }
 
 // OnboardingService creates default billing state for newly-registered owners.

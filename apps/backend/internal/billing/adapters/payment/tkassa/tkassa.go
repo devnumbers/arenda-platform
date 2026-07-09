@@ -71,6 +71,19 @@ type Provider struct {
 	log         *slog.Logger
 }
 
+// Compile-time assertions that Provider satisfies the aggregate Provider port
+// and each of its narrow capability interfaces.
+var (
+	_ application.Provider             = (*Provider)(nil)
+	_ application.PaymentInitiator     = (*Provider)(nil)
+	_ application.PaymentCharger       = (*Provider)(nil)
+	_ application.PaymentCanceler      = (*Provider)(nil)
+	_ application.PaymentStatusChecker = (*Provider)(nil)
+	_ application.WebhookParser        = (*Provider)(nil)
+	_ application.CardManager          = (*Provider)(nil)
+	_ application.WebhookResponder     = (*Provider)(nil)
+)
+
 // baseResponse is embedded in all T-Kassa API responses.
 type baseResponse struct {
 	Success     bool   `json:"Success"`

@@ -41,6 +41,19 @@ type Provider struct {
 	confirmedAmounts map[string]int64
 }
 
+// Compile-time assertions that Provider satisfies the aggregate Provider port
+// and each of its narrow capability interfaces.
+var (
+	_ application.Provider             = (*Provider)(nil)
+	_ application.PaymentInitiator     = (*Provider)(nil)
+	_ application.PaymentCharger       = (*Provider)(nil)
+	_ application.PaymentCanceler      = (*Provider)(nil)
+	_ application.PaymentStatusChecker = (*Provider)(nil)
+	_ application.WebhookParser        = (*Provider)(nil)
+	_ application.CardManager          = (*Provider)(nil)
+	_ application.WebhookResponder     = (*Provider)(nil)
+)
+
 // Name returns the provider identity used by the application layer.
 func (p *Provider) Name() domain.PaymentProvider {
 	return domain.ProviderFake
