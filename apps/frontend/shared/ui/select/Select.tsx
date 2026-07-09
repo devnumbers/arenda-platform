@@ -184,7 +184,10 @@ export function Select<Value extends string = string>({
                     onClick={() => setIsOpen(!isOpen)}
                     disabled={disabled}
                 >
-                    <span className={styles.label}>{triggerLabel}</span>
+                    <span className={styles.label}>
+                        {triggerLabel}
+                        {required && <span className={styles.required}>*</span>}
+                    </span>
                     <span className={styles.control}>
                         <span className={styles.value}>{selectedLabel || placeholder}</span>
                         <span className={styles.chevron} aria-hidden="true">

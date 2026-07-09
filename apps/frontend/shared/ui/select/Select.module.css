@@ -28,6 +28,10 @@
   font-weight: 500;
 }
 
+.required {
+  color: var(--color-error);
+}
+
 .control {
   position: relative;
   display: flex;

@@ -39,6 +39,7 @@ export function CategorySelect({
             onChange={onChange}
             error={error}
             disabled={disabled}
+            required
             placeholder="Выберите категорию"
         />
     );

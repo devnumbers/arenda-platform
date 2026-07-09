@@ -37,6 +37,7 @@ export function PropertySelect({
             error={error}
             disabled={isDisabled}
             loading={isLoading}
+            required
             emptyMessage="Сначала добавьте объект"
             placeholder={placeholder}
         />
