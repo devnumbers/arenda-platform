@@ -103,7 +103,7 @@ func TestSubscriptionPaymentRefund(t *testing.T) {
 		if err := payment.MarkSucceeded(now); err != nil {
 			t.Fatalf("MarkSucceeded() error = %v", err)
 		}
-		if err := payment.MarkRefunded(440000, now); err != nil {
+		if err := payment.MarkRefunded(now); err != nil {
 			t.Fatalf("MarkRefunded() error = %v", err)
 		}
 		if payment.Status != PaymentStatusRefunded {
@@ -117,25 +117,9 @@ func TestSubscriptionPaymentRefund(t *testing.T) {
 		}
 	})
 
-	t.Run("partial refund", func(t *testing.T) {
-		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodYear, 440000, ProviderFake, now)
-		if err := payment.MarkSucceeded(now); err != nil {
-			t.Fatalf("MarkSucceeded() error = %v", err)
-		}
-		if err := payment.MarkRefunded(200000, now); err != nil {
-			t.Fatalf("MarkRefunded() error = %v", err)
-		}
-		if payment.Status != PaymentStatusPartialRefunded {
-			t.Errorf("status = %v, want %v", payment.Status, PaymentStatusPartialRefunded)
-		}
-		if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != 200000 {
-			t.Errorf("refunded amount = %v, want 200000", payment.RefundedAmountKopecks)
-		}
-	})
-
 	t.Run("refund from pending succeeds", func(t *testing.T) {
 		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodYear, 440000, ProviderFake, now)
-		if err := payment.MarkRefunded(440000, now); err != nil {
+		if err := payment.MarkRefunded(now); err != nil {
 			t.Fatalf("MarkRefunded() error = %v", err)
 		}
 		if payment.Status != PaymentStatusRefunded {
@@ -150,16 +134,8 @@ func TestSubscriptionPaymentRefund(t *testing.T) {
 		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodYear, 440000, ProviderFake, now)
 		code := "error"
 		_ = payment.MarkFailed(&code, now)
-		if err := payment.MarkRefunded(440000, now); !errors.Is(err, ErrInvalidPaymentStatus) {
+		if err := payment.MarkRefunded(now); !errors.Is(err, ErrInvalidPaymentStatus) {
 			t.Errorf("MarkRefunded() error = %v, want ErrInvalidPaymentStatus", err)
-		}
-	})
-
-	t.Run("refund amount out of range fails", func(t *testing.T) {
-		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodYear, 440000, ProviderFake, now)
-		_ = payment.MarkSucceeded(now)
-		if err := payment.MarkRefunded(500000, now); !errors.Is(err, ErrInvalidAmount) {
-			t.Errorf("MarkRefunded() error = %v, want ErrInvalidAmount", err)
 		}
 	})
 }

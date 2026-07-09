@@ -440,12 +440,12 @@ func (r *fakeSubscriptionPaymentRepo) MarkFailed(_ context.Context, id uuid.UUID
 	return nil
 }
 
-func (r *fakeSubscriptionPaymentRepo) MarkRefunded(_ context.Context, id uuid.UUID, _ domain.PaymentStatus, amountKopecks int64, now time.Time) error {
+func (r *fakeSubscriptionPaymentRepo) MarkRefunded(_ context.Context, id uuid.UUID, now time.Time) error {
 	p, ok := r.payments[id]
 	if !ok {
 		return ErrNotFound
 	}
-	if err := p.MarkRefunded(amountKopecks, now); err != nil {
+	if err := p.MarkRefunded(now); err != nil {
 		return err
 	}
 	r.payments[id] = p
@@ -3565,6 +3565,70 @@ func TestBillingService_HandleWebhook_TkassaAddCard(t *testing.T) {
 	}
 }
 
+func TestBillingService_HandleWebhook_AddCardLinksActivePaymentMethodToSubscription(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777a")
+	tariffID := uuid.MustParse("99999999-9999-9999-9999-99999999997b")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa7c")
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         tariffID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			NotificationType: "NotificationAddCard",
+			CustomerKey:      userID.String(),
+			RequestKey:       "req_link",
+			RebillID:         "rebill_link",
+			CardID:           "card_link",
+			Pan:              "430000******0777",
+			ExpDate:          "12/30",
+		}, nil
+	}
+
+	if err := d.service.HandleWebhook(t.Context(), "tkassa", []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook AddCard error: %v", err)
+	}
+
+	var linkedID uuid.UUID
+	var found bool
+	for _, pm := range d.paymentMethods.methods {
+		if pm.UserID == userID && pm.ProviderToken == "rebill_link" {
+			linkedID = pm.ID
+			found = true
+			if !pm.IsActive {
+				t.Error("expected add card payment method to be active")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected payment method created from AddCard webhook")
+	}
+
+	sub, ok := d.subscriptions.subs[userID]
+	if !ok {
+		t.Fatal("expected subscription to exist")
+	}
+	if sub.ActivePaymentMethodID == nil {
+		t.Fatalf("expected subscription active payment method to be set to %s, got nil", linkedID)
+	}
+	if *sub.ActivePaymentMethodID != linkedID {
+		t.Errorf("expected subscription active payment method %s, got %s", linkedID, *sub.ActivePaymentMethodID)
+	}
+}
+
 func TestBillingService_HandleWebhook_TkassaAddCardLegacy(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
@@ -3936,7 +4000,7 @@ func TestBillingService_RefundPayment_SucceedsAndDowngradesToBasic(t *testing.T)
 		RefundedAmountKopecks: 5000,
 	}
 
-	if err := d.service.RefundPayment(context.Background(), paymentID, nil); err != nil {
+	if err := d.service.RefundPayment(t.Context(), paymentID); err != nil {
 		t.Fatalf("RefundPayment error: %v", err)
 	}
 
@@ -4015,7 +4079,7 @@ func TestBillingService_RefundPayment_PendingPaymentSucceeds(t *testing.T) {
 		RefundedAmountKopecks: 5000,
 	}
 
-	if err := d.service.RefundPayment(context.Background(), paymentID, nil); err != nil {
+	if err := d.service.RefundPayment(t.Context(), paymentID); err != nil {
 		t.Fatalf("RefundPayment error: %v", err)
 	}
 
@@ -4033,16 +4097,15 @@ func TestBillingService_RefundPayment_PendingPaymentSucceeds(t *testing.T) {
 	}
 }
 
-func TestBillingService_RefundPayment_PartialRefund(t *testing.T) {
+func TestBillingService_RefundPayment_FullRefund(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777c")
 	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888d")
 	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaf")
 	basicID := uuid.MustParse("00000000-0000-0000-0000-000000000005")
 	proID := uuid.MustParse("00000000-0000-0000-0000-000000000006")
-	providerPaymentID := "stub_partial_refund"
+	providerPaymentID := "stub_full_refund"
 	validUntil := fixedNow.AddDate(0, 1, 0)
-	partialAmount := int64(2000)
 
 	d.addTariff(domain.Tariff{
 		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
@@ -4073,20 +4136,20 @@ func TestBillingService_RefundPayment_PartialRefund(t *testing.T) {
 	}
 	d.provider.cancelRes = CancelResult{
 		ProviderPaymentID:     providerPaymentID,
-		Status:                domain.PaymentStatusPartialRefunded,
-		RefundedAmountKopecks: partialAmount,
+		Status:                domain.PaymentStatusRefunded,
+		RefundedAmountKopecks: 5000,
 	}
 
-	if err := d.service.RefundPayment(context.Background(), paymentID, &partialAmount); err != nil {
+	if err := d.service.RefundPayment(t.Context(), paymentID); err != nil {
 		t.Fatalf("RefundPayment error: %v", err)
 	}
 
 	payment := d.subscriptionPayments.payments[paymentID]
-	if payment.Status != domain.PaymentStatusPartialRefunded {
-		t.Errorf("expected payment partial_refunded, got %s", payment.Status)
+	if payment.Status != domain.PaymentStatusRefunded {
+		t.Errorf("expected payment refunded, got %s", payment.Status)
 	}
-	if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != partialAmount {
-		t.Errorf("expected refunded amount %d, got %v", partialAmount, payment.RefundedAmountKopecks)
+	if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != 5000 {
+		t.Errorf("expected refunded amount 5000, got %v", payment.RefundedAmountKopecks)
 	}
 
 	sub := d.subscriptions.subs[userID]
@@ -4121,48 +4184,12 @@ func TestBillingService_RefundPayment_RejectedForNonSucceededOrPendingPayment(t 
 		Status:            domain.PaymentStatusFailed,
 	}
 
-	err := d.service.RefundPayment(context.Background(), paymentID, nil)
+	err := d.service.RefundPayment(t.Context(), paymentID)
 	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
 		t.Fatalf("expected ErrInvalidPaymentStatus, got %v", err)
 	}
 	if d.provider.cancelCalled {
 		t.Error("expected provider.Cancel not to be called for non-succeeded/non-pending payment")
-	}
-}
-
-func TestBillingService_RefundPayment_RejectedForExcessivePartialAmount(t *testing.T) {
-	d := newTestDeps(t)
-	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777e")
-	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888f")
-	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaab1")
-	proID := uuid.MustParse("00000000-0000-0000-0000-000000000008")
-	providerPaymentID := "stub_refund_excessive"
-	excessiveAmount := int64(5001)
-
-	d.addSubscription(domain.Subscription{
-		ID:       subscriptionID,
-		UserID:   userID,
-		TariffID: proID,
-		Source:   domain.SubscriptionSourcePaid,
-		Status:   domain.SubscriptionStatusActive,
-	})
-	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
-		ID:                paymentID,
-		UserID:            userID,
-		SubscriptionID:    subscriptionID,
-		TariffID:          proID,
-		AmountKopecks:     5000,
-		Provider:          domain.ProviderFake,
-		ProviderPaymentID: &providerPaymentID,
-		Status:            domain.PaymentStatusSucceeded,
-	}
-
-	err := d.service.RefundPayment(context.Background(), paymentID, &excessiveAmount)
-	if !errors.Is(err, domain.ErrInvalidAmount) {
-		t.Fatalf("expected ErrInvalidAmount, got %v", err)
-	}
-	if d.provider.cancelCalled {
-		t.Error("expected provider.Cancel not to be called when partial amount exceeds payment amount")
 	}
 }
 
@@ -4194,7 +4221,7 @@ func TestBillingService_RefundPayment_ProviderCancelError(t *testing.T) {
 	}
 	d.provider.cancelErr = cancelErr
 
-	err := d.service.RefundPayment(context.Background(), paymentID, nil)
+	err := d.service.RefundPayment(t.Context(), paymentID)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -4230,7 +4257,7 @@ func TestBillingService_RefundPayment_RejectedWhenProviderPaymentIDMissing(t *te
 		Status:         domain.PaymentStatusSucceeded,
 	}
 
-	err := d.service.RefundPayment(context.Background(), paymentID, nil)
+	err := d.service.RefundPayment(t.Context(), paymentID)
 	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
 		t.Fatalf("expected ErrInvalidPaymentStatus, got %v", err)
 	}
@@ -4575,10 +4602,10 @@ func TestBillingService_SyncPendingPayment(t *testing.T) {
 		})
 	})
 
-	t.Run("partial_refunded", func(t *testing.T) {
+	t.Run("partial_refunded recorded as full refund", func(t *testing.T) {
 		runSyncCases(t, []syncCase{
 			{
-				name: "downgrades subscription to basic for partial refund",
+				name: "downgrades subscription to basic and records external partial refund as full refund",
 				setup: func(d *testDeps) uuid.UUID {
 					userID := uuid.MustParse("11111111-1111-1111-1111-11111111111b")
 					basicID := uuid.MustParse("22222222-2222-2222-2222-22222222222d")

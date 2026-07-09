@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 )
 
 func setupSubscriptionPaymentTest(t *testing.T) (context.Context, pgx.Tx, func(), *SubscriptionPaymentRepository, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) {
@@ -241,5 +241,39 @@ func TestSubscriptionPaymentRepositoryIntegration_ListPendingSubscriptionPayment
 	}
 	if list[0].ID != createdPending.ID {
 		t.Errorf("ListPendingSubscriptionPaymentsByUserID[0].ID = %v, want %v", list[0].ID, createdPending.ID)
+	}
+}
+
+func TestSubscriptionPaymentRepository_MarkRefunded_PendingPayment(t *testing.T) {
+	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	defer cleanup()
+
+	ctx := t.Context()
+
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new subscription payment: %v", err)
+	}
+	created, err := repo.Create(ctx, payment)
+	if err != nil {
+		t.Fatalf("Create error = %v", err)
+	}
+	if created.Status != domain.PaymentStatusPending {
+		t.Fatalf("precondition Status = %q, want %q", created.Status, domain.PaymentStatusPending)
+	}
+
+	if err := repo.MarkRefunded(ctx, created.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkRefunded on pending payment error = %v, want nil (must not be ErrInvalidPaymentStatus)", err)
+	}
+
+	got, err := repo.GetByID(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("GetByID error = %v", err)
+	}
+	if got.Status != domain.PaymentStatusRefunded {
+		t.Errorf("Status = %q, want %q", got.Status, domain.PaymentStatusRefunded)
+	}
+	if got.RefundedAmountKopecks == nil || *got.RefundedAmountKopecks != created.AmountKopecks {
+		t.Errorf("RefundedAmountKopecks = %v, want %d", got.RefundedAmountKopecks, created.AmountKopecks)
 	}
 }

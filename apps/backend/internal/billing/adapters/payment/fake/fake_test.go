@@ -183,7 +183,7 @@ func TestProviderCharge_FullRefund(t *testing.T) {
 	paymentID := uuid.MustParse("33333333-3333-3333-3333-333333333334")
 	amount := int64(15000)
 
-	chargeRes, err := p.Charge(context.Background(), application.ChargeRequest{
+	chargeRes, err := p.Charge(t.Context(), application.ChargeRequest{
 		PaymentID:     paymentID,
 		AmountKopecks: amount,
 		Token:         "fake_token_normal",
@@ -195,10 +195,10 @@ func TestProviderCharge_FullRefund(t *testing.T) {
 		t.Fatalf("expected succeeded status, got %q", chargeRes.Status)
 	}
 
-	cancelRes, err := p.Cancel(context.Background(), application.CancelRequest{
+	cancelRes, err := p.Cancel(t.Context(), application.CancelRequest{
 		PaymentID:         paymentID,
 		ProviderPaymentID: chargeRes.ProviderPaymentID,
-		AmountKopecks:     0,
+		AmountKopecks:     amount,
 	})
 	if err != nil {
 		t.Fatalf("Cancel error: %v", err)
@@ -483,7 +483,7 @@ func TestProviderCancel(t *testing.T) {
 	providerPaymentID := "fake_cancel_1"
 	amount := int64(10000)
 
-	if _, err := p.Init(context.Background(), application.InitRequest{
+	if _, err := p.Init(t.Context(), application.InitRequest{
 		PaymentID:     paymentID,
 		AmountKopecks: amount,
 		Period:        domain.PeriodMonth,
@@ -491,14 +491,14 @@ func TestProviderCancel(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Init error: %v", err)
 	}
-	if _, err := p.ConfirmPayment(context.Background(), paymentID.String()); err != nil {
+	if _, err := p.ConfirmPayment(t.Context(), paymentID.String()); err != nil {
 		t.Fatalf("ConfirmPayment error: %v", err)
 	}
 
-	full, err := p.Cancel(context.Background(), application.CancelRequest{
+	full, err := p.Cancel(t.Context(), application.CancelRequest{
 		PaymentID:         paymentID,
 		ProviderPaymentID: providerPaymentID,
-		AmountKopecks:     0,
+		AmountKopecks:     amount,
 	})
 	if err != nil {
 		t.Fatalf("Cancel full refund error: %v", err)
@@ -511,22 +511,6 @@ func TestProviderCancel(t *testing.T) {
 	}
 	if full.ProviderPaymentID != providerPaymentID {
 		t.Errorf("expected provider payment id %q, got %q", providerPaymentID, full.ProviderPaymentID)
-	}
-
-	partialAmount := int64(3000)
-	partial, err := p.Cancel(context.Background(), application.CancelRequest{
-		PaymentID:         paymentID,
-		ProviderPaymentID: providerPaymentID,
-		AmountKopecks:     partialAmount,
-	})
-	if err != nil {
-		t.Fatalf("Cancel partial refund error: %v", err)
-	}
-	if partial.Status != domain.PaymentStatusPartialRefunded {
-		t.Errorf("expected status %q for partial refund, got %q", domain.PaymentStatusPartialRefunded, partial.Status)
-	}
-	if partial.RefundedAmountKopecks != partialAmount {
-		t.Errorf("expected refunded amount %d for partial refund, got %d", partialAmount, partial.RefundedAmountKopecks)
 	}
 }
 

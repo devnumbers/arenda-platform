@@ -246,12 +246,11 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 
 // Cancel refunds or cancels a payment through T-Kassa.
 func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (application.CancelResult, error) {
+	// The system always refunds the full amount.
 	body := map[string]any{
 		"TerminalKey": p.terminalKey,
 		"PaymentId":   req.ProviderPaymentID,
-	}
-	if req.AmountKopecks > 0 {
-		body["Amount"] = req.AmountKopecks
+		"Amount":      req.AmountKopecks,
 	}
 
 	p.log.InfoContext(ctx, "tkassa cancel",

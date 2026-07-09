@@ -805,6 +805,25 @@ func (s *BillingService) HandleWebhook(ctx context.Context, providerName string,
 			return fmt.Errorf("activate add card payment method: %w", err)
 		}
 
+		// Link the activated card to the subscription so renewals charge the
+		// right method. A missing subscription is not fatal for AddCard itself:
+		// failing here would make T-Kassa retry the webhook indefinitely.
+		sub, err := s.subscriptions.WithTx(tx).GetByUserIDForUpdate(ctx, userID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				s.log.WarnContext(ctx, "add card webhook: subscription not found; skipping active method link",
+					slog.String("user_id", userID.String()),
+					slog.String("payment_method_id", pm.ID.String()))
+			} else {
+				return fmt.Errorf("get subscription for add card: %w", err)
+			}
+		} else {
+			sub.ActivePaymentMethodID = &pm.ID
+			if err := s.subscriptions.WithTx(tx).Update(ctx, sub); err != nil {
+				return fmt.Errorf("update subscription active payment method: %w", err)
+			}
+		}
+
 		return tx.Commit(ctx)
 	}
 
@@ -893,11 +912,12 @@ func (s *BillingService) HandleWebhook(ctx context.Context, providerName string,
 	}
 }
 
-// RefundPayment cancels/refunds a succeeded subscription payment through the provider
-// and immediately downgrades the subscription to basic. The provider HTTP call is
+// RefundPayment cancels/refunds a succeeded or pending subscription payment
+// through the provider and immediately downgrades the subscription to basic.
+// The system always refunds the full payment amount. The provider HTTP call is
 // made outside of any database transaction so a slow provider cannot hold a row
 // lock for an unbounded time.
-func (s *BillingService) RefundPayment(ctx context.Context, paymentID uuid.UUID, amountKopecks *int64) error {
+func (s *BillingService) RefundPayment(ctx context.Context, paymentID uuid.UUID) error {
 	// First short transaction: load the payment with a row lock, validate that it
 	// can be refunded, and commit immediately.
 	tx, err := s.beginner.Begin(ctx)
@@ -918,13 +938,8 @@ func (s *BillingService) RefundPayment(ctx context.Context, paymentID uuid.UUID,
 		return fmt.Errorf("%w: cannot refund payment with status %s", domain.ErrInvalidPaymentStatus, payment.Status)
 	}
 
+	// The system always refunds the full payment amount.
 	refundAmount := payment.AmountKopecks
-	if amountKopecks != nil {
-		if *amountKopecks <= 0 || *amountKopecks > payment.AmountKopecks {
-			return fmt.Errorf("%w: refund amount must be between 1 and %d kopecks", domain.ErrInvalidAmount, payment.AmountKopecks)
-		}
-		refundAmount = *amountKopecks
-	}
 
 	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
 		return fmt.Errorf("%w: payment has no provider payment id", domain.ErrInvalidPaymentStatus)
@@ -980,7 +995,7 @@ func (s *BillingService) RefundPayment(ctx context.Context, paymentID uuid.UUID,
 		return fmt.Errorf("%w: payment status changed to %s during refund", domain.ErrInvalidPaymentStatus, payment.Status)
 	}
 
-	if err := s.subscriptionPayments.WithTx(resultTx).MarkRefunded(ctx, payment.ID, cancelRes.Status, cancelRes.RefundedAmountKopecks, s.clock.Now().UTC()); err != nil {
+	if err := s.subscriptionPayments.WithTx(resultTx).MarkRefunded(ctx, payment.ID, s.clock.Now().UTC()); err != nil {
 		return fmt.Errorf("mark payment refunded: %w", err)
 	}
 
@@ -1087,11 +1102,19 @@ func (s *BillingService) applyPaymentResult(
 		payment.UpdatedAt = now
 
 	case domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
-		if err := s.subscriptionPayments.WithTx(tx).MarkRefunded(ctx, payment.ID, payload.Status, payload.AmountKopecks, now); err != nil {
+		// The system no longer initiates partial refunds. If a provider reports
+		// one anyway (external anomaly), record a full refund and warn.
+		if payload.Status == domain.PaymentStatusPartialRefunded {
+			s.log.WarnContext(ctx, "provider reported partial refund, which the system no longer initiates",
+				slog.String("payment_id", payment.ID.String()),
+				slog.String("provider_payment_id", payload.ProviderPaymentID),
+				slog.Int64("payload_amount_kopecks", payload.AmountKopecks))
+		}
+		if err := s.subscriptionPayments.WithTx(tx).MarkRefunded(ctx, payment.ID, now); err != nil {
 			return fmt.Errorf("mark payment refunded: %w", err)
 		}
-		payment.Status = payload.Status
-		payment.RefundedAmountKopecks = &payload.AmountKopecks
+		payment.Status = domain.PaymentStatusRefunded
+		payment.RefundedAmountKopecks = &payment.AmountKopecks
 		payment.UpdatedAt = now
 
 	default:

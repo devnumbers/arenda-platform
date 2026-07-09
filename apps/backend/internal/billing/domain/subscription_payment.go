@@ -10,11 +10,14 @@ import (
 type PaymentStatus string
 
 const (
-	PaymentStatusPending          PaymentStatus = "pending"
-	PaymentStatusSucceeded        PaymentStatus = "succeeded"
-	PaymentStatusFailed           PaymentStatus = "failed"
-	PaymentStatusRefunded         PaymentStatus = "refunded"
-	PaymentStatusPartialRefunded  PaymentStatus = "partial_refunded"
+	PaymentStatusPending   PaymentStatus = "pending"
+	PaymentStatusSucceeded PaymentStatus = "succeeded"
+	PaymentStatusFailed    PaymentStatus = "failed"
+	PaymentStatusRefunded  PaymentStatus = "refunded"
+	// PaymentStatusPartialRefunded is kept for backward compatibility and external
+	// webhook payloads. The system no longer initiates partial refunds; it always
+	// refunds the full amount.
+	PaymentStatusPartialRefunded PaymentStatus = "partial_refunded"
 )
 
 // SubscriptionPeriod is the billing period for a subscription payment.
@@ -27,22 +30,22 @@ const (
 
 // SubscriptionPayment records a payment event for a user subscription.
 type SubscriptionPayment struct {
-	ID                uuid.UUID
-	UserID            uuid.UUID
-	SubscriptionID    uuid.UUID
-	TariffID          uuid.UUID
-	PaymentMethodID   *uuid.UUID
-	Period            SubscriptionPeriod
-	AmountKopecks     int64
-	Provider          PaymentProvider
-	ProviderPaymentID *string
-	PaymentURL        *string
-	Status                 PaymentStatus
-	RefundedAmountKopecks  *int64
-	ErrorCode              *string
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
-	SucceededAt            *time.Time
+	ID                    uuid.UUID
+	UserID                uuid.UUID
+	SubscriptionID        uuid.UUID
+	TariffID              uuid.UUID
+	PaymentMethodID       *uuid.UUID
+	Period                SubscriptionPeriod
+	AmountKopecks         int64
+	Provider              PaymentProvider
+	ProviderPaymentID     *string
+	PaymentURL            *string
+	Status                PaymentStatus
+	RefundedAmountKopecks *int64
+	ErrorCode             *string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	SucceededAt           *time.Time
 }
 
 // NewSubscriptionPayment creates a new pending subscription payment.
@@ -98,23 +101,16 @@ func (p *SubscriptionPayment) MarkFailed(errorCode *string, now time.Time) error
 	return nil
 }
 
-// MarkRefunded transitions the payment to refunded or partial_refunded.
-// Only succeeded or pending payments can be transitioned.
-func (p *SubscriptionPayment) MarkRefunded(amountKopecks int64, now time.Time) error {
+// MarkRefunded transitions the payment to refunded (full amount only).
+// Only succeeded or pending payments can be refunded.
+func (p *SubscriptionPayment) MarkRefunded(now time.Time) error {
 	if p.Status != PaymentStatusSucceeded && p.Status != PaymentStatusPending {
 		return ErrInvalidPaymentStatus
 	}
-	if amountKopecks < 0 || amountKopecks > p.AmountKopecks {
-		return ErrInvalidAmount
-	}
 	now = now.UTC()
 	p.UpdatedAt = now
-	p.RefundedAmountKopecks = &amountKopecks
-	if amountKopecks == p.AmountKopecks {
-		p.Status = PaymentStatusRefunded
-		return nil
-	}
-	p.Status = PaymentStatusPartialRefunded
+	p.RefundedAmountKopecks = &p.AmountKopecks
+	p.Status = PaymentStatusRefunded
 	return nil
 }
 

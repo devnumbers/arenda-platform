@@ -1221,7 +1221,7 @@ func (q *Queries) MarkSubscriptionPaymentFailed(ctx context.Context, arg MarkSub
 const markSubscriptionPaymentRefunded = `-- name: MarkSubscriptionPaymentRefunded :one
 UPDATE subscription_payments
 SET status = $2, refunded_amount_kopecks = $3, updated_at = $4
-WHERE id = $1 AND status = 'succeeded'
+WHERE id = $1 AND status IN ('succeeded', 'pending')
 RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 

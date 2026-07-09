@@ -434,19 +434,7 @@ func (h *SubscriptionHandlers) GetAdminSubscriptionPayment(w http.ResponseWriter
 
 // RefundSubscriptionPayment implements POST /admin/subscription/payments/{paymentId}/refund.
 func (h *SubscriptionHandlers) RefundSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId uuid.UUID) {
-	var amount *int64
-	var body openapi.RefundSubscriptionPaymentRequest
-	if err := decodeJSONBody(w, r, &body); err != nil && !errors.Is(err, io.EOF) {
-		h.logger.ErrorContext(r.Context(), "failed to decode refund payment request", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
-		return
-	}
-	if body.AmountKopecks != nil {
-		v := int64(*body.AmountKopecks)
-		amount = &v
-	}
-
-	if err := h.billing.RefundPayment(r.Context(), paymentId, amount); err != nil {
+	if err := h.billing.RefundPayment(r.Context(), paymentId); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}

@@ -137,11 +137,11 @@ func TestVerifyWebhookToken(t *testing.T) {
 
 func TestParseWebhookRefundStatuses(t *testing.T) {
 	tests := []struct {
-		name            string
-		status          string
-		amount          int64
-		wantStatus      domain.PaymentStatus
-		wantAmount      int64
+		name       string
+		status     string
+		amount     int64
+		wantStatus domain.PaymentStatus
+		wantAmount int64
 	}{
 		{"refunded", "REFUNDED", 99000, domain.PaymentStatusRefunded, 99000},
 		{"partial_refunded", "PARTIAL_REFUNDED", 49000, domain.PaymentStatusPartialRefunded, 49000},
@@ -1018,7 +1018,6 @@ func TestSignDoesNotMutateInput(t *testing.T) {
 	}
 }
 
-
 func TestProviderCancel_FullRefund(t *testing.T) {
 	paymentID := uuid.New()
 	providerPaymentID := "cancel-123"
@@ -1031,8 +1030,8 @@ func TestProviderCancel_FullRefund(t *testing.T) {
 		if got, want := data["PaymentId"], providerPaymentID; got != want {
 			t.Fatalf("PaymentId: got %v, want %v", got, want)
 		}
-		if _, ok := data["Amount"]; ok {
-			t.Fatal("expected Amount omitted for full refund")
+		if got, want := data["Amount"], float64(10000); got != want {
+			t.Fatalf("Amount: got %v, want %v", got, want)
 		}
 
 		_ = json.NewEncoder(w).Encode(cancelResponse{
@@ -1046,10 +1045,10 @@ func TestProviderCancel_FullRefund(t *testing.T) {
 	defer server.Close()
 
 	p := newTestProvider(server.URL + "/v2/")
-	result, err := p.Cancel(context.Background(), application.CancelRequest{
+	result, err := p.Cancel(t.Context(), application.CancelRequest{
 		PaymentID:         paymentID,
 		ProviderPaymentID: providerPaymentID,
-		AmountKopecks:     0,
+		AmountKopecks:     10000,
 	})
 	if err != nil {
 		t.Fatalf("Cancel failed: %v", err)
@@ -1059,46 +1058,6 @@ func TestProviderCancel_FullRefund(t *testing.T) {
 	}
 	if result.RefundedAmountKopecks != 10000 {
 		t.Fatalf("RefundedAmountKopecks: got %d, want 10000", result.RefundedAmountKopecks)
-	}
-}
-
-func TestProviderCancel_PartialRefund(t *testing.T) {
-	paymentID := uuid.New()
-	providerPaymentID := "cancel-456"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v2/Cancel" {
-			t.Fatalf("unexpected path: %s", r.URL.Path)
-		}
-		data := verifyRequestToken(t, r, testPassword)
-		if got, want := data["Amount"], float64(3000); got != want {
-			t.Fatalf("Amount: got %v, want %v", got, want)
-		}
-
-		_ = json.NewEncoder(w).Encode(cancelResponse{
-			baseResponse:   baseResponse{Success: true, Status: "PARTIAL_REFUNDED"},
-			PaymentID:      providerPaymentID,
-			OrderID:        paymentID.String(),
-			OriginalAmount: 10000,
-			NewAmount:      7000,
-		})
-	}))
-	defer server.Close()
-
-	p := newTestProvider(server.URL + "/v2/")
-	result, err := p.Cancel(context.Background(), application.CancelRequest{
-		PaymentID:         paymentID,
-		ProviderPaymentID: providerPaymentID,
-		AmountKopecks:     3000,
-	})
-	if err != nil {
-		t.Fatalf("Cancel failed: %v", err)
-	}
-	if result.Status != domain.PaymentStatusPartialRefunded {
-		t.Fatalf("Status: got %v, want %v", result.Status, domain.PaymentStatusPartialRefunded)
-	}
-	if result.RefundedAmountKopecks != 3000 {
-		t.Fatalf("RefundedAmountKopecks: got %d, want 3000", result.RefundedAmountKopecks)
 	}
 }
 

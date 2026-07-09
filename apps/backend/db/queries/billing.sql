@@ -170,7 +170,7 @@ RETURNING *;
 -- name: MarkSubscriptionPaymentRefunded :one
 UPDATE subscription_payments
 SET status = $2, refunded_amount_kopecks = $3, updated_at = $4
-WHERE id = $1 AND status = 'succeeded'
+WHERE id = $1 AND status IN ('succeeded', 'pending')
 RETURNING *;
 
 -- name: UpdateSubscriptionPaymentProviderPaymentID :one

@@ -73,7 +73,7 @@ type SubscriptionPaymentRepository interface {
 	ListAll(ctx context.Context, status string, userID uuid.UUID, limit, offset int) ([]SubscriptionPaymentWithUser, int64, error)
 	MarkSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, errorCode *string, now time.Time) error
-	MarkRefunded(ctx context.Context, id uuid.UUID, status domain.PaymentStatus, amountKopecks int64, now time.Time) error
+	MarkRefunded(ctx context.Context, id uuid.UUID, now time.Time) error
 	UpdateProviderPaymentID(ctx context.Context, id uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
 	UpdatePaymentURL(ctx context.Context, id uuid.UUID, paymentURL string) (domain.SubscriptionPayment, error)
 	UpdatePaymentMethodAndProviderID(ctx context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
@@ -154,7 +154,7 @@ type ChargeResult struct {
 }
 
 // CancelRequest asks the provider to cancel or refund a finalized payment.
-// AmountKopecks = 0 means a full refund.
+// The system always refunds the full amount; AmountKopecks carries that amount.
 type CancelRequest struct {
 	PaymentID         uuid.UUID
 	ProviderPaymentID string

@@ -1699,11 +1699,6 @@ paths:
           schema:
             type: string
             format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RefundSubscriptionPaymentRequest'
       responses:
         '204':
           description: Payment refunded
@@ -3580,14 +3575,6 @@ components:
         reminder_date:
           type: string
           format: date
-
-    RefundSubscriptionPaymentRequest:
-      type: object
-      properties:
-        amount_kopecks:
-          type: integer
-          description: Optional partial refund amount in kopecks. If omitted, the full payment amount is refunded.
-          minimum: 1
 
     RemindersResponse:
       type: object

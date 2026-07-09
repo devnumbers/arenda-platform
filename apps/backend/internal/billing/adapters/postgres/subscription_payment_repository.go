@@ -270,9 +270,10 @@ func (r *SubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.
 	return nil
 }
 
-// MarkRefunded transitions a succeeded or pending subscription payment to refunded or partial_refunded
-// and records the refunded amount.
-func (r *SubscriptionPaymentRepository) MarkRefunded(ctx context.Context, id uuid.UUID, status domain.PaymentStatus, amountKopecks int64, now time.Time) error {
+// MarkRefunded transitions a succeeded or pending subscription payment to refunded,
+// recording the full payment amount as refunded. Partial refunds are no longer
+// initiated by the system.
+func (r *SubscriptionPaymentRepository) MarkRefunded(ctx context.Context, id uuid.UUID, now time.Time) error {
 	row, err := r.q().GetSubscriptionPaymentByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -282,7 +283,7 @@ func (r *SubscriptionPaymentRepository) MarkRefunded(ctx context.Context, id uui
 	}
 
 	payment := mapSubscriptionPayment(row)
-	if err := payment.MarkRefunded(amountKopecks, now); err != nil {
+	if err := payment.MarkRefunded(now); err != nil {
 		return err
 	}
 

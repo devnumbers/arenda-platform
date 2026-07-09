@@ -25,19 +25,19 @@ const (
 )
 
 type pendingEntry struct {
-	payload        application.WebhookPayload
-	savedToken     string
-	amountKopecks  int64
-	createdAt      time.Time
+	payload       application.WebhookPayload
+	savedToken    string
+	amountKopecks int64
+	createdAt     time.Time
 }
 
 // Provider is a fake payment processor that keeps pending payments in memory.
 type Provider struct {
-	baseURL        string
-	log            *slog.Logger
-	clock          clock.Clock
-	mu             sync.Mutex
-	pending        map[string]pendingEntry
+	baseURL          string
+	log              *slog.Logger
+	clock            clock.Clock
+	mu               sync.Mutex
+	pending          map[string]pendingEntry
 	confirmedAmounts map[string]int64
 }
 
@@ -214,10 +214,9 @@ func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (a
 		p.mu.Unlock()
 	}
 
+	// Partial refunds are no longer initiated by the system; the fake provider
+	// always reports a full refund.
 	status := domain.PaymentStatusRefunded
-	if req.AmountKopecks > 0 {
-		status = domain.PaymentStatusPartialRefunded
-	}
 
 	p.log.InfoContext(ctx, "fake payment cancelled",
 		"provider_payment_id", req.ProviderPaymentID,
