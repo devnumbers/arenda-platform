@@ -2,12 +2,9 @@
 
 import type {JSX, ReactNode} from 'react';
 import {useCallback, useMemo, useState} from 'react';
-import NextLink from 'next/link';
-import {Tooltip} from '@heroui/react';
 import {Button} from '@/shared/ui/button';
 import {Icon} from '@/shared/ui/icon';
-import {ChevronDown, ChevronUp, Filter, HomeAdd} from '@/shared/assets/icons';
-import {ROUTES} from '@/shared/config/routes';
+import {ChevronDown, ChevronUp, Filter} from '@/shared/assets/icons';
 import {propertyTypeOptions} from '@/features/properties/lib/property-types';
 import {statusFilterOptions, type StatusFilterValue,} from '@/features/properties/lib/property-statuses';
 import type {PropertyType} from '@/entities/property/model/types';
@@ -22,7 +19,6 @@ export type PropertiesToolbarProps = {
     readonly sort: PropertySort;
     readonly mode?: PropertiesViewMode;
     readonly onChange: (filters: PropertyFilters, sort: PropertySort) => void;
-    readonly canAdd?: boolean;
 };
 
 type TypeFilterSectionProps = {
@@ -164,7 +160,6 @@ export function PropertiesToolbar({
                                       sort,
                                       mode = 'active',
                                       onChange,
-                                      canAdd = true,
                                   }: PropertiesToolbarProps): JSX.Element {
     const [draftFilters, setDraftFilters] = useState<PropertyFilters>(filters);
     const [draftSort, setDraftSort] = useState<PropertySort>(sort);
@@ -354,35 +349,6 @@ export function PropertiesToolbar({
                         />
                     </FilterDrawer>
                 </div>
-
-                {canAdd ? (
-                    <NextLink
-                        href={ROUTES.propertyNew}
-                        className={styles.addButton}
-                        aria-label="Добавить объект"
-                    >
-                        <Icon size="m">
-                            <HomeAdd/>
-                        </Icon>
-                    </NextLink>
-                ) : (
-                    <Tooltip>
-                        <Tooltip.Trigger>
-                            <NextLink
-                                href={ROUTES.profileTariffChange}
-                                className={styles.addButton}
-                                aria-label="Сменить тариф"
-                            >
-                                <Icon size="m">
-                                    <HomeAdd/>
-                                </Icon>
-                            </NextLink>
-                        </Tooltip.Trigger>
-                        <Tooltip.Content>
-                            Достигнут лимит объектов по тарифу
-                        </Tooltip.Content>
-                    </Tooltip>
-                )}
             </div>
 
             {hasSelectedFilters && (

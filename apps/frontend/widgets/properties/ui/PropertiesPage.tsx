@@ -4,10 +4,13 @@ import {type JSX, useCallback, useMemo, useState} from 'react';
 import {usePathname, useRouter} from 'next/navigation';
 import {useProperties} from '@/features/properties/api/hooks';
 import {useSubscription} from '@/features/subscription/api/hooks';
+import {PageHeader} from '@/shared/ui/page-header';
+import {ROUTES} from '@/shared/config/routes';
 import {usePropertyListData} from '../lib/use-property-list-data';
 import {applyFiltersAndSort, type PropertiesViewMode} from '../lib/apply-filters';
 import {DEFAULT_PROPERTY_SORT} from '../lib/parse-property-search-params';
 import {PropertiesToolbar} from './PropertiesToolbar';
+import {PropertyCreateButton} from './PropertyCreateButton';
 import {PropertyCard} from './PropertyCard';
 import {PropertiesEmptyState} from './PropertiesEmptyState';
 import {PropertiesLoading} from './PropertiesLoading';
@@ -80,7 +83,13 @@ export function PropertiesPage({mode = 'active', initialFilters, initialSort}: P
 
     return (
         <div className={styles.root}>
-            <PropertiesToolbar mode={mode} filters={filters} sort={sort} onChange={handleChange} canAdd={canAdd}/>
+            <PageHeader
+                title={mode === 'archived' ? 'Архивные объекты' : 'Мои объекты'}
+                backHref={mode === 'archived' ? ROUTES.properties : undefined}
+                actions={<PropertyCreateButton canAdd={canAdd}/>}
+            />
+
+            <PropertiesToolbar mode={mode} filters={filters} sort={sort} onChange={handleChange}/>
 
             {isLoading && <PropertiesLoading/>}
 

@@ -1,6 +1,4 @@
 import type { Metadata } from 'next';
-import { PageHeader } from '@/shared/ui/page-header';
-import { ROUTES } from '@/shared/config/routes';
 import { PropertiesPage } from '@/widgets/properties';
 import { parseFiltersFromParams, parseSortFromParams } from '@/widgets/properties/lib/parse-property-search-params';
 
@@ -18,10 +16,5 @@ export default async function PropertiesArchivePage({ searchParams }: Properties
   const initialFilters = parseFiltersFromParams(resolved);
   const initialSort = parseSortFromParams(resolved);
 
-  return (
-    <>
-      <PageHeader title="Архивные объекты" backHref={ROUTES.properties} />
-      <PropertiesPage mode="archived" initialFilters={initialFilters} initialSort={initialSort} />
-    </>
-  );
+  return <PropertiesPage mode="archived" initialFilters={initialFilters} initialSort={initialSort} />;
 }

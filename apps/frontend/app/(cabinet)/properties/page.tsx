@@ -1,5 +1,4 @@
 import type {Metadata} from 'next';
-import {PageHeader} from '@/shared/ui/page-header';
 import {PropertiesPage} from '@/widgets/properties';
 import {parseFiltersFromParams, parseSortFromParams} from '@/widgets/properties/lib/parse-property-search-params';
 
@@ -17,10 +16,5 @@ export default async function PropertiesRoutePage({searchParams}: PropertiesRout
     const initialFilters = parseFiltersFromParams(resolved);
     const initialSort = parseSortFromParams(resolved);
 
-    return (
-        <>
-            <PageHeader title="Мои объекты"/>
-            <PropertiesPage initialFilters={initialFilters} initialSort={initialSort}/>
-        </>
-    );
+    return <PropertiesPage initialFilters={initialFilters} initialSort={initialSort}/>;
 }
