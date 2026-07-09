@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuthLanding } from "@/features/auth/lib/use-auth-landing";
 import { ColorIconHome, ColorIconHouses, ColorIconCheck } from "../components/icons";
 
 const ALL_FEATURES = [
@@ -80,6 +81,7 @@ function PriceCard({
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function Pricing({ openContact }: { openContact: () => void }) {
     const router = useRouter();
+    const { ctaHref } = useAuthLanding();
     const [yearly, setYearly] = useState(false);
 
     const proPrice = yearly ? "4 400 ₽" : "490 ₽";
@@ -141,7 +143,7 @@ export function Pricing({ openContact }: { openContact: () => void }) {
                                     }
                                     objects="1 объект"
                                     objectsIcon={<ColorIconHome />}
-                                    button={<PriceButton variant="blue" main="Попробовать" onClick={() => router.push("/login")} />}
+                                    button={<PriceButton variant="blue" main="Попробовать" onClick={() => router.push(ctaHref)} />}
                                 />
                                 <PriceCard
                                     plan="Про"
@@ -156,7 +158,7 @@ export function Pricing({ openContact }: { openContact: () => void }) {
                                     }
                                     objects="5 объектов"
                                     objectsIcon={<ColorIconHouses />}
-                                    button={<PriceButton variant="gray" main={proButton.main} sub={proButton.sub} onClick={() => router.push("/login")} />}
+                                    button={<PriceButton variant="gray" main={proButton.main} sub={proButton.sub} onClick={() => router.push(ctaHref)} />}
                                 />
                                 <PriceCard
                                     plan="Бизнес"
@@ -171,7 +173,7 @@ export function Pricing({ openContact }: { openContact: () => void }) {
                                     }
                                     objects="Без ограничений"
                                     objectsIcon={<ColorIconHouses />}
-                                    button={<PriceButton variant="gray" main={bizButton.main} sub={bizButton.sub} onClick={() => router.push("/login")} />}
+                                    button={<PriceButton variant="gray" main={bizButton.main} sub={bizButton.sub} onClick={() => router.push(ctaHref)} />}
                                 />
                             </div>
 

@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- preserving original landing <img> tags during migration */
 
 import { useRouter } from "next/navigation";
+import { useAuthLanding } from "@/features/auth/lib/use-auth-landing";
 import { imgHeroBg, imgLogo3D, imgSetting01, imgPhoneFrame } from "./assets";
 
 function PrimaryButton({ children, className = "", onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) {
@@ -33,6 +34,7 @@ function GhostBlueButton({ children, className = "", onClick }: { children: Reac
 
 export function HeroAndCreate() {
     const router = useRouter();
+    const { isAuthenticated, ctaHref } = useAuthLanding();
     return (
         <div id="top" className="content-stretch flex flex-col items-start relative rounded-bl-[32px] rounded-br-[32px] desktop:rounded-bl-[64px] desktop:rounded-br-[64px] shrink-0 w-full overflow-hidden">
             <img alt="" className="absolute inset-0 max-w-none object-cover pointer-events-none rounded-bl-[32px] rounded-br-[32px] desktop:rounded-bl-[64px] desktop:rounded-br-[64px] size-full" src={imgHeroBg} />
@@ -50,8 +52,8 @@ export function HeroAndCreate() {
                                 <p className="font-['Manrope:Medium',sans-serif] font-medium leading-[1.35] opacity-70 desktop:opacity-100 relative shrink-0 text-[14px] tablet:text-[24px] desktop:text-[24px] w-full">Управляйте объектами, арендаторами, платежами и договорами в одном месте</p>
                             </div>
                             <div className="content-stretch flex flex-col tablet:flex-row gap-[12px] items-stretch tablet:items-start w-full tablet:w-auto">
-                                <PrimaryButton className="w-full tablet:w-auto" onClick={() => router.push("/login")}>Попробовать бесплатно</PrimaryButton>
-                                <GhostBlueButton className="w-full tablet:w-auto" onClick={() => router.push("/login")}>Войти в сервис</GhostBlueButton>
+                                <PrimaryButton className="w-full tablet:w-auto" onClick={() => router.push(ctaHref)}>Попробовать бесплатно</PrimaryButton>
+                                <GhostBlueButton className="w-full tablet:w-auto" onClick={() => router.push(ctaHref)}>{isAuthenticated ? "Перейти в приложение" : "Войти в сервис"}</GhostBlueButton>
                             </div>
                         </div>
                     </div>
