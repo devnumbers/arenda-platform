@@ -98,7 +98,7 @@ paths are exempt so the owner can recover:
 
 ### 7. Pricing and fake provider
 
-- All prices are stored and exposed in kopecks.
+- All prices are stored and exposed in kopecks (`BIGINT`).
 - Local development uses the fake payment provider (`PAYMENT_PROVIDER=fake`).
 - Fake payments are confirmed via
   `POST /internal/fake-subscription-payment/{id}/confirm`, which is only

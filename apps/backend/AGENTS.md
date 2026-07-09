@@ -81,7 +81,7 @@ go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1 -config a
 - Use explicit PostgreSQL SQL with `sqlc`; do not introduce ORM models.
 - Schema changes require versioned migrations in `db/migrations` and matching queries in `db/queries`.
 - Keep database invariants in PostgreSQL with `NOT NULL`, foreign keys, `CHECK` constraints, indexes, and triggers where they protect durable rules.
-- Use `date` for domain dates, `timestamptz` for system timestamps, and `numeric(14,2)` for money.
+- Use `date` for domain dates, `timestamptz` for system timestamps, and `BIGINT` (kopecks) for money.
 - Browser auth uses opaque server-side sessions with `HttpOnly` cookies. Do not replace this with browser-readable JWT/session storage without a new ADR.
 - Store property photos through a storage port backed by REG.RU S3-compatible storage. Do not add MinIO as a local dependency.
 

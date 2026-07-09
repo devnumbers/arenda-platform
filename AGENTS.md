@@ -84,3 +84,4 @@ Use `make local-infra-reset` only when intentionally deleting local Docker volum
 - Do not create or switch to a git worktree by default. Work in the current checkout and current branch unless the user explicitly asks for a worktree or branch isolation.
 - If a generic skill recommends a worktree, this repository rule overrides it.
 - The Orchestrator never hand-edits code. It coordinates, reviews, verifies, and reports.
+- Money is stored as `BIGINT` in kopecks across the backend. See `docs/adr/0008-subscription-lifecycle.md`.
