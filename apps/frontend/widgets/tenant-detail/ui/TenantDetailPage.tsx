@@ -5,14 +5,13 @@ import { useTenantContact } from '@/features/tenant-contacts/api';
 import { useLeases } from '@/features/leases/api';
 import { mapLeaseResponse } from '@/entities/lease/model/mappers';
 import type { Lease } from '@/entities/lease/model/types';
-import { ROUTES } from '@/shared/config/routes';
-import { LinkButton } from '@/shared/ui/link-button';
 import { TenantDetailHeader } from './TenantDetailHeader';
 import { TenantInfoSection } from './TenantInfoSection';
 import { TenantLeaseSection } from './TenantLeaseSection';
 import { TenantCommentSection } from './TenantCommentSection';
 import { TenantDetailLoading } from './TenantDetailLoading';
 import { TenantDetailError } from './TenantDetailError';
+import { TenantActionMenu } from './TenantActionMenu';
 import { getTenantContactFullName } from '@/entities/tenant-contact/lib/get-tenant-contact-full-name';
 import styles from './TenantDetailPage.module.css';
 
@@ -41,37 +40,42 @@ export function TenantDetailPage({ id }: TenantDetailPageProps): JSX.Element {
     return findCurrentLeaseByTenant(leases, id);
   }, [leasesQuery.data, id]);
 
-  if (tenantQuery.isPending || leasesQuery.isPending) {
-    return <TenantDetailLoading />;
-  }
-
-  if (tenantQuery.isError || leasesQuery.isError || !tenantQuery.data) {
-    return (
-      <TenantDetailError
-        onRetry={() => {
-          tenantQuery.refetch();
-          leasesQuery.refetch();
-        }}
-        isLoading={tenantQuery.isFetching || leasesQuery.isFetching}
-      />
-    );
-  }
+  const isLoading = tenantQuery.isPending || leasesQuery.isPending;
+  const isError =
+    tenantQuery.isError || leasesQuery.isError || !tenantQuery.data;
+  const canEdit = tenantQuery.data !== undefined && !isLoading;
 
   const tenant = tenantQuery.data;
-  const fullName = getTenantContactFullName(tenant);
-
-  const headerActions = (
-    <LinkButton href={ROUTES.tenantEdit(id)} variant="primary" size="small">
-      Редактировать
-    </LinkButton>
-  );
+  const title = tenant
+    ? getTenantContactFullName(tenant) || tenant.name
+    : 'Арендатор';
 
   return (
     <main className={styles.root}>
-      <TenantDetailHeader title={fullName || tenant.name} actions={headerActions} />
-      <TenantInfoSection tenant={tenant} />
-      {currentLease && <TenantLeaseSection lease={currentLease} />}
-      {tenant.comment && <TenantCommentSection comment={tenant.comment} />}
+      <TenantDetailHeader
+        title={title}
+        actions={<TenantActionMenu tenantId={id} canEdit={canEdit} />}
+      />
+
+      {isLoading && <TenantDetailLoading />}
+
+      {!isLoading && isError && (
+        <TenantDetailError
+          onRetry={() => {
+            tenantQuery.refetch();
+            leasesQuery.refetch();
+          }}
+          isLoading={tenantQuery.isFetching || leasesQuery.isFetching}
+        />
+      )}
+
+      {!isLoading && !isError && tenant && (
+        <>
+          <TenantInfoSection tenant={tenant} />
+          {currentLease && <TenantLeaseSection lease={currentLease} />}
+          {tenant.comment && <TenantCommentSection comment={tenant.comment} />}
+        </>
+      )}
     </main>
   );
 }
