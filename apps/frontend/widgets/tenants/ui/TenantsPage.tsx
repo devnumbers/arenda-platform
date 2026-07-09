@@ -1,10 +1,11 @@
 'use client';
 
 import {useMemo, type JSX} from 'react';
+import NextLink from 'next/link';
 import {useTenantContacts} from '@/features/tenant-contacts/api';
 import {PageHeader} from '@/shared/ui/page-header';
-import {PageShell} from '@/shared/ui/page-shell';
-import {LinkButton} from '@/shared/ui/link-button';
+import {Icon} from '@/shared/ui/icon';
+import {Plus} from '@/shared/assets/icons';
 import {ROUTES} from '@/shared/config/routes';
 import {TenantSection} from './TenantSection';
 import {TenantsLoading} from './TenantsLoading';
@@ -22,33 +23,39 @@ export function TenantsPage(): JSX.Element {
         return {active: activeContacts, past: pastContacts};
     }, [query.data]);
 
-    if (query.isPending) {
-        return <TenantsLoading/>;
-    }
-
-    if (query.isError) {
-        return <TenantsError onRetry={() => query.refetch()} isLoading={query.isFetching}/>;
-    }
-
-    if ((query.data?.length ?? 0) === 0) {
-        return <TenantsEmptyState/>;
-    }
-
     return (
-        <PageShell>
-            <div className={styles.root}>
-                <PageHeader
-                    title="Арендаторы"
-                    actions={
-                        <LinkButton href={ROUTES.tenantNew} variant="primary" size="small">
-                            Добавить
-                        </LinkButton>
-                    }
-                />
+        <div className={styles.root}>
+            <PageHeader
+                title="Арендаторы"
+                actions={
+                    <NextLink
+                        href={ROUTES.tenantNew}
+                        className={styles.addButton}
+                        aria-label="Добавить арендатора"
+                    >
+                        <Icon size="s">
+                            <Plus/>
+                        </Icon>
+                    </NextLink>
+                }
+            />
 
-                <TenantSection title="Текущие арендаторы" tenants={active}/>
-                <TenantSection title="Прошлые арендаторы" tenants={past}/>
-            </div>
-        </PageShell>
+            {query.isPending && <TenantsLoading/>}
+
+            {!query.isPending && query.isError && (
+                <TenantsError onRetry={() => query.refetch()} isLoading={query.isFetching}/>
+            )}
+
+            {!query.isPending && !query.isError && (query.data?.length ?? 0) === 0 && (
+                <TenantsEmptyState/>
+            )}
+
+            {!query.isPending && !query.isError && (query.data?.length ?? 0) > 0 && (
+                <>
+                    <TenantSection title="Текущие арендаторы" tenants={active}/>
+                    <TenantSection title="Прошлые арендаторы" tenants={past}/>
+                </>
+            )}
+        </div>
     );
 }

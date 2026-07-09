@@ -1,7 +1,6 @@
 import type {Metadata} from 'next';
 import {TenantsPage} from '@/widgets/tenants';
-import {PageShell} from "@/shared/ui/page-shell";
-import {PageHeader} from "@/shared/ui/page-header";
+import {PageShell} from '@/shared/ui/page-shell';
 
 export const metadata: Metadata = {
     title: 'Арендаторы — Рентли',
@@ -11,8 +10,7 @@ export const metadata: Metadata = {
 export default function TenantsListPage() {
     return (
         <PageShell>
-            <PageHeader title="Арендаторы"/>
             <TenantsPage/>
         </PageShell>
-    )
+    );
 }
