@@ -32,13 +32,15 @@ import {
   type ScheduleData,
   type ScheduleErrors,
 } from '../model/types';
+import {
+  useOperationCreateDraft,
+  type OperationCreateStep,
+} from '../lib/use-operation-create-draft';
 import styles from './OperationCreateWizard.module.css';
 
-type Step = 'basic' | 'schedule' | 'reminder' | 'success';
+const stepOrder: Exclude<OperationCreateStep, 'success'>[] = ['basic', 'schedule', 'reminder'];
 
-const stepOrder: Exclude<Step, 'success'>[] = ['basic', 'schedule', 'reminder'];
-
-const stepNumber: Record<Step, number> = {
+const stepNumber: Record<OperationCreateStep, number> = {
   basic: 1,
   schedule: 2,
   reminder: 3,
@@ -123,28 +125,20 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     refetch: refetchProperties,
   } = useProperties();
 
-  const [operationType, setOperationType] = useState<OperationType>(type);
+  const { draft, setDraft } = useOperationCreateDraft(type, propertyId);
+  const { step, operationType, basicInfo, schedule, reminder } = draft;
 
-  const [step, setStep] = useState<Step>('basic');
-  const [basicInfo, setBasicInfo] = useState<BasicInfoData>({
-    amount: '',
-    name: '',
-    category: undefined,
-    propertyId: propertyId ?? undefined,
-    comment: '',
-    type,
-  });
+  const setStep = (next: OperationCreateStep) =>
+    setDraft((prev) => ({ ...prev, step: next }));
+  const setBasicInfo = (next: BasicInfoData) =>
+    setDraft((prev) => ({ ...prev, basicInfo: next }));
+  const setSchedule = (next: ScheduleData) =>
+    setDraft((prev) => ({ ...prev, schedule: next }));
+  const setReminder = (next: ReminderData) =>
+    setDraft((prev) => ({ ...prev, reminder: next }));
+
   const [basicErrors, setBasicErrors] = useState<BasicInfoErrors>({});
-  const [schedule, setSchedule] = useState<ScheduleData>({
-    frequency: 'once',
-    date: undefined,
-    endDate: undefined,
-  });
   const [scheduleErrors, setScheduleErrors] = useState<ScheduleErrors>({});
-  const [reminder, setReminder] = useState<ReminderData>({
-    enabled: false,
-    offsetDays: 1,
-  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | undefined>(undefined);
 
@@ -155,13 +149,16 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
   const isPageLoading = isPropertiesLoading || isSubscriptionPending;
 
   const handleTypeChange = (nextType: OperationType) => {
-    setOperationType(nextType);
-    setBasicInfo((prev) => {
+    setDraft((prev) => {
       const validCategories = getCategoriesByType(nextType);
-      const category = validCategories.some((option) => option.value === prev.category)
-        ? prev.category
+      const category = validCategories.some((option) => option.value === prev.basicInfo.category)
+        ? prev.basicInfo.category
         : undefined;
-      return { ...prev, type: nextType, category };
+      return {
+        ...prev,
+        operationType: nextType,
+        basicInfo: { ...prev.basicInfo, type: nextType, category },
+      };
     });
   };
 
