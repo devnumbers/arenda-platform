@@ -1099,12 +1099,44 @@ func TestBillingService_DeletePaymentMethodUsesTransaction(t *testing.T) {
 	if err := d.service.DeletePaymentMethod(context.Background(), userID, methodID); err != nil {
 		t.Fatalf("DeletePaymentMethod error: %v", err)
 	}
-	// Validation and deletion each run in their own transaction.
-	if d.beginner.begun != 2 || d.beginner.committed != 2 {
-		t.Errorf("expected two committed transactions, got begun=%d committed=%d", d.beginner.begun, d.beginner.committed)
+	// Validation and deletion run atomically in a single transaction.
+	if d.beginner.begun != 1 || d.beginner.committed != 1 {
+		t.Errorf("expected one committed transaction, got begun=%d committed=%d", d.beginner.begun, d.beginner.committed)
 	}
 	if _, ok := d.paymentMethods.methods[methodID]; ok {
 		t.Error("expected method deleted")
+	}
+}
+
+func TestBillingService_DeletePaymentMethod_RejectsActiveMethodInSingleTransaction(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+	methodID := uuid.MustParse("11111111-1111-1111-1111-111111111113")
+
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:       methodID,
+		UserID:   userID,
+		Provider: domain.ProviderFake,
+		IsActive: true,
+	}
+
+	err := d.service.DeletePaymentMethod(context.Background(), userID, methodID)
+	if !errors.Is(err, ErrPaymentMethodInUse) {
+		t.Fatalf("expected ErrPaymentMethodInUse, got %v", err)
+	}
+	if _, ok := d.paymentMethods.methods[methodID]; !ok {
+		t.Error("expected active method to remain (not deleted)")
+	}
+	if d.provider.removeCardCalled {
+		t.Error("expected provider.RemoveCard not to be called for active method")
+	}
+	// The in-use check runs inside the single transaction, which is rolled back
+	// on rejection; nothing is committed.
+	if d.beginner.begun != 1 || d.beginner.committed != 0 {
+		t.Errorf("expected one rolled-back transaction, got begun=%d committed=%d", d.beginner.begun, d.beginner.committed)
+	}
+	if d.beginner.rolledBack != 1 {
+		t.Errorf("expected the transaction to be rolled back, got rolledBack=%d", d.beginner.rolledBack)
 	}
 }
 
@@ -3926,7 +3958,7 @@ func TestBillingService_ProcessPendingUpgradePayments_PendingLeavesAlone(t *test
 	}
 }
 
-func TestBillingService_DeletePaymentMethod_TkassaRemoveCardFailurePreventsDelete(t *testing.T) {
+func TestBillingService_DeletePaymentMethod_TkassaRemoveCardFailureIsBestEffort(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
 	userID := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
@@ -3940,8 +3972,8 @@ func TestBillingService_DeletePaymentMethod_TkassaRemoveCardFailurePreventsDelet
 	}
 	d.provider.removeCardErr = errors.New("provider remove failed")
 
-	if err := d.service.DeletePaymentMethod(context.Background(), userID, methodID); err == nil {
-		t.Fatal("expected error when RemoveCard fails")
+	if err := d.service.DeletePaymentMethod(context.Background(), userID, methodID); err != nil {
+		t.Fatalf("expected RemoveCard failure to be best-effort, got error: %v", err)
 	}
 	if !d.provider.removeCardCalled {
 		t.Error("expected provider.RemoveCard to be called")
@@ -3952,8 +3984,11 @@ func TestBillingService_DeletePaymentMethod_TkassaRemoveCardFailurePreventsDelet
 	if d.provider.removeCardCardID != "card_123" {
 		t.Errorf("expected card id card_123, got %s", d.provider.removeCardCardID)
 	}
-	if _, ok := d.paymentMethods.methods[methodID]; !ok {
-		t.Error("expected local payment method to remain when provider remove fails")
+	if _, ok := d.paymentMethods.methods[methodID]; ok {
+		t.Error("expected local payment method to be deleted even when provider remove fails")
+	}
+	if d.beginner.begun != 1 || d.beginner.committed != 1 {
+		t.Errorf("expected one committed transaction, got begun=%d committed=%d", d.beginner.begun, d.beginner.committed)
 	}
 }
 

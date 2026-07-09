@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -259,7 +260,7 @@ func (r *SubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.
 
 	if _, err := r.q().MarkSubscriptionPaymentFailed(ctx, postgres.MarkSubscriptionPaymentFailedParams{
 		ID:        pgtype.UUID{Bytes: id, Valid: true},
-		ErrorCode: textPtr(errorCode),
+		ErrorCode: pgconv.StringPtrToPgtype(errorCode),
 		UpdatedAt: pgtype.Timestamptz{Time: payment.UpdatedAt, Valid: true},
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -290,7 +291,7 @@ func (r *SubscriptionPaymentRepository) MarkRefunded(ctx context.Context, id uui
 	if _, err := r.q().MarkSubscriptionPaymentRefunded(ctx, postgres.MarkSubscriptionPaymentRefundedParams{
 		ID:                    pgtype.UUID{Bytes: id, Valid: true},
 		Status:                string(payment.Status),
-		RefundedAmountKopecks: int64Ptr(payment.RefundedAmountKopecks),
+		RefundedAmountKopecks: pgconv.Int8PtrToPgtype(payment.RefundedAmountKopecks),
 		UpdatedAt:             pgtype.Timestamptz{Time: payment.UpdatedAt, Valid: true},
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -370,14 +371,14 @@ func mapCreateSubscriptionPaymentParams(payment domain.SubscriptionPayment) post
 		UserID:            pgtype.UUID{Bytes: payment.UserID, Valid: true},
 		SubscriptionID:    pgtype.UUID{Bytes: payment.SubscriptionID, Valid: true},
 		TariffID:          pgtype.UUID{Bytes: payment.TariffID, Valid: true},
-		PaymentMethodID:   uuidPtr(payment.PaymentMethodID),
+		PaymentMethodID:   pgconv.UUIDToPgtypePtr(payment.PaymentMethodID),
 		Period:            string(payment.Period),
 		AmountKopecks:     payment.AmountKopecks,
 		Provider:          string(payment.Provider),
-		ProviderPaymentID: textPtr(payment.ProviderPaymentID),
-		PaymentUrl:        textPtr(payment.PaymentURL),
+		ProviderPaymentID: pgconv.StringPtrToPgtype(payment.ProviderPaymentID),
+		PaymentUrl:        pgconv.StringPtrToPgtype(payment.PaymentURL),
 		Status:            string(payment.Status),
-		ErrorCode:         textPtr(payment.ErrorCode),
+		ErrorCode:         pgconv.StringPtrToPgtype(payment.ErrorCode),
 	}
 }
 
@@ -387,15 +388,15 @@ func mapSubscriptionPayment(row postgres.SubscriptionPayment) domain.Subscriptio
 		UserID:                uuid.UUID(row.UserID.Bytes),
 		SubscriptionID:        uuid.UUID(row.SubscriptionID.Bytes),
 		TariffID:              uuid.UUID(row.TariffID.Bytes),
-		PaymentMethodID:       uuidPtrFromPgtype(row.PaymentMethodID),
+		PaymentMethodID:       pgconv.UUIDFromPgtypePtr(row.PaymentMethodID),
 		Period:                domain.SubscriptionPeriod(row.Period),
 		AmountKopecks:         row.AmountKopecks,
 		Provider:              domain.PaymentProvider(row.Provider),
-		ProviderPaymentID:     stringPtrFromPgtype(row.ProviderPaymentID),
-		PaymentURL:            stringPtrFromPgtype(row.PaymentUrl),
+		ProviderPaymentID:     pgconv.TextToPtrString(row.ProviderPaymentID),
+		PaymentURL:            pgconv.TextToPtrString(row.PaymentUrl),
 		Status:                domain.PaymentStatus(row.Status),
-		RefundedAmountKopecks: int64PtrFromPgtype(row.RefundedAmountKopecks),
-		ErrorCode:             stringPtrFromPgtype(row.ErrorCode),
+		RefundedAmountKopecks: pgconv.Int8ToPtr(row.RefundedAmountKopecks),
+		ErrorCode:             pgconv.TextToPtrString(row.ErrorCode),
 		CreatedAt:             row.CreatedAt.Time,
 		UpdatedAt:             row.UpdatedAt.Time,
 	}

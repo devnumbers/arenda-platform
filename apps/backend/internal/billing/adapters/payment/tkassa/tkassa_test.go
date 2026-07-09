@@ -106,7 +106,7 @@ func TestSignSkipsNullBlankAndNested(t *testing.T) {
 func TestVerifyWebhookToken(t *testing.T) {
 	payload := map[string]any{
 		"TerminalKey": testTerminalKey,
-		"OrderId":     "order-123",
+		"OrderId":     "11111111-1111-1111-1111-111111111111",
 		"Status":      "CONFIRMED",
 		"Success":     true,
 		"PaymentId":   json.Number("12345"),
@@ -151,7 +151,7 @@ func TestParseWebhookRefundStatuses(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			payload := map[string]any{
 				"TerminalKey": testTerminalKey,
-				"OrderId":     "order-refund",
+				"OrderId":     "22222222-2222-2222-2222-222222222222",
 				"PaymentId":   json.Number("12345"),
 				"Status":      tt.status,
 				"Amount":      json.Number(strconv.FormatInt(tt.amount, 10)),
@@ -902,6 +902,69 @@ func TestParseWebhookUnknownNotificationType(t *testing.T) {
 		t.Fatalf("expected error for unknown notification type")
 	}
 	if !strings.Contains(err.Error(), "unknown notification type") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGetInt64(t *testing.T) {
+	t.Run("missing key returns zero without error", func(t *testing.T) {
+		got, err := getInt64(map[string]any{}, "Amount")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 0 {
+			t.Fatalf("got %d, want 0", got)
+		}
+	})
+
+	t.Run("empty string returns zero without error", func(t *testing.T) {
+		got, err := getInt64(map[string]any{"Amount": ""}, "Amount")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 0 {
+			t.Fatalf("got %d, want 0", got)
+		}
+	})
+
+	t.Run("valid number returns value", func(t *testing.T) {
+		got, err := getInt64(map[string]any{"Amount": json.Number("99000")}, "Amount")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 99000 {
+			t.Fatalf("got %d, want 99000", got)
+		}
+	})
+
+	t.Run("non-numeric string returns error", func(t *testing.T) {
+		_, err := getInt64(map[string]any{"Amount": "not-a-number"}, "Amount")
+		if err == nil {
+			t.Fatalf("expected error for non-numeric string")
+		}
+		if !strings.Contains(err.Error(), "tkassa: parse Amount") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestParseWebhookInvalidOrderID(t *testing.T) {
+	payload := map[string]any{
+		"TerminalKey": testTerminalKey,
+		"OrderId":     "not-a-uuid",
+		"PaymentId":   json.Number("12345"),
+		"Status":      "CONFIRMED",
+		"Success":     true,
+	}
+	payload["Token"] = sign(payload, testPassword)
+	body, _ := json.Marshal(payload)
+
+	p := newTestProvider("")
+	_, err := p.ParseWebhook(context.Background(), body)
+	if err == nil {
+		t.Fatalf("expected error for invalid OrderId")
+	}
+	if !strings.Contains(err.Error(), "parse OrderId") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

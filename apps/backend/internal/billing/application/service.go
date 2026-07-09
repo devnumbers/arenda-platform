@@ -108,13 +108,11 @@ func truncateTkassaDescription(s string) string {
 	return s[:tkassaDescriptionLimit]
 }
 
-func tkassaCallbackURLs(baseURL string, paymentID uuid.UUID) (notification, success, fail, addCardSuccess, addCardFail string) {
+func tkassaCallbackURLs(baseURL string, paymentID uuid.UUID) (notification, success, fail string) {
 	baseURL = strings.TrimRight(baseURL, "/")
 	notification = baseURL + "/webhooks/payment/tkassa"
 	success = fmt.Sprintf("%s/subscription/payments/%s/success", baseURL, paymentID.String())
 	fail = fmt.Sprintf("%s/subscription/payments/%s/fail", baseURL, paymentID.String())
-	addCardSuccess = baseURL + "/subscription/payment-methods/add-card/success"
-	addCardFail = baseURL + "/subscription/payment-methods/add-card/fail"
 	return
 }
 
@@ -354,7 +352,7 @@ func (s *BillingService) changeTariffUpgrade(
 		return ChangeTariffResponse{}, fmt.Errorf("commit transaction: %w", err)
 	}
 
-	notification, successURL, failURL, _, _ := tkassaCallbackURLs(s.callbackBaseURL, payment.ID)
+	notification, successURL, failURL := tkassaCallbackURLs(s.callbackBaseURL, payment.ID)
 	initRes, err := s.provider.Init(ctx, InitRequest{
 		PaymentID:              payment.ID,
 		AmountKopecks:          amount,
@@ -532,11 +530,12 @@ func (s *BillingService) SetActivePaymentMethod(ctx context.Context, userID, met
 }
 
 // DeletePaymentMethod removes a payment method belonging to the user.
-// For T-Kassa, the card is detached from the provider first; local deletion is
-// skipped if the provider call fails.
+// The active/in-use check and the local deletion run atomically in a single
+// transaction; for T-Kassa the provider card is detached best-effort afterwards,
+// so a provider failure cannot leave the local row in place.
 func (s *BillingService) DeletePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error {
-	// Validate existence, ownership, active status and provider card id inside a
-	// short transaction so the active check cannot race with concurrent updates.
+	// Validate existence, ownership and active status and delete atomically inside
+	// a single transaction so the active check cannot race with concurrent updates.
 	tx, err := s.beginner.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -557,28 +556,6 @@ func (s *BillingService) DeletePaymentMethod(ctx context.Context, userID, method
 		return ErrPaymentMethodInUse
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit validate payment method transaction: %w", err)
-	}
-
-	if s.provider.Name() == domain.ProviderTkassa && pm.ProviderCardID != "" {
-		if err := s.provider.RemoveCard(ctx, userID.String(), pm.ProviderCardID); err != nil {
-			if errors.Is(err, ErrProviderCardNotFound) {
-				s.log.WarnContext(ctx, "provider card already removed; continuing local deletion",
-					slog.String("payment_method_id", methodID.String()),
-					slog.String("provider_card_id", maskCardID(pm.ProviderCardID)))
-			} else {
-				return fmt.Errorf("remove provider card: %w", err)
-			}
-		}
-	}
-
-	tx, err = s.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
 	if err := s.paymentMethods.WithTx(tx).Delete(ctx, userID, methodID); err != nil {
 		return fmt.Errorf("delete payment method: %w", err)
 	}
@@ -586,6 +563,24 @@ func (s *BillingService) DeletePaymentMethod(ctx context.Context, userID, method
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit delete payment method transaction: %w", err)
 	}
+
+	// The local row is gone; detach the card at the provider best-effort. A
+	// provider failure must not fail the operation since the method is already deleted.
+	if s.provider.Name() == domain.ProviderTkassa && pm.ProviderCardID != "" {
+		if err := s.provider.RemoveCard(ctx, userID.String(), pm.ProviderCardID); err != nil {
+			if errors.Is(err, ErrProviderCardNotFound) {
+				s.log.WarnContext(ctx, "provider card already removed; continuing local deletion",
+					slog.String("payment_method_id", methodID.String()),
+					slog.String("provider_card_id", maskCardID(pm.ProviderCardID)))
+			} else {
+				s.log.ErrorContext(ctx, "failed to remove provider card after payment method deletion",
+					slog.String("payment_method_id", methodID.String()),
+					slog.String("provider_card_id", maskCardID(pm.ProviderCardID)),
+					slog.String("error", sanitize.Error(err)))
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -1274,7 +1269,7 @@ func (s *BillingService) markPaymentFailedBestEffort(ctx context.Context, paymen
 // pending upgrade payment whose provider_payment_id was lost after a crash.
 // It relies on the provider's idempotent Init to reconstruct the reference.
 func (s *BillingService) recoverUpgradeProviderReference(ctx context.Context, payment domain.SubscriptionPayment, newTariff domain.Tariff, amount int64, period domain.SubscriptionPeriod, userID uuid.UUID, now time.Time) (ChangeTariffResponse, error) {
-	notification, successURL, failURL, _, _ := tkassaCallbackURLs(s.callbackBaseURL, payment.ID)
+	notification, successURL, failURL := tkassaCallbackURLs(s.callbackBaseURL, payment.ID)
 	initRes, err := s.provider.Init(ctx, InitRequest{
 		PaymentID:              payment.ID,
 		AmountKopecks:          amount,
@@ -1518,7 +1513,7 @@ func (s *BillingService) renewSubscription(ctx context.Context, sub domain.Subsc
 
 	// Recover a missing provider reference idempotently before charging.
 	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
-		notification, successURL, failURL, _, _ := tkassaCallbackURLs(s.callbackBaseURL, payment.ID)
+		notification, successURL, failURL := tkassaCallbackURLs(s.callbackBaseURL, payment.ID)
 		initRes, err := s.provider.Init(ctx, InitRequest{
 			PaymentID:              payment.ID,
 			AmountKopecks:          amount,

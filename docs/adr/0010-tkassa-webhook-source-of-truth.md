@@ -18,7 +18,7 @@ Webhook notifications (`AUTHORIZED`, `CONFIRMED`, `REJECTED`, `AUTH_FAIL`) are t
 - Webhook token signatures are verified before parsing.
 - The first payment uses one-stage `PayType=O` with `Recurrent=Y`, `CustomerKey`, and `OperationInitiatorType=2` (CIT COF) to obtain a `RebillId`.
 - Renewals use `Init` followed by `Charge` with `OperationInitiatorType=R` (MIT recurring) and the saved `RebillId`.
-- Standalone card binding uses `AddCustomer` + `AddCard` with `CheckType=3DSHOLD`.
+- Standalone card binding uses `AddCustomer` + `AddCard` with `CheckType=3DSHOLD`. The redirect/return URL after T-Kassa card binding is configured at the T-Kassa terminal, not passed per request.
 - `Receipt` is not sent in this iteration; fiscalization is out of scope.
 
 ## Consequences

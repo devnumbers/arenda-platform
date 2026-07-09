@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -204,11 +205,11 @@ func mapPaymentMethod(ctx context.Context, row postgres.PaymentMethod, encryptor
 	if err != nil {
 		return domain.PaymentMethod{}, fmt.Errorf("decrypt provider token: %w", err)
 	}
-	providerCardID, err := decryptOptional(ctx, encryptor, textString(row.ProviderCardID))
+	providerCardID, err := decryptOptional(ctx, encryptor, pgconv.TextToString(row.ProviderCardID))
 	if err != nil {
 		return domain.PaymentMethod{}, fmt.Errorf("decrypt provider card id: %w", err)
 	}
-	expDate, err := decryptOptional(ctx, encryptor, textString(row.ExpDate))
+	expDate, err := decryptOptional(ctx, encryptor, pgconv.TextToString(row.ExpDate))
 	if err != nil {
 		return domain.PaymentMethod{}, fmt.Errorf("decrypt expiry date: %w", err)
 	}
@@ -218,7 +219,7 @@ func mapPaymentMethod(ctx context.Context, row postgres.PaymentMethod, encryptor
 		Provider:       domain.PaymentProvider(row.Provider),
 		ProviderToken:  providerToken,
 		ProviderCardID: providerCardID,
-		DisplayMask:    textString(row.DisplayMask),
+		DisplayMask:    pgconv.TextToString(row.DisplayMask),
 		ExpDate:        expDate,
 		IsActive:       row.IsActive,
 		CreatedAt:      row.CreatedAt.Time,

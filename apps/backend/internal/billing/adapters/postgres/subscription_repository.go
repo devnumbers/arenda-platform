@@ -212,12 +212,12 @@ func mapCreateSubscriptionParams(sub domain.Subscription) postgres.CreateSubscri
 		TariffID:              pgtype.UUID{Bytes: sub.TariffID, Valid: true},
 		Source:                string(sub.Source),
 		Status:                string(sub.Status),
-		ValidUntil:            timestamptzPtr(sub.ValidUntil),
+		ValidUntil:            pgconv.TimePtrToPgtype(sub.ValidUntil),
 		AutoRenewEnabled:      sub.AutoRenewEnabled,
-		PendingTariffID:       uuidPtr(sub.PendingTariffID),
-		PendingChangeAt:       timestamptzPtr(sub.PendingChangeAt),
+		PendingTariffID:       pgconv.UUIDToPgtypePtr(sub.PendingTariffID),
+		PendingChangeAt:       pgconv.TimePtrToPgtype(sub.PendingChangeAt),
 		PendingPeriod:         periodTextPtr(sub.PendingPeriod),
-		ActivePaymentMethodID: uuidPtr(sub.ActivePaymentMethodID),
+		ActivePaymentMethodID: pgconv.UUIDToPgtypePtr(sub.ActivePaymentMethodID),
 	}
 }
 
@@ -227,12 +227,12 @@ func mapUpdateSubscriptionParams(sub domain.Subscription) postgres.UpdateSubscri
 		TariffID:              pgtype.UUID{Bytes: sub.TariffID, Valid: true},
 		Source:                string(sub.Source),
 		Status:                string(sub.Status),
-		ValidUntil:            timestamptzPtr(sub.ValidUntil),
+		ValidUntil:            pgconv.TimePtrToPgtype(sub.ValidUntil),
 		AutoRenewEnabled:      sub.AutoRenewEnabled,
-		PendingTariffID:       uuidPtr(sub.PendingTariffID),
-		PendingChangeAt:       timestamptzPtr(sub.PendingChangeAt),
+		PendingTariffID:       pgconv.UUIDToPgtypePtr(sub.PendingTariffID),
+		PendingChangeAt:       pgconv.TimePtrToPgtype(sub.PendingChangeAt),
 		PendingPeriod:         periodTextPtr(sub.PendingPeriod),
-		ActivePaymentMethodID: uuidPtr(sub.ActivePaymentMethodID),
+		ActivePaymentMethodID: pgconv.UUIDToPgtypePtr(sub.ActivePaymentMethodID),
 	}
 }
 
@@ -248,10 +248,10 @@ func mapSubscription(row postgres.UserSubscription) domain.Subscription {
 		TariffID:              pgconv.UUIDFromPgtype(row.TariffID),
 		Source:                domain.SubscriptionSource(row.Source),
 		Status:                domain.SubscriptionStatus(row.Status),
-		ValidUntil:            timePtr(row.ValidUntil),
+		ValidUntil:            pgconv.TimestamptzToPtrTime(row.ValidUntil),
 		AutoRenewEnabled:      row.AutoRenewEnabled,
 		PendingTariffID:       pgconv.UUIDFromPgtypePtr(row.PendingTariffID),
-		PendingChangeAt:       timePtr(row.PendingChangeAt),
+		PendingChangeAt:       pgconv.TimestamptzToPtrTime(row.PendingChangeAt),
 		PendingPeriod:         pendingPeriod,
 		ActivePaymentMethodID: pgconv.UUIDFromPgtypePtr(row.ActivePaymentMethodID),
 	}

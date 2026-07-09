@@ -420,7 +420,10 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 	}
 
 	orderID := getString(data, "OrderId")
-	internalPaymentID, _ := uuid.Parse(orderID)
+	internalPaymentID, err := uuid.Parse(orderID)
+	if err != nil {
+		return application.WebhookPayload{}, fmt.Errorf("tkassa: parse OrderId %q: %w", orderID, err)
+	}
 
 	status := mapStatus(getString(data, "Status"))
 	errorCode := getString(data, "ErrorCode")
@@ -429,12 +432,17 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 		errorCodePtr = &errorCode
 	}
 
+	amount, err := getInt64(data, "Amount")
+	if err != nil {
+		return application.WebhookPayload{}, err
+	}
+
 	return application.WebhookPayload{
 		InternalPaymentID: internalPaymentID,
 		ProviderPaymentID: getString(data, "PaymentId"),
 		Status:            status,
 		ErrorCode:         errorCodePtr,
-		AmountKopecks:     getInt64(data, "Amount"),
+		AmountKopecks:     amount,
 		RebillID:          getString(data, "RebillId"),
 		CardID:            getString(data, "CardId"),
 		Pan:               getString(data, "Pan"),
@@ -619,20 +627,20 @@ func getString(data map[string]any, key string) string {
 	return stringifyValue(v)
 }
 
-func getInt64(data map[string]any, key string) int64 {
+func getInt64(data map[string]any, key string) (int64, error) {
 	v, ok := data[key]
 	if !ok {
-		return 0
+		return 0, nil
 	}
 	s := stringifyValue(v)
 	if s == "" {
-		return 0
+		return 0, nil
 	}
 	n, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return 0
+		return 0, fmt.Errorf("tkassa: parse %s=%q: %w", key, s, err)
 	}
-	return n
+	return n, nil
 }
 
 func isAddCardSuccessful(data map[string]any) bool {

@@ -112,3 +112,21 @@ func TimePtrToPgtype(t *time.Time) pgtype.Timestamptz {
 	}
 	return pgtype.Timestamptz{Time: *t, Valid: true}
 }
+
+// Int8PtrToPgtype converts a *int64 to pgtype.Int8.
+// A nil pointer produces an invalid Int8; any non-nil pointer produces a valid Int8 holding its value.
+func Int8PtrToPgtype(n *int64) pgtype.Int8 {
+	if n == nil {
+		return pgtype.Int8{}
+	}
+	return pgtype.Int8{Int64: *n, Valid: true}
+}
+
+// Int8ToPtr converts a pgtype.Int8 to *int64.
+// An invalid Int8 returns nil; a valid Int8 returns a pointer to its value.
+func Int8ToPtr(n pgtype.Int8) *int64 {
+	if !n.Valid {
+		return nil
+	}
+	return new(n.Int64)
+}
