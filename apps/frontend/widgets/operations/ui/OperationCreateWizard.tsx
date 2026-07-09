@@ -12,12 +12,15 @@ import {
 } from '@/entities/operation/model/types';
 import { getCategoriesByType } from '@/entities/operation/lib/categories';
 import { useCreateOperation } from '@/features/operations/api';
+import { useProperties } from '@/features/properties/api';
 import { useCreateRecurringOperation } from '@/features/recurring-operations/api/hooks';
 import { ApiError } from '@/shared/api/errors';
 import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
+import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { useSubscription } from '@/features/subscription/api/hooks';
 import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import { OperationBasicInfoStep } from './OperationBasicInfoStep';
+import { OperationCreateWizardLoading } from './OperationCreateWizardLoading';
 import { OperationReminderStep } from './OperationReminderStep';
 import { OperationScheduleStep } from './OperationScheduleStep';
 import { OperationSuccessScreen } from './OperationSuccessScreen';
@@ -109,8 +112,16 @@ function validateSchedule(data: ScheduleData): ScheduleErrors {
 export function OperationCreateWizard({ type, propertyId }: OperationCreateWizardProps): JSX.Element {
   const router = useRouter();
 
-  const { data: subscription } = useSubscription();
+  const { data: subscription, isPending: isSubscriptionPending } = useSubscription();
   const readonly = isSubscriptionReadonly(subscription);
+
+  const {
+    data: properties,
+    isLoading: isPropertiesLoading,
+    isError: isPropertiesError,
+    isFetching: isPropertiesFetching,
+    refetch: refetchProperties,
+  } = useProperties();
 
   const [operationType, setOperationType] = useState<OperationType>(type);
 
@@ -139,6 +150,9 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
 
   const createOperation = useCreateOperation();
   const createRecurringOperation = useCreateRecurringOperation();
+
+  const isEmpty = !isPropertiesLoading && !isPropertiesError && properties?.length === 0;
+  const isPageLoading = isPropertiesLoading || isSubscriptionPending;
 
   const handleTypeChange = (nextType: OperationType) => {
     setOperationType(nextType);
@@ -260,11 +274,47 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     }
   };
 
+  const currentStepNumber = stepNumber[step];
+  const isBasicValid = Object.keys(validateBasicInfo(basicInfo, operationType)).length === 0;
+  const isScheduleValid = Object.keys(validateSchedule(schedule)).length === 0;
+  const isNextDisabled =
+    readonly || (step === 'basic' && !isBasicValid) || (step === 'schedule' && !isScheduleValid);
+
   if (step === 'success') {
     return <OperationSuccessScreen type={operationType} propertyId={basicInfo.propertyId} />;
   }
 
-  const currentStepNumber = stepNumber[step];
+  if (isPageLoading) {
+    return (
+      <div className={styles.root}>
+        <WizardHeader
+          title="Создание операции"
+          step={currentStepNumber}
+          totalSteps={3}
+          onBack={handleBack}
+          onCancel={handleCancel}
+        />
+        <OperationCreateWizardLoading />
+      </div>
+    );
+  }
+
+  if (isPropertiesError) {
+    return (
+      <div className={styles.root}>
+        <WizardHeader
+          title="Создание операции"
+          step={currentStepNumber}
+          totalSteps={3}
+          onBack={handleBack}
+          onCancel={handleCancel}
+        />
+        <div className={styles.content}>
+          <FinanceErrorState onRetry={refetchProperties} isLoading={isPropertiesFetching} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.root}>
@@ -286,6 +336,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
             onTypeChange={handleTypeChange}
             errors={basicErrors}
             readonly={readonly}
+            isEmpty={isEmpty}
           />
         )}
         {step === 'schedule' && (
@@ -312,7 +363,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
           size="large"
           fullWidth
           loading={isSubmitting}
-          disabled={readonly}
+          disabled={isNextDisabled}
           onClick={step === 'reminder' ? handleSubmit : handleNext}
         >
           {step === 'reminder' ? 'Создать операцию' : 'Далее'}
