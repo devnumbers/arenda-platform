@@ -18,7 +18,6 @@ type SubscriptionStatus string
 const (
 	SubscriptionStatusActive    SubscriptionStatus = "active"
 	SubscriptionStatusGrace     SubscriptionStatus = "grace"
-	SubscriptionStatusBlocked   SubscriptionStatus = "blocked"
 	SubscriptionStatusCancelled SubscriptionStatus = "cancelled"
 )
 

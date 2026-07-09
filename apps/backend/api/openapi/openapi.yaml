@@ -3205,7 +3205,7 @@ components:
 
     SubscriptionStatus:
       type: string
-      enum: [active, grace, blocked, cancelled]
+      enum: [active, grace, cancelled]
 
     SubscriptionPaymentStatus:
       type: string

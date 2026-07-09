@@ -53,7 +53,6 @@ func TestSubscriptionCanMutateData(t *testing.T) {
 		{"active with expired valid_until", SubscriptionStatusActive, &past, false},
 		{"grace within grace period", SubscriptionStatusGrace, &future, true},
 		{"grace after grace period", SubscriptionStatusGrace, &past, false},
-		{"blocked", SubscriptionStatusBlocked, nil, false},
 		{"cancelled without valid_until", SubscriptionStatusCancelled, nil, true},
 		{"cancelled with future valid_until", SubscriptionStatusCancelled, &future, true},
 		{"cancelled with expired valid_until", SubscriptionStatusCancelled, &past, false},
@@ -188,9 +187,9 @@ func TestSubscriptionScheduleDowngrade(t *testing.T) {
 		t.Errorf("ScheduleDowngrade invalid period error = %v, want ErrInvalidPeriod", err)
 	}
 
-	subBlocked := Subscription{TariffID: currentTariffID, Status: SubscriptionStatusBlocked, ValidUntil: &validUntil}
-	if err := subBlocked.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, validUntil); !errors.Is(err, ErrInvalidSubscriptionState) {
-		t.Errorf("ScheduleDowngrade blocked status error = %v, want ErrInvalidSubscriptionState", err)
+	subCancelled := Subscription{TariffID: currentTariffID, Status: SubscriptionStatusCancelled, ValidUntil: &validUntil}
+	if err := subCancelled.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, validUntil); !errors.Is(err, ErrInvalidSubscriptionState) {
+		t.Errorf("ScheduleDowngrade cancelled status error = %v, want ErrInvalidSubscriptionState", err)
 	}
 }
 

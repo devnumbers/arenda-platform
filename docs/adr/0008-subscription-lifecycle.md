@@ -10,29 +10,32 @@ The MVP needs a paid subscription model with three public tariffs (basic, pro,
 business). Owners must be able to upgrade, downgrade, enable/disable auto-renew,
 and manage payment methods. When a paid period ends the system must either renew
 automatically or downgrade to the free basic tariff. If payment fails, the owner
-needs a short grace period to fix the payment method before data mutations are
-blocked.
+needs a short grace period to fix the payment method before data mutations become
+read-only.
 
 Key questions:
 
 - When does an upgrade vs downgrade take effect and how is it priced?
 - What happens when auto-renewal fails?
-- How do we protect data integrity when a subscription is blocked or cancelled?
+- How do we protect data integrity when a subscription becomes read-only?
 - How are property limits enforced when a user downgrades?
 
 ## Decision
 
 ### 1. Subscription status model
 
-A subscription has one of four statuses:
+A subscription has one of three statuses:
 
 - `active` — paid (or free basic) and fully usable.
 - `grace` — renewal charge failed; data mutations are still allowed so the owner
   can fix the payment method.
-- `blocked` — grace period expired without payment; data mutations are blocked.
 - `cancelled` — the owner explicitly turned off auto-renew or the subscription
   was otherwise terminated; data mutations are allowed until the end of the
-  already paid period and blocked afterwards.
+  already paid period and read-only afterwards.
+
+A `blocked` status (grace period expired without payment) was part of the
+original design but is never produced by code; it has been removed from the
+model.
 
 Status transitions are managed by the billing application service and the
 scheduled billing worker.
@@ -75,7 +78,7 @@ the same forced-downgrade logic applies.
 
 ### 5. Readonly mode and recovery paths
 
-When a subscription cannot mutate data (`blocked`, or `cancelled` with an expired
+When a subscription cannot mutate data (grace after the grace period, or `cancelled` with an expired
 `validUntil`), HTTP middleware returns `403 SubscriptionBlocked` for mutating
 requests. The following
 paths are exempt so the owner can recover:
