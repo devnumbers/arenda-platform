@@ -41,8 +41,8 @@ export function EmptyState({
                     className={styles.image}
                     src={imageSrc}
                     alt={imageAlt}
-                    width={96}
-                    height={96}
+                    width={64}
+                    height={64}
                     priority
                 />
             ) : (
