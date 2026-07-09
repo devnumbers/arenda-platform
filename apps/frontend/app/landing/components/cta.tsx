@@ -3,12 +3,11 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useRouter } from "next/navigation";
-import { useAuthLanding } from "@/features/auth/lib/use-auth-landing";
+import { ROUTES } from "@/shared/config/routes";
 import { imgCtaBg } from "./assets";
 
 export function Cta({ openContact }: { openContact: () => void }) {
     const router = useRouter();
-    const { ctaHref } = useAuthLanding();
     return (
         <div className="relative shrink-0 w-full px-[20px] tablet:px-[80px] pb-[24px]">
             <div id="cta" className="h-[650px] relative rounded-[32px] desktop:rounded-[64px] shrink-0 w-full overflow-hidden scroll-mt-[100px]">
@@ -21,7 +20,7 @@ export function Cta({ openContact }: { openContact: () => void }) {
                         </div>
                         <div className="content-stretch flex flex-col tablet:flex-row gap-[8px] tablet:gap-[12px] items-stretch tablet:items-center justify-center w-full tablet:w-auto">
                             <button
-                                onClick={() => router.push(ctaHref)}
+                                onClick={() => router.push(ROUTES.dashboard)}
                                 className="bg-white content-stretch flex flex-col items-center justify-center min-h-[56px] overflow-clip px-[28px] relative rounded-[16px] shrink-0 w-full tablet:w-auto cursor-pointer transition-colors hover:bg-[#f1f3f6] active:bg-[#e6e9ee]"
                             >
                                 <div className="[word-break:break-word] flex flex-col font-['Manrope:Medium',sans-serif] font-medium justify-center leading-[0] overflow-hidden relative shrink-0 text-[#34343c] text-[16px] text-center text-ellipsis whitespace-nowrap">

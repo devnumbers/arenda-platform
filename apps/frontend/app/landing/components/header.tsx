@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { imgLogo } from "./assets";
 import { IconMenu, IconClose } from "./icons";
-import { useAuthLanding } from "@/features/auth/lib/use-auth-landing";
+import { ROUTES } from "@/shared/config/routes";
 
 const NAV_ITEMS: { label: string; target: string }[] = [
     { label: "Возможности", target: "features" },
@@ -33,7 +33,6 @@ export function Header() {
     const [open, setOpen] = useState(false);
     const router = useRouter();
     const pathname = usePathname();
-    const { isAuthenticated, ctaHref } = useAuthLanding();
 
     const goToSection = (target: string) => {
         setOpen(false);
@@ -47,11 +46,9 @@ export function Header() {
         }
     };
 
-    const loginLabel = isAuthenticated ? "Перейти в приложение" : "Войти";
-
-    const goCta = () => {
+    const goLogin = () => {
         setOpen(false);
-        router.push(ctaHref);
+        router.push(ROUTES.dashboard);
     };
 
     return (
@@ -86,11 +83,11 @@ export function Header() {
                         {/* Desktop login */}
                         <div className="hidden desktop:flex content-stretch flex-[1_0_0] flex-col items-end justify-center min-w-px relative">
                             <button
-                                onClick={goCta}
+                                onClick={goLogin}
                                 className="bg-[#f1f3f6] content-stretch flex flex-col items-start justify-center min-h-[44px] overflow-clip px-[20px] relative rounded-[12px] shrink-0 cursor-pointer transition-colors hover:bg-[#e6e9ee] active:bg-[#dce0e6]"
                             >
                                 <div className="[word-break:break-word] flex flex-col font-['Manrope:Medium',sans-serif] font-medium justify-center leading-[0] overflow-hidden relative shrink-0 text-[#34343c] text-[16px] text-center text-ellipsis whitespace-nowrap">
-                                    <p className="leading-[1.35] overflow-hidden text-ellipsis">{loginLabel}</p>
+                                    <p className="leading-[1.35] overflow-hidden text-ellipsis">Войти</p>
                                 </div>
                             </button>
                         </div>
@@ -98,11 +95,11 @@ export function Header() {
                         {/* Tablet: login + burger */}
                         <div className="hidden tablet:flex desktop:hidden content-stretch flex-[1_0_0] gap-[4px] items-center justify-end min-w-px relative">
                             <button
-                                onClick={goCta}
+                                onClick={goLogin}
                                 className="bg-[#f1f3f6] content-stretch flex flex-col items-start justify-center min-h-[44px] overflow-clip px-[20px] relative rounded-[12px] shrink-0 cursor-pointer transition-colors hover:bg-[#e6e9ee] active:bg-[#dce0e6]"
                             >
                                 <div className="[word-break:break-word] flex flex-col font-['Manrope:Medium',sans-serif] font-medium justify-center leading-[0] overflow-hidden relative shrink-0 text-[#34343c] text-[16px] text-center text-ellipsis whitespace-nowrap">
-                                    <p className="leading-[1.35] overflow-hidden text-ellipsis">{loginLabel}</p>
+                                    <p className="leading-[1.35] overflow-hidden text-ellipsis">Войти</p>
                                 </div>
                             </button>
                             <BurgerButton open={open} onClick={() => setOpen((v) => !v)} />
