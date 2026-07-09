@@ -3,12 +3,13 @@
 import {type JSX, useMemo} from 'react';
 import {Icon} from '@/shared/ui/icon';
 import {PageHeader} from '@/shared/ui/page-header';
-import {ArrowRight, Plus} from '@/shared/assets/icons';
+import {ArrowRight} from '@/shared/assets/icons';
 import {LinkButton} from '@/shared/ui/link-button';
 import {ROUTES} from '@/shared/config/routes';
 import {useFinanceReport} from '@/features/finance/api/hooks';
 import {useOperations} from '@/features/operations/api/hooks';
 import {formatDateForApi} from '@/entities/operation/lib/dates';
+import {FinanceCreateOperationButton} from './FinanceCreateOperationButton';
 import {FinanceEmptyState} from './FinanceEmptyState';
 import {FinanceLoading} from './FinanceLoading';
 import {FinanceErrorState} from './FinanceErrorState';
@@ -113,20 +114,7 @@ export function FinancePage(): JSX.Element {
             <PageHeader
                 title="Финансы"
                 actions={
-                    !readonly && (
-                        <LinkButton
-                            href={ROUTES.financeCreateOperation}
-                            variant="primary"
-                            size="small"
-                            leftIcon={
-                                <Icon size="s">
-                                    <Plus/>
-                                </Icon>
-                            }
-                        >
-                            Добавить операцию
-                        </LinkButton>
-                    )
+                    !readonly && <FinanceCreateOperationButton/>
                 }
             />
 
