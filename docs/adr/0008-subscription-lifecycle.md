@@ -127,8 +127,7 @@ paths are exempt so the owner can recover:
   without manual intervention.
 - (+) Fake provider enables full end-to-end testing and local development
   without real payments.
-- (-) Downgrade archiving is not atomic with the tariff change; concurrent
-  property edits could temporarily exceed the limit.
+- (~) Downgrade archiving commits in the same transaction as the tariff change; only a concurrent property create or restore that slips in before the subscription row lock can briefly exceed the limit.
 - (+) The billing worker runs each tick under `pg_try_advisory_lock(0xB111)`
   (see `apps/backend/internal/platform/scheduler/billing_worker.go`), so all
   four phases — scheduled changes, renewals, pending upgrades and expired
