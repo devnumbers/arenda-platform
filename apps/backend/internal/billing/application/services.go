@@ -26,9 +26,7 @@ type Services struct {
 }
 
 // NewServices builds the billing sub-services from one shared flowDeps value
-// and returns them typed as their consumer-facing ports, along with the
-// property limiter so the postgres adapter can wrap it for the properties
-// context.
+// and returns them typed as their consumer-facing ports.
 func NewServices(
 	tariffs TariffRepository,
 	subscriptions SubscriptionRepository,
@@ -42,7 +40,7 @@ func NewServices(
 	propertyArchiver PropertyArchiver,
 	onboarding OnboardingService,
 	paymentMethodInUseChecker PaymentMethodInUseChecker,
-) (Services, PropertyLimiter) {
+) Services {
 	deps := newFlowDeps(
 		tariffs,
 		subscriptions,
@@ -55,7 +53,6 @@ func NewServices(
 		log,
 		callbackBaseURL,
 	)
-	propertyLimiter := NewSubscriptionPropertyLimiter(subscriptions, tariffs)
 	return Services{
 		Tariffs:          NewTariffService(deps),
 		Subscriptions:    NewSubscriptionService(deps, provider),
@@ -65,7 +62,7 @@ func NewServices(
 		Renewals:         NewRenewalService(deps, provider),
 		ScheduledChanges: NewScheduledChangeService(deps, provider),
 		Onboarding:       onboarding,
-	}, propertyLimiter
+	}
 }
 
 // OnUserRegistered handles the identity.UserRegistered event by setting up the

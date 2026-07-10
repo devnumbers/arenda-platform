@@ -287,7 +287,7 @@ func run(fallback *slog.Logger) error {
 		Logger:    appLogger,
 	})
 
-	billing, _ := billingapp.NewServices(
+	billing := billingapp.NewServices(
 		tariffRepo,
 		subscriptionRepo,
 		paymentMethodRepo,

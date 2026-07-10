@@ -73,6 +73,7 @@ type PaymentMethodInUseChecker interface {
 // application layer, not in the postgres adapter.
 type PropertyLimiter interface {
 	ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error)
+	WithTx(tx transaction.Tx) (PropertyLimiter, error)
 }
 
 type SubscriptionPaymentRepository interface {

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
@@ -27,12 +28,15 @@ func (l *SubscriptionLimiter) ActivePropertyLimit(ctx context.Context, userID uu
 	return l.limiter.ActivePropertyLimit(ctx, userID)
 }
 
-// WithTx returns a limiter instance bound to the provided transaction. The
-// underlying application rule is transaction-agnostic, so the adapter simply
-// returns a new wrapper around the same limiter.
+// WithTx returns a limiter bound to the provided transaction. It binds the
+// inner application limiter to the transaction so the subscription is read with
+// a row lock, serializing concurrent property-limit checks.
 func (l *SubscriptionLimiter) WithTx(tx transaction.Tx) (propertiesapp.SubscriptionLimiter, error) {
-	_ = tx
-	return &SubscriptionLimiter{limiter: l.limiter}, nil
+	txLimiter, err := l.limiter.WithTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("bind property limiter transaction: %w", err)
+	}
+	return &SubscriptionLimiter{limiter: txLimiter}, nil
 }
 
 // Compile-time check that SubscriptionLimiter implements the properties port.

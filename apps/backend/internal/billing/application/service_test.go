@@ -781,7 +781,7 @@ func newTestDeps(t *testing.T) *testDeps {
 		clock:            newFakeClock(fixedNow),
 		inUseChecker:     &fakePaymentMethodInUseChecker{},
 	}
-	d.service, _ = NewServices(
+	d.service = NewServices(
 		d.tariffs,
 		d.subscriptions,
 		d.paymentMethods,
@@ -3028,7 +3028,7 @@ func TestBilling_renewSubscription_ChargeCalledOutsideTransaction(t *testing.T) 
 func newTestDepsWithLogger(t *testing.T, log *slog.Logger) *testDeps {
 	t.Helper()
 	d := newTestDeps(t)
-	d.service, _ = NewServices(
+	d.service = NewServices(
 		d.tariffs,
 		d.subscriptions,
 		d.paymentMethods,
