@@ -145,7 +145,7 @@ export function TariffOverview(): JSX.Element {
                     <div className={styles.row}>
                         <dt className={styles.label}>Действует до</dt>
                         <dd className={styles.value}>
-                            {formatDate(subscription.validUntil)}
+                            {isPaid ? formatDate(subscription.validUntil) : 'Навсегда'}
                         </dd>
                     </div>
 
