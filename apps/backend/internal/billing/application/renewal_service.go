@@ -163,13 +163,22 @@ func (r *RenewalService) prepareRenewalPayment(
 	}
 	if err == nil && lastSucceeded.TariffID == renewalTariff.ID && !isSubscriptionRenewalApplied(sub, lastSucceeded) {
 		_ = tx.Rollback(ctx)
-		applySubscriptionRenewalBestEffort(ctx, r.deps.flowDeps, sub.ID, lastSucceeded, now)
+		applySubscriptionRenewalBestEffort(ctx, renewalBestEffortDeps{
+			beginner:      r.deps.beginner,
+			subscriptions: r.deps.subscriptions,
+			tariffs:       r.deps.tariffs,
+			log:           r.deps.log,
+		}, sub.ID, lastSucceeded, now)
 		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, nil
 	}
 
 	// Free tariff changes (e.g. downgrade to basic) do not require a charge.
 	if amount <= 0 {
-		if err := applyFreeRenewalOrDowngrade(ctx, r.deps.flowDeps, tx, &sub, renewalTariff, period, uuid.Nil, now); err != nil {
+		if err := applyFreeRenewalOrDowngrade(ctx, freeRenewalDeps{
+			subscriptions:    r.deps.subscriptions,
+			tariffs:          r.deps.tariffs,
+			propertyArchiver: r.deps.propertyArchiver,
+		}, tx, &sub, renewalTariff, period, uuid.Nil, now); err != nil {
 			return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, err
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -295,7 +304,13 @@ func (r *RenewalService) finalizeRenewalCharge(
 			return nil
 		}
 
-		payment, err = saveProviderInitResult(ctx, r.deps.flowDeps, payment, initRes, sub.UserID, now)
+		payment, err = saveProviderInitResult(ctx, saveProviderInitDeps{
+			beginner:             r.deps.beginner,
+			subscriptionPayments: r.deps.subscriptionPayments,
+			paymentMethods:       r.deps.paymentMethods,
+			provider:             r.provider,
+			log:                  r.deps.log,
+		}, payment, initRes, sub.UserID, now)
 		if err != nil {
 			return fmt.Errorf("save provider init result: %w", err)
 		}
@@ -406,9 +421,18 @@ func (r *RenewalService) finalizeRenewalCharge(
 		// Subscription renewal/tariff change and property archiving are
 		// best-effort compensating operations: they must not roll back a payment
 		// that has already been charged.
-		sub, renewalTariff, oldTariffID, ok := applySubscriptionRenewalBestEffort(ctx, r.deps.flowDeps, sub.ID, payment, now)
+		sub, renewalTariff, oldTariffID, ok := applySubscriptionRenewalBestEffort(ctx, renewalBestEffortDeps{
+			beginner:      r.deps.beginner,
+			subscriptions: r.deps.subscriptions,
+			tariffs:       r.deps.tariffs,
+			log:           r.deps.log,
+		}, sub.ID, payment, now)
 		if ok && oldTariffID != sub.TariffID {
-			archiveExcessPropertiesBestEffort(ctx, r.deps.flowDeps, sub.UserID, renewalTariff.ActivePropertyLimit)
+			archiveExcessPropertiesBestEffort(ctx, archiveDeps{
+				propertyArchiver: r.deps.propertyArchiver,
+				beginner:         r.deps.beginner,
+				log:              r.deps.log,
+			}, sub.UserID, renewalTariff.ActivePropertyLimit)
 		}
 		return nil
 	case domain.PaymentStatusFailed:
@@ -602,9 +626,18 @@ func (r *RenewalService) markRenewalSucceededAndApply(ctx context.Context, payme
 		return fmt.Errorf("commit recovery transaction: %w", err)
 	}
 
-	sub, renewalTariff, oldTariffID, ok := applySubscriptionRenewalBestEffort(ctx, r.deps.flowDeps, subscriptionID, payment, now)
+	sub, renewalTariff, oldTariffID, ok := applySubscriptionRenewalBestEffort(ctx, renewalBestEffortDeps{
+		beginner:      r.deps.beginner,
+		subscriptions: r.deps.subscriptions,
+		tariffs:       r.deps.tariffs,
+		log:           r.deps.log,
+	}, subscriptionID, payment, now)
 	if ok && oldTariffID != sub.TariffID {
-		archiveExcessPropertiesBestEffort(ctx, r.deps.flowDeps, sub.UserID, renewalTariff.ActivePropertyLimit)
+		archiveExcessPropertiesBestEffort(ctx, archiveDeps{
+			propertyArchiver: r.deps.propertyArchiver,
+			beginner:         r.deps.beginner,
+			log:              r.deps.log,
+		}, sub.UserID, renewalTariff.ActivePropertyLimit)
 	}
 	return nil
 }
@@ -842,7 +875,11 @@ func (r *RenewalService) ProcessPendingUpgradePayments(ctx context.Context, now 
 						slog.String("error", sanitize.Error(err)))
 				}
 			case domain.PaymentStatusFailed:
-				markPaymentFailedBestEffort(ctx, r.deps.flowDeps, payment.ID, now.UTC())
+				markPaymentFailedBestEffort(ctx, markFailedDeps{
+					beginner:             r.deps.beginner,
+					subscriptionPayments: r.deps.subscriptionPayments,
+					log:                  r.deps.log,
+				}, payment.ID, now.UTC())
 			case domain.PaymentStatusPending:
 				// Provider has not finalized the payment yet; leave it pending.
 			default:

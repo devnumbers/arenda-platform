@@ -107,7 +107,11 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 	// Free scheduled changes (e.g. a downgrade to the basic tariff) do not require
 	// a charge and are applied immediately within this transaction.
 	if amount <= 0 {
-		if err := applyFreeRenewalOrDowngrade(ctx, c.deps.flowDeps, tx, &sub, pendingTariff, period, uuid.Nil, now); err != nil {
+		if err := applyFreeRenewalOrDowngrade(ctx, freeRenewalDeps{
+			subscriptions:    c.deps.subscriptions,
+			tariffs:          c.deps.tariffs,
+			propertyArchiver: c.deps.propertyArchiver,
+		}, tx, &sub, pendingTariff, period, uuid.Nil, now); err != nil {
 			return err
 		}
 		return tx.Commit(ctx)
@@ -268,7 +272,11 @@ func (c *ScheduledChangeService) applyPaidScheduledChange(
 			// transaction here (the pending payment was committed in
 			// applyScheduledChange before the provider call), so the best-effort
 			// helpers each open their own short transaction safely.
-			markPaymentFailedBestEffort(ctx, c.deps.flowDeps, payment.ID, now)
+			markPaymentFailedBestEffort(ctx, markFailedDeps{
+				beginner:             c.deps.beginner,
+				subscriptionPayments: c.deps.subscriptionPayments,
+				log:                  c.deps.log,
+			}, payment.ID, now)
 			c.clearPendingScheduledChangeBestEffort(ctx, sub.ID)
 			c.deps.log.ErrorContext(ctx, "provider init failed for paid scheduled change; pending change cleared",
 				slog.String("subscription_id", sub.ID.String()),
@@ -277,7 +285,13 @@ func (c *ScheduledChangeService) applyPaidScheduledChange(
 				slog.String("error", sanitize.Error(initErr)))
 			return nil
 		}
-		payment, err = saveProviderInitResult(ctx, c.deps.flowDeps, payment, initRes, sub.UserID, now)
+		payment, err = saveProviderInitResult(ctx, saveProviderInitDeps{
+			beginner:             c.deps.beginner,
+			subscriptionPayments: c.deps.subscriptionPayments,
+			paymentMethods:       c.deps.paymentMethods,
+			provider:             c.provider,
+			log:                  c.deps.log,
+		}, payment, initRes, sub.UserID, now)
 		if err != nil {
 			return fmt.Errorf("save provider init result for scheduled change: %w", err)
 		}

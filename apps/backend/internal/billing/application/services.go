@@ -25,33 +25,86 @@ type Services struct {
 	Onboarding       OnboardingService
 }
 
-// tariffServiceDeps is the narrow dependency bundle for TariffService. It embeds
-// the shared flowDeps so field access (s.deps.tariffs) and the cross-cutting flow
-// helpers in flows.go keep working unchanged while the service is wired through
-// its own typed deps at the composition point.
-type tariffServiceDeps struct{ flowDeps }
+// tariffServiceDeps is the narrow dependency bundle for TariffService.
+type tariffServiceDeps struct {
+	tariffs TariffRepository
+}
 
 // subscriptionServiceDeps is the narrow dependency bundle for SubscriptionService.
-type subscriptionServiceDeps struct{ flowDeps }
+type subscriptionServiceDeps struct {
+	tariffs              TariffRepository
+	subscriptions        SubscriptionRepository
+	subscriptionPayments SubscriptionPaymentRepository
+	paymentMethods       PaymentMethodRepository
+	beginner             transaction.Beginner
+	clock                clock.Clock
+	log                  *slog.Logger
+	callbackBaseURL      string
+}
 
 // paymentMethodServiceDeps is the narrow dependency bundle for PaymentMethodService.
-type paymentMethodServiceDeps struct{ flowDeps }
+type paymentMethodServiceDeps struct {
+	paymentMethods PaymentMethodRepository
+	subscriptions  SubscriptionRepository
+	beginner       transaction.Beginner
+	clock          clock.Clock
+	log            *slog.Logger
+}
 
 // paymentServiceDeps is the narrow dependency bundle for PaymentService.
-type paymentServiceDeps struct{ flowDeps }
+type paymentServiceDeps struct {
+	subscriptionPayments SubscriptionPaymentRepository
+	subscriptions        SubscriptionRepository
+	paymentMethods       PaymentMethodRepository
+	tariffs              TariffRepository
+	propertyArchiver     PropertyArchiver
+	beginner             transaction.Beginner
+	clock                clock.Clock
+	log                  *slog.Logger
+}
 
 // renewalServiceDeps is the narrow dependency bundle for RenewalService.
-type renewalServiceDeps struct{ flowDeps }
+type renewalServiceDeps struct {
+	tariffs              TariffRepository
+	subscriptions        SubscriptionRepository
+	subscriptionPayments SubscriptionPaymentRepository
+	paymentMethods       PaymentMethodRepository
+	propertyArchiver     PropertyArchiver
+	beginner             transaction.Beginner
+	clock                clock.Clock
+	log                  *slog.Logger
+	callbackBaseURL      string
+}
 
 // webhookServiceDeps is the narrow dependency bundle for WebhookService.
-type webhookServiceDeps struct{ flowDeps }
+type webhookServiceDeps struct {
+	subscriptionPayments SubscriptionPaymentRepository
+	subscriptions        SubscriptionRepository
+	paymentMethods       PaymentMethodRepository
+	tariffs              TariffRepository
+	propertyArchiver     PropertyArchiver
+	beginner             transaction.Beginner
+	clock                clock.Clock
+	log                  *slog.Logger
+	callbackBaseURL      string
+}
 
 // scheduledChangeServiceDeps is the narrow dependency bundle for ScheduledChangeService.
-type scheduledChangeServiceDeps struct{ flowDeps }
+type scheduledChangeServiceDeps struct {
+	tariffs              TariffRepository
+	subscriptions        SubscriptionRepository
+	subscriptionPayments SubscriptionPaymentRepository
+	paymentMethods       PaymentMethodRepository
+	propertyArchiver     PropertyArchiver
+	beginner             transaction.Beginner
+	clock                clock.Clock
+	log                  *slog.Logger
+	callbackBaseURL      string
+}
 
-// NewServices builds the billing sub-services from one shared flowDeps value,
-// wraps it into each sub-service's narrow deps type, and returns them typed as
-// their consumer-facing ports.
+// NewServices builds the billing sub-services from the shared repository and
+// infrastructure dependencies, wires each sub-service with only the fields it
+// actually uses, and returns them typed as their consumer-facing ports.
 func NewServices(
 	tariffs TariffRepository,
 	subscriptions SubscriptionRepository,
@@ -66,27 +119,72 @@ func NewServices(
 	onboarding OnboardingService,
 	paymentMethodInUseChecker PaymentMethodInUseChecker,
 ) Services {
-	deps := newFlowDeps(
-		tariffs,
-		subscriptions,
-		paymentMethods,
-		subscriptionPayments,
-		propertyArchiver,
-		provider,
-		beginner,
-		clk,
-		log,
-		callbackBaseURL,
-	)
+	if log == nil {
+		log = slog.Default()
+	}
 	return Services{
-		Tariffs:          NewTariffService(tariffServiceDeps{flowDeps: deps}),
-		Subscriptions:    NewSubscriptionService(subscriptionServiceDeps{flowDeps: deps}, provider),
-		PaymentMethods:   NewPaymentMethodService(paymentMethodServiceDeps{flowDeps: deps}, paymentMethodInUseChecker, provider),
-		Payments:         NewPaymentService(paymentServiceDeps{flowDeps: deps}, provider),
-		Webhooks:         NewWebhookService(webhookServiceDeps{flowDeps: deps}, provider),
-		Renewals:         NewRenewalService(renewalServiceDeps{flowDeps: deps}, provider),
-		ScheduledChanges: NewScheduledChangeService(scheduledChangeServiceDeps{flowDeps: deps}, provider),
-		Onboarding:       onboarding,
+		Tariffs: NewTariffService(tariffServiceDeps{tariffs: tariffs}),
+		Subscriptions: NewSubscriptionService(subscriptionServiceDeps{
+			tariffs:              tariffs,
+			subscriptions:        subscriptions,
+			subscriptionPayments: subscriptionPayments,
+			paymentMethods:       paymentMethods,
+			beginner:             beginner,
+			clock:                clk,
+			log:                  log,
+			callbackBaseURL:      callbackBaseURL,
+		}, provider),
+		PaymentMethods: NewPaymentMethodService(paymentMethodServiceDeps{
+			paymentMethods: paymentMethods,
+			subscriptions:  subscriptions,
+			beginner:       beginner,
+			clock:          clk,
+			log:            log,
+		}, paymentMethodInUseChecker, provider),
+		Payments: NewPaymentService(paymentServiceDeps{
+			subscriptionPayments: subscriptionPayments,
+			subscriptions:        subscriptions,
+			paymentMethods:       paymentMethods,
+			tariffs:              tariffs,
+			propertyArchiver:     propertyArchiver,
+			beginner:             beginner,
+			clock:                clk,
+			log:                  log,
+		}, provider),
+		Webhooks: NewWebhookService(webhookServiceDeps{
+			subscriptionPayments: subscriptionPayments,
+			subscriptions:        subscriptions,
+			paymentMethods:       paymentMethods,
+			tariffs:              tariffs,
+			propertyArchiver:     propertyArchiver,
+			beginner:             beginner,
+			clock:                clk,
+			log:                  log,
+			callbackBaseURL:      callbackBaseURL,
+		}, provider),
+		Renewals: NewRenewalService(renewalServiceDeps{
+			tariffs:              tariffs,
+			subscriptions:        subscriptions,
+			subscriptionPayments: subscriptionPayments,
+			paymentMethods:       paymentMethods,
+			propertyArchiver:     propertyArchiver,
+			beginner:             beginner,
+			clock:                clk,
+			log:                  log,
+			callbackBaseURL:      callbackBaseURL,
+		}, provider),
+		ScheduledChanges: NewScheduledChangeService(scheduledChangeServiceDeps{
+			tariffs:              tariffs,
+			subscriptions:        subscriptions,
+			subscriptionPayments: subscriptionPayments,
+			paymentMethods:       paymentMethods,
+			propertyArchiver:     propertyArchiver,
+			beginner:             beginner,
+			clock:                clk,
+			log:                  log,
+			callbackBaseURL:      callbackBaseURL,
+		}, provider),
+		Onboarding: onboarding,
 	}
 }
 

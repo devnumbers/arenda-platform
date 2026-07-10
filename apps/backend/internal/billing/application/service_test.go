@@ -2590,10 +2590,12 @@ func TestBilling_ProcessRenewals_LastAppliedPaymentID_SkipsAlreadyApplied(t *tes
 	// applySubscriptionRenewalBestEffort is the same helper ProcessRenewals uses
 	// to self-heal a succeeded payment. When LastAppliedPaymentID already matches
 	// the payment, the subscription must not change.
-	got, _, _, ok := applySubscriptionRenewalBestEffort(t.Context(), newFlowDeps(
-		d.tariffs, d.subscriptions, d.paymentMethods, d.subscriptionPayments,
-		d.propertyArchiver, d.provider, d.beginner, d.clock, discardLogger(), "http://localhost",
-	), subID, d.subscriptionPayments.payments[succeededPaymentID], fixedNow)
+	got, _, _, ok := applySubscriptionRenewalBestEffort(t.Context(), renewalBestEffortDeps{
+		beginner:      d.beginner,
+		subscriptions: d.subscriptions,
+		tariffs:       d.tariffs,
+		log:           discardLogger(),
+	}, subID, d.subscriptionPayments.payments[succeededPaymentID], fixedNow)
 	if !ok {
 		t.Fatal("expected best-effort renewal to succeed idempotently")
 	}
@@ -3011,7 +3013,17 @@ func TestBilling_renewSubscription_ChargeCalledOutsideTransaction(t *testing.T) 
 		}
 	}
 
-	renewal := NewRenewalService(renewalServiceDeps{flowDeps: newFlowDeps(d.tariffs, d.subscriptions, d.paymentMethods, d.subscriptionPayments, d.propertyArchiver, d.provider, d.beginner, d.clock, discardLogger(), "http://localhost")}, d.provider)
+	renewal := NewRenewalService(renewalServiceDeps{
+		tariffs:              d.tariffs,
+		subscriptions:        d.subscriptions,
+		subscriptionPayments: d.subscriptionPayments,
+		paymentMethods:       d.paymentMethods,
+		propertyArchiver:     d.propertyArchiver,
+		beginner:             d.beginner,
+		clock:                d.clock,
+		log:                  discardLogger(),
+		callbackBaseURL:      "http://localhost",
+	}, d.provider)
 	if err := renewal.renewSubscription(context.Background(), d.subscriptions.subs[userID], fixedNow); err != nil {
 		t.Fatalf("renewSubscription error: %v", err)
 	}

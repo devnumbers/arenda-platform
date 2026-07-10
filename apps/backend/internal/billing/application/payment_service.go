@@ -147,7 +147,14 @@ func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 
 	if payment.Status == domain.PaymentStatusSucceeded || payment.Status == domain.PaymentStatusFailed {
 		if payment.Status == domain.PaymentStatusSucceeded {
-			applySubscriptionRenewalAndArchive(ctx, s.deps.flowDeps, payment)
+			applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
+				beginner:         s.deps.beginner,
+				subscriptions:    s.deps.subscriptions,
+				tariffs:          s.deps.tariffs,
+				propertyArchiver: s.deps.propertyArchiver,
+				clock:            s.deps.clock,
+				log:              s.deps.log,
+			}, payment)
 		}
 		return nil
 	}
@@ -162,7 +169,13 @@ func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 		return fmt.Errorf("confirm fake payment: %w", err)
 	}
 
-	if err := applyPaymentResult(ctx, s.deps.flowDeps, tx, &payment, payload); err != nil {
+	if err := applyPaymentResult(ctx, paymentResultDeps{
+		subscriptionPayments: s.deps.subscriptionPayments,
+		paymentMethods:       s.deps.paymentMethods,
+		clock:                s.deps.clock,
+		log:                  s.deps.log,
+		provider:             s.provider,
+	}, tx, &payment, payload); err != nil {
 		return err
 	}
 
@@ -170,7 +183,14 @@ func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 		return fmt.Errorf("commit fake payment confirmation transaction: %w", err)
 	}
 
-	applySubscriptionRenewalAndArchive(ctx, s.deps.flowDeps, payment)
+	applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
+		beginner:         s.deps.beginner,
+		subscriptions:    s.deps.subscriptions,
+		tariffs:          s.deps.tariffs,
+		propertyArchiver: s.deps.propertyArchiver,
+		clock:            s.deps.clock,
+		log:              s.deps.log,
+	}, payment)
 	return nil
 }
 
@@ -299,7 +319,11 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 		return fmt.Errorf("mark payment refunded: %w", err)
 	}
 
-	if err := applyRefundToSubscription(ctx, s.deps.flowDeps, resultTx, payment.SubscriptionID); err != nil {
+	if err := applyRefundToSubscription(ctx, refundDeps{
+		subscriptions:    s.deps.subscriptions,
+		tariffs:          s.deps.tariffs,
+		propertyArchiver: s.deps.propertyArchiver,
+	}, resultTx, payment.SubscriptionID); err != nil {
 		return err
 	}
 
@@ -440,7 +464,13 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 		AmountKopecks:     payment.AmountKopecks,
 	}
 
-	if err := applyPaymentResult(ctx, s.deps.flowDeps, tx, &payment, payload); err != nil {
+	if err := applyPaymentResult(ctx, paymentResultDeps{
+		subscriptionPayments: s.deps.subscriptionPayments,
+		paymentMethods:       s.deps.paymentMethods,
+		clock:                s.deps.clock,
+		log:                  s.deps.log,
+		provider:             s.provider,
+	}, tx, &payment, payload); err != nil {
 		return err
 	}
 
@@ -458,7 +488,11 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 		}
 
 	case domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
-		if err := applyRefundToSubscription(ctx, s.deps.flowDeps, tx, payment.SubscriptionID); err != nil {
+		if err := applyRefundToSubscription(ctx, refundDeps{
+			subscriptions:    s.deps.subscriptions,
+			tariffs:          s.deps.tariffs,
+			propertyArchiver: s.deps.propertyArchiver,
+		}, tx, payment.SubscriptionID); err != nil {
 			return err
 		}
 	}
@@ -468,7 +502,14 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 	}
 
 	if status == domain.PaymentStatusSucceeded {
-		applySubscriptionRenewalAndArchive(ctx, s.deps.flowDeps, payment)
+		applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
+			beginner:         s.deps.beginner,
+			subscriptions:    s.deps.subscriptions,
+			tariffs:          s.deps.tariffs,
+			propertyArchiver: s.deps.propertyArchiver,
+			clock:            s.deps.clock,
+			log:              s.deps.log,
+		}, payment)
 	}
 
 	return nil

@@ -14,54 +14,93 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// flowDeps bundles the shared dependencies used by the billing sub-services and
-// the cross-cutting flow helpers in this file. It carries the narrow provider
-// ports so individual helpers depend only on what they use.
-type flowDeps struct {
-	tariffs              TariffRepository
-	subscriptions        SubscriptionRepository
-	paymentMethods       PaymentMethodRepository
+// paymentResultDeps is the narrow dependency bundle used by applyPaymentResult.
+type paymentResultDeps struct {
 	subscriptionPayments SubscriptionPaymentRepository
-	propertyArchiver     PropertyArchiver
-	provider             ProviderNamer
-	beginner             transaction.Beginner
+	paymentMethods       PaymentMethodRepository
 	clock                clock.Clock
 	log                  *slog.Logger
-	callbackBaseURL      string
+	provider             ProviderNamer
 }
 
-func newFlowDeps(
-	tariffs TariffRepository,
-	subscriptions SubscriptionRepository,
-	paymentMethods PaymentMethodRepository,
-	subscriptionPayments SubscriptionPaymentRepository,
-	propertyArchiver PropertyArchiver,
-	provider ProviderNamer,
-	beginner transaction.Beginner,
-	clk clock.Clock,
-	log *slog.Logger,
-	callbackBaseURL string,
-) flowDeps {
-	if log == nil {
-		log = slog.Default()
-	}
-	return flowDeps{
-		tariffs:              tariffs,
-		subscriptions:        subscriptions,
-		paymentMethods:       paymentMethods,
-		subscriptionPayments: subscriptionPayments,
-		propertyArchiver:     propertyArchiver,
-		provider:             provider,
-		beginner:             beginner,
-		clock:                clk,
-		log:                  log,
-		callbackBaseURL:      callbackBaseURL,
-	}
+// upsertPaymentMethodDeps is the narrow dependency bundle used when creating or
+// upserting a payment method from a webhook payload.
+type upsertPaymentMethodDeps struct {
+	paymentMethods PaymentMethodRepository
+	provider       ProviderNamer
+	clock          clock.Clock
+}
+
+// refundDeps is the narrow dependency bundle used by applyRefundToSubscription.
+type refundDeps struct {
+	subscriptions    SubscriptionRepository
+	tariffs          TariffRepository
+	propertyArchiver PropertyArchiver
+}
+
+// renewalBestEffortDeps is the narrow dependency bundle used by
+// applySubscriptionRenewalBestEffort.
+type renewalBestEffortDeps struct {
+	beginner      transaction.Beginner
+	subscriptions SubscriptionRepository
+	tariffs       TariffRepository
+	log           *slog.Logger
+}
+
+// renewalChangeDeps is the narrow dependency bundle used by applyRenewalChanges.
+type renewalChangeDeps struct {
+	subscriptions SubscriptionRepository
+	tariffs       TariffRepository
+}
+
+// renewalAndArchiveDeps is the narrow dependency bundle used by
+// applySubscriptionRenewalAndArchive.
+type renewalAndArchiveDeps struct {
+	beginner         transaction.Beginner
+	subscriptions    SubscriptionRepository
+	tariffs          TariffRepository
+	propertyArchiver PropertyArchiver
+	clock            clock.Clock
+	log              *slog.Logger
+}
+
+// freeRenewalDeps is the narrow dependency bundle used by
+// applyFreeRenewalOrDowngrade.
+type freeRenewalDeps struct {
+	subscriptions    SubscriptionRepository
+	tariffs          TariffRepository
+	propertyArchiver PropertyArchiver
+}
+
+// archiveDeps is the narrow dependency bundle used by
+// archiveExcessPropertiesBestEffort.
+type archiveDeps struct {
+	propertyArchiver PropertyArchiver
+	beginner         transaction.Beginner
+	log              *slog.Logger
+}
+
+// saveProviderInitDeps is the narrow dependency bundle used by
+// saveProviderInitResult.
+type saveProviderInitDeps struct {
+	beginner             transaction.Beginner
+	subscriptionPayments SubscriptionPaymentRepository
+	paymentMethods       PaymentMethodRepository
+	provider             ProviderNamer
+	log                  *slog.Logger
+}
+
+// markFailedDeps is the narrow dependency bundle used by
+// markPaymentFailedBestEffort and rollbackAndMarkFailedBestEffort.
+type markFailedDeps struct {
+	beginner             transaction.Beginner
+	subscriptionPayments SubscriptionPaymentRepository
+	log                  *slog.Logger
 }
 
 func applyPaymentResult(
 	ctx context.Context,
-	d flowDeps,
+	d paymentResultDeps,
 	tx transaction.Tx,
 	payment *domain.SubscriptionPayment,
 	payload WebhookPayload,
@@ -117,7 +156,11 @@ func applyPaymentResult(
 		// best-effort step so a domain failure cannot roll back the charge.
 		methodID := payment.PaymentMethodID
 		if payload.RebillID != "" {
-			pm, err := upsertPaymentMethodFromWebhook(ctx, d, tx, payment.UserID, payload)
+			pm, err := upsertPaymentMethodFromWebhook(ctx, upsertPaymentMethodDeps{
+				paymentMethods: d.paymentMethods,
+				provider:       d.provider,
+				clock:          d.clock,
+			}, tx, payment.UserID, payload)
 			if err != nil {
 				return err
 			}
@@ -178,7 +221,7 @@ func applyPaymentResult(
 }
 
 // applyRefundToSubscription downgrades the subscription to basic after a refund.
-func applyRefundToSubscription(ctx context.Context, d flowDeps, tx transaction.Tx, subscriptionID uuid.UUID) error {
+func applyRefundToSubscription(ctx context.Context, d refundDeps, tx transaction.Tx, subscriptionID uuid.UUID) error {
 	txSubscriptions, err := d.subscriptions.WithTx(tx)
 	if err != nil {
 		return fmt.Errorf("bind subscriptions transaction: %w", err)
@@ -206,9 +249,14 @@ func applyRefundToSubscription(ctx context.Context, d flowDeps, tx transaction.T
 
 // applySubscriptionRenewalAndArchive runs the best-effort subscription renewal
 // and then archives excess properties when the tariff changed to a lower limit.
-func applySubscriptionRenewalAndArchive(ctx context.Context, d flowDeps, payment domain.SubscriptionPayment) {
+func applySubscriptionRenewalAndArchive(ctx context.Context, d renewalAndArchiveDeps, payment domain.SubscriptionPayment) {
 	now := d.clock.Now().UTC()
-	sub, renewalTariff, oldTariffID, ok := applySubscriptionRenewalBestEffort(ctx, d, payment.SubscriptionID, payment, now)
+	sub, renewalTariff, oldTariffID, ok := applySubscriptionRenewalBestEffort(ctx, renewalBestEffortDeps{
+		beginner:      d.beginner,
+		subscriptions: d.subscriptions,
+		tariffs:       d.tariffs,
+		log:           d.log,
+	}, payment.SubscriptionID, payment, now)
 	if !ok {
 		return
 	}
@@ -217,14 +265,18 @@ func applySubscriptionRenewalAndArchive(ctx context.Context, d flowDeps, payment
 	if oldTariffID == sub.TariffID {
 		return
 	}
-	archiveExcessPropertiesBestEffort(ctx, d, sub.UserID, renewalTariff.ActivePropertyLimit)
+	archiveExcessPropertiesBestEffort(ctx, archiveDeps{
+		propertyArchiver: d.propertyArchiver,
+		beginner:         d.beginner,
+		log:              d.log,
+	}, sub.UserID, renewalTariff.ActivePropertyLimit)
 }
 
 // applySubscriptionRenewalBestEffort applies the subscription side of a
 // successful payment in a separate transaction. This keeps MarkSucceeded in the
 // critical transaction path: if the renewal/tariff change fails, the payment
 // stays succeeded and the error is logged for manual review.
-func applySubscriptionRenewalBestEffort(ctx context.Context, d flowDeps, subscriptionID uuid.UUID, payment domain.SubscriptionPayment, now time.Time) (domain.Subscription, domain.Tariff, uuid.UUID, bool) {
+func applySubscriptionRenewalBestEffort(ctx context.Context, d renewalBestEffortDeps, subscriptionID uuid.UUID, payment domain.SubscriptionPayment, now time.Time) (domain.Subscription, domain.Tariff, uuid.UUID, bool) {
 	tx, err := d.beginner.Begin(ctx)
 	if err != nil {
 		d.log.ErrorContext(ctx, "failed to begin transaction for best-effort subscription renewal",
@@ -263,7 +315,10 @@ func applySubscriptionRenewalBestEffort(ctx context.Context, d flowDeps, subscri
 		sub.ActivePaymentMethodID = payment.PaymentMethodID
 	}
 
-	sub, renewalTariff, err := applyRenewalChanges(ctx, d, tx, sub, payment, now)
+	sub, renewalTariff, err := applyRenewalChanges(ctx, renewalChangeDeps{
+		subscriptions: d.subscriptions,
+		tariffs:       d.tariffs,
+	}, tx, sub, payment, now)
 	if err != nil {
 		d.log.ErrorContext(ctx, "best-effort subscription renewal failed",
 			slog.String("subscription_id", subscriptionID.String()),
@@ -283,7 +338,7 @@ func applySubscriptionRenewalBestEffort(ctx context.Context, d flowDeps, subscri
 	return sub, renewalTariff, oldTariffID, true
 }
 
-func applyRenewalChanges(ctx context.Context, d flowDeps, tx transaction.Tx, sub domain.Subscription, payment domain.SubscriptionPayment, now time.Time) (domain.Subscription, domain.Tariff, error) {
+func applyRenewalChanges(ctx context.Context, d renewalChangeDeps, tx transaction.Tx, sub domain.Subscription, payment domain.SubscriptionPayment, now time.Time) (domain.Subscription, domain.Tariff, error) {
 	txTariffs, err := d.tariffs.WithTx(tx)
 	if err != nil {
 		return domain.Subscription{}, domain.Tariff{}, fmt.Errorf("bind tariffs transaction: %w", err)
@@ -324,7 +379,7 @@ func applyRenewalChanges(ctx context.Context, d flowDeps, tx transaction.Tx, sub
 	return sub, renewalTariff, nil
 }
 
-func applyFreeRenewalOrDowngrade(ctx context.Context, d flowDeps, tx transaction.Tx, sub *domain.Subscription, renewalTariff domain.Tariff, period domain.SubscriptionPeriod, paymentID uuid.UUID, now time.Time) error {
+func applyFreeRenewalOrDowngrade(ctx context.Context, d freeRenewalDeps, tx transaction.Tx, sub *domain.Subscription, renewalTariff domain.Tariff, period domain.SubscriptionPeriod, paymentID uuid.UUID, now time.Time) error {
 	txSubscriptions, err := d.subscriptions.WithTx(tx)
 	if err != nil {
 		return fmt.Errorf("bind subscriptions transaction: %w", err)
@@ -375,7 +430,7 @@ func applyFreeRenewalOrDowngrade(ctx context.Context, d flowDeps, tx transaction
 	return nil
 }
 
-func archiveExcessPropertiesBestEffort(ctx context.Context, d flowDeps, userID uuid.UUID, limit int) {
+func archiveExcessPropertiesBestEffort(ctx context.Context, d archiveDeps, userID uuid.UUID, limit int) {
 	if d.propertyArchiver == nil {
 		return
 	}
@@ -403,7 +458,7 @@ func archiveExcessPropertiesBestEffort(ctx context.Context, d flowDeps, userID u
 	}
 }
 
-func buildPaymentMethodFromWebhook(d flowDeps, userID uuid.UUID, payload WebhookPayload) (domain.PaymentMethod, error) {
+func buildPaymentMethodFromWebhook(d upsertPaymentMethodDeps, userID uuid.UUID, payload WebhookPayload) (domain.PaymentMethod, error) {
 	pm, err := domain.NewPaymentMethod(
 		userID,
 		d.provider.Name(),
@@ -419,7 +474,7 @@ func buildPaymentMethodFromWebhook(d flowDeps, userID uuid.UUID, payload Webhook
 	return pm, nil
 }
 
-func upsertPaymentMethodFromWebhook(ctx context.Context, d flowDeps, tx transaction.Tx, userID uuid.UUID, payload WebhookPayload) (domain.PaymentMethod, error) {
+func upsertPaymentMethodFromWebhook(ctx context.Context, d upsertPaymentMethodDeps, tx transaction.Tx, userID uuid.UUID, payload WebhookPayload) (domain.PaymentMethod, error) {
 	pm, err := buildPaymentMethodFromWebhook(d, userID, payload)
 	if err != nil {
 		return domain.PaymentMethod{}, err
@@ -439,12 +494,16 @@ func upsertPaymentMethodFromWebhook(ctx context.Context, d flowDeps, tx transact
 // payment method atomically in a single transaction. If the transaction cannot
 // be committed, the pending payment is marked failed so it does not stay
 // unfinished.
-func saveProviderInitResult(ctx context.Context, d flowDeps, payment domain.SubscriptionPayment, initRes InitResult, userID uuid.UUID, now time.Time) (domain.SubscriptionPayment, error) {
+func saveProviderInitResult(ctx context.Context, d saveProviderInitDeps, payment domain.SubscriptionPayment, initRes InitResult, userID uuid.UUID, now time.Time) (domain.SubscriptionPayment, error) {
 	paymentID := payment.ID
 
 	tx, err := d.beginner.Begin(ctx)
 	if err != nil {
-		markPaymentFailedBestEffort(ctx, d, paymentID, now)
+		markPaymentFailedBestEffort(ctx, markFailedDeps{
+			beginner:             d.beginner,
+			subscriptionPayments: d.subscriptionPayments,
+			log:                  d.log,
+		}, paymentID, now)
 		return domain.SubscriptionPayment{}, fmt.Errorf("begin provider result transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -462,7 +521,11 @@ func saveProviderInitResult(ctx context.Context, d flowDeps, payment domain.Subs
 	// transaction, so the row must be locked before the reference is persisted.
 	payment, err = txSubscriptionPayments.GetByIDForUpdate(ctx, paymentID)
 	if err != nil {
-		rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
+		rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
+			beginner:             d.beginner,
+			subscriptionPayments: d.subscriptionPayments,
+			log:                  d.log,
+		}, paymentID, now)
 		return domain.SubscriptionPayment{}, fmt.Errorf("get payment for provider result: %w", err)
 	}
 	if payment.IsFinalized() {
@@ -471,7 +534,11 @@ func saveProviderInitResult(ctx context.Context, d flowDeps, payment domain.Subs
 		return payment, nil
 	}
 	if payment.Status != domain.PaymentStatusPending {
-		rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
+		rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
+			beginner:             d.beginner,
+			subscriptionPayments: d.subscriptionPayments,
+			log:                  d.log,
+		}, paymentID, now)
 		return domain.SubscriptionPayment{}, domain.ErrInvalidPaymentStatus
 	}
 
@@ -484,23 +551,39 @@ func saveProviderInitResult(ctx context.Context, d flowDeps, payment domain.Subs
 			now,
 		)
 		if err != nil {
-			rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
+				beginner:             d.beginner,
+				subscriptionPayments: d.subscriptionPayments,
+				log:                  d.log,
+			}, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("create payment method: %w", err)
 		}
 		pm, err = txPaymentMethods.Create(ctx, pm)
 		if err != nil {
-			rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
+				beginner:             d.beginner,
+				subscriptionPayments: d.subscriptionPayments,
+				log:                  d.log,
+			}, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("save payment method: %w", err)
 		}
 		payment, err = txSubscriptionPayments.UpdatePaymentMethodAndProviderID(ctx, paymentID, pm.ID, initRes.ProviderPaymentID)
 		if err != nil {
-			rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
+				beginner:             d.beginner,
+				subscriptionPayments: d.subscriptionPayments,
+				log:                  d.log,
+			}, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update payment method and provider payment id: %w", err)
 		}
 	} else {
 		payment, err = txSubscriptionPayments.UpdateProviderPaymentID(ctx, paymentID, initRes.ProviderPaymentID)
 		if err != nil {
-			rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
+				beginner:             d.beginner,
+				subscriptionPayments: d.subscriptionPayments,
+				log:                  d.log,
+			}, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update provider payment id: %w", err)
 		}
 	}
@@ -508,13 +591,21 @@ func saveProviderInitResult(ctx context.Context, d flowDeps, payment domain.Subs
 	if initRes.PaymentURL != "" {
 		payment, err = txSubscriptionPayments.UpdatePaymentURL(ctx, paymentID, initRes.PaymentURL)
 		if err != nil {
-			rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
+				beginner:             d.beginner,
+				subscriptionPayments: d.subscriptionPayments,
+				log:                  d.log,
+			}, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update payment url: %w", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
+		rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
+			beginner:             d.beginner,
+			subscriptionPayments: d.subscriptionPayments,
+			log:                  d.log,
+		}, paymentID, now)
 		return domain.SubscriptionPayment{}, fmt.Errorf("commit provider result transaction: %w", err)
 	}
 
@@ -525,7 +616,7 @@ func saveProviderInitResult(ctx context.Context, d flowDeps, payment domain.Subs
 // the row lock) and only then marks the payment as failed in a separate transaction.
 // Calling Rollback on an already-closed transaction returns an error that is ignored,
 // so this is safe to use on every error path of saveProviderInitResult.
-func rollbackAndMarkFailedBestEffort(ctx context.Context, tx transaction.Tx, d flowDeps, paymentID uuid.UUID, now time.Time) {
+func rollbackAndMarkFailedBestEffort(ctx context.Context, tx transaction.Tx, d markFailedDeps, paymentID uuid.UUID, now time.Time) {
 	_ = tx.Rollback(ctx)
 	markPaymentFailedBestEffort(ctx, d, paymentID, now)
 }
@@ -533,7 +624,7 @@ func rollbackAndMarkFailedBestEffort(ctx context.Context, tx transaction.Tx, d f
 // markPaymentFailedBestEffort marks a pending payment as failed in a separate
 // transaction. It is used when a transaction that should have finalized the
 // payment has already failed and we need to avoid leaving the record pending.
-func markPaymentFailedBestEffort(ctx context.Context, d flowDeps, paymentID uuid.UUID, now time.Time) {
+func markPaymentFailedBestEffort(ctx context.Context, d markFailedDeps, paymentID uuid.UUID, now time.Time) {
 	tx, err := d.beginner.Begin(ctx)
 	if err != nil {
 		d.log.ErrorContext(ctx, "failed to begin transaction for best-effort payment failure mark",

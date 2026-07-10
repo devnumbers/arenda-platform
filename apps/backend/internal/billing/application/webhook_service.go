@@ -55,7 +55,11 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 			return fmt.Errorf("invalid customer key: %w", err)
 		}
 
-		pm, err := buildPaymentMethodFromWebhook(s.deps.flowDeps, userID, result)
+		pm, err := buildPaymentMethodFromWebhook(upsertPaymentMethodDeps{
+			paymentMethods: s.deps.paymentMethods,
+			provider:       s.provider,
+			clock:          s.deps.clock,
+		}, userID, result)
 		if err != nil {
 			return err
 		}
@@ -136,7 +140,14 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 		// In that case we must process the refund instead of ignoring it.
 		if result.Status != domain.PaymentStatusRefunded && result.Status != domain.PaymentStatusPartialRefunded {
 			if payment.Status == domain.PaymentStatusSucceeded {
-				applySubscriptionRenewalAndArchive(ctx, s.deps.flowDeps, payment)
+				applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
+					beginner:         s.deps.beginner,
+					subscriptions:    s.deps.subscriptions,
+					tariffs:          s.deps.tariffs,
+					propertyArchiver: s.deps.propertyArchiver,
+					clock:            s.deps.clock,
+					log:              s.deps.log,
+				}, payment)
 				return nil
 			}
 			// payment.Status == domain.PaymentStatusFailed && result.Status == domain.PaymentStatusSucceeded.
@@ -151,14 +162,18 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 			}
 			// Release the row lock before the outbound HTTP call.
 			_ = tx.Rollback(ctx)
-			return reconcileFailedPayment(ctx, s.deps.flowDeps, s.provider, payment, result)
+			return s.reconcileFailedPayment(ctx, payment, result)
 		}
 	}
 
 	switch result.Status {
 	case domain.PaymentStatusPending:
 		// AUTHORIZED: credentials received, payment stays pending until CONFIRMED.
-		pm, err := upsertPaymentMethodFromWebhook(ctx, s.deps.flowDeps, tx, payment.UserID, result)
+		pm, err := upsertPaymentMethodFromWebhook(ctx, upsertPaymentMethodDeps{
+			paymentMethods: s.deps.paymentMethods,
+			provider:       s.provider,
+			clock:          s.deps.clock,
+		}, tx, payment.UserID, result)
 		if err != nil {
 			return err
 		}
@@ -178,7 +193,13 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 		return tx.Commit(ctx)
 
 	case domain.PaymentStatusSucceeded, domain.PaymentStatusFailed, domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
-		if err := applyPaymentResult(ctx, s.deps.flowDeps, tx, &payment, result); err != nil {
+		if err := applyPaymentResult(ctx, paymentResultDeps{
+			subscriptionPayments: s.deps.subscriptionPayments,
+			paymentMethods:       s.deps.paymentMethods,
+			clock:                s.deps.clock,
+			log:                  s.deps.log,
+			provider:             s.provider,
+		}, tx, &payment, result); err != nil {
 			return err
 		}
 
@@ -196,7 +217,11 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 			}
 
 		case domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
-			if err := applyRefundToSubscription(ctx, s.deps.flowDeps, tx, payment.SubscriptionID); err != nil {
+			if err := applyRefundToSubscription(ctx, refundDeps{
+				subscriptions:    s.deps.subscriptions,
+				tariffs:          s.deps.tariffs,
+				propertyArchiver: s.deps.propertyArchiver,
+			}, tx, payment.SubscriptionID); err != nil {
 				return err
 			}
 		}
@@ -206,7 +231,14 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 		}
 
 		if result.Status == domain.PaymentStatusSucceeded {
-			applySubscriptionRenewalAndArchive(ctx, s.deps.flowDeps, payment)
+			applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
+				beginner:         s.deps.beginner,
+				subscriptions:    s.deps.subscriptions,
+				tariffs:          s.deps.tariffs,
+				propertyArchiver: s.deps.propertyArchiver,
+				clock:            s.deps.clock,
+				log:              s.deps.log,
+			}, payment)
 		}
 		return nil
 
@@ -219,10 +251,10 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 // failed payment and applies the corresponding subscription-side effects. It is
 // used when a late "succeeded" webhook arrives after the payment has already
 // been marked as failed.
-func reconcileFailedPayment(ctx context.Context, d flowDeps, checker PaymentStatusChecker, payment domain.SubscriptionPayment, result WebhookPayload) error {
-	status, err := checker.Status(ctx, payment.ID, *payment.ProviderPaymentID)
+func (s *WebhookService) reconcileFailedPayment(ctx context.Context, payment domain.SubscriptionPayment, result WebhookPayload) error {
+	status, err := s.provider.Status(ctx, payment.ID, *payment.ProviderPaymentID)
 	if err != nil {
-		d.log.ErrorContext(ctx, "failed to query provider status for reconciling failed payment",
+		s.deps.log.ErrorContext(ctx, "failed to query provider status for reconciling failed payment",
 			slog.String("payment_id", payment.ID.String()),
 			slog.String("subscription_id", payment.SubscriptionID.String()),
 			slog.String("error", sanitize.Error(err)))
@@ -235,20 +267,20 @@ func reconcileFailedPayment(ctx context.Context, d flowDeps, checker PaymentStat
 	case domain.PaymentStatusFailed, domain.PaymentStatusPending:
 		return nil
 	default:
-		d.log.WarnContext(ctx, "unexpected provider status for reconciling failed payment; skipping",
+		s.deps.log.WarnContext(ctx, "unexpected provider status for reconciling failed payment; skipping",
 			slog.String("payment_id", payment.ID.String()),
 			slog.String("subscription_id", payment.SubscriptionID.String()),
 			slog.String("provider_status", string(status)))
 		return nil
 	}
 
-	tx, err := d.beginner.Begin(ctx)
+	tx, err := s.deps.beginner.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin reconcile transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	txSubscriptionPayments, err := d.subscriptionPayments.WithTx(tx)
+	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
 	if err != nil {
 		return fmt.Errorf("bind subscription payments transaction: %w", err)
 	}
@@ -268,13 +300,23 @@ func reconcileFailedPayment(ctx context.Context, d flowDeps, checker PaymentStat
 	reconcileResult := result
 	reconcileResult.Status = status
 
-	if err := applyPaymentResult(ctx, d, tx, &payment, reconcileResult); err != nil {
+	if err := applyPaymentResult(ctx, paymentResultDeps{
+		subscriptionPayments: s.deps.subscriptionPayments,
+		paymentMethods:       s.deps.paymentMethods,
+		clock:                s.deps.clock,
+		log:                  s.deps.log,
+		provider:             s.provider,
+	}, tx, &payment, reconcileResult); err != nil {
 		return err
 	}
 
 	switch status {
 	case domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
-		if err := applyRefundToSubscription(ctx, d, tx, payment.SubscriptionID); err != nil {
+		if err := applyRefundToSubscription(ctx, refundDeps{
+			subscriptions:    s.deps.subscriptions,
+			tariffs:          s.deps.tariffs,
+			propertyArchiver: s.deps.propertyArchiver,
+		}, tx, payment.SubscriptionID); err != nil {
 			return err
 		}
 	}
@@ -284,7 +326,14 @@ func reconcileFailedPayment(ctx context.Context, d flowDeps, checker PaymentStat
 	}
 
 	if status == domain.PaymentStatusSucceeded {
-		applySubscriptionRenewalAndArchive(ctx, d, payment)
+		applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
+			beginner:         s.deps.beginner,
+			subscriptions:    s.deps.subscriptions,
+			tariffs:          s.deps.tariffs,
+			propertyArchiver: s.deps.propertyArchiver,
+			clock:            s.deps.clock,
+			log:              s.deps.log,
+		}, payment)
 	}
 	return nil
 }
