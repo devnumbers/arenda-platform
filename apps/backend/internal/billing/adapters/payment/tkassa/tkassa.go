@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
 )
 
 const (
@@ -166,6 +167,8 @@ func (p *Provider) Name() domain.PaymentProvider {
 
 // Init starts a new payment through T-Kassa.
 func (p *Provider) Init(ctx context.Context, req application.InitRequest) (application.InitResult, error) {
+	log := logger.WithCorrelation(ctx, p.log)
+
 	operationInitiatorType := req.OperationInitiatorType
 	if operationInitiatorType == "" {
 		operationInitiatorType = firstPaymentInitiatorType
@@ -191,7 +194,7 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 		body["Description"] = truncateDescription(req.Description, maxDescriptionLength)
 	}
 
-	p.log.InfoContext(ctx, "tkassa init",
+	log.InfoContext(ctx, "tkassa init",
 		"internal_payment_id", req.PaymentID.String(),
 		"user_id", req.UserID.String(),
 		"amount_kopecks", req.AmountKopecks,
@@ -215,13 +218,15 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 // Amount is intentionally omitted from the request body: T-Kassa takes the
 // charge amount from the original Init call.
 func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (application.ChargeResult, error) {
+	log := logger.WithCorrelation(ctx, p.log)
+
 	body := map[string]any{
 		"TerminalKey": p.terminalKey,
 		"PaymentId":   req.ProviderPaymentID,
 		"RebillId":    req.Token,
 	}
 
-	p.log.InfoContext(ctx, "tkassa charge",
+	log.InfoContext(ctx, "tkassa charge",
 		"internal_payment_id", req.PaymentID.String(),
 		"provider_payment_id", req.ProviderPaymentID,
 		"amount_kopecks", req.AmountKopecks,
@@ -240,12 +245,14 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 
 // Status queries the current status of a payment through T-Kassa.
 func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error) {
+	log := logger.WithCorrelation(ctx, p.log)
+
 	body := map[string]any{
 		"TerminalKey": p.terminalKey,
 		"PaymentId":   providerPaymentID,
 	}
 
-	p.log.InfoContext(ctx, "tkassa get state",
+	log.InfoContext(ctx, "tkassa get state",
 		"internal_payment_id", paymentID.String(),
 		"provider_payment_id", providerPaymentID,
 	)
@@ -260,6 +267,8 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 
 // Cancel refunds or cancels a payment through T-Kassa.
 func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (application.CancelResult, error) {
+	log := logger.WithCorrelation(ctx, p.log)
+
 	// The system always refunds the full amount.
 	body := map[string]any{
 		"TerminalKey": p.terminalKey,
@@ -267,7 +276,7 @@ func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (a
 		"Amount":      req.AmountKopecks,
 	}
 
-	p.log.InfoContext(ctx, "tkassa cancel",
+	log.InfoContext(ctx, "tkassa cancel",
 		"internal_payment_id", req.PaymentID.String(),
 		"provider_payment_id", req.ProviderPaymentID,
 		"amount_kopecks", req.AmountKopecks,
@@ -314,6 +323,8 @@ type cancelResponse struct {
 
 // InitAddCard initializes attaching a new card to a T-Kassa customer.
 func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (application.InitAddCardResult, error) {
+	log := logger.WithCorrelation(ctx, p.log)
+
 	// The T-Kassa AddCard schema requires the customer to already exist, so we
 	// call AddCustomer first. If the customer was already created (for example,
 	// by a previous Init payment), T-Kassa returns ErrorCode 7. That is not a
@@ -326,7 +337,7 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 	if err := p.post(ctx, "AddCustomer", customerBody, &customerResp); err != nil {
 		var providerErr *ProviderError
 		if errors.As(err, &providerErr) && providerErr.ErrorCode == "7" {
-			p.log.InfoContext(ctx, "tkassa customer already exists, proceeding to add card",
+			log.InfoContext(ctx, "tkassa customer already exists, proceeding to add card",
 				"customer_key", req.CustomerKey,
 			)
 		} else {
@@ -347,7 +358,7 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 		"CheckType":   checkType,
 	}
 
-	p.log.InfoContext(ctx, "tkassa add card",
+	log.InfoContext(ctx, "tkassa add card",
 		"customer_key", req.CustomerKey,
 	)
 
@@ -365,13 +376,15 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 
 // RemoveCard detaches a card from a T-Kassa customer.
 func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) error {
+	log := logger.WithCorrelation(ctx, p.log)
+
 	body := map[string]any{
 		"TerminalKey": p.terminalKey,
 		"CustomerKey": customerKey,
 		"CardId":      cardID,
 	}
 
-	p.log.InfoContext(ctx, "tkassa remove card",
+	log.InfoContext(ctx, "tkassa remove card",
 		"customer_key", customerKey,
 	)
 
