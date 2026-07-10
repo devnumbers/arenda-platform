@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	adminpg "github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters/postgres"
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
 	paymentfake "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/fake"
 	paymenttkassa "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/tkassa"
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
@@ -165,9 +166,13 @@ func run(fallback *slog.Logger) error {
 		"subscription_payments", subscriptionPaymentRepo != nil)
 
 	var paymentProvider billingapp.Provider
+	paymentMetrics, err := payment.NewMetrics()
+	if err != nil {
+		return fmt.Errorf("payment metrics: %w", err)
+	}
 	switch cfg.PaymentProvider {
 	case "fake":
-		paymentProvider = paymentfake.NewProvider(cfg.AppBaseURL, appLogger, clock.Real{})
+		paymentProvider = paymentfake.NewProvider(cfg.AppBaseURL, appLogger, clock.Real{}, paymentMetrics)
 	case "tkassa":
 		paymentProvider = paymenttkassa.NewProvider(
 			cfg.TKassaBaseURL,
@@ -178,6 +183,7 @@ func run(fallback *slog.Logger) error {
 			cfg.TKassaRetryBaseDelay,
 			cfg.TKassaRetryMaxDelay,
 			appLogger,
+			paymentMetrics,
 		)
 	}
 	appLogger.InfoContext(ctx, "payment provider initialized", "provider", cfg.PaymentProvider, "initialized", paymentProvider != nil)

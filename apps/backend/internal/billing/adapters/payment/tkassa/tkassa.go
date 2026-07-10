@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
@@ -81,6 +82,7 @@ type Provider struct {
 	password    string
 	client      *http.Client
 	log         *slog.Logger
+	metrics     *payment.Metrics
 }
 
 // Compile-time assertions that Provider satisfies the aggregate Provider port
@@ -155,7 +157,7 @@ type removeCardResponse struct {
 // If baseURL is empty, the sandbox URL is used. If timeout is zero, a 30s default is used.
 // If maxRetries is positive, the HTTP client wraps the default transport with an
 // exponential backoff retry layer for temporary network errors.
-func NewProvider(baseURL, terminalKey, password string, timeout time.Duration, maxRetries int, retryBaseDelay, retryMaxDelay time.Duration, log *slog.Logger) *Provider {
+func NewProvider(baseURL, terminalKey, password string, timeout time.Duration, maxRetries int, retryBaseDelay, retryMaxDelay time.Duration, log *slog.Logger, metrics *payment.Metrics) *Provider {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
@@ -182,6 +184,7 @@ func NewProvider(baseURL, terminalKey, password string, timeout time.Duration, m
 		password:    password,
 		client:      client,
 		log:         log,
+		metrics:     metrics,
 	}
 }
 
@@ -191,7 +194,16 @@ func (p *Provider) Name() domain.PaymentProvider {
 }
 
 // Init starts a new payment through T-Kassa.
-func (p *Provider) Init(ctx context.Context, req application.InitRequest) (application.InitResult, error) {
+func (p *Provider) Init(ctx context.Context, req application.InitRequest) (res application.InitResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "tkassa", "Init", status, time.Since(start))
+	}()
+
 	ctx, span := tracer.Start(ctx, "tkassa.Init")
 	defer span.End()
 
@@ -253,7 +265,16 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 // Charge performs a recurrent charge through T-Kassa.
 // Amount is intentionally omitted from the request body: T-Kassa takes the
 // charge amount from the original Init call.
-func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (application.ChargeResult, error) {
+func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (res application.ChargeResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "tkassa", "Charge", status, time.Since(start))
+	}()
+
 	ctx, span := tracer.Start(ctx, "tkassa.Charge")
 	defer span.End()
 
@@ -292,7 +313,16 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 }
 
 // Status queries the current status of a payment through T-Kassa.
-func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error) {
+func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (status domain.PaymentStatus, err error) {
+	start := time.Now()
+	defer func() {
+		recStatus := "ok"
+		if err != nil {
+			recStatus = "error"
+		}
+		p.metrics.RecordRequest(ctx, "tkassa", "Status", recStatus, time.Since(start))
+	}()
+
 	ctx, span := tracer.Start(ctx, "tkassa.Status")
 	defer span.End()
 
@@ -325,7 +355,16 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 }
 
 // Cancel refunds or cancels a payment through T-Kassa.
-func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (application.CancelResult, error) {
+func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (res application.CancelResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "tkassa", "Cancel", status, time.Since(start))
+	}()
+
 	ctx, span := tracer.Start(ctx, "tkassa.Cancel")
 	defer span.End()
 
@@ -396,7 +435,16 @@ type cancelResponse struct {
 }
 
 // InitAddCard initializes attaching a new card to a T-Kassa customer.
-func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (application.InitAddCardResult, error) {
+func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (res application.InitAddCardResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "tkassa", "InitAddCard", status, time.Since(start))
+	}()
+
 	ctx, span := tracer.Start(ctx, "tkassa.InitAddCard")
 	defer span.End()
 
@@ -462,7 +510,16 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 }
 
 // RemoveCard detaches a card from a T-Kassa customer.
-func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) error {
+func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) (err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "tkassa", "RemoveCard", status, time.Since(start))
+	}()
+
 	ctx, span := tracer.Start(ctx, "tkassa.RemoveCard")
 	defer span.End()
 

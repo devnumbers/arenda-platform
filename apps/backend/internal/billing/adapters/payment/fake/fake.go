@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
@@ -40,6 +41,7 @@ type Provider struct {
 	mu               sync.Mutex
 	pending          map[string]pendingEntry
 	confirmedAmounts map[string]int64
+	metrics          *payment.Metrics
 }
 
 // Compile-time assertions that Provider satisfies the aggregate Provider port
@@ -61,20 +63,30 @@ func (p *Provider) Name() domain.PaymentProvider {
 }
 
 // NewProvider creates a fake provider for local development and Bruno tests.
-func NewProvider(baseURL string, log *slog.Logger, clk clock.Clock) *Provider {
+func NewProvider(baseURL string, log *slog.Logger, clk clock.Clock, metrics *payment.Metrics) *Provider {
 	return &Provider{
 		baseURL:          strings.TrimRight(baseURL, "/"),
 		log:              log,
 		clock:            clk,
 		pending:          make(map[string]pendingEntry),
 		confirmedAmounts: make(map[string]int64),
+		metrics:          metrics,
 	}
 }
 
 // Init creates a pending payment and returns a confirmation URL.
 // Calling Init twice with the same internal payment id is idempotent: the
 // existing provider payment id and confirmation URL are returned.
-func (p *Provider) Init(ctx context.Context, req application.InitRequest) (application.InitResult, error) {
+func (p *Provider) Init(ctx context.Context, req application.InitRequest) (res application.InitResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "Init", status, time.Since(start))
+	}()
+
 	if req.PaymentID == uuid.Nil {
 		return application.InitResult{}, errors.New("fake: payment id is required")
 	}
@@ -144,8 +156,16 @@ func (p *Provider) PaymentURL(ctx context.Context, paymentID uuid.UUID) (string,
 
 // Status returns the provider-side status of a payment. If the payment is not
 // found in the pending map it is assumed to have been completed and succeeded.
-func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error) {
-	_ = ctx
+func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (status domain.PaymentStatus, err error) {
+	start := time.Now()
+	defer func() {
+		recStatus := "ok"
+		if err != nil {
+			recStatus = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "Status", recStatus, time.Since(start))
+	}()
+
 	_ = providerPaymentID
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -158,7 +178,16 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 }
 
 // Charge performs a recurrent charge using a saved token.
-func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (application.ChargeResult, error) {
+func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (res application.ChargeResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "Charge", status, time.Since(start))
+	}()
+
 	if req.PaymentID == uuid.Nil {
 		return application.ChargeResult{}, errors.New("fake: payment id is required")
 	}
@@ -195,15 +224,31 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 }
 
 // InitAddCard is not supported by the fake provider.
-func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (application.InitAddCardResult, error) {
-	_ = ctx
+func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (res application.InitAddCardResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "InitAddCard", status, time.Since(start))
+	}()
+
 	_ = req
 	return application.InitAddCardResult{}, errors.New("fake: add card flow is not supported")
 }
 
 // RemoveCard is a no-op for the fake provider.
-func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) error {
-	_ = ctx
+func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) (err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "RemoveCard", status, time.Since(start))
+	}()
+
 	_ = customerKey
 	_ = cardID
 	return nil
@@ -212,7 +257,16 @@ func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) e
 // Cancel refunds a finalized fake payment. For the fake provider we treat every
 // cancel as successful. For full refunds the original payment amount is reported
 // back so callers do not need to track it separately.
-func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (application.CancelResult, error) {
+func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (res application.CancelResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "Cancel", status, time.Since(start))
+	}()
+
 	if req.PaymentID == uuid.Nil {
 		return application.CancelResult{}, errors.New("fake: payment id is required")
 	}
@@ -298,14 +352,30 @@ func (p *Provider) ParseWebhook(_ context.Context, payload []byte) (application.
 // ConfirmPayment completes a previously initialized fake payment as succeeded.
 // It is used by the local fake confirmation HTTP handler and is not part of the
 // Provider interface.
-func (p *Provider) ConfirmPayment(ctx context.Context, internalPaymentID string) (application.WebhookPayload, error) {
-	_ = ctx
+func (p *Provider) ConfirmPayment(ctx context.Context, internalPaymentID string) (res application.WebhookPayload, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "ConfirmPayment", status, time.Since(start))
+	}()
+
 	return p.confirm(internalPaymentID, false, nil)
 }
 
 // ConfirmPaymentFailed completes a previously initialized fake payment as failed.
-func (p *Provider) ConfirmPaymentFailed(ctx context.Context, internalPaymentID string, errorCode *string) (application.WebhookPayload, error) {
-	_ = ctx
+func (p *Provider) ConfirmPaymentFailed(ctx context.Context, internalPaymentID string, errorCode *string) (res application.WebhookPayload, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "ConfirmPaymentFailed", status, time.Since(start))
+	}()
+
 	return p.confirm(internalPaymentID, true, errorCode)
 }
 

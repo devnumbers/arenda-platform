@@ -30,7 +30,7 @@ func discardLogger() *slog.Logger {
 }
 
 func TestProviderInit(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
@@ -61,7 +61,7 @@ func TestProviderInit(t *testing.T) {
 }
 
 func TestProviderInit_IdempotentByInternalPaymentID(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
@@ -95,7 +95,7 @@ func TestProviderInit_IdempotentByInternalPaymentID(t *testing.T) {
 }
 
 func TestProviderInitValidation(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	validPaymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	validUserID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
@@ -150,7 +150,7 @@ func TestProviderInitValidation(t *testing.T) {
 }
 
 func TestProviderCharge(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 
 	success, err := p.Charge(context.Background(), application.ChargeRequest{
@@ -179,7 +179,7 @@ func TestProviderCharge(t *testing.T) {
 }
 
 func TestProviderCharge_FullRefund(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.MustParse("33333333-3333-3333-3333-333333333334")
 	amount := int64(15000)
 
@@ -212,7 +212,7 @@ func TestProviderCharge_FullRefund(t *testing.T) {
 }
 
 func TestProviderChargeValidation(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	validPaymentID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 
 	cases := []struct {
@@ -263,7 +263,7 @@ func TestProviderChargeValidation(t *testing.T) {
 }
 
 func TestProviderParseWebhook(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	internalID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 
 	cases := []struct {
@@ -328,7 +328,7 @@ func TestProviderParseWebhook(t *testing.T) {
 }
 
 func TestProviderConfirmPayment(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
 
 	initRes, err := p.Init(context.Background(), application.InitRequest{
@@ -370,7 +370,7 @@ func TestProviderConfirmPayment(t *testing.T) {
 }
 
 func TestProviderConfirmPaymentFailed(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.MustParse("77777777-7777-7777-7777-777777777777")
 
 	_, err := p.Init(context.Background(), application.InitRequest{
@@ -419,7 +419,7 @@ func TestProviderConfirmPaymentFailed(t *testing.T) {
 }
 
 func TestProviderConfirmPaymentIgnoresErrorCodeOnSuccess(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 
 	_, err := p.Init(context.Background(), application.InitRequest{
@@ -446,7 +446,7 @@ func TestProviderConfirmPaymentIgnoresErrorCodeOnSuccess(t *testing.T) {
 
 func TestProviderPurgePendingTTL(t *testing.T) {
 	clk := newTestClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
-	p := NewProvider("http://localhost:8080", discardLogger(), clk)
+	p := NewProvider("http://localhost:8080", discardLogger(), clk, nil)
 	paymentID := uuid.MustParse("dddddddd-dddd-dddd-dddd-dddddddddddd")
 
 	_, err := p.Init(context.Background(), application.InitRequest{
@@ -478,7 +478,7 @@ func TestProviderPurgePendingTTL(t *testing.T) {
 }
 
 func TestProviderCancel(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111113")
 	providerPaymentID := "fake_cancel_1"
 	amount := int64(10000)
@@ -515,7 +515,7 @@ func TestProviderCancel(t *testing.T) {
 }
 
 func TestProviderCancelValidation(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()))
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 
 	cases := []struct {
 		name    string
