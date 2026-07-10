@@ -2,10 +2,9 @@ package application
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
-	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
+	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -182,14 +181,10 @@ func NewServices(
 	}
 }
 
-// OnUserRegistered handles the identity.UserRegistered event by setting up the
+// OnUserRegistered handles the user registration event by setting up the
 // default subscription for a newly-created user. It is kept on the bundle
 // (rather than on the Subscriber port) because it is an event adapter, not a
 // subscription operation; main.go subscribes it to the event dispatcher.
-func (s Services) OnUserRegistered(ctx context.Context, event any) error {
-	e, ok := event.(identityapp.UserRegistered)
-	if !ok {
-		return fmt.Errorf("unexpected event type %T", event)
-	}
-	return s.Onboarding.SetupDefaultSubscription(ctx, e.UserID)
+func (s Services) OnUserRegistered(ctx context.Context, userID uuid.UUID) error {
+	return s.Onboarding.SetupDefaultSubscription(ctx, userID)
 }

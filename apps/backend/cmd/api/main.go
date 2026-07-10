@@ -301,7 +301,13 @@ func run(fallback *slog.Logger) error {
 		onboardingService,
 		paymentMethodInUseChecker,
 	)
-	eventDispatcher.Subscribe(events.EventType("user_registered"), billing.OnUserRegistered)
+	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
+		e, ok := event.(identityapp.UserRegistered)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return billing.OnUserRegistered(ctx, e.UserID)
+	})
 
 	adminRepo := adminpg.NewAdminRepository(db, encryptor, clock.Real{}, occupancyProvider)
 	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billing.Subscriptions, clock.Real{})

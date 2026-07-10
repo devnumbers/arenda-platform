@@ -224,6 +224,12 @@ type OnboardingService interface {
 	SetupDefaultSubscription(ctx context.Context, userID uuid.UUID) error
 }
 
+// UserRegisteredHandler handles the user registration event. Billing owns this
+// narrow port so it does not depend on the identity context.
+type UserRegisteredHandler interface {
+	OnUserRegistered(ctx context.Context, userID uuid.UUID) error
+}
+
 type InitRequest struct {
 	PaymentID              uuid.UUID
 	AmountKopecks          int64
