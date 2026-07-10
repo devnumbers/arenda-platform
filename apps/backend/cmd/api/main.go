@@ -40,6 +40,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	mailerfake "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/fake"
 	mailersmtp "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/smtp"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/observability"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/dadata"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
@@ -88,13 +89,30 @@ func run(fallback *slog.Logger) error {
 	}
 	appLogger := slog.New(logHandler)
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	otelSDK, err := observability.NewSDK(ctx, observability.Config{
+		ServiceName:  cfg.OTelServiceName,
+		Enabled:      cfg.OTelEnabled,
+		OTLPEndpoint: cfg.OTelOTLPEndpoint,
+		TraceSampler: cfg.OTelTraceSampler,
+	})
+	if err != nil {
+		return fmt.Errorf("observability: %w", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if err := otelSDK.Shutdown(shutdownCtx); err != nil {
+			appLogger.ErrorContext(ctx, "observability shutdown failed", "error", err)
+		}
+	}()
+
 	renderer, err := mailer.NewRenderer(cfg.EmailTemplatesDir)
 	if err != nil {
 		return fmt.Errorf("failed to load email templates: %w", err)
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	encryptor, err := encryption.NewEncryptor(cfg.EncryptionKey)
 	if err != nil {

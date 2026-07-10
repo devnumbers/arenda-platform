@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 	"log/slog"
 	"net"
@@ -62,6 +63,10 @@ type Config struct {
 	SMTPFrom                            string
 	SMTPFromName                        string
 	SMTPTimeout                         time.Duration
+	OTelServiceName                     string
+	OTelEnabled                         bool
+	OTelTraceSampler                    float64
+	OTelOTLPEndpoint                    string
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -111,7 +116,17 @@ func Load() (Config, error) {
 		DaDataSecretKey:   os.Getenv("DADATA_SECRET_KEY"),
 		DaDataBaseURL:     os.Getenv("DADATA_BASE_URL"),
 		EncryptionKey:     os.Getenv("ENCRYPTION_KEY"),
+		OTelServiceName:   cmp.Or(os.Getenv("OTEL_SERVICE_NAME"), "arenda-api"),
+		OTelEnabled: (os.Getenv("OTEL_TRACES_EXPORTER") != "" && os.Getenv("OTEL_TRACES_EXPORTER") != "none") ||
+			(os.Getenv("OTEL_METRICS_EXPORTER") != "" && os.Getenv("OTEL_METRICS_EXPORTER") != "none"),
+		OTelOTLPEndpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 	}
+
+	sampler, err := parseFloatEnv("OTEL_TRACES_SAMPLER_ARG", 1.0)
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid OTEL_TRACES_SAMPLER_ARG %q: %w", os.Getenv("OTEL_TRACES_SAMPLER_ARG"), err)
+	}
+	cfg.OTelTraceSampler = sampler
 
 	if cfg.AppEnv == "" {
 		return Config{}, fmt.Errorf("APP_ENV is required")
@@ -629,4 +644,16 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func parseFloatEnv(key string, defaultValue float64) (float64, error) {
+	s := os.Getenv(key)
+	if s == "" {
+		return defaultValue, nil
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
 }
