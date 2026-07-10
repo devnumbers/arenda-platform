@@ -61,6 +61,11 @@ Downgrading to a cheaper tariff:
   new tariff limit, the system archives the excess properties, skipping
   properties with open leases.
 
+Paid downgrades (to a cheaper non-basic tariff) follow the same deferred model:
+the tariff change is scheduled for the end of the already paid period and the
+charge is performed by the billing worker at the moment the scheduled change is
+applied, not at the time `ChangeTariff` is called.
+
 ### 4. Renewal, grace and forced downgrade
 
 A background billing worker runs on a configurable interval:

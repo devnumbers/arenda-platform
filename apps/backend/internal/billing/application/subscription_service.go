@@ -196,6 +196,9 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 	if sub.ValidUntil == nil {
 		return ChangeTariffResponse{}, ErrInvalidTariffChange
 	}
+	// Paid and free downgrades are deferred until the end of the paid period;
+	// the charge happens when the scheduled change is applied by the worker.
+	// See ADR 0008, section 3.
 	if err := sub.ScheduleDowngrade(currentTariff, newTariff, req.Period, *sub.ValidUntil); err != nil {
 		return ChangeTariffResponse{}, err
 	}
