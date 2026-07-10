@@ -7,6 +7,8 @@ var (
 	ErrInvalidAmount = errors.New("amount must be positive")
 	// ErrInvalidPeriod indicates a subscription period other than month/year was supplied.
 	ErrInvalidPeriod = errors.New("period must be month or year")
+	// ErrInvalidTariff indicates a tariff name that does not match a known tariff.
+	ErrInvalidTariff = errors.New("invalid tariff name")
 	// ErrInvalidPaymentStatus indicates a status transition that is not allowed.
 	ErrInvalidPaymentStatus = errors.New("payment status transition is invalid")
 	// ErrAlreadyOnTariff indicates an attempt to change to the current tariff.

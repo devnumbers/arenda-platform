@@ -7,7 +7,7 @@ import (
 
 // ChangeTariffRequest asks to move a user to another tariff for a period.
 type ChangeTariffRequest struct {
-	TariffName string
+	TariffName domain.TariffName
 	Period     domain.SubscriptionPeriod
 }
 

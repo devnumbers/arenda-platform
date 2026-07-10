@@ -97,11 +97,7 @@ func (s *SubscriptionService) existingUpgradeResponse(ctx context.Context, payme
 
 // ChangeTariff starts an upgrade payment or schedules a downgrade.
 func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID, req ChangeTariffRequest) (ChangeTariffResponse, error) {
-	if req.Period != domain.PeriodMonth && req.Period != domain.PeriodYear {
-		return ChangeTariffResponse{}, domain.ErrInvalidPeriod
-	}
-
-	newTariff, err := s.deps.tariffs.GetByName(ctx, domain.TariffName(req.TariffName))
+	newTariff, err := s.deps.tariffs.GetByName(ctx, req.TariffName)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ChangeTariffResponse{}, ErrTariffNotFound

@@ -12,6 +12,15 @@ const (
 	TariffBusiness TariffName = "business"
 )
 
+// ParseTariffName validates and converts a string to TariffName.
+func ParseTariffName(s string) (TariffName, error) {
+	switch TariffName(s) {
+	case TariffBasic, TariffPro, TariffBusiness:
+		return TariffName(s), nil
+	}
+	return "", ErrInvalidTariff
+}
+
 // TariffChangeType describes the direction of a tariff change.
 type TariffChangeType string
 

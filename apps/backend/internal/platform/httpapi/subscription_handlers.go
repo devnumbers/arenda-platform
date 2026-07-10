@@ -138,9 +138,20 @@ func (h *SubscriptionHandlers) ChangeTariff(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	tariffName, err := domain.ParseTariffName(string(body.TariffName))
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	period, err := domain.ParseSubscriptionPeriod(string(body.Period))
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
 	res, err := h.subscriptions.ChangeTariff(r.Context(), ownerID, billingapp.ChangeTariffRequest{
-		TariffName: string(body.TariffName),
-		Period:     domain.SubscriptionPeriod(body.Period),
+		TariffName: tariffName,
+		Period:     period,
 	})
 	if err != nil {
 		h.handleBillingError(w, r, err)

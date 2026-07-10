@@ -23,6 +23,15 @@ const (
 
 const gracePeriod = 7 * 24 * time.Hour
 
+// ParseSubscriptionPeriod validates and converts a string to SubscriptionPeriod.
+func ParseSubscriptionPeriod(s string) (SubscriptionPeriod, error) {
+	switch SubscriptionPeriod(s) {
+	case PeriodMonth, PeriodYear:
+		return SubscriptionPeriod(s), nil
+	}
+	return "", ErrInvalidPeriod
+}
+
 type Subscription struct {
 	ID                    uuid.UUID
 	UserID                uuid.UUID

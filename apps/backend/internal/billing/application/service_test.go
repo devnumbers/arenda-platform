@@ -877,7 +877,7 @@ func TestBilling_ChangeTariff_UpgradeCreatesPendingPayment(t *testing.T) {
 	})
 
 	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -980,7 +980,7 @@ func TestBilling_ChangeTariff_UpgradeCreatesPaymentBeforeProviderCall(t *testing
 	}
 
 	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -1015,7 +1015,7 @@ func TestBilling_ChangeTariff_DowngradeSchedulesPendingChange(t *testing.T) {
 	})
 
 	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffBasic),
+		TariffName: domain.TariffBasic,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -1063,7 +1063,7 @@ func TestBilling_ChangeTariff_AlreadyOnTariff(t *testing.T) {
 	})
 
 	_, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffBasic),
+		TariffName: domain.TariffBasic,
 		Period:     domain.PeriodMonth,
 	})
 	if !errors.Is(err, ErrAlreadyOnTariff) {
@@ -1245,7 +1245,7 @@ func TestBilling_ConfirmFakePayment_AppliesUpgrade(t *testing.T) {
 	})
 
 	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -1837,7 +1837,7 @@ func TestBilling_ChangeTariff_UpgradeDefersPaymentMethodActivation(t *testing.T)
 	}
 
 	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -1888,7 +1888,7 @@ func TestBilling_ChangeTariff_UpgradeInitFailureMarksPaymentFailed(t *testing.T)
 	d.provider.initErr = wantErr
 
 	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if !errors.Is(err, wantErr) {
@@ -1955,7 +1955,7 @@ func TestBilling_SaveProviderInitResult_NoDeadlockOnUpdateFailure(t *testing.T) 
 	}
 
 	_, err := d.service.Subscriptions.ChangeTariff(t.Context(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err == nil {
@@ -2019,7 +2019,7 @@ func TestBilling_ChangeTariff_UpgradeReturnsExistingPendingPayment(t *testing.T)
 	}
 
 	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -2067,7 +2067,7 @@ func TestBilling_ChangeTariff_DowngradeCancelledInvalidState(t *testing.T) {
 	})
 
 	_, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffBasic),
+		TariffName: domain.TariffBasic,
 		Period:     domain.PeriodMonth,
 	})
 	if !errors.Is(err, domain.ErrInvalidSubscriptionState) {
@@ -2313,7 +2313,7 @@ func TestBilling_ChangeTariff_RejectServiceSubscription(t *testing.T) {
 	})
 
 	_, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if !errors.Is(err, domain.ErrInvalidSubscriptionState) {
@@ -2345,7 +2345,7 @@ func TestBilling_ConfirmFakePayment_Idempotent(t *testing.T) {
 	})
 
 	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -3313,7 +3313,7 @@ func TestBilling_ChangeTariff_UpgradeRecoversProviderReferenceAfterCrash(t *test
 	}
 
 	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -3779,7 +3779,7 @@ func TestBilling_ChangeTariff_TkassaFirstPaymentInitFields(t *testing.T) {
 	}
 
 	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -3855,7 +3855,7 @@ func TestBilling_ChangeTariff_TkassaReturnsExistingPendingPaymentURL(t *testing.
 	}
 
 	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -6373,7 +6373,7 @@ func TestBilling_ChangeTariff_UpgradeCommitFailure_RollsBackAndMarksFailed(t *te
 	}
 
 	_, err := d.service.Subscriptions.ChangeTariff(t.Context(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err == nil {
