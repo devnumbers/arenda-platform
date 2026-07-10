@@ -25,9 +25,10 @@ func NewScheduledChangeService(deps scheduledChangeServiceDeps) *ScheduledChange
 // the free basic tariff) whose pending_change_at has been reached. Returns the
 // number of subscriptions processed.
 func (c *ScheduledChangeService) ProcessScheduledChanges(ctx context.Context, now time.Time) (int, error) {
+	now = now.UTC()
 	processed := 0
 	for {
-		subs, err := c.deps.subscriptions.ListPendingChanges(ctx, now.UTC(), renewalBatchSize)
+		subs, err := c.deps.subscriptions.ListPendingChanges(ctx, now, renewalBatchSize)
 		if err != nil {
 			return processed, fmt.Errorf("list subscriptions with pending change: %w", err)
 		}
@@ -35,7 +36,7 @@ func (c *ScheduledChangeService) ProcessScheduledChanges(ctx context.Context, no
 			break
 		}
 		for _, sub := range subs {
-			if err := c.applyScheduledChange(ctx, sub, now.UTC()); err != nil {
+			if err := c.applyScheduledChange(ctx, sub, now); err != nil {
 				c.deps.log.ErrorContext(ctx, "apply scheduled change failed",
 					slog.String("subscription_id", sub.ID.String()),
 					slog.String("user_id", sub.UserID.String()),
