@@ -13,22 +13,23 @@ import (
 
 // PaymentMethodService manages the user's saved payment methods.
 type PaymentMethodService struct {
-	deps flowDeps
+	deps     flowDeps
+	provider CardProvider
 }
 
 // NewPaymentMethodService creates a PaymentMethodService.
-func NewPaymentMethodService(deps flowDeps) *PaymentMethodService {
-	return &PaymentMethodService{deps: deps}
+func NewPaymentMethodService(deps flowDeps, provider CardProvider) *PaymentMethodService {
+	return &PaymentMethodService{deps: deps, provider: provider}
 }
 
 // AddPaymentMethod stores a new inactive payment method for the user.
 // For the fake provider the method is created synchronously from the raw token.
 // For T-Kassa a bank-form flow is initiated and the confirmation URL is returned.
 func (s *PaymentMethodService) AddPaymentMethod(ctx context.Context, userID uuid.UUID, req AddPaymentMethodRequest) (AddPaymentMethodResponse, error) {
-	if s.deps.provider.Name() == domain.ProviderFake {
+	if s.provider.Name() == domain.ProviderFake {
 		pm, err := domain.NewPaymentMethod(
 			userID,
-			s.deps.provider.Name(),
+			s.provider.Name(),
 			req.ProviderToken,
 			maskToken(req.ProviderToken),
 			s.deps.clock.Now().UTC(),
@@ -60,7 +61,7 @@ func (s *PaymentMethodService) AddPaymentMethod(ctx context.Context, userID uuid
 		return AddPaymentMethodResponse{PaymentMethod: &pm}, nil
 	}
 
-	result, err := s.deps.provider.InitAddCard(ctx, InitAddCardRequest{
+	result, err := s.provider.InitAddCard(ctx, InitAddCardRequest{
 		UserID:      userID,
 		CustomerKey: userID.String(),
 		CheckType:   "3DSHOLD",
@@ -154,8 +155,8 @@ func (s *PaymentMethodService) DeletePaymentMethod(ctx context.Context, userID, 
 
 	// The local row is gone; detach the card at the provider best-effort. A
 	// provider failure must not fail the operation since the method is already deleted.
-	if s.deps.provider.Name() == domain.ProviderTkassa && pm.ProviderCardID != "" {
-		if err := s.deps.provider.RemoveCard(ctx, userID.String(), pm.ProviderCardID); err != nil {
+	if s.provider.Name() == domain.ProviderTkassa && pm.ProviderCardID != "" {
+		if err := s.provider.RemoveCard(ctx, userID.String(), pm.ProviderCardID); err != nil {
 			if errors.Is(err, ErrProviderCardNotFound) {
 				s.deps.log.WarnContext(ctx, "provider card already removed; continuing local deletion",
 					slog.String("payment_method_id", methodID.String()),

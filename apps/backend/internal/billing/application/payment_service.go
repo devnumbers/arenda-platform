@@ -14,12 +14,13 @@ import (
 
 // PaymentService lists and acts on subscription payments.
 type PaymentService struct {
-	deps flowDeps
+	deps     flowDeps
+	provider PaymentManager
 }
 
 // NewPaymentService creates a PaymentService.
-func NewPaymentService(deps flowDeps) *PaymentService {
-	return &PaymentService{deps: deps}
+func NewPaymentService(deps flowDeps, provider PaymentManager) *PaymentService {
+	return &PaymentService{deps: deps, provider: provider}
 }
 
 // ListPayments returns all subscription payments for the user with their tariffs.
@@ -153,7 +154,7 @@ func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 		return nil
 	}
 
-	cp, ok := s.deps.provider.(ConfirmableProvider)
+	cp, ok := s.provider.(ConfirmableProvider)
 	if !ok {
 		return ErrProviderNotConfirmable
 	}
@@ -241,7 +242,7 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 	// held during the unbounded external HTTP request. On failure, or on a
 	// non-refund response, the reservation is reverted in a separate short
 	// transaction.
-	cancelRes, err := s.deps.provider.Cancel(ctx, CancelRequest{
+	cancelRes, err := s.provider.Cancel(ctx, CancelRequest{
 		PaymentID:         paymentID,
 		ProviderPaymentID: providerPaymentID,
 		AmountKopecks:     refundAmount,
@@ -388,7 +389,7 @@ func (s *PaymentService) SyncPendingPayment(ctx context.Context, paymentID uuid.
 		return fmt.Errorf("%w: payment has no provider payment id", domain.ErrInvalidPaymentStatus)
 	}
 
-	status, err := s.deps.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
+	status, err := s.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
 	if err != nil {
 		return fmt.Errorf("provider status: %w", err)
 	}

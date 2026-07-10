@@ -54,12 +54,12 @@ func NewServices(
 	)
 	return Services{
 		Tariffs:          NewTariffService(deps),
-		Subscriptions:    NewSubscriptionService(deps),
-		PaymentMethods:   NewPaymentMethodService(deps),
-		Payments:         NewPaymentService(deps),
-		Webhooks:         NewWebhookService(deps),
-		Renewals:         NewRenewalService(deps),
-		ScheduledChanges: NewScheduledChangeService(deps),
+		Subscriptions:    NewSubscriptionService(deps, provider),
+		PaymentMethods:   NewPaymentMethodService(deps, provider),
+		Payments:         NewPaymentService(deps, provider),
+		Webhooks:         NewWebhookService(deps, provider),
+		Renewals:         NewRenewalService(deps, provider),
+		ScheduledChanges: NewScheduledChangeService(deps, provider),
 		Onboarding:       onboarding,
 	}
 }

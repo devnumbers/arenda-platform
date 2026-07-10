@@ -23,7 +23,7 @@ type flowDeps struct {
 	paymentMethods       PaymentMethodRepository
 	subscriptionPayments SubscriptionPaymentRepository
 	propertyArchiver     PropertyArchiver
-	provider             Provider
+	provider             ProviderNamer
 	beginner             transaction.Beginner
 	clock                clock.Clock
 	log                  *slog.Logger
@@ -36,7 +36,7 @@ func newFlowDeps(
 	paymentMethods PaymentMethodRepository,
 	subscriptionPayments SubscriptionPaymentRepository,
 	propertyArchiver PropertyArchiver,
-	provider Provider,
+	provider ProviderNamer,
 	beginner transaction.Beginner,
 	clk clock.Clock,
 	log *slog.Logger,

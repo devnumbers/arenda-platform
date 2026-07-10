@@ -585,6 +585,14 @@ func (a *fakePropertyArchiver) ArchiveExcessProperties(_ context.Context, _ tran
 
 // --- provider fake ---
 
+var _ RenewalProvider = (*stubProvider)(nil)
+var _ WebhookProvider = (*stubProvider)(nil)
+var _ PaymentManager = (*stubProvider)(nil)
+var _ CardProvider = (*stubProvider)(nil)
+var _ SubscriptionPaymentProvider = (*stubProvider)(nil)
+var _ ScheduledChangeProvider = (*stubProvider)(nil)
+var _ ProviderNamer = (*stubProvider)(nil)
+
 type stubProvider struct {
 	name       domain.PaymentProvider
 	initCalled bool
@@ -2950,7 +2958,7 @@ func TestBilling_renewSubscription_ChargeCalledOutsideTransaction(t *testing.T) 
 		}
 	}
 
-	renewal := NewRenewalService(newFlowDeps(d.tariffs, d.subscriptions, d.paymentMethods, d.subscriptionPayments, d.propertyArchiver, d.provider, d.beginner, d.clock, discardLogger(), "http://localhost"))
+	renewal := NewRenewalService(newFlowDeps(d.tariffs, d.subscriptions, d.paymentMethods, d.subscriptionPayments, d.propertyArchiver, d.provider, d.beginner, d.clock, discardLogger(), "http://localhost"), d.provider)
 	if err := renewal.renewSubscription(context.Background(), d.subscriptions.subs[userID], fixedNow); err != nil {
 		t.Fatalf("renewSubscription error: %v", err)
 	}

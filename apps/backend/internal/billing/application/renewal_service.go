@@ -15,12 +15,13 @@ import (
 
 // RenewalService drives the subscription renewal background jobs.
 type RenewalService struct {
-	deps flowDeps
+	deps     flowDeps
+	provider RenewalProvider
 }
 
 // NewRenewalService creates a RenewalService.
-func NewRenewalService(deps flowDeps) *RenewalService {
-	return &RenewalService{deps: deps}
+func NewRenewalService(deps flowDeps, provider RenewalProvider) *RenewalService {
+	return &RenewalService{deps: deps, provider: provider}
 }
 
 // ProcessRenewals processes all subscriptions whose validity period has ended.
@@ -220,7 +221,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 			&pm.ID,
 			period,
 			amount,
-			r.deps.provider.Name(),
+			r.provider.Name(),
 			now,
 		)
 		if err != nil {
@@ -240,7 +241,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 	// Recover a missing provider reference idempotently before charging.
 	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
 		notification, successURL, failURL := tkassaCallbackURLs(r.deps.callbackBaseURL, payment.ID)
-		initRes, err := r.deps.provider.Init(ctx, InitRequest{
+		initRes, err := r.provider.Init(ctx, InitRequest{
 			PaymentID:              payment.ID,
 			AmountKopecks:          amount,
 			Period:                 period,
@@ -278,7 +279,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 	// If a previous run already registered a provider reference, query the
 	// provider status before re-charging to avoid duplicate charges.
 	if chargeProviderPaymentID != "" {
-		status, statusErr := r.deps.provider.Status(ctx, payment.ID, chargeProviderPaymentID)
+		status, statusErr := r.provider.Status(ctx, payment.ID, chargeProviderPaymentID)
 		if statusErr == nil {
 			switch status {
 			case domain.PaymentStatusSucceeded:
@@ -289,7 +290,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 		}
 	}
 
-	chargeResult, chargeErr := r.deps.provider.Charge(ctx, ChargeRequest{
+	chargeResult, chargeErr := r.provider.Charge(ctx, ChargeRequest{
 		PaymentID:         payment.ID,
 		AmountKopecks:     amount,
 		Token:             pm.ProviderToken,
@@ -447,7 +448,7 @@ func (r *RenewalService) recoverRenewalFailure(ctx context.Context, paymentID, s
 		return r.markRenewalFailedAndGrace(ctx, paymentID, subscriptionID, errorCode, now)
 	}
 
-	status, err := r.deps.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
+	status, err := r.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
 	if err != nil || status == domain.PaymentStatusPending {
 		statusStr := string(status)
 		if statusStr == "" {
@@ -793,7 +794,7 @@ func (r *RenewalService) ProcessPendingUpgradePayments(ctx context.Context, now 
 				continue
 			}
 
-			status, statusErr := r.deps.provider.Status(ctx, payment.ID, *payment.ProviderPaymentID)
+			status, statusErr := r.provider.Status(ctx, payment.ID, *payment.ProviderPaymentID)
 			processed++
 
 			if statusErr != nil {

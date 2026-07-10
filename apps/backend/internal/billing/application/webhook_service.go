@@ -13,27 +13,28 @@ import (
 
 // WebhookService handles provider webhooks.
 type WebhookService struct {
-	deps flowDeps
+	deps     flowDeps
+	provider WebhookProvider
 }
 
 // NewWebhookService creates a WebhookService.
-func NewWebhookService(deps flowDeps) *WebhookService {
-	return &WebhookService{deps: deps}
+func NewWebhookService(deps flowDeps, provider WebhookProvider) *WebhookService {
+	return &WebhookService{deps: deps, provider: provider}
 }
 
 // WebhookResponse returns the provider-specific response body that must be sent
 // back after a webhook is handled.
 func (s *WebhookService) WebhookResponse() []byte {
-	return s.deps.provider.WebhookResponse()
+	return s.provider.WebhookResponse()
 }
 
 // HandleWebhook parses and applies a provider webhook payload.
 func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string, payload []byte) error {
-	if providerName != string(s.deps.provider.Name()) {
-		return fmt.Errorf("unexpected provider %q, expected %q", providerName, s.deps.provider.Name())
+	if providerName != string(s.provider.Name()) {
+		return fmt.Errorf("unexpected provider %q, expected %q", providerName, s.provider.Name())
 	}
 
-	result, err := s.deps.provider.ParseWebhook(ctx, payload)
+	result, err := s.provider.ParseWebhook(ctx, payload)
 	if err != nil {
 		return fmt.Errorf("parse webhook: %w", err)
 	}
@@ -150,7 +151,7 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 			}
 			// Release the row lock before the outbound HTTP call.
 			_ = tx.Rollback(ctx)
-			return reconcileFailedPayment(ctx, s.deps, payment, result)
+			return reconcileFailedPayment(ctx, s.deps, s.provider, payment, result)
 		}
 	}
 
@@ -218,8 +219,8 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 // failed payment and applies the corresponding subscription-side effects. It is
 // used when a late "succeeded" webhook arrives after the payment has already
 // been marked as failed.
-func reconcileFailedPayment(ctx context.Context, d flowDeps, payment domain.SubscriptionPayment, result WebhookPayload) error {
-	status, err := d.provider.Status(ctx, payment.ID, *payment.ProviderPaymentID)
+func reconcileFailedPayment(ctx context.Context, d flowDeps, checker PaymentStatusChecker, payment domain.SubscriptionPayment, result WebhookPayload) error {
+	status, err := checker.Status(ctx, payment.ID, *payment.ProviderPaymentID)
 	if err != nil {
 		d.log.ErrorContext(ctx, "failed to query provider status for reconciling failed payment",
 			slog.String("payment_id", payment.ID.String()),

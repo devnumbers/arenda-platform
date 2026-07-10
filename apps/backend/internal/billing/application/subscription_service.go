@@ -14,12 +14,13 @@ import (
 
 // SubscriptionService manages the current user's subscription and tariff changes.
 type SubscriptionService struct {
-	deps flowDeps
+	deps     flowDeps
+	provider SubscriptionPaymentProvider
 }
 
 // NewSubscriptionService creates a SubscriptionService.
-func NewSubscriptionService(deps flowDeps) *SubscriptionService {
-	return &SubscriptionService{deps: deps}
+func NewSubscriptionService(deps flowDeps, provider SubscriptionPaymentProvider) *SubscriptionService {
+	return &SubscriptionService{deps: deps, provider: provider}
 }
 
 // GetSubscription returns the current subscription with its tariff and active payment method.
@@ -82,7 +83,7 @@ func (s *SubscriptionService) GetSubscription(ctx context.Context, userID uuid.U
 
 func (s *SubscriptionService) existingUpgradeResponse(ctx context.Context, payment domain.SubscriptionPayment) ChangeTariffResponse {
 	res := ChangeTariffResponse{PaymentID: payment.ID}
-	if urlProvider, ok := s.deps.provider.(PaymentURLProvider); ok {
+	if urlProvider, ok := s.provider.(PaymentURLProvider); ok {
 		if url, err := urlProvider.PaymentURL(ctx, payment.ID); err == nil {
 			res.ConfirmURL = url
 		}
@@ -229,7 +230,7 @@ func (s *SubscriptionService) changeTariffUpgrade(
 		nil,
 		period,
 		amount,
-		s.deps.provider.Name(),
+		s.provider.Name(),
 		now,
 	)
 	if err != nil {
@@ -266,7 +267,7 @@ func (s *SubscriptionService) changeTariffUpgrade(
 	}
 
 	notification, successURL, failURL := tkassaCallbackURLs(s.deps.callbackBaseURL, payment.ID)
-	initRes, err := s.deps.provider.Init(ctx, InitRequest{
+	initRes, err := s.provider.Init(ctx, InitRequest{
 		PaymentID:              payment.ID,
 		AmountKopecks:          amount,
 		Period:                 period,
@@ -304,7 +305,7 @@ func (s *SubscriptionService) changeTariffUpgrade(
 // It relies on the provider's idempotent Init to reconstruct the reference.
 func (s *SubscriptionService) recoverUpgradeProviderReference(ctx context.Context, payment domain.SubscriptionPayment, newTariff domain.Tariff, amount int64, period domain.SubscriptionPeriod, userID uuid.UUID, now time.Time) (ChangeTariffResponse, error) {
 	notification, successURL, failURL := tkassaCallbackURLs(s.deps.callbackBaseURL, payment.ID)
-	initRes, err := s.deps.provider.Init(ctx, InitRequest{
+	initRes, err := s.provider.Init(ctx, InitRequest{
 		PaymentID:              payment.ID,
 		AmountKopecks:          amount,
 		Period:                 period,

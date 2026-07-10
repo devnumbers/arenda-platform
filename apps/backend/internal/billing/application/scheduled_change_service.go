@@ -14,12 +14,13 @@ import (
 
 // ScheduledChangeService applies scheduled tariff changes.
 type ScheduledChangeService struct {
-	deps flowDeps
+	deps     flowDeps
+	provider ScheduledChangeProvider
 }
 
 // NewScheduledChangeService creates a ScheduledChangeService.
-func NewScheduledChangeService(deps flowDeps) *ScheduledChangeService {
-	return &ScheduledChangeService{deps: deps}
+func NewScheduledChangeService(deps flowDeps, provider ScheduledChangeProvider) *ScheduledChangeService {
+	return &ScheduledChangeService{deps: deps, provider: provider}
 }
 
 // ProcessScheduledChanges applies scheduled tariff changes (usually downgrades to
@@ -188,7 +189,7 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 			&pm.ID,
 			period,
 			amount,
-			c.deps.provider.Name(),
+			c.provider.Name(),
 			now,
 		)
 		if err != nil {
@@ -249,7 +250,7 @@ func (c *ScheduledChangeService) applyPaidScheduledChange(
 	// connection.
 	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
 		notification, successURL, failURL := tkassaCallbackURLs(c.deps.callbackBaseURL, payment.ID)
-		initRes, initErr := c.deps.provider.Init(ctx, InitRequest{
+		initRes, initErr := c.provider.Init(ctx, InitRequest{
 			PaymentID:              payment.ID,
 			AmountKopecks:          amount,
 			Period:                 period,
@@ -298,7 +299,7 @@ func (c *ScheduledChangeService) applyPaidScheduledChange(
 	// charge. A terminal succeeded/failed status is applied directly without a
 	// second Charge.
 	if chargeProviderPaymentID != "" {
-		status, statusErr := c.deps.provider.Status(ctx, payment.ID, chargeProviderPaymentID)
+		status, statusErr := c.provider.Status(ctx, payment.ID, chargeProviderPaymentID)
 		if statusErr == nil {
 			switch status {
 			case domain.PaymentStatusSucceeded:
@@ -314,7 +315,7 @@ func (c *ScheduledChangeService) applyPaidScheduledChange(
 	// The Charge always carries ProviderPaymentID: a real recurrent gateway (e.g.
 	// T-Kassa) rejects a Charge that omits the PaymentId returned by Init.
 	if chargeResult.Status == "" {
-		chargeResult, chargeErr = c.deps.provider.Charge(ctx, ChargeRequest{
+		chargeResult, chargeErr = c.provider.Charge(ctx, ChargeRequest{
 			PaymentID:         payment.ID,
 			ProviderPaymentID: chargeProviderPaymentID,
 			AmountKopecks:     amount,

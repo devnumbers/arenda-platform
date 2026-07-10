@@ -140,6 +140,11 @@ type WebhookResponder interface {
 	WebhookResponse() []byte
 }
 
+// ProviderNamer identifies the payment provider implementation.
+type ProviderNamer interface {
+	Name() domain.PaymentProvider
+}
+
 // Provider abstracts the external payment processor used for subscription payments.
 // It is the aggregate of the narrow payment capability interfaces above plus the
 // provider identity. Consumers that need only a subset should depend on the
@@ -152,7 +157,50 @@ type Provider interface {
 	WebhookParser
 	CardManager
 	WebhookResponder
-	Name() domain.PaymentProvider
+	ProviderNamer
+}
+
+// RenewalProvider aggregates the capabilities used by RenewalService.
+type RenewalProvider interface {
+	PaymentInitiator
+	PaymentCharger
+	PaymentStatusChecker
+	ProviderNamer
+}
+
+// WebhookProvider aggregates the capabilities used by WebhookService.
+type WebhookProvider interface {
+	WebhookParser
+	WebhookResponder
+	PaymentStatusChecker
+	ProviderNamer
+}
+
+// PaymentManager aggregates the capabilities used by PaymentService.
+type PaymentManager interface {
+	PaymentCanceler
+	PaymentStatusChecker
+	ProviderNamer
+}
+
+// CardProvider aggregates the capabilities used by PaymentMethodService.
+type CardProvider interface {
+	CardManager
+	ProviderNamer
+}
+
+// SubscriptionPaymentProvider aggregates the capabilities used by SubscriptionService.
+type SubscriptionPaymentProvider interface {
+	PaymentInitiator
+	ProviderNamer
+}
+
+// ScheduledChangeProvider aggregates the capabilities used by ScheduledChangeService.
+type ScheduledChangeProvider interface {
+	PaymentInitiator
+	PaymentCharger
+	PaymentStatusChecker
+	ProviderNamer
 }
 
 // OnboardingService creates default billing state for newly-registered owners.
