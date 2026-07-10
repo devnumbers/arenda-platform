@@ -113,8 +113,17 @@ func transitionToGrace(sub *domain.Subscription, now time.Time) {
 }
 
 // isSubscriptionRenewalApplied reports whether the subscription already reflects
-// the given successful payment. It is used to make best-effort renewal idempotent.
+// the given successful payment. The primary check is the last applied payment id
+// stored on the subscription; a date-based fallback is kept for subscriptions
+// created before the last_applied_payment_id column existed.
 func isSubscriptionRenewalApplied(sub domain.Subscription, payment domain.SubscriptionPayment) bool {
+	// Primary check: the subscription records exactly which payment was last
+	// applied. A non-nil value that does not match means this payment has not
+	// been applied yet.
+	if sub.LastAppliedPaymentID != nil {
+		return *sub.LastAppliedPaymentID == payment.ID
+	}
+	// Fallback for subscriptions created before the last_applied_payment_id column.
 	if sub.TariffID != payment.TariffID {
 		return false
 	}

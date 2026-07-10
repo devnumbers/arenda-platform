@@ -120,11 +120,12 @@ INSERT INTO user_subscriptions (
     pending_tariff_id,
     pending_change_at,
     pending_period,
-    active_payment_method_id
+    active_payment_method_id,
+    last_applied_payment_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (user_id) DO NOTHING
-RETURNING id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period
+RETURNING id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period, last_applied_payment_id
 `
 
 type CreateSubscriptionParams struct {
@@ -138,6 +139,7 @@ type CreateSubscriptionParams struct {
 	PendingChangeAt       pgtype.Timestamptz `json:"pending_change_at"`
 	PendingPeriod         pgtype.Text        `json:"pending_period"`
 	ActivePaymentMethodID pgtype.UUID        `json:"active_payment_method_id"`
+	LastAppliedPaymentID  pgtype.UUID        `json:"last_applied_payment_id"`
 }
 
 func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (UserSubscription, error) {
@@ -152,6 +154,7 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 		arg.PendingChangeAt,
 		arg.PendingPeriod,
 		arg.ActivePaymentMethodID,
+		arg.LastAppliedPaymentID,
 	)
 	var i UserSubscription
 	err := row.Scan(
@@ -168,6 +171,7 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 		&i.PendingChangeAt,
 		&i.ActivePaymentMethodID,
 		&i.PendingPeriod,
+		&i.LastAppliedPaymentID,
 	)
 	return i, err
 }
@@ -338,7 +342,7 @@ func (q *Queries) GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.U
 }
 
 const getSubscriptionByID = `-- name: GetSubscriptionByID :one
-SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period FROM user_subscriptions WHERE id = $1
+SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period, last_applied_payment_id FROM user_subscriptions WHERE id = $1
 `
 
 func (q *Queries) GetSubscriptionByID(ctx context.Context, id pgtype.UUID) (UserSubscription, error) {
@@ -358,12 +362,13 @@ func (q *Queries) GetSubscriptionByID(ctx context.Context, id pgtype.UUID) (User
 		&i.PendingChangeAt,
 		&i.ActivePaymentMethodID,
 		&i.PendingPeriod,
+		&i.LastAppliedPaymentID,
 	)
 	return i, err
 }
 
 const getSubscriptionByIDForUpdate = `-- name: GetSubscriptionByIDForUpdate :one
-SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period FROM user_subscriptions WHERE id = $1 FOR UPDATE
+SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period, last_applied_payment_id FROM user_subscriptions WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetSubscriptionByIDForUpdate(ctx context.Context, id pgtype.UUID) (UserSubscription, error) {
@@ -383,12 +388,13 @@ func (q *Queries) GetSubscriptionByIDForUpdate(ctx context.Context, id pgtype.UU
 		&i.PendingChangeAt,
 		&i.ActivePaymentMethodID,
 		&i.PendingPeriod,
+		&i.LastAppliedPaymentID,
 	)
 	return i, err
 }
 
 const getSubscriptionByUserID = `-- name: GetSubscriptionByUserID :one
-SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period FROM user_subscriptions WHERE user_id = $1
+SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period, last_applied_payment_id FROM user_subscriptions WHERE user_id = $1
 `
 
 func (q *Queries) GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (UserSubscription, error) {
@@ -408,12 +414,13 @@ func (q *Queries) GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUI
 		&i.PendingChangeAt,
 		&i.ActivePaymentMethodID,
 		&i.PendingPeriod,
+		&i.LastAppliedPaymentID,
 	)
 	return i, err
 }
 
 const getSubscriptionByUserIDForUpdate = `-- name: GetSubscriptionByUserIDForUpdate :one
-SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period FROM user_subscriptions WHERE user_id = $1 FOR UPDATE
+SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period, last_applied_payment_id FROM user_subscriptions WHERE user_id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetSubscriptionByUserIDForUpdate(ctx context.Context, userID pgtype.UUID) (UserSubscription, error) {
@@ -433,6 +440,7 @@ func (q *Queries) GetSubscriptionByUserIDForUpdate(ctx context.Context, userID p
 		&i.PendingChangeAt,
 		&i.ActivePaymentMethodID,
 		&i.PendingPeriod,
+		&i.LastAppliedPaymentID,
 	)
 	return i, err
 }
@@ -586,7 +594,7 @@ func (q *Queries) GetTariffByName(ctx context.Context, name string) (Tariff, err
 }
 
 const listExpiredCancelledSubscriptions = `-- name: ListExpiredCancelledSubscriptions :many
-SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period FROM user_subscriptions
+SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period, last_applied_payment_id FROM user_subscriptions
 WHERE status = 'cancelled'
   AND valid_until IS NOT NULL
   AND valid_until <= $1
@@ -623,6 +631,7 @@ func (q *Queries) ListExpiredCancelledSubscriptions(ctx context.Context, arg Lis
 			&i.PendingChangeAt,
 			&i.ActivePaymentMethodID,
 			&i.PendingPeriod,
+			&i.LastAppliedPaymentID,
 		); err != nil {
 			return nil, err
 		}
@@ -635,7 +644,7 @@ func (q *Queries) ListExpiredCancelledSubscriptions(ctx context.Context, arg Lis
 }
 
 const listExpiredNonRenewingSubscriptions = `-- name: ListExpiredNonRenewingSubscriptions :many
-SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period FROM user_subscriptions
+SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period, last_applied_payment_id FROM user_subscriptions
 WHERE status = 'active'
   AND auto_renew_enabled = false
   AND valid_until IS NOT NULL
@@ -673,6 +682,7 @@ func (q *Queries) ListExpiredNonRenewingSubscriptions(ctx context.Context, arg L
 			&i.PendingChangeAt,
 			&i.ActivePaymentMethodID,
 			&i.PendingPeriod,
+			&i.LastAppliedPaymentID,
 		); err != nil {
 			return nil, err
 		}
@@ -990,7 +1000,7 @@ func (q *Queries) ListSubscriptionPaymentsByUserID(ctx context.Context, userID p
 }
 
 const listSubscriptionsInExpiredGrace = `-- name: ListSubscriptionsInExpiredGrace :many
-SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period FROM user_subscriptions
+SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period, last_applied_payment_id FROM user_subscriptions
 WHERE status = 'grace'
   AND valid_until IS NOT NULL
   AND valid_until <= $1
@@ -1027,6 +1037,7 @@ func (q *Queries) ListSubscriptionsInExpiredGrace(ctx context.Context, arg ListS
 			&i.PendingChangeAt,
 			&i.ActivePaymentMethodID,
 			&i.PendingPeriod,
+			&i.LastAppliedPaymentID,
 		); err != nil {
 			return nil, err
 		}
@@ -1039,7 +1050,7 @@ func (q *Queries) ListSubscriptionsInExpiredGrace(ctx context.Context, arg ListS
 }
 
 const listSubscriptionsUpForRenewal = `-- name: ListSubscriptionsUpForRenewal :many
-SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period FROM user_subscriptions
+SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period, last_applied_payment_id FROM user_subscriptions
 WHERE status = 'active'
   AND auto_renew_enabled = true
   AND valid_until IS NOT NULL
@@ -1077,6 +1088,7 @@ func (q *Queries) ListSubscriptionsUpForRenewal(ctx context.Context, arg ListSub
 			&i.PendingChangeAt,
 			&i.ActivePaymentMethodID,
 			&i.PendingPeriod,
+			&i.LastAppliedPaymentID,
 		); err != nil {
 			return nil, err
 		}
@@ -1089,7 +1101,7 @@ func (q *Queries) ListSubscriptionsUpForRenewal(ctx context.Context, arg ListSub
 }
 
 const listSubscriptionsWithPendingChange = `-- name: ListSubscriptionsWithPendingChange :many
-SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period FROM user_subscriptions
+SELECT id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period, last_applied_payment_id FROM user_subscriptions
 WHERE status = 'active'
   AND pending_tariff_id IS NOT NULL
   AND pending_change_at IS NOT NULL
@@ -1127,6 +1139,7 @@ func (q *Queries) ListSubscriptionsWithPendingChange(ctx context.Context, arg Li
 			&i.PendingChangeAt,
 			&i.ActivePaymentMethodID,
 			&i.PendingPeriod,
+			&i.LastAppliedPaymentID,
 		); err != nil {
 			return nil, err
 		}
@@ -1209,6 +1222,85 @@ type MarkSubscriptionPaymentFailedParams struct {
 
 func (q *Queries) MarkSubscriptionPaymentFailed(ctx context.Context, arg MarkSubscriptionPaymentFailedParams) (SubscriptionPayment, error) {
 	row := q.db.QueryRow(ctx, markSubscriptionPaymentFailed, arg.ID, arg.ErrorCode, arg.UpdatedAt)
+	var i SubscriptionPayment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SubscriptionID,
+		&i.TariffID,
+		&i.PaymentMethodID,
+		&i.Period,
+		&i.AmountKopecks,
+		&i.Provider,
+		&i.ProviderPaymentID,
+		&i.Status,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PaymentUrl,
+		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
+	)
+	return i, err
+}
+
+const markSubscriptionPaymentReconciledRefunded = `-- name: MarkSubscriptionPaymentReconciledRefunded :one
+UPDATE subscription_payments
+SET status = 'refunded', refunded_amount_kopecks = $2, updated_at = $3
+WHERE id = $1 AND status = 'failed'
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
+`
+
+type MarkSubscriptionPaymentReconciledRefundedParams struct {
+	ID                    pgtype.UUID        `json:"id"`
+	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Transition a failed payment to refunded after an explicit provider-side
+// status check. This handles out-of-order webhooks where the provider reports
+// a refund after the system has already marked the payment as failed.
+func (q *Queries) MarkSubscriptionPaymentReconciledRefunded(ctx context.Context, arg MarkSubscriptionPaymentReconciledRefundedParams) (SubscriptionPayment, error) {
+	row := q.db.QueryRow(ctx, markSubscriptionPaymentReconciledRefunded, arg.ID, arg.RefundedAmountKopecks, arg.UpdatedAt)
+	var i SubscriptionPayment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SubscriptionID,
+		&i.TariffID,
+		&i.PaymentMethodID,
+		&i.Period,
+		&i.AmountKopecks,
+		&i.Provider,
+		&i.ProviderPaymentID,
+		&i.Status,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PaymentUrl,
+		&i.SucceededAt,
+		&i.RefundedAmountKopecks,
+	)
+	return i, err
+}
+
+const markSubscriptionPaymentReconciledSucceeded = `-- name: MarkSubscriptionPaymentReconciledSucceeded :one
+UPDATE subscription_payments
+SET status = 'succeeded', updated_at = $2, succeeded_at = $2, error_code = NULL
+WHERE id = $1 AND status = 'failed'
+RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
+`
+
+type MarkSubscriptionPaymentReconciledSucceededParams struct {
+	ID        pgtype.UUID        `json:"id"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Transition a failed payment to succeeded after an explicit provider-side
+// status check. This handles out-of-order webhooks where the provider reports
+// success after the system has already marked the payment as failed.
+func (q *Queries) MarkSubscriptionPaymentReconciledSucceeded(ctx context.Context, arg MarkSubscriptionPaymentReconciledSucceededParams) (SubscriptionPayment, error) {
+	row := q.db.QueryRow(ctx, markSubscriptionPaymentReconciledSucceeded, arg.ID, arg.UpdatedAt)
 	var i SubscriptionPayment
 	err := row.Scan(
 		&i.ID,
@@ -1369,9 +1461,10 @@ SET
     pending_tariff_id = $7,
     pending_change_at = $8,
     pending_period = $9,
-    active_payment_method_id = $10
+    active_payment_method_id = $10,
+    last_applied_payment_id = $11
 WHERE id = $1
-RETURNING id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period
+RETURNING id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period, last_applied_payment_id
 `
 
 type UpdateSubscriptionParams struct {
@@ -1385,6 +1478,7 @@ type UpdateSubscriptionParams struct {
 	PendingChangeAt       pgtype.Timestamptz `json:"pending_change_at"`
 	PendingPeriod         pgtype.Text        `json:"pending_period"`
 	ActivePaymentMethodID pgtype.UUID        `json:"active_payment_method_id"`
+	LastAppliedPaymentID  pgtype.UUID        `json:"last_applied_payment_id"`
 }
 
 func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (UserSubscription, error) {
@@ -1399,6 +1493,7 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		arg.PendingChangeAt,
 		arg.PendingPeriod,
 		arg.ActivePaymentMethodID,
+		arg.LastAppliedPaymentID,
 	)
 	var i UserSubscription
 	err := row.Scan(
@@ -1415,6 +1510,7 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		&i.PendingChangeAt,
 		&i.ActivePaymentMethodID,
 		&i.PendingPeriod,
+		&i.LastAppliedPaymentID,
 	)
 	return i, err
 }

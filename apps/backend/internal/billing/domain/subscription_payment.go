@@ -135,6 +135,37 @@ func (p *SubscriptionPayment) MarkRefunded(now time.Time) error {
 	return nil
 }
 
+// ReconcileToSucceeded transitions a failed payment to succeeded after an
+// explicit provider-side status check. It is used for out-of-order webhooks
+// where the provider reports success after the system has already marked the
+// payment as failed.
+func (p *SubscriptionPayment) ReconcileToSucceeded(now time.Time) error {
+	if p.Status != PaymentStatusFailed {
+		return ErrInvalidPaymentStatus
+	}
+	now = now.UTC()
+	p.Status = PaymentStatusSucceeded
+	p.UpdatedAt = now
+	p.SucceededAt = &now
+	p.ErrorCode = nil
+	return nil
+}
+
+// ReconcileToRefunded transitions a failed payment to refunded after an
+// explicit provider-side status check. It is used for out-of-order webhooks
+// where the provider reports a successful refund after the system has already
+// marked the payment as failed.
+func (p *SubscriptionPayment) ReconcileToRefunded(now time.Time) error {
+	if p.Status != PaymentStatusFailed {
+		return ErrInvalidPaymentStatus
+	}
+	now = now.UTC()
+	p.UpdatedAt = now
+	p.RefundedAmountKopecks = &p.AmountKopecks
+	p.Status = PaymentStatusRefunded
+	return nil
+}
+
 // RevertRefund rolls back an in-flight refund reservation, restoring the
 // payment to its previous status. It is used as compensation when the external
 // provider cancel call fails or returns a non-refund status. Only payments in

@@ -180,6 +180,14 @@ type Querier interface {
 	MarkSendingReminderPending(ctx context.Context, arg MarkSendingReminderPendingParams) (int64, error)
 	MarkSendingReminderSent(ctx context.Context, arg MarkSendingReminderSentParams) (int64, error)
 	MarkSubscriptionPaymentFailed(ctx context.Context, arg MarkSubscriptionPaymentFailedParams) (SubscriptionPayment, error)
+	// Transition a failed payment to refunded after an explicit provider-side
+	// status check. This handles out-of-order webhooks where the provider reports
+	// a refund after the system has already marked the payment as failed.
+	MarkSubscriptionPaymentReconciledRefunded(ctx context.Context, arg MarkSubscriptionPaymentReconciledRefundedParams) (SubscriptionPayment, error)
+	// Transition a failed payment to succeeded after an explicit provider-side
+	// status check. This handles out-of-order webhooks where the provider reports
+	// success after the system has already marked the payment as failed.
+	MarkSubscriptionPaymentReconciledSucceeded(ctx context.Context, arg MarkSubscriptionPaymentReconciledSucceededParams) (SubscriptionPayment, error)
 	MarkSubscriptionPaymentRefunded(ctx context.Context, arg MarkSubscriptionPaymentRefundedParams) (SubscriptionPayment, error)
 	MarkSubscriptionPaymentSucceeded(ctx context.Context, arg MarkSubscriptionPaymentSucceededParams) (SubscriptionPayment, error)
 	ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error)

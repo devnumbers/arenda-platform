@@ -199,6 +199,7 @@ func TestSubscriptionApplyTariffChange(t *testing.T) {
 	basicID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
 	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
 	pendingID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14")
+	paymentID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a19")
 	pendingAt := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 
 	sub := Subscription{
@@ -212,7 +213,7 @@ func TestSubscriptionApplyTariffChange(t *testing.T) {
 
 	basic := Tariff{ID: basicID, Name: TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000}
 	pro := Tariff{ID: proID, Name: TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000}
-	if err := sub.ApplyTariffChange(basic, pro, PeriodMonth, now); err != nil {
+	if err := sub.ApplyTariffChange(paymentID, basic, pro, PeriodMonth, now); err != nil {
 		t.Fatalf("ApplyTariffChange() error = %v", err)
 	}
 	if sub.TariffID != proID {
@@ -225,6 +226,9 @@ func TestSubscriptionApplyTariffChange(t *testing.T) {
 	if !sub.AutoRenewEnabled {
 		t.Error("expected auto-renew enabled")
 	}
+	if sub.LastAppliedPaymentID == nil || *sub.LastAppliedPaymentID != paymentID {
+		t.Errorf("LastAppliedPaymentID = %v, want %v", sub.LastAppliedPaymentID, paymentID)
+	}
 	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil {
 		t.Error("expected pending change cleared")
 	}
@@ -232,10 +236,10 @@ func TestSubscriptionApplyTariffChange(t *testing.T) {
 		t.Errorf("Status = %v, want active", sub.Status)
 	}
 
-	if err := sub.ApplyTariffChange(pro, Tariff{ID: proID}, PeriodMonth, now); !errors.Is(err, ErrAlreadyOnTariff) {
+	if err := sub.ApplyTariffChange(paymentID, pro, Tariff{ID: proID}, PeriodMonth, now); !errors.Is(err, ErrAlreadyOnTariff) {
 		t.Errorf("ApplyTariffChange same tariff error = %v, want ErrAlreadyOnTariff", err)
 	}
-	if err := sub.ApplyTariffChange(pro, pro, "invalid", now); !errors.Is(err, ErrInvalidPeriod) {
+	if err := sub.ApplyTariffChange(paymentID, pro, pro, "invalid", now); !errors.Is(err, ErrInvalidPeriod) {
 		t.Errorf("ApplyTariffChange invalid period error = %v, want ErrInvalidPeriod", err)
 	}
 }
@@ -244,6 +248,7 @@ func TestSubscriptionApplyRenewal(t *testing.T) {
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	existingValidUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	paymentID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18")
 
 	sub := Subscription{
 		ID:         uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12"),
@@ -252,12 +257,15 @@ func TestSubscriptionApplyRenewal(t *testing.T) {
 		ValidUntil: &existingValidUntil,
 	}
 
-	if err := sub.ApplyRenewal(PeriodMonth, now); err != nil {
+	if err := sub.ApplyRenewal(paymentID, PeriodMonth, now); err != nil {
 		t.Fatalf("ApplyRenewal() error = %v", err)
 	}
 	wantValidUntil := existingValidUntil.AddDate(0, 1, 0)
 	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
 		t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, wantValidUntil)
+	}
+	if sub.LastAppliedPaymentID == nil || *sub.LastAppliedPaymentID != paymentID {
+		t.Errorf("LastAppliedPaymentID = %v, want %v", sub.LastAppliedPaymentID, paymentID)
 	}
 	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
 		t.Error("expected pending downgrade cleared after renewal")
@@ -266,15 +274,18 @@ func TestSubscriptionApplyRenewal(t *testing.T) {
 	// When valid_until is in the past, renewal should start from now.
 	past := now.AddDate(0, -1, 0)
 	sub2 := Subscription{TariffID: tariffID, ValidUntil: &past}
-	if err := sub2.ApplyRenewal(PeriodYear, now); err != nil {
+	if err := sub2.ApplyRenewal(paymentID, PeriodYear, now); err != nil {
 		t.Fatalf("ApplyRenewal() error = %v", err)
 	}
 	wantValidUntil2 := now.AddDate(1, 0, 0)
 	if sub2.ValidUntil == nil || !sub2.ValidUntil.Equal(wantValidUntil2) {
 		t.Errorf("ValidUntil = %v, want %v", sub2.ValidUntil, wantValidUntil2)
 	}
+	if sub2.LastAppliedPaymentID == nil || *sub2.LastAppliedPaymentID != paymentID {
+		t.Errorf("LastAppliedPaymentID = %v, want %v", sub2.LastAppliedPaymentID, paymentID)
+	}
 
-	if err := sub.ApplyRenewal("invalid", now); !errors.Is(err, ErrInvalidPeriod) {
+	if err := sub.ApplyRenewal(paymentID, "invalid", now); !errors.Is(err, ErrInvalidPeriod) {
 		t.Errorf("ApplyRenewal invalid period error = %v, want ErrInvalidPeriod", err)
 	}
 }

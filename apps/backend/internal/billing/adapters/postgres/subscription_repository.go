@@ -218,6 +218,7 @@ func mapCreateSubscriptionParams(sub domain.Subscription) postgres.CreateSubscri
 		PendingChangeAt:       pgconv.TimePtrToPgtype(sub.PendingChangeAt),
 		PendingPeriod:         periodTextPtr(sub.PendingPeriod),
 		ActivePaymentMethodID: pgconv.UUIDToPgtypePtr(sub.ActivePaymentMethodID),
+		LastAppliedPaymentID:  pgconv.UUIDToPgtypePtr(sub.LastAppliedPaymentID),
 	}
 }
 
@@ -233,6 +234,7 @@ func mapUpdateSubscriptionParams(sub domain.Subscription) postgres.UpdateSubscri
 		PendingChangeAt:       pgconv.TimePtrToPgtype(sub.PendingChangeAt),
 		PendingPeriod:         periodTextPtr(sub.PendingPeriod),
 		ActivePaymentMethodID: pgconv.UUIDToPgtypePtr(sub.ActivePaymentMethodID),
+		LastAppliedPaymentID:  pgconv.UUIDToPgtypePtr(sub.LastAppliedPaymentID),
 	}
 }
 
@@ -254,6 +256,7 @@ func mapSubscription(row postgres.UserSubscription) domain.Subscription {
 		PendingChangeAt:       pgconv.TimestamptzToPtrTime(row.PendingChangeAt),
 		PendingPeriod:         pendingPeriod,
 		ActivePaymentMethodID: pgconv.UUIDFromPgtypePtr(row.ActivePaymentMethodID),
+		LastAppliedPaymentID:  pgconv.UUIDFromPgtypePtr(row.LastAppliedPaymentID),
 	}
 }
 

@@ -161,7 +161,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 
 	// Free tariff changes (e.g. downgrade to basic) do not require a charge.
 	if amount <= 0 {
-		if err := applyFreeRenewalOrDowngrade(ctx, r.deps, tx, &sub, renewalTariff, period, now); err != nil {
+		if err := applyFreeRenewalOrDowngrade(ctx, r.deps, tx, &sub, renewalTariff, period, uuid.Nil, now); err != nil {
 			return err
 		}
 		return tx.Commit(ctx)

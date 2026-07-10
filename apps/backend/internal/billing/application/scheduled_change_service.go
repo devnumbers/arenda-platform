@@ -106,7 +106,7 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 	// Free scheduled changes (e.g. a downgrade to the basic tariff) do not require
 	// a charge and are applied immediately within this transaction.
 	if amount <= 0 {
-		if err := applyFreeRenewalOrDowngrade(ctx, c.deps, tx, &sub, pendingTariff, period, now); err != nil {
+		if err := applyFreeRenewalOrDowngrade(ctx, c.deps, tx, &sub, pendingTariff, period, uuid.Nil, now); err != nil {
 			return err
 		}
 		return tx.Commit(ctx)

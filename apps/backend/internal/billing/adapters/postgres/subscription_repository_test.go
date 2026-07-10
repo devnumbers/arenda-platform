@@ -17,6 +17,7 @@ func TestMapSubscription(t *testing.T) {
 	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
 	pendingTariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14")
 	paymentMethodID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15")
+	lastAppliedPaymentID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16")
 	validUntil := time.Date(2026, 12, 31, 23, 59, 59, 0, time.UTC)
 	pendingChangeAt := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	pendingPeriod := domain.PeriodYear
@@ -33,6 +34,7 @@ func TestMapSubscription(t *testing.T) {
 		PendingChangeAt:       pgtype.Timestamptz{Time: pendingChangeAt, Valid: true},
 		PendingPeriod:         pgtype.Text{String: string(pendingPeriod), Valid: true},
 		ActivePaymentMethodID: pgtype.UUID{Bytes: paymentMethodID, Valid: true},
+		LastAppliedPaymentID:  pgtype.UUID{Bytes: lastAppliedPaymentID, Valid: true},
 	}
 
 	got := mapSubscription(row)
@@ -48,6 +50,7 @@ func TestMapSubscription(t *testing.T) {
 		PendingChangeAt:       &pendingChangeAt,
 		PendingPeriod:         &pendingPeriod,
 		ActivePaymentMethodID: &paymentMethodID,
+		LastAppliedPaymentID:  &lastAppliedPaymentID,
 	}
 
 	if !reflect.DeepEqual(got, want) {

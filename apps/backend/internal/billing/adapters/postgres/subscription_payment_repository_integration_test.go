@@ -351,3 +351,115 @@ func TestSubscriptionPaymentRepository_BeginRefund_Guard(t *testing.T) {
 		}
 	})
 }
+
+func TestSubscriptionPaymentRepository_MarkRefunded_GuardAlreadyRefunded(t *testing.T) {
+	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	defer cleanup()
+
+	ctx := t.Context()
+
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new subscription payment: %v", err)
+	}
+	created, err := repo.Create(ctx, payment)
+	if err != nil {
+		t.Fatalf("Create error = %v", err)
+	}
+
+	if err := repo.MarkSucceeded(ctx, created.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkSucceeded error = %v", err)
+	}
+	if err := repo.MarkRefunded(ctx, created.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("first MarkRefunded error = %v", err)
+	}
+
+	err = repo.MarkRefunded(ctx, created.ID, time.Now().UTC())
+	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+		t.Errorf("second MarkRefunded error = %v, want ErrInvalidPaymentStatus", err)
+	}
+}
+
+func TestSubscriptionPaymentRepository_Create_DuplicateProviderPaymentID(t *testing.T) {
+	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	defer cleanup()
+
+	ctx := t.Context()
+	providerPaymentID := "duplicate-provider-payment-id"
+
+	first, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new first subscription payment: %v", err)
+	}
+	first.ProviderPaymentID = &providerPaymentID
+	first, err = repo.Create(ctx, first)
+	if err != nil {
+		t.Fatalf("Create first error = %v", err)
+	}
+	if err := repo.MarkSucceeded(ctx, first.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkSucceeded first error = %v", err)
+	}
+
+	second, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodYear, 490000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new second subscription payment: %v", err)
+	}
+	second.ProviderPaymentID = &providerPaymentID
+	_, err = repo.Create(ctx, second)
+	if err == nil {
+		t.Fatal("expected error creating payment with duplicate (provider, provider_payment_id), got nil")
+	}
+}
+
+func TestSubscriptionPaymentRepository_MarkFailed_GuardAlreadySucceeded(t *testing.T) {
+	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	defer cleanup()
+
+	ctx := t.Context()
+
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new subscription payment: %v", err)
+	}
+	created, err := repo.Create(ctx, payment)
+	if err != nil {
+		t.Fatalf("Create error = %v", err)
+	}
+
+	if err := repo.MarkSucceeded(ctx, created.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkSucceeded error = %v", err)
+	}
+
+	err = repo.MarkFailed(ctx, created.ID, nil, time.Now().UTC())
+	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+		t.Errorf("MarkFailed after succeeded error = %v, want ErrInvalidPaymentStatus", err)
+	}
+}
+
+func TestSubscriptionPaymentRepository_MarkFailed_GuardAlreadyRefunded(t *testing.T) {
+	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	defer cleanup()
+
+	ctx := t.Context()
+
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new subscription payment: %v", err)
+	}
+	created, err := repo.Create(ctx, payment)
+	if err != nil {
+		t.Fatalf("Create error = %v", err)
+	}
+
+	if err := repo.MarkSucceeded(ctx, created.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkSucceeded error = %v", err)
+	}
+	if err := repo.MarkRefunded(ctx, created.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkRefunded error = %v", err)
+	}
+
+	err = repo.MarkFailed(ctx, created.ID, nil, time.Now().UTC())
+	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+		t.Errorf("MarkFailed after refunded error = %v, want ErrInvalidPaymentStatus", err)
+	}
+}

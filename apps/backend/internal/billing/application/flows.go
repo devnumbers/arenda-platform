@@ -93,12 +93,21 @@ func applyPaymentResult(
 	now := d.clock.Now().UTC()
 	switch payload.Status {
 	case domain.PaymentStatusSucceeded:
-		if err := txSubscriptionPayments.MarkSucceeded(ctx, payment.ID, now); err != nil {
-			return fmt.Errorf("mark payment succeeded: %w", err)
+		// Out-of-order webhooks may reconcile an already-failed payment to
+		// succeeded after an explicit provider-side status check.
+		if payment.Status == domain.PaymentStatusFailed {
+			if err := txSubscriptionPayments.MarkReconciledSucceeded(ctx, payment.ID, now); err != nil {
+				return fmt.Errorf("reconcile payment to succeeded: %w", err)
+			}
+		} else {
+			if err := txSubscriptionPayments.MarkSucceeded(ctx, payment.ID, now); err != nil {
+				return fmt.Errorf("mark payment succeeded: %w", err)
+			}
 		}
 		payment.Status = domain.PaymentStatusSucceeded
 		payment.UpdatedAt = now
 		payment.SucceededAt = &now
+		payment.ErrorCode = nil
 
 		// Payment method activation is part of the critical transaction: a
 		// succeeded payment means the saved token is valid and should become the
@@ -141,8 +150,16 @@ func applyPaymentResult(
 				slog.String("provider_payment_id", payload.ProviderPaymentID),
 				slog.Int64("payload_amount_kopecks", payload.AmountKopecks))
 		}
-		if err := txSubscriptionPayments.MarkRefunded(ctx, payment.ID, now); err != nil {
-			return fmt.Errorf("mark payment refunded: %w", err)
+		// Out-of-order webhooks may reconcile an already-failed payment to
+		// refunded after an explicit provider-side status check.
+		if payment.Status == domain.PaymentStatusFailed {
+			if err := txSubscriptionPayments.MarkReconciledRefunded(ctx, payment.ID, now); err != nil {
+				return fmt.Errorf("reconcile payment to refunded: %w", err)
+			}
+		} else {
+			if err := txSubscriptionPayments.MarkRefunded(ctx, payment.ID, now); err != nil {
+				return fmt.Errorf("mark payment refunded: %w", err)
+			}
 		}
 		payment.Status = domain.PaymentStatusRefunded
 		payment.RefundedAmountKopecks = &payment.AmountKopecks
@@ -280,7 +297,7 @@ func applyRenewalChanges(ctx context.Context, d flowDeps, tx transaction.Tx, sub
 	}
 
 	if sub.TariffID == renewalTariff.ID {
-		if err := sub.ApplyRenewal(payment.Period, now); err != nil {
+		if err := sub.ApplyRenewal(payment.ID, payment.Period, now); err != nil {
 			return domain.Subscription{}, domain.Tariff{}, fmt.Errorf("apply renewal: %w", err)
 		}
 	} else {
@@ -291,7 +308,7 @@ func applyRenewalChanges(ctx context.Context, d flowDeps, tx transaction.Tx, sub
 			}
 			return domain.Subscription{}, domain.Tariff{}, fmt.Errorf("get current tariff for change: %w", err)
 		}
-		if err := sub.ApplyTariffChange(currentTariff, renewalTariff, payment.Period, now); err != nil {
+		if err := sub.ApplyTariffChange(payment.ID, currentTariff, renewalTariff, payment.Period, now); err != nil {
 			return domain.Subscription{}, domain.Tariff{}, fmt.Errorf("apply tariff change: %w", err)
 		}
 	}
@@ -302,7 +319,7 @@ func applyRenewalChanges(ctx context.Context, d flowDeps, tx transaction.Tx, sub
 	return sub, renewalTariff, nil
 }
 
-func applyFreeRenewalOrDowngrade(ctx context.Context, d flowDeps, tx transaction.Tx, sub *domain.Subscription, renewalTariff domain.Tariff, period domain.SubscriptionPeriod, now time.Time) error {
+func applyFreeRenewalOrDowngrade(ctx context.Context, d flowDeps, tx transaction.Tx, sub *domain.Subscription, renewalTariff domain.Tariff, period domain.SubscriptionPeriod, paymentID uuid.UUID, now time.Time) error {
 	txSubscriptions, err := d.subscriptions.WithTx(tx)
 	if err != nil {
 		return fmt.Errorf("bind subscriptions transaction: %w", err)
@@ -315,6 +332,9 @@ func applyFreeRenewalOrDowngrade(ctx context.Context, d flowDeps, tx transaction
 	// The free basic tariff has no validity period and cannot be auto-renewed.
 	if renewalTariff.Name == domain.TariffBasic {
 		applyBasicDowngrade(sub, renewalTariff.ID)
+		if paymentID != uuid.Nil {
+			sub.LastAppliedPaymentID = &paymentID
+		}
 		if err := txSubscriptions.Update(ctx, *sub); err != nil {
 			return fmt.Errorf("update subscription after free downgrade to basic: %w", err)
 		}
@@ -327,7 +347,7 @@ func applyFreeRenewalOrDowngrade(ctx context.Context, d flowDeps, tx transaction
 	}
 
 	if sub.TariffID == renewalTariff.ID {
-		if err := sub.ApplyRenewal(period, now); err != nil {
+		if err := sub.ApplyRenewal(paymentID, period, now); err != nil {
 			return fmt.Errorf("apply free renewal: %w", err)
 		}
 	} else {
@@ -335,7 +355,7 @@ func applyFreeRenewalOrDowngrade(ctx context.Context, d flowDeps, tx transaction
 		if err != nil {
 			return fmt.Errorf("get current tariff for free change: %w", err)
 		}
-		if err := sub.ApplyTariffChange(currentTariff, renewalTariff, period, now); err != nil {
+		if err := sub.ApplyTariffChange(paymentID, currentTariff, renewalTariff, period, now); err != nil {
 			return fmt.Errorf("apply free tariff change: %w", err)
 		}
 		if d.propertyArchiver != nil {

@@ -33,6 +33,7 @@ type Subscription struct {
 	PendingChangeAt       *time.Time
 	PendingPeriod         *SubscriptionPeriod
 	ActivePaymentMethodID *uuid.UUID
+	LastAppliedPaymentID  *uuid.UUID
 	CurrentPeriod         *SubscriptionPeriod
 }
 
@@ -134,9 +135,9 @@ func (s *Subscription) ScheduleDowngrade(currentTariff, newTariff Tariff, period
 }
 
 // ApplyTariffChange applies a successful tariff change immediately. It sets the
-// new tariff, extends validity by the chosen period, enables auto-renew and
-// clears any pending change.
-func (s *Subscription) ApplyTariffChange(currentTariff, newTariff Tariff, period SubscriptionPeriod, now time.Time) error {
+// new tariff, extends validity by the chosen period, enables auto-renew,
+// records the applied payment and clears any pending change.
+func (s *Subscription) ApplyTariffChange(paymentID uuid.UUID, currentTariff, newTariff Tariff, period SubscriptionPeriod, now time.Time) error {
 	if period != PeriodMonth && period != PeriodYear {
 		return ErrInvalidPeriod
 	}
@@ -153,17 +154,18 @@ func (s *Subscription) ApplyTariffChange(currentTariff, newTariff Tariff, period
 	s.TariffID = newTariff.ID
 	s.ValidUntil = &validUntil
 	s.AutoRenewEnabled = true
+	s.LastAppliedPaymentID = &paymentID
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
 	s.Status = SubscriptionStatusActive
 	return nil
 }
 
-// ApplyRenewal extends the subscription validity by one period. The extension
-// is calculated from the current valid_until when it exists and is in the
-// future; otherwise it starts from now. A successful renewal also clears any
-// scheduled downgrade.
-func (s *Subscription) ApplyRenewal(period SubscriptionPeriod, now time.Time) error {
+// ApplyRenewal extends the subscription validity by one period and records the
+// applied payment. The extension is calculated from the current valid_until when
+// it exists and is in the future; otherwise it starts from now. A successful
+// renewal also clears any scheduled downgrade.
+func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeriod, now time.Time) error {
 	if period != PeriodMonth && period != PeriodYear {
 		return ErrInvalidPeriod
 	}
@@ -173,6 +175,7 @@ func (s *Subscription) ApplyRenewal(period SubscriptionPeriod, now time.Time) er
 	}
 	validUntil := addSubscriptionPeriod(base, period)
 	s.ValidUntil = &validUntil
+	s.LastAppliedPaymentID = &paymentID
 	s.Status = SubscriptionStatusActive
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil

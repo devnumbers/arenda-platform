@@ -302,6 +302,63 @@ func (r *SubscriptionPaymentRepository) MarkRefunded(ctx context.Context, id uui
 	return nil
 }
 
+// MarkReconciledSucceeded transitions a failed subscription payment to succeeded
+// after an explicit provider-side status check.
+func (r *SubscriptionPaymentRepository) MarkReconciledSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error {
+	row, err := r.q().GetSubscriptionPaymentByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.ErrNotFound
+		}
+		return fmt.Errorf("get subscription payment: %w", err)
+	}
+
+	payment := mapSubscriptionPayment(row)
+	if err := payment.ReconcileToSucceeded(now); err != nil {
+		return err
+	}
+
+	if _, err := r.q().MarkSubscriptionPaymentReconciledSucceeded(ctx, postgres.MarkSubscriptionPaymentReconciledSucceededParams{
+		ID:        pgtype.UUID{Bytes: id, Valid: true},
+		UpdatedAt: pgtype.Timestamptz{Time: payment.UpdatedAt, Valid: true},
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrInvalidPaymentStatus
+		}
+		return fmt.Errorf("mark subscription payment reconciled succeeded: %w", err)
+	}
+	return nil
+}
+
+// MarkReconciledRefunded transitions a failed subscription payment to refunded
+// after an explicit provider-side status check.
+func (r *SubscriptionPaymentRepository) MarkReconciledRefunded(ctx context.Context, id uuid.UUID, now time.Time) error {
+	row, err := r.q().GetSubscriptionPaymentByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.ErrNotFound
+		}
+		return fmt.Errorf("get subscription payment: %w", err)
+	}
+
+	payment := mapSubscriptionPayment(row)
+	if err := payment.ReconcileToRefunded(now); err != nil {
+		return err
+	}
+
+	if _, err := r.q().MarkSubscriptionPaymentReconciledRefunded(ctx, postgres.MarkSubscriptionPaymentReconciledRefundedParams{
+		ID:                    pgtype.UUID{Bytes: id, Valid: true},
+		RefundedAmountKopecks: pgconv.Int8PtrToPgtype(payment.RefundedAmountKopecks),
+		UpdatedAt:             pgtype.Timestamptz{Time: payment.UpdatedAt, Valid: true},
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrInvalidPaymentStatus
+		}
+		return fmt.Errorf("mark subscription payment reconciled refunded: %w", err)
+	}
+	return nil
+}
+
 // BeginRefund atomically reserves a succeeded or pending subscription payment for
 // an in-flight refund by moving it to the refunding status. It returns
 // domain.ErrInvalidPaymentStatus when the payment is not in a refundable state,

@@ -23,9 +23,10 @@ INSERT INTO user_subscriptions (
     pending_tariff_id,
     pending_change_at,
     pending_period,
-    active_payment_method_id
+    active_payment_method_id,
+    last_applied_payment_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (user_id) DO NOTHING
 RETURNING *;
 
@@ -52,7 +53,8 @@ SET
     pending_tariff_id = $7,
     pending_change_at = $8,
     pending_period = $9,
-    active_payment_method_id = $10
+    active_payment_method_id = $10,
+    last_applied_payment_id = $11
 WHERE id = $1
 RETURNING *;
 
@@ -171,6 +173,24 @@ RETURNING *;
 UPDATE subscription_payments
 SET status = $2, refunded_amount_kopecks = $3, updated_at = $4
 WHERE id = $1 AND status IN ('succeeded', 'pending', 'refunding')
+RETURNING *;
+
+-- name: MarkSubscriptionPaymentReconciledSucceeded :one
+-- Transition a failed payment to succeeded after an explicit provider-side
+-- status check. This handles out-of-order webhooks where the provider reports
+-- success after the system has already marked the payment as failed.
+UPDATE subscription_payments
+SET status = 'succeeded', updated_at = $2, succeeded_at = $2, error_code = NULL
+WHERE id = $1 AND status = 'failed'
+RETURNING *;
+
+-- name: MarkSubscriptionPaymentReconciledRefunded :one
+-- Transition a failed payment to refunded after an explicit provider-side
+-- status check. This handles out-of-order webhooks where the provider reports
+-- a refund after the system has already marked the payment as failed.
+UPDATE subscription_payments
+SET status = 'refunded', refunded_amount_kopecks = $2, updated_at = $3
+WHERE id = $1 AND status = 'failed'
 RETURNING *;
 
 -- name: BeginSubscriptionPaymentRefund :execresult
