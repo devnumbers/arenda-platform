@@ -232,8 +232,8 @@ func (r *SubscriptionPaymentRepository) MarkSucceeded(ctx context.Context, id uu
 	}
 
 	if _, err := r.q().MarkSubscriptionPaymentSucceeded(ctx, postgres.MarkSubscriptionPaymentSucceededParams{
-		ID:        pgtype.UUID{Bytes: id, Valid: true},
-		UpdatedAt: pgtype.Timestamptz{Time: payment.UpdatedAt, Valid: true},
+		ID:          pgtype.UUID{Bytes: id, Valid: true},
+		SucceededAt: pgconv.TimePtrToPgtype(payment.SucceededAt),
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrInvalidPaymentStatus
@@ -261,7 +261,6 @@ func (r *SubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.
 	if _, err := r.q().MarkSubscriptionPaymentFailed(ctx, postgres.MarkSubscriptionPaymentFailedParams{
 		ID:        pgtype.UUID{Bytes: id, Valid: true},
 		ErrorCode: pgconv.StringPtrToPgtype(errorCode),
-		UpdatedAt: pgtype.Timestamptz{Time: payment.UpdatedAt, Valid: true},
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrInvalidPaymentStatus
@@ -292,7 +291,6 @@ func (r *SubscriptionPaymentRepository) MarkRefunded(ctx context.Context, id uui
 		ID:                    pgtype.UUID{Bytes: id, Valid: true},
 		Status:                string(payment.Status),
 		RefundedAmountKopecks: pgconv.Int8PtrToPgtype(payment.RefundedAmountKopecks),
-		UpdatedAt:             pgtype.Timestamptz{Time: payment.UpdatedAt, Valid: true},
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrInvalidPaymentStatus
@@ -319,8 +317,8 @@ func (r *SubscriptionPaymentRepository) MarkReconciledSucceeded(ctx context.Cont
 	}
 
 	if _, err := r.q().MarkSubscriptionPaymentReconciledSucceeded(ctx, postgres.MarkSubscriptionPaymentReconciledSucceededParams{
-		ID:        pgtype.UUID{Bytes: id, Valid: true},
-		UpdatedAt: pgtype.Timestamptz{Time: payment.UpdatedAt, Valid: true},
+		ID:          pgtype.UUID{Bytes: id, Valid: true},
+		SucceededAt: pgconv.TimePtrToPgtype(payment.SucceededAt),
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrInvalidPaymentStatus
@@ -349,7 +347,6 @@ func (r *SubscriptionPaymentRepository) MarkReconciledRefunded(ctx context.Conte
 	if _, err := r.q().MarkSubscriptionPaymentReconciledRefunded(ctx, postgres.MarkSubscriptionPaymentReconciledRefundedParams{
 		ID:                    pgtype.UUID{Bytes: id, Valid: true},
 		RefundedAmountKopecks: pgconv.Int8PtrToPgtype(payment.RefundedAmountKopecks),
-		UpdatedAt:             pgtype.Timestamptz{Time: payment.UpdatedAt, Valid: true},
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrInvalidPaymentStatus

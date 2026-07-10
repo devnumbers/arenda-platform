@@ -159,19 +159,19 @@ SELECT * FROM subscription_payments WHERE user_id = $1 AND status = 'pending' OR
 
 -- name: MarkSubscriptionPaymentSucceeded :one
 UPDATE subscription_payments
-SET status = 'succeeded', updated_at = $2, succeeded_at = $2
+SET status = 'succeeded', succeeded_at = $2
 WHERE id = $1 AND status = 'pending'
 RETURNING *;
 
 -- name: MarkSubscriptionPaymentFailed :one
 UPDATE subscription_payments
-SET status = 'failed', error_code = $2, updated_at = $3
+SET status = 'failed', error_code = $2
 WHERE id = $1 AND status = 'pending'
 RETURNING *;
 
 -- name: MarkSubscriptionPaymentRefunded :one
 UPDATE subscription_payments
-SET status = $2, refunded_amount_kopecks = $3, updated_at = $4
+SET status = $2, refunded_amount_kopecks = $3
 WHERE id = $1 AND status IN ('succeeded', 'pending', 'refunding')
 RETURNING *;
 
@@ -180,7 +180,7 @@ RETURNING *;
 -- status check. This handles out-of-order webhooks where the provider reports
 -- success after the system has already marked the payment as failed.
 UPDATE subscription_payments
-SET status = 'succeeded', updated_at = $2, succeeded_at = $2, error_code = NULL
+SET status = 'succeeded', succeeded_at = $2, error_code = NULL
 WHERE id = $1 AND status = 'failed'
 RETURNING *;
 
@@ -189,7 +189,7 @@ RETURNING *;
 -- status check. This handles out-of-order webhooks where the provider reports
 -- a refund after the system has already marked the payment as failed.
 UPDATE subscription_payments
-SET status = 'refunded', refunded_amount_kopecks = $2, updated_at = $3
+SET status = 'refunded', refunded_amount_kopecks = $2
 WHERE id = $1 AND status = 'failed'
 RETURNING *;
 

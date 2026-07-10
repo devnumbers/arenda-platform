@@ -1209,19 +1209,18 @@ func (q *Queries) LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.
 
 const markSubscriptionPaymentFailed = `-- name: MarkSubscriptionPaymentFailed :one
 UPDATE subscription_payments
-SET status = 'failed', error_code = $2, updated_at = $3
+SET status = 'failed', error_code = $2
 WHERE id = $1 AND status = 'pending'
 RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 
 type MarkSubscriptionPaymentFailedParams struct {
-	ID        pgtype.UUID        `json:"id"`
-	ErrorCode pgtype.Text        `json:"error_code"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID        pgtype.UUID `json:"id"`
+	ErrorCode pgtype.Text `json:"error_code"`
 }
 
 func (q *Queries) MarkSubscriptionPaymentFailed(ctx context.Context, arg MarkSubscriptionPaymentFailedParams) (SubscriptionPayment, error) {
-	row := q.db.QueryRow(ctx, markSubscriptionPaymentFailed, arg.ID, arg.ErrorCode, arg.UpdatedAt)
+	row := q.db.QueryRow(ctx, markSubscriptionPaymentFailed, arg.ID, arg.ErrorCode)
 	var i SubscriptionPayment
 	err := row.Scan(
 		&i.ID,
@@ -1246,22 +1245,21 @@ func (q *Queries) MarkSubscriptionPaymentFailed(ctx context.Context, arg MarkSub
 
 const markSubscriptionPaymentReconciledRefunded = `-- name: MarkSubscriptionPaymentReconciledRefunded :one
 UPDATE subscription_payments
-SET status = 'refunded', refunded_amount_kopecks = $2, updated_at = $3
+SET status = 'refunded', refunded_amount_kopecks = $2
 WHERE id = $1 AND status = 'failed'
 RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 
 type MarkSubscriptionPaymentReconciledRefundedParams struct {
-	ID                    pgtype.UUID        `json:"id"`
-	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
-	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	ID                    pgtype.UUID `json:"id"`
+	RefundedAmountKopecks pgtype.Int8 `json:"refunded_amount_kopecks"`
 }
 
 // Transition a failed payment to refunded after an explicit provider-side
 // status check. This handles out-of-order webhooks where the provider reports
 // a refund after the system has already marked the payment as failed.
 func (q *Queries) MarkSubscriptionPaymentReconciledRefunded(ctx context.Context, arg MarkSubscriptionPaymentReconciledRefundedParams) (SubscriptionPayment, error) {
-	row := q.db.QueryRow(ctx, markSubscriptionPaymentReconciledRefunded, arg.ID, arg.RefundedAmountKopecks, arg.UpdatedAt)
+	row := q.db.QueryRow(ctx, markSubscriptionPaymentReconciledRefunded, arg.ID, arg.RefundedAmountKopecks)
 	var i SubscriptionPayment
 	err := row.Scan(
 		&i.ID,
@@ -1286,21 +1284,21 @@ func (q *Queries) MarkSubscriptionPaymentReconciledRefunded(ctx context.Context,
 
 const markSubscriptionPaymentReconciledSucceeded = `-- name: MarkSubscriptionPaymentReconciledSucceeded :one
 UPDATE subscription_payments
-SET status = 'succeeded', updated_at = $2, succeeded_at = $2, error_code = NULL
+SET status = 'succeeded', succeeded_at = $2, error_code = NULL
 WHERE id = $1 AND status = 'failed'
 RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 
 type MarkSubscriptionPaymentReconciledSucceededParams struct {
-	ID        pgtype.UUID        `json:"id"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID          pgtype.UUID        `json:"id"`
+	SucceededAt pgtype.Timestamptz `json:"succeeded_at"`
 }
 
 // Transition a failed payment to succeeded after an explicit provider-side
 // status check. This handles out-of-order webhooks where the provider reports
 // success after the system has already marked the payment as failed.
 func (q *Queries) MarkSubscriptionPaymentReconciledSucceeded(ctx context.Context, arg MarkSubscriptionPaymentReconciledSucceededParams) (SubscriptionPayment, error) {
-	row := q.db.QueryRow(ctx, markSubscriptionPaymentReconciledSucceeded, arg.ID, arg.UpdatedAt)
+	row := q.db.QueryRow(ctx, markSubscriptionPaymentReconciledSucceeded, arg.ID, arg.SucceededAt)
 	var i SubscriptionPayment
 	err := row.Scan(
 		&i.ID,
@@ -1325,25 +1323,19 @@ func (q *Queries) MarkSubscriptionPaymentReconciledSucceeded(ctx context.Context
 
 const markSubscriptionPaymentRefunded = `-- name: MarkSubscriptionPaymentRefunded :one
 UPDATE subscription_payments
-SET status = $2, refunded_amount_kopecks = $3, updated_at = $4
+SET status = $2, refunded_amount_kopecks = $3
 WHERE id = $1 AND status IN ('succeeded', 'pending', 'refunding')
 RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 
 type MarkSubscriptionPaymentRefundedParams struct {
-	ID                    pgtype.UUID        `json:"id"`
-	Status                string             `json:"status"`
-	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
-	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	ID                    pgtype.UUID `json:"id"`
+	Status                string      `json:"status"`
+	RefundedAmountKopecks pgtype.Int8 `json:"refunded_amount_kopecks"`
 }
 
 func (q *Queries) MarkSubscriptionPaymentRefunded(ctx context.Context, arg MarkSubscriptionPaymentRefundedParams) (SubscriptionPayment, error) {
-	row := q.db.QueryRow(ctx, markSubscriptionPaymentRefunded,
-		arg.ID,
-		arg.Status,
-		arg.RefundedAmountKopecks,
-		arg.UpdatedAt,
-	)
+	row := q.db.QueryRow(ctx, markSubscriptionPaymentRefunded, arg.ID, arg.Status, arg.RefundedAmountKopecks)
 	var i SubscriptionPayment
 	err := row.Scan(
 		&i.ID,
@@ -1368,18 +1360,18 @@ func (q *Queries) MarkSubscriptionPaymentRefunded(ctx context.Context, arg MarkS
 
 const markSubscriptionPaymentSucceeded = `-- name: MarkSubscriptionPaymentSucceeded :one
 UPDATE subscription_payments
-SET status = 'succeeded', updated_at = $2, succeeded_at = $2
+SET status = 'succeeded', succeeded_at = $2
 WHERE id = $1 AND status = 'pending'
 RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 
 type MarkSubscriptionPaymentSucceededParams struct {
-	ID        pgtype.UUID        `json:"id"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID          pgtype.UUID        `json:"id"`
+	SucceededAt pgtype.Timestamptz `json:"succeeded_at"`
 }
 
 func (q *Queries) MarkSubscriptionPaymentSucceeded(ctx context.Context, arg MarkSubscriptionPaymentSucceededParams) (SubscriptionPayment, error) {
-	row := q.db.QueryRow(ctx, markSubscriptionPaymentSucceeded, arg.ID, arg.UpdatedAt)
+	row := q.db.QueryRow(ctx, markSubscriptionPaymentSucceeded, arg.ID, arg.SucceededAt)
 	var i SubscriptionPayment
 	err := row.Scan(
 		&i.ID,
