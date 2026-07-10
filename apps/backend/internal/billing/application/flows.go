@@ -99,15 +99,17 @@ func applyPaymentResult(
 			if err := txSubscriptionPayments.MarkReconciledSucceeded(ctx, payment.ID, now); err != nil {
 				return fmt.Errorf("reconcile payment to succeeded: %w", err)
 			}
+			if err := payment.ReconcileToSucceeded(now); err != nil {
+				return fmt.Errorf("apply reconciled succeeded transition: %w", err)
+			}
 		} else {
 			if err := txSubscriptionPayments.MarkSucceeded(ctx, payment.ID, now); err != nil {
 				return fmt.Errorf("mark payment succeeded: %w", err)
 			}
+			if err := payment.MarkSucceeded(now); err != nil {
+				return fmt.Errorf("apply succeeded transition: %w", err)
+			}
 		}
-		payment.Status = domain.PaymentStatusSucceeded
-		payment.UpdatedAt = now
-		payment.SucceededAt = &now
-		payment.ErrorCode = nil
 
 		// Payment method activation is part of the critical transaction: a
 		// succeeded payment means the saved token is valid and should become the
@@ -137,9 +139,9 @@ func applyPaymentResult(
 		if err := txSubscriptionPayments.MarkFailed(ctx, payment.ID, payload.ErrorCode, now); err != nil {
 			return fmt.Errorf("mark payment failed: %w", err)
 		}
-		payment.Status = domain.PaymentStatusFailed
-		payment.ErrorCode = payload.ErrorCode
-		payment.UpdatedAt = now
+		if err := payment.MarkFailed(payload.ErrorCode, now); err != nil {
+			return fmt.Errorf("apply failed transition: %w", err)
+		}
 
 	case domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
 		// The system no longer initiates partial refunds. If a provider reports
@@ -156,14 +158,17 @@ func applyPaymentResult(
 			if err := txSubscriptionPayments.MarkReconciledRefunded(ctx, payment.ID, now); err != nil {
 				return fmt.Errorf("reconcile payment to refunded: %w", err)
 			}
+			if err := payment.ReconcileToRefunded(now); err != nil {
+				return fmt.Errorf("apply reconciled refunded transition: %w", err)
+			}
 		} else {
 			if err := txSubscriptionPayments.MarkRefunded(ctx, payment.ID, now); err != nil {
 				return fmt.Errorf("mark payment refunded: %w", err)
 			}
+			if err := payment.MarkRefunded(now); err != nil {
+				return fmt.Errorf("apply refunded transition: %w", err)
+			}
 		}
-		payment.Status = domain.PaymentStatusRefunded
-		payment.RefundedAmountKopecks = &payment.AmountKopecks
-		payment.UpdatedAt = now
 
 	default:
 		return fmt.Errorf("unsupported webhook status: %s", payload.Status)

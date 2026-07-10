@@ -397,9 +397,9 @@ func (r *RenewalService) finalizeRenewalCharge(
 			}
 			return fmt.Errorf("mark renewal payment succeeded: %w", err)
 		}
-		payment.Status = domain.PaymentStatusSucceeded
-		payment.UpdatedAt = now
-		payment.SucceededAt = &now
+		if err := payment.MarkSucceeded(now); err != nil {
+			return fmt.Errorf("apply renewal succeeded transition: %w", err)
+		}
 		if err := resultTx.Commit(ctx); err != nil {
 			return fmt.Errorf("commit post-charge transaction: %w", err)
 		}
@@ -595,9 +595,9 @@ func (r *RenewalService) markRenewalSucceededAndApply(ctx context.Context, payme
 	if err := txSubscriptionPayments.MarkSucceeded(ctx, payment.ID, now); err != nil {
 		return fmt.Errorf("mark payment succeeded in recovery: %w", err)
 	}
-	payment.Status = domain.PaymentStatusSucceeded
-	payment.UpdatedAt = now
-	payment.SucceededAt = &now
+	if err := payment.MarkSucceeded(now); err != nil {
+		return fmt.Errorf("apply recovery succeeded transition: %w", err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit recovery transaction: %w", err)
 	}
