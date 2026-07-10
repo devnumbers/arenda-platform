@@ -17,6 +17,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Deps holds the dependencies required by the HTTP server.
@@ -75,6 +76,7 @@ func securityHeaders(secure bool) func(http.Handler) http.Handler {
 // New builds the HTTP handler with routing and middleware wired.
 func New(deps Deps) http.Handler {
 	r := chi.NewRouter()
+	r.Use(otelhttp.NewMiddleware("arenda-api", otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method + " " + r.URL.Path })))
 	r.Use(RequestIDMiddleware)
 	r.Use(realIPMiddleware(deps.TrustedProxies))
 	r.Use(RequestLoggerWithOptions(deps.Logger, RequestLoggerOptions{
