@@ -19,6 +19,10 @@ type retryTransport struct {
 	maxRetries int
 	baseDelay  time.Duration
 	maxDelay   time.Duration
+	// jitter maps the deterministic backoff delay to the actual sleep duration.
+	// It defaults to the identity so callers (and tests) that do not configure
+	// it observe the exact backoff values; production wiring installs full-jitter.
+	jitter func(time.Duration) time.Duration
 }
 
 func newRetryTransport(base http.RoundTripper, maxRetries int, baseDelay, maxDelay time.Duration) *retryTransport {
@@ -30,6 +34,7 @@ func newRetryTransport(base http.RoundTripper, maxRetries int, baseDelay, maxDel
 		maxRetries: maxRetries,
 		baseDelay:  baseDelay,
 		maxDelay:   maxDelay,
+		jitter:     func(d time.Duration) time.Duration { return d },
 	}
 }
 
@@ -66,7 +71,7 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		if !isRetriable(err) || attempt == t.maxRetries {
 			return nil, err
 		}
-		time.Sleep(t.backoff(attempt))
+		time.Sleep(t.jitter(t.backoff(attempt)))
 	}
 	return resp, err
 }
@@ -74,8 +79,10 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 func (t *retryTransport) backoff(attempt int) time.Duration {
 	shift := min(attempt, 30)
 	d := t.baseDelay * (1 << shift)
-	if d > t.maxDelay {
-		return t.maxDelay
+	// Clamp to maxDelay both when the delay exceeds the cap and when a large
+	// baseDelay shifted high overflows int64 and wraps to zero or negative.
+	if d <= 0 || d > t.maxDelay {
+		d = t.maxDelay
 	}
 	return d
 }

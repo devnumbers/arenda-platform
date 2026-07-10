@@ -185,6 +185,61 @@ func TestRetryTransportBackoffExponential(t *testing.T) {
 	}
 }
 
+func TestRetryTransportJitterApplied(t *testing.T) {
+	retriableErr := &timeoutNetError{errorString: "boom"}
+	base := &fakeRoundTripper{err: retriableErr}
+	tr := newRetryTransport(base, 1, 1*time.Millisecond, 100*time.Millisecond)
+
+	// Deterministic jitter: record the input it receives and return a fixed,
+	// near-zero sleep so the test stays fast and wall-clock independent.
+	const fixedSleep = time.Microsecond
+	var (
+		called    bool
+		receivedD time.Duration
+	)
+	tr.jitter = func(d time.Duration) time.Duration {
+		called = true
+		receivedD = d
+		return fixedSleep
+	}
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
+	resp, err := tr.RoundTrip(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	// maxRetries=1 with an always-failing base yields exactly one retry
+	// (1 initial + 1 retry) and therefore exactly one sleep at attempt 0.
+	if base.calls.Load() != 2 {
+		t.Fatalf("expected 2 calls (1 initial + 1 retry), got %d", base.calls.Load())
+	}
+	if !called {
+		t.Fatalf("expected jitter func to be invoked exactly once")
+	}
+	// The single sleep corresponds to attempt 0, so jitter must receive the
+	// deterministic backoff(0) value; its return (fixedSleep) is what gets slept.
+	if receivedD != tr.backoff(0) {
+		t.Fatalf("jitter input = %v, want %v", receivedD, tr.backoff(0))
+	}
+}
+
+func TestRetryTransportBackoffOverflowCap(t *testing.T) {
+	tr := &retryTransport{baseDelay: time.Hour, maxDelay: 10 * time.Minute}
+	// shift is capped at 30; time.Hour * (1<<30) exceeds int64 and wraps to a
+	// negative value. The overflow guard must clamp the result to maxDelay and
+	// never return a negative (or zero) duration.
+	got := tr.backoff(30)
+	if got != tr.maxDelay {
+		t.Fatalf("backoff(30) = %v, want maxDelay %v", got, tr.maxDelay)
+	}
+	if got < 0 {
+		t.Fatalf("backoff(30) returned negative duration %v (int64 overflow)", got)
+	}
+}
+
 func TestRetryTransportIsRetriable(t *testing.T) {
 	if isRetriable(nil) {
 		t.Fatalf("nil error should not be retriable")

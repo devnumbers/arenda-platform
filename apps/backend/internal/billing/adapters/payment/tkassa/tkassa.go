@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"maps"
 	"math"
+	"math/rand/v2"
 	"net/http"
 	"sort"
 	"strconv"
@@ -188,7 +189,14 @@ func NewProvider(baseURL, terminalKey, password string, timeout time.Duration, m
 	}
 	base := http.DefaultTransport
 	if maxRetries > 0 {
-		base = newRetryTransport(base, maxRetries, retryBaseDelay, retryMaxDelay)
+		rt := newRetryTransport(base, maxRetries, retryBaseDelay, retryMaxDelay)
+		// Full-jitter: the actual sleep is drawn uniformly from [0, d], where d
+		// is the deterministic exponential-backoff delay. This desynchronizes
+		// concurrent retries and avoids thundering-herd spikes against T-Kassa.
+		rt.jitter = func(d time.Duration) time.Duration {
+			return time.Duration(rand.Float64() * float64(d)) //nolint:gosec // full-jitter only desynchronizes retry timing; it is not used for security.
+		}
+		base = rt
 	}
 	instrumentedTransport := otelhttp.NewTransport(base,
 		otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string {
