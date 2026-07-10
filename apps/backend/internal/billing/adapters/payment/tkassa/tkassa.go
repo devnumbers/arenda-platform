@@ -24,6 +24,10 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 const (
@@ -40,6 +44,12 @@ const (
 	maxResponseBytes              = 1 << 20 // 1 MiB
 	maxDescriptionLength          = 140     // T-Kassa limit for Description field
 )
+
+// instrumentationName is the OpenTelemetry tracer scope for this adapter.
+const instrumentationName = "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/tkassa"
+
+// tracer is the package-level OpenTelemetry tracer used to span provider operations.
+var tracer = otel.Tracer(instrumentationName)
 
 // ProviderError is returned when T-Kassa responds with Success=false and a non-zero ErrorCode.
 type ProviderError struct {
@@ -157,9 +167,14 @@ func NewProvider(baseURL, terminalKey, password string, timeout time.Duration, m
 	if maxRetries > 0 {
 		base = newRetryTransport(base, maxRetries, retryBaseDelay, retryMaxDelay)
 	}
+	instrumentedTransport := otelhttp.NewTransport(base,
+		otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string {
+			return "tkassa-http"
+		}),
+	)
 	client := &http.Client{
 		Timeout:   timeout,
-		Transport: base,
+		Transport: instrumentedTransport,
 	}
 	return &Provider{
 		baseURL:     baseURL,
@@ -177,6 +192,15 @@ func (p *Provider) Name() domain.PaymentProvider {
 
 // Init starts a new payment through T-Kassa.
 func (p *Provider) Init(ctx context.Context, req application.InitRequest) (application.InitResult, error) {
+	ctx, span := tracer.Start(ctx, "tkassa.Init")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("internal_payment_id", req.PaymentID.String()),
+		attribute.Int64("amount_kopecks", req.AmountKopecks),
+	)
+
 	log := logger.WithCorrelation(ctx, p.log)
 
 	operationInitiatorType := req.OperationInitiatorType
@@ -212,6 +236,8 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 
 	var resp initResponse
 	if err := p.post(ctx, "Init", body, &resp); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return application.InitResult{}, err
 	}
 
@@ -228,6 +254,16 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 // Amount is intentionally omitted from the request body: T-Kassa takes the
 // charge amount from the original Init call.
 func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (application.ChargeResult, error) {
+	ctx, span := tracer.Start(ctx, "tkassa.Charge")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("internal_payment_id", req.PaymentID.String()),
+		attribute.String("provider_payment_id", req.ProviderPaymentID),
+		attribute.Int64("amount_kopecks", req.AmountKopecks),
+	)
+
 	log := logger.WithCorrelation(ctx, p.log)
 
 	body := map[string]any{
@@ -244,6 +280,8 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 
 	var resp chargeResponse
 	if err := p.post(ctx, "Charge", body, &resp); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return application.ChargeResult{}, err
 	}
 
@@ -255,6 +293,15 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 
 // Status queries the current status of a payment through T-Kassa.
 func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error) {
+	ctx, span := tracer.Start(ctx, "tkassa.Status")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("internal_payment_id", paymentID.String()),
+		attribute.String("provider_payment_id", providerPaymentID),
+	)
+
 	log := logger.WithCorrelation(ctx, p.log)
 
 	body := map[string]any{
@@ -269,6 +316,8 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 
 	var resp getStateResponse
 	if err := p.post(ctx, "GetState", body, &resp); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return "", err
 	}
 
@@ -277,6 +326,16 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 
 // Cancel refunds or cancels a payment through T-Kassa.
 func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (application.CancelResult, error) {
+	ctx, span := tracer.Start(ctx, "tkassa.Cancel")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("internal_payment_id", req.PaymentID.String()),
+		attribute.String("provider_payment_id", req.ProviderPaymentID),
+		attribute.Int64("amount_kopecks", req.AmountKopecks),
+	)
+
 	log := logger.WithCorrelation(ctx, p.log)
 
 	// The system always refunds the full amount.
@@ -294,16 +353,21 @@ func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (a
 
 	var resp cancelResponse
 	if err := p.post(ctx, "Cancel", body, &resp); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return application.CancelResult{}, err
 	}
 
 	if !resp.Success {
-		return application.CancelResult{}, &ProviderError{
+		err := &ProviderError{
 			Method:    "Cancel",
 			ErrorCode: resp.ErrorCode,
 			Message:   resp.Message,
 			Details:   resp.Details,
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return application.CancelResult{}, err
 	}
 
 	status := mapCancelStatus(resp.Status)
@@ -333,6 +397,14 @@ type cancelResponse struct {
 
 // InitAddCard initializes attaching a new card to a T-Kassa customer.
 func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (application.InitAddCardResult, error) {
+	ctx, span := tracer.Start(ctx, "tkassa.InitAddCard")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("customer_key", req.CustomerKey),
+	)
+
 	log := logger.WithCorrelation(ctx, p.log)
 
 	// The T-Kassa AddCard schema requires the customer to already exist, so we
@@ -351,7 +423,10 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 				"customer_key", req.CustomerKey,
 			)
 		} else {
-			return application.InitAddCardResult{}, fmt.Errorf("tkassa: add customer failed: %w", err)
+			wrappedErr := fmt.Errorf("tkassa: add customer failed: %w", err)
+			span.RecordError(wrappedErr)
+			span.SetStatus(codes.Error, wrappedErr.Error())
+			return application.InitAddCardResult{}, wrappedErr
 		}
 	}
 
@@ -374,6 +449,8 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 
 	var cardResp addCardResponse
 	if err := p.post(ctx, "AddCard", cardBody, &cardResp); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return application.InitAddCardResult{}, err
 	}
 
@@ -386,6 +463,15 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 
 // RemoveCard detaches a card from a T-Kassa customer.
 func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) error {
+	ctx, span := tracer.Start(ctx, "tkassa.RemoveCard")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("customer_key", customerKey),
+		attribute.String("card_id", cardID),
+	)
+
 	log := logger.WithCorrelation(ctx, p.log)
 
 	body := map[string]any{
@@ -403,6 +489,8 @@ func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) e
 		if isCardNotFoundError(err) {
 			return application.ErrProviderCardNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	return nil
