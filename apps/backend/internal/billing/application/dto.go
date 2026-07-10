@@ -30,7 +30,8 @@ type AddPaymentMethodResponse struct {
 	PaymentMethod *domain.PaymentMethod
 }
 
-// SubscriptionView is the current subscription together with its tariff and active payment method.
+// SubscriptionView is the current subscription together with its tariff,
+// pending tariff, active payment method, and current paid period.
 type SubscriptionView struct {
 	Subscription        domain.Subscription
 	Tariff              domain.Tariff
