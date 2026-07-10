@@ -28,6 +28,9 @@ type Config struct {
 	TKassaPassword                      string
 	TKassaBaseURL                       string
 	TKassaTimeout                       time.Duration
+	TKassaMaxRetries                    int
+	TKassaRetryBaseDelay                time.Duration
+	TKassaRetryMaxDelay                 time.Duration
 	DaDataAPIKey                        string
 	DaDataSecretKey                     string
 	DaDataBaseURL                       string
@@ -476,6 +479,42 @@ func Load() (Config, error) {
 				return Config{}, fmt.Errorf("T_KASSA_TIMEOUT must be positive")
 			}
 			cfg.TKassaTimeout = d
+		}
+
+		cfg.TKassaMaxRetries = 3
+		if v := os.Getenv("T_KASSA_MAX_RETRIES"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid T_KASSA_MAX_RETRIES %q: %w", v, err)
+			}
+			if n < 0 {
+				return Config{}, fmt.Errorf("T_KASSA_MAX_RETRIES must be non-negative")
+			}
+			cfg.TKassaMaxRetries = n
+		}
+
+		cfg.TKassaRetryBaseDelay = 500 * time.Millisecond
+		if v := os.Getenv("T_KASSA_RETRY_BASE_DELAY"); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid T_KASSA_RETRY_BASE_DELAY %q: %w", v, err)
+			}
+			if d <= 0 {
+				return Config{}, fmt.Errorf("T_KASSA_RETRY_BASE_DELAY must be positive")
+			}
+			cfg.TKassaRetryBaseDelay = d
+		}
+
+		cfg.TKassaRetryMaxDelay = 5 * time.Second
+		if v := os.Getenv("T_KASSA_RETRY_MAX_DELAY"); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid T_KASSA_RETRY_MAX_DELAY %q: %w", v, err)
+			}
+			if d <= 0 {
+				return Config{}, fmt.Errorf("T_KASSA_RETRY_MAX_DELAY must be positive")
+			}
+			cfg.TKassaRetryMaxDelay = d
 		}
 	}
 

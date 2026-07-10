@@ -151,7 +151,16 @@ func run(fallback *slog.Logger) error {
 	case "fake":
 		paymentProvider = paymentfake.NewProvider(cfg.AppBaseURL, appLogger, clock.Real{})
 	case "tkassa":
-		paymentProvider = paymenttkassa.NewProvider(cfg.TKassaBaseURL, cfg.TKassaTerminalKey, cfg.TKassaPassword, cfg.TKassaTimeout, appLogger)
+		paymentProvider = paymenttkassa.NewProvider(
+			cfg.TKassaBaseURL,
+			cfg.TKassaTerminalKey,
+			cfg.TKassaPassword,
+			cfg.TKassaTimeout,
+			cfg.TKassaMaxRetries,
+			cfg.TKassaRetryBaseDelay,
+			cfg.TKassaRetryMaxDelay,
+			appLogger,
+		)
 	}
 	appLogger.InfoContext(ctx, "payment provider initialized", "provider", cfg.PaymentProvider, "initialized", paymentProvider != nil)
 

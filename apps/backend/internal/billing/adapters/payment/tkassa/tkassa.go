@@ -143,7 +143,9 @@ type removeCardResponse struct {
 
 // NewProvider creates a T-Kassa provider instance.
 // If baseURL is empty, the sandbox URL is used. If timeout is zero, a 30s default is used.
-func NewProvider(baseURL, terminalKey, password string, timeout time.Duration, log *slog.Logger) *Provider {
+// If maxRetries is positive, the HTTP client wraps the default transport with an
+// exponential backoff retry layer for temporary network errors.
+func NewProvider(baseURL, terminalKey, password string, timeout time.Duration, maxRetries int, retryBaseDelay, retryMaxDelay time.Duration, log *slog.Logger) *Provider {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
@@ -151,11 +153,19 @@ func NewProvider(baseURL, terminalKey, password string, timeout time.Duration, l
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
+	base := http.DefaultTransport
+	if maxRetries > 0 {
+		base = newRetryTransport(base, maxRetries, retryBaseDelay, retryMaxDelay)
+	}
+	client := &http.Client{
+		Timeout:   timeout,
+		Transport: base,
+	}
 	return &Provider{
 		baseURL:     baseURL,
 		terminalKey: terminalKey,
 		password:    password,
-		client:      &http.Client{Timeout: timeout},
+		client:      client,
 		log:         log,
 	}
 }
