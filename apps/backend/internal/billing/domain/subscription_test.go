@@ -477,11 +477,16 @@ func TestSubscriptionApplyScheduledDowngrade(t *testing.T) {
 		t.Errorf("ApplyScheduledDowngrade mutated fields on invalid period: got %+v, want %+v", subInvalid, baseline)
 	}
 
-	// Applying the tariff the subscription is already on must be rejected.
+	// Applying the tariff the subscription is already on must be rejected and
+	// must not mutate any field.
 	subSame := newSub(PeriodMonth)
+	baseline = subSame
 	pro := Tariff{ID: proID, Name: TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000}
 	if err := subSame.ApplyScheduledDowngrade(pro, PeriodMonth, now); !errors.Is(err, ErrAlreadyOnTariff) {
 		t.Errorf("ApplyScheduledDowngrade same tariff error = %v, want ErrAlreadyOnTariff", err)
+	}
+	if subSame != baseline {
+		t.Errorf("ApplyScheduledDowngrade mutated fields on same tariff: got %+v, want %+v", subSame, baseline)
 	}
 }
 

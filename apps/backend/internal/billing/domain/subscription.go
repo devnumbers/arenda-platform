@@ -197,10 +197,10 @@ func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeri
 // ApplyScheduledDowngrade applies a deferred downgrade at the end of the paid
 // period. Per ADR 0008 §3 there is no charge at apply time: it switches the
 // tariff, extends valid_until by the chosen period from now, enables auto-renew,
-// keeps the subscription active, and clears the pending change. LastAppliedPaymentID
+// sets status to active, and clears the pending change. LastAppliedPaymentID
 // is intentionally left untouched because no payment is involved.
 func (s *Subscription) ApplyScheduledDowngrade(newTariff Tariff, period SubscriptionPeriod, now time.Time) error {
-	if _, err := ParseSubscriptionPeriod(string(period)); err != nil {
+	if period != PeriodMonth && period != PeriodYear {
 		return ErrInvalidPeriod
 	}
 	if s.TariffID == newTariff.ID {
