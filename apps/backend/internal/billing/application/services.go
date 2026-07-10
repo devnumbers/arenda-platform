@@ -39,6 +39,7 @@ func NewServices(
 	callbackBaseURL string,
 	propertyArchiver PropertyArchiver,
 	onboarding OnboardingService,
+	paymentMethodInUseChecker PaymentMethodInUseChecker,
 ) Services {
 	deps := newFlowDeps(
 		tariffs,
@@ -55,7 +56,7 @@ func NewServices(
 	return Services{
 		Tariffs:          NewTariffService(deps),
 		Subscriptions:    NewSubscriptionService(deps, provider),
-		PaymentMethods:   NewPaymentMethodService(deps, provider),
+		PaymentMethods:   NewPaymentMethodService(deps, paymentMethodInUseChecker, provider),
 		Payments:         NewPaymentService(deps, provider),
 		Webhooks:         NewWebhookService(deps, provider),
 		Renewals:         NewRenewalService(deps, provider),

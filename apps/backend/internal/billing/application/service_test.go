@@ -560,6 +560,19 @@ func (r *fakeSubscriptionPaymentRepo) WithTx(transaction.Tx) (SubscriptionPaymen
 	return r, nil
 }
 
+// --- payment method in-use checker fake ---
+
+type fakePaymentMethodInUseChecker struct {
+	inUse map[uuid.UUID]bool
+}
+
+func (c *fakePaymentMethodInUseChecker) IsInUse(_ context.Context, methodID uuid.UUID) (bool, error) {
+	if c.inUse == nil {
+		return false, nil
+	}
+	return c.inUse[methodID], nil
+}
+
 // --- property archiver fake ---
 
 type fakePropertyArchiver struct {
@@ -744,6 +757,7 @@ type testDeps struct {
 	provider             *stubProvider
 	beginner             *fakeBeginner
 	clock                *fakeClock
+	inUseChecker         *fakePaymentMethodInUseChecker
 	service              Services
 }
 
@@ -761,6 +775,7 @@ func newTestDeps(t *testing.T) *testDeps {
 		provider:         &stubProvider{},
 		beginner:         &fakeBeginner{},
 		clock:            newFakeClock(fixedNow),
+		inUseChecker:     &fakePaymentMethodInUseChecker{},
 	}
 	d.service = NewServices(
 		d.tariffs,
@@ -774,6 +789,7 @@ func newTestDeps(t *testing.T) *testDeps {
 		"http://localhost",
 		d.propertyArchiver,
 		nil,
+		d.inUseChecker,
 	)
 	return d
 }
@@ -2987,6 +3003,7 @@ func newTestDepsWithLogger(t *testing.T, log *slog.Logger) *testDeps {
 		"http://localhost",
 		d.propertyArchiver,
 		nil,
+		d.inUseChecker,
 	)
 	return d
 }

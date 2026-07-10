@@ -167,9 +167,9 @@ func (r *PaymentMethodRepository) SetActive(ctx context.Context, userID, methodI
 	return nil
 }
 
-// Delete removes a payment method for the given user.
-// Returns ErrPaymentMethodInUse if the method is referenced as the active payment
-// method of a subscription.
+// Delete removes a payment method for the given user after verifying that it
+// exists and belongs to the user. Callers are responsible for checking whether
+// the method is referenced by an active subscription.
 func (r *PaymentMethodRepository) Delete(ctx context.Context, userID, methodID uuid.UUID) error {
 	pm, err := r.q().GetPaymentMethodByIDForUpdate(ctx, pgtype.UUID{Bytes: methodID, Valid: true})
 	if err != nil {
@@ -183,14 +183,6 @@ func (r *PaymentMethodRepository) Delete(ctx context.Context, userID, methodID u
 	}
 
 	if pm.IsActive {
-		return application.ErrPaymentMethodInUse
-	}
-
-	count, err := r.q().CountSubscriptionsByActivePaymentMethodID(ctx, pgtype.UUID{Bytes: methodID, Valid: true})
-	if err != nil {
-		return fmt.Errorf("check active payment method usage: %w", err)
-	}
-	if count > 0 {
 		return application.ErrPaymentMethodInUse
 	}
 

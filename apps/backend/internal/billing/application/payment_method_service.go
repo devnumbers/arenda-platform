@@ -14,12 +14,13 @@ import (
 // PaymentMethodService manages the user's saved payment methods.
 type PaymentMethodService struct {
 	deps     flowDeps
+	checker  PaymentMethodInUseChecker
 	provider CardProvider
 }
 
 // NewPaymentMethodService creates a PaymentMethodService.
-func NewPaymentMethodService(deps flowDeps, provider CardProvider) *PaymentMethodService {
-	return &PaymentMethodService{deps: deps, provider: provider}
+func NewPaymentMethodService(deps flowDeps, checker PaymentMethodInUseChecker, provider CardProvider) *PaymentMethodService {
+	return &PaymentMethodService{deps: deps, checker: checker, provider: provider}
 }
 
 // AddPaymentMethod stores a new inactive payment method for the user.
@@ -142,6 +143,14 @@ func (s *PaymentMethodService) DeletePaymentMethod(ctx context.Context, userID, 
 		return ErrPaymentMethodNotFound
 	}
 	if pm.IsActive {
+		return ErrPaymentMethodInUse
+	}
+
+	inUse, err := s.checker.IsInUse(ctx, methodID)
+	if err != nil {
+		return fmt.Errorf("check payment method in use: %w", err)
+	}
+	if inUse {
 		return ErrPaymentMethodInUse
 	}
 

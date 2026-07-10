@@ -60,6 +60,13 @@ type PaymentMethodRepository interface {
 	WithTx(tx transaction.Tx) (PaymentMethodRepository, error)
 }
 
+// PaymentMethodInUseChecker checks whether a payment method is referenced by an
+// active subscription. The check lives in the application layer so the
+// repository does not own business rules.
+type PaymentMethodInUseChecker interface {
+	IsInUse(ctx context.Context, methodID uuid.UUID) (bool, error)
+}
+
 type SubscriptionPaymentRepository interface {
 	Create(ctx context.Context, payment domain.SubscriptionPayment) (domain.SubscriptionPayment, error)
 	GetByID(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)

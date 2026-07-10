@@ -140,6 +140,7 @@ func run(fallback *slog.Logger) error {
 	subscriptionRepo := billingpg.NewSubscriptionRepository(db)
 	onboardingService := billingpg.NewOnboardingService(tariffRepo, subscriptionRepo, platformpostgres.NewBeginner(pool, appLogger))
 	paymentMethodRepo := billingpg.NewPaymentMethodRepository(db, encryptor)
+	paymentMethodInUseChecker := billingpg.NewPaymentMethodInUseChecker(db)
 	subscriptionPaymentRepo := billingpg.NewSubscriptionPaymentRepository(db)
 	appLogger.InfoContext(ctx, "billing repositories initialized",
 		"payment_methods", paymentMethodRepo != nil,
@@ -297,6 +298,7 @@ func run(fallback *slog.Logger) error {
 		cfg.AppBaseURL,
 		propertyService,
 		onboardingService,
+		paymentMethodInUseChecker,
 	)
 	eventDispatcher.Subscribe(events.EventType("user_registered"), billing.OnUserRegistered)
 
