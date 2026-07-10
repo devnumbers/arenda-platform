@@ -607,7 +607,6 @@ var _ WebhookProvider = (*stubProvider)(nil)
 var _ PaymentManager = (*stubProvider)(nil)
 var _ CardProvider = (*stubProvider)(nil)
 var _ SubscriptionPaymentProvider = (*stubProvider)(nil)
-var _ ScheduledChangeProvider = (*stubProvider)(nil)
 var _ ProviderNamer = (*stubProvider)(nil)
 
 type stubProvider struct {
@@ -1061,8 +1060,8 @@ func TestBilling_ChangeTariff_DowngradeSchedulesPendingChange(t *testing.T) {
 	if sub.PendingPeriod == nil || *sub.PendingPeriod != domain.PeriodMonth {
 		t.Errorf("expected pending period month, got %v", sub.PendingPeriod)
 	}
-	if sub.AutoRenewEnabled {
-		t.Error("downgrade scheduling should not change auto-renew")
+	if !sub.AutoRenewEnabled {
+		t.Error("expected auto-renew enabled after scheduling downgrade")
 	}
 }
 
@@ -2511,17 +2510,17 @@ func TestBilling_ProcessRenewals_LastAppliedPaymentID_PreventsFalsePositive(t *t
 	// consider the renewal already applied; LastAppliedPaymentID prevents that.
 	succeededAt := fixedNow.AddDate(-2, 0, 0)
 	d.subscriptionPayments.payments[succeededPaymentID] = domain.SubscriptionPayment{
-		ID:                succeededPaymentID,
-		UserID:            userID,
-		SubscriptionID:    uuid.MustParse("77777777-7777-7777-7777-777777777777"),
-		TariffID:          proID,
-		PaymentMethodID:   &methodID,
-		Period:            domain.PeriodMonth,
-		AmountKopecks:     5000,
-		Provider:          domain.ProviderFake,
-		Status:            domain.PaymentStatusSucceeded,
-		CreatedAt:         succeededAt,
-		SucceededAt:       &succeededAt,
+		ID:              succeededPaymentID,
+		UserID:          userID,
+		SubscriptionID:  uuid.MustParse("77777777-7777-7777-7777-777777777777"),
+		TariffID:        proID,
+		PaymentMethodID: &methodID,
+		Period:          domain.PeriodMonth,
+		AmountKopecks:   5000,
+		Provider:        domain.ProviderFake,
+		Status:          domain.PaymentStatusSucceeded,
+		CreatedAt:       succeededAt,
+		SucceededAt:     &succeededAt,
 	}
 
 	count, err := d.service.Renewals.ProcessRenewals(t.Context(), fixedNow)
@@ -2574,17 +2573,17 @@ func TestBilling_ProcessRenewals_LastAppliedPaymentID_SkipsAlreadyApplied(t *tes
 	}
 	succeededAt := fixedNow.AddDate(0, 0, -5)
 	d.subscriptionPayments.payments[succeededPaymentID] = domain.SubscriptionPayment{
-		ID:                succeededPaymentID,
-		UserID:            userID,
-		SubscriptionID:    subID,
-		TariffID:          proID,
-		PaymentMethodID:   &methodID,
-		Period:            domain.PeriodMonth,
-		AmountKopecks:     5000,
-		Provider:          domain.ProviderFake,
-		Status:            domain.PaymentStatusSucceeded,
-		CreatedAt:         succeededAt,
-		SucceededAt:       &succeededAt,
+		ID:              succeededPaymentID,
+		UserID:          userID,
+		SubscriptionID:  subID,
+		TariffID:        proID,
+		PaymentMethodID: &methodID,
+		Period:          domain.PeriodMonth,
+		AmountKopecks:   5000,
+		Provider:        domain.ProviderFake,
+		Status:          domain.PaymentStatusSucceeded,
+		CreatedAt:       succeededAt,
+		SucceededAt:     &succeededAt,
 	}
 
 	// applySubscriptionRenewalBestEffort is the same helper ProcessRenewals uses
@@ -5867,7 +5866,7 @@ func scheduledChangeSubscription(userID, subID, tariffID, pendingTariffID uuid.U
 	}
 }
 
-func TestBilling_ProcessScheduledChanges_FreeChangeStillApplies(t *testing.T) {
+func TestBilling_ProcessScheduledChanges_NoChargeApplies(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -5890,413 +5889,112 @@ func TestBilling_ProcessScheduledChanges_FreeChangeStillApplies(t *testing.T) {
 	if sub.TariffID != basicID {
 		t.Errorf("expected tariff changed to basic, got %s", sub.TariffID)
 	}
+	wantValidUntil := fixedNow.AddDate(0, 1, 0)
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+		t.Errorf("expected valid_until extended to %v, got %v", wantValidUntil, sub.ValidUntil)
+	}
+	if !sub.AutoRenewEnabled {
+		t.Errorf("expected auto_renew_enabled after scheduled downgrade")
+	}
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected status active, got %s", sub.Status)
+	}
 	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
 		t.Errorf("expected pending_* cleared, got %+v/%+v/%+v", sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
 	}
-	if d.provider.chargeCalled {
-		t.Errorf("expected no charge for free scheduled change")
+	if d.provider.chargeCalled || d.provider.initCalled {
+		t.Errorf("expected no provider call for scheduled downgrade")
 	}
 	if len(d.subscriptionPayments.payments) != 0 {
-		t.Errorf("expected no payment for free scheduled change, got %d", len(d.subscriptionPayments.payments))
+		t.Errorf("expected no payment for scheduled downgrade, got %d", len(d.subscriptionPayments.payments))
+	}
+	if len(d.propertyArchiver.calls) != 1 || d.propertyArchiver.calls[0].limit != 5 {
+		t.Errorf("expected property archiver called with limit 5, got %v", d.propertyArchiver.calls)
 	}
 }
 
-func TestBilling_ProcessScheduledChanges_PaidChargeSucceeds(t *testing.T) {
+func TestBilling_ProcessScheduledChanges_AppliesOnceAndNotAgain(t *testing.T) {
 	d := newTestDeps(t)
-	// A recurrent (tkassa) provider does not mint a new token on Init, so the
-	// existing active payment method stays attached to the payment.
-	d.provider.name = domain.ProviderTkassa
-	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	userA := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	userB := uuid.MustParse("11111111-1111-1111-1111-111111111112")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
-	subID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	subA := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	subB := uuid.MustParse("55555555-5555-5555-5555-555555555556")
 
 	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
 	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
-	d.addSubscription(scheduledChangeSubscription(userID, subID, basicID, proID, &methodID))
-	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
-		ID:            methodID,
-		UserID:        userID,
-		Provider:      domain.ProviderTkassa,
-		ProviderToken: "fake_token_1234",
-		IsActive:      true,
-	}
-	// The application-level stubProvider is driven to the succeeded outcome via
-	// chargeRes; the charge function additionally asserts Charge runs outside any
-	// open transaction.
-	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_1", Status: domain.PaymentStatusSucceeded}
-	d.provider.chargeFunc = func(_ ChargeRequest) {
-		if d.beginner.open != 0 {
-			t.Errorf("provider.Charge called with %d open transaction(s); expected none", d.beginner.open)
-		}
-	}
+
+	// (a) due row: pending_change_at <= now, must be applied.
+	d.addSubscription(scheduledChangeSubscription(userA, subA, proID, basicID, nil))
+
+	// (c) future row: pending_change_at > now, must be left untouched.
+	futureChangeAt := fixedNow.Add(24 * time.Hour)
+	futurePeriod := domain.PeriodMonth
+	futureValidUntil := fixedNow.AddDate(0, 1, 0)
+	d.addSubscription(domain.Subscription{
+		ID:               subB,
+		UserID:           userB,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &futureValidUntil,
+		AutoRenewEnabled: true,
+		PendingTariffID:  &basicID,
+		PendingChangeAt:  &futureChangeAt,
+		PendingPeriod:    &futurePeriod,
+	})
 
 	count, err := d.service.ScheduledChanges.ProcessScheduledChanges(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessScheduledChanges error: %v", err)
 	}
 	if count != 1 {
-		t.Fatalf("expected 1 scheduled change applied, got %d", count)
-	}
-	if !d.provider.chargeCalled {
-		t.Fatalf("expected provider.Charge to be called")
-	}
-	if d.provider.chargeReq.AmountKopecks != 5000 {
-		t.Errorf("expected charge amount 5000, got %d", d.provider.chargeReq.AmountKopecks)
-	}
-	if d.provider.chargeReq.Token != "fake_token_1234" {
-		t.Errorf("expected charge token from active payment method, got %q", d.provider.chargeReq.Token)
+		t.Fatalf("expected 1 scheduled change applied on first tick, got %d", count)
 	}
 
-	sub := d.subscriptions.subs[userID]
-	if sub.TariffID != proID {
-		t.Errorf("expected tariff changed to pro, got %s", sub.TariffID)
+	applied := d.subscriptions.subs[userA]
+	if applied.TariffID != basicID {
+		t.Errorf("expected tariff changed to basic, got %s", applied.TariffID)
 	}
-	if sub.CurrentPeriod == nil || *sub.CurrentPeriod != domain.PeriodMonth {
-		t.Errorf("expected current_period month, got %v", sub.CurrentPeriod)
+	wantValidUntil := fixedNow.AddDate(0, 1, 0)
+	if applied.ValidUntil == nil || !applied.ValidUntil.Equal(wantValidUntil) {
+		t.Errorf("expected valid_until extended to %v, got %v", wantValidUntil, applied.ValidUntil)
 	}
-	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
-		t.Errorf("expected pending_* cleared, got %+v/%+v/%+v", sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
+	if !applied.AutoRenewEnabled {
+		t.Errorf("expected auto_renew_enabled after scheduled downgrade")
 	}
-
-	if len(d.subscriptionPayments.payments) != 1 {
-		t.Fatalf("expected 1 payment, got %d", len(d.subscriptionPayments.payments))
+	if applied.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected status active, got %s", applied.Status)
 	}
-	var payment domain.SubscriptionPayment
-	for _, p := range d.subscriptionPayments.payments {
-		payment = p
+	if applied.PendingTariffID != nil || applied.PendingChangeAt != nil || applied.PendingPeriod != nil {
+		t.Errorf("expected pending_* cleared, got %+v/%+v/%+v", applied.PendingTariffID, applied.PendingChangeAt, applied.PendingPeriod)
 	}
-	if payment.Status != domain.PaymentStatusSucceeded {
-		t.Errorf("expected payment succeeded, got %s", payment.Status)
-	}
-	if payment.TariffID != proID {
-		t.Errorf("expected payment tariff pro, got %s", payment.TariffID)
-	}
-	if payment.PaymentMethodID == nil || *payment.PaymentMethodID != methodID {
-		t.Errorf("expected payment method %s, got %v", methodID, payment.PaymentMethodID)
-	}
-	if d.provider.chargeReq.PaymentID != payment.ID {
-		t.Errorf("expected charge payment id %s, got %s", payment.ID, d.provider.chargeReq.PaymentID)
+	if len(d.propertyArchiver.calls) != 1 || d.propertyArchiver.calls[0].limit != 5 {
+		t.Errorf("expected property archiver called once with limit 5, got %v", d.propertyArchiver.calls)
 	}
 
-	// Idempotency: a second worker tick must not re-process or double-charge.
-	d.provider.chargeCalled = false
+	untouched := d.subscriptions.subs[userB]
+	if untouched.TariffID != proID {
+		t.Errorf("expected future row tariff unchanged (pro), got %s", untouched.TariffID)
+	}
+	if untouched.PendingTariffID == nil || *untouched.PendingTariffID != basicID {
+		t.Errorf("expected future row pending tariff basic, got %v", untouched.PendingTariffID)
+	}
+	if untouched.PendingChangeAt == nil || !untouched.PendingChangeAt.Equal(futureChangeAt) {
+		t.Errorf("expected future row pending_change_at %v, got %v", futureChangeAt, untouched.PendingChangeAt)
+	}
+
+	// (b) a second worker tick must not re-apply the already-processed row.
 	count, err = d.service.ScheduledChanges.ProcessScheduledChanges(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("second ProcessScheduledChanges error: %v", err)
 	}
 	if count != 0 {
-		t.Errorf("expected 0 changes on second tick, got %d", count)
+		t.Errorf("expected 0 scheduled changes on second tick, got %d", count)
 	}
-	if d.provider.chargeCalled {
-		t.Errorf("expected no charge on second tick")
-	}
-}
-
-func TestBilling_ProcessScheduledChanges_PaidChargeFails(t *testing.T) {
-	d := newTestDeps(t)
-	d.provider.name = domain.ProviderTkassa
-	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
-	subID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
-
-	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
-	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
-	d.addSubscription(scheduledChangeSubscription(userID, subID, basicID, proID, &methodID))
-	// The real fake adapter forces a failed charge when the token starts with
-	// "fake_fail_" (fakeFailTokenPrefix). Here the application-level stubProvider
-	// is driven to the same failed outcome via chargeErr carrying a provider code.
-	//nolint:gosec // test token, not a real credential
-	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
-		ID:            methodID,
-		UserID:        userID,
-		Provider:      domain.ProviderTkassa,
-		ProviderToken: "fake_fail_test_token",
-		IsActive:      true,
-	}
-	d.provider.chargeErr = &fakeProviderError{code: "card_declined", msg: "charge failed"}
-
-	count, err := d.service.ScheduledChanges.ProcessScheduledChanges(context.Background(), fixedNow)
-	if err != nil {
-		t.Fatalf("ProcessScheduledChanges error: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected 1 scheduled change processed, got %d", count)
-	}
-
-	sub := d.subscriptions.subs[userID]
-	if sub.TariffID != basicID {
-		t.Errorf("expected subscription tariff unchanged (basic), got %s", sub.TariffID)
-	}
-	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
-		t.Errorf("expected pending_* cleared, got %+v/%+v/%+v", sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
-	}
-
-	if len(d.subscriptionPayments.payments) != 1 {
-		t.Fatalf("expected 1 payment, got %d", len(d.subscriptionPayments.payments))
-	}
-	var payment domain.SubscriptionPayment
-	for _, p := range d.subscriptionPayments.payments {
-		payment = p
-	}
-	if payment.Status != domain.PaymentStatusFailed {
-		t.Errorf("expected payment failed, got %s", payment.Status)
-	}
-	if payment.ErrorCode == nil || *payment.ErrorCode != "card_declined" {
-		t.Errorf("expected error_code card_declined, got %v", payment.ErrorCode)
-	}
-}
-
-func TestBilling_ProcessScheduledChanges_PaidNoActivePaymentMethod(t *testing.T) {
-	d := newTestDeps(t)
-	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	subID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
-
-	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
-	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
-	d.addSubscription(scheduledChangeSubscription(userID, subID, basicID, proID, nil))
-
-	count, err := d.service.ScheduledChanges.ProcessScheduledChanges(context.Background(), fixedNow)
-	if err != nil {
-		t.Fatalf("ProcessScheduledChanges error: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected 1 scheduled change processed, got %d", count)
-	}
-	if d.provider.chargeCalled {
-		t.Errorf("expected no charge without an active payment method")
-	}
-	if len(d.subscriptionPayments.payments) != 0 {
-		t.Errorf("expected no payment created, got %d", len(d.subscriptionPayments.payments))
-	}
-
-	sub := d.subscriptions.subs[userID]
-	if sub.TariffID != basicID {
-		t.Errorf("expected subscription tariff unchanged (basic), got %s", sub.TariffID)
-	}
-	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
-		t.Errorf("expected pending_* cleared, got %+v/%+v/%+v", sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
-	}
-}
-
-func TestBilling_ProcessScheduledChanges_PaidInitializesBeforeCharge(t *testing.T) {
-	d := newTestDeps(t)
-	d.provider.name = domain.ProviderTkassa
-	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
-	subID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
-
-	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
-	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
-	d.addSubscription(scheduledChangeSubscription(userID, subID, basicID, proID, &methodID))
-	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
-		ID:            methodID,
-		UserID:        userID,
-		Provider:      domain.ProviderTkassa,
-		ProviderToken: "rebill_1234",
-		IsActive:      true,
-	}
-	d.provider.initRes = InitResult{ProviderPaymentID: "tkassa_sched_1", PaymentURL: "https://bank.example/pay"}
-	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "tkassa_sched_1", Status: domain.PaymentStatusSucceeded}
-
-	count, err := d.service.ScheduledChanges.ProcessScheduledChanges(t.Context(), fixedNow)
-	if err != nil {
-		t.Fatalf("ProcessScheduledChanges error: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected 1 scheduled change applied, got %d", count)
-	}
-	if d.provider.initCount != 1 {
-		t.Errorf("expected exactly 1 Init, got %d", d.provider.initCount)
-	}
-	if d.provider.chargeCount != 1 {
-		t.Errorf("expected exactly 1 Charge, got %d", d.provider.chargeCount)
-	}
-	if d.provider.chargeReq.ProviderPaymentID == "" {
-		t.Fatalf("expected Charge to carry a ProviderPaymentID, got empty")
-	}
-	if d.provider.chargeReq.ProviderPaymentID != "tkassa_sched_1" {
-		t.Errorf("expected Charge ProviderPaymentID tkassa_sched_1, got %q", d.provider.chargeReq.ProviderPaymentID)
-	}
-	if !d.provider.initReq.Recurrent || d.provider.initReq.OperationInitiatorType != "R" {
-		t.Errorf("expected recurrent Init with initiator R, got recurrent=%v initiator=%q",
-			d.provider.initReq.Recurrent, d.provider.initReq.OperationInitiatorType)
-	}
-	if d.provider.initReq.CustomerKey != userID.String() {
-		t.Errorf("expected CustomerKey %s, got %s", userID.String(), d.provider.initReq.CustomerKey)
-	}
-
-	sub := d.subscriptions.subs[userID]
-	if sub.TariffID != proID {
-		t.Errorf("expected tariff changed to pro, got %s", sub.TariffID)
-	}
-	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
-		t.Errorf("expected pending_* cleared, got %+v/%+v/%+v", sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
-	}
-}
-
-func TestBilling_ProcessScheduledChanges_ReusesPendingAfterCrash(t *testing.T) {
-	d := newTestDeps(t)
-	d.provider.name = domain.ProviderTkassa
-	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
-	subID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
-	paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666666")
-
-	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
-	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
-
-	// Simulate the post-crash state: a previous worker run created the pending
-	// payment (no provider reference yet, because it crashed before Init) and
-	// captured the subscription by pushing pending_change_at into the future.
-	capturedAt := fixedNow.Add(scheduledChangeInProgressTTL)
-	period := domain.PeriodMonth
-	validUntil := fixedNow.AddDate(0, 1, 0)
-	d.addSubscription(domain.Subscription{
-		ID:                    subID,
-		UserID:                userID,
-		TariffID:              basicID,
-		Source:                domain.SubscriptionSourcePaid,
-		Status:                domain.SubscriptionStatusActive,
-		ValidUntil:            &validUntil,
-		AutoRenewEnabled:      true,
-		ActivePaymentMethodID: &methodID,
-		PendingTariffID:       &proID,
-		PendingChangeAt:       &capturedAt,
-		PendingPeriod:         &period,
-	})
-	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
-		ID:            methodID,
-		UserID:        userID,
-		Provider:      domain.ProviderTkassa,
-		ProviderToken: "rebill_1234",
-		IsActive:      true,
-	}
-	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
-		ID:              paymentID,
-		UserID:          userID,
-		SubscriptionID:  subID,
-		TariffID:        proID,
-		PaymentMethodID: &methodID,
-		Period:          domain.PeriodMonth,
-		AmountKopecks:   5000,
-		Provider:        domain.ProviderTkassa,
-		Status:          domain.PaymentStatusPending,
-	}
-	d.provider.initRes = InitResult{ProviderPaymentID: "tkassa_reuse_1"}
-	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "tkassa_reuse_1", Status: domain.PaymentStatusSucceeded}
-
-	// Advance past the capture so the worker re-lists the row. Reuse must kick
-	// in: no second pending payment is created and Init runs exactly once.
-	later := fixedNow.Add(2 * time.Hour)
-	count, err := d.service.ScheduledChanges.ProcessScheduledChanges(t.Context(), later)
-	if err != nil {
-		t.Fatalf("ProcessScheduledChanges error: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected 1 scheduled change applied, got %d", count)
-	}
-	if d.provider.initCount != 1 {
-		t.Errorf("expected exactly 1 Init across the scenario, got %d", d.provider.initCount)
-	}
-	if d.provider.chargeCount != 1 {
-		t.Errorf("expected exactly 1 Charge, got %d", d.provider.chargeCount)
-	}
-	if len(d.subscriptionPayments.payments) != 1 {
-		t.Fatalf("expected exactly 1 payment (reused, no duplicate), got %d", len(d.subscriptionPayments.payments))
-	}
-	if _, ok := d.subscriptionPayments.payments[paymentID]; !ok {
-		t.Fatalf("expected the original pending payment %s to be reused", paymentID)
-	}
-	payment := d.subscriptionPayments.payments[paymentID]
-	if payment.Status != domain.PaymentStatusSucceeded {
-		t.Errorf("expected reused payment succeeded, got %s", payment.Status)
-	}
-
-	sub := d.subscriptions.subs[userID]
-	if sub.TariffID != proID {
-		t.Errorf("expected tariff changed to pro, got %s", sub.TariffID)
-	}
-	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
-		t.Errorf("expected pending_* cleared, got %+v/%+v/%+v", sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
-	}
-}
-
-func TestBilling_ProcessScheduledChanges_StatusDedupSkipsDoubleCharge(t *testing.T) {
-	d := newTestDeps(t)
-	d.provider.name = domain.ProviderTkassa
-	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
-	subID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
-	paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666666")
-	providerPaymentID := "tkassa_already_charged"
-
-	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
-	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
-
-	// The payment already carries a provider reference: a previous run charged
-	// it but crashed before applying the result. Status reports succeeded, so
-	// the worker must finalize (MarkSucceeded + apply) without a second Charge.
-	d.addSubscription(scheduledChangeSubscription(userID, subID, basicID, proID, &methodID))
-	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
-		ID:            methodID,
-		UserID:        userID,
-		Provider:      domain.ProviderTkassa,
-		ProviderToken: "rebill_1234",
-		IsActive:      true,
-	}
-	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
-		ID:                paymentID,
-		UserID:            userID,
-		SubscriptionID:    subID,
-		TariffID:          proID,
-		PaymentMethodID:   &methodID,
-		Period:            domain.PeriodMonth,
-		AmountKopecks:     5000,
-		Provider:          domain.ProviderTkassa,
-		ProviderPaymentID: &providerPaymentID,
-		Status:            domain.PaymentStatusPending,
-	}
-	d.provider.statusRes = domain.PaymentStatusSucceeded
-
-	count, err := d.service.ScheduledChanges.ProcessScheduledChanges(t.Context(), fixedNow)
-	if err != nil {
-		t.Fatalf("ProcessScheduledChanges error: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected 1 scheduled change applied, got %d", count)
-	}
-	if d.provider.initCount != 0 {
-		t.Errorf("expected no Init when a provider reference already exists, got %d", d.provider.initCount)
-	}
-	if d.provider.statusCount != 1 {
-		t.Errorf("expected exactly 1 Status check, got %d", d.provider.statusCount)
-	}
-	if d.provider.chargeCount != 0 {
-		t.Errorf("expected no Charge when status already succeeded, got %d", d.provider.chargeCount)
-	}
-
-	payment := d.subscriptionPayments.payments[paymentID]
-	if payment.Status != domain.PaymentStatusSucceeded {
-		t.Errorf("expected payment marked succeeded, got %s", payment.Status)
-	}
-	sub := d.subscriptions.subs[userID]
-	if sub.TariffID != proID {
-		t.Errorf("expected tariff changed to pro, got %s", sub.TariffID)
-	}
-	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
-		t.Errorf("expected pending_* cleared, got %+v/%+v/%+v", sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
+	if len(d.propertyArchiver.calls) != 1 {
+		t.Errorf("expected property archiver still called once (no re-apply), got %d", len(d.propertyArchiver.calls))
 	}
 }
 
@@ -6355,38 +6053,6 @@ func TestBilling_HandleWebhook_ProviderPaymentIDMismatch(t *testing.T) {
 	}
 	if sub.TariffID != tariffID {
 		t.Errorf("expected subscription tariff unchanged, got %s", sub.TariffID)
-	}
-}
-
-func TestBilling_ProcessScheduledChanges_ActivePaymentMethodNotFound_ClearsPending(t *testing.T) {
-	d := newTestDeps(t)
-	userID := uuid.MustParse("11111111-1111-1111-1111-111111111112")
-	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222223")
-	proID := uuid.MustParse("33333333-3333-3333-3333-333333333334")
-	subID := uuid.MustParse("55555555-5555-5555-5555-555555555556")
-	missingMethodID := uuid.MustParse("44444444-4444-4444-4444-444444444445")
-
-	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
-	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
-	d.addSubscription(scheduledChangeSubscription(userID, subID, basicID, proID, &missingMethodID))
-
-	count, err := d.service.ScheduledChanges.ProcessScheduledChanges(t.Context(), fixedNow)
-	if err != nil {
-		t.Fatalf("ProcessScheduledChanges error: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected 1 scheduled change processed, got %d", count)
-	}
-	if d.provider.chargeCalled {
-		t.Errorf("expected no charge when active payment method not found")
-	}
-
-	sub := d.subscriptions.subs[userID]
-	if sub.TariffID != basicID {
-		t.Errorf("expected subscription tariff unchanged (basic), got %s", sub.TariffID)
-	}
-	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
-		t.Errorf("expected pending_* cleared, got %+v/%+v/%+v", sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
 	}
 }
 

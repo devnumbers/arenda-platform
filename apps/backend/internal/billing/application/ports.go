@@ -211,14 +211,6 @@ type SubscriptionPaymentProvider interface {
 	ProviderNamer
 }
 
-// ScheduledChangeProvider aggregates the capabilities used by ScheduledChangeService.
-type ScheduledChangeProvider interface {
-	PaymentInitiator
-	PaymentCharger
-	PaymentStatusChecker
-	ProviderNamer
-}
-
 // OnboardingService creates default billing state for newly-registered owners.
 type OnboardingService interface {
 	SetupDefaultSubscription(ctx context.Context, userID uuid.UUID) error

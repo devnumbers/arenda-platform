@@ -93,14 +93,11 @@ type webhookServiceDeps struct {
 
 // scheduledChangeServiceDeps is the narrow dependency bundle for ScheduledChangeService.
 type scheduledChangeServiceDeps struct {
-	tariffs              TariffRepository
-	subscriptions        SubscriptionRepository
-	subscriptionPayments SubscriptionPaymentRepository
-	paymentMethods       PaymentMethodRepository
-	propertyArchiver     PropertyArchiver
-	beginner             transaction.Beginner
-	log                  *slog.Logger
-	callbackBaseURL      string
+	tariffs          TariffRepository
+	subscriptions    SubscriptionRepository
+	propertyArchiver PropertyArchiver
+	beginner         transaction.Beginner
+	log              *slog.Logger
 }
 
 // NewServices builds the billing sub-services from the shared repository and
@@ -173,15 +170,12 @@ func NewServices(
 			callbackBaseURL:      callbackBaseURL,
 		}, provider),
 		ScheduledChanges: NewScheduledChangeService(scheduledChangeServiceDeps{
-			tariffs:              tariffs,
-			subscriptions:        subscriptions,
-			subscriptionPayments: subscriptionPayments,
-			paymentMethods:       paymentMethods,
-			propertyArchiver:     propertyArchiver,
-			beginner:             beginner,
-			log:                  log,
-			callbackBaseURL:      callbackBaseURL,
-		}, provider),
+			tariffs:          tariffs,
+			subscriptions:    subscriptions,
+			propertyArchiver: propertyArchiver,
+			beginner:         beginner,
+			log:              log,
+		}),
 		Onboarding: onboarding,
 	}
 }

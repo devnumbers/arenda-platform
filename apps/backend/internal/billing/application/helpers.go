@@ -15,12 +15,6 @@ const tkassaDescriptionLimit = 140
 const (
 	renewalBatchSize = 100
 	graceBatchSize   = 100
-	// scheduledChangeInProgressTTL pushes pending_change_at into the future while
-	// a paid scheduled change is being applied. ListPendingChanges only returns
-	// rows whose pending_change_at <= now, so a crash after the pending payment is
-	// committed (or a repeated worker tick) cannot re-list the same subscription
-	// and charge the downgrade twice before the apply finishes.
-	scheduledChangeInProgressTTL = time.Hour
 )
 
 const (
@@ -34,10 +28,6 @@ func upgradePaymentDescription(name domain.TariffName, period domain.Subscriptio
 
 func renewalPaymentDescription(name domain.TariffName, period domain.SubscriptionPeriod) string {
 	return fmt.Sprintf("Subscription renewal %s (%s)", name, period)
-}
-
-func scheduledChangePaymentDescription(name domain.TariffName, period domain.SubscriptionPeriod) string {
-	return fmt.Sprintf("Scheduled change to %s (%s)", name, period)
 }
 
 // providerError is implemented by provider-specific errors that expose a
