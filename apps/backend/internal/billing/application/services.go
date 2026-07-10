@@ -24,6 +24,11 @@ type Services struct {
 	Onboarding       OnboardingService
 }
 
+// Compile-time assertion that Services implements the user-registration event
+// port consumed by main.go. This keeps the UserRegisteredHandler contract alive
+// even though it is not stored as a struct field.
+var _ UserRegisteredHandler = Services{}
+
 // tariffServiceDeps is the narrow dependency bundle for TariffService.
 type tariffServiceDeps struct {
 	tariffs TariffRepository
