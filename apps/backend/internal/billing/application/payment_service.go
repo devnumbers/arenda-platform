@@ -78,7 +78,10 @@ func (s *PaymentService) GetPayment(ctx context.Context, paymentID uuid.UUID) (A
 
 // ListAllPayments returns all subscription payments for admin view.
 func (s *PaymentService) ListAllPayments(ctx context.Context, filters ListAllPaymentsFilters) ([]AdminSubscriptionPaymentView, int64, error) {
-	filters.Limit = min(max(filters.Limit, 1), 100)
+	if filters.Limit <= 0 {
+		filters.Limit = 20
+	}
+	filters.Limit = min(filters.Limit, 100)
 	filters.Offset = max(filters.Offset, 0)
 
 	if filters.Status != "" && !slices.Contains([]string{
