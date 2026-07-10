@@ -32,45 +32,61 @@ func NewRenewalService(deps flowDeps, provider RenewalProvider) *RenewalService 
 func (r *RenewalService) ProcessRenewals(ctx context.Context, now time.Time) (int, error) {
 	processed := 0
 
-	for {
-		subs, err := r.deps.subscriptions.ListUpForRenewal(ctx, now.UTC(), renewalBatchSize)
-		if err != nil {
-			return processed, fmt.Errorf("list subscriptions up for renewal: %w", err)
-		}
-		if len(subs) == 0 {
-			break
-		}
-		for _, sub := range subs {
-			if err := r.renewSubscription(ctx, sub, now.UTC()); err != nil {
-				r.deps.log.ErrorContext(ctx, "renew subscription failed",
-					slog.String("subscription_id", sub.ID.String()),
-					slog.String("user_id", sub.UserID.String()),
-					slog.String("error", sanitize.Error(err)))
-				continue
-			}
-			processed++
-		}
-		if len(subs) < renewalBatchSize {
-			break
-		}
+	n, err := r.processSubscriptionBatch(ctx, now, "renew",
+		r.deps.subscriptions.ListUpForRenewal,
+		r.renewSubscription)
+	if err != nil {
+		return processed, err
 	}
+	processed += n
 
 	basicTariff, err := r.deps.tariffs.GetByName(ctx, domain.TariffBasic)
 	if err != nil {
 		return processed, fmt.Errorf("get basic tariff for non-renewing cleanup: %w", err)
 	}
 
+	n, err = r.processSubscriptionBatch(ctx, now, "expire non-renewing",
+		r.deps.subscriptions.ListExpiredNonRenewing,
+		func(ctx context.Context, sub domain.Subscription, now time.Time) error {
+			return r.expireNonRenewingSubscription(ctx, sub, basicTariff, now)
+		})
+	if err != nil {
+		return processed, err
+	}
+	processed += n
+
+	n, err = r.processSubscriptionBatch(ctx, now, "expire cancelled",
+		r.deps.subscriptions.ListExpiredCancelled,
+		func(ctx context.Context, sub domain.Subscription, now time.Time) error {
+			return r.expireNonRenewingSubscription(ctx, sub, basicTariff, now)
+		})
+	if err != nil {
+		return processed, err
+	}
+	processed += n
+
+	return processed, nil
+}
+
+func (r *RenewalService) processSubscriptionBatch(
+	ctx context.Context,
+	now time.Time,
+	op string,
+	list func(context.Context, time.Time, int32) ([]domain.Subscription, error),
+	process func(context.Context, domain.Subscription, time.Time) error,
+) (int, error) {
+	processed := 0
 	for {
-		subs, err := r.deps.subscriptions.ListExpiredNonRenewing(ctx, now.UTC(), renewalBatchSize)
+		subs, err := list(ctx, now.UTC(), renewalBatchSize)
 		if err != nil {
-			return processed, fmt.Errorf("list expired non-renewing subscriptions: %w", err)
+			return processed, fmt.Errorf("list subscriptions for %s: %w", op, err)
 		}
 		if len(subs) == 0 {
 			break
 		}
 		for _, sub := range subs {
-			if err := r.expireNonRenewingSubscription(ctx, sub, basicTariff, now.UTC()); err != nil {
-				r.deps.log.ErrorContext(ctx, "expire non-renewing subscription failed",
+			if err := process(ctx, sub, now.UTC()); err != nil {
+				r.deps.log.ErrorContext(ctx, fmt.Sprintf("%s subscription failed", op),
 					slog.String("subscription_id", sub.ID.String()),
 					slog.String("user_id", sub.UserID.String()),
 					slog.String("error", sanitize.Error(err)))
@@ -78,34 +94,10 @@ func (r *RenewalService) ProcessRenewals(ctx context.Context, now time.Time) (in
 			}
 			processed++
 		}
-		if len(subs) < renewalBatchSize {
+		if len(subs) < int(renewalBatchSize) {
 			break
 		}
 	}
-
-	for {
-		subs, err := r.deps.subscriptions.ListExpiredCancelled(ctx, now.UTC(), renewalBatchSize)
-		if err != nil {
-			return processed, fmt.Errorf("list expired cancelled subscriptions: %w", err)
-		}
-		if len(subs) == 0 {
-			break
-		}
-		for _, sub := range subs {
-			if err := r.expireNonRenewingSubscription(ctx, sub, basicTariff, now.UTC()); err != nil {
-				r.deps.log.ErrorContext(ctx, "expire cancelled subscription failed",
-					slog.String("subscription_id", sub.ID.String()),
-					slog.String("user_id", sub.UserID.String()),
-					slog.String("error", sanitize.Error(err)))
-				continue
-			}
-			processed++
-		}
-		if len(subs) < renewalBatchSize {
-			break
-		}
-	}
-
 	return processed, nil
 }
 
