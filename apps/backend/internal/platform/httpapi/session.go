@@ -41,10 +41,7 @@ func setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time, 
 	if secure {
 		sameSite = http.SameSiteStrictMode
 	}
-	maxAge := int(time.Until(expiresAt).Seconds())
-	if maxAge < 1 {
-		maxAge = 1
-	}
+	maxAge := max(1, int(time.Until(expiresAt).Seconds()))
 	//nolint:gosec // Secure/HttpOnly/SameSite are configured dynamically based on APP_ENV.
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName(secure),

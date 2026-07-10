@@ -24,16 +24,16 @@ type fakeTariffDB struct {
 	rows  []genpostgres.Tariff
 }
 
-func (db *fakeTariffDB) Exec(context.Context, string, ...interface{}) (pgconn.CommandTag, error) {
+func (db *fakeTariffDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
 }
 
-func (db *fakeTariffDB) Query(context.Context, string, ...interface{}) (pgx.Rows, error) {
+func (db *fakeTariffDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
 	db.calls++
 	return &fakeRows{rows: db.rows}, nil
 }
 
-func (db *fakeTariffDB) QueryRow(context.Context, string, ...interface{}) pgx.Row {
+func (db *fakeTariffDB) QueryRow(context.Context, string, ...any) pgx.Row {
 	db.calls++
 	return &fakeRow{row: db.rows[0]}
 }

@@ -47,10 +47,7 @@ func nextPaymentDate(current time.Time, paymentDay int) time.Time {
 	year, month, _ := current.Date()
 	lastDay := lastDayOfMonth(year, month+1)
 
-	day := paymentDay
-	if day > lastDay {
-		day = lastDay
-	}
+	day := min(paymentDay, lastDay)
 
 	return time.Date(year, month+1, day, 0, 0, 0, 0, time.UTC)
 }
@@ -60,10 +57,7 @@ func nextPaymentDateYearly(current time.Time, paymentDay int) time.Time {
 	year++
 	lastDay := lastDayOfMonth(year, month)
 
-	day := paymentDay
-	if day > lastDay {
-		day = lastDay
-	}
+	day := min(paymentDay, lastDay)
 
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }

@@ -219,10 +219,7 @@ func buildRecurringReminders(rec RecurringOperationInfo, baseReminderDate time.T
 			earliestOp = op
 		}
 	}
-	offset := domain.ReminderOffset(earliestOp.OperationDate, baseReminderDate)
-	if offset < 0 {
-		offset = 0
-	}
+	offset := max(0, domain.ReminderOffset(earliestOp.OperationDate, baseReminderDate))
 	reminders := make([]domain.Reminder, 0, len(ops))
 	for _, op := range ops {
 		reminderDate := op.OperationDate.AddDate(0, 0, -offset)

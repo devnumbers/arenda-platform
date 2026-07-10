@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -1071,10 +1072,7 @@ func TestNewProviderTrimsTrailingSlash(t *testing.T) {
 
 func TestSignDoesNotMutateInput(t *testing.T) {
 	data := map[string]any{"TerminalKey": "T", "Amount": int64(1)}
-	original := make(map[string]any, len(data))
-	for k, v := range data {
-		original[k] = v
-	}
+	original := maps.Clone(data)
 	_ = sign(data, testPassword)
 	if len(data) != len(original) {
 		t.Fatalf("sign mutated input map")

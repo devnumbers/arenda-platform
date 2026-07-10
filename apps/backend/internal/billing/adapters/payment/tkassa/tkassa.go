@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"math"
 	"net/http"
 	"sort"
@@ -292,10 +293,7 @@ func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (a
 	// are present. Fall back to the requested amount only when the response does
 	// not contain them.
 	if resp.OriginalAmount > 0 || resp.NewAmount > 0 {
-		refundedAmount = resp.OriginalAmount - resp.NewAmount
-		if refundedAmount < 0 {
-			refundedAmount = 0
-		}
+		refundedAmount = max(resp.OriginalAmount-resp.NewAmount, 0)
 	}
 
 	return application.CancelResult{
@@ -600,11 +598,7 @@ func stringifyValue(v any) string {
 }
 
 func cloneBody(body map[string]any) map[string]any {
-	cloned := make(map[string]any, len(body)+1)
-	for k, v := range body {
-		cloned[k] = v
-	}
-	return cloned
+	return maps.Clone(body)
 }
 
 func verifyToken(payload []byte, password string) error {

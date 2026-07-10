@@ -25,9 +25,9 @@ const (
 )
 
 type queryExecutor interface {
-	Exec(context.Context, string, ...interface{}) (pgconn.CommandTag, error)
-	Query(context.Context, string, ...interface{}) (pgx.Rows, error)
-	QueryRow(context.Context, string, ...interface{}) pgx.Row
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
 type transactionExecutor interface {
@@ -82,7 +82,7 @@ func newDBInstrumenter(logger *slog.Logger) dbInstrumenter {
 	}
 }
 
-func (db *InstrumentedPool) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+func (db *InstrumentedPool) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 	acquireStart := time.Now()
 	conn, err := db.pool.Acquire(ctx)
 	acquireDuration := time.Since(acquireStart)
@@ -98,7 +98,7 @@ func (db *InstrumentedPool) Exec(ctx context.Context, sql string, args ...interf
 	return tag, err
 }
 
-func (db *InstrumentedPool) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+func (db *InstrumentedPool) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
 	acquireStart := time.Now()
 	conn, err := db.pool.Acquire(ctx)
 	acquireDuration := time.Since(acquireStart)
@@ -118,7 +118,7 @@ func (db *InstrumentedPool) Query(ctx context.Context, sql string, args ...inter
 	return newInstrumentedRows(rows, db.inst, ctx, sql, acquireDuration, queryStart, conn.Release), nil
 }
 
-func (db *InstrumentedPool) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+func (db *InstrumentedPool) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	acquireStart := time.Now()
 	conn, err := db.pool.Acquire(ctx)
 	acquireDuration := time.Since(acquireStart)
@@ -158,14 +158,14 @@ func (db *InstrumentedPool) Begin(ctx context.Context) (transaction.Tx, error) {
 	return NewInstrumentedTx(tx, db.inst.logger), nil
 }
 
-func (tx *InstrumentedTx) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+func (tx *InstrumentedTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 	queryStart := time.Now()
 	tag, err := tx.tx.Exec(ctx, sql, args...)
 	tx.inst.log(ctx, sql, 0, time.Since(queryStart), err)
 	return tag, err
 }
 
-func (tx *InstrumentedTx) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+func (tx *InstrumentedTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
 	queryStart := time.Now()
 	rows, err := tx.tx.Query(ctx, sql, args...)
 	if err != nil {
@@ -176,7 +176,7 @@ func (tx *InstrumentedTx) Query(ctx context.Context, sql string, args ...interfa
 	return newInstrumentedRows(rows, tx.inst, ctx, sql, 0, queryStart, nil), nil
 }
 
-func (tx *InstrumentedTx) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+func (tx *InstrumentedTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	queryStart := time.Now()
 	row := tx.tx.QueryRow(ctx, sql, args...)
 	return &instrumentedRow{

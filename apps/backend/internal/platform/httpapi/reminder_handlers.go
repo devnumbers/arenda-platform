@@ -95,21 +95,13 @@ func (h *ReminderHandlers) ListReminders(w http.ResponseWriter, r *http.Request,
 
 	limit := 100
 	if params.Limit != nil {
-		limit = *params.Limit
-		if limit > 1000 {
-			limit = 1000
-		}
-		if limit < 1 {
-			limit = 1
-		}
+		limit = min(*params.Limit, 1000)
+		limit = max(limit, 1)
 	}
 
 	offset := 0
 	if params.Offset != nil {
-		offset = *params.Offset
-		if offset < 0 {
-			offset = 0
-		}
+		offset = max(*params.Offset, 0)
 	}
 
 	reminders, err := h.svc.ListByOwner(r.Context(), ownerID, notificationsapp.ListFilter{Limit: limit, Offset: offset})

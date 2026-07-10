@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -506,13 +507,7 @@ func Load() (Config, error) {
 		cfg.PhotoStorageSecretKey,
 		cfg.PhotoStoragePublicBaseURL,
 	}
-	s3Complete := true
-	for _, f := range s3Fields {
-		if f == "" {
-			s3Complete = false
-			break
-		}
-	}
+	s3Complete := !slices.Contains(s3Fields, "")
 	if cfg.PhotoStorageProvider == "" {
 		if cfg.AppEnv == "local" && !s3Complete {
 			cfg.PhotoStorageProvider = "fake"

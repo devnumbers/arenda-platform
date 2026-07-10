@@ -5658,7 +5658,7 @@ func TestBilling_ReconcilePendingPayments_SyncsInBatches(t *testing.T) {
 
 		const totalPayments = 101
 		paymentIDs := make([]uuid.UUID, 0, totalPayments)
-		for i := 0; i < totalPayments; i++ {
+		for i := range totalPayments {
 			userID := uuid.MustParse(fmt.Sprintf("11111111-1111-1111-1111-%012d", i))
 			subscriptionID := uuid.MustParse(fmt.Sprintf("22222222-2222-2222-2222-%012d", i))
 			paymentID := uuid.MustParse(fmt.Sprintf("33333333-3333-3333-3333-%012d", i))
