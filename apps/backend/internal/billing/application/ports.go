@@ -74,6 +74,8 @@ type SubscriptionPaymentRepository interface {
 	MarkSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, errorCode *string, now time.Time) error
 	MarkRefunded(ctx context.Context, id uuid.UUID, now time.Time) error
+	BeginRefund(ctx context.Context, id uuid.UUID, now time.Time) error
+	RevertRefund(ctx context.Context, id uuid.UUID, prev domain.PaymentStatus, now time.Time) error
 	UpdateProviderPaymentID(ctx context.Context, id uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
 	UpdatePaymentURL(ctx context.Context, id uuid.UUID, paymentURL string) (domain.SubscriptionPayment, error)
 	UpdatePaymentMethodAndProviderID(ctx context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)

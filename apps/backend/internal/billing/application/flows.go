@@ -437,7 +437,7 @@ func saveProviderInitResult(ctx context.Context, d flowDeps, payment domain.Subs
 	// transaction, so the row must be locked before the reference is persisted.
 	payment, err = txSubscriptionPayments.GetByIDForUpdate(ctx, paymentID)
 	if err != nil {
-		markPaymentFailedBestEffort(ctx, d, paymentID, now)
+		rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
 		return domain.SubscriptionPayment{}, fmt.Errorf("get payment for provider result: %w", err)
 	}
 	if payment.IsFinalized() {
@@ -446,7 +446,7 @@ func saveProviderInitResult(ctx context.Context, d flowDeps, payment domain.Subs
 		return payment, nil
 	}
 	if payment.Status != domain.PaymentStatusPending {
-		markPaymentFailedBestEffort(ctx, d, paymentID, now)
+		rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
 		return domain.SubscriptionPayment{}, domain.ErrInvalidPaymentStatus
 	}
 
@@ -459,23 +459,23 @@ func saveProviderInitResult(ctx context.Context, d flowDeps, payment domain.Subs
 			now,
 		)
 		if err != nil {
-			markPaymentFailedBestEffort(ctx, d, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("create payment method: %w", err)
 		}
 		pm, err = txPaymentMethods.Create(ctx, pm)
 		if err != nil {
-			markPaymentFailedBestEffort(ctx, d, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("save payment method: %w", err)
 		}
 		payment, err = txSubscriptionPayments.UpdatePaymentMethodAndProviderID(ctx, paymentID, pm.ID, initRes.ProviderPaymentID)
 		if err != nil {
-			markPaymentFailedBestEffort(ctx, d, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update payment method and provider payment id: %w", err)
 		}
 	} else {
 		payment, err = txSubscriptionPayments.UpdateProviderPaymentID(ctx, paymentID, initRes.ProviderPaymentID)
 		if err != nil {
-			markPaymentFailedBestEffort(ctx, d, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update provider payment id: %w", err)
 		}
 	}
@@ -483,17 +483,26 @@ func saveProviderInitResult(ctx context.Context, d flowDeps, payment domain.Subs
 	if initRes.PaymentURL != "" {
 		payment, err = txSubscriptionPayments.UpdatePaymentURL(ctx, paymentID, initRes.PaymentURL)
 		if err != nil {
-			markPaymentFailedBestEffort(ctx, d, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update payment url: %w", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		markPaymentFailedBestEffort(ctx, d, paymentID, now)
+		rollbackAndMarkFailedBestEffort(ctx, tx, d, paymentID, now)
 		return domain.SubscriptionPayment{}, fmt.Errorf("commit provider result transaction: %w", err)
 	}
 
 	return payment, nil
+}
+
+// rollbackAndMarkFailedBestEffort closes the still-open outer transaction (releasing
+// the row lock) and only then marks the payment as failed in a separate transaction.
+// Calling Rollback on an already-closed transaction returns an error that is ignored,
+// so this is safe to use on every error path of saveProviderInitResult.
+func rollbackAndMarkFailedBestEffort(ctx context.Context, tx transaction.Tx, d flowDeps, paymentID uuid.UUID, now time.Time) {
+	_ = tx.Rollback(ctx)
+	markPaymentFailedBestEffort(ctx, d, paymentID, now)
 }
 
 // markPaymentFailedBestEffort marks a pending payment as failed in a separate

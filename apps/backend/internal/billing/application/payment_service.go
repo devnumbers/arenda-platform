@@ -180,9 +180,20 @@ func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 // The system always refunds the full payment amount. The provider HTTP call is
 // made outside of any database transaction so a slow provider cannot hold a row
 // lock for an unbounded time.
+//
+// To prevent a double refund under concurrency, the payment is atomically
+// reserved into the internal refunding status in a short first transaction
+// BEFORE the provider is called. A concurrent refund attempt loses the
+// reservation race (BeginRefund returns ErrInvalidPaymentStatus) and never
+// reaches the provider. If the provider call fails or returns a non-refund
+// status, the reservation is reverted to the previous status in a separate
+// short transaction so the payment can be refunded again later.
 func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID) error {
-	// First short transaction: load the payment with a row lock, validate that it
-	// can be refunded, and commit immediately.
+	// Phase 1 (tx, reserve): load the payment under a row lock, validate that it
+	// can be refunded, and atomically move it to the refunding status. A
+	// concurrent refund that already reserved or finalized the payment loses
+	// this race and BeginRefund returns ErrInvalidPaymentStatus, so the provider
+	// is never called twice for the same payment.
 	tx, err := s.deps.beginner.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin refund payment transaction: %w", err)
@@ -213,16 +224,23 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 		return fmt.Errorf("%w: payment has no provider payment id", domain.ErrInvalidPaymentStatus)
 	}
 
+	prevStatus := payment.Status
 	providerPaymentID := *payment.ProviderPaymentID
 	userID := payment.UserID
 	subscriptionID := payment.SubscriptionID
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit refund validation transaction: %w", err)
+	if err := txSubscriptionPayments.BeginRefund(ctx, payment.ID, s.deps.clock.Now().UTC()); err != nil {
+		return fmt.Errorf("reserve payment for refund: %w", err)
 	}
 
-	// Provider call happens outside the transaction so the database connection is
-	// not held during an unbounded external HTTP request.
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit refund reservation transaction: %w", err)
+	}
+
+	// Phase 2 (outside tx): call the provider. The database connection is not
+	// held during the unbounded external HTTP request. On failure, or on a
+	// non-refund response, the reservation is reverted in a separate short
+	// transaction.
 	cancelRes, err := s.deps.provider.Cancel(ctx, CancelRequest{
 		PaymentID:         paymentID,
 		ProviderPaymentID: providerPaymentID,
@@ -235,16 +253,24 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 			slog.String("user_id", userID.String()),
 			slog.Int64("refund_amount_kopecks", refundAmount),
 			slog.String("error", sanitize.Error(err)))
+		s.revertRefundBestEffort(ctx, paymentID, prevStatus)
 		return fmt.Errorf("provider cancel: %w", err)
 	}
 
 	if cancelRes.Status != domain.PaymentStatusRefunded && cancelRes.Status != domain.PaymentStatusPartialRefunded {
+		s.deps.log.ErrorContext(ctx, "provider cancel returned non-refund status",
+			slog.String("payment_id", paymentID.String()),
+			slog.String("subscription_id", subscriptionID.String()),
+			slog.String("user_id", userID.String()),
+			slog.String("status", string(cancelRes.Status)))
+		s.revertRefundBestEffort(ctx, paymentID, prevStatus)
 		return fmt.Errorf("provider cancel returned non-refund status: %s", cancelRes.Status)
 	}
 
-	// Second short transaction: reload the payment under lock, re-check that it is
-	// still succeeded (it may have been refunded by a concurrent webhook), apply
-	// the refund and downgrade the subscription.
+	// Phase 3 (tx, finalize): reload the payment under lock, confirm it is still
+	// in a refundable state (refunding from our own reservation, or
+	// succeeded/pending for compatibility / re-entry), mark it refunded and
+	// downgrade the subscription.
 	resultTx, err := s.deps.beginner.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin refund result transaction: %w", err)
@@ -264,7 +290,9 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 		return fmt.Errorf("get payment for refund result: %w", err)
 	}
 
-	if payment.Status != domain.PaymentStatusSucceeded && payment.Status != domain.PaymentStatusPending {
+	if payment.Status != domain.PaymentStatusRefunding &&
+		payment.Status != domain.PaymentStatusSucceeded &&
+		payment.Status != domain.PaymentStatusPending {
 		return fmt.Errorf("%w: payment status changed to %s during refund", domain.ErrInvalidPaymentStatus, payment.Status)
 	}
 
@@ -287,6 +315,47 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 		slog.Int64("refund_amount_kopecks", cancelRes.RefundedAmountKopecks))
 
 	return nil
+}
+
+// revertRefundBestEffort rolls back the in-flight refund reservation in a
+// separate short transaction. It is the compensation step used when the
+// provider cancel call fails or returns a non-refund status. No other
+// transaction must be open when it is called. It never returns an error: a
+// failure to revert only leaves the payment in the refunding state and is
+// logged for manual review.
+func (s *PaymentService) revertRefundBestEffort(ctx context.Context, paymentID uuid.UUID, prev domain.PaymentStatus) {
+	now := s.deps.clock.Now().UTC()
+
+	tx, err := s.deps.beginner.Begin(ctx)
+	if err != nil {
+		s.deps.log.ErrorContext(ctx, "failed to begin transaction for refund revert",
+			slog.String("payment_id", paymentID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		s.deps.log.ErrorContext(ctx, "failed to bind subscription payments transaction for refund revert",
+			slog.String("payment_id", paymentID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+
+	if err := txSubscriptionPayments.RevertRefund(ctx, paymentID, prev, now); err != nil {
+		s.deps.log.ErrorContext(ctx, "failed to revert refund reservation",
+			slog.String("payment_id", paymentID.String()),
+			slog.String("prev_status", string(prev)),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		s.deps.log.ErrorContext(ctx, "failed to commit refund revert transaction",
+			slog.String("payment_id", paymentID.String()),
+			slog.String("error", sanitize.Error(err)))
+	}
 }
 
 // SyncPendingPayment queries the provider for the current status of a single

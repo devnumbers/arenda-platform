@@ -7,11 +7,15 @@ package postgres
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
+	// Atomically reserve a payment for an in-flight refund. updated_at is maintained
+	// by the trg_subscription_payments_updated_at trigger, so it is not set here.
+	BeginSubscriptionPaymentRefund(ctx context.Context, id pgtype.UUID) (pgconn.CommandTag, error)
 	CancelByIDAndOwner(ctx context.Context, arg CancelByIDAndOwnerParams) (int64, error)
 	CancelReminderByTarget(ctx context.Context, arg CancelReminderByTargetParams) (int64, error)
 	CancelRemindersByRecurringOperationID(ctx context.Context, arg CancelRemindersByRecurringOperationIDParams) (int64, error)
@@ -179,6 +183,9 @@ type Querier interface {
 	MarkSubscriptionPaymentRefunded(ctx context.Context, arg MarkSubscriptionPaymentRefundedParams) (SubscriptionPayment, error)
 	MarkSubscriptionPaymentSucceeded(ctx context.Context, arg MarkSubscriptionPaymentSucceededParams) (SubscriptionPayment, error)
 	ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Roll back an in-flight refund reservation to the previous status ($2).
+	// updated_at is maintained by the trg_subscription_payments_updated_at trigger.
+	RevertSubscriptionPaymentRefund(ctx context.Context, arg RevertSubscriptionPaymentRefundParams) (pgconn.CommandTag, error)
 	SaveOrReplaceOperationReminder(ctx context.Context, arg SaveOrReplaceOperationReminderParams) (int64, error)
 	SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) (int64, error)
 	SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperationParams) (Operation, error)

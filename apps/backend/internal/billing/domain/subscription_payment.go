@@ -14,6 +14,12 @@ const (
 	PaymentStatusSucceeded PaymentStatus = "succeeded"
 	PaymentStatusFailed    PaymentStatus = "failed"
 	PaymentStatusRefunded  PaymentStatus = "refunded"
+	// PaymentStatusRefunding is an internal, non-final reservation state. A
+	// payment enters it atomically before the external provider cancel call so
+	// that concurrent refund attempts are rejected instead of refunding the
+	// payment twice. It is never produced by external payloads and is not a
+	// terminal state.
+	PaymentStatusRefunding PaymentStatus = "refunding"
 	// PaymentStatusPartialRefunded is kept for backward compatibility and external
 	// webhook payloads. The system no longer initiates partial refunds; it always
 	// refunds the full amount.
@@ -101,16 +107,44 @@ func (p *SubscriptionPayment) MarkFailed(errorCode *string, now time.Time) error
 	return nil
 }
 
-// MarkRefunded transitions the payment to refunded (full amount only).
-// Only succeeded or pending payments can be refunded.
-func (p *SubscriptionPayment) MarkRefunded(now time.Time) error {
+// BeginRefund atomically reserves the payment for an in-flight refund by moving
+// it to the internal refunding status. Only succeeded or pending payments can
+// begin a refund. The reservation is taken before the external provider cancel
+// call so that concurrent refund attempts are rejected instead of refunding the
+// payment twice. refunding is an internal, non-final state.
+func (p *SubscriptionPayment) BeginRefund(now time.Time) error {
 	if p.Status != PaymentStatusSucceeded && p.Status != PaymentStatusPending {
+		return ErrInvalidPaymentStatus
+	}
+	p.Status = PaymentStatusRefunding
+	p.UpdatedAt = now.UTC()
+	return nil
+}
+
+// MarkRefunded transitions the payment to refunded (full amount only).
+// Only succeeded, pending, or refunding (an in-flight refund reservation)
+// payments can be refunded.
+func (p *SubscriptionPayment) MarkRefunded(now time.Time) error {
+	if p.Status != PaymentStatusSucceeded && p.Status != PaymentStatusPending && p.Status != PaymentStatusRefunding {
 		return ErrInvalidPaymentStatus
 	}
 	now = now.UTC()
 	p.UpdatedAt = now
 	p.RefundedAmountKopecks = &p.AmountKopecks
 	p.Status = PaymentStatusRefunded
+	return nil
+}
+
+// RevertRefund rolls back an in-flight refund reservation, restoring the
+// payment to its previous status. It is used as compensation when the external
+// provider cancel call fails or returns a non-refund status. Only payments in
+// the refunding state can be reverted.
+func (p *SubscriptionPayment) RevertRefund(now time.Time, prev PaymentStatus) error {
+	if p.Status != PaymentStatusRefunding {
+		return ErrInvalidPaymentStatus
+	}
+	p.Status = prev
+	p.UpdatedAt = now.UTC()
 	return nil
 }
 

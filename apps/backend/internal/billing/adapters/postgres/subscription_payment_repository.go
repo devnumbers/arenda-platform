@@ -271,9 +271,9 @@ func (r *SubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.
 	return nil
 }
 
-// MarkRefunded transitions a succeeded or pending subscription payment to refunded,
-// recording the full payment amount as refunded. Partial refunds are no longer
-// initiated by the system.
+// MarkRefunded transitions a succeeded, pending, or refunding subscription payment
+// to refunded, recording the full payment amount as refunded. Partial refunds are
+// no longer initiated by the system.
 func (r *SubscriptionPaymentRepository) MarkRefunded(ctx context.Context, id uuid.UUID, now time.Time) error {
 	row, err := r.q().GetSubscriptionPaymentByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
 	if err != nil {
@@ -298,6 +298,40 @@ func (r *SubscriptionPaymentRepository) MarkRefunded(ctx context.Context, id uui
 			return domain.ErrInvalidPaymentStatus
 		}
 		return fmt.Errorf("mark subscription payment refunded: %w", err)
+	}
+	return nil
+}
+
+// BeginRefund atomically reserves a succeeded or pending subscription payment for
+// an in-flight refund by moving it to the refunding status. It returns
+// domain.ErrInvalidPaymentStatus when the payment is not in a refundable state,
+// which is what rejects concurrent refund attempts. updated_at is maintained by
+// the table trigger, so the now argument is not written directly.
+func (r *SubscriptionPaymentRepository) BeginRefund(ctx context.Context, id uuid.UUID, _ time.Time) error {
+	tag, err := r.q().BeginSubscriptionPaymentRefund(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		return fmt.Errorf("begin subscription payment refund: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrInvalidPaymentStatus
+	}
+	return nil
+}
+
+// RevertRefund rolls back an in-flight refund reservation, restoring the payment
+// to its previous status. It returns domain.ErrInvalidPaymentStatus when the
+// payment is no longer in the refunding state. updated_at is maintained by the
+// table trigger, so the now argument is not written directly.
+func (r *SubscriptionPaymentRepository) RevertRefund(ctx context.Context, id uuid.UUID, prev domain.PaymentStatus, _ time.Time) error {
+	tag, err := r.q().RevertSubscriptionPaymentRefund(ctx, postgres.RevertSubscriptionPaymentRefundParams{
+		ID:     pgtype.UUID{Bytes: id, Valid: true},
+		Status: string(prev),
+	})
+	if err != nil {
+		return fmt.Errorf("revert subscription payment refund: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrInvalidPaymentStatus
 	}
 	return nil
 }

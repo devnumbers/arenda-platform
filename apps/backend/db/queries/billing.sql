@@ -170,8 +170,22 @@ RETURNING *;
 -- name: MarkSubscriptionPaymentRefunded :one
 UPDATE subscription_payments
 SET status = $2, refunded_amount_kopecks = $3, updated_at = $4
-WHERE id = $1 AND status IN ('succeeded', 'pending')
+WHERE id = $1 AND status IN ('succeeded', 'pending', 'refunding')
 RETURNING *;
+
+-- name: BeginSubscriptionPaymentRefund :execresult
+-- Atomically reserve a payment for an in-flight refund. updated_at is maintained
+-- by the trg_subscription_payments_updated_at trigger, so it is not set here.
+UPDATE subscription_payments
+SET status = 'refunding'
+WHERE id = $1 AND status IN ('succeeded', 'pending');
+
+-- name: RevertSubscriptionPaymentRefund :execresult
+-- Roll back an in-flight refund reservation to the previous status ($2).
+-- updated_at is maintained by the trg_subscription_payments_updated_at trigger.
+UPDATE subscription_payments
+SET status = $2
+WHERE id = $1 AND status = 'refunding';
 
 -- name: UpdateSubscriptionPaymentProviderPaymentID :one
 UPDATE subscription_payments

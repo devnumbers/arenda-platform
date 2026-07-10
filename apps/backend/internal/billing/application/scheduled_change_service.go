@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
@@ -153,25 +154,68 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 		return fmt.Errorf("get active payment method for scheduled change: %w", err)
 	}
 
+	// Reuse an existing pending payment for the same scheduled change so a crash
+	// after the pending row was committed (or a repeated worker tick) does not
+	// create a duplicate payment and charge the same downgrade twice.
+	var payment domain.SubscriptionPayment
+	pendingPayments, err := txSubscriptionPayments.ListPendingSubscriptionPaymentsByUserID(ctx, sub.UserID)
+	if err != nil {
+		return fmt.Errorf("list pending scheduled change payments: %w", err)
+	}
+	for _, p := range pendingPayments {
+		if p.SubscriptionID == sub.ID && p.TariffID == pendingTariff.ID && p.Period == period {
+			payment = p
+			break
+		}
+	}
+
+	// If we reuse a pending payment but the active card has changed, refresh the
+	// payment method reference so the record matches the token that will be charged.
+	if payment.ID != uuid.Nil && (payment.PaymentMethodID == nil || *payment.PaymentMethodID != pm.ID) {
+		payment, err = txSubscriptionPayments.UpdatePaymentMethodID(ctx, payment.ID, pm.ID)
+		if err != nil {
+			return fmt.Errorf("update pending scheduled change payment method: %w", err)
+		}
+	}
+
 	// Persist the pending payment and commit *before* the external provider call
 	// so the database connection is not held during an unbounded HTTP request.
-	payment, err := domain.NewSubscriptionPayment(
-		sub.UserID,
-		sub.ID,
-		pendingTariff.ID,
-		&pm.ID,
-		period,
-		amount,
-		c.deps.provider.Name(),
-		now,
-	)
-	if err != nil {
-		return fmt.Errorf("create scheduled change payment: %w", err)
+	if payment.ID == uuid.Nil {
+		payment, err = domain.NewSubscriptionPayment(
+			sub.UserID,
+			sub.ID,
+			pendingTariff.ID,
+			&pm.ID,
+			period,
+			amount,
+			c.deps.provider.Name(),
+			now,
+		)
+		if err != nil {
+			return fmt.Errorf("create scheduled change payment: %w", err)
+		}
+		payment, err = txSubscriptionPayments.Create(ctx, payment)
+		if err != nil {
+			return fmt.Errorf("save scheduled change payment: %w", err)
+		}
 	}
-	payment, err = txSubscriptionPayments.Create(ctx, payment)
-	if err != nil {
-		return fmt.Errorf("save scheduled change payment: %w", err)
+
+	// Capture the scheduled change for the duration of the apply by pushing
+	// pending_change_at into the future. ListPendingChanges only returns rows
+	// whose pending_change_at <= now, so a crash after this commit or a repeated
+	// worker tick will not re-list this subscription until the TTL elapses. The
+	// terminal branches in applyPaidScheduledChange still clear pending_* as before.
+	originalPendingChangeAt := *sub.PendingChangeAt
+	inProgressUntil := now.Add(scheduledChangeInProgressTTL)
+	sub.PendingChangeAt = &inProgressUntil
+	if err := txSubscriptions.Update(ctx, sub); err != nil {
+		return fmt.Errorf("capture scheduled change in progress: %w", err)
 	}
+	c.deps.log.DebugContext(ctx, "scheduled change captured in progress",
+		slog.String("subscription_id", sub.ID.String()),
+		slog.String("payment_id", payment.ID.String()),
+		slog.Time("original_pending_change_at", originalPendingChangeAt),
+		slog.Time("in_progress_until", inProgressUntil))
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit pending scheduled change payment: %w", err)
@@ -181,9 +225,12 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 }
 
 // applyPaidScheduledChange charges a scheduled tariff change to the active
-// payment method and applies the result. The provider call is performed outside
-// of any database transaction. Both the success and the failure paths clear the
-// subscription's pending_* fields so the worker loop terminates.
+// payment method and applies the result. It mirrors the renewal flow: Init to
+// obtain a provider reference when missing, a Status check to deduplicate an
+// already-charged payment, and a Charge that always carries ProviderPaymentID.
+// All provider calls run outside of any database transaction. Both the success
+// and the failure paths clear the subscription's pending_* fields so the worker
+// loop terminates.
 func (c *ScheduledChangeService) applyPaidScheduledChange(
 	ctx context.Context,
 	sub domain.Subscription,
@@ -194,16 +241,89 @@ func (c *ScheduledChangeService) applyPaidScheduledChange(
 	pm domain.PaymentMethod,
 	now time.Time,
 ) error {
-	// The provider charge is intentionally performed outside of any database
-	// transaction so an unbounded HTTP request never holds a connection.
-	chargeResult, chargeErr := c.deps.provider.Charge(ctx, ChargeRequest{
-		PaymentID:     payment.ID,
-		AmountKopecks: amount,
-		Token:         pm.ProviderToken,
-	})
+	var err error
+
+	// Recover a missing provider reference idempotently before charging, mirroring
+	// the renewal flow. The provider Init call is intentionally performed outside
+	// of any database transaction so an unbounded HTTP request never holds a
+	// connection.
+	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
+		notification, successURL, failURL := tkassaCallbackURLs(c.deps.callbackBaseURL, payment.ID)
+		initRes, initErr := c.deps.provider.Init(ctx, InitRequest{
+			PaymentID:              payment.ID,
+			AmountKopecks:          amount,
+			Period:                 period,
+			UserID:                 sub.UserID,
+			CustomerKey:            sub.UserID.String(),
+			Recurrent:              true,
+			OperationInitiatorType: "R",
+			NotificationURL:        notification,
+			SuccessURL:             successURL,
+			FailURL:                failURL,
+			Description:            truncateTkassaDescription(scheduledChangePaymentDescription(pendingTariff.Name, period)),
+		})
+		if initErr != nil {
+			// Init failure is terminal for a scheduled change. There is no open
+			// transaction here (the pending payment was committed in
+			// applyScheduledChange before the provider call), so the best-effort
+			// helpers each open their own short transaction safely.
+			markPaymentFailedBestEffort(ctx, c.deps, payment.ID, now)
+			c.clearPendingScheduledChangeBestEffort(ctx, sub.ID)
+			c.deps.log.ErrorContext(ctx, "provider init failed for paid scheduled change; pending change cleared",
+				slog.String("subscription_id", sub.ID.String()),
+				slog.String("user_id", sub.UserID.String()),
+				slog.String("payment_id", payment.ID.String()),
+				slog.String("error", sanitize.Error(initErr)))
+			return nil
+		}
+		payment, err = saveProviderInitResult(ctx, c.deps, payment, initRes, sub.UserID, now)
+		if err != nil {
+			return fmt.Errorf("save provider init result for scheduled change: %w", err)
+		}
+	}
+
+	chargeProviderPaymentID := ""
+	if payment.ProviderPaymentID != nil {
+		chargeProviderPaymentID = *payment.ProviderPaymentID
+	}
+
+	var (
+		chargeResult ChargeResult
+		chargeErr    error
+		charged      bool
+	)
+
+	// If a provider reference already exists (from this run's Init or a previous
+	// crashed run), query the provider status before charging to avoid a duplicate
+	// charge. A terminal succeeded/failed status is applied directly without a
+	// second Charge.
+	if chargeProviderPaymentID != "" {
+		status, statusErr := c.deps.provider.Status(ctx, payment.ID, chargeProviderPaymentID)
+		if statusErr == nil {
+			switch status {
+			case domain.PaymentStatusSucceeded:
+				chargeResult = ChargeResult{Status: domain.PaymentStatusSucceeded}
+				charged = true
+			case domain.PaymentStatusFailed:
+				chargeResult = ChargeResult{Status: domain.PaymentStatusFailed}
+			}
+		}
+	}
+
+	// Charge only when the provider has not already reported a terminal status.
+	// The Charge always carries ProviderPaymentID: a real recurrent gateway (e.g.
+	// T-Kassa) rejects a Charge that omits the PaymentId returned by Init.
+	if chargeResult.Status == "" {
+		chargeResult, chargeErr = c.deps.provider.Charge(ctx, ChargeRequest{
+			PaymentID:         payment.ID,
+			ProviderPaymentID: chargeProviderPaymentID,
+			AmountKopecks:     amount,
+			Token:             pm.ProviderToken,
+		})
+		charged = chargeErr == nil && chargeResult.Status == domain.PaymentStatusSucceeded
+	}
 
 	errorCode := providerErrorCode(chargeErr)
-	charged := chargeErr == nil && chargeResult.Status == domain.PaymentStatusSucceeded
 
 	tx, err := c.deps.beginner.Begin(ctx)
 	if err != nil {
@@ -289,4 +409,49 @@ func (c *ScheduledChangeService) applyPaidScheduledChange(
 		slog.String("payment_id", payment.ID.String()),
 		slog.String("error", sanitize.Error(chargeErr)))
 	return nil
+}
+
+// clearPendingScheduledChangeBestEffort clears a subscription's pending_* fields
+// in a short dedicated transaction. It is used on terminal failure paths that run
+// without an open transaction (for example a provider Init failure), so the worker
+// does not re-list the row after the in-progress capture TTL elapses.
+func (c *ScheduledChangeService) clearPendingScheduledChangeBestEffort(ctx context.Context, subscriptionID uuid.UUID) {
+	tx, err := c.deps.beginner.Begin(ctx)
+	if err != nil {
+		c.deps.log.ErrorContext(ctx, "failed to begin transaction to clear scheduled change",
+			slog.String("subscription_id", subscriptionID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txSubscriptions, err := c.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		c.deps.log.ErrorContext(ctx, "failed to bind subscription transaction to clear scheduled change",
+			slog.String("subscription_id", subscriptionID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+
+	sub, err := txSubscriptions.GetByIDForUpdate(ctx, subscriptionID)
+	if err != nil {
+		c.deps.log.ErrorContext(ctx, "failed to load subscription to clear scheduled change",
+			slog.String("subscription_id", subscriptionID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+	sub.PendingTariffID = nil
+	sub.PendingChangeAt = nil
+	sub.PendingPeriod = nil
+	if err := txSubscriptions.Update(ctx, sub); err != nil {
+		c.deps.log.ErrorContext(ctx, "failed to clear scheduled change",
+			slog.String("subscription_id", subscriptionID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+	if err := tx.Commit(ctx); err != nil {
+		c.deps.log.ErrorContext(ctx, "failed to commit scheduled change cleanup",
+			slog.String("subscription_id", subscriptionID.String()),
+			slog.String("error", sanitize.Error(err)))
+	}
 }

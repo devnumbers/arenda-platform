@@ -277,3 +277,77 @@ func TestSubscriptionPaymentRepository_MarkRefunded_PendingPayment(t *testing.T)
 		t.Errorf("RefundedAmountKopecks = %v, want %d", got.RefundedAmountKopecks, created.AmountKopecks)
 	}
 }
+
+func TestSubscriptionPaymentRepository_BeginRefund_Guard(t *testing.T) {
+	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	defer cleanup()
+
+	ctx := t.Context()
+
+	// Each helper call creates a fresh pending payment. The unique index on
+	// (user_id, tariff_id, period) only applies to pending rows, and every test
+	// case transitions its payment out of pending before returning, so the next
+	// case can create another pending payment for the same user/tariff/period.
+	createPending := func() domain.SubscriptionPayment {
+		t.Helper()
+		payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
+		if err != nil {
+			t.Fatalf("new subscription payment: %v", err)
+		}
+		created, err := repo.Create(ctx, payment)
+		if err != nil {
+			t.Fatalf("Create error = %v", err)
+		}
+		return created
+	}
+
+	t.Run("succeeded to refunding ok", func(t *testing.T) {
+		p := createPending()
+		if err := repo.MarkSucceeded(ctx, p.ID, time.Now().UTC()); err != nil {
+			t.Fatalf("MarkSucceeded error = %v", err)
+		}
+		if err := repo.BeginRefund(ctx, p.ID, time.Now().UTC()); err != nil {
+			t.Fatalf("BeginRefund on succeeded error = %v", err)
+		}
+		got, err := repo.GetByID(ctx, p.ID)
+		if err != nil {
+			t.Fatalf("GetByID error = %v", err)
+		}
+		if got.Status != domain.PaymentStatusRefunding {
+			t.Errorf("Status = %q, want %q", got.Status, domain.PaymentStatusRefunding)
+		}
+	})
+
+	t.Run("refunding to refunding rejected", func(t *testing.T) {
+		p := createPending()
+		if err := repo.BeginRefund(ctx, p.ID, time.Now().UTC()); err != nil {
+			t.Fatalf("first BeginRefund error = %v", err)
+		}
+		err := repo.BeginRefund(ctx, p.ID, time.Now().UTC())
+		if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+			t.Errorf("second BeginRefund error = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+
+	t.Run("refunded rejected", func(t *testing.T) {
+		p := createPending()
+		if err := repo.MarkRefunded(ctx, p.ID, time.Now().UTC()); err != nil {
+			t.Fatalf("MarkRefunded error = %v", err)
+		}
+		err := repo.BeginRefund(ctx, p.ID, time.Now().UTC())
+		if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+			t.Errorf("BeginRefund on refunded error = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+
+	t.Run("failed rejected", func(t *testing.T) {
+		p := createPending()
+		if err := repo.MarkFailed(ctx, p.ID, nil, time.Now().UTC()); err != nil {
+			t.Fatalf("MarkFailed error = %v", err)
+		}
+		err := repo.BeginRefund(ctx, p.ID, time.Now().UTC())
+		if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+			t.Errorf("BeginRefund on failed error = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+}

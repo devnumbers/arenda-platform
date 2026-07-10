@@ -8,8 +8,21 @@ package postgres
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const beginSubscriptionPaymentRefund = `-- name: BeginSubscriptionPaymentRefund :execresult
+UPDATE subscription_payments
+SET status = 'refunding'
+WHERE id = $1 AND status IN ('succeeded', 'pending')
+`
+
+// Atomically reserve a payment for an in-flight refund. updated_at is maintained
+// by the trg_subscription_payments_updated_at trigger, so it is not set here.
+func (q *Queries) BeginSubscriptionPaymentRefund(ctx context.Context, id pgtype.UUID) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, beginSubscriptionPaymentRefund, id)
+}
 
 const countSubscriptionPaymentsAdmin = `-- name: CountSubscriptionPaymentsAdmin :one
 SELECT COUNT(*)
@@ -1221,7 +1234,7 @@ func (q *Queries) MarkSubscriptionPaymentFailed(ctx context.Context, arg MarkSub
 const markSubscriptionPaymentRefunded = `-- name: MarkSubscriptionPaymentRefunded :one
 UPDATE subscription_payments
 SET status = $2, refunded_amount_kopecks = $3, updated_at = $4
-WHERE id = $1 AND status IN ('succeeded', 'pending')
+WHERE id = $1 AND status IN ('succeeded', 'pending', 'refunding')
 RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
 `
 
@@ -1295,6 +1308,23 @@ func (q *Queries) MarkSubscriptionPaymentSucceeded(ctx context.Context, arg Mark
 		&i.RefundedAmountKopecks,
 	)
 	return i, err
+}
+
+const revertSubscriptionPaymentRefund = `-- name: RevertSubscriptionPaymentRefund :execresult
+UPDATE subscription_payments
+SET status = $2
+WHERE id = $1 AND status = 'refunding'
+`
+
+type RevertSubscriptionPaymentRefundParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Status string      `json:"status"`
+}
+
+// Roll back an in-flight refund reservation to the previous status ($2).
+// updated_at is maintained by the trg_subscription_payments_updated_at trigger.
+func (q *Queries) RevertSubscriptionPaymentRefund(ctx context.Context, arg RevertSubscriptionPaymentRefundParams) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, revertSubscriptionPaymentRefund, arg.ID, arg.Status)
 }
 
 const updatePaymentMethodActiveByID = `-- name: UpdatePaymentMethodActiveByID :one
