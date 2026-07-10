@@ -3011,7 +3011,7 @@ func TestBilling_renewSubscription_ChargeCalledOutsideTransaction(t *testing.T) 
 		}
 	}
 
-	renewal := NewRenewalService(newFlowDeps(d.tariffs, d.subscriptions, d.paymentMethods, d.subscriptionPayments, d.propertyArchiver, d.provider, d.beginner, d.clock, discardLogger(), "http://localhost"), d.provider)
+	renewal := NewRenewalService(renewalServiceDeps{flowDeps: newFlowDeps(d.tariffs, d.subscriptions, d.paymentMethods, d.subscriptionPayments, d.propertyArchiver, d.provider, d.beginner, d.clock, discardLogger(), "http://localhost")}, d.provider)
 	if err := renewal.renewSubscription(context.Background(), d.subscriptions.subs[userID], fixedNow); err != nil {
 		t.Fatalf("renewSubscription error: %v", err)
 	}

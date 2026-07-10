@@ -15,12 +15,12 @@ import (
 
 // PaymentService lists and acts on subscription payments.
 type PaymentService struct {
-	deps     flowDeps
+	deps     paymentServiceDeps
 	provider PaymentManager
 }
 
 // NewPaymentService creates a PaymentService.
-func NewPaymentService(deps flowDeps, provider PaymentManager) *PaymentService {
+func NewPaymentService(deps paymentServiceDeps, provider PaymentManager) *PaymentService {
 	return &PaymentService{deps: deps, provider: provider}
 }
 
@@ -147,7 +147,7 @@ func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 
 	if payment.Status == domain.PaymentStatusSucceeded || payment.Status == domain.PaymentStatusFailed {
 		if payment.Status == domain.PaymentStatusSucceeded {
-			applySubscriptionRenewalAndArchive(ctx, s.deps, payment)
+			applySubscriptionRenewalAndArchive(ctx, s.deps.flowDeps, payment)
 		}
 		return nil
 	}
@@ -162,7 +162,7 @@ func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 		return fmt.Errorf("confirm fake payment: %w", err)
 	}
 
-	if err := applyPaymentResult(ctx, s.deps, tx, &payment, payload); err != nil {
+	if err := applyPaymentResult(ctx, s.deps.flowDeps, tx, &payment, payload); err != nil {
 		return err
 	}
 
@@ -170,7 +170,7 @@ func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 		return fmt.Errorf("commit fake payment confirmation transaction: %w", err)
 	}
 
-	applySubscriptionRenewalAndArchive(ctx, s.deps, payment)
+	applySubscriptionRenewalAndArchive(ctx, s.deps.flowDeps, payment)
 	return nil
 }
 
@@ -299,7 +299,7 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 		return fmt.Errorf("mark payment refunded: %w", err)
 	}
 
-	if err := applyRefundToSubscription(ctx, s.deps, resultTx, payment.SubscriptionID); err != nil {
+	if err := applyRefundToSubscription(ctx, s.deps.flowDeps, resultTx, payment.SubscriptionID); err != nil {
 		return err
 	}
 
@@ -440,7 +440,7 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 		AmountKopecks:     payment.AmountKopecks,
 	}
 
-	if err := applyPaymentResult(ctx, s.deps, tx, &payment, payload); err != nil {
+	if err := applyPaymentResult(ctx, s.deps.flowDeps, tx, &payment, payload); err != nil {
 		return err
 	}
 
@@ -458,7 +458,7 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 		}
 
 	case domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
-		if err := applyRefundToSubscription(ctx, s.deps, tx, payment.SubscriptionID); err != nil {
+		if err := applyRefundToSubscription(ctx, s.deps.flowDeps, tx, payment.SubscriptionID); err != nil {
 			return err
 		}
 	}
@@ -468,7 +468,7 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 	}
 
 	if status == domain.PaymentStatusSucceeded {
-		applySubscriptionRenewalAndArchive(ctx, s.deps, payment)
+		applySubscriptionRenewalAndArchive(ctx, s.deps.flowDeps, payment)
 	}
 
 	return nil

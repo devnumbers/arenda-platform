@@ -14,12 +14,12 @@ import (
 
 // SubscriptionService manages the current user's subscription and tariff changes.
 type SubscriptionService struct {
-	deps     flowDeps
+	deps     subscriptionServiceDeps
 	provider SubscriptionPaymentProvider
 }
 
 // NewSubscriptionService creates a SubscriptionService.
-func NewSubscriptionService(deps flowDeps, provider SubscriptionPaymentProvider) *SubscriptionService {
+func NewSubscriptionService(deps subscriptionServiceDeps, provider SubscriptionPaymentProvider) *SubscriptionService {
 	return &SubscriptionService{deps: deps, provider: provider}
 }
 
@@ -279,7 +279,7 @@ func (s *SubscriptionService) changeTariffUpgrade(
 		Description:            truncateTkassaDescription(upgradePaymentDescription(newTariff.Name, period)),
 	})
 	if err != nil {
-		markPaymentFailedBestEffort(ctx, s.deps, payment.ID, now)
+		markPaymentFailedBestEffort(ctx, s.deps.flowDeps, payment.ID, now)
 		return ChangeTariffResponse{}, sanitize.Wrap(err, "init payment")
 	}
 
@@ -287,7 +287,7 @@ func (s *SubscriptionService) changeTariffUpgrade(
 	// provider reference and any newly created payment method atomically in a
 	// single transaction so a crash cannot leave a pending payment without a
 	// provider reference.
-	payment, err = saveProviderInitResult(ctx, s.deps, payment, initRes, userID, now)
+	payment, err = saveProviderInitResult(ctx, s.deps.flowDeps, payment, initRes, userID, now)
 	if err != nil {
 		return ChangeTariffResponse{}, err
 	}
@@ -317,11 +317,11 @@ func (s *SubscriptionService) recoverUpgradeProviderReference(ctx context.Contex
 		Description:            truncateTkassaDescription(upgradePaymentDescription(newTariff.Name, period)),
 	})
 	if err != nil {
-		markPaymentFailedBestEffort(ctx, s.deps, payment.ID, now)
+		markPaymentFailedBestEffort(ctx, s.deps.flowDeps, payment.ID, now)
 		return ChangeTariffResponse{}, sanitize.Wrap(err, "recover provider reference")
 	}
 
-	payment, err = saveProviderInitResult(ctx, s.deps, payment, initRes, userID, now)
+	payment, err = saveProviderInitResult(ctx, s.deps.flowDeps, payment, initRes, userID, now)
 	if err != nil {
 		return ChangeTariffResponse{}, fmt.Errorf("recover provider reference: %w", err)
 	}

@@ -13,12 +13,12 @@ import (
 
 // WebhookService handles provider webhooks.
 type WebhookService struct {
-	deps     flowDeps
+	deps     webhookServiceDeps
 	provider WebhookProvider
 }
 
 // NewWebhookService creates a WebhookService.
-func NewWebhookService(deps flowDeps, provider WebhookProvider) *WebhookService {
+func NewWebhookService(deps webhookServiceDeps, provider WebhookProvider) *WebhookService {
 	return &WebhookService{deps: deps, provider: provider}
 }
 
@@ -55,7 +55,7 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 			return fmt.Errorf("invalid customer key: %w", err)
 		}
 
-		pm, err := buildPaymentMethodFromWebhook(s.deps, userID, result)
+		pm, err := buildPaymentMethodFromWebhook(s.deps.flowDeps, userID, result)
 		if err != nil {
 			return err
 		}
@@ -136,7 +136,7 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 		// In that case we must process the refund instead of ignoring it.
 		if result.Status != domain.PaymentStatusRefunded && result.Status != domain.PaymentStatusPartialRefunded {
 			if payment.Status == domain.PaymentStatusSucceeded {
-				applySubscriptionRenewalAndArchive(ctx, s.deps, payment)
+				applySubscriptionRenewalAndArchive(ctx, s.deps.flowDeps, payment)
 				return nil
 			}
 			// payment.Status == domain.PaymentStatusFailed && result.Status == domain.PaymentStatusSucceeded.
@@ -151,14 +151,14 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 			}
 			// Release the row lock before the outbound HTTP call.
 			_ = tx.Rollback(ctx)
-			return reconcileFailedPayment(ctx, s.deps, s.provider, payment, result)
+			return reconcileFailedPayment(ctx, s.deps.flowDeps, s.provider, payment, result)
 		}
 	}
 
 	switch result.Status {
 	case domain.PaymentStatusPending:
 		// AUTHORIZED: credentials received, payment stays pending until CONFIRMED.
-		pm, err := upsertPaymentMethodFromWebhook(ctx, s.deps, tx, payment.UserID, result)
+		pm, err := upsertPaymentMethodFromWebhook(ctx, s.deps.flowDeps, tx, payment.UserID, result)
 		if err != nil {
 			return err
 		}
@@ -178,7 +178,7 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 		return tx.Commit(ctx)
 
 	case domain.PaymentStatusSucceeded, domain.PaymentStatusFailed, domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
-		if err := applyPaymentResult(ctx, s.deps, tx, &payment, result); err != nil {
+		if err := applyPaymentResult(ctx, s.deps.flowDeps, tx, &payment, result); err != nil {
 			return err
 		}
 
@@ -196,7 +196,7 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 			}
 
 		case domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
-			if err := applyRefundToSubscription(ctx, s.deps, tx, payment.SubscriptionID); err != nil {
+			if err := applyRefundToSubscription(ctx, s.deps.flowDeps, tx, payment.SubscriptionID); err != nil {
 				return err
 			}
 		}
@@ -206,7 +206,7 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 		}
 
 		if result.Status == domain.PaymentStatusSucceeded {
-			applySubscriptionRenewalAndArchive(ctx, s.deps, payment)
+			applySubscriptionRenewalAndArchive(ctx, s.deps.flowDeps, payment)
 		}
 		return nil
 

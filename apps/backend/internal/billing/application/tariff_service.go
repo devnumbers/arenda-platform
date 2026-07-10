@@ -9,11 +9,11 @@ import (
 
 // TariffService handles read-only tariff queries.
 type TariffService struct {
-	deps flowDeps
+	deps tariffServiceDeps
 }
 
 // NewTariffService creates a TariffService.
-func NewTariffService(deps flowDeps) *TariffService {
+func NewTariffService(deps tariffServiceDeps) *TariffService {
 	return &TariffService{deps: deps}
 }
 

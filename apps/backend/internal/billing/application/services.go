@@ -25,8 +25,33 @@ type Services struct {
 	Onboarding       OnboardingService
 }
 
-// NewServices builds the billing sub-services from one shared flowDeps value
-// and returns them typed as their consumer-facing ports.
+// tariffServiceDeps is the narrow dependency bundle for TariffService. It embeds
+// the shared flowDeps so field access (s.deps.tariffs) and the cross-cutting flow
+// helpers in flows.go keep working unchanged while the service is wired through
+// its own typed deps at the composition point.
+type tariffServiceDeps struct{ flowDeps }
+
+// subscriptionServiceDeps is the narrow dependency bundle for SubscriptionService.
+type subscriptionServiceDeps struct{ flowDeps }
+
+// paymentMethodServiceDeps is the narrow dependency bundle for PaymentMethodService.
+type paymentMethodServiceDeps struct{ flowDeps }
+
+// paymentServiceDeps is the narrow dependency bundle for PaymentService.
+type paymentServiceDeps struct{ flowDeps }
+
+// renewalServiceDeps is the narrow dependency bundle for RenewalService.
+type renewalServiceDeps struct{ flowDeps }
+
+// webhookServiceDeps is the narrow dependency bundle for WebhookService.
+type webhookServiceDeps struct{ flowDeps }
+
+// scheduledChangeServiceDeps is the narrow dependency bundle for ScheduledChangeService.
+type scheduledChangeServiceDeps struct{ flowDeps }
+
+// NewServices builds the billing sub-services from one shared flowDeps value,
+// wraps it into each sub-service's narrow deps type, and returns them typed as
+// their consumer-facing ports.
 func NewServices(
 	tariffs TariffRepository,
 	subscriptions SubscriptionRepository,
@@ -54,13 +79,13 @@ func NewServices(
 		callbackBaseURL,
 	)
 	return Services{
-		Tariffs:          NewTariffService(deps),
-		Subscriptions:    NewSubscriptionService(deps, provider),
-		PaymentMethods:   NewPaymentMethodService(deps, paymentMethodInUseChecker, provider),
-		Payments:         NewPaymentService(deps, provider),
-		Webhooks:         NewWebhookService(deps, provider),
-		Renewals:         NewRenewalService(deps, provider),
-		ScheduledChanges: NewScheduledChangeService(deps, provider),
+		Tariffs:          NewTariffService(tariffServiceDeps{flowDeps: deps}),
+		Subscriptions:    NewSubscriptionService(subscriptionServiceDeps{flowDeps: deps}, provider),
+		PaymentMethods:   NewPaymentMethodService(paymentMethodServiceDeps{flowDeps: deps}, paymentMethodInUseChecker, provider),
+		Payments:         NewPaymentService(paymentServiceDeps{flowDeps: deps}, provider),
+		Webhooks:         NewWebhookService(webhookServiceDeps{flowDeps: deps}, provider),
+		Renewals:         NewRenewalService(renewalServiceDeps{flowDeps: deps}, provider),
+		ScheduledChanges: NewScheduledChangeService(scheduledChangeServiceDeps{flowDeps: deps}, provider),
 		Onboarding:       onboarding,
 	}
 }

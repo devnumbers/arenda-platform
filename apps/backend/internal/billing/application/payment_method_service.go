@@ -13,13 +13,13 @@ import (
 
 // PaymentMethodService manages the user's saved payment methods.
 type PaymentMethodService struct {
-	deps     flowDeps
+	deps     paymentMethodServiceDeps
 	checker  PaymentMethodInUseChecker
 	provider CardProvider
 }
 
 // NewPaymentMethodService creates a PaymentMethodService.
-func NewPaymentMethodService(deps flowDeps, checker PaymentMethodInUseChecker, provider CardProvider) *PaymentMethodService {
+func NewPaymentMethodService(deps paymentMethodServiceDeps, checker PaymentMethodInUseChecker, provider CardProvider) *PaymentMethodService {
 	return &PaymentMethodService{deps: deps, checker: checker, provider: provider}
 }
 
