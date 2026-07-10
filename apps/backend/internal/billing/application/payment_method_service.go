@@ -115,12 +115,11 @@ func (s *PaymentMethodService) SetActivePaymentMethod(ctx context.Context, userI
 }
 
 // DeletePaymentMethod removes a payment method belonging to the user.
-// The active/in-use check and the local deletion run atomically in a single
-// transaction; for T-Kassa the provider card is detached best-effort afterwards,
-// so a provider failure cannot leave the local row in place.
+// Existence, ownership, the active-method guard and the in-use check all run
+// inside a single transaction so they cannot race with concurrent updates.
+// For T-Kassa the provider card is detached best-effort afterwards, so a
+// provider failure cannot leave the local row in place.
 func (s *PaymentMethodService) DeletePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error {
-	// Validate existence, ownership and active status and delete atomically inside
-	// a single transaction so the active check cannot race with concurrent updates.
 	tx, err := s.deps.beginner.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -130,6 +129,11 @@ func (s *PaymentMethodService) DeletePaymentMethod(ctx context.Context, userID, 
 	txPaymentMethods, err := s.deps.paymentMethods.WithTx(tx)
 	if err != nil {
 		return fmt.Errorf("bind payment methods transaction: %w", err)
+	}
+
+	txChecker, err := s.checker.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind in-use checker transaction: %w", err)
 	}
 
 	pm, err := txPaymentMethods.GetByID(ctx, methodID)
@@ -146,7 +150,7 @@ func (s *PaymentMethodService) DeletePaymentMethod(ctx context.Context, userID, 
 		return ErrPaymentMethodInUse
 	}
 
-	inUse, err := s.checker.IsInUse(ctx, methodID)
+	inUse, err := txChecker.IsInUse(ctx, methodID)
 	if err != nil {
 		return fmt.Errorf("check payment method in use: %w", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // PaymentMethodInUseChecker implements application.PaymentMethodInUseChecker.
@@ -27,6 +28,15 @@ func (c *PaymentMethodInUseChecker) IsInUse(ctx context.Context, methodID uuid.U
 		return false, fmt.Errorf("count subscriptions by active payment method: %w", err)
 	}
 	return count > 0, nil
+}
+
+// WithTx returns a checker bound to the given transaction.
+func (c *PaymentMethodInUseChecker) WithTx(tx transaction.Tx) (application.PaymentMethodInUseChecker, error) {
+	dbtx, ok := tx.(postgres.DBTX)
+	if !ok {
+		return nil, fmt.Errorf("billing.PaymentMethodInUseChecker.WithTx: %T is not a postgres.DBTX", tx)
+	}
+	return NewPaymentMethodInUseChecker(dbtx), nil
 }
 
 var _ application.PaymentMethodInUseChecker = (*PaymentMethodInUseChecker)(nil)

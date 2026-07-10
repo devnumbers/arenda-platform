@@ -573,6 +573,10 @@ func (c *fakePaymentMethodInUseChecker) IsInUse(_ context.Context, methodID uuid
 	return c.inUse[methodID], nil
 }
 
+func (c *fakePaymentMethodInUseChecker) WithTx(transaction.Tx) (PaymentMethodInUseChecker, error) {
+	return c, nil
+}
+
 // --- property archiver fake ---
 
 type fakePropertyArchiver struct {
@@ -1226,6 +1230,39 @@ func TestBilling_DeletePaymentMethod_RejectsActiveMethodInSingleTransaction(t *t
 	}
 	if d.provider.removeCardCalled {
 		t.Error("expected provider.RemoveCard not to be called for active method")
+	}
+	// The active-method guard runs inside the single transaction, which is rolled
+	// back on rejection; nothing is committed.
+	if d.beginner.begun != 1 || d.beginner.committed != 0 {
+		t.Errorf("expected one rolled-back transaction, got begun=%d committed=%d", d.beginner.begun, d.beginner.committed)
+	}
+	if d.beginner.rolledBack != 1 {
+		t.Errorf("expected the transaction to be rolled back, got rolledBack=%d", d.beginner.rolledBack)
+	}
+}
+
+func TestBilling_DeletePaymentMethod_RejectsInUseMethodInSingleTransaction(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+	methodID := uuid.MustParse("11111111-1111-1111-1111-111111111113")
+
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:       methodID,
+		UserID:   userID,
+		Provider: domain.ProviderFake,
+		IsActive: false,
+	}
+	d.inUseChecker.inUse = map[uuid.UUID]bool{methodID: true}
+
+	err := d.service.PaymentMethods.DeletePaymentMethod(context.Background(), userID, methodID)
+	if !errors.Is(err, ErrPaymentMethodInUse) {
+		t.Fatalf("expected ErrPaymentMethodInUse, got %v", err)
+	}
+	if _, ok := d.paymentMethods.methods[methodID]; !ok {
+		t.Error("expected in-use method to remain (not deleted)")
+	}
+	if d.provider.removeCardCalled {
+		t.Error("expected provider.RemoveCard not to be called for in-use method")
 	}
 	// The in-use check runs inside the single transaction, which is rolled back
 	// on rejection; nothing is committed.

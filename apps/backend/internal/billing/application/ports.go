@@ -65,6 +65,7 @@ type PaymentMethodRepository interface {
 // repository does not own business rules.
 type PaymentMethodInUseChecker interface {
 	IsInUse(ctx context.Context, methodID uuid.UUID) (bool, error)
+	WithTx(tx transaction.Tx) (PaymentMethodInUseChecker, error)
 }
 
 type SubscriptionPaymentRepository interface {
