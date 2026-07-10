@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -20,23 +19,23 @@ import (
 type SDK struct {
 	tracerProvider *sdktrace.TracerProvider
 	meterProvider  *sdkmetric.MeterProvider
-	logger         *slog.Logger
 }
 
 // Config controls whether observability is enabled and how it exports.
 type Config struct {
-	ServiceName   string
-	Enabled       bool
-	OTLPEndpoint  string
-	TraceSampler  float64
+	ServiceName  string
+	Enabled      bool
+	OTLPEndpoint string
+	TraceSampler float64
 }
 
 // NewSDK initializes tracer and meter providers when enabled. Callers must
 // invoke Shutdown before exit.
-func NewSDK(ctx context.Context, cfg Config, logger *slog.Logger) (*SDK, error) {
+func NewSDK(ctx context.Context, cfg Config) (*SDK, error) {
 	if !cfg.Enabled {
-		return &SDK{logger: logger}, nil
+		return &SDK{}, nil
 	}
+
 	res, err := sdkresource.New(ctx,
 		sdkresource.WithAttributes(
 			semconv.ServiceName(cfg.ServiceName),
@@ -46,33 +45,55 @@ func NewSDK(ctx context.Context, cfg Config, logger *slog.Logger) (*SDK, error) 
 		return nil, fmt.Errorf("observability resource: %w", err)
 	}
 
-	traceExp, err := otlptracegrpc.New(ctx)
+	sampler := cfg.TraceSampler
+	if sampler < 0 {
+		sampler = 0
+	}
+	if sampler > 1 {
+		sampler = 1
+	}
+
+	traceOpts := []otlptracegrpc.Option{}
+	if cfg.OTLPEndpoint != "" {
+		traceOpts = append(traceOpts, otlptracegrpc.WithEndpointURL(cfg.OTLPEndpoint))
+	}
+	traceExp, err := otlptracegrpc.New(ctx, traceOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("observability trace exporter: %w", err)
 	}
+
+	metricOpts := []otlpmetricgrpc.Option{}
+	if cfg.OTLPEndpoint != "" {
+		metricOpts = append(metricOpts, otlpmetricgrpc.WithEndpointURL(cfg.OTLPEndpoint))
+	}
+	metricExp, err := otlpmetricgrpc.New(ctx, metricOpts...)
+	if err != nil {
+		_ = traceExp.Shutdown(ctx)
+		return nil, fmt.Errorf("observability metric exporter: %w", err)
+	}
+
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(traceExp),
 		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sdktrace.TraceIDRatioBased(cfg.TraceSampler)),
+		sdktrace.WithSampler(sdktrace.TraceIDRatioBased(sampler)),
 	)
-	otel.SetTracerProvider(tp)
-
-	metricExp, err := otlpmetricgrpc.New(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("observability metric exporter: %w", err)
-	}
 	mp := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExp)),
 		sdkmetric.WithResource(res),
 	)
-	otel.SetMeterProvider(mp)
 
-	otel.SetTextMapPropagator(propagation.TraceContext{})
+	otel.SetTracerProvider(tp)
+	otel.SetMeterProvider(mp)
+	otel.SetTextMapPropagator(
+		propagation.NewCompositeTextMapPropagator(
+			propagation.TraceContext{},
+			propagation.Baggage{},
+		),
+	)
 
 	return &SDK{
 		tracerProvider: tp,
 		meterProvider:  mp,
-		logger:         logger,
 	}, nil
 }
 
