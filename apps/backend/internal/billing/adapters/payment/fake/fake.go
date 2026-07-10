@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
@@ -81,12 +82,14 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 		return application.InitResult{}, errors.New("fake: amount must be positive")
 	}
 
+	log := logger.WithCorrelation(ctx, p.log)
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.purgeLocked()
 
 	if entry, ok := p.pending[req.PaymentID.String()]; ok {
-		p.log.InfoContext(ctx, "fake payment init is idempotent",
+		log.InfoContext(ctx, "fake payment init is idempotent",
 			"provider_payment_id", entry.payload.ProviderPaymentID,
 			"internal_payment_id", req.PaymentID.String(),
 		)
@@ -112,7 +115,7 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 		createdAt:     p.clock.Now().UTC(),
 	}
 
-	p.log.InfoContext(ctx, "fake payment initialized",
+	log.InfoContext(ctx, "fake payment initialized",
 		"provider_payment_id", providerPaymentID,
 		"internal_payment_id", req.PaymentID.String(),
 		"user_id", req.UserID.String(),
@@ -163,10 +166,12 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 		return application.ChargeResult{}, errors.New("fake: amount must be positive")
 	}
 
+	log := logger.WithCorrelation(ctx, p.log)
+
 	providerPaymentID := fakeProviderPaymentIDPrefix + uuid.NewString()
 
 	if strings.HasPrefix(req.Token, fakeFailTokenPrefix) {
-		p.log.InfoContext(ctx, "fake charge failed",
+		log.InfoContext(ctx, "fake charge failed",
 			"provider_payment_id", providerPaymentID,
 			"internal_payment_id", req.PaymentID.String(),
 		)
@@ -176,7 +181,7 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 		}, nil
 	}
 
-	p.log.InfoContext(ctx, "fake charge succeeded",
+	log.InfoContext(ctx, "fake charge succeeded",
 		"provider_payment_id", providerPaymentID,
 		"internal_payment_id", req.PaymentID.String(),
 	)
@@ -215,6 +220,8 @@ func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (a
 		return application.CancelResult{}, errors.New("fake: provider payment id is required")
 	}
 
+	log := logger.WithCorrelation(ctx, p.log)
+
 	refundedAmount := req.AmountKopecks
 	if refundedAmount == 0 {
 		p.mu.Lock()
@@ -230,7 +237,7 @@ func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (a
 	// always reports a full refund.
 	status := domain.PaymentStatusRefunded
 
-	p.log.InfoContext(ctx, "fake payment cancelled",
+	log.InfoContext(ctx, "fake payment cancelled",
 		"provider_payment_id", req.ProviderPaymentID,
 		"internal_payment_id", req.PaymentID.String(),
 		"amount_kopecks", refundedAmount,
