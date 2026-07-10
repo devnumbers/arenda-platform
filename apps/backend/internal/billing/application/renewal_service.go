@@ -102,41 +102,56 @@ func (r *RenewalService) processSubscriptionBatch(
 }
 
 func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subscription, now time.Time) error {
-	// First transaction: lock the subscription, resolve the renewal terms, and
-	// persist a pending payment. This transaction is committed *before* the
-	// external provider call so the database connection is not held during an
-	// unbounded HTTP request.
+	payment, pm, amount, period, renewalTariff, err := r.prepareRenewalPayment(ctx, sub, now)
+	if err != nil {
+		return err
+	}
+	if payment.ID == uuid.Nil {
+		return nil
+	}
+	return r.finalizeRenewalCharge(ctx, sub, payment, pm, amount, period, renewalTariff, now)
+}
+
+// prepareRenewalPayment locks the subscription, resolves the renewal terms, and
+// persists a pending payment. The transaction is committed *before* returning
+// so the database connection is not held during the unbounded external provider
+// call. All early-exit paths return a zero payment and a nil error.
+func (r *RenewalService) prepareRenewalPayment(
+	ctx context.Context,
+	sub domain.Subscription,
+	now time.Time,
+) (payment domain.SubscriptionPayment, pm domain.PaymentMethod, amount int64, period domain.SubscriptionPeriod, renewalTariff domain.Tariff, err error) {
 	tx, err := r.deps.beginner.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txSubscriptions, err := r.deps.subscriptions.WithTx(tx)
 	if err != nil {
-		return fmt.Errorf("bind subscriptions transaction: %w", err)
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("bind subscriptions transaction: %w", err)
 	}
 	txSubscriptionPayments, err := r.deps.subscriptionPayments.WithTx(tx)
 	if err != nil {
-		return fmt.Errorf("bind subscription payments transaction: %w", err)
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("bind subscription payments transaction: %w", err)
 	}
 	txPaymentMethods, err := r.deps.paymentMethods.WithTx(tx)
 	if err != nil {
-		return fmt.Errorf("bind payment methods transaction: %w", err)
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("bind payment methods transaction: %w", err)
 	}
 
 	sub, err = txSubscriptions.GetByIDForUpdate(ctx, sub.ID)
 	if err != nil {
-		return fmt.Errorf("get subscription for update: %w", err)
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("get subscription for update: %w", err)
 	}
 
 	if sub.Status != domain.SubscriptionStatusActive || !sub.AutoRenewEnabled || sub.ValidUntil == nil || sub.ValidUntil.After(now) {
-		return nil
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, nil
 	}
 
-	renewalTariff, period, amount, err := r.resolveRenewalTariffAndAmount(ctx, tx, sub)
+	renewalTariff, period, amount, err = r.resolveRenewalTariffAndAmount(ctx, tx, sub)
 	if err != nil {
-		return err
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, err
 	}
 
 	// If a previous succeeded payment for the same renewal tariff was not fully
@@ -144,49 +159,57 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 	// reconcile it now instead of creating a duplicate payment.
 	lastSucceeded, err := txSubscriptionPayments.GetLastSucceededBySubscriptionID(ctx, sub.ID)
 	if err != nil && !errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("get last succeeded payment: %w", err)
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("get last succeeded payment: %w", err)
 	}
 	if err == nil && lastSucceeded.TariffID == renewalTariff.ID && !isSubscriptionRenewalApplied(sub, lastSucceeded) {
 		_ = tx.Rollback(ctx)
 		applySubscriptionRenewalBestEffort(ctx, r.deps, sub.ID, lastSucceeded, now)
-		return nil
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, nil
 	}
 
 	// Free tariff changes (e.g. downgrade to basic) do not require a charge.
 	if amount <= 0 {
 		if err := applyFreeRenewalOrDowngrade(ctx, r.deps, tx, &sub, renewalTariff, period, uuid.Nil, now); err != nil {
-			return err
+			return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, err
 		}
-		return tx.Commit(ctx)
+		if err := tx.Commit(ctx); err != nil {
+			return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("commit free renewal transaction: %w", err)
+		}
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, nil
 	}
 
 	if sub.ActivePaymentMethodID == nil {
 		sub.EnterGrace(now)
 		if err := txSubscriptions.Update(ctx, sub); err != nil {
-			return fmt.Errorf("transition to grace: %w", err)
+			return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("transition to grace: %w", err)
 		}
-		return tx.Commit(ctx)
+		if err := tx.Commit(ctx); err != nil {
+			return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("commit grace transition transaction: %w", err)
+		}
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, nil
 	}
 
-	pm, err := txPaymentMethods.GetByID(ctx, *sub.ActivePaymentMethodID)
+	pm, err = txPaymentMethods.GetByID(ctx, *sub.ActivePaymentMethodID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			sub.EnterGrace(now)
 			if err := txSubscriptions.Update(ctx, sub); err != nil {
-				return fmt.Errorf("transition to grace: %w", err)
+				return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("transition to grace: %w", err)
 			}
-			return tx.Commit(ctx)
+			if err := tx.Commit(ctx); err != nil {
+				return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("commit grace transition transaction: %w", err)
+			}
+			return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, nil
 		}
-		return fmt.Errorf("get active payment method: %w", err)
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("get active payment method: %w", err)
 	}
 
 	// Look for an existing pending renewal payment for the same terms. If a
 	// previous run created the pending row but crashed before saving the provider
 	// reference, recover it idempotently instead of creating a duplicate.
-	var payment domain.SubscriptionPayment
 	pendingPayments, err := txSubscriptionPayments.ListPendingSubscriptionPaymentsByUserID(ctx, sub.UserID)
 	if err != nil {
-		return fmt.Errorf("list pending renewal payments: %w", err)
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("list pending renewal payments: %w", err)
 	}
 	for _, p := range pendingPayments {
 		if p.SubscriptionID == sub.ID && p.TariffID == renewalTariff.ID && p.Period == period {
@@ -201,7 +224,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 	if payment.ID != uuid.Nil && (payment.PaymentMethodID == nil || *payment.PaymentMethodID != pm.ID) {
 		payment, err = txSubscriptionPayments.UpdatePaymentMethodID(ctx, payment.ID, pm.ID)
 		if err != nil {
-			return fmt.Errorf("update pending renewal payment method: %w", err)
+			return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("update pending renewal payment method: %w", err)
 		}
 	}
 
@@ -217,19 +240,34 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 			now,
 		)
 		if err != nil {
-			return fmt.Errorf("create renewal payment: %w", err)
+			return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("create renewal payment: %w", err)
 		}
 
 		payment, err = txSubscriptionPayments.Create(ctx, payment)
 		if err != nil {
-			return fmt.Errorf("save renewal payment: %w", err)
+			return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("save renewal payment: %w", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit pending renewal payment transaction: %w", err)
+		return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("commit pending renewal payment transaction: %w", err)
 	}
 
+	return payment, pm, amount, period, renewalTariff, nil
+}
+
+// finalizeRenewalCharge idempotently initializes the provider payment, charges
+// the active payment method, and applies the result in a second transaction.
+func (r *RenewalService) finalizeRenewalCharge(
+	ctx context.Context,
+	sub domain.Subscription,
+	payment domain.SubscriptionPayment,
+	pm domain.PaymentMethod,
+	amount int64,
+	period domain.SubscriptionPeriod,
+	renewalTariff domain.Tariff,
+	now time.Time,
+) error {
 	// Recover a missing provider reference idempotently before charging.
 	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
 		notification, successURL, failURL := tkassaCallbackURLs(r.deps.callbackBaseURL, payment.ID)
