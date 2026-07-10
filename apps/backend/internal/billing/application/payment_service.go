@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -77,22 +78,16 @@ func (s *PaymentService) GetPayment(ctx context.Context, paymentID uuid.UUID) (A
 
 // ListAllPayments returns all subscription payments for admin view.
 func (s *PaymentService) ListAllPayments(ctx context.Context, filters ListAllPaymentsFilters) ([]AdminSubscriptionPaymentView, int64, error) {
-	if filters.Limit <= 0 {
-		filters.Limit = 20
-	}
-	if filters.Limit > 100 {
-		filters.Limit = 100
-	}
-	if filters.Offset < 0 {
-		filters.Offset = 0
-	}
+	filters.Limit = min(max(filters.Limit, 1), 100)
+	filters.Offset = max(filters.Offset, 0)
 
-	if filters.Status != "" &&
-		filters.Status != string(domain.PaymentStatusPending) &&
-		filters.Status != string(domain.PaymentStatusSucceeded) &&
-		filters.Status != string(domain.PaymentStatusFailed) &&
-		filters.Status != string(domain.PaymentStatusRefunded) &&
-		filters.Status != string(domain.PaymentStatusPartialRefunded) {
+	if filters.Status != "" && !slices.Contains([]string{
+		string(domain.PaymentStatusPending),
+		string(domain.PaymentStatusSucceeded),
+		string(domain.PaymentStatusFailed),
+		string(domain.PaymentStatusRefunded),
+		string(domain.PaymentStatusPartialRefunded),
+	}, filters.Status) {
 		return nil, 0, fmt.Errorf("%w: invalid status filter", ErrInvalidFilter)
 	}
 
