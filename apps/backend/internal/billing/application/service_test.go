@@ -3020,7 +3020,6 @@ func TestBilling_renewSubscription_ChargeCalledOutsideTransaction(t *testing.T) 
 		paymentMethods:       d.paymentMethods,
 		propertyArchiver:     d.propertyArchiver,
 		beginner:             d.beginner,
-		clock:                d.clock,
 		log:                  discardLogger(),
 		callbackBaseURL:      "http://localhost",
 	}, d.provider)

@@ -71,7 +71,6 @@ type renewalServiceDeps struct {
 	paymentMethods       PaymentMethodRepository
 	propertyArchiver     PropertyArchiver
 	beginner             transaction.Beginner
-	clock                clock.Clock
 	log                  *slog.Logger
 	callbackBaseURL      string
 }
@@ -86,7 +85,6 @@ type webhookServiceDeps struct {
 	beginner             transaction.Beginner
 	clock                clock.Clock
 	log                  *slog.Logger
-	callbackBaseURL      string
 }
 
 // scheduledChangeServiceDeps is the narrow dependency bundle for ScheduledChangeService.
@@ -97,7 +95,6 @@ type scheduledChangeServiceDeps struct {
 	paymentMethods       PaymentMethodRepository
 	propertyArchiver     PropertyArchiver
 	beginner             transaction.Beginner
-	clock                clock.Clock
 	log                  *slog.Logger
 	callbackBaseURL      string
 }
@@ -160,7 +157,6 @@ func NewServices(
 			beginner:             beginner,
 			clock:                clk,
 			log:                  log,
-			callbackBaseURL:      callbackBaseURL,
 		}, provider),
 		Renewals: NewRenewalService(renewalServiceDeps{
 			tariffs:              tariffs,
@@ -169,7 +165,6 @@ func NewServices(
 			paymentMethods:       paymentMethods,
 			propertyArchiver:     propertyArchiver,
 			beginner:             beginner,
-			clock:                clk,
 			log:                  log,
 			callbackBaseURL:      callbackBaseURL,
 		}, provider),
@@ -180,7 +175,6 @@ func NewServices(
 			paymentMethods:       paymentMethods,
 			propertyArchiver:     propertyArchiver,
 			beginner:             beginner,
-			clock:                clk,
 			log:                  log,
 			callbackBaseURL:      callbackBaseURL,
 		}, provider),

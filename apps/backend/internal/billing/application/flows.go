@@ -496,14 +496,15 @@ func upsertPaymentMethodFromWebhook(ctx context.Context, d upsertPaymentMethodDe
 // unfinished.
 func saveProviderInitResult(ctx context.Context, d saveProviderInitDeps, payment domain.SubscriptionPayment, initRes InitResult, userID uuid.UUID, now time.Time) (domain.SubscriptionPayment, error) {
 	paymentID := payment.ID
+	markFailed := markFailedDeps{
+		beginner:             d.beginner,
+		subscriptionPayments: d.subscriptionPayments,
+		log:                  d.log,
+	}
 
 	tx, err := d.beginner.Begin(ctx)
 	if err != nil {
-		markPaymentFailedBestEffort(ctx, markFailedDeps{
-			beginner:             d.beginner,
-			subscriptionPayments: d.subscriptionPayments,
-			log:                  d.log,
-		}, paymentID, now)
+		markPaymentFailedBestEffort(ctx, markFailed, paymentID, now)
 		return domain.SubscriptionPayment{}, fmt.Errorf("begin provider result transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -521,11 +522,7 @@ func saveProviderInitResult(ctx context.Context, d saveProviderInitDeps, payment
 	// transaction, so the row must be locked before the reference is persisted.
 	payment, err = txSubscriptionPayments.GetByIDForUpdate(ctx, paymentID)
 	if err != nil {
-		rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
-			beginner:             d.beginner,
-			subscriptionPayments: d.subscriptionPayments,
-			log:                  d.log,
-		}, paymentID, now)
+		rollbackAndMarkFailedBestEffort(ctx, tx, markFailed, paymentID, now)
 		return domain.SubscriptionPayment{}, fmt.Errorf("get payment for provider result: %w", err)
 	}
 	if payment.IsFinalized() {
@@ -534,11 +531,7 @@ func saveProviderInitResult(ctx context.Context, d saveProviderInitDeps, payment
 		return payment, nil
 	}
 	if payment.Status != domain.PaymentStatusPending {
-		rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
-			beginner:             d.beginner,
-			subscriptionPayments: d.subscriptionPayments,
-			log:                  d.log,
-		}, paymentID, now)
+		rollbackAndMarkFailedBestEffort(ctx, tx, markFailed, paymentID, now)
 		return domain.SubscriptionPayment{}, domain.ErrInvalidPaymentStatus
 	}
 
@@ -551,39 +544,23 @@ func saveProviderInitResult(ctx context.Context, d saveProviderInitDeps, payment
 			now,
 		)
 		if err != nil {
-			rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
-				beginner:             d.beginner,
-				subscriptionPayments: d.subscriptionPayments,
-				log:                  d.log,
-			}, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, markFailed, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("create payment method: %w", err)
 		}
 		pm, err = txPaymentMethods.Create(ctx, pm)
 		if err != nil {
-			rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
-				beginner:             d.beginner,
-				subscriptionPayments: d.subscriptionPayments,
-				log:                  d.log,
-			}, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, markFailed, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("save payment method: %w", err)
 		}
 		payment, err = txSubscriptionPayments.UpdatePaymentMethodAndProviderID(ctx, paymentID, pm.ID, initRes.ProviderPaymentID)
 		if err != nil {
-			rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
-				beginner:             d.beginner,
-				subscriptionPayments: d.subscriptionPayments,
-				log:                  d.log,
-			}, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, markFailed, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update payment method and provider payment id: %w", err)
 		}
 	} else {
 		payment, err = txSubscriptionPayments.UpdateProviderPaymentID(ctx, paymentID, initRes.ProviderPaymentID)
 		if err != nil {
-			rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
-				beginner:             d.beginner,
-				subscriptionPayments: d.subscriptionPayments,
-				log:                  d.log,
-			}, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, markFailed, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update provider payment id: %w", err)
 		}
 	}
@@ -591,21 +568,13 @@ func saveProviderInitResult(ctx context.Context, d saveProviderInitDeps, payment
 	if initRes.PaymentURL != "" {
 		payment, err = txSubscriptionPayments.UpdatePaymentURL(ctx, paymentID, initRes.PaymentURL)
 		if err != nil {
-			rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
-				beginner:             d.beginner,
-				subscriptionPayments: d.subscriptionPayments,
-				log:                  d.log,
-			}, paymentID, now)
+			rollbackAndMarkFailedBestEffort(ctx, tx, markFailed, paymentID, now)
 			return domain.SubscriptionPayment{}, fmt.Errorf("update payment url: %w", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		rollbackAndMarkFailedBestEffort(ctx, tx, markFailedDeps{
-			beginner:             d.beginner,
-			subscriptionPayments: d.subscriptionPayments,
-			log:                  d.log,
-		}, paymentID, now)
+		rollbackAndMarkFailedBestEffort(ctx, tx, markFailed, paymentID, now)
 		return domain.SubscriptionPayment{}, fmt.Errorf("commit provider result transaction: %w", err)
 	}
 
