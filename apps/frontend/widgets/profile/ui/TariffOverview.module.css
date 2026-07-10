@@ -80,10 +80,6 @@
   color: var(--color-warning);
 }
 
-.blocked {
-  color: var(--color-error);
-}
-
 .cancelled {
   color: var(--color-text-muted);
 }

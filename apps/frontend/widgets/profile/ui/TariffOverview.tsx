@@ -18,12 +18,11 @@ import {ApiError} from '@/shared/api/errors';
 import styles from './TariffOverview.module.css';
 
 const STATUS_LABELS: Record<
-    'active' | 'grace' | 'blocked' | 'cancelled',
+    'active' | 'grace' | 'cancelled',
     string
 > = {
     active: 'Активна',
     grace: 'Льготный период',
-    blocked: 'Заблокирована',
     cancelled: 'Отменена',
 };
 

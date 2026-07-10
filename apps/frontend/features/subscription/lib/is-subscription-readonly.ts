@@ -18,10 +18,6 @@ export function isSubscriptionReadonly(subscription: Subscription | null | undef
 
   const status: SubscriptionStatus = subscription.status;
 
-  if (status === 'blocked') {
-    return true;
-  }
-
   if (status === 'grace') {
     const validUntil = subscription.validUntil;
     if (!validUntil) {
