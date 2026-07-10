@@ -81,16 +81,11 @@ linters:
               desc: application layer must not depend on adapters
     modernize:
       disable:
-        - any
         - fmtappendf
         - forvar
-        - mapsloop
-        - minmax
         - omitzero
         - plusbuild
-        - rangeint
         - reflecttypefor
-        - slicescontains
         - slicessort
         - stditerators
         - stringscut
