@@ -31,7 +31,7 @@ func discardLogger() *slog.Logger {
 }
 
 func newTestProvider(serverURL string) *Provider {
-	return NewProvider(serverURL, testTerminalKey, testPassword, 5*time.Second, discardLogger())
+	return NewProvider(serverURL, testTerminalKey, testPassword, 5*time.Second, 0, 0, 0, discardLogger())
 }
 
 func verifyRequestToken(t *testing.T, r *http.Request, password string) map[string]any {
@@ -1013,7 +1013,7 @@ func TestProviderTimeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewProvider(server.URL+"/v2/", testTerminalKey, testPassword, 1*time.Nanosecond, discardLogger())
+	p := NewProvider(server.URL+"/v2/", testTerminalKey, testPassword, 1*time.Nanosecond, 0, 0, 0, discardLogger())
 	_, err := p.Status(context.Background(), uuid.New(), "1")
 	if err == nil {
 		t.Fatalf("expected timeout error")
@@ -1054,7 +1054,7 @@ func TestMapStatus(t *testing.T) {
 }
 
 func TestNewProviderDefaults(t *testing.T) {
-	p := NewProvider("", testTerminalKey, testPassword, 0, discardLogger())
+	p := NewProvider("", testTerminalKey, testPassword, 0, 0, 0, 0, discardLogger())
 	if !strings.HasSuffix(p.baseURL, "/") {
 		t.Fatalf("baseURL should have trailing slash: %q", p.baseURL)
 	}
@@ -1064,7 +1064,7 @@ func TestNewProviderDefaults(t *testing.T) {
 }
 
 func TestNewProviderTrimsTrailingSlash(t *testing.T) {
-	p := NewProvider("https://example.com/rest", testTerminalKey, testPassword, 0, discardLogger())
+	p := NewProvider("https://example.com/rest", testTerminalKey, testPassword, 0, 0, 0, 0, discardLogger())
 	if p.baseURL != "https://example.com/rest/" {
 		t.Fatalf("baseURL: got %q", p.baseURL)
 	}

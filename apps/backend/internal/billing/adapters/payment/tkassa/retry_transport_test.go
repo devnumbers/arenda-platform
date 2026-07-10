@@ -1,23 +1,34 @@
 package tkassa
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-type temporaryNetError struct {
+type timeoutNetError struct {
 	errorString string
-	timeout     bool
 }
 
-func (e *temporaryNetError) Error() string   { return e.errorString }
-func (e *temporaryNetError) Temporary() bool { return true }
-func (e *temporaryNetError) Timeout() bool   { return e.timeout }
+func (e *timeoutNetError) Error() string   { return e.errorString }
+func (e *timeoutNetError) Temporary() bool { return false }
+func (e *timeoutNetError) Timeout() bool   { return true }
+
+type nonTimeoutNetError struct {
+	errorString string
+}
+
+func (e *nonTimeoutNetError) Error() string   { return e.errorString }
+func (e *nonTimeoutNetError) Temporary() bool { return true }
+func (e *nonTimeoutNetError) Timeout() bool   { return false }
 
 type permanentNetError struct {
 	errorString string
@@ -37,11 +48,15 @@ func TestRetryTransportSuccessFirstAttempt(t *testing.T) {
 	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond)
 	client := &http.Client{Transport: tr}
 
-	resp, err := client.Get(server.URL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_ = resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
@@ -50,28 +65,31 @@ func TestRetryTransportSuccessFirstAttempt(t *testing.T) {
 func TestRetryTransportRetryThenSuccess(t *testing.T) {
 	base := &countingRoundTripper{
 		failures: 2,
-		err:      &temporaryNetError{errorString: "timeout", timeout: true},
+		err:      &timeoutNetError{errorString: "timeout"},
 	}
 	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond)
 
-	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
 	resp, err := tr.RoundTrip(req)
 	if err != nil {
 		t.Fatalf("unexpected error after retries: %v", err)
 	}
-	_ = resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if base.calls.Load() != 3 {
 		t.Fatalf("expected 3 calls (1 initial + 2 retries), got %d", base.calls.Load())
 	}
 }
 
 func TestRetryTransportExhaustsRetries(t *testing.T) {
-	retriableErr := &temporaryNetError{errorString: "boom"}
+	retriableErr := &timeoutNetError{errorString: "boom"}
 	base := &fakeRoundTripper{err: retriableErr}
 	tr := newRetryTransport(base, 2, 1*time.Millisecond, 5*time.Millisecond)
 
-	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
-	_, err := tr.RoundTrip(req)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
+	resp, err := tr.RoundTrip(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -84,12 +102,15 @@ func TestRetryTransportExhaustsRetries(t *testing.T) {
 }
 
 func TestRetryTransportNoRetryWhenDisabled(t *testing.T) {
-	retriableErr := &temporaryNetError{errorString: "boom"}
+	retriableErr := &timeoutNetError{errorString: "boom"}
 	base := &fakeRoundTripper{err: retriableErr}
 	tr := newRetryTransport(base, 0, 1*time.Millisecond, 5*time.Millisecond)
 
-	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
-	_, err := tr.RoundTrip(req)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
+	resp, err := tr.RoundTrip(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -103,13 +124,43 @@ func TestRetryTransportNoRetryOnPermanentError(t *testing.T) {
 	base := &fakeRoundTripper{err: permanentErr}
 	tr := newRetryTransport(base, 3, 1*time.Millisecond, 5*time.Millisecond)
 
-	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
-	_, err := tr.RoundTrip(req)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
+	resp, err := tr.RoundTrip(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
 	if err == nil {
 		t.Fatalf("expected error")
 	}
 	if base.calls.Load() != 1 {
 		t.Fatalf("expected 1 call for permanent error, got %d", base.calls.Load())
+	}
+}
+
+func TestRetryTransportPreservesBodyAcrossRetries(t *testing.T) {
+	wantBody := `{"key":"value"}`
+	base := &bodyCapturingRoundTripper{
+		failures: 2,
+		err:      &timeoutNetError{errorString: "timeout"},
+	}
+	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "http://example.com", bytes.NewReader([]byte(wantBody)))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := tr.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("unexpected error after retries: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if base.calls.Load() != 3 {
+		t.Fatalf("expected 3 calls (1 initial + 2 retries), got %d", base.calls.Load())
+	}
+	for i, got := range base.bodies {
+		if got != wantBody {
+			t.Fatalf("attempt %d body = %q, want %q", i+1, got, wantBody)
+		}
 	}
 }
 
@@ -138,17 +189,20 @@ func TestRetryTransportIsRetriable(t *testing.T) {
 	if isRetriable(nil) {
 		t.Fatalf("nil error should not be retriable")
 	}
-	if !isRetriable(&temporaryNetError{errorString: "temp"}) {
-		t.Fatalf("temporary net error should be retriable")
-	}
-	if !isRetriable(&temporaryNetError{errorString: "timeout", timeout: true}) {
+	if !isRetriable(&timeoutNetError{errorString: "timeout"}) {
 		t.Fatalf("timeout net error should be retriable")
+	}
+	if isRetriable(&nonTimeoutNetError{errorString: "temp"}) {
+		t.Fatalf("non-timeout net error should not be retriable")
 	}
 	if isRetriable(&permanentNetError{errorString: "perm"}) {
 		t.Fatalf("permanent net error should not be retriable")
 	}
 	if isRetriable(errors.New("plain")) {
 		t.Fatalf("plain error should not be retriable")
+	}
+	if isRetriable(context.Canceled) {
+		t.Fatalf("context.Canceled should not be retriable")
 	}
 }
 
@@ -176,10 +230,41 @@ func (c *countingRoundTripper) RoundTrip(_ *http.Request) (*http.Response, error
 	return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 }
 
+type bodyCapturingRoundTripper struct {
+	calls    atomic.Int32
+	failures int32
+	err      error
+	mu       sync.Mutex
+	bodies   []string
+}
+
+func (b *bodyCapturingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	call := b.calls.Add(1)
+
+	var body string
+	if req.Body != nil {
+		data, err := io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
+		body = string(data)
+	}
+
+	b.mu.Lock()
+	b.bodies = append(b.bodies, body)
+	b.mu.Unlock()
+
+	if call <= b.failures {
+		return nil, b.err
+	}
+	return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+}
+
 // Ensure fakeRoundTripper satisfies the interface at compile time.
 var _ http.RoundTripper = (*fakeRoundTripper)(nil)
 var _ http.RoundTripper = (*countingRoundTripper)(nil)
 
 // Ensure net.Error implementations satisfy the interface at compile time.
-var _ net.Error = (*temporaryNetError)(nil)
+var _ net.Error = (*timeoutNetError)(nil)
+var _ net.Error = (*nonTimeoutNetError)(nil)
 var _ net.Error = (*permanentNetError)(nil)
