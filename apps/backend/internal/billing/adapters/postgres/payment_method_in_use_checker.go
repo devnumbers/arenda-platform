@@ -34,7 +34,7 @@ func (c *PaymentMethodInUseChecker) IsInUse(ctx context.Context, methodID uuid.U
 func (c *PaymentMethodInUseChecker) WithTx(tx transaction.Tx) (application.PaymentMethodInUseChecker, error) {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		return nil, fmt.Errorf("billing.PaymentMethodInUseChecker.WithTx: %T is not a postgres.DBTX", tx)
+		return nil, fmt.Errorf("postgres.PaymentMethodInUseChecker.WithTx: %T is not a postgres.DBTX", tx)
 	}
 	return NewPaymentMethodInUseChecker(dbtx), nil
 }
