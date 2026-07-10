@@ -21,6 +21,8 @@ const (
 	SubscriptionStatusCancelled SubscriptionStatus = "cancelled"
 )
 
+const gracePeriod = 7 * 24 * time.Hour
+
 type Subscription struct {
 	ID                    uuid.UUID
 	UserID                uuid.UUID
@@ -203,6 +205,29 @@ func (s *Subscription) Cancel() error {
 	s.Status = SubscriptionStatusCancelled
 	s.AutoRenewEnabled = false
 	return nil
+}
+
+// DowngradeToBasic resets the subscription to the free basic tariff. It clears
+// any validity period, pending change and auto-renewal state.
+func (s *Subscription) DowngradeToBasic(basicTariffID uuid.UUID) {
+	s.TariffID = basicTariffID
+	s.Status = SubscriptionStatusActive
+	s.ValidUntil = nil
+	s.AutoRenewEnabled = false
+	s.PendingTariffID = nil
+	s.PendingChangeAt = nil
+	s.PendingPeriod = nil
+}
+
+// EnterGrace moves the subscription into the grace period. The validity date is
+// extended to now+gracePeriod unless the subscription is already paid up beyond
+// that point, so an already-paid period is never shortened.
+func (s *Subscription) EnterGrace(now time.Time) {
+	s.Status = SubscriptionStatusGrace
+	graceUntil := now.Add(gracePeriod)
+	if s.ValidUntil == nil || graceUntil.After(*s.ValidUntil) {
+		s.ValidUntil = &graceUntil
+	}
 }
 
 // addSubscriptionPeriod returns the time one subscription period after start.

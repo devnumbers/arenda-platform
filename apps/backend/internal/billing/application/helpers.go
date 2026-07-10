@@ -15,7 +15,6 @@ const tkassaDescriptionLimit = 140
 const (
 	renewalBatchSize = 100
 	graceBatchSize   = 100
-	gracePeriod      = 7 * 24 * time.Hour
 	// scheduledChangeInProgressTTL pushes pending_change_at into the future while
 	// a paid scheduled change is being applied. ListPendingChanges only returns
 	// rows whose pending_change_at <= now, so a crash after the pending payment is
@@ -90,26 +89,6 @@ func maskCardID(cardID string) string {
 
 func isAddCardNotificationType(notificationType string) bool {
 	return notificationType == "NotificationAddCard" || notificationType == "AddCard"
-}
-
-func applyBasicDowngrade(sub *domain.Subscription, basicTariffID uuid.UUID) {
-	sub.TariffID = basicTariffID
-	sub.Status = domain.SubscriptionStatusActive
-	sub.ValidUntil = nil
-	sub.AutoRenewEnabled = false
-	sub.PendingTariffID = nil
-	sub.PendingChangeAt = nil
-	sub.PendingPeriod = nil
-}
-
-func transitionToGrace(sub *domain.Subscription, now time.Time) {
-	sub.Status = domain.SubscriptionStatusGrace
-	graceUntil := now.Add(gracePeriod)
-	// Never shorten an already-paid validity period. This protects against
-	// races or failed renewals overwriting a future valid_until.
-	if sub.ValidUntil == nil || graceUntil.After(*sub.ValidUntil) {
-		sub.ValidUntil = &graceUntil
-	}
 }
 
 // isSubscriptionRenewalApplied reports whether the subscription already reflects

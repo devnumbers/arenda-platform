@@ -187,7 +187,7 @@ func applyRefundToSubscription(ctx context.Context, d flowDeps, tx transaction.T
 	if err != nil {
 		return fmt.Errorf("get basic tariff for refund: %w", err)
 	}
-	applyBasicDowngrade(&sub, basicTariff.ID)
+	sub.DowngradeToBasic(basicTariff.ID)
 	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("downgrade subscription to basic after refund: %w", err)
 	}
@@ -331,7 +331,7 @@ func applyFreeRenewalOrDowngrade(ctx context.Context, d flowDeps, tx transaction
 
 	// The free basic tariff has no validity period and cannot be auto-renewed.
 	if renewalTariff.Name == domain.TariffBasic {
-		applyBasicDowngrade(sub, renewalTariff.ID)
+		sub.DowngradeToBasic(renewalTariff.ID)
 		if paymentID != uuid.Nil {
 			sub.LastAppliedPaymentID = &paymentID
 		}

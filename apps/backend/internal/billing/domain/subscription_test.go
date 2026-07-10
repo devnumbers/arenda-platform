@@ -311,3 +311,88 @@ func TestSubscriptionSetAutoRenew(t *testing.T) {
 		t.Errorf("SetAutoRenew(true) without ValidUntil error = %v, want ErrCannotEnableAutoRenew", err)
 	}
 }
+
+func TestSubscriptionDowngradeToBasic(t *testing.T) {
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	basicID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	pendingID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14")
+	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	pendingAt := time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC)
+	period := PeriodMonth
+
+	sub := Subscription{
+		ID:               uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15"),
+		UserID:           userID,
+		TariffID:         proID,
+		Status:           SubscriptionStatusGrace,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+		PendingTariffID:  &pendingID,
+		PendingChangeAt:  &pendingAt,
+		PendingPeriod:    &period,
+	}
+
+	sub.DowngradeToBasic(basicID)
+
+	if sub.TariffID != basicID {
+		t.Errorf("TariffID = %v, want %v", sub.TariffID, basicID)
+	}
+	if sub.Status != SubscriptionStatusActive {
+		t.Errorf("Status = %v, want %v", sub.Status, SubscriptionStatusActive)
+	}
+	if sub.ValidUntil != nil {
+		t.Errorf("ValidUntil = %v, want nil", sub.ValidUntil)
+	}
+	if sub.AutoRenewEnabled {
+		t.Error("expected auto-renew disabled")
+	}
+	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
+		t.Error("expected pending change fields cleared")
+	}
+}
+
+func TestSubscriptionEnterGrace(t *testing.T) {
+	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+
+	t.Run("extends ValidUntil from nil", func(t *testing.T) {
+		sub := Subscription{
+			ID:       uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13"),
+			UserID:   userID,
+			TariffID: proID,
+			Status:   SubscriptionStatusActive,
+		}
+
+		sub.EnterGrace(now)
+
+		if sub.Status != SubscriptionStatusGrace {
+			t.Errorf("Status = %v, want %v", sub.Status, SubscriptionStatusGrace)
+		}
+		wantValidUntil := now.Add(gracePeriod)
+		if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+			t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, wantValidUntil)
+		}
+	})
+
+	t.Run("does not shorten already-paid ValidUntil", func(t *testing.T) {
+		farFuture := now.Add(30 * 24 * time.Hour)
+		sub := Subscription{
+			ID:         uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14"),
+			UserID:     userID,
+			TariffID:   proID,
+			Status:     SubscriptionStatusActive,
+			ValidUntil: &farFuture,
+		}
+
+		sub.EnterGrace(now)
+
+		if sub.Status != SubscriptionStatusGrace {
+			t.Errorf("Status = %v, want %v", sub.Status, SubscriptionStatusGrace)
+		}
+		if sub.ValidUntil == nil || !sub.ValidUntil.Equal(farFuture) {
+			t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, farFuture)
+		}
+	})
+}

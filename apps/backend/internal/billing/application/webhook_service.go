@@ -188,7 +188,7 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 				return fmt.Errorf("get subscription for failed webhook: %w", err)
 			}
 			if sub.TariffID == payment.TariffID {
-				transitionToGrace(&sub, s.deps.clock.Now().UTC())
+				sub.EnterGrace(s.deps.clock.Now().UTC())
 				if err := txSubscriptions.Update(ctx, sub); err != nil {
 					return fmt.Errorf("transition subscription to grace after failed webhook: %w", err)
 				}

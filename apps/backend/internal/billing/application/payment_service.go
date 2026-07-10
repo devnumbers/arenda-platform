@@ -452,7 +452,7 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 			return fmt.Errorf("get subscription for failed payment sync: %w", err)
 		}
 		if sub.TariffID == payment.TariffID {
-			transitionToGrace(&sub, s.deps.clock.Now().UTC())
+			sub.EnterGrace(s.deps.clock.Now().UTC())
 			if err := txSubscriptions.Update(ctx, sub); err != nil {
 				return fmt.Errorf("transition subscription to grace after failed payment sync: %w", err)
 			}

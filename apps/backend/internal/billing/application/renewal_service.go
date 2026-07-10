@@ -168,7 +168,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 	}
 
 	if sub.ActivePaymentMethodID == nil {
-		transitionToGrace(&sub, now)
+		sub.EnterGrace(now)
 		if err := txSubscriptions.Update(ctx, sub); err != nil {
 			return fmt.Errorf("transition to grace: %w", err)
 		}
@@ -178,7 +178,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 	pm, err := txPaymentMethods.GetByID(ctx, *sub.ActivePaymentMethodID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			transitionToGrace(&sub, now)
+			sub.EnterGrace(now)
 			if err := txSubscriptions.Update(ctx, sub); err != nil {
 				return fmt.Errorf("transition to grace: %w", err)
 			}
@@ -394,7 +394,7 @@ func (r *RenewalService) renewSubscription(ctx context.Context, sub domain.Subsc
 			}
 			return fmt.Errorf("get subscription for update after failed charge: %w", err)
 		}
-		transitionToGrace(&sub, now)
+		sub.EnterGrace(now)
 		if err := txResultSubscriptions.Update(ctx, sub); err != nil {
 			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("transition to grace after failed renewal: %w; recovery failed: %w", err, recErr)
@@ -534,7 +534,7 @@ func (r *RenewalService) markRenewalFailedAndGrace(ctx context.Context, paymentI
 	if err != nil {
 		return fmt.Errorf("get subscription for recovery: %w", err)
 	}
-	transitionToGrace(&sub, now)
+	sub.EnterGrace(now)
 	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("transition subscription to grace in recovery: %w", err)
 	}
@@ -594,7 +594,7 @@ func (r *RenewalService) transitionSubscriptionToGrace(ctx context.Context, subs
 	if err != nil {
 		return fmt.Errorf("get subscription for recovery: %w", err)
 	}
-	transitionToGrace(&sub, now)
+	sub.EnterGrace(now)
 	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("transition subscription to grace in recovery: %w", err)
 	}
@@ -713,7 +713,7 @@ func (r *RenewalService) downgradeToBasic(ctx context.Context, sub domain.Subscr
 		return nil
 	}
 
-	applyBasicDowngrade(&sub, basicTariff.ID)
+	sub.DowngradeToBasic(basicTariff.ID)
 	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("update subscription after grace downgrade: %w", err)
 	}
@@ -757,7 +757,7 @@ func (r *RenewalService) expireNonRenewingSubscription(ctx context.Context, sub 
 		return nil
 	}
 
-	applyBasicDowngrade(&sub, basicTariff.ID)
+	sub.DowngradeToBasic(basicTariff.ID)
 	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("update subscription after non-renewing expiry: %w", err)
 	}
