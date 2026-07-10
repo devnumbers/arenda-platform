@@ -105,6 +105,8 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Сумма должна быть больше нуля", true
 	case errors.Is(err, billingdomain.ErrInvalidPeriod):
 		return "Период должен быть месяц или год", true
+	case errors.Is(err, billingdomain.ErrInvalidTariff):
+		return "Некорректное название тарифа", true
 	case errors.Is(err, billingdomain.ErrAlreadyOnTariff):
 		return "Вы уже на выбранном тарифе", true
 	case errors.Is(err, billingdomain.ErrInvalidTariffChange):

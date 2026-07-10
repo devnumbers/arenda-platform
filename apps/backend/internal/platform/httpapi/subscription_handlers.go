@@ -390,6 +390,7 @@ func (h *SubscriptionHandlers) handleBillingError(w http.ResponseWriter, r *http
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
 	case errors.Is(err, domain.ErrInvalidPeriod),
 		errors.Is(err, domain.ErrInvalidAmount),
+		errors.Is(err, domain.ErrInvalidTariff),
 		errors.Is(err, billingapp.ErrInvalidFilter):
 		detail, ok := UserFacingDetail(err)
 		if !ok {
