@@ -45,7 +45,6 @@ type Subscription struct {
 	PendingPeriod         *SubscriptionPeriod
 	ActivePaymentMethodID *uuid.UUID
 	LastAppliedPaymentID  *uuid.UUID
-	CurrentPeriod         *SubscriptionPeriod
 }
 
 // NewOwnerSubscription creates a free basic subscription for a newly-registered owner.
@@ -114,9 +113,9 @@ func (s *Subscription) HasPendingChange() bool {
 }
 
 // ScheduleDowngrade schedules a downgrade to take effect when the current paid
-// period ends. It requires a valid_until date and enables auto-renew so the
-// downgrade can be applied automatically. The new tariff must be a downgrade
-// from the current tariff.
+// period ends. It requires a valid_until date and enables auto-renew so the new
+// tariff keeps renewing on the normal cycle after it is applied. The new tariff
+// must be a downgrade from the current tariff.
 func (s *Subscription) ScheduleDowngrade(currentTariff, newTariff Tariff, period SubscriptionPeriod, changeAt time.Time) error {
 	if s.Status != SubscriptionStatusActive && s.Status != SubscriptionStatusGrace {
 		return ErrInvalidSubscriptionState
@@ -142,6 +141,7 @@ func (s *Subscription) ScheduleDowngrade(currentTariff, newTariff Tariff, period
 	s.PendingTariffID = &newTariff.ID
 	s.PendingChangeAt = &changeAt
 	s.PendingPeriod = &period
+	s.AutoRenewEnabled = true
 	return nil
 }
 
@@ -194,18 +194,23 @@ func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeri
 	return nil
 }
 
-// ApplyScheduledChange applies a paid scheduled tariff change after it has been
-// successfully charged. It switches the subscription to the pending tariff,
-// records the chosen period in the in-memory CurrentPeriod view (which is not
-// persisted) and clears the pending change state. Unlike ApplyTariffChange it
-// leaves ValidUntil, AutoRenewEnabled, LastAppliedPaymentID, Status and Source
-// untouched.
-func (s *Subscription) ApplyScheduledChange(pendingTariff Tariff, period SubscriptionPeriod) error {
+// ApplyScheduledDowngrade applies a deferred downgrade at the end of the paid
+// period. Per ADR 0008 §3 there is no charge at apply time: it switches the
+// tariff, extends valid_until by the chosen period from now, enables auto-renew,
+// keeps the subscription active, and clears the pending change. LastAppliedPaymentID
+// is intentionally left untouched because no payment is involved.
+func (s *Subscription) ApplyScheduledDowngrade(newTariff Tariff, period SubscriptionPeriod, now time.Time) error {
 	if _, err := ParseSubscriptionPeriod(string(period)); err != nil {
 		return ErrInvalidPeriod
 	}
-	s.TariffID = pendingTariff.ID
-	s.CurrentPeriod = &period
+	if s.TariffID == newTariff.ID {
+		return ErrAlreadyOnTariff
+	}
+	validUntil := addSubscriptionPeriod(now, period)
+	s.TariffID = newTariff.ID
+	s.ValidUntil = &validUntil
+	s.AutoRenewEnabled = true
+	s.Status = SubscriptionStatusActive
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
