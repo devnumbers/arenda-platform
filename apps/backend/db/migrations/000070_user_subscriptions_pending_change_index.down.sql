@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_user_subscriptions_pending_change;
