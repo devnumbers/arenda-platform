@@ -94,10 +94,10 @@ func TestSubscriptionIsInGrace(t *testing.T) {
 	past := now.Add(-24 * time.Hour)
 
 	tests := []struct {
-		name      string
-		status    SubscriptionStatus
+		name       string
+		status     SubscriptionStatus
 		validUntil *time.Time
-		want      bool
+		want       bool
 	}{
 		{"grace with future valid_until", SubscriptionStatusGrace, &future, true},
 		{"grace with nil valid_until", SubscriptionStatusGrace, nil, false},
@@ -395,4 +395,112 @@ func TestSubscriptionEnterGrace(t *testing.T) {
 			t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, farFuture)
 		}
 	})
+}
+
+func TestSubscriptionApplyScheduledChange(t *testing.T) {
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	basicID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	paymentID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a19")
+	validUntil := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	pendingAt := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	pendingPeriod := PeriodMonth
+
+	sub := Subscription{
+		ID:                   uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15"),
+		UserID:               userID,
+		TariffID:             basicID,
+		Source:               SubscriptionSourcePaid,
+		Status:               SubscriptionStatusActive,
+		ValidUntil:           &validUntil,
+		AutoRenewEnabled:     true,
+		LastAppliedPaymentID: &paymentID,
+		PendingTariffID:      &proID,
+		PendingChangeAt:      &pendingAt,
+		PendingPeriod:        &pendingPeriod,
+	}
+
+	baseValidUntil := sub.ValidUntil
+	baseAutoRenew := sub.AutoRenewEnabled
+	baseLastPayment := sub.LastAppliedPaymentID
+	baseStatus := sub.Status
+	baseSource := sub.Source
+
+	pendingTariff := Tariff{ID: proID, Name: TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000}
+	if err := sub.ApplyScheduledChange(pendingTariff, PeriodMonth); err != nil {
+		t.Fatalf("ApplyScheduledChange() error = %v", err)
+	}
+
+	if sub.TariffID != proID {
+		t.Errorf("TariffID = %v, want %v", sub.TariffID, proID)
+	}
+	if sub.CurrentPeriod == nil || *sub.CurrentPeriod != PeriodMonth {
+		t.Errorf("CurrentPeriod = %v, want %s", sub.CurrentPeriod, PeriodMonth)
+	}
+	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
+		t.Error("expected pending change fields cleared")
+	}
+	if sub.ValidUntil != baseValidUntil {
+		t.Errorf("ValidUntil mutated = %v, want %v", sub.ValidUntil, baseValidUntil)
+	}
+	if sub.AutoRenewEnabled != baseAutoRenew {
+		t.Errorf("AutoRenewEnabled mutated = %v, want %v", sub.AutoRenewEnabled, baseAutoRenew)
+	}
+	if sub.LastAppliedPaymentID != baseLastPayment {
+		t.Errorf("LastAppliedPaymentID mutated = %v, want %v", sub.LastAppliedPaymentID, baseLastPayment)
+	}
+	if sub.Status != baseStatus {
+		t.Errorf("Status mutated = %v, want %v", sub.Status, baseStatus)
+	}
+	if sub.Source != baseSource {
+		t.Errorf("Source mutated = %v, want %v", sub.Source, baseSource)
+	}
+
+	// An invalid period must be rejected and must not mutate any field.
+	baseline := sub
+	if err := sub.ApplyScheduledChange(pendingTariff, SubscriptionPeriod("weekly")); !errors.Is(err, ErrInvalidPeriod) {
+		t.Errorf("ApplyScheduledChange invalid period error = %v, want ErrInvalidPeriod", err)
+	}
+	if sub != baseline {
+		t.Errorf("ApplyScheduledChange mutated fields on invalid period: got %+v, want %+v", sub, baseline)
+	}
+}
+
+func TestSubscriptionClearPendingChange(t *testing.T) {
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	pendingID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14")
+	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	pendingAt := time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC)
+	period := PeriodMonth
+	currentPeriod := PeriodYear
+
+	sub := Subscription{
+		ID:               uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15"),
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           SubscriptionSourcePaid,
+		Status:           SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+		PendingTariffID:  &pendingID,
+		PendingChangeAt:  &pendingAt,
+		PendingPeriod:    &period,
+		CurrentPeriod:    &currentPeriod,
+	}
+
+	baseline := sub
+	sub.ClearPendingChange()
+
+	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
+		t.Error("expected pending change fields cleared")
+	}
+
+	// Nothing but the pending_* fields may change.
+	baseline.PendingTariffID = nil
+	baseline.PendingChangeAt = nil
+	baseline.PendingPeriod = nil
+	if sub != baseline {
+		t.Errorf("ClearPendingChange mutated non-pending fields: got %+v, want %+v", sub, baseline)
+	}
 }

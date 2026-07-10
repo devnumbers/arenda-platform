@@ -194,6 +194,32 @@ func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeri
 	return nil
 }
 
+// ApplyScheduledChange applies a paid scheduled tariff change after it has been
+// successfully charged. It switches the subscription to the pending tariff,
+// records the chosen period in the in-memory CurrentPeriod view (which is not
+// persisted) and clears the pending change state. Unlike ApplyTariffChange it
+// leaves ValidUntil, AutoRenewEnabled, LastAppliedPaymentID, Status and Source
+// untouched.
+func (s *Subscription) ApplyScheduledChange(pendingTariff Tariff, period SubscriptionPeriod) error {
+	if _, err := ParseSubscriptionPeriod(string(period)); err != nil {
+		return ErrInvalidPeriod
+	}
+	s.TariffID = pendingTariff.ID
+	s.CurrentPeriod = &period
+	s.PendingTariffID = nil
+	s.PendingChangeAt = nil
+	s.PendingPeriod = nil
+	return nil
+}
+
+// ClearPendingChange clears any scheduled tariff change pending on the
+// subscription without modifying the current tariff, validity or status.
+func (s *Subscription) ClearPendingChange() {
+	s.PendingTariffID = nil
+	s.PendingChangeAt = nil
+	s.PendingPeriod = nil
+}
+
 // SetAutoRenew toggles automatic subscription renewal. Enabling auto-renew is
 // only allowed when the subscription has a validity period.
 func (s *Subscription) SetAutoRenew(enabled bool) error {

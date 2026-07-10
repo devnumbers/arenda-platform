@@ -123,9 +123,7 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 	// left for manual handling. In every terminal branch the pending_* fields are
 	// cleared, which guarantees the worker never re-lists the same row.
 	if sub.ActivePaymentMethodID == nil {
-		sub.PendingTariffID = nil
-		sub.PendingChangeAt = nil
-		sub.PendingPeriod = nil
+		sub.ClearPendingChange()
 		if err := txSubscriptions.Update(ctx, sub); err != nil {
 			return fmt.Errorf("clear scheduled change without payment method: %w", err)
 		}
@@ -142,9 +140,7 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 	pm, err := txPaymentMethods.GetByID(ctx, *sub.ActivePaymentMethodID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			sub.PendingTariffID = nil
-			sub.PendingChangeAt = nil
-			sub.PendingPeriod = nil
+			sub.ClearPendingChange()
 			if updateErr := txSubscriptions.Update(ctx, sub); updateErr != nil {
 				return fmt.Errorf("clear scheduled change with missing payment method: %w", updateErr)
 			}
@@ -377,11 +373,9 @@ func (c *ScheduledChangeService) applyPaidScheduledChange(
 			return fmt.Errorf("get subscription for scheduled change apply: %w", err)
 		}
 		oldTariffID := sub.TariffID
-		sub.TariffID = pendingTariff.ID
-		sub.CurrentPeriod = &period
-		sub.PendingTariffID = nil
-		sub.PendingChangeAt = nil
-		sub.PendingPeriod = nil
+		if err := sub.ApplyScheduledChange(pendingTariff, period); err != nil {
+			return fmt.Errorf("apply paid scheduled change: %w", err)
+		}
 		if err := txSubscriptions.Update(ctx, sub); err != nil {
 			return fmt.Errorf("apply paid scheduled change: %w", err)
 		}
@@ -407,9 +401,7 @@ func (c *ScheduledChangeService) applyPaidScheduledChange(
 	if err != nil {
 		return fmt.Errorf("get subscription for scheduled change failure: %w", err)
 	}
-	sub.PendingTariffID = nil
-	sub.PendingChangeAt = nil
-	sub.PendingPeriod = nil
+	sub.ClearPendingChange()
 	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("clear scheduled change after failed charge: %w", err)
 	}
@@ -455,9 +447,7 @@ func (c *ScheduledChangeService) clearPendingScheduledChangeBestEffort(ctx conte
 			slog.String("error", sanitize.Error(err)))
 		return
 	}
-	sub.PendingTariffID = nil
-	sub.PendingChangeAt = nil
-	sub.PendingPeriod = nil
+	sub.ClearPendingChange()
 	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		c.deps.log.ErrorContext(ctx, "failed to clear scheduled change",
 			slog.String("subscription_id", subscriptionID.String()),
