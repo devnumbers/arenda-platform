@@ -75,6 +75,27 @@ func (e *ProviderError) Error() string {
 // handlers can persist it without importing this package.
 func (e *ProviderError) ProviderErrorCode() string { return e.ErrorCode }
 
+// metricStatus maps an adapter error to the RED "status" metric label.
+//
+// RED convention: status is "error" ONLY for genuine operational failures —
+// transport errors, timeouts, context cancellation, request-build / marshal
+// errors, non-2xx HTTP status, and response-unmarshal errors. Any definitive
+// provider response is a completed operation and reports "ok", even when it
+// carries a business outcome such as a declined payment or a parsed provider
+// error-code (surfaced as *ProviderError). This matches the fake adapter
+// (which returns nil err on decline) and keeps payment.provider.errors
+// comparable across providers.
+func metricStatus(err error) string {
+	if err == nil {
+		return "ok"
+	}
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) {
+		return "ok"
+	}
+	return "error"
+}
+
 // Provider is a T-Kassa payment adapter.
 type Provider struct {
 	baseURL     string
@@ -197,10 +218,7 @@ func (p *Provider) Name() domain.PaymentProvider {
 func (p *Provider) Init(ctx context.Context, req application.InitRequest) (res application.InitResult, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
-		if err != nil {
-			status = "error"
-		}
+		status := metricStatus(err)
 		p.metrics.RecordRequest(ctx, "tkassa", "Init", status, time.Since(start))
 	}()
 
@@ -268,10 +286,7 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (res a
 func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (res application.ChargeResult, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
-		if err != nil {
-			status = "error"
-		}
+		status := metricStatus(err)
 		p.metrics.RecordRequest(ctx, "tkassa", "Charge", status, time.Since(start))
 	}()
 
@@ -316,10 +331,7 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (r
 func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (status domain.PaymentStatus, err error) {
 	start := time.Now()
 	defer func() {
-		recStatus := "ok"
-		if err != nil {
-			recStatus = "error"
-		}
+		recStatus := metricStatus(err)
 		p.metrics.RecordRequest(ctx, "tkassa", "Status", recStatus, time.Since(start))
 	}()
 
@@ -358,10 +370,7 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (res application.CancelResult, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
-		if err != nil {
-			status = "error"
-		}
+		status := metricStatus(err)
 		p.metrics.RecordRequest(ctx, "tkassa", "Cancel", status, time.Since(start))
 	}()
 
@@ -398,7 +407,7 @@ func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (r
 	}
 
 	if !resp.Success {
-		err := &ProviderError{
+		err = &ProviderError{
 			Method:    "Cancel",
 			ErrorCode: resp.ErrorCode,
 			Message:   resp.Message,
@@ -438,10 +447,7 @@ type cancelResponse struct {
 func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (res application.InitAddCardResult, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
-		if err != nil {
-			status = "error"
-		}
+		status := metricStatus(err)
 		p.metrics.RecordRequest(ctx, "tkassa", "InitAddCard", status, time.Since(start))
 	}()
 
@@ -513,10 +519,7 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) (err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
-		if err != nil {
-			status = "error"
-		}
+		status := metricStatus(err)
 		p.metrics.RecordRequest(ctx, "tkassa", "RemoveCard", status, time.Since(start))
 	}()
 
