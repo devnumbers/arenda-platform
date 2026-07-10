@@ -68,6 +68,13 @@ type PaymentMethodInUseChecker interface {
 	WithTx(tx transaction.Tx) (PaymentMethodInUseChecker, error)
 }
 
+// PropertyLimiter returns the maximum number of active properties a user is
+// allowed to own based on their subscription. The rule lives in the billing
+// application layer, not in the postgres adapter.
+type PropertyLimiter interface {
+	ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error)
+}
+
 type SubscriptionPaymentRepository interface {
 	Create(ctx context.Context, payment domain.SubscriptionPayment) (domain.SubscriptionPayment, error)
 	GetByID(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)

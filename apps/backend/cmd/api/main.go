@@ -233,7 +233,8 @@ func run(fallback *slog.Logger) error {
 	propertyRepo := propertiespg.NewPropertyRepository(db)
 	propertyPhotoRepo := propertiespg.NewPropertyPhotoRepository(db)
 	occupancyProvider := propertiespg.NewOccupancyProvider(db)
-	limiter := billingpg.NewSubscriptionLimiter(db)
+	propertyLimiter := billingapp.NewSubscriptionPropertyLimiter(subscriptionRepo, tariffRepo)
+	limiter := billingpg.NewSubscriptionLimiter(propertyLimiter)
 	operationRepo := leasespg.NewOperationRepository(db)
 	recurringOpRepo := leasespg.NewRecurringOperationRepository(db)
 	leaseRepo := leasespg.NewLeaseRepository(db)
@@ -286,7 +287,7 @@ func run(fallback *slog.Logger) error {
 		Logger:    appLogger,
 	})
 
-	billing := billingapp.NewServices(
+	billing, _ := billingapp.NewServices(
 		tariffRepo,
 		subscriptionRepo,
 		paymentMethodRepo,

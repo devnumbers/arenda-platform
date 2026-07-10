@@ -2,82 +2,37 @@ package postgres
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"math"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// SubscriptionLimiter enforces per-user active property limits based on the
-// user's billing subscription and its tariff.
+// SubscriptionLimiter enforces per-user active property limits by delegating to
+// the billing application layer. It adapts application.PropertyLimiter to the
+// properties context's SubscriptionLimiter port.
 type SubscriptionLimiter struct {
-	db   postgres.DBTX
-	lock bool
+	limiter application.PropertyLimiter
 }
 
 // NewSubscriptionLimiter creates a subscription-backed property limiter.
-func NewSubscriptionLimiter(db postgres.DBTX) *SubscriptionLimiter {
-	return &SubscriptionLimiter{db: db}
-}
-
-// WithTx returns a limiter instance bound to the provided transaction. The
-// transaction-bound instance locks the subscription row with SELECT FOR UPDATE
-// to serialize concurrent property-limit checks.
-func (l *SubscriptionLimiter) WithTx(tx transaction.Tx) (propertiesapp.SubscriptionLimiter, error) {
-	dbtx, ok := tx.(postgres.DBTX)
-	if !ok {
-		return nil, fmt.Errorf("billing.SubscriptionLimiter.WithTx: %T is not a postgres.DBTX", tx)
-	}
-	return &SubscriptionLimiter{db: dbtx, lock: true}, nil
-}
-
-func (l *SubscriptionLimiter) q() *postgres.Queries {
-	return postgres.New(l.db)
+func NewSubscriptionLimiter(limiter application.PropertyLimiter) *SubscriptionLimiter {
+	return &SubscriptionLimiter{limiter: limiter}
 }
 
 // ActivePropertyLimit returns the maximum number of active properties the user
-// is allowed to own. If the user has no active subscription, the limit is 0.
+// is allowed to own.
 func (l *SubscriptionLimiter) ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error) {
-	var sub postgres.UserSubscription
-	var err error
+	return l.limiter.ActivePropertyLimit(ctx, userID)
+}
 
-	userIDPg := pgtype.UUID{Bytes: userID, Valid: true}
-	if l.lock {
-		sub, err = l.q().GetSubscriptionByUserIDForUpdate(ctx, userIDPg)
-	} else {
-		sub, err = l.q().GetSubscriptionByUserID(ctx, userIDPg)
-	}
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("get subscription by user id: %w", err)
-	}
-
-	if sub.Status != string(domain.SubscriptionStatusActive) && sub.Status != string(domain.SubscriptionStatusGrace) {
-		return 0, nil
-	}
-
-	tariff, err := l.q().GetTariffByID(ctx, sub.TariffID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("get tariff by id: %w", err)
-	}
-
-	limit := int(tariff.ActivePropertyLimit)
-	if limit < 0 {
-		return math.MaxInt32, nil
-	}
-	return limit, nil
+// WithTx returns a limiter instance bound to the provided transaction. The
+// underlying application rule is transaction-agnostic, so the adapter simply
+// returns a new wrapper around the same limiter.
+func (l *SubscriptionLimiter) WithTx(tx transaction.Tx) (propertiesapp.SubscriptionLimiter, error) {
+	_ = tx
+	return &SubscriptionLimiter{limiter: l.limiter}, nil
 }
 
 // Compile-time check that SubscriptionLimiter implements the properties port.
