@@ -431,7 +431,7 @@ func (r *RenewalService) recoverRenewalFailure(ctx context.Context, paymentID, s
 		return fmt.Errorf("get payment for recovery: %w", err)
 	}
 
-	if payment.Status == domain.PaymentStatusSucceeded || payment.Status != domain.PaymentStatusPending {
+	if payment.Status != domain.PaymentStatusPending {
 		// Nothing more to do for finalized or unexpected statuses.
 		return nil
 	}
