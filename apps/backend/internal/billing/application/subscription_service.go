@@ -49,8 +49,7 @@ func (s *SubscriptionService) GetSubscription(ctx context.Context, userID uuid.U
 	}
 	if err == nil {
 		period := lastPayment.Period
-		sub.CurrentPeriod = &period
-		view.Subscription = sub
+		view.CurrentPeriod = &period
 	}
 
 	if sub.PendingTariffID != nil {

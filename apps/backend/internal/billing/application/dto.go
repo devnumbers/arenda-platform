@@ -36,6 +36,7 @@ type SubscriptionView struct {
 	Tariff              domain.Tariff
 	PendingTariff       *domain.Tariff
 	ActivePaymentMethod *domain.PaymentMethod
+	CurrentPeriod       *domain.SubscriptionPeriod
 }
 
 // SubscriptionPaymentView is a subscription payment together with its tariff.
