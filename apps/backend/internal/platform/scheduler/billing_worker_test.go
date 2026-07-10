@@ -56,6 +56,18 @@ func (s *fakeBillingRunner) ProcessPendingUpgradePayments(context.Context, time.
 func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 	t.Parallel()
 
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+
+	ctx := context.Background()
+	pool, err := database.NewPool(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("new pool: %v", err)
+	}
+	defer pool.Close()
+
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 
@@ -66,7 +78,7 @@ func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 		expiredGraceErr: errors.New("expired grace failed: " + sensitive),
 	}
 
-	w := NewBillingWorker(nil, nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
+	w := NewBillingWorker(nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
 	w.renewals = svc
 	w.scheduled = svc
 
@@ -99,11 +111,23 @@ func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 func TestBillingWorkerTick_CallsProcessPendingUpgradePayments(t *testing.T) {
 	t.Parallel()
 
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+
+	ctx := context.Background()
+	pool, err := database.NewPool(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("new pool: %v", err)
+	}
+	defer pool.Close()
+
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 
 	svc := &fakeBillingRunner{pendingUpgradeCount: 3}
-	w := NewBillingWorker(nil, nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
+	w := NewBillingWorker(nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
 	w.renewals = svc
 	w.scheduled = svc
 
@@ -117,6 +141,15 @@ func TestBillingWorkerTick_CallsProcessPendingUpgradePayments(t *testing.T) {
 	}
 	if !bytes.Contains([]byte(logs), []byte("count=3")) {
 		t.Errorf("expected count=3 in logs, got:\n%s", logs)
+	}
+}
+
+func TestBillingWorker_Tick_RequiresPool(t *testing.T) {
+	t.Parallel()
+
+	w := NewBillingWorker(nil, nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
+	if err := w.tick(context.Background()); err == nil {
+		t.Fatal("expected tick to error when pool is nil")
 	}
 }
 

@@ -71,19 +71,21 @@ func (w *BillingWorker) Run(ctx context.Context) {
 }
 
 func (w *BillingWorker) tick(ctx context.Context) error {
-	if w.pool != nil {
-		acquired, release, err := w.acquireTickLock(ctx)
-		if err != nil {
-			return err
-		}
-		if !acquired {
-			w.logger.InfoContext(ctx, "billing worker tick skipped, another instance holds the lock")
-			return nil
-		}
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		defer release(releaseCtx)
+	if w.pool == nil {
+		return errors.New("billing worker requires a database pool")
 	}
+
+	acquired, release, err := w.acquireTickLock(ctx)
+	if err != nil {
+		return err
+	}
+	if !acquired {
+		w.logger.InfoContext(ctx, "billing worker tick skipped, another instance holds the lock")
+		return nil
+	}
+	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	defer release(releaseCtx)
 
 	now := w.clock.Now().UTC()
 
