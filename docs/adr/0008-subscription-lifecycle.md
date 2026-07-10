@@ -51,20 +51,26 @@ Upgrading to a more expensive tariff:
 
 ### 3. Downgrades
 
-Downgrading to a cheaper tariff:
+Downgrading to a cheaper tariff is always deferred and never charged at the
+moment it is scheduled:
 
-- Does not require immediate payment.
-- Is scheduled to take effect at the end of the already paid period.
-- Enables auto-renew automatically so the scheduled change is applied by the
-  worker.
-- When the downgrade is applied, if the number of active properties exceeds the
-  new tariff limit, the system archives the excess properties, skipping
+- `ScheduleDowngrade` sets the `pending_*` fields (`pending_tariff_id`,
+  `pending_change_at`, `pending_period`) AND `auto_renew_enabled = true`.
+  Enabling auto-renew is what lets the worker apply the change and keeps the
+  new tariff renewing on the normal cycle afterwards.
+- The billing worker applies the downgrade when `pending_change_at <= now`
+  (`pending_change_at` equals the current `valid_until`, i.e. the end of the
+  already paid period).
+- Application performs **no charge**: `tariff_id` switches to the new tariff,
+  `valid_until` is extended by the new tariff's chosen period from `now`,
+  `auto_renew_enabled = true`, `status = active`, and the `pending_*` fields are
+  cleared.
+- If the number of active properties exceeds the new tariff's
+  `active_property_limit`, the system archives the excess properties, skipping
   properties with open leases.
-
-Paid downgrades (to a cheaper non-basic tariff) follow the same deferred model:
-the tariff change is scheduled for the end of the already paid period and the
-charge is performed by the billing worker at the moment the scheduled change is
-applied, not at the time `ChangeTariff` is called.
+- There is **no paid scheduled change**: downgrades are never charged, neither
+  at schedule time nor at apply time. Subsequent renewals charge the NEW tariff
+  on the normal renewal cycle.
 
 ### 4. Renewal, grace and forced downgrade
 
@@ -123,12 +129,15 @@ paths are exempt so the owner can recover:
   without real payments.
 - (-) Downgrade archiving is not atomic with the tariff change; concurrent
   property edits could temporarily exceed the limit.
-- (-) The billing worker has no single-flight protection; overlapping runs could
-  process the same subscription twice in rare cases.
+- (+) The billing worker runs each tick under `pg_try_advisory_lock(0xB111)`
+  (see `apps/backend/internal/platform/scheduler/billing_worker.go`), so all
+  four phases — scheduled changes, renewals, pending upgrades and expired
+  grace — execute on a single leader and never overlap.
 
 ## Future work
 
-- Add idempotency keys or distributed locking for the billing worker.
+- Optionally add idempotency keys for renewal charges (distributed locking is
+  already provided by the advisory lock above).
 - Implement a "cancel now" endpoint to move a subscription to `cancelled`
   immediately.
 - Add retry logic and owner notifications for failed renewal charges.
