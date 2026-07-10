@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"testing"
+
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 )
 
 // TestMetricStatus pins the RED convention for the "status" metric label:
@@ -41,6 +43,11 @@ func TestMetricStatus(t *testing.T) {
 		{
 			name: "wrapped ProviderError is still ok",
 			err:  fmt.Errorf("tkassa: add customer failed: %w", providerErr),
+			want: "ok",
+		},
+		{
+			name: "card-not-found sentinel is ok",
+			err:  application.ErrProviderCardNotFound,
 			want: "ok",
 		},
 		{

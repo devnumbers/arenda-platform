@@ -82,16 +82,18 @@ func (e *ProviderError) ProviderErrorCode() string { return e.ErrorCode }
 // transport errors, timeouts, context cancellation, request-build / marshal
 // errors, non-2xx HTTP status, and response-unmarshal errors. Any definitive
 // provider response is a completed operation and reports "ok", even when it
-// carries a business outcome such as a declined payment or a parsed provider
-// error-code (surfaced as *ProviderError). This matches the fake adapter
-// (which returns nil err on decline) and keeps payment.provider.errors
-// comparable across providers.
+// carries a business outcome such as a declined payment, a parsed provider
+// error-code (surfaced as *ProviderError), or a card-not-found outcome
+// (application.ErrProviderCardNotFound). Definitive provider responses
+// (declines and card-not-found) are ok; only operational failures are error.
+// This matches the fake adapter (which returns nil err on decline) and keeps
+// payment.provider.errors comparable across providers.
 func metricStatus(err error) string {
 	if err == nil {
 		return "ok"
 	}
 	var providerErr *ProviderError
-	if errors.As(err, &providerErr) {
+	if errors.As(err, &providerErr) || errors.Is(err, application.ErrProviderCardNotFound) {
 		return "ok"
 	}
 	return "error"
