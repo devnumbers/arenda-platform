@@ -82,10 +82,10 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 	}
 
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.purgeLocked()
 
 	if entry, ok := p.pending[req.PaymentID.String()]; ok {
-		p.mu.Unlock()
 		p.log.InfoContext(ctx, "fake payment init is idempotent",
 			"provider_payment_id", entry.payload.ProviderPaymentID,
 			"internal_payment_id", req.PaymentID.String(),
@@ -111,7 +111,6 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 		amountKopecks: req.AmountKopecks,
 		createdAt:     p.clock.Now().UTC(),
 	}
-	p.mu.Unlock()
 
 	p.log.InfoContext(ctx, "fake payment initialized",
 		"provider_payment_id", providerPaymentID,
@@ -219,12 +218,12 @@ func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (a
 	refundedAmount := req.AmountKopecks
 	if refundedAmount == 0 {
 		p.mu.Lock()
+		defer p.mu.Unlock()
 		if amount, ok := p.confirmedAmounts[req.ProviderPaymentID]; ok {
 			refundedAmount = amount
 		} else if amount, ok := p.confirmedAmounts[req.PaymentID.String()]; ok {
 			refundedAmount = amount
 		}
-		p.mu.Unlock()
 	}
 
 	// Partial refunds are no longer initiated by the system; the fake provider
@@ -305,12 +304,12 @@ func (p *Provider) ConfirmPaymentFailed(ctx context.Context, internalPaymentID s
 
 func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *string) (application.WebhookPayload, error) {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.purgeLocked()
 	entry, ok := p.pending[internalPaymentID]
 	if ok {
 		delete(p.pending, internalPaymentID)
 	}
-	p.mu.Unlock()
 	if !ok {
 		return application.WebhookPayload{}, errors.New("fake: payment not found")
 	}
@@ -324,9 +323,7 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 		}
 	} else {
 		errorCode = nil
-		p.mu.Lock()
 		p.confirmedAmounts[internalPaymentID] = entry.amountKopecks
-		p.mu.Unlock()
 	}
 
 	return application.WebhookPayload{
