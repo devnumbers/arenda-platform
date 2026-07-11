@@ -383,6 +383,8 @@ func (b *bodyCapturingRoundTripper) RoundTrip(req *http.Request) (*http.Response
 // Ensure fakeRoundTripper satisfies the interface at compile time.
 var _ http.RoundTripper = (*fakeRoundTripper)(nil)
 var _ http.RoundTripper = (*countingRoundTripper)(nil)
+var _ http.RoundTripper = (*wroteRequestRoundTripper)(nil)
+var _ http.RoundTripper = (*signalingRoundTripper)(nil)
 
 // Ensure net.Error implementations satisfy the interface at compile time.
 var _ net.Error = (*timeoutNetError)(nil)
@@ -402,9 +404,18 @@ func hangingServer(t *testing.T, hits *atomic.Int32) *httptest.Server {
 	return srv
 }
 
+// waitHits blocks until the server observed n requests or the deadline
+// passes, so the test does not race the server goroutine incrementing hits.
+func waitHits(t *testing.T, hits *atomic.Int32, n int32) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for hits.Load() < n && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func timeoutTransport() *http.Transport {
 	return &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
 		DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
 		ResponseHeaderTimeout: 50 * time.Millisecond,
 	}
@@ -443,6 +454,7 @@ func TestRetryTransportWriteMethodsNoDuplicateAfterReadTimeout(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected read timeout error")
 			}
+			waitHits(t, &hits, tc.wantHits)
 			if hits.Load() != tc.wantHits {
 				t.Fatalf("%s reached server %d times, want %d (duplicate request would double-charge)", tc.method, hits.Load(), tc.wantHits)
 			}
@@ -468,6 +480,7 @@ func TestRetryTransportReadMethodsRetriedAfterReadTimeout(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected read timeout error")
 			}
+			waitHits(t, &hits, 3)
 			if hits.Load() != 3 {
 				t.Fatalf("%s reached server %d times, want 3 (1 initial + 2 retries)", method, hits.Load())
 			}
