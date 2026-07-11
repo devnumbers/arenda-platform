@@ -1048,6 +1048,7 @@ func TestMapStatus(t *testing.T) {
 		{"PARTIAL_REVERSED", domain.PaymentStatusFailed},
 		{"REVERSING", domain.PaymentStatusPending},
 		{"REFUNDING", domain.PaymentStatusPending},
+		{"ASYNC_REFUNDING", domain.PaymentStatusPending},
 		{"REFUNDED", domain.PaymentStatusRefunded},
 		{"PARTIAL_REFUNDED", domain.PaymentStatusPartialRefunded},
 		{"UNKNOWN", domain.PaymentStatusPending},
@@ -1072,6 +1073,7 @@ func TestMapCancelStatus(t *testing.T) {
 		{"AUTHORIZED", domain.PaymentStatusPending},
 		{"REVERSING", domain.PaymentStatusRefunding},
 		{"REFUNDING", domain.PaymentStatusRefunding},
+		{"ASYNC_REFUNDING", domain.PaymentStatusRefunding},
 		{"REJECTED", domain.PaymentStatusFailed},
 		{"UNKNOWN", domain.PaymentStatusFailed},
 	}

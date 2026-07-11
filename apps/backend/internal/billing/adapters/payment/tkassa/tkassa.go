@@ -877,12 +877,13 @@ func mapCancelStatus(status string) domain.PaymentStatus {
 	case statusPartialRefunded, statusPartialReversed:
 		return domain.PaymentStatusPartialRefunded
 	case statusNew, statusAuthorized, statusAuthorizing, status3DSChecking,
-		status3DSChecked, statusConfirming, statusFormShowed, statusAsyncRefunding:
+		status3DSChecked, statusConfirming, statusFormShowed:
 		return domain.PaymentStatusPending
-	case statusReversing, statusRefunding:
+	case statusReversing, statusRefunding, statusAsyncRefunding:
 		// The provider accepted the refund but has not settled it yet: the refund
 		// is in flight, so keep the internal refunding reservation instead of
-		// failing it.
+		// failing it. ASYNC_REFUNDING is an async-acquiring refund the provider
+		// settles in the background.
 		return domain.PaymentStatusRefunding
 	default:
 		return domain.PaymentStatusFailed

@@ -129,7 +129,7 @@ func Load() (Config, error) {
 	cfg.OTelTraceSampler = sampler
 
 	if cfg.OTelEnabled && cfg.OTelOTLPEndpoint == "" {
-		return Config{}, fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL_TRACES_EXPORTER or OTEL_METRICS_EXPORTER is set")
+		return Config{}, fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL_TRACES_EXPORTER or OTEL_METRICS_EXPORTER is set to a value other than 'none'")
 	}
 
 	if cfg.AppEnv == "" {

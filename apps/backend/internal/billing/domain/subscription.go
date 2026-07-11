@@ -70,8 +70,9 @@ func NewOwnerSubscription(userID, tariffID uuid.UUID) (Subscription, error) {
 // ReconstituteSubscription validates a Subscription assembled from persisted
 // state and returns it. Persistence adapters build the aggregate from raw
 // storage values (including unchecked enum casts) and pass it here so that
-// unknown statuses/sources or missing identity fields are rejected with a
-// descriptive error instead of silently producing an invalid aggregate.
+// unknown statuses/sources/pending periods or missing identity fields are
+// rejected with a descriptive error instead of silently producing an invalid
+// aggregate.
 func ReconstituteSubscription(sub Subscription) (Subscription, error) {
 	if sub.ID == uuid.Nil {
 		return Subscription{}, fmt.Errorf("reconstitute subscription: missing id")
@@ -91,6 +92,13 @@ func ReconstituteSubscription(sub Subscription) (Subscription, error) {
 	case SubscriptionSourcePaid, SubscriptionSourceService:
 	default:
 		return Subscription{}, fmt.Errorf("reconstitute subscription: unknown source %q", sub.Source)
+	}
+	if sub.PendingPeriod != nil {
+		switch *sub.PendingPeriod {
+		case PeriodMonth, PeriodYear:
+		default:
+			return Subscription{}, fmt.Errorf("reconstitute subscription: unknown pending period %q", *sub.PendingPeriod)
+		}
 	}
 	return sub, nil
 }

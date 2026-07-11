@@ -263,7 +263,9 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 	// held during the unbounded external HTTP request. On failure, or on a
 	// non-refund response, the reservation is reverted in a separate short
 	// transaction. An in-flight refund (refunding) keeps the reservation for the
-	// reconciliation watchdog.
+	// reconciliation watchdog. A partial-refund response to our full-amount
+	// Cancel is an anomaly: the reservation is kept and the payment is left in
+	// refunding for manual review instead of being finalized as a full refund.
 	cancelRes, err := s.provider.Cancel(ctx, CancelRequest{
 		PaymentID:         paymentID,
 		ProviderPaymentID: providerPaymentID,
@@ -292,7 +294,21 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 		return nil
 	}
 
-	if cancelRes.Status != domain.PaymentStatusRefunded && cancelRes.Status != domain.PaymentStatusPartialRefunded {
+	if cancelRes.Status == domain.PaymentStatusPartialRefunded {
+		// The system always refunds the full amount, so the provider answering
+		// our full-amount Cancel with a partial refund is an anomaly. Warn and
+		// leave the payment in the refunding status for manual review instead
+		// of recording a full refund that did not happen.
+		s.deps.log.WarnContext(ctx, "provider cancel returned partial refund for a full refund request, manual review required",
+			slog.String("payment_id", paymentID.String()),
+			slog.String("subscription_id", subscriptionID.String()),
+			slog.String("user_id", userID.String()),
+			slog.Int64("requested_amount_kopecks", refundAmount),
+			slog.Int64("refunded_amount_kopecks", cancelRes.RefundedAmountKopecks))
+		return nil
+	}
+
+	if cancelRes.Status != domain.PaymentStatusRefunded {
 		s.deps.log.ErrorContext(ctx, "provider cancel returned non-refund status",
 			slog.String("payment_id", paymentID.String()),
 			slog.String("subscription_id", subscriptionID.String()),
@@ -533,6 +549,13 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 	return nil
 }
 
+// maxReconcileBatchesPerTick caps how many batches a single reconcile tick
+// processes. Each batch re-reads the same staleness cutoff, so payments that
+// cannot be resolved (provider down or still unsettled) would otherwise keep
+// the tick spinning on provider calls while holding the worker advisory lock.
+// Anything left over is still stale on the next tick.
+const maxReconcileBatchesPerTick = 10
+
 // ReconcilePendingPayments checks all pending subscription payments that have
 // been stuck longer than the staleness threshold with the provider in batches
 // and finalizes them via SyncPendingPayment. Returns the number of payments
@@ -541,7 +564,7 @@ func (s *PaymentService) ReconcilePendingPayments(ctx context.Context, now time.
 	processed := 0
 	createdBefore := now.Add(-pendingPaymentStalenessThreshold).UTC()
 
-	for {
+	for batch := 0; batch < maxReconcileBatchesPerTick; batch++ {
 		payments, err := s.deps.subscriptionPayments.ListPendingPayments(ctx, createdBefore, renewalBatchSize)
 		if err != nil {
 			return processed, fmt.Errorf("list pending payments: %w", err)
@@ -571,12 +594,13 @@ func (s *PaymentService) ReconcilePendingPayments(ctx context.Context, now time.
 // ReconcileStaleRefunds resolves payments stuck in the refunding state by
 // asking the provider for ground truth: a refunded provider payment finalizes
 // the refund; a still-captured charge reverts the refund reservation. Returns
-// the number of payments resolved.
+// the number of payments checked, including no-op visits to payments the
+// provider has not settled yet.
 func (s *PaymentService) ReconcileStaleRefunds(ctx context.Context, now time.Time) (int, error) {
 	processed := 0
 	updatedBefore := now.Add(-pendingPaymentStalenessThreshold).UTC()
 
-	for {
+	for batch := 0; batch < maxReconcileBatchesPerTick; batch++ {
 		payments, err := s.deps.subscriptionPayments.ListStaleRefundingPayments(ctx, updatedBefore, renewalBatchSize)
 		if err != nil {
 			return processed, fmt.Errorf("list stale refunding payments: %w", err)
@@ -612,8 +636,10 @@ func (s *PaymentService) ReconcileStaleRefunds(ctx context.Context, now time.Tim
 // downgraded to basic. A still-captured charge (succeeded) means the provider
 // cancel never reached the provider or never happened, so the reservation is
 // reverted. A partial refund is an anomaly the system never initiates, so it is
-// logged for manual review and left untouched. Any other status means the
-// provider has not settled yet, so the payment is retried on the next tick.
+// logged for manual review and left untouched. A failed provider status is
+// ambiguous for a payment we are refunding, so it is warned for manual review
+// and left untouched. Any other status means the provider has not settled yet,
+// so the payment is retried on the next tick.
 func (s *PaymentService) syncRefundingPayment(ctx context.Context, paymentID uuid.UUID) error {
 	payment, err := s.deps.subscriptionPayments.GetByID(ctx, paymentID)
 	if err != nil {
@@ -647,9 +673,17 @@ func (s *PaymentService) syncRefundingPayment(ctx context.Context, paymentID uui
 			slog.String("payment_id", paymentID.String()),
 			slog.String("subscription_id", payment.SubscriptionID.String()))
 		return nil
+	case domain.PaymentStatusFailed:
+		// A failed provider status (e.g. GetState reports REVERSED) is ambiguous
+		// for a payment we are refunding: it is unclear whether the refund
+		// happened, so flag it for manual review instead of silently retrying.
+		s.deps.log.WarnContext(ctx, "refunding payment has failed status at provider, manual review required",
+			slog.String("payment_id", payment.ID.String()),
+			slog.String("provider_payment_id", *payment.ProviderPaymentID))
+		return nil
 	default:
-		// The provider payment has not settled yet (pending, failed, or an
-		// unknown status); leave the reservation for the next tick.
+		// The provider payment has not settled yet (pending or an unknown
+		// status); leave the reservation for the next tick.
 		s.deps.log.DebugContext(ctx, "provider status does not resolve stuck refund yet",
 			slog.String("payment_id", paymentID.String()),
 			slog.String("subscription_id", payment.SubscriptionID.String()),

@@ -618,6 +618,19 @@ func TestReconstituteSubscription(t *testing.T) {
 		}
 	})
 
+	t.Run("accepts valid pending period", func(t *testing.T) {
+		sub := validSub()
+		period := PeriodMonth
+		sub.PendingPeriod = &period
+		got, err := ReconstituteSubscription(sub)
+		if err != nil {
+			t.Fatalf("ReconstituteSubscription() error = %v", err)
+		}
+		if got.PendingPeriod == nil || *got.PendingPeriod != PeriodMonth {
+			t.Errorf("ReconstituteSubscription() PendingPeriod = %v, want %v", got.PendingPeriod, PeriodMonth)
+		}
+	})
+
 	tests := []struct {
 		name   string
 		mutate func(*Subscription)
@@ -625,6 +638,10 @@ func TestReconstituteSubscription(t *testing.T) {
 		{"unknown status", func(s *Subscription) { s.Status = SubscriptionStatus("paused") }},
 		{"empty status", func(s *Subscription) { s.Status = "" }},
 		{"unknown source", func(s *Subscription) { s.Source = SubscriptionSource("trial") }},
+		{"unknown pending period", func(s *Subscription) {
+			period := SubscriptionPeriod("quarter")
+			s.PendingPeriod = &period
+		}},
 		{"missing id", func(s *Subscription) { s.ID = uuid.Nil }},
 		{"missing user id", func(s *Subscription) { s.UserID = uuid.Nil }},
 		{"missing tariff id", func(s *Subscription) { s.TariffID = uuid.Nil }},

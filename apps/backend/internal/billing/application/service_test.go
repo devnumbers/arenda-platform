@@ -5489,6 +5489,74 @@ func TestBilling_RefundPayment_CancelRefundingKeepsReservation(t *testing.T) {
 	}
 }
 
+func TestBilling_RefundPayment_CancelPartialRefundedStaysRefunding(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777776")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888886")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6")
+	basicID := uuid.MustParse("00000000-0000-0000-0000-0000000000b6")
+	proID := uuid.MustParse("00000000-0000-0000-0000-0000000000c6")
+	providerPaymentID := "stub_cancel_partial_refunded"
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
+	})
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+		SucceededAt:       &validUntil,
+	}
+	d.provider.cancelRes = CancelResult{
+		ProviderPaymentID:     providerPaymentID,
+		Status:                domain.PaymentStatusPartialRefunded,
+		RefundedAmountKopecks: 2500,
+	}
+
+	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
+		t.Fatalf("RefundPayment error: %v", err)
+	}
+
+	// A partial refund answers a full-amount Cancel we never make: it is an
+	// anomaly. The payment must stay in refunding for manual review with no
+	// refunded amount recorded and no subscription downgrade.
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusRefunding {
+		t.Errorf("status after partial-refund anomaly = %s, want refunding (kept for manual review)", payment.Status)
+	}
+	if payment.RefundedAmountKopecks != nil {
+		t.Errorf("refunded amount = %v, want nil (no refund finalized)", *payment.RefundedAmountKopecks)
+	}
+	if got := d.subscriptions.subs[userID].TariffID; got != proID {
+		t.Errorf("subscription tariff = %s, want pro %s (must not downgrade)", got, proID)
+	}
+	if len(d.propertyArchiver.calls) != 0 {
+		t.Errorf("downgrade applied %d times, want 0", len(d.propertyArchiver.calls))
+	}
+	if d.provider.cancelCount != 1 {
+		t.Errorf("provider.Cancel called %d times, want 1", d.provider.cancelCount)
+	}
+}
+
 func TestBilling_SyncPendingPayment(t *testing.T) {
 	type syncCase struct {
 		name               string
@@ -6449,6 +6517,62 @@ func TestBilling_ReconcileStaleRefunds(t *testing.T) {
 		}
 		if len(d.propertyArchiver.calls) != 0 {
 			t.Errorf("expected property archiver not called, got %v", d.propertyArchiver.calls)
+		}
+	})
+
+	t.Run("provider failed keeps the payment refunding", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666671")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666672")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666673")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_failed", staleAt)
+
+		d.provider.statusRes = domain.PaymentStatusFailed
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected 1 payment visited, got %d", count)
+		}
+
+		payment := d.subscriptionPayments.payments[paymentID]
+		if payment.Status != domain.PaymentStatusRefunding {
+			t.Errorf("expected payment to stay refunding, got %s", payment.Status)
+		}
+	})
+
+	t.Run("bounded when no payment resolves", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+
+		// A full batch of stuck refunds whose provider never settles: each
+		// batch re-reads the same payments, so the loop must stop at the cap
+		// instead of spinning for the whole tick.
+		for i := range renewalBatchSize {
+			userID := uuid.MustParse(fmt.Sprintf("77777777-7777-7777-7777-%012d", i))
+			subscriptionID := uuid.MustParse(fmt.Sprintf("88888888-8888-8888-8888-%012d", i))
+			paymentID := uuid.MustParse(fmt.Sprintf("99999999-9999-9999-9999-%012d", i))
+			addRefundingPayment(d, userID, subscriptionID, paymentID, fmt.Sprintf("stale_refund_stuck_%d", i), staleAt)
+		}
+		d.provider.statusRes = domain.PaymentStatusPending
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if d.subscriptionPayments.listStaleRefundingCalls != maxReconcileBatchesPerTick {
+			t.Errorf("ListStaleRefundingPayments called %d times, want cap %d",
+				d.subscriptionPayments.listStaleRefundingCalls, maxReconcileBatchesPerTick)
+		}
+		if d.provider.statusCount != maxReconcileBatchesPerTick*renewalBatchSize {
+			t.Errorf("provider.Status called %d times, want %d (cap * batch size)",
+				d.provider.statusCount, maxReconcileBatchesPerTick*renewalBatchSize)
+		}
+		if count != maxReconcileBatchesPerTick*renewalBatchSize {
+			t.Errorf("checked count = %d, want %d", count, maxReconcileBatchesPerTick*renewalBatchSize)
 		}
 	})
 
