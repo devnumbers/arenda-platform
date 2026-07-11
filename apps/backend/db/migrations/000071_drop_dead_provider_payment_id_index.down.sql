@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS idx_subscription_payments_provider_payment_id
+ON subscription_payments(provider_payment_id);

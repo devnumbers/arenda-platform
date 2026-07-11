@@ -25,21 +25,22 @@ export type FilterDrawerProps = {
 export function FilterDrawer({ isOpen, onClose, onApply, children }: FilterDrawerProps): JSX.Element {
   return (
     <Drawer isOpen={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DrawerBackdrop />
-      <DrawerContent placement="bottom">
-        <DrawerDialog>
-          <DrawerCloseTrigger aria-label="Закрыть" />
-          <DrawerHeader className={styles.header}>
-            <DrawerHeading>Фильтры</DrawerHeading>
-          </DrawerHeader>
-          <DrawerBody className={styles.body}>{children}</DrawerBody>
-          <DrawerFooter className={styles.footer}>
-            <HeroButton variant="primary" size="lg" fullWidth onClick={onApply}>
-              Применить
-            </HeroButton>
-          </DrawerFooter>
-        </DrawerDialog>
-      </DrawerContent>
+      <DrawerBackdrop>
+        <DrawerContent placement="bottom">
+          <DrawerDialog>
+            <DrawerCloseTrigger aria-label="Закрыть" />
+            <DrawerHeader className={styles.header}>
+              <DrawerHeading>Фильтры</DrawerHeading>
+            </DrawerHeader>
+            <DrawerBody className={styles.body}>{children}</DrawerBody>
+            <DrawerFooter className={styles.footer}>
+              <HeroButton variant="primary" size="lg" fullWidth onPress={onApply}>
+                Применить
+              </HeroButton>
+            </DrawerFooter>
+          </DrawerDialog>
+        </DrawerContent>
+      </DrawerBackdrop>
     </Drawer>
   );
 }

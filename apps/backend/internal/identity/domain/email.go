@@ -1,14 +1,11 @@
 package domain
 
 import (
-	"errors"
 	"regexp"
 	"strings"
 )
 
 var emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
-
-var ErrInvalidEmail = errors.New("invalid email")
 
 type Email struct {
 	value string
@@ -22,10 +19,15 @@ func NewEmail(raw string) (Email, error) {
 	return Email{value: normalized}, nil
 }
 
-// EmailFrom creates an Email from a already-normalized address.
-// It is intended for trusted sources such as the database.
-func EmailFrom(normalized string) Email {
-	return Email{value: normalized}
+// EmailFrom creates an Email from an already-normalized address.
+// It is intended for trusted sources such as the database. An empty value or
+// an invalid address returns an error so callers do not silently propagate
+// corrupt or missing data.
+func EmailFrom(normalized string) (Email, error) {
+	if normalized == "" {
+		return Email{}, ErrInvalidEmail
+	}
+	return NewEmail(normalized)
 }
 
 func NormalizeEmail(raw string) (string, error) {

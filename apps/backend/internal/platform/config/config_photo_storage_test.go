@@ -12,7 +12,6 @@ func setRequiredProductionEnv(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("APP_BASE_URL", "https://rentlee.ru")
 	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
-	t.Setenv("SMS_SENDER", "disabled")
 	t.Setenv("PAYMENT_PROVIDER", "tkassa")
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")

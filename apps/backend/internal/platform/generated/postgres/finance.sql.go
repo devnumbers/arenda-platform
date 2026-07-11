@@ -17,17 +17,19 @@ SELECT
   category,
   COALESCE(SUM(amount_kopecks), 0)::bigint AS total_kopecks
 FROM operations
-WHERE owner_id = $1
-  AND operation_date >= $2 AND operation_date <= $3
+WHERE owner_id = $1::uuid
+  AND status IN ('paid', 'received')
+  AND ($2::date IS NULL OR operation_date >= $2::date)
+  AND ($3::date IS NULL OR operation_date <= $3::date)
   AND deleted_at IS NULL
 GROUP BY type, category
 ORDER BY total_kopecks DESC
 `
 
 type GetFinanceReportByCategoryParams struct {
-	OwnerID         pgtype.UUID `json:"owner_id"`
-	OperationDate   pgtype.Date `json:"operation_date"`
-	OperationDate_2 pgtype.Date `json:"operation_date_2"`
+	OwnerID  pgtype.UUID `json:"owner_id"`
+	FromDate pgtype.Date `json:"from_date"`
+	ToDate   pgtype.Date `json:"to_date"`
 }
 
 type GetFinanceReportByCategoryRow struct {
@@ -37,7 +39,7 @@ type GetFinanceReportByCategoryRow struct {
 }
 
 func (q *Queries) GetFinanceReportByCategory(ctx context.Context, arg GetFinanceReportByCategoryParams) ([]GetFinanceReportByCategoryRow, error) {
-	rows, err := q.db.Query(ctx, getFinanceReportByCategory, arg.OwnerID, arg.OperationDate, arg.OperationDate_2)
+	rows, err := q.db.Query(ctx, getFinanceReportByCategory, arg.OwnerID, arg.FromDate, arg.ToDate)
 	if err != nil {
 		return nil, err
 	}
@@ -62,17 +64,19 @@ SELECT
   COALESCE(SUM(CASE WHEN type = 'income' THEN amount_kopecks ELSE 0 END), 0)::bigint AS income_kopecks,
   COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_kopecks ELSE 0 END), 0)::bigint AS expense_kopecks
 FROM operations
-WHERE owner_id = $1
-  AND operation_date >= $2 AND operation_date <= $3
+WHERE owner_id = $1::uuid
+  AND status IN ('paid', 'received')
+  AND ($2::date IS NULL OR operation_date >= $2::date)
+  AND ($3::date IS NULL OR operation_date <= $3::date)
   AND deleted_at IS NULL
 GROUP BY month
 ORDER BY month
 `
 
 type GetFinanceReportByMonthParams struct {
-	OwnerID         pgtype.UUID `json:"owner_id"`
-	OperationDate   pgtype.Date `json:"operation_date"`
-	OperationDate_2 pgtype.Date `json:"operation_date_2"`
+	OwnerID  pgtype.UUID `json:"owner_id"`
+	FromDate pgtype.Date `json:"from_date"`
+	ToDate   pgtype.Date `json:"to_date"`
 }
 
 type GetFinanceReportByMonthRow struct {
@@ -82,7 +86,7 @@ type GetFinanceReportByMonthRow struct {
 }
 
 func (q *Queries) GetFinanceReportByMonth(ctx context.Context, arg GetFinanceReportByMonthParams) ([]GetFinanceReportByMonthRow, error) {
-	rows, err := q.db.Query(ctx, getFinanceReportByMonth, arg.OwnerID, arg.OperationDate, arg.OperationDate_2)
+	rows, err := q.db.Query(ctx, getFinanceReportByMonth, arg.OwnerID, arg.FromDate, arg.ToDate)
 	if err != nil {
 		return nil, err
 	}
@@ -107,8 +111,10 @@ SELECT
   COALESCE(SUM(CASE WHEN type = 'income' THEN amount_kopecks ELSE 0 END), 0)::bigint AS income_kopecks,
   COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_kopecks ELSE 0 END), 0)::bigint AS expense_kopecks
 FROM operations
-WHERE owner_id = $1
-  AND operation_date >= $2 AND operation_date <= $3
+WHERE owner_id = $1::uuid
+  AND status IN ('paid', 'received')
+  AND ($2::date IS NULL OR operation_date >= $2::date)
+  AND ($3::date IS NULL OR operation_date <= $3::date)
   AND deleted_at IS NULL
 GROUP BY property_id
 ORDER BY (
@@ -118,9 +124,9 @@ ORDER BY (
 `
 
 type GetFinanceReportByPropertyParams struct {
-	OwnerID         pgtype.UUID `json:"owner_id"`
-	OperationDate   pgtype.Date `json:"operation_date"`
-	OperationDate_2 pgtype.Date `json:"operation_date_2"`
+	OwnerID  pgtype.UUID `json:"owner_id"`
+	FromDate pgtype.Date `json:"from_date"`
+	ToDate   pgtype.Date `json:"to_date"`
 }
 
 type GetFinanceReportByPropertyRow struct {
@@ -130,7 +136,7 @@ type GetFinanceReportByPropertyRow struct {
 }
 
 func (q *Queries) GetFinanceReportByProperty(ctx context.Context, arg GetFinanceReportByPropertyParams) ([]GetFinanceReportByPropertyRow, error) {
-	rows, err := q.db.Query(ctx, getFinanceReportByProperty, arg.OwnerID, arg.OperationDate, arg.OperationDate_2)
+	rows, err := q.db.Query(ctx, getFinanceReportByProperty, arg.OwnerID, arg.FromDate, arg.ToDate)
 	if err != nil {
 		return nil, err
 	}
@@ -154,15 +160,17 @@ SELECT
   COALESCE(SUM(CASE WHEN type = 'income' THEN amount_kopecks ELSE 0 END), 0)::bigint AS income_kopecks,
   COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_kopecks ELSE 0 END), 0)::bigint AS expense_kopecks
 FROM operations
-WHERE owner_id = $1
-  AND operation_date >= $2 AND operation_date <= $3
+WHERE owner_id = $1::uuid
+  AND status IN ('paid', 'received')
+  AND ($2::date IS NULL OR operation_date >= $2::date)
+  AND ($3::date IS NULL OR operation_date <= $3::date)
   AND deleted_at IS NULL
 `
 
 type GetFinanceReportTotalsParams struct {
-	OwnerID         pgtype.UUID `json:"owner_id"`
-	OperationDate   pgtype.Date `json:"operation_date"`
-	OperationDate_2 pgtype.Date `json:"operation_date_2"`
+	OwnerID  pgtype.UUID `json:"owner_id"`
+	FromDate pgtype.Date `json:"from_date"`
+	ToDate   pgtype.Date `json:"to_date"`
 }
 
 type GetFinanceReportTotalsRow struct {
@@ -171,7 +179,7 @@ type GetFinanceReportTotalsRow struct {
 }
 
 func (q *Queries) GetFinanceReportTotals(ctx context.Context, arg GetFinanceReportTotalsParams) (GetFinanceReportTotalsRow, error) {
-	row := q.db.QueryRow(ctx, getFinanceReportTotals, arg.OwnerID, arg.OperationDate, arg.OperationDate_2)
+	row := q.db.QueryRow(ctx, getFinanceReportTotals, arg.OwnerID, arg.FromDate, arg.ToDate)
 	var i GetFinanceReportTotalsRow
 	err := row.Scan(&i.IncomeKopecks, &i.ExpenseKopecks)
 	return i, err

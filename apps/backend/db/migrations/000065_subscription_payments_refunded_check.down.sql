@@ -1,0 +1,1 @@
+ALTER TABLE subscription_payments DROP CONSTRAINT IF EXISTS subscription_payments_refunded_amount_nonneg;

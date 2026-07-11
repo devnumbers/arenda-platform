@@ -1,72 +1,39 @@
 'use client';
 
-import {type JSX, useCallback, useEffect, useMemo, useState} from 'react';
-import {usePathname, useRouter, useSearchParams} from 'next/navigation';
-import {propertyTypeOptions} from '@/features/properties/lib/property-types';
-import type {StatusFilterValue} from '@/features/properties/lib/property-statuses';
-import {statusFilterOptions} from '@/features/properties/lib/property-statuses';
+import {type JSX, useCallback, useMemo, useState} from 'react';
+import {usePathname, useRouter} from 'next/navigation';
+import {useProperties} from '@/features/properties/api/hooks';
 import {useSubscription} from '@/features/subscription/api/hooks';
+import {PageHeader} from '@/shared/ui/page-header';
+import {ROUTES} from '@/shared/config/routes';
 import {usePropertyListData} from '../lib/use-property-list-data';
 import {applyFiltersAndSort, type PropertiesViewMode} from '../lib/apply-filters';
+import {DEFAULT_PROPERTY_SORT} from '../lib/parse-property-search-params';
 import {PropertiesToolbar} from './PropertiesToolbar';
+import {PropertyCreateButton} from './PropertyCreateButton';
 import {PropertyCard} from './PropertyCard';
 import {PropertiesEmptyState} from './PropertiesEmptyState';
 import {PropertiesLoading} from './PropertiesLoading';
 import {PropertiesErrorState} from './PropertiesErrorState';
 import {PropertiesArchiveLink} from './PropertiesArchiveLink';
 import type {PropertyFilters, PropertySort} from '../lib/filter-types';
-import type {PropertyType} from '@/entities/property/model/types';
 import styles from './PropertiesPage.module.css';
 
 export type PropertiesPageProps = {
     readonly mode?: PropertiesViewMode;
+    readonly initialFilters?: PropertyFilters;
+    readonly initialSort?: PropertySort;
 };
 
-const initialSort: PropertySort = 'name_asc';
-
-const validPropertyTypes = new Set<PropertyType>(propertyTypeOptions.map((option) => option.value));
-const validStatusValues = new Set<StatusFilterValue>(statusFilterOptions.map((option) => option.value));
-
-function parseFiltersFromSearchParams(searchParams: URLSearchParams): PropertyFilters {
-    const rawTypes = searchParams.get('types')?.split(',') ?? [];
-    const rawStatuses = searchParams.get('statuses')?.split(',') ?? [];
-
-    return {
-        types: rawTypes.filter((value): value is PropertyType => validPropertyTypes.has(value as PropertyType)),
-        statuses: rawStatuses.filter((value): value is StatusFilterValue =>
-            validStatusValues.has(value as StatusFilterValue),
-        ),
-    };
-}
-
-function parseSortFromSearchParams(searchParams: URLSearchParams): PropertySort {
-    const value = searchParams.get('sort');
-    return value === 'name_asc' || value === 'name_desc' ? value : initialSort;
-}
-
-export function PropertiesPage({mode = 'active'}: PropertiesPageProps): JSX.Element {
+export function PropertiesPage({mode = 'active', initialFilters, initialSort}: PropertiesPageProps): JSX.Element {
     const {data, isLoading, isFetching, isError, refetch} = usePropertyListData(mode);
+    const {data: activeProperties} = useProperties();
     const subscriptionQuery = useSubscription();
     const router = useRouter();
     const pathname = usePathname();
-    const searchParams = useSearchParams();
 
-    const [filters, setFilters] = useState<PropertyFilters>(() => parseFiltersFromSearchParams(searchParams));
-    const [sort, setSort] = useState<PropertySort>(() => parseSortFromSearchParams(searchParams));
-
-    useEffect(() => {
-        const nextFilters = parseFiltersFromSearchParams(searchParams);
-        const nextSort = parseSortFromSearchParams(searchParams);
-        let cancelled = false;
-        queueMicrotask(() => {
-            if (cancelled) return;
-            setFilters(nextFilters);
-            setSort(nextSort);
-        });
-        return () => {
-            cancelled = true;
-        };
-    }, [searchParams]);
+    const [filters, setFilters] = useState<PropertyFilters>(initialFilters ?? {types: [], statuses: []});
+    const [sort, setSort] = useState<PropertySort>(initialSort ?? DEFAULT_PROPERTY_SORT);
 
     const visible = useMemo(
         () => (data ? applyFiltersAndSort(data, mode, filters, sort) : []),
@@ -85,7 +52,7 @@ export function PropertiesPage({mode = 'active'}: PropertiesPageProps): JSX.Elem
                 params.set('statuses', nextFilters.statuses.join(','));
             }
 
-            if (nextSort !== initialSort) {
+            if (nextSort !== DEFAULT_PROPERTY_SORT) {
                 params.set('sort', nextSort);
             }
 
@@ -106,22 +73,30 @@ export function PropertiesPage({mode = 'active'}: PropertiesPageProps): JSX.Elem
 
     const isEmpty = !isLoading && !isError && visible.length === 0;
 
+    const isActionLoading = subscriptionQuery.isPending || activeProperties === undefined;
+
     const canAdd = useMemo(() => {
-        if (!subscriptionQuery.data) return true;
+        if (!subscriptionQuery.data || activeProperties === undefined) return false;
         const limit = subscriptionQuery.data.tariff.activePropertyLimit;
         if (limit < 0) return true;
-        return (data?.length ?? 0) < limit;
-    }, [subscriptionQuery.data, data]);
+        return activeProperties.length < limit;
+    }, [subscriptionQuery.data, activeProperties]);
 
     return (
         <div className={styles.root}>
-            <PropertiesToolbar mode={mode} filters={filters} sort={sort} onChange={handleChange} canAdd={canAdd}/>
+            <PageHeader
+                title={mode === 'archived' ? 'Архивные объекты' : 'Мои объекты'}
+                backHref={mode === 'archived' ? ROUTES.properties : undefined}
+                actions={<PropertyCreateButton canAdd={canAdd} isLoading={isActionLoading}/>}
+            />
+
+            <PropertiesToolbar mode={mode} filters={filters} sort={sort} onChange={handleChange}/>
 
             {isLoading && <PropertiesLoading/>}
 
             {!isLoading && isError && <PropertiesErrorState onRetry={refetch} isLoading={isFetching}/>}
 
-            {!isLoading && !isError && isEmpty && <PropertiesEmptyState/>}
+            {!isLoading && !isError && isEmpty && <PropertiesEmptyState canAdd={canAdd} isLoading={isActionLoading}/>}
 
             {!isLoading && !isError && !isEmpty && (
                 <ul className={styles.list}>

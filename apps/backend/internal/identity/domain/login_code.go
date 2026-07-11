@@ -1,9 +1,8 @@
 package domain
 
 import (
-	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"time"
 
@@ -11,19 +10,8 @@ import (
 )
 
 const (
-	LoginCodeTTL          = 5 * time.Minute
-	LoginAttemptWindowTTL = 30 * time.Minute
-	MaxLoginFailures      = 5
-)
-
-const (
-	LoginCodePurposeLogin       = "login"
-	LoginCodePurposePhoneChange = "phone_change"
-)
-
-var (
-	ErrLoginCodeInvalid = errors.New("login code invalid")
-	ErrTooManyAttempts  = errors.New("too many attempts")
+	// LoginCodeTTL is the lifetime of a newly generated login code.
+	LoginCodeTTL = 5 * time.Minute
 )
 
 type LoginCode struct {
@@ -31,14 +19,14 @@ type LoginCode struct {
 	UserID    *uuid.UUID
 	Phone     Phone
 	Email     Email
-	Purpose   string
+	Purpose   LoginCodePurpose
 	CodeHash  string
 	ExpiresAt time.Time
 	Used      bool
 	CreatedAt time.Time
 }
 
-func NewLoginCode(phone Phone, email Email, code, purpose string, userID *uuid.UUID, now time.Time) (LoginCode, error) {
+func NewLoginCode(phone Phone, email Email, codeHash string, purpose LoginCodePurpose, userID *uuid.UUID, now time.Time) (LoginCode, error) {
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return LoginCode{}, fmt.Errorf("generate login code id: %w", err)
@@ -49,52 +37,43 @@ func NewLoginCode(phone Phone, email Email, code, purpose string, userID *uuid.U
 		Phone:     phone,
 		Email:     email,
 		Purpose:   purpose,
-		CodeHash:  hashLoginCode(phone.String(), email.String(), code),
+		CodeHash:  codeHash,
 		ExpiresAt: now.Add(LoginCodeTTL),
 		Used:      false,
 		CreatedAt: now,
 	}, nil
 }
 
-func (c *LoginCode) Verify(code string, now time.Time) error {
-	if c.Used || now.After(c.ExpiresAt) || hashLoginCode(c.Phone.String(), c.Email.String(), code) != c.CodeHash {
+func (c *LoginCode) Verify(codeHash string, now time.Time) error {
+	if c.Used || now.After(c.ExpiresAt) {
 		return ErrLoginCodeInvalid
 	}
+
+	expected, err := hex.DecodeString(c.CodeHash)
+	if err != nil {
+		return ErrLoginCodeInvalid
+	}
+	actual, err := hex.DecodeString(codeHash)
+	if err != nil {
+		return ErrLoginCodeInvalid
+	}
+	if len(expected) != len(actual) || subtle.ConstantTimeCompare(expected, actual) != 1 {
+		return ErrLoginCodeInvalid
+	}
+
+	return nil
+}
+
+// MarkUsed marks the login code as used.
+func (c *LoginCode) MarkUsed() {
 	c.Used = true
+}
+
+// VerifyAndUse checks the code hash and, if valid, marks the code as used.
+func (c *LoginCode) VerifyAndUse(codeHash string, now time.Time) error {
+	if err := c.Verify(codeHash, now); err != nil {
+		return err
+	}
+	c.MarkUsed()
 	return nil
-}
-
-func hashLoginCode(phone, email, code string) string {
-	sum := sha256.Sum256([]byte(phone + ":" + email + ":" + code))
-	return hex.EncodeToString(sum[:])
-}
-
-type AttemptWindow struct {
-	Failures       int
-	FirstFailureAt time.Time
-	LastFailureAt  time.Time
-}
-
-func NewAttemptWindow(now time.Time) AttemptWindow {
-	return AttemptWindow{FirstFailureAt: now, LastFailureAt: now}
-}
-
-func (w *AttemptWindow) RecordFailure(now time.Time) error {
-	if w.Failures == 0 || now.Sub(w.FirstFailureAt) > LoginAttemptWindowTTL {
-		w.FirstFailureAt = now
-		w.Failures = 0
-	}
-	w.Failures++
-	w.LastFailureAt = now
-	if w.Failures >= MaxLoginFailures {
-		return ErrTooManyAttempts
-	}
-	return nil
-}
-
-func (w *AttemptWindow) Blocked(now time.Time) bool {
-	if w.Failures < MaxLoginFailures {
-		return false
-	}
-	return now.Before(w.FirstFailureAt.Add(LoginAttemptWindowTTL))
 }

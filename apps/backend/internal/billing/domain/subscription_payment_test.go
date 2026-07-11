@@ -74,9 +74,22 @@ func TestNewSubscriptionPaymentInvalidAmount(t *testing.T) {
 	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
 
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
-	_, err := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodMonth, -1, ProviderFake, now)
-	if !errors.Is(err, ErrInvalidAmount) {
-		t.Errorf("NewSubscriptionPayment() error = %v, want ErrInvalidAmount", err)
+	tests := []struct {
+		name          string
+		amountKopecks int64
+		wantErr       error
+	}{
+		{"negative amount", -1, ErrInvalidAmount},
+		{"zero amount", 0, ErrInvalidAmount},
+		{"positive amount", 1, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodMonth, tt.amountKopecks, ProviderFake, now)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("NewSubscriptionPayment() error = %v, want %v", err, tt.wantErr)
+			}
+		})
 	}
 }
 
@@ -103,7 +116,7 @@ func TestSubscriptionPaymentRefund(t *testing.T) {
 		if err := payment.MarkSucceeded(now); err != nil {
 			t.Fatalf("MarkSucceeded() error = %v", err)
 		}
-		if err := payment.MarkRefunded(440000, now); err != nil {
+		if err := payment.MarkRefunded(now); err != nil {
 			t.Fatalf("MarkRefunded() error = %v", err)
 		}
 		if payment.Status != PaymentStatusRefunded {
@@ -117,25 +130,9 @@ func TestSubscriptionPaymentRefund(t *testing.T) {
 		}
 	})
 
-	t.Run("partial refund", func(t *testing.T) {
-		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodYear, 440000, ProviderFake, now)
-		if err := payment.MarkSucceeded(now); err != nil {
-			t.Fatalf("MarkSucceeded() error = %v", err)
-		}
-		if err := payment.MarkRefunded(200000, now); err != nil {
-			t.Fatalf("MarkRefunded() error = %v", err)
-		}
-		if payment.Status != PaymentStatusPartialRefunded {
-			t.Errorf("status = %v, want %v", payment.Status, PaymentStatusPartialRefunded)
-		}
-		if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != 200000 {
-			t.Errorf("refunded amount = %v, want 200000", payment.RefundedAmountKopecks)
-		}
-	})
-
 	t.Run("refund from pending succeeds", func(t *testing.T) {
 		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodYear, 440000, ProviderFake, now)
-		if err := payment.MarkRefunded(440000, now); err != nil {
+		if err := payment.MarkRefunded(now); err != nil {
 			t.Fatalf("MarkRefunded() error = %v", err)
 		}
 		if payment.Status != PaymentStatusRefunded {
@@ -150,16 +147,8 @@ func TestSubscriptionPaymentRefund(t *testing.T) {
 		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodYear, 440000, ProviderFake, now)
 		code := "error"
 		_ = payment.MarkFailed(&code, now)
-		if err := payment.MarkRefunded(440000, now); !errors.Is(err, ErrInvalidPaymentStatus) {
+		if err := payment.MarkRefunded(now); !errors.Is(err, ErrInvalidPaymentStatus) {
 			t.Errorf("MarkRefunded() error = %v, want ErrInvalidPaymentStatus", err)
-		}
-	})
-
-	t.Run("refund amount out of range fails", func(t *testing.T) {
-		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodYear, 440000, ProviderFake, now)
-		_ = payment.MarkSucceeded(now)
-		if err := payment.MarkRefunded(500000, now); !errors.Is(err, ErrInvalidAmount) {
-			t.Errorf("MarkRefunded() error = %v, want ErrInvalidAmount", err)
 		}
 	})
 }
@@ -195,5 +184,155 @@ func TestSubscriptionPaymentInvalidStatusTransitions(t *testing.T) {
 				t.Errorf("MarkFailed() error = %v, want ErrInvalidPaymentStatus", err)
 			}
 		})
+	}
+}
+
+func TestSubscriptionPaymentBeginRefund(t *testing.T) {
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	subscriptionID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	t.Run("from succeeded", func(t *testing.T) {
+		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodMonth, 1000, ProviderFake, now)
+		if err := payment.MarkSucceeded(now); err != nil {
+			t.Fatalf("MarkSucceeded() error = %v", err)
+		}
+		if err := payment.BeginRefund(now); err != nil {
+			t.Fatalf("BeginRefund() error = %v", err)
+		}
+		if payment.Status != PaymentStatusRefunding {
+			t.Errorf("status = %v, want %v", payment.Status, PaymentStatusRefunding)
+		}
+		if !payment.UpdatedAt.Equal(now) {
+			t.Errorf("UpdatedAt = %v, want %v", payment.UpdatedAt, now)
+		}
+		if payment.IsFinalized() {
+			t.Error("refunding must not be a finalized state")
+		}
+	})
+
+	t.Run("from pending", func(t *testing.T) {
+		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodMonth, 1000, ProviderFake, now)
+		if err := payment.BeginRefund(now); err != nil {
+			t.Fatalf("BeginRefund() error = %v", err)
+		}
+		if payment.Status != PaymentStatusRefunding {
+			t.Errorf("status = %v, want %v", payment.Status, PaymentStatusRefunding)
+		}
+	})
+
+	t.Run("rejected from non-refundable", func(t *testing.T) {
+		for _, status := range []PaymentStatus{PaymentStatusFailed, PaymentStatusRefunded, PaymentStatusRefunding} {
+			payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodMonth, 1000, ProviderFake, now)
+			payment.Status = status
+			if err := payment.BeginRefund(now); !errors.Is(err, ErrInvalidPaymentStatus) {
+				t.Errorf("BeginRefund() from %s error = %v, want ErrInvalidPaymentStatus", status, err)
+			}
+		}
+	})
+}
+
+func TestSubscriptionPaymentRevertRefund(t *testing.T) {
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	subscriptionID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	t.Run("restores previous status", func(t *testing.T) {
+		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodMonth, 1000, ProviderFake, now)
+		if err := payment.MarkSucceeded(now); err != nil {
+			t.Fatalf("MarkSucceeded() error = %v", err)
+		}
+		if err := payment.BeginRefund(now); err != nil {
+			t.Fatalf("BeginRefund() error = %v", err)
+		}
+		if err := payment.RevertRefund(now, PaymentStatusSucceeded); err != nil {
+			t.Fatalf("RevertRefund() error = %v", err)
+		}
+		if payment.Status != PaymentStatusSucceeded {
+			t.Errorf("status = %v, want %v", payment.Status, PaymentStatusSucceeded)
+		}
+	})
+
+	t.Run("rejected when not refunding", func(t *testing.T) {
+		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodMonth, 1000, ProviderFake, now)
+		if err := payment.MarkSucceeded(now); err != nil {
+			t.Fatalf("MarkSucceeded() error = %v", err)
+		}
+		if err := payment.RevertRefund(now, PaymentStatusSucceeded); !errors.Is(err, ErrInvalidPaymentStatus) {
+			t.Errorf("RevertRefund() error = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+}
+
+func TestSubscriptionPaymentReconcileFromFailed(t *testing.T) {
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	subscriptionID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	t.Run("to succeeded", func(t *testing.T) {
+		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodMonth, 1000, ProviderFake, now)
+		code := "error"
+		_ = payment.MarkFailed(&code, now)
+		if err := payment.ReconcileToSucceeded(now); err != nil {
+			t.Fatalf("ReconcileToSucceeded() error = %v", err)
+		}
+		if payment.Status != PaymentStatusSucceeded {
+			t.Errorf("status = %v, want %v", payment.Status, PaymentStatusSucceeded)
+		}
+		if payment.ErrorCode != nil {
+			t.Errorf("error code = %v, want nil", payment.ErrorCode)
+		}
+		if payment.SucceededAt == nil || !payment.SucceededAt.Equal(now) {
+			t.Errorf("succeeded at = %v, want %v", payment.SucceededAt, now)
+		}
+	})
+
+	t.Run("to refunded", func(t *testing.T) {
+		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodMonth, 1000, ProviderFake, now)
+		code := "error"
+		_ = payment.MarkFailed(&code, now)
+		if err := payment.ReconcileToRefunded(now); err != nil {
+			t.Fatalf("ReconcileToRefunded() error = %v", err)
+		}
+		if payment.Status != PaymentStatusRefunded {
+			t.Errorf("status = %v, want %v", payment.Status, PaymentStatusRefunded)
+		}
+		if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != 1000 {
+			t.Errorf("refunded amount = %v, want 1000", payment.RefundedAmountKopecks)
+		}
+	})
+
+	t.Run("rejected from non-failed", func(t *testing.T) {
+		payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodMonth, 1000, ProviderFake, now)
+		if err := payment.ReconcileToSucceeded(now); !errors.Is(err, ErrInvalidPaymentStatus) {
+			t.Errorf("ReconcileToSucceeded() from pending error = %v, want ErrInvalidPaymentStatus", err)
+		}
+		if err := payment.ReconcileToRefunded(now); !errors.Is(err, ErrInvalidPaymentStatus) {
+			t.Errorf("ReconcileToRefunded() from pending error = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+}
+
+func TestSubscriptionPaymentMarkRefundedFromRefunding(t *testing.T) {
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	subscriptionID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	payment, _ := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodMonth, 1000, ProviderFake, now)
+	if err := payment.MarkSucceeded(now); err != nil {
+		t.Fatalf("MarkSucceeded() error = %v", err)
+	}
+	if err := payment.BeginRefund(now); err != nil {
+		t.Fatalf("BeginRefund() error = %v", err)
+	}
+	if err := payment.MarkRefunded(now); err != nil {
+		t.Fatalf("MarkRefunded() from refunding error = %v", err)
+	}
+	if payment.Status != PaymentStatusRefunded {
+		t.Errorf("status = %v, want %v", payment.Status, PaymentStatusRefunded)
 	}
 }

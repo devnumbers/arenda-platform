@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { notify } from '@/shared/lib/toast';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
+import { PageHeader } from '@/shared/ui/page-header';
 import { useMe } from '@/features/auth/api/hooks';
 import {
   useChangePhone,
@@ -205,38 +206,37 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
 export function PhoneChangeForm(): JSX.Element {
   const { data: me, isPending: isMeLoading, isError: isMeError, refetch } = useMe();
 
-  if (isMeError) {
-    return (
-      <div className={styles.error}>
-        <p className={styles.errorText}>Не удалось загрузить данные</p>
-        <Button onClick={() => refetch()} variant="secondary">
-          Повторить
-        </Button>
-      </div>
-    );
-  }
-
-  if (isMeLoading || !me) {
-    return (
-      <form className={styles.form}>
-        <div className={styles.fields}>
-          <TextField
-            label="Новый номер телефона"
-            type="tel"
-            placeholder="+7 (999) 000-00-00"
-            value=""
-            disabled
-            fullWidth
-          />
-        </div>
-        <div className={styles.actions}>
-          <Button type="submit" variant="primary" size="large" fullWidth disabled>
-            Получить код
+  return (
+    <>
+      <PageHeader title="Изменение телефона" backHref={ROUTES.profileAccount} />
+      {isMeError && (
+        <div className={styles.error}>
+          <p className={styles.errorText}>Не удалось загрузить данные</p>
+          <Button onClick={() => refetch()} variant="secondary">
+            Повторить
           </Button>
         </div>
-      </form>
-    );
-  }
-
-  return <PhoneChangeFormView currentPhone={me.phone} />;
+      )}
+      {!isMeError && (isMeLoading || !me) && (
+        <form className={styles.form}>
+          <div className={styles.fields}>
+            <TextField
+              label="Новый номер телефона"
+              type="tel"
+              placeholder="+7 (999) 000-00-00"
+              value=""
+              disabled
+              fullWidth
+            />
+          </div>
+          <div className={styles.actions}>
+            <Button type="submit" variant="primary" size="large" fullWidth disabled>
+              Получить код
+            </Button>
+          </div>
+        </form>
+      )}
+      {!isMeError && !isMeLoading && me && <PhoneChangeFormView currentPhone={me.phone} />}
+    </>
+  );
 }

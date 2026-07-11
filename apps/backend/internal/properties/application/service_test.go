@@ -251,8 +251,8 @@ func (l fakeSubscriptionLimiter) ActivePropertyLimit(_ context.Context, _ uuid.U
 	return l.limit, nil
 }
 
-func (l fakeSubscriptionLimiter) WithTx(_ transaction.Tx) SubscriptionLimiter {
-	return l
+func (l fakeSubscriptionLimiter) WithTx(_ transaction.Tx) (SubscriptionLimiter, error) {
+	return l, nil
 }
 
 type fakePropertyBillingLifecycle struct{}

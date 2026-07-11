@@ -57,7 +57,7 @@ export const LoginPage = () => {
     setError(null);
 
     try {
-      const response = await fetch(`${API_PREFIX}/auth/email/send`, {
+      const response = await fetch(`${API_PREFIX}/auth/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

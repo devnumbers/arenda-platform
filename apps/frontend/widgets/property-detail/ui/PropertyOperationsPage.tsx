@@ -107,9 +107,10 @@ export function PropertyOperationsPage(): JSX.Element {
   };
 
   const propertyName = propertyQuery.data?.name ?? 'Мой объект';
+  const isArchived = propertyQuery.data?.status === 'archived';
   const operations = operationsQuery.data?.pages.flatMap((page) => page.items) ?? [];
-  const { data: subscription } = useSubscription();
-  const readonly = isSubscriptionReadonly(subscription);
+  const { data: subscription, isPending: isSubscriptionPending } = useSubscription();
+  const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
   return (
     <div className={styles.root}>
@@ -122,6 +123,8 @@ export function PropertyOperationsPage(): JSX.Element {
               href={`${ROUTES.financeCreateOperation}?propertyId=${id}`}
               variant="primary"
               size="small"
+              disabled={isArchived}
+              title={isArchived ? 'Объект в архиве' : undefined}
               leftIcon={
                 <Icon size="s">
                   <Plus />
@@ -201,6 +204,7 @@ export function PropertyOperationsPage(): JSX.Element {
               subtitle="Добавьте первую операцию, чтобы увидеть её в списке"
               actionHref={readonly ? undefined : `${ROUTES.financeCreateOperation}?propertyId=${id}`}
               actionText={readonly ? undefined : 'Добавить операцию'}
+              actionDisabled={isArchived}
             />
           ) : (
             <>

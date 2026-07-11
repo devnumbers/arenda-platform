@@ -23,9 +23,10 @@ INSERT INTO user_subscriptions (
     pending_tariff_id,
     pending_change_at,
     pending_period,
-    active_payment_method_id
+    active_payment_method_id,
+    last_applied_payment_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (user_id) DO NOTHING
 RETURNING *;
 
@@ -52,7 +53,8 @@ SET
     pending_tariff_id = $7,
     pending_change_at = $8,
     pending_period = $9,
-    active_payment_method_id = $10
+    active_payment_method_id = $10,
+    last_applied_payment_id = $11
 WHERE id = $1
 RETURNING *;
 
@@ -157,21 +159,53 @@ SELECT * FROM subscription_payments WHERE user_id = $1 AND status = 'pending' OR
 
 -- name: MarkSubscriptionPaymentSucceeded :one
 UPDATE subscription_payments
-SET status = 'succeeded', updated_at = $2, succeeded_at = $2
+SET status = 'succeeded', succeeded_at = $2
 WHERE id = $1 AND status = 'pending'
 RETURNING *;
 
 -- name: MarkSubscriptionPaymentFailed :one
 UPDATE subscription_payments
-SET status = 'failed', error_code = $2, updated_at = $3
+SET status = 'failed', error_code = $2
 WHERE id = $1 AND status = 'pending'
 RETURNING *;
 
 -- name: MarkSubscriptionPaymentRefunded :one
 UPDATE subscription_payments
-SET status = $2, refunded_amount_kopecks = $3, updated_at = $4
-WHERE id = $1 AND status = 'succeeded'
+SET status = $2, refunded_amount_kopecks = $3
+WHERE id = $1 AND status IN ('succeeded', 'pending', 'refunding')
 RETURNING *;
+
+-- name: MarkSubscriptionPaymentReconciledSucceeded :one
+-- Transition a failed payment to succeeded after an explicit provider-side
+-- status check. This handles out-of-order webhooks where the provider reports
+-- success after the system has already marked the payment as failed.
+UPDATE subscription_payments
+SET status = 'succeeded', succeeded_at = $2, error_code = NULL
+WHERE id = $1 AND status = 'failed'
+RETURNING *;
+
+-- name: MarkSubscriptionPaymentReconciledRefunded :one
+-- Transition a failed payment to refunded after an explicit provider-side
+-- status check. This handles out-of-order webhooks where the provider reports
+-- a refund after the system has already marked the payment as failed.
+UPDATE subscription_payments
+SET status = 'refunded', refunded_amount_kopecks = $2
+WHERE id = $1 AND status = 'failed'
+RETURNING *;
+
+-- name: BeginSubscriptionPaymentRefund :execresult
+-- Atomically reserve a payment for an in-flight refund. updated_at is maintained
+-- by the trg_subscription_payments_updated_at trigger, so it is not set here.
+UPDATE subscription_payments
+SET status = 'refunding'
+WHERE id = $1 AND status IN ('succeeded', 'pending');
+
+-- name: RevertSubscriptionPaymentRefund :execresult
+-- Roll back an in-flight refund reservation to the previous status ($2).
+-- updated_at is maintained by the trg_subscription_payments_updated_at trigger.
+UPDATE subscription_payments
+SET status = $2
+WHERE id = $1 AND status = 'refunding';
 
 -- name: UpdateSubscriptionPaymentProviderPaymentID :one
 UPDATE subscription_payments
@@ -196,6 +230,15 @@ UPDATE subscription_payments
 SET payment_method_id = $2, updated_at = now()
 WHERE id = $1
 RETURNING *;
+
+-- name: IncrementSubscriptionPaymentChargeAttempts :one
+-- Atomically increment the renewal charge attempt counter and return the new
+-- value so the renewal job can cap retries on persistent charge failures.
+-- updated_at is maintained by the trg_subscription_payments_updated_at trigger.
+UPDATE subscription_payments
+SET charge_attempts = charge_attempts + 1
+WHERE id = $1
+RETURNING charge_attempts;
 
 -- name: ListSubscriptionsUpForRenewal :many
 SELECT * FROM user_subscriptions
@@ -257,6 +300,7 @@ FROM subscription_payments sp
 JOIN user_subscriptions us ON us.id = sp.subscription_id
 WHERE sp.status = 'pending'
   AND sp.provider_payment_id IS NOT NULL
+  AND sp.provider_payment_id <> ''
   AND sp.tariff_id != us.tariff_id
   AND sp.created_at < $1
 ORDER BY sp.created_at ASC
@@ -270,6 +314,18 @@ WHERE status = 'pending'
   AND provider_payment_id <> ''
   AND created_at < $1
 ORDER BY created_at ASC
+LIMIT $2;
+
+-- name: ListStaleRefundingPayments :many
+-- Payments stuck in the refunding state (refund reserved but never finalized or
+-- reverted). updated_at is trigger-maintained and marks entry into refunding.
+SELECT *
+FROM subscription_payments
+WHERE status = 'refunding'
+  AND provider_payment_id IS NOT NULL
+  AND provider_payment_id <> ''
+  AND updated_at < $1
+ORDER BY updated_at ASC
 LIMIT $2;
 
 -- name: ListSubscriptionPaymentsAdmin :many

@@ -1,48 +1,47 @@
 'use client';
 
-import {type JSX, useMemo} from 'react';
-import {usePathname, useRouter, useSearchParams} from 'next/navigation';
+import {type JSX, type MouseEvent as ReactMouseEvent, useMemo, useState} from 'react';
+import {usePathname, useRouter} from 'next/navigation';
 import NextLink from 'next/link';
 import {Plus} from '@/shared/assets/icons';
 import {PageHeader} from '@/shared/ui/page-header';
 import {Icon} from '@/shared/ui/icon';
 import {Button} from '@/shared/ui/button';
-import {LinkButton} from '@/shared/ui/link-button';
 import {ROUTES} from '@/shared/config/routes';
 import {type OperationsFilters, useInfiniteOperations,} from '@/features/operations/api/hooks';
 import {
     endOfMonth,
-    endOfQuarter,
-    endOfYear,
     formatDateForApi,
-    parseDateForApi,
     startOfMonth,
-    startOfQuarter,
-    startOfYear,
 } from '@/entities/operation/lib/dates';
-import {FinanceLoading} from '@/widgets/finance/ui/FinanceLoading';
 import {FinanceErrorState} from '@/widgets/finance/ui/FinanceErrorState';
 import {FinanceEmptyState} from '@/widgets/finance/ui/FinanceEmptyState';
 import {useArchivedProperties, useProperties} from '@/features/properties/api';
 import {OperationFilters, type OperationFiltersState, type OperationPeriod,} from './OperationFilters';
 import {OperationsList} from './OperationsList';
+import {OperationsListLoading} from './OperationsListLoading';
 import {SubscriptionReadonlyBanner} from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
 import {useSubscription} from '@/features/subscription/api/hooks';
 import {isSubscriptionReadonly} from '@/features/subscription/lib/is-subscription-readonly';
+import {
+    DEFAULT_OPERATION_SORT,
+    type OperationInitialFilters,
+    type OperationListSort,
+} from '../lib/parse-operation-search-params';
 import styles from './OperationsPage.module.css';
 
 type OperationTab = 'all' | 'income' | 'expense';
 type OperationType = Exclude<OperationTab, 'all'>;
-type OperationListSort = NonNullable<OperationsFilters['sort']>;
-type PeriodRange = {
-    readonly from: string;
-    readonly to: string;
-};
-type ResolvedOperationPeriod = OperationFiltersState & {
-    readonly isDefaultPeriod: boolean;
-};
 
-const DEFAULT_OPERATION_SORT: OperationListSort = 'operation_date_desc';
+type FilterSnapshot = {
+    readonly type: OperationType | undefined;
+    readonly propertyId: string | undefined;
+    readonly period: OperationPeriod;
+    readonly from: string | undefined;
+    readonly to: string | undefined;
+    readonly status: ReadonlyArray<string>;
+    readonly sort: OperationListSort;
+};
 
 const TAB_ITEMS: ReadonlyArray<{
     readonly key: OperationTab;
@@ -58,165 +57,74 @@ function buildHref(pathname: string, params: URLSearchParams): string {
     return query ? `${pathname}?${query}` : pathname;
 }
 
-function buildTabHref(
-    pathname: string,
-    searchParams: { toString: () => string },
-    tabKey: OperationTab,
-): string {
-    const params = new URLSearchParams(searchParams.toString());
-    if (tabKey === 'all') {
-        params.delete('type');
+function buildQuery(snapshot: FilterSnapshot): URLSearchParams {
+    const params = new URLSearchParams();
+
+    if (snapshot.type) {
+        params.set('type', snapshot.type);
+    }
+
+    if (snapshot.propertyId) {
+        params.set('property_id', snapshot.propertyId);
+    }
+
+    if (snapshot.period === 'all') {
+        params.set('period', 'all');
     } else {
-        params.set('type', tabKey);
-    }
-    return buildHref(pathname, params);
-}
-
-function getOperationType(value: string | null): OperationType | undefined {
-    if (value === 'income' || value === 'expense') {
-        return value;
-    }
-    return undefined;
-}
-
-function getOperationPeriod(value: string | null): OperationPeriod | undefined {
-    if (
-        value === 'all' ||
-        value === 'month' ||
-        value === 'quarter' ||
-        value === 'year' ||
-        value === 'custom'
-    ) {
-        return value;
-    }
-    return undefined;
-}
-
-function getOperationSort(value: string | null): OperationListSort | undefined {
-    if (value === 'operation_date_desc' || value === 'operation_date_asc') {
-        return value;
-    }
-    return undefined;
-}
-
-function getMonthRange(date: Date): PeriodRange {
-    return {
-        from: formatDateForApi(startOfMonth(date)),
-        to: formatDateForApi(endOfMonth(date)),
-    };
-}
-
-function getQuarterRange(date: Date): PeriodRange {
-    return {
-        from: formatDateForApi(startOfQuarter(date)),
-        to: formatDateForApi(endOfQuarter(date)),
-    };
-}
-
-function getYearRange(date: Date): PeriodRange {
-    return {
-        from: formatDateForApi(startOfYear(date)),
-        to: formatDateForApi(endOfYear(date)),
-    };
-}
-
-function getPeriodRange(
-    period: Exclude<OperationPeriod, 'all' | 'custom'>,
-    date: Date,
-): PeriodRange {
-    if (period === 'month') return getMonthRange(date);
-    if (period === 'quarter') return getQuarterRange(date);
-    return getYearRange(date);
-}
-
-function isValidRange(from: string | null, to: string | null): boolean {
-    const fromDate = parseDateForApi(from);
-    const toDate = parseDateForApi(to);
-    return Boolean(fromDate && toDate && fromDate <= toDate);
-}
-
-function isSameRange(first: PeriodRange, second: PeriodRange): boolean {
-    return first.from === second.from && first.to === second.to;
-}
-
-function resolveOperationPeriod(searchParams: {
-    get: (name: string) => string | null;
-}): ResolvedOperationPeriod {
-    const now = new Date();
-    const currentMonthRange = getMonthRange(now);
-    const requestedPeriod = getOperationPeriod(searchParams.get('period'));
-
-    if (requestedPeriod === 'all') {
-        return {period: 'all', status: [], isDefaultPeriod: false};
-    }
-
-    const requestedFrom = searchParams.get('from');
-    const requestedTo = searchParams.get('to');
-
-    if (requestedPeriod === 'custom') {
-        if (isValidRange(requestedFrom, requestedTo)) {
-            return {
-                period: 'custom',
-                from: requestedFrom ?? undefined,
-                to: requestedTo ?? undefined,
-                status: [],
-                isDefaultPeriod: false,
-            };
+        params.set('period', snapshot.period);
+        if (snapshot.from) {
+            params.set('from', snapshot.from);
         }
-
-        return {
-            period: 'month',
-            from: currentMonthRange.from,
-            to: currentMonthRange.to,
-            status: [],
-            isDefaultPeriod: true,
-        };
+        if (snapshot.to) {
+            params.set('to', snapshot.to);
+        }
     }
 
-    if (requestedPeriod) {
-        const range = isValidRange(requestedFrom, requestedTo)
-            ? {from: requestedFrom ?? currentMonthRange.from, to: requestedTo ?? currentMonthRange.to}
-            : getPeriodRange(requestedPeriod, now);
+    snapshot.status.forEach((value) => params.append('status', value));
 
-        return {
-            period: requestedPeriod,
-            from: range.from,
-            to: range.to,
-            status: [],
-            isDefaultPeriod: requestedPeriod === 'month' && isSameRange(range, currentMonthRange),
-        };
+    if (snapshot.sort !== DEFAULT_OPERATION_SORT) {
+        params.set('sort', snapshot.sort);
     }
 
+    return params;
+}
+
+function getDefaultMonthPeriod(): {
+    readonly period: OperationPeriod;
+    readonly from: string;
+    readonly to: string;
+    readonly isDefaultPeriod: boolean;
+} {
+    const now = new Date();
     return {
         period: 'month',
-        from: currentMonthRange.from,
-        to: currentMonthRange.to,
-        status: [],
+        from: formatDateForApi(startOfMonth(now)),
+        to: formatDateForApi(endOfMonth(now)),
         isDefaultPeriod: true,
     };
 }
 
-export function OperationsPage(): JSX.Element {
+export type OperationsPageProps = {
+    readonly initial: OperationInitialFilters;
+};
+
+export function OperationsPage({initial}: OperationsPageProps): JSX.Element {
     const router = useRouter();
     const pathname = usePathname();
-    const searchParams = useSearchParams();
 
-    const type = getOperationType(searchParams.get('type'));
+    const [type, setType] = useState<OperationType | undefined>(initial.type);
+    const [propertyId, setPropertyId] = useState<string | undefined>(initial.propertyId);
+    const [periodState, setPeriodState] = useState({
+        period: initial.period,
+        from: initial.from,
+        to: initial.to,
+        isDefaultPeriod: initial.isDefaultPeriod,
+    });
+    const [status, setStatus] = useState<ReadonlyArray<string>>(initial.status);
+    const [sort, setSort] = useState<OperationListSort>(initial.sort ?? DEFAULT_OPERATION_SORT);
+
     const activeTabKey: OperationTab = type ?? 'all';
-    const propertyId = searchParams.get('property_id') || undefined;
-    const resolvedPeriod = useMemo(
-        () => resolveOperationPeriod(searchParams),
-        [searchParams],
-    );
-    const period = resolvedPeriod.period;
-    const from = resolvedPeriod.from;
-    const to = resolvedPeriod.to;
-    const sort = getOperationSort(searchParams.get('sort'));
-
-    const status = useMemo(
-        () => searchParams.getAll('status'),
-        [searchParams],
-    );
+    const {period, from, to, isDefaultPeriod} = periodState;
 
     const filters = useMemo<Omit<OperationsFilters, 'offset'>>(() => {
         const nextFilters: Omit<OperationsFilters, 'offset'> = {
@@ -228,7 +136,7 @@ export function OperationsPage(): JSX.Element {
         }
 
         if (status.length > 0) {
-            nextFilters.status = status;
+            nextFilters.status = [...status];
         }
 
         if (propertyId) {
@@ -244,7 +152,7 @@ export function OperationsPage(): JSX.Element {
             }
         }
 
-        nextFilters.sort = sort ?? DEFAULT_OPERATION_SORT;
+        nextFilters.sort = sort;
 
         return nextFilters;
     }, [type, status, propertyId, period, from, to, sort]);
@@ -294,47 +202,48 @@ export function OperationsPage(): JSX.Element {
     const isInitialOperationsError = operationsError && !operationsData;
     const isLoading = operationsLoading || propertiesLoading;
     const isError = isInitialOperationsError || propertiesError;
-    const showContent = !isLoading && !isError && hasProperties;
     const hasActiveFilters =
         activeTabKey !== 'all' ||
         Boolean(propertyId) ||
-        !resolvedPeriod.isDefaultPeriod ||
+        !isDefaultPeriod ||
         status.length > 0;
 
-    const {data: subscription} = useSubscription();
-    const readonly = isSubscriptionReadonly(subscription);
-
-    const resetFiltersHref = buildHref(pathname, new URLSearchParams());
+    const {data: subscription, isPending: isSubscriptionPending} = useSubscription();
+    const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
     const handleResetFilters = () => {
-        router.replace(resetFiltersHref, {scroll: false});
+        setType(undefined);
+        setPropertyId(undefined);
+        setStatus([]);
+        setSort(DEFAULT_OPERATION_SORT);
+        setPeriodState(getDefaultMonthPeriod());
+        router.replace(pathname, {scroll: false});
     };
 
     const handleFilterChange = (nextFilters: OperationFiltersState) => {
-        const params = new URLSearchParams(searchParams.toString());
-
-        if (nextFilters.period === 'all') {
-            params.set('period', 'all');
-            params.delete('from');
-            params.delete('to');
-        } else {
-            params.set('period', nextFilters.period);
-            if (nextFilters.from) {
-                params.set('from', nextFilters.from);
-            } else {
-                params.delete('from');
-            }
-            if (nextFilters.to) {
-                params.set('to', nextFilters.to);
-            } else {
-                params.delete('to');
-            }
-        }
-
-        params.delete('status');
-        nextFilters.status.forEach((value) => params.append('status', value));
-
-        router.replace(buildHref(pathname, params), {scroll: false});
+        const nextPeriod = {
+            period: nextFilters.period,
+            from: nextFilters.from,
+            to: nextFilters.to,
+            isDefaultPeriod: false,
+        };
+        setPeriodState(nextPeriod);
+        setStatus(nextFilters.status);
+        router.replace(
+            buildHref(
+                pathname,
+                buildQuery({
+                    type,
+                    propertyId,
+                    period: nextFilters.period,
+                    from: nextFilters.from,
+                    to: nextFilters.to,
+                    status: nextFilters.status,
+                    sort,
+                }),
+            ),
+            {scroll: false},
+        );
     };
 
     return (
@@ -344,18 +253,15 @@ export function OperationsPage(): JSX.Element {
                 backHref={ROUTES.finance}
                 actions={
                     !readonly && (
-                        <LinkButton
+                        <NextLink
                             href={ROUTES.financeCreateOperation}
-                            variant="primary"
-                            size="small"
-                            leftIcon={
-                                <Icon size="s">
-                                    <Plus/>
-                                </Icon>
-                            }
+                            className={styles.addButton}
+                            aria-label="Добавить операцию"
                         >
-                            Добавить операцию
-                        </LinkButton>
+                            <Icon size="s">
+                                <Plus/>
+                            </Icon>
+                        </NextLink>
                     )
                 }
             />
@@ -365,10 +271,38 @@ export function OperationsPage(): JSX.Element {
             <nav className={styles.tabs} aria-label="Тип операции">
                 {TAB_ITEMS.map((tabItem) => {
                     const isActive = activeTabKey === tabItem.key;
+                    const nextType = tabItem.key === 'all' ? undefined : tabItem.key;
+                    const href = buildHref(
+                        pathname,
+                        buildQuery({
+                            type: nextType,
+                            propertyId,
+                            period,
+                            from,
+                            to,
+                            status,
+                            sort,
+                        }),
+                    );
                     return (
                         <NextLink
                             key={tabItem.key}
-                            href={buildTabHref(pathname, searchParams, tabItem.key)}
+                            href={href}
+                            onClick={(event: ReactMouseEvent<HTMLAnchorElement>) => {
+                                if (
+                                    event.defaultPrevented ||
+                                    event.button !== 0 ||
+                                    event.metaKey ||
+                                    event.ctrlKey ||
+                                    event.shiftKey ||
+                                    event.altKey
+                                ) {
+                                    return;
+                                }
+                                event.preventDefault();
+                                setType(nextType);
+                                router.replace(href, {scroll: false});
+                            }}
                             className={`${styles.tab} ${isActive ? styles.tabActive : ''}`}
                             aria-current={isActive ? 'page' : undefined}
                         >
@@ -378,7 +312,23 @@ export function OperationsPage(): JSX.Element {
                 })}
             </nav>
 
-            {isLoading && <FinanceLoading/>}
+            <OperationFilters
+                filters={{period, from, to, status}}
+                hasExternalFilters={activeTabKey !== 'all' || Boolean(propertyId)}
+                isDefaultPeriod={isDefaultPeriod}
+                onChange={handleFilterChange}
+                onReset={handleResetFilters}
+            />
+
+            {propertyId && (
+                <div className={styles.appliedFilters}>
+          <span className={styles.appliedFilter}>
+            Объект: {propertyNameById.get(propertyId) ?? 'Выбранный объект'}
+          </span>
+                </div>
+            )}
+
+            {isLoading && <OperationsListLoading/>}
 
             {!isLoading && isError && (
                 <FinanceErrorState
@@ -404,25 +354,7 @@ export function OperationsPage(): JSX.Element {
                 />
             )}
 
-            {showContent && (
-                <OperationFilters
-                    filters={{period, from, to, status}}
-                    hasExternalFilters={activeTabKey !== 'all' || Boolean(propertyId)}
-                    isDefaultPeriod={resolvedPeriod.isDefaultPeriod}
-                    onChange={handleFilterChange}
-                    onReset={handleResetFilters}
-                />
-            )}
-
-            {showContent && propertyId && (
-                <div className={styles.appliedFilters}>
-          <span className={styles.appliedFilter}>
-            Объект: {propertyNameById.get(propertyId) ?? 'Выбранный объект'}
-          </span>
-                </div>
-            )}
-
-            {showContent && (
+            {!isLoading && !isError && hasProperties && (
                 <>
                     <OperationsList
                         operations={operations}
@@ -438,11 +370,12 @@ export function OperationsPage(): JSX.Element {
                                 }
                                 actionHref={
                                     hasActiveFilters
-                                        ? resetFiltersHref
+                                        ? undefined
                                         : readonly
                                             ? undefined
                                             : ROUTES.financeCreateOperation
                                 }
+                                actionOnClick={hasActiveFilters ? handleResetFilters : undefined}
                                 actionText={
                                     hasActiveFilters
                                         ? 'Сбросить фильтры'

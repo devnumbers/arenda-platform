@@ -78,7 +78,7 @@ func (w *LeaseReconciliationWorker) Run(ctx context.Context) {
 
 func (w *LeaseReconciliationWorker) tick(ctx context.Context) error {
 	asOf := w.clock.Now()
-	for batch := 0; batch < maxReconciliationBatches; batch++ {
+	for range maxReconciliationBatches {
 		leases, err := w.leaseService.ListOpenLeasesWithPastEndDate(ctx, asOf, w.batchSize)
 		if err != nil {
 			return fmt.Errorf("list open leases with past end date: %w", err)

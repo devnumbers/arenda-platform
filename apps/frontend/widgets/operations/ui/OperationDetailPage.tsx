@@ -26,16 +26,11 @@ import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
 import { useSubscription } from '@/features/subscription/api/hooks';
 import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
+import { OperationActionMenu } from './OperationActionMenu';
 import styles from './OperationDetailPage.module.css';
 
 type OperationResponse = components['schemas']['OperationResponse'];
 type OperationStatus = components['schemas']['OperationStatus'];
-type OperationType = components['schemas']['OperationType'];
-
-const TYPE_LABELS: Record<OperationType, string> = {
-  income: 'Доход',
-  expense: 'Расход',
-};
 
 const STATUS_VARIANT_CLASS: Record<
   NonNullable<ReturnType<typeof getStatusVariant>>,
@@ -55,14 +50,6 @@ function getStatusVariant(status: OperationStatus) {
 function useOperationId(): string | undefined {
   const params = useParams<{ readonly id: string }>();
   return params?.id;
-}
-
-function isReminderInPast(operationDate: string, offsetDays: number): boolean {
-  const reminderDate = new Date(operationDate);
-  reminderDate.setDate(reminderDate.getDate() - offsetDays);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return reminderDate < today;
 }
 
 function formatReminderLabel(offsetDays: number | null | undefined): string {
@@ -124,65 +111,18 @@ function DeleteOperationModal({
 
 function OperationDetailCard({
   operation,
-  readonly,
+  propertyName,
+  isArchived,
 }: {
   readonly operation: OperationResponse;
-  readonly readonly: boolean;
+  readonly propertyName?: string;
+  readonly isArchived: boolean;
 }): JSX.Element {
-  const router = useRouter();
-  const completeMutation = useCompleteOperation();
-  const markIncompleteMutation = useMarkOperationIncomplete();
-  const deleteMutation = useDeleteOperation();
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const { data: property } = useProperty(operation.property_id);
-
   const isIncome = operation.type === 'income';
   const sign = isIncome ? '+' : '-';
   const amountClass = isIncome ? styles.amountIncome : styles.amountExpense;
   const statusVariant = getStatusVariant(operation.status);
   const statusClass = statusVariant ? STATUS_VARIANT_CLASS[statusVariant] : '';
-  const canComplete = operation.status === 'pending' || operation.status === 'overdue';
-  const canMarkIncomplete = operation.status === 'paid' || operation.status === 'received';
-  const isArchived = property?.status === 'archived';
-  const viewOnly = readonly || isArchived;
-
-  const handleComplete = () => {
-    completeMutation.mutate({
-      id: operation.id,
-      propertyId: operation.property_id,
-    });
-  };
-
-  const handleMarkIncomplete = () => {
-    markIncompleteMutation.mutate({
-      id: operation.id,
-      propertyId: operation.property_id,
-    });
-  };
-
-  const handleEdit = () => {
-    router.push(ROUTES.financeOperationEdit(operation.id));
-  };
-
-  const handleDelete = () => {
-    setIsDeleteModalOpen(true);
-  };
-
-  const handleConfirmDelete = () => {
-    deleteMutation.mutate(
-      { id: operation.id, propertyId: operation.property_id },
-      {
-        onSuccess: () => {
-          setIsDeleteModalOpen(false);
-          router.push(
-            operation.lease_id
-              ? ROUTES.lease(operation.lease_id)
-              : ROUTES.financeOperations,
-          );
-        },
-      },
-    );
-  };
 
   return (
     <section className={styles.card}>
@@ -198,25 +138,13 @@ function OperationDetailCard({
           {sign}
           {formatMoneyKopecks(operation.amount_kopecks, { round: true })}
         </span>
-        <span className={styles.type}>{TYPE_LABELS[operation.type]}</span>
       </div>
-
-      {operation.lease_id && (
-        <span className={styles.badgeLease}>Создано из договора аренды</span>
-      )}
 
       {isArchived && (
         <p className={styles.banner}>
           Объект в архиве, операция только для просмотра.
         </p>
       )}
-
-      {operation.reminder_offset_days &&
-        isReminderInPast(operation.operation_date, operation.reminder_offset_days) && (
-          <p className={styles.banner}>
-            Напоминание уже должно было быть отправлено или не будет отправлено.
-          </p>
-        )}
 
       <dl className={styles.details}>
         <div className={styles.detailRow}>
@@ -233,7 +161,7 @@ function OperationDetailCard({
         </div>
         <div className={styles.detailRow}>
           <dt className={styles.detailLabel}>Объект</dt>
-          <dd className={styles.detailValue}>{property?.name ?? operation.property_id}</dd>
+          <dd className={styles.detailValue}>{propertyName ?? operation.property_id}</dd>
         </div>
         <div className={styles.detailRow}>
           <dt className={styles.detailLabel}>Напоминание</dt>
@@ -248,57 +176,6 @@ function OperationDetailCard({
           </div>
         )}
       </dl>
-
-      {!viewOnly && (
-        <div className={styles.actions}>
-          {canComplete && (
-            <Button
-              variant="primary"
-              size="medium"
-              loading={completeMutation.isPending}
-              disabled={readonly}
-              onClick={handleComplete}
-            >
-              {isIncome ? 'Отметить полученной' : 'Отметить оплаченной'}
-            </Button>
-          )}
-          {canMarkIncomplete && (
-            <Button
-              variant="secondary"
-              size="medium"
-              loading={markIncompleteMutation.isPending}
-              disabled={readonly}
-              onClick={handleMarkIncomplete}
-            >
-              {isIncome ? 'Отметить не полученной' : 'Отметить не оплаченной'}
-            </Button>
-          )}
-          <Button
-            variant="secondary"
-            size="medium"
-            disabled={readonly}
-            onClick={handleEdit}
-          >
-            Редактировать
-          </Button>
-          <Button
-            variant="icon-black"
-            size="medium"
-            loading={deleteMutation.isPending}
-            disabled={readonly}
-            onClick={handleDelete}
-          >
-            Удалить
-          </Button>
-        </div>
-      )}
-
-      <DeleteOperationModal
-        isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
-        onConfirm={handleConfirmDelete}
-        isLoading={deleteMutation.isPending}
-      />
     </section>
   );
 }
@@ -307,33 +184,85 @@ export function OperationDetailPage(): JSX.Element {
   const id = useOperationId();
   const router = useRouter();
   const { data, isLoading, isError, refetch, isFetching } = useOperation(id ?? '');
-  const { data: subscription } = useSubscription();
-  const readonly = isSubscriptionReadonly(subscription);
+  const { data: subscription, isPending: isSubscriptionPending } = useSubscription();
+  const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
-  if (!id) {
-    return (
-      <FinanceErrorState
-        onRetry={() => router.push(ROUTES.financeOperations)}
-        isLoading={false}
-      />
+  const completeMutation = useCompleteOperation();
+  const markIncompleteMutation = useMarkOperationIncomplete();
+  const deleteMutation = useDeleteOperation();
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const { data: property } = useProperty(data?.property_id ?? '');
+
+  const propertyName = property?.name;
+  const isArchived = property?.status === 'archived';
+  const viewOnly = readonly || isArchived;
+
+  const handleComplete = () => {
+    if (!data) return;
+    completeMutation.mutate({ id: data.id, propertyId: data.property_id });
+  };
+
+  const handleMarkIncomplete = () => {
+    if (!data) return;
+    markIncompleteMutation.mutate({ id: data.id, propertyId: data.property_id });
+  };
+
+  const handleEdit = () => {
+    if (!data) return;
+    router.push(ROUTES.financeOperationEdit(data.id));
+  };
+
+  const handleDelete = () => setIsDeleteModalOpen(true);
+
+  const handleConfirmDelete = () => {
+    if (!data) return;
+    deleteMutation.mutate(
+      { id: data.id, propertyId: data.property_id },
+      {
+        onSuccess: () => {
+          setIsDeleteModalOpen(false);
+          router.push(
+            data.lease_id
+              ? ROUTES.lease(data.lease_id)
+              : ROUTES.financeOperations,
+          );
+        },
+      },
     );
-  }
+  };
+
+  const actionMenu = (
+    <OperationActionMenu
+      type={data?.type}
+      status={data?.status}
+      disabled={isLoading || isError || !data || viewOnly}
+      onComplete={handleComplete}
+      onMarkIncomplete={handleMarkIncomplete}
+      onEdit={handleEdit}
+      onDelete={handleDelete}
+    />
+  );
 
   return (
     <div className={styles.root}>
-      <PageHeader title="Операция" backHref={ROUTES.financeOperations} />
-
+      <PageHeader title="Операция" backHref={ROUTES.financeOperations} actions={actionMenu} />
       <SubscriptionReadonlyBanner />
-
-      {isLoading && <FinanceLoading />}
-
-      {!isLoading && isError && (
+      {!id && (
+        <FinanceErrorState onRetry={() => router.push(ROUTES.financeOperations)} isLoading={false} />
+      )}
+      {id && isLoading && <FinanceLoading />}
+      {id && !isLoading && isError && (
         <FinanceErrorState onRetry={refetch} isLoading={isFetching} />
       )}
-
-      {!isLoading && !isError && data && (
-        <OperationDetailCard operation={data} readonly={readonly} />
+      {id && !isLoading && !isError && data && (
+        <OperationDetailCard operation={data} propertyName={propertyName} isArchived={isArchived} />
       )}
+      <DeleteOperationModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleConfirmDelete}
+        isLoading={deleteMutation.isPending}
+      />
     </div>
   );
 }

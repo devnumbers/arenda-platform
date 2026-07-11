@@ -87,7 +87,7 @@ func (w *OperationOverdueWorker) Run(ctx context.Context) {
 
 func (w *OperationOverdueWorker) tick(ctx context.Context) error {
 	asOf := timeutil.Date(w.clock.Now())
-	for batch := 0; batch < maxOverdueBatches; batch++ {
+	for range maxOverdueBatches {
 		ops, err := w.operationService.ListAllOverdueCandidates(ctx, asOf, w.batchSize)
 		if err != nil {
 			return fmt.Errorf("list all overdue candidates: %w", err)

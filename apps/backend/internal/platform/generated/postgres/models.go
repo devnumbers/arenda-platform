@@ -306,18 +306,6 @@ type Session struct {
 	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
 }
 
-type SmsCode struct {
-	ID             pgtype.UUID        `json:"id"`
-	UserID         pgtype.UUID        `json:"user_id"`
-	Phone          string             `json:"phone"`
-	CodeHash       string             `json:"code_hash"`
-	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
-	Used           bool               `json:"used"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	Purpose        string             `json:"purpose"`
-	PhoneEncrypted bool               `json:"phone_encrypted"`
-}
-
 type SubscriptionPayment struct {
 	ID                    pgtype.UUID        `json:"id"`
 	UserID                pgtype.UUID        `json:"user_id"`
@@ -335,6 +323,7 @@ type SubscriptionPayment struct {
 	PaymentUrl            pgtype.Text        `json:"payment_url"`
 	SucceededAt           pgtype.Timestamptz `json:"succeeded_at"`
 	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
+	ChargeAttempts        int32              `json:"charge_attempts"`
 }
 
 type Tariff struct {
@@ -387,4 +376,5 @@ type UserSubscription struct {
 	PendingChangeAt       pgtype.Timestamptz `json:"pending_change_at"`
 	ActivePaymentMethodID pgtype.UUID        `json:"active_payment_method_id"`
 	PendingPeriod         pgtype.Text        `json:"pending_period"`
+	LastAppliedPaymentID  pgtype.UUID        `json:"last_applied_payment_id"`
 }

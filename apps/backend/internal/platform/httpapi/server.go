@@ -17,34 +17,43 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
-	Auth                  *identityapp.AuthService
-	Billing               *billingapp.BillingService
-	Admin                 *adminapp.AdminService
-	Sessions              identityapp.SessionRepository
-	Properties            *propertiesapp.PropertyService
-	AddressSuggester      propertiesapp.AddressSuggester
-	Leases                *leasesapp.LeaseService
-	TenantContacts        *leasesapp.TenantContactService
-	Operations            *leasesapp.OperationService
-	RecurringOperations   *leasesapp.RecurringOperationService
-	Reminders             *notificationsapp.ReminderService
-	AppBaseURL            string
-	CookieSecure          bool
-	Logger                *slog.Logger
-	Clock                 clock.Clock
-	LogSuccessfulRequests bool
-	IPRateLimiter         *RateLimiter
-	PhoneSendLimiter      *RateLimiter
-	PhoneVerifyLimiter    *RateLimiter
-	EmailSendLimiter      *RateLimiter
-	EmailVerifyLimiter    *RateLimiter
-	DBPoolStats           func() DBPoolSnapshot
-	DevMode               bool
-	TrustedProxies        []string
+	Auth                     identityapp.Authenticator
+	PhoneChange              identityapp.PhoneChanger
+	Profile                  identityapp.Profiler
+	Logout                   identityapp.Logout
+	Sessions                 identityapp.SessionService
+	MeEnricher               MeEnricher
+	Tariffs                  billingapp.Tariffer
+	Subscriptions            billingapp.Subscriber
+	PaymentMethods           billingapp.PaymentMethodManager
+	Payments                 billingapp.PaymentProcessor
+	Webhooks                 billingapp.WebhookHandler
+	Admin                    *adminapp.AdminService
+	Properties               *propertiesapp.PropertyService
+	AddressSuggester         propertiesapp.AddressSuggester
+	Leases                   *leasesapp.LeaseService
+	TenantContacts           *leasesapp.TenantContactService
+	Operations               *leasesapp.OperationService
+	RecurringOperations      *leasesapp.RecurringOperationService
+	Reminders                *notificationsapp.ReminderService
+	AppBaseURL               string
+	CookieSecure             bool
+	Logger                   *slog.Logger
+	Clock                    clock.Clock
+	LogSuccessfulRequests    bool
+	IPRateLimiter            *RateLimiter
+	EmailSendLimiter         *RateLimiter
+	EmailVerifyLimiter       *RateLimiter
+	PhoneChangeSendLimiter   *RateLimiter
+	PhoneChangeVerifyLimiter *RateLimiter
+	DBPoolStats              func() DBPoolSnapshot
+	DevMode                  bool
+	TrustedProxies           []string
 }
 
 const slowRequestThreshold = 500 * time.Millisecond
@@ -67,6 +76,7 @@ func securityHeaders(secure bool) func(http.Handler) http.Handler {
 // New builds the HTTP handler with routing and middleware wired.
 func New(deps Deps) http.Handler {
 	r := chi.NewRouter()
+	r.Use(otelhttp.NewMiddleware("arenda-api", otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method + " " + r.URL.Path })))
 	r.Use(RequestIDMiddleware)
 	r.Use(realIPMiddleware(deps.TrustedProxies))
 	r.Use(RequestLoggerWithOptions(deps.Logger, RequestLoggerOptions{
@@ -77,7 +87,7 @@ func New(deps Deps) http.Handler {
 	r.Use(rateLimitMiddleware(deps.IPRateLimiter))
 	r.Use(securityHeaders(deps.CookieSecure))
 	r.Use(SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
-	r.Use(readonlyMiddleware(deps.Billing, deps.Logger, deps.Clock))
+	r.Use(readonlyMiddleware(deps.Subscriptions, deps.Logger, deps.Clock))
 
 	r.Get("/healthz", healthHandler)
 
@@ -85,15 +95,27 @@ func New(deps Deps) http.Handler {
 		r.Get("/internal/perf/db-pool", dbPoolDiagnosticsHandler(deps.DBPoolStats))
 	}
 
-	authHandlers := NewAuthHandlers(deps.Auth, deps.Billing, deps.CookieSecure, deps.Logger, deps.PhoneSendLimiter, deps.PhoneVerifyLimiter, deps.EmailSendLimiter, deps.EmailVerifyLimiter)
-	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Logger)
-	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger)
+	authHandlers := NewAuthHandlers(
+		deps.Auth,
+		deps.PhoneChange,
+		deps.Profile,
+		deps.Logout,
+		deps.CookieSecure,
+		deps.Logger,
+		deps.EmailSendLimiter,
+		deps.EmailVerifyLimiter,
+		deps.PhoneChangeSendLimiter,
+		deps.PhoneChangeVerifyLimiter,
+		deps.MeEnricher,
+	)
+	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Logger, deps.Clock)
+	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock)
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Logger)
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Logger)
 	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
-	subscriptionHandlers := NewSubscriptionHandlers(deps.Billing, deps.Logger, deps.DevMode)
+	subscriptionHandlers := NewSubscriptionHandlers(deps.Tariffs, deps.Subscriptions, deps.PaymentMethods, deps.Payments, deps.Webhooks, deps.Logger, deps.DevMode)
 	financeHandlers := NewFinanceHandlers(deps.Operations)
-	adminHandlers := NewAdminHandlers(deps.Admin, deps.Billing, deps.Logger)
+	adminHandlers := NewAdminHandlers(deps.Admin, deps.Logger)
 
 	handler := &composedHandler{
 		AuthHandlers:               authHandlers,
@@ -173,6 +195,7 @@ func rateLimitMiddleware(limiter *RateLimiter) func(http.Handler) http.Handler {
 				ip = r.RemoteAddr
 			}
 			if !limiter.Allow(ip) {
+				w.Header().Set("Retry-After", "60")
 				writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too Many Requests", "Превышен лимит запросов"))
 				return
 			}

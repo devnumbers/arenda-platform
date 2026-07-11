@@ -28,6 +28,7 @@ export function PropertyPaymentsCard({
   operations,
   overdueCount,
 }: PropertyPaymentsCardProps): JSX.Element {
+  const isArchived = property.status === 'archived';
   const recent = [...operations]
     .sort((a, b) => {
       const byDate = b.operation_date.localeCompare(a.operation_date);
@@ -84,30 +85,22 @@ export function PropertyPaymentsCard({
       )}
 
       <div className={styles.actions}>
-        {recent.length > 0 ? (
-          <>
-            <LinkButton
-              href={`${ROUTES.financeCreateOperation}?propertyId=${property.id}`}
-              variant="primary"
-              fullWidth
-            >
-              Добавить операцию
-            </LinkButton>
-            <LinkButton
-              href={`${ROUTES.financeOperations}?property_id=${property.id}`}
-              variant="secondary"
-              fullWidth
-            >
-              Все операции
-            </LinkButton>
-          </>
-        ) : (
+        <LinkButton
+          href={`${ROUTES.financeCreateOperation}?propertyId=${property.id}`}
+          variant="primary"
+          fullWidth
+          disabled={isArchived}
+          title={isArchived ? 'Объект в архиве' : undefined}
+        >
+          Добавить операцию
+        </LinkButton>
+        {recent.length > 0 && (
           <LinkButton
-            href={`${ROUTES.financeCreateOperation}?propertyId=${property.id}`}
-            variant="primary"
+            href={`${ROUTES.financeOperations}?property_id=${property.id}`}
+            variant="secondary"
             fullWidth
           >
-            Добавить операцию
+            Все операции
           </LinkButton>
         )}
       </div>

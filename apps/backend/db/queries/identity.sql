@@ -7,14 +7,16 @@ SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at
 -- name: GetUserByPhone :one
 SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE phone = $1;
 
+-- name: GetUserByPhoneForUpdate :one
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE phone = $1 FOR UPDATE;
+
+-- name: GetUserByEmail :one
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE LOWER(email) = LOWER($1::text);
+
 -- name: CreateUser :one
 INSERT INTO users (id, phone, role, phone_encrypted, email, email_verified_at)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (phone) DO UPDATE SET
-    phone = EXCLUDED.phone,
-    phone_encrypted = EXCLUDED.phone_encrypted,
-    email = EXCLUDED.email,
-    email_verified_at = EXCLUDED.email_verified_at
+ON CONFLICT DO NOTHING
 RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted;
 
 -- name: GetLatestLoginCodeByPhoneAndEmailAndPurpose :one
@@ -24,16 +26,25 @@ ORDER BY created_at DESC
 LIMIT 1
 FOR UPDATE;
 
--- name: GetLatestLoginCodeByPhoneAndPurposeAndUserID :one
-SELECT id, user_id, phone, email, code_hash, expires_at, used, created_at, purpose, phone_encrypted FROM login_codes
-WHERE phone = $1 AND purpose = $2 AND user_id = $3 AND used = false AND expires_at > $4
-ORDER BY created_at DESC
-LIMIT 1
-FOR UPDATE;
-
 -- name: CreateLoginCode :exec
 INSERT INTO login_codes (id, phone, email, code_hash, expires_at, user_id, purpose, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (phone, COALESCE(email, ''), purpose) WHERE used = false
+DO UPDATE SET
+    id = EXCLUDED.id,
+    code_hash = EXCLUDED.code_hash,
+    expires_at = EXCLUDED.expires_at,
+    user_id = EXCLUDED.user_id,
+    phone_encrypted = EXCLUDED.phone_encrypted,
+    created_at = now();
+
+-- name: DeleteExpiredLoginCodesByPhoneAndEmail :exec
+DELETE FROM login_codes
+WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false AND expires_at < $4;
+
+-- name: DeleteUnusedLoginCodesByPhoneAndEmail :exec
+DELETE FROM login_codes
+WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false;
 
 -- name: MarkLoginCodeUsed :exec
 UPDATE login_codes SET used = true WHERE id = $1;
@@ -44,9 +55,6 @@ DELETE FROM login_codes WHERE id = $1;
 -- name: DeleteLoginCodesByUserID :exec
 DELETE FROM login_codes WHERE user_id = $1;
 
--- name: DeleteExpiredLoginCodes :exec
-DELETE FROM login_codes WHERE expires_at < $1;
-
 -- name: DeleteExpiredLoginCodesBatch :execrows
 DELETE FROM login_codes t WHERE t.ctid IN (
     SELECT s.ctid FROM login_codes s WHERE s.expires_at < $1 LIMIT $2
@@ -54,6 +62,9 @@ DELETE FROM login_codes t WHERE t.ctid IN (
 
 -- name: GetLoginAttemptByPhone :one
 SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted FROM login_attempts WHERE phone = $1;
+
+-- name: GetLoginAttemptByPhoneForUpdate :one
+SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted FROM login_attempts WHERE phone = $1 FOR UPDATE;
 
 -- name: UpsertLoginAttempt :exec
 INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
@@ -70,9 +81,6 @@ DELETE FROM login_attempts WHERE phone = $1;
 
 -- name: DeleteLoginAttemptsByUserID :exec
 DELETE FROM login_attempts WHERE user_id = $1;
-
--- name: DeleteStaleLoginAttempts :exec
-DELETE FROM login_attempts WHERE last_failure_at < $1;
 
 -- name: DeleteStaleLoginAttemptsBatch :execrows
 DELETE FROM login_attempts t WHERE t.ctid IN (
@@ -95,9 +103,6 @@ DELETE FROM sessions WHERE user_id = $1;
 -- name: DeleteSessionsByUserIDExcept :exec
 DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2;
 
--- name: DeleteExpiredSessions :exec
-DELETE FROM sessions WHERE expires_at < $1;
-
 -- name: DeleteExpiredSessionsBatch :execrows
 DELETE FROM sessions t WHERE t.ctid IN (
     SELECT s.ctid FROM sessions s WHERE s.expires_at < $1 LIMIT $2
@@ -110,9 +115,6 @@ FROM sessions s
 JOIN users u ON s.user_id = u.id
 WHERE s.token_hash = $1 AND s.expires_at > $2;
 
--- name: GetUserPhoneByID :one
-SELECT phone, phone_encrypted FROM users WHERE id = $1;
-
 -- name: GetVerifiedEmailByUserID :one
 SELECT email
 FROM users
@@ -124,6 +126,7 @@ SET name = $2,
     surname = $3,
     patronymic = $4,
     email = $5,
+    email_verified_at = $6,
     updated_at = now()
 WHERE id = $1
 RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at;
@@ -135,11 +138,6 @@ SET phone = $2,
     updated_at = now()
 WHERE id = $1
 RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at;
-
--- name: GetUserByEmail :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at
-FROM users
-WHERE LOWER(email) = LOWER($1);
 
 -- name: UpdateUserEmailVerified :one
 UPDATE users

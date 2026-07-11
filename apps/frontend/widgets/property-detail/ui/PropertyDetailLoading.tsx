@@ -5,11 +5,6 @@ import styles from './PropertyDetailLoading.module.css';
 export function PropertyDetailLoading(): JSX.Element {
   return (
     <div className={styles.root} aria-busy="true" aria-label="Загрузка объекта">
-      <div className={styles.header}>
-        <Skeleton className={styles.title} />
-        <Skeleton className={styles.icon} />
-      </div>
-
       <Skeleton className={styles.gallery} />
 
       <div className={styles.status}>

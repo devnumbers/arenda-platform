@@ -10,6 +10,12 @@
   border-radius: 8px;
 }
 
+.cardLink {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
 .card {
   position: relative;
   display: flex;

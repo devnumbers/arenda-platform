@@ -34,11 +34,11 @@ type fakeTx struct {
 
 func (tx *fakeTx) Commit(context.Context) error {
 	if !tx.done {
-		tx.b.committed++
 		tx.b.open--
+		tx.b.committed++
 		tx.done = true
 	}
-	return nil
+	return tx.b.commitErr
 }
 
 func (tx *fakeTx) Rollback(context.Context) error {
@@ -52,9 +52,14 @@ func (tx *fakeTx) Rollback(context.Context) error {
 
 type fakeBeginner struct {
 	begun, committed, rolledBack, open int
+	beginErr                           error
+	commitErr                          error
 }
 
 func (b *fakeBeginner) Begin(context.Context) (transaction.Tx, error) {
+	if b.beginErr != nil {
+		return nil, b.beginErr
+	}
 	b.begun++
 	b.open++
 	return &fakeTx{b: b}, nil
@@ -111,10 +116,12 @@ func (r *fakeTariffRepo) List(_ context.Context) ([]domain.Tariff, error) {
 	return out, nil
 }
 
-func (r *fakeTariffRepo) WithTx(transaction.Tx) TariffRepository { return r }
+func (r *fakeTariffRepo) WithTx(transaction.Tx) (TariffRepository, error) { return r, nil }
 
 type fakeSubscriptionRepo struct {
-	subs map[uuid.UUID]domain.Subscription
+	subs                    map[uuid.UUID]domain.Subscription
+	listUpForRenewalCalls   int
+	listInExpiredGraceCalls int
 }
 
 func (r *fakeSubscriptionRepo) GetByID(_ context.Context, id uuid.UUID) (domain.Subscription, error) {
@@ -153,6 +160,7 @@ func (r *fakeSubscriptionRepo) Update(_ context.Context, sub domain.Subscription
 }
 
 func (r *fakeSubscriptionRepo) ListUpForRenewal(_ context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
+	r.listUpForRenewalCalls++
 	var out []domain.Subscription
 	for _, sub := range r.subs {
 		if sub.Status == domain.SubscriptionStatusActive && sub.AutoRenewEnabled && sub.ValidUntil != nil && !sub.ValidUntil.After(now) {
@@ -166,6 +174,7 @@ func (r *fakeSubscriptionRepo) ListUpForRenewal(_ context.Context, now time.Time
 }
 
 func (r *fakeSubscriptionRepo) ListInExpiredGrace(_ context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
+	r.listInExpiredGraceCalls++
 	var out []domain.Subscription
 	for _, sub := range r.subs {
 		if sub.Status == domain.SubscriptionStatusGrace && sub.ValidUntil != nil && !sub.ValidUntil.After(now) {
@@ -219,7 +228,7 @@ func (r *fakeSubscriptionRepo) ListPendingChanges(_ context.Context, now time.Ti
 	return out, nil
 }
 
-func (r *fakeSubscriptionRepo) WithTx(transaction.Tx) SubscriptionRepository { return r }
+func (r *fakeSubscriptionRepo) WithTx(transaction.Tx) (SubscriptionRepository, error) { return r, nil }
 
 type fakePaymentMethodRepo struct {
 	methods map[uuid.UUID]domain.PaymentMethod
@@ -289,18 +298,28 @@ func (r *fakePaymentMethodRepo) Delete(_ context.Context, userID, methodID uuid.
 	return nil
 }
 
-func (r *fakePaymentMethodRepo) WithTx(transaction.Tx) PaymentMethodRepository { return r }
+func (r *fakePaymentMethodRepo) WithTx(transaction.Tx) (PaymentMethodRepository, error) {
+	return r, nil
+}
 
 type fakeSubscriptionPaymentRepo struct {
-	payments                 map[uuid.UUID]domain.SubscriptionPayment
-	pendingUpgradePaymentIDs map[uuid.UUID]bool
-	listPendingErr           error
-	listPendingLimit         int32
-	listPendingCalls         int
-	forUpdateStatus          map[uuid.UUID]domain.PaymentStatus
+	payments                   map[uuid.UUID]domain.SubscriptionPayment
+	pendingUpgradePaymentIDs   map[uuid.UUID]bool
+	listPendingErr             error
+	listPendingLimit           int32
+	listPendingCalls           int
+	listStaleRefundingErr      error
+	listStaleRefundingCalls    int
+	forUpdateStatus            map[uuid.UUID]domain.PaymentStatus
+	updateProviderPaymentIDErr error
+	onMarkFailed               func()
+	beforeCreate               func()
 }
 
 func (r *fakeSubscriptionPaymentRepo) Create(_ context.Context, p domain.SubscriptionPayment) (domain.SubscriptionPayment, error) {
+	if r.beforeCreate != nil {
+		r.beforeCreate()
+	}
 	for _, existing := range r.payments {
 		if existing.UserID == p.UserID && existing.TariffID == p.TariffID && existing.Period == p.Period && existing.Status == domain.PaymentStatusPending {
 			return domain.SubscriptionPayment{}, ErrAlreadyExists
@@ -396,6 +415,28 @@ func (r *fakeSubscriptionPaymentRepo) ListPendingPayments(_ context.Context, cre
 	return out, nil
 }
 
+func (r *fakeSubscriptionPaymentRepo) ListStaleRefundingPayments(_ context.Context, updatedBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error) {
+	r.listStaleRefundingCalls++
+	if r.listStaleRefundingErr != nil {
+		return nil, r.listStaleRefundingErr
+	}
+	var out []domain.SubscriptionPayment
+	for _, p := range r.payments {
+		if p.Status != domain.PaymentStatusRefunding || !p.UpdatedAt.Before(updatedBefore) {
+			continue
+		}
+		if p.ProviderPaymentID == nil || *p.ProviderPaymentID == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].UpdatedAt.Before(out[j].UpdatedAt) })
+	if len(out) > int(limit) {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 func (r *fakeSubscriptionPaymentRepo) ListAll(_ context.Context, _ string, _ uuid.UUID, _, _ int) ([]SubscriptionPaymentWithUser, int64, error) {
 	return nil, 0, nil
 }
@@ -429,6 +470,9 @@ func (r *fakeSubscriptionPaymentRepo) MarkSucceeded(_ context.Context, id uuid.U
 }
 
 func (r *fakeSubscriptionPaymentRepo) MarkFailed(_ context.Context, id uuid.UUID, errorCode *string, now time.Time) error {
+	if r.onMarkFailed != nil {
+		r.onMarkFailed()
+	}
 	p, ok := r.payments[id]
 	if !ok {
 		return ErrNotFound
@@ -440,12 +484,60 @@ func (r *fakeSubscriptionPaymentRepo) MarkFailed(_ context.Context, id uuid.UUID
 	return nil
 }
 
-func (r *fakeSubscriptionPaymentRepo) MarkRefunded(_ context.Context, id uuid.UUID, _ domain.PaymentStatus, amountKopecks int64, now time.Time) error {
+func (r *fakeSubscriptionPaymentRepo) MarkRefunded(_ context.Context, id uuid.UUID, now time.Time) error {
 	p, ok := r.payments[id]
 	if !ok {
 		return ErrNotFound
 	}
-	if err := p.MarkRefunded(amountKopecks, now); err != nil {
+	if err := p.MarkRefunded(now); err != nil {
+		return err
+	}
+	r.payments[id] = p
+	return nil
+}
+
+func (r *fakeSubscriptionPaymentRepo) MarkReconciledSucceeded(_ context.Context, id uuid.UUID, now time.Time) error {
+	p, ok := r.payments[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if err := p.ReconcileToSucceeded(now); err != nil {
+		return err
+	}
+	r.payments[id] = p
+	return nil
+}
+
+func (r *fakeSubscriptionPaymentRepo) MarkReconciledRefunded(_ context.Context, id uuid.UUID, now time.Time) error {
+	p, ok := r.payments[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if err := p.ReconcileToRefunded(now); err != nil {
+		return err
+	}
+	r.payments[id] = p
+	return nil
+}
+
+func (r *fakeSubscriptionPaymentRepo) BeginRefund(_ context.Context, id uuid.UUID, now time.Time) error {
+	p, ok := r.payments[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if err := p.BeginRefund(now); err != nil {
+		return err
+	}
+	r.payments[id] = p
+	return nil
+}
+
+func (r *fakeSubscriptionPaymentRepo) RevertRefund(_ context.Context, id uuid.UUID, prev domain.PaymentStatus, now time.Time) error {
+	p, ok := r.payments[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if err := p.RevertRefund(now, prev); err != nil {
 		return err
 	}
 	r.payments[id] = p
@@ -453,6 +545,9 @@ func (r *fakeSubscriptionPaymentRepo) MarkRefunded(_ context.Context, id uuid.UU
 }
 
 func (r *fakeSubscriptionPaymentRepo) UpdateProviderPaymentID(_ context.Context, id uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error) {
+	if r.updateProviderPaymentIDErr != nil {
+		return domain.SubscriptionPayment{}, r.updateProviderPaymentIDErr
+	}
 	p, ok := r.payments[id]
 	if !ok {
 		return domain.SubscriptionPayment{}, ErrNotFound
@@ -493,7 +588,36 @@ func (r *fakeSubscriptionPaymentRepo) UpdatePaymentMethodID(_ context.Context, i
 	return p, nil
 }
 
-func (r *fakeSubscriptionPaymentRepo) WithTx(transaction.Tx) SubscriptionPaymentRepository { return r }
+func (r *fakeSubscriptionPaymentRepo) IncrementChargeAttempts(_ context.Context, id uuid.UUID) (int, error) {
+	p, ok := r.payments[id]
+	if !ok {
+		return 0, ErrNotFound
+	}
+	p.ChargeAttempts++
+	r.payments[id] = p
+	return p.ChargeAttempts, nil
+}
+
+func (r *fakeSubscriptionPaymentRepo) WithTx(transaction.Tx) (SubscriptionPaymentRepository, error) {
+	return r, nil
+}
+
+// --- payment method in-use checker fake ---
+
+type fakePaymentMethodInUseChecker struct {
+	inUse map[uuid.UUID]bool
+}
+
+func (c *fakePaymentMethodInUseChecker) IsInUse(_ context.Context, methodID uuid.UUID) (bool, error) {
+	if c.inUse == nil {
+		return false, nil
+	}
+	return c.inUse[methodID], nil
+}
+
+func (c *fakePaymentMethodInUseChecker) WithTx(transaction.Tx) (PaymentMethodInUseChecker, error) {
+	return c, nil
+}
 
 // --- property archiver fake ---
 
@@ -520,9 +644,17 @@ func (a *fakePropertyArchiver) ArchiveExcessProperties(_ context.Context, _ tran
 
 // --- provider fake ---
 
+var _ RenewalProvider = (*stubProvider)(nil)
+var _ WebhookProvider = (*stubProvider)(nil)
+var _ PaymentManager = (*stubProvider)(nil)
+var _ CardProvider = (*stubProvider)(nil)
+var _ SubscriptionPaymentProvider = (*stubProvider)(nil)
+var _ ProviderNamer = (*stubProvider)(nil)
+
 type stubProvider struct {
 	name       domain.PaymentProvider
 	initCalled bool
+	initCount  int
 	initReq    InitRequest
 	initRes    InitResult
 	initErr    error
@@ -533,11 +665,13 @@ type stubProvider struct {
 	chargeReq    ChargeRequest
 	chargeFunc   func(ChargeRequest)
 	chargeCalled bool
+	chargeCount  int
 
 	statusRes    domain.PaymentStatus
 	statusErr    error
 	statusFunc   func(uuid.UUID, string)
 	statusCalled bool
+	statusCount  int
 
 	parseWebhook func([]byte) (WebhookPayload, error)
 
@@ -551,6 +685,12 @@ type stubProvider struct {
 	removeCardCustomer string
 	removeCardCardID   string
 
+	getCardListRes         []ProviderCard
+	getCardListErr         error
+	getCardListCalled      bool
+	getCardListCount       int
+	getCardListCustomerKey string
+
 	confirmPaymentRes        WebhookPayload
 	confirmPaymentErr        error
 	confirmPaymentInternalID string
@@ -558,6 +698,7 @@ type stubProvider struct {
 	cancelRes    CancelResult
 	cancelErr    error
 	cancelCalled bool
+	cancelCount  int
 	cancelReq    CancelRequest
 }
 
@@ -570,6 +711,7 @@ func (p *stubProvider) Name() domain.PaymentProvider {
 
 func (p *stubProvider) Init(_ context.Context, req InitRequest) (InitResult, error) {
 	p.initCalled = true
+	p.initCount++
 	p.initReq = req
 	if p.initFunc != nil {
 		p.initFunc(req)
@@ -595,6 +737,7 @@ func (p *stubProvider) Init(_ context.Context, req InitRequest) (InitResult, err
 
 func (p *stubProvider) Charge(_ context.Context, req ChargeRequest) (ChargeResult, error) {
 	p.chargeCalled = true
+	p.chargeCount++
 	p.chargeReq = req
 	if p.chargeFunc != nil {
 		p.chargeFunc(req)
@@ -604,6 +747,7 @@ func (p *stubProvider) Charge(_ context.Context, req ChargeRequest) (ChargeResul
 
 func (p *stubProvider) Status(_ context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error) {
 	p.statusCalled = true
+	p.statusCount++
 	if p.statusFunc != nil {
 		p.statusFunc(paymentID, providerPaymentID)
 	}
@@ -637,6 +781,16 @@ func (p *stubProvider) RemoveCard(_ context.Context, customerKey, cardID string)
 	return p.removeCardErr
 }
 
+func (p *stubProvider) GetCardList(_ context.Context, customerKey string) ([]ProviderCard, error) {
+	p.getCardListCalled = true
+	p.getCardListCount++
+	p.getCardListCustomerKey = customerKey
+	if p.getCardListErr != nil {
+		return nil, p.getCardListErr
+	}
+	return p.getCardListRes, nil
+}
+
 func (p *stubProvider) WebhookResponse() []byte {
 	return []byte(`{"status":"ok"}`)
 }
@@ -648,6 +802,7 @@ func (p *stubProvider) ConfirmPayment(_ context.Context, internalPaymentID strin
 
 func (p *stubProvider) Cancel(_ context.Context, req CancelRequest) (CancelResult, error) {
 	p.cancelCalled = true
+	p.cancelCount++
 	p.cancelReq = req
 	return p.cancelRes, p.cancelErr
 }
@@ -663,7 +818,8 @@ type testDeps struct {
 	provider             *stubProvider
 	beginner             *fakeBeginner
 	clock                *fakeClock
-	service              *BillingService
+	inUseChecker         *fakePaymentMethodInUseChecker
+	service              Services
 }
 
 func newTestDeps(t *testing.T) *testDeps {
@@ -680,8 +836,9 @@ func newTestDeps(t *testing.T) *testDeps {
 		provider:         &stubProvider{},
 		beginner:         &fakeBeginner{},
 		clock:            newFakeClock(fixedNow),
+		inUseChecker:     &fakePaymentMethodInUseChecker{},
 	}
-	d.service = NewBillingService(
+	d.service = NewServices(
 		d.tariffs,
 		d.subscriptions,
 		d.paymentMethods,
@@ -692,6 +849,8 @@ func newTestDeps(t *testing.T) *testDeps {
 		discardLogger(),
 		"http://localhost",
 		d.propertyArchiver,
+		nil,
+		d.inUseChecker,
 	)
 	return d
 }
@@ -707,7 +866,7 @@ func (d *testDeps) addSubscription(sub domain.Subscription) {
 
 // --- tests ---
 
-func TestBillingService_ListTariffsOrderedByPrice(t *testing.T) {
+func TestBilling_ListTariffsOrderedByPrice(t *testing.T) {
 	d := newTestDeps(t)
 	d.addTariff(domain.Tariff{
 		ID:                  uuid.MustParse("11111111-1111-1111-1111-111111111111"),
@@ -722,7 +881,7 @@ func TestBillingService_ListTariffsOrderedByPrice(t *testing.T) {
 		MonthlyPriceKopecks: 1000,
 	})
 
-	list, err := d.service.ListTariffs(context.Background())
+	list, err := d.service.Tariffs.ListTariffs(context.Background())
 	if err != nil {
 		t.Fatalf("ListTariffs error: %v", err)
 	}
@@ -734,7 +893,7 @@ func TestBillingService_ListTariffsOrderedByPrice(t *testing.T) {
 	}
 }
 
-func TestBillingService_GetSubscriptionWithActivePaymentMethod(t *testing.T) {
+func TestBilling_GetSubscriptionWithActivePaymentMethod(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	methodID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
@@ -759,7 +918,7 @@ func TestBillingService_GetSubscriptionWithActivePaymentMethod(t *testing.T) {
 		IsActive: true,
 	}
 
-	view, err := d.service.GetSubscription(context.Background(), userID)
+	view, err := d.service.Subscriptions.GetSubscription(context.Background(), userID)
 	if err != nil {
 		t.Fatalf("GetSubscription error: %v", err)
 	}
@@ -771,7 +930,7 @@ func TestBillingService_GetSubscriptionWithActivePaymentMethod(t *testing.T) {
 	}
 }
 
-func TestBillingService_ChangeTariff_UpgradeCreatesPendingPayment(t *testing.T) {
+func TestBilling_ChangeTariff_UpgradeCreatesPendingPayment(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -794,8 +953,8 @@ func TestBillingService_ChangeTariff_UpgradeCreatesPendingPayment(t *testing.T) 
 		AutoRenewEnabled: false,
 	})
 
-	resp, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -855,7 +1014,7 @@ func TestBillingService_ChangeTariff_UpgradeCreatesPendingPayment(t *testing.T) 
 	}
 }
 
-func TestBillingService_ChangeTariff_UpgradeCreatesPaymentBeforeProviderCall(t *testing.T) {
+func TestBilling_ChangeTariff_UpgradeCreatesPaymentBeforeProviderCall(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -897,8 +1056,8 @@ func TestBillingService_ChangeTariff_UpgradeCreatesPaymentBeforeProviderCall(t *
 		}
 	}
 
-	resp, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -909,7 +1068,7 @@ func TestBillingService_ChangeTariff_UpgradeCreatesPaymentBeforeProviderCall(t *
 	}
 }
 
-func TestBillingService_ChangeTariff_DowngradeSchedulesPendingChange(t *testing.T) {
+func TestBilling_ChangeTariff_DowngradeSchedulesPendingChange(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
 	basicID := uuid.MustParse("66666666-6666-6666-6666-666666666666")
@@ -932,8 +1091,8 @@ func TestBillingService_ChangeTariff_DowngradeSchedulesPendingChange(t *testing.
 		AutoRenewEnabled: false,
 	})
 
-	resp, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffBasic),
+	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffBasic,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -959,12 +1118,12 @@ func TestBillingService_ChangeTariff_DowngradeSchedulesPendingChange(t *testing.
 	if sub.PendingPeriod == nil || *sub.PendingPeriod != domain.PeriodMonth {
 		t.Errorf("expected pending period month, got %v", sub.PendingPeriod)
 	}
-	if sub.AutoRenewEnabled {
-		t.Error("downgrade scheduling should not change auto-renew")
+	if !sub.AutoRenewEnabled {
+		t.Error("expected auto-renew enabled after scheduling downgrade")
 	}
 }
 
-func TestBillingService_ChangeTariff_AlreadyOnTariff(t *testing.T) {
+func TestBilling_ChangeTariff_AlreadyOnTariff(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("99999999-9999-9999-9999-999999999999")
 	basicID := uuid.MustParse("00000000-0000-0000-0000-000000000000")
@@ -980,8 +1139,8 @@ func TestBillingService_ChangeTariff_AlreadyOnTariff(t *testing.T) {
 		Status:   domain.SubscriptionStatusActive,
 	})
 
-	_, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffBasic),
+	_, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffBasic,
 		Period:     domain.PeriodMonth,
 	})
 	if !errors.Is(err, ErrAlreadyOnTariff) {
@@ -989,7 +1148,7 @@ func TestBillingService_ChangeTariff_AlreadyOnTariff(t *testing.T) {
 	}
 }
 
-func TestBillingService_ToggleAutoRenew(t *testing.T) {
+func TestBilling_ToggleAutoRenew(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab")
 	validUntil := fixedNow.AddDate(0, 1, 0)
@@ -1004,14 +1163,14 @@ func TestBillingService_ToggleAutoRenew(t *testing.T) {
 		AutoRenewEnabled: false,
 	})
 
-	if err := d.service.ToggleAutoRenew(context.Background(), userID, true); err != nil {
+	if err := d.service.Subscriptions.ToggleAutoRenew(context.Background(), userID, true); err != nil {
 		t.Fatalf("ToggleAutoRenew error: %v", err)
 	}
 	if !d.subscriptions.subs[userID].AutoRenewEnabled {
 		t.Error("expected auto-renew enabled")
 	}
 
-	if err := d.service.ToggleAutoRenew(context.Background(), userID, false); err != nil {
+	if err := d.service.Subscriptions.ToggleAutoRenew(context.Background(), userID, false); err != nil {
 		t.Fatalf("ToggleAutoRenew error: %v", err)
 	}
 	if d.subscriptions.subs[userID].AutoRenewEnabled {
@@ -1019,11 +1178,11 @@ func TestBillingService_ToggleAutoRenew(t *testing.T) {
 	}
 }
 
-func TestBillingService_AddPaymentMethod(t *testing.T) {
+func TestBilling_AddPaymentMethod(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccd")
 
-	resp, err := d.service.AddPaymentMethod(context.Background(), userID, AddPaymentMethodRequest{
+	resp, err := d.service.PaymentMethods.AddPaymentMethod(context.Background(), userID, AddPaymentMethodRequest{
 		ProviderToken: "raw_token_1234",
 	})
 	if err != nil {
@@ -1047,7 +1206,7 @@ func TestBillingService_AddPaymentMethod(t *testing.T) {
 	}
 }
 
-func TestBillingService_SetActivePaymentMethodUsesTransaction(t *testing.T) {
+func TestBilling_SetActivePaymentMethodUsesTransaction(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("dddddddd-dddd-dddd-dddd-ddddddddddde")
 	methodID := uuid.MustParse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")
@@ -1068,7 +1227,7 @@ func TestBillingService_SetActivePaymentMethodUsesTransaction(t *testing.T) {
 		IsActive: false,
 	}
 
-	if err := d.service.SetActivePaymentMethod(context.Background(), userID, methodID); err != nil {
+	if err := d.service.PaymentMethods.SetActivePaymentMethod(context.Background(), userID, methodID); err != nil {
 		t.Fatalf("SetActivePaymentMethod error: %v", err)
 	}
 
@@ -1084,7 +1243,7 @@ func TestBillingService_SetActivePaymentMethodUsesTransaction(t *testing.T) {
 	}
 }
 
-func TestBillingService_DeletePaymentMethodUsesTransaction(t *testing.T) {
+func TestBilling_DeletePaymentMethodUsesTransaction(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
 	methodID := uuid.MustParse("11111111-1111-1111-1111-111111111113")
@@ -1095,19 +1254,84 @@ func TestBillingService_DeletePaymentMethodUsesTransaction(t *testing.T) {
 		Provider: domain.ProviderFake,
 	}
 
-	if err := d.service.DeletePaymentMethod(context.Background(), userID, methodID); err != nil {
+	if err := d.service.PaymentMethods.DeletePaymentMethod(context.Background(), userID, methodID); err != nil {
 		t.Fatalf("DeletePaymentMethod error: %v", err)
 	}
-	// Validation and deletion each run in their own transaction.
-	if d.beginner.begun != 2 || d.beginner.committed != 2 {
-		t.Errorf("expected two committed transactions, got begun=%d committed=%d", d.beginner.begun, d.beginner.committed)
+	// Validation and deletion run atomically in a single transaction.
+	if d.beginner.begun != 1 || d.beginner.committed != 1 {
+		t.Errorf("expected one committed transaction, got begun=%d committed=%d", d.beginner.begun, d.beginner.committed)
 	}
 	if _, ok := d.paymentMethods.methods[methodID]; ok {
 		t.Error("expected method deleted")
 	}
 }
 
-func TestBillingService_ConfirmFakePayment_AppliesUpgrade(t *testing.T) {
+func TestBilling_DeletePaymentMethod_RejectsActiveMethodInSingleTransaction(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+	methodID := uuid.MustParse("11111111-1111-1111-1111-111111111113")
+
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:       methodID,
+		UserID:   userID,
+		Provider: domain.ProviderFake,
+		IsActive: true,
+	}
+
+	err := d.service.PaymentMethods.DeletePaymentMethod(context.Background(), userID, methodID)
+	if !errors.Is(err, ErrPaymentMethodInUse) {
+		t.Fatalf("expected ErrPaymentMethodInUse, got %v", err)
+	}
+	if _, ok := d.paymentMethods.methods[methodID]; !ok {
+		t.Error("expected active method to remain (not deleted)")
+	}
+	if d.provider.removeCardCalled {
+		t.Error("expected provider.RemoveCard not to be called for active method")
+	}
+	// The active-method guard runs inside the single transaction, which is rolled
+	// back on rejection; nothing is committed.
+	if d.beginner.begun != 1 || d.beginner.committed != 0 {
+		t.Errorf("expected one rolled-back transaction, got begun=%d committed=%d", d.beginner.begun, d.beginner.committed)
+	}
+	if d.beginner.rolledBack != 1 {
+		t.Errorf("expected the transaction to be rolled back, got rolledBack=%d", d.beginner.rolledBack)
+	}
+}
+
+func TestBilling_DeletePaymentMethod_RejectsInUseMethodInSingleTransaction(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+	methodID := uuid.MustParse("11111111-1111-1111-1111-111111111113")
+
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:       methodID,
+		UserID:   userID,
+		Provider: domain.ProviderFake,
+		IsActive: false,
+	}
+	d.inUseChecker.inUse = map[uuid.UUID]bool{methodID: true}
+
+	err := d.service.PaymentMethods.DeletePaymentMethod(context.Background(), userID, methodID)
+	if !errors.Is(err, ErrPaymentMethodInUse) {
+		t.Fatalf("expected ErrPaymentMethodInUse, got %v", err)
+	}
+	if _, ok := d.paymentMethods.methods[methodID]; !ok {
+		t.Error("expected in-use method to remain (not deleted)")
+	}
+	if d.provider.removeCardCalled {
+		t.Error("expected provider.RemoveCard not to be called for in-use method")
+	}
+	// The in-use check runs inside the single transaction, which is rolled back
+	// on rejection; nothing is committed.
+	if d.beginner.begun != 1 || d.beginner.committed != 0 {
+		t.Errorf("expected one rolled-back transaction, got begun=%d committed=%d", d.beginner.begun, d.beginner.committed)
+	}
+	if d.beginner.rolledBack != 1 {
+		t.Errorf("expected the transaction to be rolled back, got rolledBack=%d", d.beginner.rolledBack)
+	}
+}
+
+func TestBilling_ConfirmFakePayment_AppliesUpgrade(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("22222222-2222-2222-2222-222222222223")
 	basicID := uuid.MustParse("33333333-3333-3333-3333-333333333334")
@@ -1130,8 +1354,8 @@ func TestBillingService_ConfirmFakePayment_AppliesUpgrade(t *testing.T) {
 		AutoRenewEnabled: false,
 	})
 
-	resp, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -1150,7 +1374,7 @@ func TestBillingService_ConfirmFakePayment_AppliesUpgrade(t *testing.T) {
 		Status:            domain.PaymentStatusSucceeded,
 	}
 
-	if err := d.service.ConfirmFakePayment(context.Background(), resp.PaymentID); err != nil {
+	if err := d.service.Payments.ConfirmFakePayment(context.Background(), resp.PaymentID); err != nil {
 		t.Fatalf("ConfirmFakePayment error: %v", err)
 	}
 
@@ -1186,7 +1410,7 @@ func TestBillingService_ConfirmFakePayment_AppliesUpgrade(t *testing.T) {
 	}
 }
 
-func TestBillingService_HandleWebhook_AppliesFailedUpgradePayment(t *testing.T) {
+func TestBilling_HandleWebhook_AppliesFailedUpgradePayment(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777778")
 	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888889")
@@ -1223,7 +1447,7 @@ func TestBillingService_HandleWebhook_AppliesFailedUpgradePayment(t *testing.T) 
 		}, nil
 	}
 
-	if err := d.service.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook error: %v", err)
 	}
 
@@ -1241,7 +1465,7 @@ func TestBillingService_HandleWebhook_AppliesFailedUpgradePayment(t *testing.T) 
 	}
 }
 
-func TestBillingService_HandleWebhook_RefundDowngradesToBasic(t *testing.T) {
+func TestBilling_HandleWebhook_RefundDowngradesToBasic(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777a")
 	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888b")
@@ -1287,7 +1511,7 @@ func TestBillingService_HandleWebhook_RefundDowngradesToBasic(t *testing.T) {
 		}, nil
 	}
 
-	if err := d.service.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook error: %v", err)
 	}
 
@@ -1317,7 +1541,7 @@ func TestBillingService_HandleWebhook_RefundDowngradesToBasic(t *testing.T) {
 	}
 }
 
-func TestBillingService_HandleWebhook_FailedRenewalMovesToGrace(t *testing.T) {
+func TestBilling_HandleWebhook_FailedRenewalMovesToGrace(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777779")
 	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888a")
@@ -1360,7 +1584,7 @@ func TestBillingService_HandleWebhook_FailedRenewalMovesToGrace(t *testing.T) {
 		}, nil
 	}
 
-	if err := d.service.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook error: %v", err)
 	}
 
@@ -1373,7 +1597,7 @@ func TestBillingService_HandleWebhook_FailedRenewalMovesToGrace(t *testing.T) {
 	}
 }
 
-func TestBillingService_HandleWebhook_FailedRenewalDoesNotShortenFutureValidUntil(t *testing.T) {
+func TestBilling_HandleWebhook_FailedRenewalDoesNotShortenFutureValidUntil(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777779")
 	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888a")
@@ -1416,7 +1640,7 @@ func TestBillingService_HandleWebhook_FailedRenewalDoesNotShortenFutureValidUnti
 		}, nil
 	}
 
-	if err := d.service.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook error: %v", err)
 	}
 
@@ -1429,7 +1653,270 @@ func TestBillingService_HandleWebhook_FailedRenewalDoesNotShortenFutureValidUnti
 	}
 }
 
-func TestBillingService_ChangeTariff_UpgradeDefersPaymentMethodActivation(t *testing.T) {
+func TestBilling_HandleWebhook_SucceededAfterFailed_ReconcilesToSucceeded(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777b")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888c")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaf")
+	proID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
+	providerPaymentID := "stub_webhook_reconcile_succeeded"
+	validUntil := fixedNow.AddDate(0, 0, -1)
+
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusGrace,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusFailed,
+	}
+
+	d.provider.statusRes = domain.PaymentStatusSucceeded
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			ProviderPaymentID: providerPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusSucceeded,
+		}, nil
+	}
+
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook error: %v", err)
+	}
+
+	if d.provider.statusCount != 1 {
+		t.Errorf("expected provider.Status called once, got %d", d.provider.statusCount)
+	}
+
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("expected payment succeeded, got %s", payment.Status)
+	}
+	if payment.ErrorCode != nil {
+		t.Errorf("expected error code cleared, got %v", payment.ErrorCode)
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected subscription active, got %s", sub.Status)
+	}
+	wantValidUntil := validUntil.AddDate(0, 1, 0)
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+		t.Errorf("expected valid_until extended to %v, got %v", wantValidUntil, sub.ValidUntil)
+	}
+}
+
+func TestBilling_HandleWebhook_SucceededAfterFailed_AlreadyRefunded(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777c")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888d")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1")
+	basicID := uuid.MustParse("00000000-0000-0000-0000-000000000004")
+	proID := uuid.MustParse("00000000-0000-0000-0000-000000000005")
+	providerPaymentID := "stub_webhook_reconcile_refunded"
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
+	})
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusGrace,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusFailed,
+	}
+
+	d.provider.statusRes = domain.PaymentStatusRefunded
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			ProviderPaymentID: providerPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusSucceeded,
+		}, nil
+	}
+
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook error: %v", err)
+	}
+
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusRefunded {
+		t.Errorf("expected payment refunded, got %s", payment.Status)
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.TariffID != basicID {
+		t.Errorf("expected subscription downgraded to basic, got tariff %s", sub.TariffID)
+	}
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected subscription status active, got %s", sub.Status)
+	}
+	if sub.ValidUntil != nil {
+		t.Errorf("expected valid_until nil after refund, got %v", sub.ValidUntil)
+	}
+	if sub.AutoRenewEnabled {
+		t.Error("expected auto_renew disabled after refund")
+	}
+	if len(d.propertyArchiver.calls) != 1 || d.propertyArchiver.calls[0].limit != 5 {
+		t.Errorf("expected property archiver called with limit 5, got %v", d.propertyArchiver.calls)
+	}
+}
+
+func TestBilling_HandleWebhook_SucceededAfterFailed_StillFailed(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777d")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888e")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2")
+	tariffID := uuid.MustParse("99999999-9999-9999-9999-99999999999c")
+	providerPaymentID := "stub_webhook_reconcile_still_failed"
+	validUntil := fixedNow.AddDate(0, 0, -1)
+
+	d.addTariff(domain.Tariff{
+		ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         tariffID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusGrace,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          tariffID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusFailed,
+	}
+
+	d.provider.statusRes = domain.PaymentStatusFailed
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			ProviderPaymentID: providerPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusSucceeded,
+		}, nil
+	}
+
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook error: %v", err)
+	}
+
+	if d.provider.statusCount != 1 {
+		t.Errorf("expected provider.Status called once, got %d", d.provider.statusCount)
+	}
+
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusFailed {
+		t.Errorf("expected payment still failed, got %s", payment.Status)
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("expected subscription still in grace, got %s", sub.Status)
+	}
+}
+
+func TestBilling_HandleWebhook_SucceededAfterFailed_StatusError(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777e")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888f")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3")
+	tariffID := uuid.MustParse("99999999-9999-9999-9999-99999999999d")
+	providerPaymentID := "stub_webhook_reconcile_status_error"
+	validUntil := fixedNow.AddDate(0, 0, -1)
+
+	d.addTariff(domain.Tariff{
+		ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         tariffID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusGrace,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          tariffID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusFailed,
+	}
+
+	d.provider.statusErr = errors.New("provider status unavailable")
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			ProviderPaymentID: providerPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusSucceeded,
+		}, nil
+	}
+
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook error: %v", err)
+	}
+
+	if d.provider.statusCount != 1 {
+		t.Errorf("expected provider.Status called once, got %d", d.provider.statusCount)
+	}
+
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusFailed {
+		t.Errorf("expected payment still failed, got %s", payment.Status)
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("expected subscription still in grace, got %s", sub.Status)
+	}
+}
+
+func TestBilling_ChangeTariff_UpgradeDefersPaymentMethodActivation(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -1459,8 +1946,8 @@ func TestBillingService_ChangeTariff_UpgradeDefersPaymentMethodActivation(t *tes
 		IsActive: true,
 	}
 
-	resp, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -1483,7 +1970,7 @@ func TestBillingService_ChangeTariff_UpgradeDefersPaymentMethodActivation(t *tes
 	}
 }
 
-func TestBillingService_ChangeTariff_UpgradeInitFailureMarksPaymentFailed(t *testing.T) {
+func TestBilling_ChangeTariff_UpgradeInitFailureMarksPaymentFailed(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -1510,8 +1997,8 @@ func TestBillingService_ChangeTariff_UpgradeInitFailureMarksPaymentFailed(t *tes
 	wantErr := errors.New("provider init failed: " + sensitive)
 	d.provider.initErr = wantErr
 
-	resp, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if !errors.Is(err, wantErr) {
@@ -1538,7 +2025,74 @@ func TestBillingService_ChangeTariff_UpgradeInitFailureMarksPaymentFailed(t *tes
 	}
 }
 
-func TestBillingService_ChangeTariff_UpgradeReturnsExistingPendingPayment(t *testing.T) {
+func TestBilling_SaveProviderInitResult_NoDeadlockOnUpdateFailure(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
+	})
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               uuid.MustParse("55555555-5555-5555-5555-555555555555"),
+		UserID:           userID,
+		TariffID:         basicID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: false,
+	})
+
+	// A non-fake provider keeps stubProvider.Init from auto-filling a saved
+	// token, so saveProviderInitResult takes the UpdateProviderPaymentID branch,
+	// which we force to fail while the payment row is locked by the outer tx.
+	d.provider.name = domain.ProviderTkassa
+
+	d.subscriptionPayments.updateProviderPaymentIDErr = errors.New("boom: update provider payment id failed")
+
+	// Capture how many transactions are open exactly when the best-effort
+	// MarkFailed runs. The outer (locked) tx must be rolled back first, so only
+	// the best-effort tx is open (open == 1). If the outer tx were still open,
+	// open would be 2, which is the self-deadlock on a real database.
+	openAtMarkFailed := -1
+	d.subscriptionPayments.onMarkFailed = func() {
+		openAtMarkFailed = d.beginner.open
+	}
+
+	_, err := d.service.Subscriptions.ChangeTariff(t.Context(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodMonth,
+	})
+	if err == nil {
+		t.Fatal("expected ChangeTariff error from failing UpdateProviderPaymentID, got nil")
+	}
+	if !d.provider.initCalled {
+		t.Fatal("expected provider.Init to be called")
+	}
+
+	paymentID := d.provider.initReq.PaymentID
+	payment, ok := d.subscriptionPayments.payments[paymentID]
+	if !ok {
+		t.Fatalf("payment %s not saved", paymentID)
+	}
+	if payment.Status != domain.PaymentStatusFailed {
+		t.Errorf("expected payment to be marked failed, got status %s", payment.Status)
+	}
+
+	if openAtMarkFailed != 1 {
+		t.Errorf("best-effort MarkFailed ran with %d open transaction(s); want 1 (outer locked tx must be rolled back first)", openAtMarkFailed)
+	}
+	if d.beginner.open != 0 {
+		t.Errorf("expected no open transactions after return, got %d", d.beginner.open)
+	}
+}
+
+func TestBilling_ChangeTariff_UpgradeReturnsExistingPendingPayment(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -1574,8 +2128,8 @@ func TestBillingService_ChangeTariff_UpgradeReturnsExistingPendingPayment(t *tes
 		Status:            domain.PaymentStatusPending,
 	}
 
-	resp, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -1599,7 +2153,7 @@ func TestBillingService_ChangeTariff_UpgradeReturnsExistingPendingPayment(t *tes
 	}
 }
 
-func TestBillingService_ChangeTariff_DowngradeBlockedInvalidState(t *testing.T) {
+func TestBilling_ChangeTariff_DowngradeCancelledInvalidState(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
 	basicID := uuid.MustParse("66666666-6666-6666-6666-666666666666")
@@ -1617,13 +2171,13 @@ func TestBillingService_ChangeTariff_DowngradeBlockedInvalidState(t *testing.T) 
 		UserID:           userID,
 		TariffID:         proID,
 		Source:           domain.SubscriptionSourcePaid,
-		Status:           domain.SubscriptionStatusBlocked,
+		Status:           domain.SubscriptionStatusCancelled,
 		ValidUntil:       &validUntil,
 		AutoRenewEnabled: false,
 	})
 
-	_, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffBasic),
+	_, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffBasic,
 		Period:     domain.PeriodMonth,
 	})
 	if !errors.Is(err, domain.ErrInvalidSubscriptionState) {
@@ -1631,7 +2185,7 @@ func TestBillingService_ChangeTariff_DowngradeBlockedInvalidState(t *testing.T) 
 	}
 }
 
-func TestBillingService_ToggleAutoRenewUsesTransaction(t *testing.T) {
+func TestBilling_ToggleAutoRenewUsesTransaction(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab")
 	validUntil := fixedNow.AddDate(0, 1, 0)
@@ -1646,7 +2200,7 @@ func TestBillingService_ToggleAutoRenewUsesTransaction(t *testing.T) {
 		AutoRenewEnabled: false,
 	})
 
-	if err := d.service.ToggleAutoRenew(context.Background(), userID, true); err != nil {
+	if err := d.service.Subscriptions.ToggleAutoRenew(context.Background(), userID, true); err != nil {
 		t.Fatalf("ToggleAutoRenew error: %v", err)
 	}
 	if d.beginner.begun != 1 || d.beginner.committed != 1 {
@@ -1654,11 +2208,11 @@ func TestBillingService_ToggleAutoRenewUsesTransaction(t *testing.T) {
 	}
 }
 
-func TestBillingService_AddPaymentMethodUsesTransaction(t *testing.T) {
+func TestBilling_AddPaymentMethodUsesTransaction(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccd")
 
-	if _, err := d.service.AddPaymentMethod(context.Background(), userID, AddPaymentMethodRequest{
+	if _, err := d.service.PaymentMethods.AddPaymentMethod(context.Background(), userID, AddPaymentMethodRequest{
 		ProviderToken: "raw_token_1234",
 	}); err != nil {
 		t.Fatalf("AddPaymentMethod error: %v", err)
@@ -1668,7 +2222,7 @@ func TestBillingService_AddPaymentMethodUsesTransaction(t *testing.T) {
 	}
 }
 
-func TestBillingService_HandleWebhook_SucceededPersistsProviderPaymentID(t *testing.T) {
+func TestBilling_HandleWebhook_SucceededPersistsProviderPaymentID(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777778")
 	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888889")
@@ -1711,7 +2265,7 @@ func TestBillingService_HandleWebhook_SucceededPersistsProviderPaymentID(t *test
 		}, nil
 	}
 
-	if err := d.service.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook error: %v", err)
 	}
 
@@ -1724,7 +2278,7 @@ func TestBillingService_HandleWebhook_SucceededPersistsProviderPaymentID(t *test
 	}
 }
 
-func TestBillingService_HandleWebhook_AppliesRenewal(t *testing.T) {
+func TestBilling_HandleWebhook_AppliesRenewal(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777778")
 	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888889")
@@ -1765,7 +2319,7 @@ func TestBillingService_HandleWebhook_AppliesRenewal(t *testing.T) {
 		}, nil
 	}
 
-	if err := d.service.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook error: %v", err)
 	}
 
@@ -1784,7 +2338,7 @@ func TestBillingService_HandleWebhook_AppliesRenewal(t *testing.T) {
 	}
 }
 
-func TestBillingService_HandleWebhook_DuplicateRenewalWebhookIsIdempotent(t *testing.T) {
+func TestBilling_HandleWebhook_DuplicateRenewalWebhookIsIdempotent(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777778")
 	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888889")
@@ -1825,7 +2379,7 @@ func TestBillingService_HandleWebhook_DuplicateRenewalWebhookIsIdempotent(t *tes
 		}, nil
 	}
 
-	if err := d.service.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
 		t.Fatalf("first HandleWebhook error: %v", err)
 	}
 
@@ -1838,7 +2392,7 @@ func TestBillingService_HandleWebhook_DuplicateRenewalWebhookIsIdempotent(t *tes
 	// Simulate a retry webhook arriving later; the subscription must not be
 	// extended a second time.
 	d.clock.now = fixedNow.Add(time.Hour)
-	if err := d.service.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
 		t.Fatalf("second HandleWebhook error: %v", err)
 	}
 
@@ -1848,7 +2402,272 @@ func TestBillingService_HandleWebhook_DuplicateRenewalWebhookIsIdempotent(t *tes
 	}
 }
 
-func TestBillingService_ChangeTariff_RejectServiceSubscription(t *testing.T) {
+func TestBilling_HandleWebhook_DuplicateSucceededIsIdempotent(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777778")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888889")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab")
+	tariffID := uuid.MustParse("99999999-9999-9999-9999-99999999999a")
+	providerPaymentID := "stub_webhook_duplicate_succeeded"
+	existingValidUntil := fixedNow.AddDate(0, 0, 15)
+
+	// Active paid subscription on a paid tariff with a PENDING renewal payment
+	// for the SAME tariff, so the success path is ApplyRenewal (extends
+	// valid_until by the payment period and records LastAppliedPaymentID) rather
+	// than ApplyTariffChange.
+	d.addTariff(domain.Tariff{
+		ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         tariffID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &existingValidUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          tariffID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusPending,
+	}
+
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			ProviderPaymentID: providerPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusSucceeded,
+		}, nil
+	}
+
+	// Act 1: first succeeded webhook marks the payment succeeded and applies the
+	// renewal, extending valid_until and recording LastAppliedPaymentID.
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("first HandleWebhook error: %v", err)
+	}
+
+	wantValidUntil := existingValidUntil.AddDate(0, 1, 0)
+	sub := d.subscriptions.subs[userID]
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+		t.Fatalf("after first webhook: expected valid_until extended to %v, got %v", wantValidUntil, sub.ValidUntil)
+	}
+	if sub.LastAppliedPaymentID == nil || *sub.LastAppliedPaymentID != paymentID {
+		t.Fatalf("after first webhook: expected LastAppliedPaymentID = %s, got %v", paymentID, sub.LastAppliedPaymentID)
+	}
+	if got := d.subscriptionPayments.payments[paymentID].Status; got != domain.PaymentStatusSucceeded {
+		t.Fatalf("after first webhook: expected payment succeeded, got %s", got)
+	}
+
+	// Snapshot the post-1st state. For a same-tariff renewal the archiver is not
+	// invoked (applySubscriptionRenewalAndArchive only archives when the tariff
+	// changes), so archiverCalls1 is 0; the meaningful assertion is that the
+	// duplicate webhook does not change it.
+	validUntil1 := *sub.ValidUntil
+	lastApplied1 := *sub.LastAppliedPaymentID
+	archiverCalls1 := len(d.propertyArchiver.calls)
+
+	// Act 2: the SAME succeeded webhook arrives again. The payment is already
+	// succeeded, so HandleWebhook must return nil and leave state untouched.
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("second HandleWebhook error: %v", err)
+	}
+
+	sub = d.subscriptions.subs[userID]
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(validUntil1) {
+		t.Errorf("duplicate succeeded webhook extended valid_until: expected %v, got %v", validUntil1, sub.ValidUntil)
+	}
+	if sub.LastAppliedPaymentID == nil || *sub.LastAppliedPaymentID != lastApplied1 {
+		t.Errorf("duplicate succeeded webhook changed LastAppliedPaymentID: expected %s, got %v", lastApplied1, sub.LastAppliedPaymentID)
+	}
+	if got := len(d.propertyArchiver.calls); got != archiverCalls1 {
+		t.Errorf("duplicate succeeded webhook invoked archiver again: expected %d calls, got %d", archiverCalls1, got)
+	}
+	if got := d.subscriptionPayments.payments[paymentID].Status; got != domain.PaymentStatusSucceeded {
+		t.Errorf("expected payment to remain succeeded, got %s", got)
+	}
+}
+
+func TestBilling_HandleWebhook_DuplicateRefundedIsIdempotent(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777d")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888d")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaad")
+	basicID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	proID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	providerPaymentID := "stub_webhook_duplicate_refunded"
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
+	})
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+		SucceededAt:       &validUntil,
+	}
+
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			ProviderPaymentID: providerPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusRefunded,
+			AmountKopecks:     5000,
+		}, nil
+	}
+
+	// Act 1: the first refunded webhook marks the payment refunded and downgrades
+	// the subscription to basic.
+	if err := d.service.Webhooks.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("first HandleWebhook error: %v", err)
+	}
+
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusRefunded {
+		t.Fatalf("after first webhook: expected payment refunded, got %s", payment.Status)
+	}
+	if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != 5000 {
+		t.Fatalf("after first webhook: expected refunded amount 5000, got %v", payment.RefundedAmountKopecks)
+	}
+	sub := d.subscriptions.subs[userID]
+	if sub.TariffID != basicID {
+		t.Fatalf("after first webhook: expected subscription downgraded to basic, got tariff %s", sub.TariffID)
+	}
+
+	// Snapshot the post-1st state, including the archiver call count: the
+	// duplicate webhook must not trigger a second downgrade.
+	refundedAmount1 := *payment.RefundedAmountKopecks
+	archiverCalls1 := len(d.propertyArchiver.calls)
+
+	// Act 2: the SAME refunded webhook arrives again. The payment is already
+	// refunded, so HandleWebhook must return nil and leave state untouched.
+	if err := d.service.Webhooks.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("second HandleWebhook error: %v", err)
+	}
+
+	payment = d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusRefunded {
+		t.Errorf("expected payment to remain refunded, got %s", payment.Status)
+	}
+	if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != refundedAmount1 {
+		t.Errorf("duplicate refunded webhook changed refunded amount: expected %d, got %v", refundedAmount1, payment.RefundedAmountKopecks)
+	}
+	sub = d.subscriptions.subs[userID]
+	if sub.TariffID != basicID {
+		t.Errorf("duplicate refunded webhook changed tariff: expected basic, got %s", sub.TariffID)
+	}
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("duplicate refunded webhook changed subscription status: expected active, got %s", sub.Status)
+	}
+	if sub.ValidUntil != nil {
+		t.Errorf("duplicate refunded webhook changed valid_until: expected nil, got %v", sub.ValidUntil)
+	}
+	if sub.AutoRenewEnabled {
+		t.Error("duplicate refunded webhook re-enabled auto_renew")
+	}
+	if got := len(d.propertyArchiver.calls); got != archiverCalls1 {
+		t.Errorf("duplicate refunded webhook invoked archiver again: expected %d calls, got %d", archiverCalls1, got)
+	}
+}
+
+func TestBilling_HandleWebhook_PartialRefundedIsIgnored(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777e")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888e")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaae")
+	proID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	providerPaymentID := "stub_webhook_partial_refunded"
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+		SucceededAt:       &validUntil,
+	}
+
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			ProviderPaymentID: providerPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusPartialRefunded,
+			AmountKopecks:     2500,
+		}, nil
+	}
+
+	// Partial refunds are impossible in this product: the external notification
+	// is an anomaly that must be logged and ignored without any state change.
+	if err := d.service.Webhooks.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook error: %v", err)
+	}
+
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("expected payment to remain succeeded, got %s", payment.Status)
+	}
+	if payment.RefundedAmountKopecks != nil {
+		t.Errorf("expected refunded amount to stay nil, got %v", *payment.RefundedAmountKopecks)
+	}
+	sub := d.subscriptions.subs[userID]
+	if sub.TariffID != proID {
+		t.Errorf("expected subscription to stay on pro tariff, got %s", sub.TariffID)
+	}
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected subscription status active, got %s", sub.Status)
+	}
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(validUntil) {
+		t.Errorf("expected valid_until unchanged at %v, got %v", validUntil, sub.ValidUntil)
+	}
+	if !sub.AutoRenewEnabled {
+		t.Error("expected auto_renew to stay enabled")
+	}
+	if got := len(d.propertyArchiver.calls); got != 0 {
+		t.Errorf("expected no archiver calls, got %d", got)
+	}
+}
+
+func TestBilling_ChangeTariff_RejectServiceSubscription(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	basicID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
@@ -1868,8 +2687,8 @@ func TestBillingService_ChangeTariff_RejectServiceSubscription(t *testing.T) {
 		Status:   domain.SubscriptionStatusActive,
 	})
 
-	_, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+	_, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if !errors.Is(err, domain.ErrInvalidSubscriptionState) {
@@ -1877,7 +2696,7 @@ func TestBillingService_ChangeTariff_RejectServiceSubscription(t *testing.T) {
 	}
 }
 
-func TestBillingService_ConfirmFakePayment_Idempotent(t *testing.T) {
+func TestBilling_ConfirmFakePayment_Idempotent(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("22222222-2222-2222-2222-222222222223")
 	basicID := uuid.MustParse("33333333-3333-3333-3333-333333333334")
@@ -1900,8 +2719,8 @@ func TestBillingService_ConfirmFakePayment_Idempotent(t *testing.T) {
 		AutoRenewEnabled: false,
 	})
 
-	resp, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -1920,7 +2739,7 @@ func TestBillingService_ConfirmFakePayment_Idempotent(t *testing.T) {
 		Status:            domain.PaymentStatusSucceeded,
 	}
 
-	if err := d.service.ConfirmFakePayment(context.Background(), resp.PaymentID); err != nil {
+	if err := d.service.Payments.ConfirmFakePayment(context.Background(), resp.PaymentID); err != nil {
 		t.Fatalf("first ConfirmFakePayment error: %v", err)
 	}
 	if d.subscriptionPayments.payments[resp.PaymentID].Status != domain.PaymentStatusSucceeded {
@@ -1928,12 +2747,12 @@ func TestBillingService_ConfirmFakePayment_Idempotent(t *testing.T) {
 	}
 
 	// Second confirmation should be a no-op and not return an error.
-	if err := d.service.ConfirmFakePayment(context.Background(), resp.PaymentID); err != nil {
+	if err := d.service.Payments.ConfirmFakePayment(context.Background(), resp.PaymentID); err != nil {
 		t.Fatalf("second ConfirmFakePayment error: %v", err)
 	}
 }
 
-func TestBillingService_ProcessRenewals_Success(t *testing.T) {
+func TestBilling_ProcessRenewals_Success(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -1962,7 +2781,7 @@ func TestBillingService_ProcessRenewals_Success(t *testing.T) {
 	}
 	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_1", Status: domain.PaymentStatusSucceeded}
 
-	count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessRenewals error: %v", err)
 	}
@@ -1979,7 +2798,138 @@ func TestBillingService_ProcessRenewals_Success(t *testing.T) {
 	}
 }
 
-func TestBillingService_ProcessRenewals_UpdatesStalePaymentMethodID(t *testing.T) {
+func TestBilling_ProcessRenewals_LastAppliedPaymentID_PreventsFalsePositive(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	otherPaymentID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	succeededPaymentID := uuid.MustParse("66666666-6666-6666-6666-666666666666")
+	validUntil := fixedNow
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(domain.Subscription{
+		ID:                    uuid.MustParse("77777777-7777-7777-7777-777777777777"),
+		UserID:                userID,
+		TariffID:              proID,
+		Source:                domain.SubscriptionSourcePaid,
+		Status:                domain.SubscriptionStatusActive,
+		ValidUntil:            &validUntil,
+		AutoRenewEnabled:      true,
+		ActivePaymentMethodID: &methodID,
+		LastAppliedPaymentID:  &otherPaymentID,
+	})
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:            methodID,
+		UserID:        userID,
+		Provider:      domain.ProviderFake,
+		ProviderToken: "fake_token_1234",
+		IsActive:      true,
+	}
+	// Succeeded payment whose expected valid_until is far behind the current
+	// subscription valid_until. The old date-based heuristic would mistakenly
+	// consider the renewal already applied; LastAppliedPaymentID prevents that.
+	succeededAt := fixedNow.AddDate(-2, 0, 0)
+	d.subscriptionPayments.payments[succeededPaymentID] = domain.SubscriptionPayment{
+		ID:              succeededPaymentID,
+		UserID:          userID,
+		SubscriptionID:  uuid.MustParse("77777777-7777-7777-7777-777777777777"),
+		TariffID:        proID,
+		PaymentMethodID: &methodID,
+		Period:          domain.PeriodMonth,
+		AmountKopecks:   5000,
+		Provider:        domain.ProviderFake,
+		Status:          domain.PaymentStatusSucceeded,
+		CreatedAt:       succeededAt,
+		SucceededAt:     &succeededAt,
+	}
+
+	count, err := d.service.Renewals.ProcessRenewals(t.Context(), fixedNow)
+	if err != nil {
+		t.Fatalf("ProcessRenewals error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 renewal processed, got %d", count)
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.LastAppliedPaymentID == nil || *sub.LastAppliedPaymentID != succeededPaymentID {
+		t.Errorf("expected LastAppliedPaymentID = %s, got %v", succeededPaymentID, sub.LastAppliedPaymentID)
+	}
+	wantValidUntil := validUntil.AddDate(0, 1, 0)
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+		t.Errorf("expected valid_until = %v, got %v", wantValidUntil, sub.ValidUntil)
+	}
+}
+
+func TestBilling_ProcessRenewals_LastAppliedPaymentID_SkipsAlreadyApplied(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	succeededPaymentID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	subID := uuid.MustParse("66666666-6666-6666-6666-666666666666")
+	d.addSubscription(domain.Subscription{
+		ID:                    subID,
+		UserID:                userID,
+		TariffID:              proID,
+		Source:                domain.SubscriptionSourcePaid,
+		Status:                domain.SubscriptionStatusActive,
+		ValidUntil:            &validUntil,
+		AutoRenewEnabled:      true,
+		ActivePaymentMethodID: &methodID,
+		LastAppliedPaymentID:  &succeededPaymentID,
+	})
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:            methodID,
+		UserID:        userID,
+		Provider:      domain.ProviderFake,
+		ProviderToken: "fake_token_1234",
+		IsActive:      true,
+	}
+	succeededAt := fixedNow.AddDate(0, 0, -5)
+	d.subscriptionPayments.payments[succeededPaymentID] = domain.SubscriptionPayment{
+		ID:              succeededPaymentID,
+		UserID:          userID,
+		SubscriptionID:  subID,
+		TariffID:        proID,
+		PaymentMethodID: &methodID,
+		Period:          domain.PeriodMonth,
+		AmountKopecks:   5000,
+		Provider:        domain.ProviderFake,
+		Status:          domain.PaymentStatusSucceeded,
+		CreatedAt:       succeededAt,
+		SucceededAt:     &succeededAt,
+	}
+
+	// applySubscriptionRenewalBestEffort is the same helper ProcessRenewals uses
+	// to self-heal a succeeded payment. When LastAppliedPaymentID already matches
+	// the payment, the subscription must not change.
+	got, _, _, ok := applySubscriptionRenewalBestEffort(t.Context(), renewalBestEffortDeps{
+		beginner:      d.beginner,
+		subscriptions: d.subscriptions,
+		tariffs:       d.tariffs,
+		log:           discardLogger(),
+	}, subID, d.subscriptionPayments.payments[succeededPaymentID], fixedNow)
+	if !ok {
+		t.Fatal("expected best-effort renewal to succeed idempotently")
+	}
+	if got.LastAppliedPaymentID == nil || *got.LastAppliedPaymentID != succeededPaymentID {
+		t.Errorf("expected LastAppliedPaymentID unchanged = %s, got %v", succeededPaymentID, got.LastAppliedPaymentID)
+	}
+	if got.ValidUntil == nil || !got.ValidUntil.Equal(validUntil) {
+		t.Errorf("expected valid_until unchanged = %v, got %v", validUntil, got.ValidUntil)
+	}
+}
+
+func TestBilling_ProcessRenewals_UpdatesStalePaymentMethodID(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -2030,7 +2980,7 @@ func TestBillingService_ProcessRenewals_UpdatesStalePaymentMethodID(t *testing.T
 	}
 	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_1", Status: domain.PaymentStatusSucceeded}
 
-	count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessRenewals error: %v", err)
 	}
@@ -2044,7 +2994,85 @@ func TestBillingService_ProcessRenewals_UpdatesStalePaymentMethodID(t *testing.T
 	}
 }
 
-func TestBillingService_ProcessRenewals_FailedChargeMovesToGrace(t *testing.T) {
+func TestBilling_ProcessRenewals_RecoversExistingPendingPaymentOnCreateRace(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	subID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	existingPaymentID := uuid.MustParse("66666666-6666-6666-6666-666666666666")
+	validUntil := fixedNow
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(domain.Subscription{
+		ID:                    subID,
+		UserID:                userID,
+		TariffID:              proID,
+		Source:                domain.SubscriptionSourcePaid,
+		Status:                domain.SubscriptionStatusActive,
+		ValidUntil:            &validUntil,
+		AutoRenewEnabled:      true,
+		ActivePaymentMethodID: &methodID,
+	})
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:            methodID,
+		UserID:        userID,
+		Provider:      domain.ProviderFake,
+		ProviderToken: "fake_token_1234",
+		IsActive:      true,
+	}
+	// Simulate a concurrent renewal run that commits its pending payment after
+	// our pre-lookup misses it but before our Create executes, so Create hits
+	// ErrAlreadyExists from the partial unique index backstop.
+	d.subscriptionPayments.beforeCreate = func() {
+		d.subscriptionPayments.payments[existingPaymentID] = domain.SubscriptionPayment{
+			ID:              existingPaymentID,
+			UserID:          userID,
+			SubscriptionID:  subID,
+			TariffID:        proID,
+			PaymentMethodID: &methodID,
+			Period:          domain.PeriodMonth,
+			AmountKopecks:   5000,
+			Provider:        domain.ProviderFake,
+			Status:          domain.PaymentStatusPending,
+		}
+	}
+	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_1", Status: domain.PaymentStatusSucceeded}
+
+	count, err := d.service.Renewals.ProcessRenewals(t.Context(), fixedNow)
+	if err != nil {
+		t.Fatalf("ProcessRenewals error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 renewal, got %d", count)
+	}
+
+	// The conflicting pending payment must be reused: no duplicate created.
+	if len(d.subscriptionPayments.payments) != 1 {
+		t.Errorf("expected exactly 1 payment (no duplicate), got %d", len(d.subscriptionPayments.payments))
+	}
+	if d.provider.initReq.PaymentID != existingPaymentID {
+		t.Errorf("expected provider init for existing payment %s, got %s", existingPaymentID, d.provider.initReq.PaymentID)
+	}
+	if !d.provider.chargeCalled || d.provider.chargeReq.PaymentID != existingPaymentID {
+		t.Errorf("expected charge for existing payment %s, got %s (called=%v)", existingPaymentID, d.provider.chargeReq.PaymentID, d.provider.chargeCalled)
+	}
+	p := d.subscriptionPayments.payments[existingPaymentID]
+	if p.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("expected existing payment succeeded, got %s", p.Status)
+	}
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected status active, got %s", sub.Status)
+	}
+	if sub.ValidUntil == nil || !sub.ValidUntil.After(fixedNow) {
+		t.Errorf("expected valid_until extended, got %v", sub.ValidUntil)
+	}
+}
+
+func TestBilling_ProcessRenewals_FailedChargeMovesToGrace(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -2074,7 +3102,7 @@ func TestBillingService_ProcessRenewals_FailedChargeMovesToGrace(t *testing.T) {
 	}
 	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_1", Status: domain.PaymentStatusFailed}
 
-	count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessRenewals error: %v", err)
 	}
@@ -2091,7 +3119,7 @@ func TestBillingService_ProcessRenewals_FailedChargeMovesToGrace(t *testing.T) {
 	}
 }
 
-func TestBillingService_ProcessRenewals_SkipsDuplicateChargeWhenProviderSucceeded(t *testing.T) {
+func TestBilling_ProcessRenewals_SkipsDuplicateChargeWhenProviderSucceeded(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -2134,7 +3162,7 @@ func TestBillingService_ProcessRenewals_SkipsDuplicateChargeWhenProviderSucceede
 	}
 	d.provider.statusRes = domain.PaymentStatusSucceeded
 
-	count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessRenewals error: %v", err)
 	}
@@ -2159,7 +3187,7 @@ func TestBillingService_ProcessRenewals_SkipsDuplicateChargeWhenProviderSucceede
 	}
 }
 
-func TestBillingService_ProcessRenewals_FinalizesFailedPaymentWithoutCharge(t *testing.T) {
+func TestBilling_ProcessRenewals_FinalizesFailedPaymentWithoutCharge(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -2202,7 +3230,7 @@ func TestBillingService_ProcessRenewals_FinalizesFailedPaymentWithoutCharge(t *t
 	}
 	d.provider.statusRes = domain.PaymentStatusFailed
 
-	count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessRenewals error: %v", err)
 	}
@@ -2232,7 +3260,7 @@ type fakeProviderError struct {
 func (e *fakeProviderError) Error() string             { return e.msg }
 func (e *fakeProviderError) ProviderErrorCode() string { return e.code }
 
-func TestBillingService_ProcessRenewals_ProviderErrorCodeSavedOnFailedCharge(t *testing.T) {
+func TestBilling_ProcessRenewals_ProviderErrorCodeSavedOnFailedCharge(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -2287,7 +3315,7 @@ func TestBillingService_ProcessRenewals_ProviderErrorCodeSavedOnFailedCharge(t *
 	}
 	d.provider.chargeErr = &fakeProviderError{code: "card_declined", msg: "charge failed"}
 
-	count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessRenewals error: %v", err)
 	}
@@ -2307,7 +3335,7 @@ func TestBillingService_ProcessRenewals_ProviderErrorCodeSavedOnFailedCharge(t *
 	}
 }
 
-func TestBillingService_ProcessExpiredGrace_DowngradesToBasic(t *testing.T) {
+func TestBilling_ProcessExpiredGrace_DowngradesToBasic(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -2326,7 +3354,7 @@ func TestBillingService_ProcessExpiredGrace_DowngradesToBasic(t *testing.T) {
 		AutoRenewEnabled: true,
 	})
 
-	count, err := d.service.ProcessExpiredGrace(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessExpiredGrace(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessExpiredGrace error: %v", err)
 	}
@@ -2352,7 +3380,7 @@ func TestBillingService_ProcessExpiredGrace_DowngradesToBasic(t *testing.T) {
 	}
 }
 
-func TestBillingService_renewSubscription_ChargeCalledOutsideTransaction(t *testing.T) {
+func TestBilling_renewSubscription_ChargeCalledOutsideTransaction(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
@@ -2385,7 +3413,17 @@ func TestBillingService_renewSubscription_ChargeCalledOutsideTransaction(t *test
 		}
 	}
 
-	if err := d.service.renewSubscription(context.Background(), d.subscriptions.subs[userID], fixedNow); err != nil {
+	renewal := NewRenewalService(renewalServiceDeps{
+		tariffs:              d.tariffs,
+		subscriptions:        d.subscriptions,
+		subscriptionPayments: d.subscriptionPayments,
+		paymentMethods:       d.paymentMethods,
+		propertyArchiver:     d.propertyArchiver,
+		beginner:             d.beginner,
+		log:                  discardLogger(),
+		callbackBaseURL:      "http://localhost",
+	}, d.provider)
+	if err := renewal.renewSubscription(context.Background(), d.subscriptions.subs[userID], fixedNow); err != nil {
 		t.Fatalf("renewSubscription error: %v", err)
 	}
 
@@ -2401,7 +3439,7 @@ func TestBillingService_renewSubscription_ChargeCalledOutsideTransaction(t *test
 func newTestDepsWithLogger(t *testing.T, log *slog.Logger) *testDeps {
 	t.Helper()
 	d := newTestDeps(t)
-	d.service = NewBillingService(
+	d.service = NewServices(
 		d.tariffs,
 		d.subscriptions,
 		d.paymentMethods,
@@ -2412,6 +3450,8 @@ func newTestDepsWithLogger(t *testing.T, log *slog.Logger) *testDeps {
 		log,
 		"http://localhost",
 		d.propertyArchiver,
+		nil,
+		d.inUseChecker,
 	)
 	return d
 }
@@ -2421,7 +3461,7 @@ func captureLogger() (*slog.Logger, *bytes.Buffer) {
 	return slog.New(slog.NewTextHandler(&buf, nil)), &buf
 }
 
-func TestBillingService_ProcessRenewals_RecoverAfterChargeTimeoutProviderSucceeds(t *testing.T) {
+func TestBilling_ProcessRenewals_RecoverAfterChargeTimeoutProviderSucceeds(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -2464,7 +3504,7 @@ func TestBillingService_ProcessRenewals_RecoverAfterChargeTimeoutProviderSucceed
 		}
 	}
 
-	count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessRenewals error: %v", err)
 	}
@@ -2498,7 +3538,7 @@ func TestBillingService_ProcessRenewals_RecoverAfterChargeTimeoutProviderSucceed
 	}
 }
 
-func TestBillingService_ProcessRenewals_RecoverAfterChargeTimeoutProviderUnknownKeepsActive(t *testing.T) {
+func TestBilling_ProcessRenewals_RecoverAfterChargeTimeoutProviderUnknownKeepsActive(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111112")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222223")
@@ -2579,10 +3619,21 @@ func TestBillingService_ProcessRenewals_RecoverAfterChargeTimeoutProviderUnknown
 			}
 			d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_timeout_unknown", Status: domain.PaymentStatusSucceeded}
 			d.provider.chargeErr = errors.New("provider timeout")
-			d.provider.statusRes = tt.statusRes
-			d.provider.statusErr = tt.statusErr
+			// The pre-charge status query reports Pending so the Charge attempt
+			// still happens; the recovery status query uses the subtest values.
+			statusCalls := 0
+			d.provider.statusFunc = func(uuid.UUID, string) {
+				statusCalls++
+				if statusCalls == 1 {
+					d.provider.statusRes = domain.PaymentStatusPending
+					d.provider.statusErr = nil
+					return
+				}
+				d.provider.statusRes = tt.statusRes
+				d.provider.statusErr = tt.statusErr
+			}
 
-			count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+			count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 			if err != nil {
 				t.Fatalf("ProcessRenewals error: %v", err)
 			}
@@ -2630,7 +3681,307 @@ func TestBillingService_ProcessRenewals_RecoverAfterChargeTimeoutProviderUnknown
 	}
 }
 
-func TestBillingService_ProcessRenewals_ArchivingFailureDoesNotRollbackPayment(t *testing.T) {
+// renewalTestPayment returns the renewal payment created for the subscription.
+func renewalTestPayment(t *testing.T, d *testDeps, sub domain.Subscription) domain.SubscriptionPayment {
+	t.Helper()
+	for _, p := range d.subscriptionPayments.payments {
+		if p.SubscriptionID == sub.ID {
+			return p
+		}
+	}
+	t.Fatal("expected renewal payment to be created")
+	return domain.SubscriptionPayment{}
+}
+
+func TestBilling_ProcessRenewals_ChargeAttemptLimitMovesToGrace(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111121")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222121")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333121")
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444121")
+	subID := uuid.MustParse("55555555-5555-5555-5555-555555555121")
+	validUntil := fixedNow
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(domain.Subscription{
+		ID:                    subID,
+		UserID:                userID,
+		TariffID:              proID,
+		Source:                domain.SubscriptionSourcePaid,
+		Status:                domain.SubscriptionStatusActive,
+		ValidUntil:            &validUntil,
+		AutoRenewEnabled:      true,
+		ActivePaymentMethodID: &methodID,
+	})
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:            methodID,
+		UserID:        userID,
+		Provider:      domain.ProviderFake,
+		ProviderToken: "fake_token_1234",
+		IsActive:      true,
+	}
+
+	// Every charge attempt fails and the provider keeps reporting Pending, so
+	// recovery counts an attempt on each tick. After maxRenewalChargeAttempts
+	// ticks the payment must be marked failed and the subscription moved to
+	// grace instead of staying active with an expired valid_until forever.
+	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_timeout_limit", Status: domain.PaymentStatusSucceeded}
+	d.provider.chargeErr = errors.New("provider timeout")
+	d.provider.statusRes = domain.PaymentStatusPending
+
+	for tick := 1; tick <= maxRenewalChargeAttempts; tick++ {
+		count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
+		if err != nil {
+			t.Fatalf("tick %d: ProcessRenewals error: %v", tick, err)
+		}
+		if count != 1 {
+			t.Fatalf("tick %d: expected 1 renewal attempt, got %d", tick, count)
+		}
+
+		sub := d.subscriptions.subs[userID]
+		payment := renewalTestPayment(t, d, sub)
+		if tick < maxRenewalChargeAttempts {
+			if sub.Status != domain.SubscriptionStatusActive {
+				t.Fatalf("tick %d: expected status active before attempt limit, got %s", tick, sub.Status)
+			}
+			if payment.Status != domain.PaymentStatusPending {
+				t.Fatalf("tick %d: expected payment pending before attempt limit, got %s", tick, payment.Status)
+			}
+			if payment.ChargeAttempts != tick {
+				t.Fatalf("tick %d: expected %d charge attempts, got %d", tick, tick, payment.ChargeAttempts)
+			}
+		}
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("expected status grace after %d failed attempts, got %s", maxRenewalChargeAttempts, sub.Status)
+	}
+	payment := renewalTestPayment(t, d, sub)
+	if payment.Status != domain.PaymentStatusFailed {
+		t.Errorf("expected payment failed after %d attempts, got %s", maxRenewalChargeAttempts, payment.Status)
+	}
+	if payment.ChargeAttempts != maxRenewalChargeAttempts {
+		t.Errorf("expected %d charge attempts, got %d", maxRenewalChargeAttempts, payment.ChargeAttempts)
+	}
+	if d.provider.chargeCount != maxRenewalChargeAttempts {
+		t.Errorf("expected %d provider charge calls, got %d", maxRenewalChargeAttempts, d.provider.chargeCount)
+	}
+}
+
+func TestBilling_ProcessRenewals_StatusErrorDoesNotCountChargeAttempt(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111122")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222122")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333122")
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444122")
+	validUntil := fixedNow
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(domain.Subscription{
+		ID:                    uuid.MustParse("55555555-5555-5555-5555-555555555122"),
+		UserID:                userID,
+		TariffID:              proID,
+		Source:                domain.SubscriptionSourcePaid,
+		Status:                domain.SubscriptionStatusActive,
+		ValidUntil:            &validUntil,
+		AutoRenewEnabled:      true,
+		ActivePaymentMethodID: &methodID,
+	})
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:            methodID,
+		UserID:        userID,
+		Provider:      domain.ProviderFake,
+		ProviderToken: "fake_token_1234",
+		IsActive:      true,
+	}
+
+	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_status_err", Status: domain.PaymentStatusSucceeded}
+	d.provider.chargeErr = errors.New("provider timeout")
+	// Pre-charge status queries report Pending so each tick attempts a Charge;
+	// recovery status queries (issued after a failed Charge) fail, so the
+	// attempt counter must never grow and the subscription must stay active.
+	chargeSeen := 0
+	d.provider.statusFunc = func(uuid.UUID, string) {
+		if d.provider.chargeCount > chargeSeen {
+			chargeSeen = d.provider.chargeCount
+			d.provider.statusRes = domain.PaymentStatusPending
+			d.provider.statusErr = errors.New("provider unreachable")
+			return
+		}
+		d.provider.statusRes = domain.PaymentStatusPending
+		d.provider.statusErr = nil
+	}
+
+	ticks := maxRenewalChargeAttempts + 2
+	for tick := 1; tick <= ticks; tick++ {
+		count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
+		if err != nil {
+			t.Fatalf("tick %d: ProcessRenewals error: %v", tick, err)
+		}
+		if count != 1 {
+			t.Fatalf("tick %d: expected 1 renewal attempt, got %d", tick, count)
+		}
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected status active, got %s", sub.Status)
+	}
+	payment := renewalTestPayment(t, d, sub)
+	if payment.Status != domain.PaymentStatusPending {
+		t.Errorf("expected payment pending, got %s", payment.Status)
+	}
+	if payment.ChargeAttempts != 0 {
+		t.Errorf("expected 0 charge attempts counted on status errors, got %d", payment.ChargeAttempts)
+	}
+	if d.provider.chargeCount != ticks {
+		t.Errorf("expected %d provider charge calls, got %d", ticks, d.provider.chargeCount)
+	}
+}
+
+func TestBilling_ProcessRenewals_SkipsRechargeWhenProviderStatusUnknown(t *testing.T) {
+	log, logBuf := captureLogger()
+	d := newTestDepsWithLogger(t, log)
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111123")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222123")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333123")
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444123")
+	validUntil := fixedNow
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(domain.Subscription{
+		ID:                    uuid.MustParse("55555555-5555-5555-5555-555555555123"),
+		UserID:                userID,
+		TariffID:              proID,
+		Source:                domain.SubscriptionSourcePaid,
+		Status:                domain.SubscriptionStatusActive,
+		ValidUntil:            &validUntil,
+		AutoRenewEnabled:      true,
+		ActivePaymentMethodID: &methodID,
+	})
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:            methodID,
+		UserID:        userID,
+		Provider:      domain.ProviderFake,
+		ProviderToken: "fake_token_1234",
+		IsActive:      true,
+	}
+
+	// First tick: the pre-charge status query reports Pending so the Charge
+	// happens and is "lost" (error response). All later status queries fail,
+	// so the next tick must not blindly re-charge a payment that may already
+	// be charged on the provider side.
+	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_lost", Status: domain.PaymentStatusSucceeded}
+	d.provider.chargeErr = errors.New("provider timeout")
+	statusCalls := 0
+	d.provider.statusFunc = func(uuid.UUID, string) {
+		statusCalls++
+		if statusCalls == 1 {
+			d.provider.statusRes = domain.PaymentStatusPending
+			d.provider.statusErr = nil
+			return
+		}
+		d.provider.statusErr = errors.New("provider unreachable")
+	}
+
+	for range 2 {
+		if _, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow); err != nil {
+			t.Fatalf("ProcessRenewals error: %v", err)
+		}
+	}
+
+	if d.provider.chargeCount != 1 {
+		t.Errorf("expected exactly 1 charge attempt, got %d", d.provider.chargeCount)
+	}
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected status active, got %s", sub.Status)
+	}
+	payment := renewalTestPayment(t, d, sub)
+	if payment.Status != domain.PaymentStatusPending {
+		t.Errorf("expected payment pending, got %s", payment.Status)
+	}
+	if !strings.Contains(logBuf.String(), "provider status unavailable; skipping charge attempt this tick") {
+		t.Errorf("expected skip-charge log, got:\n%s", logBuf.String())
+	}
+}
+
+func TestBilling_ProcessRenewals_BatchWithoutProgressStops(t *testing.T) {
+	d := newTestDeps(t)
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222124")
+	missingTariffID := uuid.MustParse("33333333-3333-3333-3333-333333333124")
+	validUntil := fixedNow
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+
+	// A full batch of subscriptions whose renewal always fails (the tariff is
+	// missing) stays in the selection; the batch loop must break after one
+	// fruitless iteration instead of spinning forever within a single tick.
+	for range renewalBatchSize {
+		userID := uuid.New()
+		d.addSubscription(domain.Subscription{
+			ID:               uuid.New(),
+			UserID:           userID,
+			TariffID:         missingTariffID,
+			Source:           domain.SubscriptionSourcePaid,
+			Status:           domain.SubscriptionStatusActive,
+			ValidUntil:       &validUntil,
+			AutoRenewEnabled: true,
+		})
+	}
+
+	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
+	if err != nil {
+		t.Fatalf("ProcessRenewals error: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 processed renewals, got %d", count)
+	}
+	if d.subscriptions.listUpForRenewalCalls != 1 {
+		t.Errorf("expected 1 list call (no-progress break), got %d", d.subscriptions.listUpForRenewalCalls)
+	}
+}
+
+func TestBilling_ProcessExpiredGrace_BatchWithoutProgressStops(t *testing.T) {
+	d := newTestDeps(t)
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222125")
+	validUntil := fixedNow
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+
+	// A full batch of grace subscriptions whose downgrade always fails (the
+	// transaction cannot begin) stays in the selection; the batch loop must
+	// break after one fruitless iteration instead of spinning forever.
+	d.beginner.beginErr = errors.New("database unavailable")
+	for range graceBatchSize {
+		userID := uuid.New()
+		d.addSubscription(domain.Subscription{
+			ID:         uuid.New(),
+			UserID:     userID,
+			TariffID:   uuid.New(),
+			Source:     domain.SubscriptionSourcePaid,
+			Status:     domain.SubscriptionStatusGrace,
+			ValidUntil: &validUntil,
+		})
+	}
+
+	count, err := d.service.Renewals.ProcessExpiredGrace(context.Background(), fixedNow)
+	if err != nil {
+		t.Fatalf("ProcessExpiredGrace error: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 processed subscriptions, got %d", count)
+	}
+	if d.subscriptions.listInExpiredGraceCalls != 1 {
+		t.Errorf("expected 1 list call (no-progress break), got %d", d.subscriptions.listInExpiredGraceCalls)
+	}
+}
+
+func TestBilling_ProcessRenewals_ArchivingFailureDoesNotRollbackPayment(t *testing.T) {
 	log, logBuf := captureLogger()
 	d := newTestDepsWithLogger(t, log)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
@@ -2665,7 +4016,7 @@ func TestBillingService_ProcessRenewals_ArchivingFailureDoesNotRollbackPayment(t
 	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_1", Status: domain.PaymentStatusSucceeded}
 	d.propertyArchiver.err = errors.New("archive failed")
 
-	count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessRenewals error: %v", err)
 	}
@@ -2701,7 +4052,7 @@ func TestBillingService_ProcessRenewals_ArchivingFailureDoesNotRollbackPayment(t
 	}
 }
 
-func TestBillingService_ChangeTariff_UpgradeRecoversProviderReferenceAfterCrash(t *testing.T) {
+func TestBilling_ChangeTariff_UpgradeRecoversProviderReferenceAfterCrash(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -2737,8 +4088,8 @@ func TestBillingService_ChangeTariff_UpgradeRecoversProviderReferenceAfterCrash(
 		Status:         domain.PaymentStatusPending,
 	}
 
-	resp, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -2763,7 +4114,7 @@ func TestBillingService_ChangeTariff_UpgradeRecoversProviderReferenceAfterCrash(
 	}
 }
 
-func TestBillingService_ProcessRenewals_ApplyTariffChangeFailureDoesNotRollbackPayment(t *testing.T) {
+func TestBilling_ProcessRenewals_ApplyTariffChangeFailureDoesNotRollbackPayment(t *testing.T) {
 	log, logBuf := captureLogger()
 	d := newTestDepsWithLogger(t, log)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
@@ -2799,7 +4150,7 @@ func TestBillingService_ProcessRenewals_ApplyTariffChangeFailureDoesNotRollbackP
 	// fails because the current tariff cannot be loaded.
 	d.tariffs.failGetByIDFor = &basicID
 
-	count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessRenewals error: %v", err)
 	}
@@ -2838,7 +4189,7 @@ func TestBillingService_ProcessRenewals_ApplyTariffChangeFailureDoesNotRollbackP
 	// the subscription is now updated.
 	d.tariffs.failGetByIDFor = nil
 
-	count, err = d.service.ProcessRenewals(context.Background(), fixedNow)
+	count, err = d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("second ProcessRenewals error: %v", err)
 	}
@@ -2855,7 +4206,7 @@ func TestBillingService_ProcessRenewals_ApplyTariffChangeFailureDoesNotRollbackP
 	}
 }
 
-func TestBillingService_HandleWebhook_ApplyTariffChangeFailureDoesNotRollbackPayment(t *testing.T) {
+func TestBilling_HandleWebhook_ApplyTariffChangeFailureDoesNotRollbackPayment(t *testing.T) {
 	log, logBuf := captureLogger()
 	d := newTestDepsWithLogger(t, log)
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777778")
@@ -2911,7 +4262,7 @@ func TestBillingService_HandleWebhook_ApplyTariffChangeFailureDoesNotRollbackPay
 	// change fails because the current tariff cannot be loaded.
 	d.tariffs.failGetByIDFor = &basicID
 
-	if err := d.service.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
 		t.Fatalf("first HandleWebhook error: %v", err)
 	}
 
@@ -2933,7 +4284,7 @@ func TestBillingService_HandleWebhook_ApplyTariffChangeFailureDoesNotRollbackPay
 	// Second webhook: the already-succeeded payment is reconciled.
 	d.tariffs.failGetByIDFor = nil
 
-	if err := d.service.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
 		t.Fatalf("second HandleWebhook error: %v", err)
 	}
 
@@ -2949,7 +4300,7 @@ func TestBillingService_HandleWebhook_ApplyTariffChangeFailureDoesNotRollbackPay
 	}
 }
 
-func TestBillingService_ConfirmFakePayment_ArchivesExcessPropertiesAfterTariffChange(t *testing.T) {
+func TestBilling_ConfirmFakePayment_ArchivesExcessPropertiesAfterTariffChange(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("22222222-2222-2222-2222-222222222223")
 	basicID := uuid.MustParse("33333333-3333-3333-3333-333333333334")
@@ -3003,7 +4354,7 @@ func TestBillingService_ConfirmFakePayment_ArchivesExcessPropertiesAfterTariffCh
 		Status:            domain.PaymentStatusSucceeded,
 	}
 
-	if err := d.service.ConfirmFakePayment(context.Background(), paymentID); err != nil {
+	if err := d.service.Payments.ConfirmFakePayment(context.Background(), paymentID); err != nil {
 		t.Fatalf("ConfirmFakePayment error: %v", err)
 	}
 
@@ -3016,7 +4367,7 @@ func TestBillingService_ConfirmFakePayment_ArchivesExcessPropertiesAfterTariffCh
 	}
 }
 
-func TestBillingService_HandleWebhook_ArchivesExcessPropertiesAfterTariffChange(t *testing.T) {
+func TestBilling_HandleWebhook_ArchivesExcessPropertiesAfterTariffChange(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777779")
 	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888a")
@@ -3071,7 +4422,7 @@ func TestBillingService_HandleWebhook_ArchivesExcessPropertiesAfterTariffChange(
 		}, nil
 	}
 
-	if err := d.service.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook error: %v", err)
 	}
 
@@ -3084,7 +4435,7 @@ func TestBillingService_HandleWebhook_ArchivesExcessPropertiesAfterTariffChange(
 	}
 }
 
-func TestBillingService_ProcessRenewals_ProviderErrorSanitizedInLogs(t *testing.T) {
+func TestBilling_ProcessRenewals_ProviderErrorSanitizedInLogs(t *testing.T) {
 	log, logBuf := captureLogger()
 	d := newTestDepsWithLogger(t, log)
 
@@ -3120,7 +4471,7 @@ func TestBillingService_ProcessRenewals_ProviderErrorSanitizedInLogs(t *testing.
 	// path is exercised and logged.
 	d.provider.statusRes = domain.PaymentStatusPending
 
-	_, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	_, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessRenewals error: %v", err)
 	}
@@ -3143,14 +4494,14 @@ func TestBillingService_ProcessRenewals_ProviderErrorSanitizedInLogs(t *testing.
 
 // --- T-Kassa flow tests ---
 
-func TestBillingService_AddPaymentMethod_TkassaReturnsConfirmURL(t *testing.T) {
+func TestBilling_AddPaymentMethod_TkassaReturnsConfirmURL(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
 	userID := uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccd")
 
 	d.provider.initAddCardRes = InitAddCardResult{PaymentURL: "https://bank.example/add-card"}
 
-	resp, err := d.service.AddPaymentMethod(context.Background(), userID, AddPaymentMethodRequest{
+	resp, err := d.service.PaymentMethods.AddPaymentMethod(context.Background(), userID, AddPaymentMethodRequest{
 		ProviderToken: "ignored_for_tkassa",
 	})
 	if err != nil {
@@ -3173,7 +4524,172 @@ func TestBillingService_AddPaymentMethod_TkassaReturnsConfirmURL(t *testing.T) {
 	}
 }
 
-func TestBillingService_ChangeTariff_TkassaFirstPaymentInitFields(t *testing.T) {
+func TestBilling_SyncPaymentMethods_ImportsCardActivatesAndLinksSubscription(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777780")
+	tariffID := uuid.MustParse("99999999-9999-9999-9999-999999999980")
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa80"),
+		UserID:           userID,
+		TariffID:         tariffID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+
+	d.provider.getCardListRes = []ProviderCard{
+		{
+			CardID:   "card_sync_1",
+			Pan:      "430000******0777",
+			ExpDate:  "12/30",
+			RebillID: "rebill_sync_1",
+			Status:   ProviderCardStatusActive,
+		},
+	}
+
+	methods, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods error: %v", err)
+	}
+	if !d.provider.getCardListCalled {
+		t.Fatal("expected provider.GetCardList to be called")
+	}
+	if d.provider.getCardListCustomerKey != userID.String() {
+		t.Errorf("expected customer key %s, got %s", userID.String(), d.provider.getCardListCustomerKey)
+	}
+	if len(methods) != 1 {
+		t.Fatalf("expected 1 payment method, got %d", len(methods))
+	}
+	pm := methods[0]
+	if pm.ProviderToken != "rebill_sync_1" {
+		t.Errorf("expected provider token rebill_sync_1, got %s", pm.ProviderToken)
+	}
+	if pm.ProviderCardID != "card_sync_1" {
+		t.Errorf("expected card id card_sync_1, got %s", pm.ProviderCardID)
+	}
+	if pm.DisplayMask != "430000******0777" {
+		t.Errorf("expected display mask 430000******0777, got %s", pm.DisplayMask)
+	}
+	if pm.ExpDate != "12/30" {
+		t.Errorf("expected exp date 12/30, got %s", pm.ExpDate)
+	}
+	if !pm.IsActive {
+		t.Error("expected synced payment method to become active")
+	}
+
+	sub, ok := d.subscriptions.subs[userID]
+	if !ok {
+		t.Fatal("expected subscription to exist")
+	}
+	if sub.ActivePaymentMethodID == nil || *sub.ActivePaymentMethodID != pm.ID {
+		t.Errorf("expected subscription active payment method %s, got %v", pm.ID, sub.ActivePaymentMethodID)
+	}
+}
+
+func TestBilling_SyncPaymentMethods_RepeatedSyncKeepsSingleRowAndActiveMethod(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777782")
+
+	existingID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2")
+	d.paymentMethods.methods[existingID] = domain.PaymentMethod{
+		ID:            existingID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: "existing_token",
+		DisplayMask:   "****0777",
+		IsActive:      true,
+		CreatedAt:     fixedNow.Add(-time.Hour),
+		UpdatedAt:     fixedNow.Add(-time.Hour),
+	}
+
+	d.provider.getCardListRes = []ProviderCard{
+		{
+			CardID:   "card_sync_2",
+			Pan:      "430000******0888",
+			ExpDate:  "12/31",
+			RebillID: "rebill_sync_2",
+			Status:   ProviderCardStatusActive,
+		},
+	}
+
+	if _, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID); err != nil {
+		t.Fatalf("first SyncPaymentMethods error: %v", err)
+	}
+	if len(d.paymentMethods.methods) != 2 {
+		t.Fatalf("expected 2 payment methods after first sync, got %d", len(d.paymentMethods.methods))
+	}
+
+	methods, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("second SyncPaymentMethods error: %v", err)
+	}
+	if len(methods) != 2 {
+		t.Fatalf("expected 2 payment methods after repeated sync, got %d", len(methods))
+	}
+	if len(d.paymentMethods.methods) != 2 {
+		t.Fatalf("expected repeated sync to keep 2 stored methods, got %d", len(d.paymentMethods.methods))
+	}
+
+	for _, pm := range d.paymentMethods.methods {
+		if pm.ID == existingID && !pm.IsActive {
+			t.Error("expected previously active method to stay active")
+		}
+		if pm.ProviderToken == "rebill_sync_2" && pm.IsActive {
+			t.Error("expected sync not to switch the active method")
+		}
+	}
+}
+
+func TestBilling_SyncPaymentMethods_SkipsInactiveAndTokenlessCards(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777783")
+
+	d.provider.getCardListRes = []ProviderCard{
+		{CardID: "card_no_rebill", Pan: "430000******0777", ExpDate: "12/30", Status: ProviderCardStatusActive},
+		{CardID: "card_inactive", Pan: "430000******0888", ExpDate: "12/31", RebillID: "rebill_inactive", Status: ProviderCardStatusInactive},
+		{CardID: "card_deleted", Pan: "430000******0999", ExpDate: "12/32", RebillID: "rebill_deleted", Status: ProviderCardStatusDeleted},
+	}
+
+	methods, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods error: %v", err)
+	}
+	if len(methods) != 0 {
+		t.Fatalf("expected no payment methods, got %d", len(methods))
+	}
+	if len(d.paymentMethods.methods) != 0 {
+		t.Fatalf("expected no stored payment methods, got %d", len(d.paymentMethods.methods))
+	}
+}
+
+func TestBilling_SyncPaymentMethods_ProviderErrorPropagatesWithoutWrites(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777784")
+	d.provider.getCardListErr = errors.New("provider unavailable")
+
+	_, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID)
+	if err == nil {
+		t.Fatal("expected error when provider GetCardList fails")
+	}
+	if len(d.paymentMethods.methods) != 0 {
+		t.Fatalf("expected no stored payment methods, got %d", len(d.paymentMethods.methods))
+	}
+	if d.beginner.begun != 0 {
+		t.Fatalf("expected no transaction to begin on provider error, got %d", d.beginner.begun)
+	}
+}
+
+func TestBilling_ChangeTariff_TkassaFirstPaymentInitFields(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
@@ -3203,8 +4719,8 @@ func TestBillingService_ChangeTariff_TkassaFirstPaymentInitFields(t *testing.T) 
 		SavedToken:        "",
 	}
 
-	resp, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -3240,7 +4756,7 @@ func TestBillingService_ChangeTariff_TkassaFirstPaymentInitFields(t *testing.T) 
 	}
 }
 
-func TestBillingService_ChangeTariff_TkassaReturnsExistingPendingPaymentURL(t *testing.T) {
+func TestBilling_ChangeTariff_TkassaReturnsExistingPendingPaymentURL(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
@@ -3279,8 +4795,8 @@ func TestBillingService_ChangeTariff_TkassaReturnsExistingPendingPaymentURL(t *t
 		Status:            domain.PaymentStatusPending,
 	}
 
-	resp, err := d.service.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
-		TariffName: string(domain.TariffPro),
+	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if err != nil {
@@ -3297,7 +4813,7 @@ func TestBillingService_ChangeTariff_TkassaReturnsExistingPendingPaymentURL(t *t
 	}
 }
 
-func TestBillingService_ProcessRenewals_TkassaInitChargeFlow(t *testing.T) {
+func TestBilling_ProcessRenewals_TkassaInitChargeFlow(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
@@ -3332,7 +4848,7 @@ func TestBillingService_ProcessRenewals_TkassaInitChargeFlow(t *testing.T) {
 	}
 	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "tkassa_renewal_1", Status: domain.PaymentStatusSucceeded}
 
-	count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessRenewals error: %v", err)
 	}
@@ -3370,7 +4886,7 @@ func TestBillingService_ProcessRenewals_TkassaInitChargeFlow(t *testing.T) {
 	}
 }
 
-func TestBillingService_ProcessRenewals_TkassaInitFailureMovesToGrace(t *testing.T) {
+func TestBilling_ProcessRenewals_TkassaInitFailureMovesToGrace(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
@@ -3400,7 +4916,7 @@ func TestBillingService_ProcessRenewals_TkassaInitFailureMovesToGrace(t *testing
 	}
 	d.provider.initErr = errors.New("tkassa init failed")
 
-	count, err := d.service.ProcessRenewals(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessRenewals error: %v", err)
 	}
@@ -3414,7 +4930,7 @@ func TestBillingService_ProcessRenewals_TkassaInitFailureMovesToGrace(t *testing
 	}
 }
 
-func TestBillingService_HandleWebhook_TkassaAuthorizedThenConfirmed(t *testing.T) {
+func TestBilling_HandleWebhook_TkassaAuthorizedThenConfirmed(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777778")
@@ -3461,7 +4977,7 @@ func TestBillingService_HandleWebhook_TkassaAuthorizedThenConfirmed(t *testing.T
 		}, nil
 	}
 
-	if err := d.service.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook authorized error: %v", err)
 	}
 
@@ -3503,7 +5019,7 @@ func TestBillingService_HandleWebhook_TkassaAuthorizedThenConfirmed(t *testing.T
 		}, nil
 	}
 
-	if err := d.service.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook confirmed error: %v", err)
 	}
 
@@ -3522,7 +5038,7 @@ func TestBillingService_HandleWebhook_TkassaAuthorizedThenConfirmed(t *testing.T
 	}
 }
 
-func TestBillingService_HandleWebhook_TkassaAddCard(t *testing.T) {
+func TestBilling_HandleWebhook_TkassaAddCard(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777778")
@@ -3539,7 +5055,7 @@ func TestBillingService_HandleWebhook_TkassaAddCard(t *testing.T) {
 		}, nil
 	}
 
-	if err := d.service.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook AddCard error: %v", err)
 	}
 
@@ -3563,7 +5079,71 @@ func TestBillingService_HandleWebhook_TkassaAddCard(t *testing.T) {
 	}
 }
 
-func TestBillingService_HandleWebhook_TkassaAddCardLegacy(t *testing.T) {
+func TestBilling_HandleWebhook_AddCardLinksActivePaymentMethodToSubscription(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777a")
+	tariffID := uuid.MustParse("99999999-9999-9999-9999-99999999997b")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa7c")
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         tariffID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			NotificationType: "NotificationAddCard",
+			CustomerKey:      userID.String(),
+			RequestKey:       "req_link",
+			RebillID:         "rebill_link",
+			CardID:           "card_link",
+			Pan:              "430000******0777",
+			ExpDate:          "12/30",
+		}, nil
+	}
+
+	if err := d.service.Webhooks.HandleWebhook(t.Context(), "tkassa", []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook AddCard error: %v", err)
+	}
+
+	var linkedID uuid.UUID
+	var found bool
+	for _, pm := range d.paymentMethods.methods {
+		if pm.UserID == userID && pm.ProviderToken == "rebill_link" {
+			linkedID = pm.ID
+			found = true
+			if !pm.IsActive {
+				t.Error("expected add card payment method to be active")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected payment method created from AddCard webhook")
+	}
+
+	sub, ok := d.subscriptions.subs[userID]
+	if !ok {
+		t.Fatal("expected subscription to exist")
+	}
+	if sub.ActivePaymentMethodID == nil {
+		t.Fatalf("expected subscription active payment method to be set to %s, got nil", linkedID)
+	}
+	if *sub.ActivePaymentMethodID != linkedID {
+		t.Errorf("expected subscription active payment method %s, got %s", linkedID, *sub.ActivePaymentMethodID)
+	}
+}
+
+func TestBilling_HandleWebhook_TkassaAddCardLegacy(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777779")
@@ -3580,7 +5160,7 @@ func TestBillingService_HandleWebhook_TkassaAddCardLegacy(t *testing.T) {
 		}, nil
 	}
 
-	if err := d.service.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook legacy AddCard error: %v", err)
 	}
 
@@ -3601,7 +5181,7 @@ func TestBillingService_HandleWebhook_TkassaAddCardLegacy(t *testing.T) {
 	}
 }
 
-func TestBillingService_HandleWebhook_DuplicateConfirmedIsIdempotent(t *testing.T) {
+func TestBilling_HandleWebhook_DuplicateConfirmedIsIdempotent(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777778")
@@ -3659,12 +5239,12 @@ func TestBillingService_HandleWebhook_DuplicateConfirmedIsIdempotent(t *testing.
 	}
 	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) { return webhook(), nil }
 
-	if err := d.service.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
 		t.Fatalf("first HandleWebhook error: %v", err)
 	}
 	firstValidUntil := d.subscriptions.subs[userID].ValidUntil
 
-	if err := d.service.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "tkassa", []byte(`{}`)); err != nil {
 		t.Fatalf("second HandleWebhook error: %v", err)
 	}
 	if !d.subscriptions.subs[userID].ValidUntil.Equal(*firstValidUntil) {
@@ -3672,7 +5252,7 @@ func TestBillingService_HandleWebhook_DuplicateConfirmedIsIdempotent(t *testing.
 	}
 }
 
-func TestBillingService_ProcessPendingUpgradePayments_SucceededFinalizesUpgrade(t *testing.T) {
+func TestBilling_ProcessPendingUpgradePayments_SucceededFinalizesUpgrade(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -3717,7 +5297,7 @@ func TestBillingService_ProcessPendingUpgradePayments_SucceededFinalizesUpgrade(
 	d.subscriptionPayments.pendingUpgradePaymentIDs[paymentID] = true
 	d.provider.statusRes = domain.PaymentStatusSucceeded
 
-	count, err := d.service.ProcessPendingUpgradePayments(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessPendingUpgradePayments(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessPendingUpgradePayments error: %v", err)
 	}
@@ -3745,7 +5325,7 @@ func TestBillingService_ProcessPendingUpgradePayments_SucceededFinalizesUpgrade(
 	}
 }
 
-func TestBillingService_ProcessPendingUpgradePayments_FailedMarksFailed(t *testing.T) {
+func TestBilling_ProcessPendingUpgradePayments_FailedMarksFailed(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111112")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222223")
@@ -3782,7 +5362,7 @@ func TestBillingService_ProcessPendingUpgradePayments_FailedMarksFailed(t *testi
 	d.subscriptionPayments.pendingUpgradePaymentIDs[paymentID] = true
 	d.provider.statusRes = domain.PaymentStatusFailed
 
-	count, err := d.service.ProcessPendingUpgradePayments(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessPendingUpgradePayments(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessPendingUpgradePayments error: %v", err)
 	}
@@ -3801,7 +5381,7 @@ func TestBillingService_ProcessPendingUpgradePayments_FailedMarksFailed(t *testi
 	}
 }
 
-func TestBillingService_ProcessPendingUpgradePayments_PendingLeavesAlone(t *testing.T) {
+func TestBilling_ProcessPendingUpgradePayments_PendingLeavesAlone(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111113")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222224")
@@ -3838,7 +5418,7 @@ func TestBillingService_ProcessPendingUpgradePayments_PendingLeavesAlone(t *test
 	d.subscriptionPayments.pendingUpgradePaymentIDs[paymentID] = true
 	d.provider.statusRes = domain.PaymentStatusPending
 
-	count, err := d.service.ProcessPendingUpgradePayments(context.Background(), fixedNow)
+	count, err := d.service.Renewals.ProcessPendingUpgradePayments(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessPendingUpgradePayments error: %v", err)
 	}
@@ -3860,7 +5440,7 @@ func TestBillingService_ProcessPendingUpgradePayments_PendingLeavesAlone(t *test
 	}
 }
 
-func TestBillingService_DeletePaymentMethod_TkassaRemoveCardFailurePreventsDelete(t *testing.T) {
+func TestBilling_DeletePaymentMethod_TkassaRemoveCardFailureIsBestEffort(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
 	userID := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
@@ -3874,8 +5454,8 @@ func TestBillingService_DeletePaymentMethod_TkassaRemoveCardFailurePreventsDelet
 	}
 	d.provider.removeCardErr = errors.New("provider remove failed")
 
-	if err := d.service.DeletePaymentMethod(context.Background(), userID, methodID); err == nil {
-		t.Fatal("expected error when RemoveCard fails")
+	if err := d.service.PaymentMethods.DeletePaymentMethod(context.Background(), userID, methodID); err != nil {
+		t.Fatalf("expected RemoveCard failure to be best-effort, got error: %v", err)
 	}
 	if !d.provider.removeCardCalled {
 		t.Error("expected provider.RemoveCard to be called")
@@ -3886,12 +5466,15 @@ func TestBillingService_DeletePaymentMethod_TkassaRemoveCardFailurePreventsDelet
 	if d.provider.removeCardCardID != "card_123" {
 		t.Errorf("expected card id card_123, got %s", d.provider.removeCardCardID)
 	}
-	if _, ok := d.paymentMethods.methods[methodID]; !ok {
-		t.Error("expected local payment method to remain when provider remove fails")
+	if _, ok := d.paymentMethods.methods[methodID]; ok {
+		t.Error("expected local payment method to be deleted even when provider remove fails")
+	}
+	if d.beginner.begun != 1 || d.beginner.committed != 1 {
+		t.Errorf("expected one committed transaction, got begun=%d committed=%d", d.beginner.begun, d.beginner.committed)
 	}
 }
 
-func TestBillingService_RefundPayment_SucceedsAndDowngradesToBasic(t *testing.T) {
+func TestBilling_RefundPayment_SucceedsAndDowngradesToBasic(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777b")
 	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888c")
@@ -3934,7 +5517,7 @@ func TestBillingService_RefundPayment_SucceedsAndDowngradesToBasic(t *testing.T)
 		RefundedAmountKopecks: 5000,
 	}
 
-	if err := d.service.RefundPayment(context.Background(), paymentID, nil); err != nil {
+	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
 		t.Fatalf("RefundPayment error: %v", err)
 	}
 
@@ -3974,7 +5557,7 @@ func TestBillingService_RefundPayment_SucceedsAndDowngradesToBasic(t *testing.T)
 	}
 }
 
-func TestBillingService_RefundPayment_PendingPaymentSucceeds(t *testing.T) {
+func TestBilling_RefundPayment_PendingPaymentSucceeds(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777b")
 	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888c")
@@ -4013,7 +5596,7 @@ func TestBillingService_RefundPayment_PendingPaymentSucceeds(t *testing.T) {
 		RefundedAmountKopecks: 5000,
 	}
 
-	if err := d.service.RefundPayment(context.Background(), paymentID, nil); err != nil {
+	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
 		t.Fatalf("RefundPayment error: %v", err)
 	}
 
@@ -4031,16 +5614,396 @@ func TestBillingService_RefundPayment_PendingPaymentSucceeds(t *testing.T) {
 	}
 }
 
-func TestBillingService_RefundPayment_PartialRefund(t *testing.T) {
+func TestBilling_RefundPayment_FullRefund(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777c")
 	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888d")
 	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaf")
 	basicID := uuid.MustParse("00000000-0000-0000-0000-000000000005")
 	proID := uuid.MustParse("00000000-0000-0000-0000-000000000006")
-	providerPaymentID := "stub_partial_refund"
+	providerPaymentID := "stub_full_refund"
 	validUntil := fixedNow.AddDate(0, 1, 0)
-	partialAmount := int64(2000)
+
+	d.addTariff(domain.Tariff{
+		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
+	})
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+		SucceededAt:       &validUntil,
+	}
+	d.provider.cancelRes = CancelResult{
+		ProviderPaymentID:     providerPaymentID,
+		Status:                domain.PaymentStatusRefunded,
+		RefundedAmountKopecks: 5000,
+	}
+
+	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
+		t.Fatalf("RefundPayment error: %v", err)
+	}
+
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusRefunded {
+		t.Errorf("expected payment refunded, got %s", payment.Status)
+	}
+	if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != 5000 {
+		t.Errorf("expected refunded amount 5000, got %v", payment.RefundedAmountKopecks)
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.TariffID != basicID {
+		t.Errorf("expected subscription downgraded to basic, got tariff %s", sub.TariffID)
+	}
+}
+
+func TestBilling_RefundPayment_RejectedForNonSucceededOrPendingPayment(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777d")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888e")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaab0")
+	proID := uuid.MustParse("00000000-0000-0000-0000-000000000007")
+	providerPaymentID := "stub_refund_pending"
+
+	d.addSubscription(domain.Subscription{
+		ID:       subscriptionID,
+		UserID:   userID,
+		TariffID: proID,
+		Source:   domain.SubscriptionSourcePaid,
+		Status:   domain.SubscriptionStatusActive,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusFailed,
+	}
+
+	err := d.service.Payments.RefundPayment(t.Context(), paymentID)
+	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+		t.Fatalf("expected ErrInvalidPaymentStatus, got %v", err)
+	}
+	if d.provider.cancelCalled {
+		t.Error("expected provider.Cancel not to be called for non-succeeded/non-pending payment")
+	}
+}
+
+func TestBilling_RefundPayment_ProviderCancelError(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777f")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888a")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaab2")
+	proID := uuid.MustParse("00000000-0000-0000-0000-000000000009")
+	providerPaymentID := "stub_refund_cancel_error"
+	cancelErr := errors.New("provider refused refund")
+
+	d.addSubscription(domain.Subscription{
+		ID:       subscriptionID,
+		UserID:   userID,
+		TariffID: proID,
+		Source:   domain.SubscriptionSourcePaid,
+		Status:   domain.SubscriptionStatusActive,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+	}
+	d.provider.cancelErr = cancelErr
+
+	err := d.service.Payments.RefundPayment(t.Context(), paymentID)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, cancelErr) {
+		t.Errorf("expected provider cancel error, got %v", err)
+	}
+	if d.subscriptionPayments.payments[paymentID].Status != domain.PaymentStatusSucceeded {
+		t.Errorf("expected payment status to remain succeeded, got %s", d.subscriptionPayments.payments[paymentID].Status)
+	}
+}
+
+func TestBilling_RefundPayment_RejectedWhenProviderPaymentIDMissing(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777e")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888b")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaab3")
+	proID := uuid.MustParse("00000000-0000-0000-0000-00000000000a")
+
+	d.addSubscription(domain.Subscription{
+		ID:       subscriptionID,
+		UserID:   userID,
+		TariffID: proID,
+		Source:   domain.SubscriptionSourcePaid,
+		Status:   domain.SubscriptionStatusActive,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:             paymentID,
+		UserID:         userID,
+		SubscriptionID: subscriptionID,
+		TariffID:       proID,
+		AmountKopecks:  5000,
+		Provider:       domain.ProviderFake,
+		Status:         domain.PaymentStatusSucceeded,
+	}
+
+	err := d.service.Payments.RefundPayment(t.Context(), paymentID)
+	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+		t.Fatalf("expected ErrInvalidPaymentStatus, got %v", err)
+	}
+	if d.provider.cancelCalled {
+		t.Error("expected provider.Cancel not to be called when provider payment id is missing")
+	}
+}
+
+func TestBilling_RefundPayment_DoubleRefundRejected(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777771")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888881")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1")
+	basicID := uuid.MustParse("00000000-0000-0000-0000-0000000000b1")
+	proID := uuid.MustParse("00000000-0000-0000-0000-0000000000c1")
+	providerPaymentID := "stub_double_refund"
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
+	})
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+		SucceededAt:       &validUntil,
+	}
+	d.provider.cancelRes = CancelResult{
+		ProviderPaymentID:     providerPaymentID,
+		Status:                domain.PaymentStatusRefunded,
+		RefundedAmountKopecks: 5000,
+	}
+
+	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
+		t.Fatalf("first RefundPayment error: %v", err)
+	}
+
+	// A second refund on the same (now refunded) payment must be rejected and
+	// must NOT reach the provider or downgrade the subscription a second time.
+	err := d.service.Payments.RefundPayment(t.Context(), paymentID)
+	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+		t.Fatalf("second RefundPayment error = %v, want ErrInvalidPaymentStatus", err)
+	}
+
+	if d.provider.cancelCount != 1 {
+		t.Errorf("provider.Cancel called %d times, want exactly 1", d.provider.cancelCount)
+	}
+	if len(d.propertyArchiver.calls) != 1 {
+		t.Errorf("downgrade applied %d times, want exactly 1", len(d.propertyArchiver.calls))
+	}
+	if got := d.subscriptionPayments.payments[paymentID].Status; got != domain.PaymentStatusRefunded {
+		t.Errorf("payment status = %s, want refunded", got)
+	}
+	if got := d.subscriptions.subs[userID].TariffID; got != basicID {
+		t.Errorf("subscription tariff = %s, want basic %s", got, basicID)
+	}
+}
+
+func TestBilling_RefundPayment_CancelFailureRevertsStatus(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777772")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888882")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2")
+	basicID := uuid.MustParse("00000000-0000-0000-0000-0000000000b2")
+	proID := uuid.MustParse("00000000-0000-0000-0000-0000000000c2")
+	providerPaymentID := "stub_cancel_fail_revert"
+	validUntil := fixedNow.AddDate(0, 1, 0)
+	cancelErr := errors.New("provider refused refund")
+
+	d.addTariff(domain.Tariff{
+		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
+	})
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+		SucceededAt:       &validUntil,
+	}
+	d.provider.cancelErr = cancelErr
+
+	err := d.service.Payments.RefundPayment(t.Context(), paymentID)
+	if !errors.Is(err, cancelErr) {
+		t.Fatalf("expected provider cancel error, got %v", err)
+	}
+
+	// The refunding reservation must be reverted to the previous status, and the
+	// subscription must NOT be downgraded.
+	if got := d.subscriptionPayments.payments[paymentID].Status; got != domain.PaymentStatusSucceeded {
+		t.Errorf("status after failed cancel = %s, want succeeded (reverted)", got)
+	}
+	if got := d.subscriptions.subs[userID].TariffID; got != proID {
+		t.Errorf("subscription tariff = %s, want pro %s (must not downgrade)", got, proID)
+	}
+	if len(d.propertyArchiver.calls) != 0 {
+		t.Errorf("downgrade applied %d times, want 0", len(d.propertyArchiver.calls))
+	}
+	if d.provider.cancelCount != 1 {
+		t.Errorf("provider.Cancel called %d times, want 1", d.provider.cancelCount)
+	}
+
+	// The reverted payment can be refunded again with a successful cancel.
+	d.provider.cancelErr = nil
+	d.provider.cancelRes = CancelResult{
+		ProviderPaymentID:     providerPaymentID,
+		Status:                domain.PaymentStatusRefunded,
+		RefundedAmountKopecks: 5000,
+	}
+	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
+		t.Fatalf("retry RefundPayment error: %v", err)
+	}
+	if got := d.subscriptionPayments.payments[paymentID].Status; got != domain.PaymentStatusRefunded {
+		t.Errorf("status after retry = %s, want refunded", got)
+	}
+	if got := d.subscriptions.subs[userID].TariffID; got != basicID {
+		t.Errorf("subscription tariff = %s, want basic %s", got, basicID)
+	}
+	if d.provider.cancelCount != 2 {
+		t.Errorf("provider.Cancel called %d times, want 2", d.provider.cancelCount)
+	}
+}
+
+func TestBilling_RefundPayment_CancelRefundingKeepsReservation(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777775")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888885")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5")
+	basicID := uuid.MustParse("00000000-0000-0000-0000-0000000000b5")
+	proID := uuid.MustParse("00000000-0000-0000-0000-0000000000c5")
+	providerPaymentID := "stub_cancel_refunding"
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
+	})
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+		SucceededAt:       &validUntil,
+	}
+	d.provider.cancelRes = CancelResult{
+		ProviderPaymentID: providerPaymentID,
+		Status:            domain.PaymentStatusRefunding,
+	}
+
+	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
+		t.Fatalf("RefundPayment error: %v", err)
+	}
+
+	// The refund is in flight at the provider: the reservation must stay in
+	// refunding (NOT reverted to succeeded) and the subscription must NOT be
+	// downgraded. The ReconcileStaleRefunds watchdog resolves the payment.
+	if got := d.subscriptionPayments.payments[paymentID].Status; got != domain.PaymentStatusRefunding {
+		t.Errorf("status after in-flight refund = %s, want refunding (kept for the watchdog)", got)
+	}
+	if got := d.subscriptions.subs[userID].TariffID; got != proID {
+		t.Errorf("subscription tariff = %s, want pro %s (must not downgrade)", got, proID)
+	}
+	if len(d.propertyArchiver.calls) != 0 {
+		t.Errorf("downgrade applied %d times, want 0", len(d.propertyArchiver.calls))
+	}
+	if d.provider.cancelCount != 1 {
+		t.Errorf("provider.Cancel called %d times, want 1", d.provider.cancelCount)
+	}
+}
+
+func TestBilling_RefundPayment_CancelPartialRefundedStaysRefunding(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777776")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888886")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6")
+	basicID := uuid.MustParse("00000000-0000-0000-0000-0000000000b6")
+	proID := uuid.MustParse("00000000-0000-0000-0000-0000000000c6")
+	providerPaymentID := "stub_cancel_partial_refunded"
+	validUntil := fixedNow.AddDate(0, 1, 0)
 
 	d.addTariff(domain.Tariff{
 		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
@@ -4072,172 +6035,35 @@ func TestBillingService_RefundPayment_PartialRefund(t *testing.T) {
 	d.provider.cancelRes = CancelResult{
 		ProviderPaymentID:     providerPaymentID,
 		Status:                domain.PaymentStatusPartialRefunded,
-		RefundedAmountKopecks: partialAmount,
+		RefundedAmountKopecks: 2500,
 	}
 
-	if err := d.service.RefundPayment(context.Background(), paymentID, &partialAmount); err != nil {
+	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
 		t.Fatalf("RefundPayment error: %v", err)
 	}
 
+	// A partial refund answers a full-amount Cancel we never make: it is an
+	// anomaly. The payment must stay in refunding for manual review with no
+	// refunded amount recorded and no subscription downgrade.
 	payment := d.subscriptionPayments.payments[paymentID]
-	if payment.Status != domain.PaymentStatusPartialRefunded {
-		t.Errorf("expected payment partial_refunded, got %s", payment.Status)
+	if payment.Status != domain.PaymentStatusRefunding {
+		t.Errorf("status after partial-refund anomaly = %s, want refunding (kept for manual review)", payment.Status)
 	}
-	if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != partialAmount {
-		t.Errorf("expected refunded amount %d, got %v", partialAmount, payment.RefundedAmountKopecks)
+	if payment.RefundedAmountKopecks != nil {
+		t.Errorf("refunded amount = %v, want nil (no refund finalized)", *payment.RefundedAmountKopecks)
 	}
-
-	sub := d.subscriptions.subs[userID]
-	if sub.TariffID != basicID {
-		t.Errorf("expected subscription downgraded to basic, got tariff %s", sub.TariffID)
+	if got := d.subscriptions.subs[userID].TariffID; got != proID {
+		t.Errorf("subscription tariff = %s, want pro %s (must not downgrade)", got, proID)
 	}
-}
-
-func TestBillingService_RefundPayment_RejectedForNonSucceededOrPendingPayment(t *testing.T) {
-	d := newTestDeps(t)
-	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777d")
-	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888e")
-	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaab0")
-	proID := uuid.MustParse("00000000-0000-0000-0000-000000000007")
-	providerPaymentID := "stub_refund_pending"
-
-	d.addSubscription(domain.Subscription{
-		ID:       subscriptionID,
-		UserID:   userID,
-		TariffID: proID,
-		Source:   domain.SubscriptionSourcePaid,
-		Status:   domain.SubscriptionStatusActive,
-	})
-	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
-		ID:                paymentID,
-		UserID:            userID,
-		SubscriptionID:    subscriptionID,
-		TariffID:          proID,
-		AmountKopecks:     5000,
-		Provider:          domain.ProviderFake,
-		ProviderPaymentID: &providerPaymentID,
-		Status:            domain.PaymentStatusFailed,
+	if len(d.propertyArchiver.calls) != 0 {
+		t.Errorf("downgrade applied %d times, want 0", len(d.propertyArchiver.calls))
 	}
-
-	err := d.service.RefundPayment(context.Background(), paymentID, nil)
-	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
-		t.Fatalf("expected ErrInvalidPaymentStatus, got %v", err)
-	}
-	if d.provider.cancelCalled {
-		t.Error("expected provider.Cancel not to be called for non-succeeded/non-pending payment")
+	if d.provider.cancelCount != 1 {
+		t.Errorf("provider.Cancel called %d times, want 1", d.provider.cancelCount)
 	}
 }
 
-func TestBillingService_RefundPayment_RejectedForExcessivePartialAmount(t *testing.T) {
-	d := newTestDeps(t)
-	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777e")
-	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888f")
-	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaab1")
-	proID := uuid.MustParse("00000000-0000-0000-0000-000000000008")
-	providerPaymentID := "stub_refund_excessive"
-	excessiveAmount := int64(5001)
-
-	d.addSubscription(domain.Subscription{
-		ID:       subscriptionID,
-		UserID:   userID,
-		TariffID: proID,
-		Source:   domain.SubscriptionSourcePaid,
-		Status:   domain.SubscriptionStatusActive,
-	})
-	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
-		ID:                paymentID,
-		UserID:            userID,
-		SubscriptionID:    subscriptionID,
-		TariffID:          proID,
-		AmountKopecks:     5000,
-		Provider:          domain.ProviderFake,
-		ProviderPaymentID: &providerPaymentID,
-		Status:            domain.PaymentStatusSucceeded,
-	}
-
-	err := d.service.RefundPayment(context.Background(), paymentID, &excessiveAmount)
-	if !errors.Is(err, domain.ErrInvalidAmount) {
-		t.Fatalf("expected ErrInvalidAmount, got %v", err)
-	}
-	if d.provider.cancelCalled {
-		t.Error("expected provider.Cancel not to be called when partial amount exceeds payment amount")
-	}
-}
-
-func TestBillingService_RefundPayment_ProviderCancelError(t *testing.T) {
-	d := newTestDeps(t)
-	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777f")
-	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888a")
-	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaab2")
-	proID := uuid.MustParse("00000000-0000-0000-0000-000000000009")
-	providerPaymentID := "stub_refund_cancel_error"
-	cancelErr := errors.New("provider refused refund")
-
-	d.addSubscription(domain.Subscription{
-		ID:       subscriptionID,
-		UserID:   userID,
-		TariffID: proID,
-		Source:   domain.SubscriptionSourcePaid,
-		Status:   domain.SubscriptionStatusActive,
-	})
-	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
-		ID:                paymentID,
-		UserID:            userID,
-		SubscriptionID:    subscriptionID,
-		TariffID:          proID,
-		AmountKopecks:     5000,
-		Provider:          domain.ProviderFake,
-		ProviderPaymentID: &providerPaymentID,
-		Status:            domain.PaymentStatusSucceeded,
-	}
-	d.provider.cancelErr = cancelErr
-
-	err := d.service.RefundPayment(context.Background(), paymentID, nil)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !errors.Is(err, cancelErr) {
-		t.Errorf("expected provider cancel error, got %v", err)
-	}
-	if d.subscriptionPayments.payments[paymentID].Status != domain.PaymentStatusSucceeded {
-		t.Errorf("expected payment status to remain succeeded, got %s", d.subscriptionPayments.payments[paymentID].Status)
-	}
-}
-
-func TestBillingService_RefundPayment_RejectedWhenProviderPaymentIDMissing(t *testing.T) {
-	d := newTestDeps(t)
-	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777e")
-	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888b")
-	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaab3")
-	proID := uuid.MustParse("00000000-0000-0000-0000-00000000000a")
-
-	d.addSubscription(domain.Subscription{
-		ID:       subscriptionID,
-		UserID:   userID,
-		TariffID: proID,
-		Source:   domain.SubscriptionSourcePaid,
-		Status:   domain.SubscriptionStatusActive,
-	})
-	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
-		ID:             paymentID,
-		UserID:         userID,
-		SubscriptionID: subscriptionID,
-		TariffID:       proID,
-		AmountKopecks:  5000,
-		Provider:       domain.ProviderFake,
-		Status:         domain.PaymentStatusSucceeded,
-	}
-
-	err := d.service.RefundPayment(context.Background(), paymentID, nil)
-	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
-		t.Fatalf("expected ErrInvalidPaymentStatus, got %v", err)
-	}
-	if d.provider.cancelCalled {
-		t.Error("expected provider.Cancel not to be called when provider payment id is missing")
-	}
-}
-
-func TestBillingService_SyncPendingPayment(t *testing.T) {
+func TestBilling_SyncPendingPayment(t *testing.T) {
 	type syncCase struct {
 		name               string
 		setup              func(*testDeps) uuid.UUID
@@ -4257,7 +6083,7 @@ func TestBillingService_SyncPendingPayment(t *testing.T) {
 				d.provider.statusRes = tc.providerStatus
 				d.provider.statusErr = tc.providerErr
 
-				err := d.service.SyncPendingPayment(context.Background(), paymentID)
+				err := d.service.Payments.SyncPendingPayment(context.Background(), paymentID)
 
 				if tc.wantErr != nil {
 					if !tc.wantErr(err) {
@@ -4573,10 +6399,10 @@ func TestBillingService_SyncPendingPayment(t *testing.T) {
 		})
 	})
 
-	t.Run("partial_refunded", func(t *testing.T) {
+	t.Run("partial_refunded ignored as anomaly", func(t *testing.T) {
 		runSyncCases(t, []syncCase{
 			{
-				name: "downgrades subscription to basic for partial refund",
+				name: "ignores external partial refund notification without state change",
 				setup: func(d *testDeps) uuid.UUID {
 					userID := uuid.MustParse("11111111-1111-1111-1111-11111111111b")
 					basicID := uuid.MustParse("22222222-2222-2222-2222-22222222222d")
@@ -4616,27 +6442,27 @@ func TestBillingService_SyncPendingPayment(t *testing.T) {
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
 					payment := d.subscriptionPayments.payments[paymentID]
-					// Without a real refund amount from GetState, the synthetic payload
-					// uses the full payment amount, so the payment is recorded as refunded.
-					if payment.Status != domain.PaymentStatusRefunded {
-						t.Errorf("expected payment recorded as refunded, got %s", payment.Status)
+					// Partial refunds are impossible in this product: the external
+					// notification is an anomaly that is logged and ignored.
+					if payment.Status != domain.PaymentStatusPending {
+						t.Errorf("expected payment to stay pending, got %s", payment.Status)
 					}
-					if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != 5000 {
-						t.Errorf("expected refunded amount 5000, got %v", payment.RefundedAmountKopecks)
+					if payment.RefundedAmountKopecks != nil {
+						t.Errorf("expected refunded amount to stay nil, got %v", *payment.RefundedAmountKopecks)
 					}
 					sub := d.subscriptions.subs[payment.UserID]
-					basicID := uuid.MustParse("22222222-2222-2222-2222-22222222222d")
-					if sub.TariffID != basicID {
-						t.Errorf("expected subscription downgraded to basic, got %s", sub.TariffID)
+					proID := uuid.MustParse("33333333-3333-3333-3333-33333333333e")
+					if sub.TariffID != proID {
+						t.Errorf("expected subscription to stay on pro tariff, got %s", sub.TariffID)
 					}
 					if sub.Status != domain.SubscriptionStatusActive {
-						t.Errorf("expected subscription active after downgrade, got %s", sub.Status)
+						t.Errorf("expected subscription active, got %s", sub.Status)
 					}
-					if sub.AutoRenewEnabled {
-						t.Error("expected auto-renew disabled after refund downgrade")
+					if !sub.AutoRenewEnabled {
+						t.Error("expected auto-renew to stay enabled")
 					}
-					if len(d.propertyArchiver.calls) != 1 {
-						t.Errorf("expected property archiver called once, got %d", len(d.propertyArchiver.calls))
+					if len(d.propertyArchiver.calls) != 0 {
+						t.Errorf("expected no archiver calls, got %d", len(d.propertyArchiver.calls))
 					}
 				},
 			},
@@ -4777,7 +6603,7 @@ func TestBillingService_SyncPendingPayment(t *testing.T) {
 	})
 }
 
-func TestBillingService_SyncPendingPayment_UnexpectedProviderStatus(t *testing.T) {
+func TestBilling_SyncPendingPayment_UnexpectedProviderStatus(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111118")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222229")
@@ -4811,7 +6637,7 @@ func TestBillingService_SyncPendingPayment_UnexpectedProviderStatus(t *testing.T
 	}
 	d.provider.statusRes = domain.PaymentStatus("unknown")
 
-	err := d.service.SyncPendingPayment(context.Background(), paymentID)
+	err := d.service.Payments.SyncPendingPayment(context.Background(), paymentID)
 	if err == nil {
 		t.Fatal("expected error for unexpected provider status")
 	}
@@ -4823,7 +6649,7 @@ func TestBillingService_SyncPendingPayment_UnexpectedProviderStatus(t *testing.T
 	}
 }
 
-func TestBillingService_SyncPendingPayment_DoubleFinalizeGuard(t *testing.T) {
+func TestBilling_SyncPendingPayment_DoubleFinalizeGuard(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111119")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-22222222222a")
@@ -4858,7 +6684,7 @@ func TestBillingService_SyncPendingPayment_DoubleFinalizeGuard(t *testing.T) {
 	d.subscriptionPayments.forUpdateStatus = map[uuid.UUID]domain.PaymentStatus{paymentID: domain.PaymentStatusSucceeded}
 	d.provider.statusRes = domain.PaymentStatusSucceeded
 
-	if err := d.service.SyncPendingPayment(context.Background(), paymentID); err != nil {
+	if err := d.service.Payments.SyncPendingPayment(context.Background(), paymentID); err != nil {
 		t.Fatalf("SyncPendingPayment error: %v", err)
 	}
 	if !d.provider.statusCalled {
@@ -4870,7 +6696,7 @@ func TestBillingService_SyncPendingPayment_DoubleFinalizeGuard(t *testing.T) {
 	}
 }
 
-func TestBillingService_ReconcilePendingPayments_SyncsInBatches(t *testing.T) {
+func TestBilling_ReconcilePendingPayments_SyncsInBatches(t *testing.T) {
 	basicID := uuid.MustParse("22222222-2222-2222-2222-22222222222b")
 	addBasicPayment := func(d *testDeps, userID, subscriptionID, paymentID uuid.UUID, providerPaymentID string, createdAt time.Time) {
 		validUntil := fixedNow.Add(-time.Hour)
@@ -4904,7 +6730,7 @@ func TestBillingService_ReconcilePendingPayments_SyncsInBatches(t *testing.T) {
 
 		const totalPayments = 101
 		paymentIDs := make([]uuid.UUID, 0, totalPayments)
-		for i := 0; i < totalPayments; i++ {
+		for i := range totalPayments {
 			userID := uuid.MustParse(fmt.Sprintf("11111111-1111-1111-1111-%012d", i))
 			subscriptionID := uuid.MustParse(fmt.Sprintf("22222222-2222-2222-2222-%012d", i))
 			paymentID := uuid.MustParse(fmt.Sprintf("33333333-3333-3333-3333-%012d", i))
@@ -4916,7 +6742,7 @@ func TestBillingService_ReconcilePendingPayments_SyncsInBatches(t *testing.T) {
 
 		d.provider.statusRes = domain.PaymentStatusSucceeded
 
-		count, err := d.service.ReconcilePendingPayments(context.Background(), fixedNow)
+		count, err := d.service.Payments.ReconcilePendingPayments(context.Background(), fixedNow)
 		if err != nil {
 			t.Fatalf("ReconcilePendingPayments error: %v", err)
 		}
@@ -4979,7 +6805,7 @@ func TestBillingService_ReconcilePendingPayments_SyncsInBatches(t *testing.T) {
 			}
 		}
 
-		count, err := d.service.ReconcilePendingPayments(context.Background(), fixedNow)
+		count, err := d.service.Payments.ReconcilePendingPayments(context.Background(), fixedNow)
 		if err != nil {
 			t.Fatalf("ReconcilePendingPayments error: %v", err)
 		}
@@ -5019,7 +6845,7 @@ func TestBillingService_ReconcilePendingPayments_SyncsInBatches(t *testing.T) {
 
 		d.subscriptionPayments.listPendingErr = errors.New("list failed")
 
-		count, err := d.service.ReconcilePendingPayments(context.Background(), fixedNow)
+		count, err := d.service.Payments.ReconcilePendingPayments(context.Background(), fixedNow)
 		if err == nil {
 			t.Fatal("expected error from ListPendingPayments")
 		}
@@ -5027,4 +6853,563 @@ func TestBillingService_ReconcilePendingPayments_SyncsInBatches(t *testing.T) {
 			t.Errorf("expected 0 payments synced on list error, got %d", count)
 		}
 	})
+}
+
+func TestBilling_ReconcileStaleRefunds(t *testing.T) {
+	basicID := uuid.MustParse("44444444-4444-4444-4444-44444444444b")
+	proID := uuid.MustParse("55555555-5555-5555-5555-55555555555a")
+	staleAt := fixedNow.Add(-time.Hour)
+
+	addTariffs := func(d *testDeps) {
+		d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000})
+		d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	}
+	addRefundingPayment := func(d *testDeps, userID, subscriptionID, paymentID uuid.UUID, providerPaymentID string, updatedAt time.Time) {
+		validUntil := fixedNow.AddDate(0, 1, 0)
+		d.addSubscription(domain.Subscription{
+			ID:               subscriptionID,
+			UserID:           userID,
+			TariffID:         proID,
+			Source:           domain.SubscriptionSourcePaid,
+			Status:           domain.SubscriptionStatusActive,
+			ValidUntil:       &validUntil,
+			AutoRenewEnabled: true,
+		})
+		d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+			ID:                paymentID,
+			UserID:            userID,
+			SubscriptionID:    subscriptionID,
+			TariffID:          proID,
+			Period:            domain.PeriodMonth,
+			AmountKopecks:     5000,
+			Provider:          domain.ProviderFake,
+			ProviderPaymentID: &providerPaymentID,
+			Status:            domain.PaymentStatusRefunding,
+			CreatedAt:         updatedAt.Add(-time.Minute),
+			UpdatedAt:         updatedAt,
+		}
+	}
+
+	t.Run("provider refunded finalizes the refund and downgrades to basic", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666601")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666602")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666603")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_finalize", staleAt)
+
+		d.provider.statusRes = domain.PaymentStatusRefunded
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected 1 payment resolved, got %d", count)
+		}
+		if !d.provider.statusCalled {
+			t.Error("expected provider.Status to be called")
+		}
+
+		payment := d.subscriptionPayments.payments[paymentID]
+		if payment.Status != domain.PaymentStatusRefunded {
+			t.Errorf("expected payment refunded, got %s", payment.Status)
+		}
+		if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != 5000 {
+			t.Errorf("expected refunded amount 5000, got %v", payment.RefundedAmountKopecks)
+		}
+
+		sub := d.subscriptions.subs[userID]
+		if sub.TariffID != basicID {
+			t.Errorf("expected subscription downgraded to basic, got tariff %s", sub.TariffID)
+		}
+		if sub.Status != domain.SubscriptionStatusActive {
+			t.Errorf("expected subscription status active, got %s", sub.Status)
+		}
+		if sub.ValidUntil != nil {
+			t.Errorf("expected valid_until nil after refund, got %v", sub.ValidUntil)
+		}
+		if sub.AutoRenewEnabled {
+			t.Error("expected auto_renew disabled after refund")
+		}
+		if len(d.propertyArchiver.calls) != 1 || d.propertyArchiver.calls[0].limit != 5 {
+			t.Errorf("expected property archiver called with limit 5, got %v", d.propertyArchiver.calls)
+		}
+	})
+
+	t.Run("provider succeeded reverts the refund reservation", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666611")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666612")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666613")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_revert", staleAt)
+
+		d.provider.statusRes = domain.PaymentStatusSucceeded
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected 1 payment resolved, got %d", count)
+		}
+
+		payment := d.subscriptionPayments.payments[paymentID]
+		if payment.Status != domain.PaymentStatusSucceeded {
+			t.Errorf("expected payment back to succeeded, got %s", payment.Status)
+		}
+		if payment.RefundedAmountKopecks != nil {
+			t.Errorf("expected refunded amount nil, got %v", *payment.RefundedAmountKopecks)
+		}
+
+		sub := d.subscriptions.subs[userID]
+		if sub.TariffID != proID {
+			t.Errorf("expected subscription to stay on pro, got tariff %s", sub.TariffID)
+		}
+		if len(d.propertyArchiver.calls) != 0 {
+			t.Errorf("expected property archiver not called, got %v", d.propertyArchiver.calls)
+		}
+	})
+
+	t.Run("provider pending keeps the payment refunding", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666621")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666622")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666623")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_pending", staleAt)
+
+		d.provider.statusRes = domain.PaymentStatusPending
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected 1 payment visited, got %d", count)
+		}
+
+		payment := d.subscriptionPayments.payments[paymentID]
+		if payment.Status != domain.PaymentStatusRefunding {
+			t.Errorf("expected payment to stay refunding, got %s", payment.Status)
+		}
+		if payment.RefundedAmountKopecks != nil {
+			t.Errorf("expected refunded amount nil, got %v", *payment.RefundedAmountKopecks)
+		}
+	})
+
+	t.Run("provider partial refund is an anomaly and stays refunding", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666631")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666632")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666633")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_partial", staleAt)
+
+		d.provider.statusRes = domain.PaymentStatusPartialRefunded
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected 1 payment visited, got %d", count)
+		}
+
+		payment := d.subscriptionPayments.payments[paymentID]
+		if payment.Status != domain.PaymentStatusRefunding {
+			t.Errorf("expected payment to stay refunding, got %s", payment.Status)
+		}
+		if len(d.propertyArchiver.calls) != 0 {
+			t.Errorf("expected property archiver not called, got %v", d.propertyArchiver.calls)
+		}
+	})
+
+	t.Run("provider failed keeps the payment refunding", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666671")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666672")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666673")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_failed", staleAt)
+
+		d.provider.statusRes = domain.PaymentStatusFailed
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected 1 payment visited, got %d", count)
+		}
+
+		payment := d.subscriptionPayments.payments[paymentID]
+		if payment.Status != domain.PaymentStatusRefunding {
+			t.Errorf("expected payment to stay refunding, got %s", payment.Status)
+		}
+	})
+
+	t.Run("bounded when no payment resolves", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+
+		// A full batch of stuck refunds whose provider never settles: each
+		// batch re-reads the same payments, so the loop must stop at the cap
+		// instead of spinning for the whole tick.
+		for i := range renewalBatchSize {
+			userID := uuid.MustParse(fmt.Sprintf("77777777-7777-7777-7777-%012d", i))
+			subscriptionID := uuid.MustParse(fmt.Sprintf("88888888-8888-8888-8888-%012d", i))
+			paymentID := uuid.MustParse(fmt.Sprintf("99999999-9999-9999-9999-%012d", i))
+			addRefundingPayment(d, userID, subscriptionID, paymentID, fmt.Sprintf("stale_refund_stuck_%d", i), staleAt)
+		}
+		d.provider.statusRes = domain.PaymentStatusPending
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if d.subscriptionPayments.listStaleRefundingCalls != maxReconcileBatchesPerTick {
+			t.Errorf("ListStaleRefundingPayments called %d times, want cap %d",
+				d.subscriptionPayments.listStaleRefundingCalls, maxReconcileBatchesPerTick)
+		}
+		if d.provider.statusCount != maxReconcileBatchesPerTick*renewalBatchSize {
+			t.Errorf("provider.Status called %d times, want %d (cap * batch size)",
+				d.provider.statusCount, maxReconcileBatchesPerTick*renewalBatchSize)
+		}
+		if count != maxReconcileBatchesPerTick*renewalBatchSize {
+			t.Errorf("checked count = %d, want %d", count, maxReconcileBatchesPerTick*renewalBatchSize)
+		}
+	})
+
+	t.Run("recent refunding payment is untouched", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666641")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666642")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666643")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_recent", fixedNow)
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("expected 0 payments resolved, got %d", count)
+		}
+		if d.provider.statusCalled {
+			t.Error("expected provider.Status not called for a non-stale payment")
+		}
+
+		payment := d.subscriptionPayments.payments[paymentID]
+		if payment.Status != domain.PaymentStatusRefunding {
+			t.Errorf("expected payment to stay refunding, got %s", payment.Status)
+		}
+	})
+
+	t.Run("returns list error", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666651")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666652")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666653")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_list_err", staleAt)
+
+		d.subscriptionPayments.listStaleRefundingErr = errors.New("list failed")
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err == nil {
+			t.Fatal("expected error from ListStaleRefundingPayments")
+		}
+		if count != 0 {
+			t.Errorf("expected 0 payments resolved on list error, got %d", count)
+		}
+	})
+}
+
+func scheduledChangeSubscription(userID, subID, tariffID, pendingTariffID uuid.UUID, methodID *uuid.UUID) domain.Subscription {
+	changeAt := fixedNow.Add(-time.Hour)
+	period := domain.PeriodMonth
+	validUntil := fixedNow.AddDate(0, 1, 0)
+	return domain.Subscription{
+		ID:                    subID,
+		UserID:                userID,
+		TariffID:              tariffID,
+		Source:                domain.SubscriptionSourcePaid,
+		Status:                domain.SubscriptionStatusActive,
+		ValidUntil:            &validUntil,
+		AutoRenewEnabled:      true,
+		ActivePaymentMethodID: methodID,
+		PendingTariffID:       &pendingTariffID,
+		PendingChangeAt:       &changeAt,
+		PendingPeriod:         &period,
+	}
+}
+
+func TestBilling_ProcessScheduledChanges_NoChargeApplies(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	subID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(scheduledChangeSubscription(userID, subID, proID, basicID, nil))
+
+	count, err := d.service.ScheduledChanges.ProcessScheduledChanges(context.Background(), fixedNow)
+	if err != nil {
+		t.Fatalf("ProcessScheduledChanges error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 scheduled change applied, got %d", count)
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.TariffID != basicID {
+		t.Errorf("expected tariff changed to basic, got %s", sub.TariffID)
+	}
+	wantValidUntil := fixedNow.AddDate(0, 1, 0)
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+		t.Errorf("expected valid_until extended to %v, got %v", wantValidUntil, sub.ValidUntil)
+	}
+	if !sub.AutoRenewEnabled {
+		t.Errorf("expected auto_renew_enabled after scheduled downgrade")
+	}
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected status active, got %s", sub.Status)
+	}
+	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
+		t.Errorf("expected pending_* cleared, got %+v/%+v/%+v", sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
+	}
+	if d.provider.chargeCalled || d.provider.initCalled {
+		t.Errorf("expected no provider call for scheduled downgrade")
+	}
+	if len(d.subscriptionPayments.payments) != 0 {
+		t.Errorf("expected no payment for scheduled downgrade, got %d", len(d.subscriptionPayments.payments))
+	}
+	if len(d.propertyArchiver.calls) != 1 || d.propertyArchiver.calls[0].limit != 5 {
+		t.Errorf("expected property archiver called with limit 5, got %v", d.propertyArchiver.calls)
+	}
+}
+
+func TestBilling_ProcessScheduledChanges_AppliesOnceAndNotAgain(t *testing.T) {
+	d := newTestDeps(t)
+	userA := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	userB := uuid.MustParse("11111111-1111-1111-1111-111111111112")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	subA := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	subB := uuid.MustParse("55555555-5555-5555-5555-555555555556")
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+
+	// (a) due row: pending_change_at <= now, must be applied.
+	d.addSubscription(scheduledChangeSubscription(userA, subA, proID, basicID, nil))
+
+	// (c) future row: pending_change_at > now, must be left untouched.
+	futureChangeAt := fixedNow.Add(24 * time.Hour)
+	futurePeriod := domain.PeriodMonth
+	futureValidUntil := fixedNow.AddDate(0, 1, 0)
+	d.addSubscription(domain.Subscription{
+		ID:               subB,
+		UserID:           userB,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &futureValidUntil,
+		AutoRenewEnabled: true,
+		PendingTariffID:  &basicID,
+		PendingChangeAt:  &futureChangeAt,
+		PendingPeriod:    &futurePeriod,
+	})
+
+	count, err := d.service.ScheduledChanges.ProcessScheduledChanges(context.Background(), fixedNow)
+	if err != nil {
+		t.Fatalf("ProcessScheduledChanges error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 scheduled change applied on first tick, got %d", count)
+	}
+
+	applied := d.subscriptions.subs[userA]
+	if applied.TariffID != basicID {
+		t.Errorf("expected tariff changed to basic, got %s", applied.TariffID)
+	}
+	wantValidUntil := fixedNow.AddDate(0, 1, 0)
+	if applied.ValidUntil == nil || !applied.ValidUntil.Equal(wantValidUntil) {
+		t.Errorf("expected valid_until extended to %v, got %v", wantValidUntil, applied.ValidUntil)
+	}
+	if !applied.AutoRenewEnabled {
+		t.Errorf("expected auto_renew_enabled after scheduled downgrade")
+	}
+	if applied.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected status active, got %s", applied.Status)
+	}
+	if applied.PendingTariffID != nil || applied.PendingChangeAt != nil || applied.PendingPeriod != nil {
+		t.Errorf("expected pending_* cleared, got %+v/%+v/%+v", applied.PendingTariffID, applied.PendingChangeAt, applied.PendingPeriod)
+	}
+	if len(d.propertyArchiver.calls) != 1 || d.propertyArchiver.calls[0].limit != 5 {
+		t.Errorf("expected property archiver called once with limit 5, got %v", d.propertyArchiver.calls)
+	}
+
+	untouched := d.subscriptions.subs[userB]
+	if untouched.TariffID != proID {
+		t.Errorf("expected future row tariff unchanged (pro), got %s", untouched.TariffID)
+	}
+	if untouched.PendingTariffID == nil || *untouched.PendingTariffID != basicID {
+		t.Errorf("expected future row pending tariff basic, got %v", untouched.PendingTariffID)
+	}
+	if untouched.PendingChangeAt == nil || !untouched.PendingChangeAt.Equal(futureChangeAt) {
+		t.Errorf("expected future row pending_change_at %v, got %v", futureChangeAt, untouched.PendingChangeAt)
+	}
+
+	// (b) a second worker tick must not re-apply the already-processed row.
+	count, err = d.service.ScheduledChanges.ProcessScheduledChanges(context.Background(), fixedNow)
+	if err != nil {
+		t.Fatalf("second ProcessScheduledChanges error: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 scheduled changes on second tick, got %d", count)
+	}
+	if len(d.propertyArchiver.calls) != 1 {
+		t.Errorf("expected property archiver still called once (no re-apply), got %d", len(d.propertyArchiver.calls))
+	}
+}
+
+func TestBilling_HandleWebhook_ProviderPaymentIDMismatch(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777f")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888890")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4")
+	tariffID := uuid.MustParse("99999999-9999-9999-9999-99999999999e")
+	expectedProviderPaymentID := "expected-provider-id"
+	otherProviderPaymentID := "other-provider-id"
+
+	d.addTariff(domain.Tariff{ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(domain.Subscription{
+		ID:       subscriptionID,
+		UserID:   userID,
+		TariffID: tariffID,
+		Source:   domain.SubscriptionSourcePaid,
+		Status:   domain.SubscriptionStatusActive,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          tariffID,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &expectedProviderPaymentID,
+		Status:            domain.PaymentStatusPending,
+	}
+
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			ProviderPaymentID: otherProviderPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusSucceeded,
+		}, nil
+	}
+
+	err := d.service.Webhooks.HandleWebhook(t.Context(), "fake", []byte(`{}`))
+	if err == nil {
+		t.Fatal("expected error for provider payment id mismatch, got nil")
+	}
+	if !strings.Contains(err.Error(), "provider payment id mismatch") {
+		t.Errorf("expected mismatch error, got %v", err)
+	}
+
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusPending {
+		t.Errorf("expected payment to stay pending, got %s", payment.Status)
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected subscription status active, got %s", sub.Status)
+	}
+	if sub.TariffID != tariffID {
+		t.Errorf("expected subscription tariff unchanged, got %s", sub.TariffID)
+	}
+}
+
+func TestBilling_ProcessScheduledChanges_PendingTariffNotFound_ErrTariffNotFound(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111113")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222224")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333335")
+	subID := uuid.MustParse("55555555-5555-5555-5555-555555555557")
+	missingTariffID := uuid.MustParse("66666666-6666-6666-6666-666666666668")
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(scheduledChangeSubscription(userID, subID, basicID, missingTariffID, nil))
+
+	// The top-level ProcessScheduledChange swallows per-item errors and logs
+	// them, so we exercise the missing-pending-tariff branch directly.
+	svc, ok := d.service.ScheduledChanges.(*ScheduledChangeService)
+	if !ok {
+		t.Fatalf("ScheduledChanges service is %T, expected *ScheduledChangeService", d.service.ScheduledChanges)
+	}
+	err := svc.applyScheduledChange(t.Context(), d.subscriptions.subs[userID], fixedNow)
+	if !errors.Is(err, ErrTariffNotFound) {
+		t.Fatalf("expected ErrTariffNotFound, got %v", err)
+	}
+}
+
+func TestBilling_ChangeTariff_UpgradeCommitFailure_RollsBackAndMarksFailed(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111114")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222225")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333336")
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(domain.Subscription{
+		ID:               uuid.MustParse("44444444-4444-4444-4444-444444444446"),
+		UserID:           userID,
+		TariffID:         basicID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: false,
+	})
+
+	d.provider.initFunc = func(_ InitRequest) {
+		d.beginner.commitErr = errors.New("commit failed: boom")
+	}
+
+	_, err := d.service.Subscriptions.ChangeTariff(t.Context(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodMonth,
+	})
+	if err == nil {
+		t.Fatal("expected ChangeTariff error on commit failure, got nil")
+	}
+
+	var failedPayment *domain.SubscriptionPayment
+	for _, p := range d.subscriptionPayments.payments {
+		if p.UserID == userID && p.TariffID == proID && p.Status == domain.PaymentStatusFailed {
+			failedPayment = &p
+			break
+		}
+	}
+	if failedPayment == nil {
+		t.Fatal("expected a failed payment record for the upgrade")
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.TariffID != basicID {
+		t.Errorf("expected subscription tariff to remain basic, got %s", sub.TariffID)
+	}
+	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil {
+		t.Errorf("expected no pending change, got pending=%+v at=%+v", sub.PendingTariffID, sub.PendingChangeAt)
+	}
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(validUntil) {
+		t.Errorf("expected valid_until unchanged at %v, got %v", validUntil, sub.ValidUntil)
+	}
 }

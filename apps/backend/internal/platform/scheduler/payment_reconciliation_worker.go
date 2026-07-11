@@ -17,18 +17,11 @@ import (
 // worker runs at a time.
 const paymentReconciliationWorkerLockKey int64 = 0xB112
 
-// paymentReconciliationService is the subset of the billing application service
-// used by the worker. It keeps the worker decoupled from the concrete service
-// type.
-type paymentReconciliationService interface {
-	ReconcilePendingPayments(ctx context.Context, now time.Time) (int, error)
-}
-
 // PaymentReconciliationWorker periodically reconciles stuck pending
-// subscription payments. It delegates the actual reconciliation to
-// BillingService so the worker stays a thin scheduling shell.
+// subscription payments. It delegates the actual reconciliation to the billing
+// payments port so the worker stays a thin scheduling shell.
 type PaymentReconciliationWorker struct {
-	billing  paymentReconciliationService
+	payments billingapp.PaymentProcessor
 	pool     *pgxpool.Pool
 	clock    clock.Clock
 	interval time.Duration
@@ -36,7 +29,7 @@ type PaymentReconciliationWorker struct {
 }
 
 // NewPaymentReconciliationWorker creates a new payment reconciliation worker.
-func NewPaymentReconciliationWorker(billing *billingapp.BillingService, pool *pgxpool.Pool, clock clock.Clock, interval time.Duration, logger *slog.Logger) *PaymentReconciliationWorker {
+func NewPaymentReconciliationWorker(payments billingapp.PaymentProcessor, pool *pgxpool.Pool, clock clock.Clock, interval time.Duration, logger *slog.Logger) *PaymentReconciliationWorker {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
@@ -44,7 +37,7 @@ func NewPaymentReconciliationWorker(billing *billingapp.BillingService, pool *pg
 		logger = slog.Default()
 	}
 	return &PaymentReconciliationWorker{
-		billing:  billing,
+		payments: payments,
 		pool:     pool,
 		clock:    clock,
 		interval: interval,
@@ -92,12 +85,19 @@ func (w *PaymentReconciliationWorker) tick(ctx context.Context) error {
 
 	now := w.clock.Now().UTC()
 
-	count, err := w.billing.ReconcilePendingPayments(ctx, now)
+	count, err := w.payments.ReconcilePendingPayments(ctx, now)
 	if err != nil {
 		w.logger.ErrorContext(ctx, "payment reconciliation failed", "error", sanitize.Error(err))
 		return fmt.Errorf("reconcile pending payments: %w", err)
 	}
 	w.logger.InfoContext(ctx, "payment reconciliation processed pending payments", "count", count)
+
+	refundCount, err := w.payments.ReconcileStaleRefunds(ctx, now)
+	if err != nil {
+		w.logger.ErrorContext(ctx, "stale refund reconciliation failed", "error", sanitize.Error(err))
+		return fmt.Errorf("reconcile stale refunds: %w", err)
+	}
+	w.logger.InfoContext(ctx, "payment reconciliation processed stale refunding payments", "count", refundCount)
 	return nil
 }
 

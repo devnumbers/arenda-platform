@@ -6,7 +6,9 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 
+	"github.com/google/uuid"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
@@ -15,6 +17,10 @@ import (
 
 const maxRequestBodySize = 16 << 10 // 16 KiB
 
+// retryAfterSeconds is the cooldown clients should wait before retrying a
+// rate-limited auth request. It matches the service-layer minSendInterval.
+const retryAfterSeconds = 60
+
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	dec := json.NewDecoder(r.Body)
@@ -22,90 +28,63 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 	return dec.Decode(dst)
 }
 
+// MeEnricher augments a MeResponse with cross-cutting data (for example, the
+// current subscription). Transport code may pass nil when no enrichment is
+// required.
+type MeEnricher func(ctx context.Context, userID uuid.UUID, resp *openapi.MeResponse) error
+
 // AuthHandlers implements the generated non-strict ServerInterface.
 type AuthHandlers struct {
-	auth         *application.AuthService
-	billing      *billingapp.BillingService
-	cookieSecure bool
-	logger       *slog.Logger
-	phoneSend    *RateLimiter
-	phoneVerify  *RateLimiter
-	emailSend    *RateLimiter
-	emailVerify  *RateLimiter
+	auth              application.Authenticator
+	phoneChange       application.PhoneChanger
+	profile           application.Profiler
+	logout            application.Logout
+	cookieSecure      bool
+	logger            *slog.Logger
+	emailSend         *RateLimiter
+	emailVerify       *RateLimiter
+	phoneChangeSend   *RateLimiter
+	phoneChangeVerify *RateLimiter
+	meEnricher        MeEnricher
 }
 
 // NewAuthHandlers creates HTTP handlers for the auth API.
 func NewAuthHandlers(
-	auth *application.AuthService,
-	billing *billingapp.BillingService,
+	auth application.Authenticator,
+	phoneChange application.PhoneChanger,
+	profile application.Profiler,
+	logout application.Logout,
 	cookieSecure bool,
 	logger *slog.Logger,
-	phoneSend *RateLimiter,
-	phoneVerify *RateLimiter,
 	emailSend *RateLimiter,
 	emailVerify *RateLimiter,
+	phoneChangeSend *RateLimiter,
+	phoneChangeVerify *RateLimiter,
+	meEnricher MeEnricher,
 ) *AuthHandlers {
 	return &AuthHandlers{
-		auth:         auth,
-		billing:      billing,
-		cookieSecure: cookieSecure,
-		logger:       logger,
-		phoneSend:    phoneSend,
-		phoneVerify:  phoneVerify,
-		emailSend:    emailSend,
-		emailVerify:  emailVerify,
+		auth:              auth,
+		phoneChange:       phoneChange,
+		profile:           profile,
+		logout:            logout,
+		cookieSecure:      cookieSecure,
+		logger:            logger,
+		emailSend:         emailSend,
+		emailVerify:       emailVerify,
+		phoneChangeSend:   phoneChangeSend,
+		phoneChangeVerify: phoneChangeVerify,
+		meEnricher:        meEnricher,
 	}
 }
 
-// SendPhoneCode implements POST /auth/phone/send.
-func (h *AuthHandlers) SendPhoneCode(w http.ResponseWriter, r *http.Request) {
-	var body openapi.SendPhoneCodeRequest
-	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
-		return
-	}
-
-	phone, err := domain.NewPhone(body.Phone)
-	if err != nil {
-		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
-		return
-	}
-
-	if h.phoneSend != nil && !h.phoneSend.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
-		return
-	}
-
-	if err := h.auth.SendCode(r.Context(), phone); err != nil {
-		switch {
-		case errors.Is(err, application.ErrPhoneLoginDeprecated):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusGone, problem(r.Context(), "Gone", detail))
-		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
-		default:
-			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-		}
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
+// sendCodeResponse is the JSON body returned by successful code-send endpoints.
+type sendCodeResponse struct {
+	RetryAfter int `json:"retryAfter"`
 }
 
-// SendEmailCode implements POST /auth/email/send.
-func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
-	var body openapi.SendEmailCodeRequest
+// SendCode implements POST /auth/send.
+func (h *AuthHandlers) SendCode(w http.ResponseWriter, r *http.Request) {
+	var body openapi.SendCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
@@ -126,34 +105,29 @@ func (h *AuthHandlers) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.emailSend != nil && !h.emailSend.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
+	if h.emailSend != nil && !h.emailSend.Allow(email.String()) {
+		writeTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
 
-	if err := h.auth.SendEmailCode(r.Context(), phone, email); err != nil {
+	if err := h.auth.SendCode(r.Context(), phone, email, domain.LoginCodePurposeLogin); err != nil {
 		switch {
 		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
+			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Превышен лимит запросов"))
 		case errors.Is(err, application.ErrEmailDoesNotMatch):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Почта не соответствует номеру телефона"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Некорректные учётные данные")))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	writeJSON(r.Context(), w, http.StatusOK, sendCodeResponse{RetryAfter: retryAfterSeconds})
 }
 
-// VerifyEmailCode implements POST /auth/email/verify.
-func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
-	var body openapi.VerifyEmailCodeRequest
+// VerifyCode implements POST /auth/verify.
+func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
+	var body openapi.VerifyCodeRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
@@ -174,77 +148,24 @@ func (h *AuthHandlers) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.emailVerify != nil && !h.emailVerify.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
+	if h.emailVerify != nil && !h.emailVerify.Allow(email.String()) {
+		writeTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
 
-	raw, user, err := h.auth.VerifyEmailCode(r.Context(), phone, email, body.Code)
+	raw, user, err := h.auth.VerifyCode(r.Context(), phone, email, body.Code)
 	if err != nil {
 		switch {
 		case errors.Is(err, application.ErrUserBlocked),
 			errors.Is(err, domain.ErrTooManyAttempts):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
+			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Превышен лимит запросов"))
 		case errors.Is(err, domain.ErrLoginCodeInvalid),
 			errors.Is(err, application.ErrNotFound):
 			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный телефон, почта или код"))
-		default:
-			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-		}
-		return
-	}
-
-	setSessionCookie(w, raw.Token, raw.Session.ExpiresAt, h.cookieSecure)
-	writeJSON(r.Context(), w, http.StatusOK, meResponse(user))
-}
-
-// VerifyPhoneCode implements POST /auth/phone/verify.
-func (h *AuthHandlers) VerifyPhoneCode(w http.ResponseWriter, r *http.Request) {
-	var body openapi.VerifyPhoneCodeRequest
-	if err := decodeJSONBody(w, r, &body); err != nil {
-		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
-		return
-	}
-
-	phone, err := domain.NewPhone(body.Phone)
-	if err != nil {
-		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
-		return
-	}
-
-	if h.phoneVerify != nil && !h.phoneVerify.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
-		return
-	}
-
-	raw, user, err := h.auth.VerifyCode(r.Context(), phone, body.Code)
-	if err != nil {
-		switch {
-		case errors.Is(err, application.ErrPhoneLoginDeprecated):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusGone, problem(r.Context(), "Gone", detail))
-		case errors.Is(err, application.ErrUserBlocked),
-			errors.Is(err, domain.ErrTooManyAttempts):
-			detail, ok := UserFacingDetail(err)
-			if !ok {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
-		case errors.Is(err, domain.ErrLoginCodeInvalid),
-			errors.Is(err, application.ErrNotFound):
-			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный телефон или код"))
+		case errors.Is(err, application.ErrEmailDoesNotMatch):
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Некорректные учётные данные")))
+		case errors.Is(err, application.ErrEmailAlreadyTaken):
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Этот email уже используется")))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -263,8 +184,13 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.auth.Logout(r.Context(), hashSessionToken(token)); err != nil {
-		h.logger.ErrorContext(r.Context(), "logout failed", slog.String("error", sanitizeError(err)))
+	if err := h.logout.Logout(r.Context(), token); err != nil {
+		if !errors.Is(err, application.ErrNotFound) {
+			h.logger.ErrorContext(r.Context(), "logout failed", slog.String("error", sanitizeError(err)))
+			clearSessionCookie(w, h.cookieSecure)
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
 	}
 
 	clearSessionCookie(w, h.cookieSecure)
@@ -279,8 +205,9 @@ func (h *AuthHandlers) LogoutAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.auth.LogoutAll(r.Context(), userID); err != nil {
+	if err := h.logout.LogoutAll(r.Context(), userID); err != nil {
 		h.logger.ErrorContext(r.Context(), "logout all failed", slog.String("error", sanitizeError(err)))
+		clearSessionCookie(w, h.cookieSecure)
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		return
 	}
@@ -300,7 +227,7 @@ func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
 		var err error
-		user, err = h.auth.Me(r.Context(), userID)
+		user, err = h.profile.Me(r.Context(), userID)
 		if err != nil {
 			if errors.Is(err, application.ErrNotFound) {
 				writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Сессия недействительна"))
@@ -312,16 +239,10 @@ func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := meResponse(user)
-	if h.billing != nil {
-		view, err := h.billing.GetSubscription(r.Context(), userID)
-		if err != nil {
-			if !errors.Is(err, billingapp.ErrSubscriptionNotFound) {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-		} else {
-			s := subscriptionResponse(view)
-			resp.Subscription = &s
+	if h.meEnricher != nil {
+		if err := h.meEnricher(r.Context(), userID, &resp); err != nil {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
 		}
 	}
 
@@ -336,32 +257,27 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type updateMeRequest struct {
-		Name       domain.Optional[string] `json:"name"`
-		Surname    domain.Optional[string] `json:"surname"`
-		Patronymic domain.Optional[string] `json:"patronymic"`
-		Email      domain.Optional[string] `json:"email"`
-	}
-
-	var body updateMeRequest
+	var body openapi.UserUpdateRequest
 	if err := decodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", sanitizeError(err)))
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
-	user, err := h.auth.UpdateUser(r.Context(), userID, application.UpdateUserCommand{
+	cmd := application.UpdateProfileCommand{
+		Email:      body.Email,
 		Name:       body.Name,
 		Surname:    body.Surname,
 		Patronymic: body.Patronymic,
-		Email:      body.Email,
-	})
+	}
+
+	user, err := h.profile.UpdateProfile(r.Context(), userID, cmd)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidEmail):
 			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "Некорректный формат email"))
 		case errors.Is(err, application.ErrEmailAlreadyTaken):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Этот email уже используется"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Этот email уже используется")))
 		case errors.Is(err, application.ErrNotFound):
 			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Сессия недействительна"))
 		default:
@@ -371,16 +287,10 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := meResponse(user)
-	if h.billing != nil {
-		view, err := h.billing.GetSubscription(r.Context(), userID)
-		if err != nil {
-			if !errors.Is(err, billingapp.ErrSubscriptionNotFound) {
-				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-				return
-			}
-		} else {
-			s := subscriptionResponse(view)
-			resp.Subscription = &s
+	if h.meEnricher != nil {
+		if err := h.meEnricher(r.Context(), userID, &resp); err != nil {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
 		}
 	}
 
@@ -409,21 +319,21 @@ func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if h.phoneSend != nil && !h.phoneSend.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
+	if h.phoneChangeSend != nil && !h.phoneChangeSend.Allow(phone.String()) {
+		writeTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
 
-	if err := h.auth.SendPhoneChangeCode(r.Context(), userID, phone); err != nil {
+	if err := h.phoneChange.SendChangeCode(r.Context(), userID, phone); err != nil {
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
-			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Новый номер должен отличаться от текущего"))
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", userFacingDetailOrDefault(r.Context(), err, "Новый номер должен отличаться от текущего")))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Этот номер телефона уже используется"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Этот номер телефона уже используется")))
 		case errors.Is(err, application.ErrUserBlocked):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Слишком много попыток"))
+			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Слишком много попыток"))
 		case errors.Is(err, application.ErrCodeSentTooRecently):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Код отправлен слишком недавно"))
+			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Код отправлен слишком недавно"))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
@@ -461,21 +371,21 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.phoneVerify != nil && !h.phoneVerify.Allow(phone.String()) {
-		writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Превышен лимит запросов"))
+	if h.phoneChangeVerify != nil && !h.phoneChangeVerify.Allow(phone.String()) {
+		writeTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
 
-	user, err := h.auth.ChangePhone(r.Context(), userID, phone, body.Code, hashSessionToken(token))
+	user, err := h.phoneChange.ChangePhone(r.Context(), userID, phone, body.Code, token)
 	if err != nil {
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
-			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", "Новый номер должен отличаться от текущего"))
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid phone", userFacingDetailOrDefault(r.Context(), err, "Новый номер должен отличаться от текущего")))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", "Этот номер телефона уже используется"))
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Этот номер телефона уже используется")))
 		case errors.Is(err, application.ErrUserBlocked),
 			errors.Is(err, domain.ErrTooManyAttempts):
-			writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", "Слишком много попыток"))
+			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Слишком много попыток"))
 		case errors.Is(err, domain.ErrLoginCodeInvalid),
 			errors.Is(err, application.ErrNotFound):
 			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный код"))
@@ -489,6 +399,11 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 }
 
 func meResponse(user domain.User) openapi.MeResponse {
+	var email *string
+	if user.Email != nil {
+		s := user.Email.String()
+		email = &s
+	}
 	return openapi.MeResponse{
 		Id:         user.ID,
 		Phone:      user.Phone.String(),
@@ -496,7 +411,28 @@ func meResponse(user domain.User) openapi.MeResponse {
 		Name:       user.Name,
 		Surname:    user.Surname,
 		Patronymic: user.Patronymic,
-		Email:      user.Email,
+		Email:      email,
+	}
+}
+
+// BillingMeEnricher returns a MeEnricher that adds the current billing
+// subscription to a MeResponse. It keeps the billing-to-OpenAPI mapping in the
+// HTTP layer so the application layer does not depend on openapi types.
+func BillingMeEnricher(billing billingapp.Subscriber) MeEnricher {
+	return func(ctx context.Context, userID uuid.UUID, resp *openapi.MeResponse) error {
+		if billing == nil {
+			return nil
+		}
+		view, err := billing.GetSubscription(ctx, userID)
+		if err != nil {
+			if errors.Is(err, billingapp.ErrSubscriptionNotFound) {
+				return nil
+			}
+			return err
+		}
+		sub := subscriptionResponse(view)
+		resp.Subscription = &sub
+		return nil
 	}
 }
 
@@ -506,4 +442,20 @@ func writeJSON(ctx context.Context, w http.ResponseWriter, status int, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		loggerFromContext(ctx).ErrorContext(ctx, "failed to encode JSON response", slog.String("error", sanitizeError(err)))
 	}
+}
+
+// writeTooManyRequests writes a 429 RFC 7807 problem response with a
+// Retry-After header so clients can back off before retrying.
+func writeTooManyRequests(w http.ResponseWriter, r *http.Request, detail string) {
+	w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds))
+	writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
+}
+
+// userFacingDetailOrDefault returns a user-facing message for err if one is
+// defined, otherwise returns the provided default.
+func userFacingDetailOrDefault(ctx context.Context, err error, defaultDetail string) string {
+	if detail, ok := UserFacingDetail(err); ok {
+		return detail
+	}
+	return defaultDetail
 }

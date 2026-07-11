@@ -2,16 +2,13 @@
 
 import type {JSX, ReactNode} from 'react';
 import {useCallback, useMemo, useState} from 'react';
-import NextLink from 'next/link';
-import {Tooltip} from '@heroui/react';
 import {Button} from '@/shared/ui/button';
 import {Icon} from '@/shared/ui/icon';
-import {Cancel, Filter, HomeAdd} from '@/shared/assets/icons';
-import {ROUTES} from '@/shared/config/routes';
+import {ChevronDown, ChevronUp, Filter} from '@/shared/assets/icons';
 import {propertyTypeOptions} from '@/features/properties/lib/property-types';
 import {statusFilterOptions, type StatusFilterValue,} from '@/features/properties/lib/property-statuses';
 import type {PropertyType} from '@/entities/property/model/types';
-import {FilterPopover} from './FilterPopover';
+import {Select} from '@/shared/ui/select';
 import {FilterDrawer} from './FilterDrawer';
 import {type PropertyFilters, type PropertySort, sortOptions, toggleValue,} from '../lib/filter-types';
 import type {PropertiesViewMode} from '../lib/apply-filters';
@@ -22,7 +19,6 @@ export type PropertiesToolbarProps = {
     readonly sort: PropertySort;
     readonly mode?: PropertiesViewMode;
     readonly onChange: (filters: PropertyFilters, sort: PropertySort) => void;
-    readonly canAdd?: boolean;
 };
 
 type TypeFilterSectionProps = {
@@ -80,10 +76,8 @@ function FilterOption({
 }
 
 function FilterGroup({
-                         title,
                          children,
                      }: {
-    readonly title: string;
     readonly children: ReactNode;
 }): JSX.Element {
     return (
@@ -99,7 +93,7 @@ function TypeFilterSection({
                                layout,
                            }: TypeFilterSectionProps): JSX.Element {
     return (
-        <FilterGroup title="Тип объекта">
+        <FilterGroup>
             {propertyTypeOptions.map((option) => (
                 <FilterOption
                     key={option.value}
@@ -119,7 +113,7 @@ function StatusFilterSection({
                                  layout,
                              }: StatusFilterSectionProps): JSX.Element {
     return (
-        <FilterGroup title="Статус">
+        <FilterGroup>
             {statusFilterOptions.map((option) => (
                 <FilterOption
                     key={option.value}
@@ -139,7 +133,7 @@ function SortSection({
                          layout,
                      }: SortSectionProps): JSX.Element {
     return (
-        <FilterGroup title="Сортировка">
+        <FilterGroup>
             <div className={styles.options} role="radiogroup" aria-label="Сортировка">
                 {sortOptions.map((option) => (
                     <FilterOption
@@ -166,7 +160,6 @@ export function PropertiesToolbar({
                                       sort,
                                       mode = 'active',
                                       onChange,
-                                      canAdd = true,
                                   }: PropertiesToolbarProps): JSX.Element {
     const [draftFilters, setDraftFilters] = useState<PropertyFilters>(filters);
     const [draftSort, setDraftSort] = useState<PropertySort>(sort);
@@ -182,30 +175,6 @@ export function PropertiesToolbar({
         onChange(draftFilters, draftSort);
         setIsDrawerOpen(false);
     }, [draftFilters, draftSort, onChange]);
-
-    const handleDesktopTypeToggle = useCallback(
-        (type: PropertyType) => {
-            onChange({...filters, types: toggleValue(filters.types, type)}, sort);
-        },
-        [filters, sort, onChange],
-    );
-
-    const handleDesktopStatusToggle = useCallback(
-        (status: StatusFilterValue) => {
-            onChange(
-                {...filters, statuses: toggleValue(filters.statuses, status)},
-                sort,
-            );
-        },
-        [filters, sort, onChange],
-    );
-
-    const handleDesktopSortSelect = useCallback(
-        (nextSort: PropertySort) => {
-            onChange(filters, nextSort);
-        },
-        [filters, onChange],
-    );
 
     const handleDraftTypeToggle = useCallback((type: PropertyType) => {
         setDraftFilters((prev) => ({
@@ -273,35 +242,73 @@ export function PropertiesToolbar({
         <div className={styles.root}>
             <div className={styles.row}>
                 <div className={styles.desktopOnly}>
-                    <FilterPopover
+                    <Select
                         label="Тип объекта"
-                        activeCount={filters.types.length}
-                    >
-                        <TypeFilterSection
-                            selected={filters.types}
-                            onToggle={handleDesktopTypeToggle}
-                            layout="popover"
-                        />
-                    </FilterPopover>
+                        multiple
+                        value={filters.types}
+                        options={propertyTypeOptions}
+                        onChange={(nextTypes) => onChange({...filters, types: nextTypes as PropertyType[]}, sort)}
+                        renderTrigger={({isOpen, onClick}) => (
+                            <Button
+                                variant={isOpen ? 'primary' : 'secondary'}
+                                size="medium"
+                                rightIcon={
+                                    <Icon size="s">
+                                        {isOpen ? <ChevronUp/> : <ChevronDown/>}
+                                    </Icon>
+                                }
+                                onClick={onClick}
+                            >
+                                Тип объекта
+                            </Button>
+                        )}
+                    />
                     {mode !== 'archived' && (
-                        <FilterPopover
+                        <Select
                             label="Статус"
-                            activeCount={filters.statuses.length}
-                        >
-                            <StatusFilterSection
-                                selected={filters.statuses}
-                                onToggle={handleDesktopStatusToggle}
-                                layout="popover"
-                            />
-                        </FilterPopover>
-                    )}
-                    <FilterPopover label="Сортировка" activeCount={0}>
-                        <SortSection
-                            selected={sort}
-                            onSelect={handleDesktopSortSelect}
-                            layout="popover"
+                            multiple
+                            value={filters.statuses}
+                            options={statusFilterOptions}
+                            onChange={(nextStatuses) => onChange({
+                                ...filters,
+                                statuses: nextStatuses as StatusFilterValue[]
+                            }, sort)}
+                            renderTrigger={({isOpen, onClick}) => (
+                                <Button
+                                    variant={isOpen ? 'primary' : 'secondary'}
+                                    size="medium"
+                                    rightIcon={
+                                        <Icon size="s">
+                                            {isOpen ? <ChevronUp/> : <ChevronDown/>}
+                                        </Icon>
+                                    }
+                                    onClick={onClick}
+                                >
+                                    Статус
+                                </Button>
+                            )}
                         />
-                    </FilterPopover>
+                    )}
+                    <Select
+                        label="Сортировка"
+                        value={sort}
+                        options={sortOptions}
+                        onChange={(nextSort) => onChange(filters, nextSort as PropertySort)}
+                        renderTrigger={({isOpen, onClick}) => (
+                            <Button
+                                variant={isOpen ? 'primary' : 'secondary'}
+                                size="medium"
+                                rightIcon={
+                                    <Icon size="s">
+                                        {isOpen ? <ChevronUp/> : <ChevronDown/>}
+                                    </Icon>
+                                }
+                                onClick={onClick}
+                            >
+                                Сортировка
+                            </Button>
+                        )}
+                    />
                 </div>
 
                 <div className={styles.mobileOnly}>
@@ -342,36 +349,6 @@ export function PropertiesToolbar({
                         />
                     </FilterDrawer>
                 </div>
-
-                {canAdd ? (
-                    <NextLink
-                        href={ROUTES.propertyNew}
-                        className={styles.addButton}
-                        aria-label="Добавить объект"
-                    >
-                        <Icon size="m">
-                            <HomeAdd/>
-                        </Icon>
-                    </NextLink>
-                ) : (
-                    <Tooltip>
-                        <Tooltip.Trigger>
-                            <span
-                                className={styles.addButtonDisabled}
-                                role="button"
-                                aria-label="Добавить объект (достигнут лимит)"
-                                aria-disabled="true"
-                            >
-                                <Icon size="s">
-                                    <HomeAdd/>
-                                </Icon>
-                            </span>
-                        </Tooltip.Trigger>
-                        <Tooltip.Content>
-                            Достигнут лимит объектов по тарифу
-                        </Tooltip.Content>
-                    </Tooltip>
-                )}
             </div>
 
             {hasSelectedFilters && (

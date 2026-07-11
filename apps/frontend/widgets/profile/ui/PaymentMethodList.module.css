@@ -4,6 +4,11 @@
   gap: 24px;
 }
 
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .list {
   display: flex;
   flex-direction: column;

@@ -98,7 +98,7 @@ func NewOperationService(
 
 // CreateOperation creates a manual operation for the given owner and property.
 func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUID, cmd CreateOperationCommand) (domain.Operation, error) {
-	if err := validateProperty(ctx, s.properties, ownerID, cmd.PropertyID); err != nil {
+	if err := validatePropertyNotArchived(ctx, s.properties, ownerID, cmd.PropertyID); err != nil {
 		return domain.Operation{}, err
 	}
 
@@ -204,7 +204,7 @@ type FinanceReport struct {
 	ByMonth    []FinanceReportMonthRow
 }
 
-func (s *OperationService) GetFinanceReport(ctx context.Context, ownerID uuid.UUID, from, to time.Time) (FinanceReport, error) {
+func (s *OperationService) GetFinanceReport(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) (FinanceReport, error) {
 	totals, err := s.operations.GetFinanceReportTotals(ctx, ownerID, from, to)
 	if err != nil {
 		return FinanceReport{}, fmt.Errorf("report totals: %w", err)
@@ -283,6 +283,10 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
 	}
 
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), ownerID, op.PropertyID); err != nil {
+		return domain.Operation{}, err
+	}
+
 	originalOffset := op.ReminderOffsetDays
 	originalOperationDate := op.OperationDate
 
@@ -343,8 +347,14 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 
 	op.IsException = true
 	now := s.clock.Now()
-	if cmd.OperationDate != nil && op.Status == domain.OperationStatusOverdue && !op.OperationDate.Before(timeutil.Date(now)) {
-		op.Status = domain.OperationStatusPending
+	if cmd.OperationDate != nil {
+		today := timeutil.Date(now)
+		switch {
+		case op.Status == domain.OperationStatusOverdue && !op.OperationDate.Before(today):
+			op.Status = domain.OperationStatusPending
+		case op.Status == domain.OperationStatusPending && op.OperationDate.Before(today):
+			op.Status = domain.OperationStatusOverdue
+		}
 	}
 	op.UpdatedAt = now
 
@@ -404,6 +414,10 @@ func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOp
 		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
 	}
 
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), cmd.OwnerID, op.PropertyID); err != nil {
+		return domain.Operation{}, err
+	}
+
 	if !op.Status.CanComplete() {
 		return domain.Operation{}, fmt.Errorf("%w: operation is already completed", ErrOperationAlreadyCompleted)
 	}
@@ -461,6 +475,10 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 			return domain.Operation{}, ErrNotFound
 		}
 		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
+	}
+
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), cmd.OwnerID, op.PropertyID); err != nil {
+		return domain.Operation{}, err
 	}
 
 	if !op.Status.IsCompleted() {
@@ -601,6 +619,19 @@ func (s *OperationService) DeleteOperation(ctx context.Context, ownerID, id uuid
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txOps := s.operations.WithTx(tx)
+
+	op, err := txOps.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("get operation: %w", err)
+	}
+
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), ownerID, op.PropertyID); err != nil {
+		return err
+	}
+
 	if err := txOps.SoftDeleteOperation(ctx, id, ownerID); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound

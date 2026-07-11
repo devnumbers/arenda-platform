@@ -25,14 +25,6 @@
   gap: 24px;
 }
 
-.loading {
-  padding: 24px;
-  text-align: center;
-  font-size: var(--font-size-text-m);
-  line-height: var(--line-height-text-m);
-  color: var(--color-text-muted);
-}
-
 .errorCard {
   display: flex;
   flex-direction: column;

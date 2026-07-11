@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -72,6 +73,61 @@ func TestClassifyTariffChange(t *testing.T) {
 			got := ClassifyTariffChange(tt.current, tt.next)
 			if got != tt.want {
 				t.Errorf("ClassifyTariffChange() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseTariffName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		input   string
+		want    TariffName
+		wantErr error
+	}{
+		{"basic", "basic", TariffBasic, nil},
+		{"pro", "pro", TariffPro, nil},
+		{"business", "business", TariffBusiness, nil},
+		{"empty", "", "", ErrInvalidTariff},
+		{"invalid", "premium", "", ErrInvalidTariff},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ParseTariffName(tt.input)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("ParseTariffName() error = %v, want %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("ParseTariffName() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseSubscriptionPeriod(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		input   string
+		want    SubscriptionPeriod
+		wantErr error
+	}{
+		{"month", "month", PeriodMonth, nil},
+		{"year", "year", PeriodYear, nil},
+		{"empty", "", "", ErrInvalidPeriod},
+		{"invalid", "weekly", "", ErrInvalidPeriod},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ParseSubscriptionPeriod(tt.input)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("ParseSubscriptionPeriod() error = %v, want %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("ParseSubscriptionPeriod() = %v, want %v", got, tt.want)
 			}
 		})
 	}

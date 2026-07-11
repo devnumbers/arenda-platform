@@ -25,9 +25,6 @@
 }
 
 @media (max-width: 767px) {
-  .root {
-    min-height: calc(100vh - 84px - 96px);
-  }
 
   .fields {
     flex: 1;

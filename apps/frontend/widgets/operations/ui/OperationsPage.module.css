@@ -5,6 +5,24 @@
     padding: 0 0 96px;
 }
 
+.addButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+    background: var(--color-secondary-bg);
+    color: var(--color-text);
+    text-decoration: none;
+    transition: background-color 0.15s ease;
+}
+
+.addButton:hover {
+    background: var(--color-secondary-hover);
+}
+
 .tabs {
     display: flex;
     align-items: center;

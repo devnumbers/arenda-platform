@@ -33,6 +33,11 @@ export function mapLeaseResponse(
     rentKopecks: dto.rent_amount_kopecks,
     startDate: dto.start_date,
     endDate: dto.end_date ?? undefined,
+    paymentDay: dto.payment_day,
+    currentPeriodOverdue: dto.current_period_overdue,
+    hasOverdue: dto.has_overdue,
+    overdueSince: dto.overdue_since ?? undefined,
+    nextPaymentDate: dto.next_payment_date ?? undefined,
     status: leaseStatusMap[dto.status],
   };
 }

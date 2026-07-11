@@ -10,29 +10,32 @@ The MVP needs a paid subscription model with three public tariffs (basic, pro,
 business). Owners must be able to upgrade, downgrade, enable/disable auto-renew,
 and manage payment methods. When a paid period ends the system must either renew
 automatically or downgrade to the free basic tariff. If payment fails, the owner
-needs a short grace period to fix the payment method before data mutations are
-blocked.
+needs a short grace period to fix the payment method before data mutations become
+read-only.
 
 Key questions:
 
 - When does an upgrade vs downgrade take effect and how is it priced?
 - What happens when auto-renewal fails?
-- How do we protect data integrity when a subscription is blocked or cancelled?
+- How do we protect data integrity when a subscription becomes read-only?
 - How are property limits enforced when a user downgrades?
 
 ## Decision
 
 ### 1. Subscription status model
 
-A subscription has one of four statuses:
+A subscription has one of three statuses:
 
 - `active` — paid (or free basic) and fully usable.
 - `grace` — renewal charge failed; data mutations are still allowed so the owner
   can fix the payment method.
-- `blocked` — grace period expired without payment; data mutations are blocked.
 - `cancelled` — the owner explicitly turned off auto-renew or the subscription
   was otherwise terminated; data mutations are allowed until the end of the
-  already paid period and blocked afterwards.
+  already paid period and read-only afterwards.
+
+A `blocked` status (grace period expired without payment) was part of the
+original design but is never produced by code; it has been removed from the
+model.
 
 Status transitions are managed by the billing application service and the
 scheduled billing worker.
@@ -48,15 +51,26 @@ Upgrading to a more expensive tariff:
 
 ### 3. Downgrades
 
-Downgrading to a cheaper tariff:
+Downgrading to a cheaper tariff is always deferred and never charged at the
+moment it is scheduled:
 
-- Does not require immediate payment.
-- Is scheduled to take effect at the end of the already paid period.
-- Enables auto-renew automatically so the scheduled change is applied by the
-  worker.
-- When the downgrade is applied, if the number of active properties exceeds the
-  new tariff limit, the system archives the excess properties, skipping
+- `ScheduleDowngrade` sets the `pending_*` fields (`pending_tariff_id`,
+  `pending_change_at`, `pending_period`) AND `auto_renew_enabled = true`.
+  Enabling auto-renew is what lets the worker apply the change and keeps the
+  new tariff renewing on the normal cycle afterwards.
+- The billing worker applies the downgrade when `pending_change_at <= now`
+  (`pending_change_at` equals the current `valid_until`, i.e. the end of the
+  already paid period).
+- Application performs **no charge**: `tariff_id` switches to the new tariff,
+  `valid_until` is extended by the new tariff's chosen period from `now`,
+  `auto_renew_enabled = true`, `status = active`, and the `pending_*` fields are
+  cleared.
+- If the number of active properties exceeds the new tariff's
+  `active_property_limit`, the system archives the excess properties, skipping
   properties with open leases.
+- There is **no paid scheduled change**: downgrades are never charged, neither
+  at schedule time nor at apply time. Subsequent renewals charge the NEW tariff
+  on the normal renewal cycle.
 
 ### 4. Renewal, grace and forced downgrade
 
@@ -75,7 +89,7 @@ the same forced-downgrade logic applies.
 
 ### 5. Readonly mode and recovery paths
 
-When a subscription cannot mutate data (`blocked`, or `cancelled` with an expired
+When a subscription cannot mutate data (grace after the grace period, or `cancelled` with an expired
 `validUntil`), HTTP middleware returns `403 SubscriptionBlocked` for mutating
 requests. The following
 paths are exempt so the owner can recover:
@@ -98,7 +112,7 @@ paths are exempt so the owner can recover:
 
 ### 7. Pricing and fake provider
 
-- All prices are stored and exposed in kopecks.
+- All prices are stored and exposed in kopecks (`BIGINT`).
 - Local development uses the fake payment provider (`PAYMENT_PROVIDER=fake`).
 - Fake payments are confirmed via
   `POST /internal/fake-subscription-payment/{id}/confirm`, which is only
@@ -113,14 +127,16 @@ paths are exempt so the owner can recover:
   without manual intervention.
 - (+) Fake provider enables full end-to-end testing and local development
   without real payments.
-- (-) Downgrade archiving is not atomic with the tariff change; concurrent
-  property edits could temporarily exceed the limit.
-- (-) The billing worker has no single-flight protection; overlapping runs could
-  process the same subscription twice in rare cases.
+- (~) Downgrade archiving commits in the same transaction as the tariff change; only a concurrent property create or restore that slips in before the subscription row lock can briefly exceed the limit.
+- (+) The billing worker runs each tick under `pg_try_advisory_lock(0xB111)`
+  (see `apps/backend/internal/platform/scheduler/billing_worker.go`), so all
+  four phases — scheduled changes, renewals, pending upgrades and expired
+  grace — execute on a single leader and never overlap.
 
 ## Future work
 
-- Add idempotency keys or distributed locking for the billing worker.
+- Optionally add idempotency keys for renewal charges (distributed locking is
+  already provided by the advisory lock above).
 - Implement a "cancel now" endpoint to move a subscription to `cancelled`
   immediately.
 - Add retry logic and owner notifications for failed renewal charges.

@@ -184,6 +184,52 @@ func (r *fakeOperationRepo) GetPropertyOperationsSummary(_ context.Context, owne
 	}, nil
 }
 
+func (r *fakeOperationRepo) ListOverdueRentOperations(_ context.Context, ownerID uuid.UUID) ([]OverdueRentOperation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []OverdueRentOperation
+	for _, op := range r.ops {
+		if op.OwnerID != ownerID ||
+			op.DeletedAt != nil ||
+			op.LeaseID == uuid.Nil ||
+			op.Status != domain.OperationStatusOverdue ||
+			op.Type != domain.OperationTypeIncome ||
+			op.Category != domain.OperationCategoryRent {
+			continue
+		}
+		out = append(out, OverdueRentOperation{LeaseID: op.LeaseID, OperationDate: timeutil.Date(op.OperationDate)})
+	}
+	return out, nil
+}
+
+func (r *fakeOperationRepo) ListNextRentPayments(_ context.Context, ownerID uuid.UUID, asOf time.Time) ([]NextRentPayment, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	minByLease := make(map[uuid.UUID]time.Time)
+	for _, op := range r.ops {
+		if op.OwnerID != ownerID ||
+			op.DeletedAt != nil ||
+			op.LeaseID == uuid.Nil ||
+			op.Status != domain.OperationStatusPending ||
+			op.Type != domain.OperationTypeIncome ||
+			op.Category != domain.OperationCategoryRent {
+			continue
+		}
+		d := timeutil.Date(op.OperationDate)
+		if d.Before(asOf) {
+			continue
+		}
+		if cur, ok := minByLease[op.LeaseID]; !ok || d.Before(cur) {
+			minByLease[op.LeaseID] = d
+		}
+	}
+	out := make([]NextRentPayment, 0, len(minByLease))
+	for leaseID, d := range minByLease {
+		out = append(out, NextRentPayment{LeaseID: leaseID, NextPaymentDate: d})
+	}
+	return out, nil
+}
+
 func (r *fakeOperationRepo) GetByIDAndOwner(_ context.Context, id, _ uuid.UUID) (domain.Operation, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -378,19 +424,19 @@ func (r *fakeOperationRepo) MarkOverdue(_ context.Context, ownerID, id uuid.UUID
 	return domain.Operation{}, false, ErrNotFound
 }
 
-func (r *fakeOperationRepo) GetFinanceReportTotals(_ context.Context, _ uuid.UUID, _, _ time.Time) (FinanceReportTotals, error) {
+func (r *fakeOperationRepo) GetFinanceReportTotals(_ context.Context, _ uuid.UUID, _, _ *time.Time) (FinanceReportTotals, error) {
 	return FinanceReportTotals{}, nil
 }
 
-func (r *fakeOperationRepo) GetFinanceReportByProperty(_ context.Context, _ uuid.UUID, _, _ time.Time) ([]FinanceReportPropertyRow, error) {
+func (r *fakeOperationRepo) GetFinanceReportByProperty(_ context.Context, _ uuid.UUID, _, _ *time.Time) ([]FinanceReportPropertyRow, error) {
 	return nil, nil
 }
 
-func (r *fakeOperationRepo) GetFinanceReportByCategory(_ context.Context, _ uuid.UUID, _, _ time.Time) ([]FinanceReportCategoryRow, error) {
+func (r *fakeOperationRepo) GetFinanceReportByCategory(_ context.Context, _ uuid.UUID, _, _ *time.Time) ([]FinanceReportCategoryRow, error) {
 	return nil, nil
 }
 
-func (r *fakeOperationRepo) GetFinanceReportByMonth(_ context.Context, _ uuid.UUID, _, _ time.Time) ([]FinanceReportMonthRow, error) {
+func (r *fakeOperationRepo) GetFinanceReportByMonth(_ context.Context, _ uuid.UUID, _, _ *time.Time) ([]FinanceReportMonthRow, error) {
 	return nil, nil
 }
 

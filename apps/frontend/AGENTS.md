@@ -11,15 +11,26 @@ Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.
 - Next.js `16.2.9`, React `19.2.4`, TypeScript `^5`.
 - React Compiler enabled in `next.config.ts`.
 - Official Next.js docs (`https://nextjs.org/docs`) take precedence over training data.
-- For non-obvious third-party behavior, use Context7 for current docs.
+- For non-obvious third-party behavior, use `context7` for current docs.
 
 ## Required Skills
 
-- For all frontend work, invoke `$next-best-practices` and `$vercel-react-best-practices`.
-- For component composition and design patterns, invoke `$vercel-composition-patterns`.
-- For view transitions, invoke `$vercel-react-view-transitions`.
-- For TypeScript questions and type design, invoke `$typescript`.
-- For current library docs before relying on non-obvious APIs, use Context7 (`mcp:context7`).
+Invoke skills through the Kimi `Skill` tool using the exact skill name.
+
+- For all frontend work, invoke `next-best-practices` and `vercel-react-best-practices`.
+- For component composition and design patterns, invoke `vercel-composition-patterns`.
+- For view transitions, invoke `vercel-react-view-transitions`.
+- For TypeScript questions and type design, invoke `typescript`.
+- For current library docs before relying on non-obvious APIs, use `context7`.
+
+## MCP Servers
+
+- `playwright` — use for browser automation and UI verification when available. Check desktop and mobile layouts, visible interaction states, loading/error states, and that text does not overlap or overflow. If `/mcp` shows `playwright` is unavailable, fall back to manual inspection, build logs, and native browser tools.
+- `lean-ctx` — use for broad exploration, large generated files, repeated reads, and noisy build or lint output. Before editing exact TypeScript, component, route, or config code, read the target source in raw/full form.
+- `context7` — use for current official docs on third-party libraries when needed.
+- If a TypeScript LSP or MCP server is added later, use it for semantic navigation, references, diagnostics, and impact checks. Do not use it as a replacement for `npm run lint`, `npm run build`, or direct code review.
+
+Before adding components, hooks, helpers, entity types, feature state, or API wrappers, search existing FSD slices and call sites with `Grep`/`lean-ctx` to avoid duplicate patterns.
 
 ## TypeScript & Linting
 
@@ -46,6 +57,7 @@ Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.
 - Browser-side state only when interactivity requires it.
 - Map backend DTOs to entity models at the API boundary; do not leak generated DTOs into widgets or features.
 - Reuse backend types from OpenAPI where possible; keep frontend entity types explicit and minimal.
+- Do not edit generated API client files by hand; update the backend OpenAPI contract and regenerate the frontend client.
 
 ## Components & State
 
@@ -55,17 +67,15 @@ Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.
 - Do not use global state for local UI state. Use URL state for shareable page state.
 - Prefer explicit event handlers and reducers over implicit side effects.
 
-## Testing & Quality Gates
+## Quality Gates
 
-- Add tests for features and entities that contain business logic.
+- Do not write new tests unless the user explicitly asks for them.
 - Run before claiming frontend work complete:
 
 ```bash
 cd apps/frontend && npm run lint
 cd apps/frontend && npm run build
 ```
-
-- Keep tests deterministic; mock network and browser APIs at `shared/api` boundaries.
 
 ## Commands
 

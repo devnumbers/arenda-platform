@@ -1,1 +1,1 @@
-export { LeaseCreateWizard, LeaseDetailPage } from './ui';
+export { LeaseCreateWizard, LeaseDetailPage, LeaseEditForm } from './ui';

@@ -36,7 +36,7 @@
 .text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
   max-width: 72px;
 }
 
@@ -53,8 +53,4 @@
   line-height: var(--line-height-text-s);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-}
-
-.subtitle {
-  color: var(--color-text-muted);
 }

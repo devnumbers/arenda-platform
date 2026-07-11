@@ -1,10 +1,29 @@
 'use client';
 
-import type { JSX } from 'react';
+import { type JSX, useEffect, useState } from 'react';
 import { Toast, Spinner, type ToastContentValue } from '@heroui/react';
 import type { QueuedToast } from 'react-aria-components';
 import clsx from 'clsx';
 import styles from './ToastProvider.module.css';
+
+const MOBILE_MEDIA_QUERY = '(max-width: 767px)';
+
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mql = window.matchMedia(MOBILE_MEDIA_QUERY);
+    const update = (matches: boolean) => setIsMobile(matches);
+
+    update(mql.matches);
+
+    const onChange = (event: MediaQueryListEvent) => update(event.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+
+  return isMobile;
+}
 
 function renderToast({ toast }: { toast: QueuedToast<ToastContentValue> }): JSX.Element {
   const { actionProps, description, indicator, isLoading, title, variant } = toast.content ?? {};
@@ -40,9 +59,11 @@ function renderToast({ toast }: { toast: QueuedToast<ToastContentValue> }): JSX.
 }
 
 export function ToastProvider(): JSX.Element {
+  const isMobile = useIsMobile();
+
   return (
     <Toast.Provider
-      placement="bottom end"
+      placement={isMobile ? 'top' : 'bottom end'}
       maxVisibleToasts={4}
       className={styles.region}
     >

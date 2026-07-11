@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -32,12 +33,12 @@ func (r *SubscriptionPaymentRepository) q() *postgres.Queries {
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
-func (r *SubscriptionPaymentRepository) WithTx(tx transaction.Tx) application.SubscriptionPaymentRepository {
+func (r *SubscriptionPaymentRepository) WithTx(tx transaction.Tx) (application.SubscriptionPaymentRepository, error) {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		panic(fmt.Sprintf("billing.SubscriptionPaymentRepository.WithTx: %T is not a postgres.DBTX", tx))
+		return nil, fmt.Errorf("billing.SubscriptionPaymentRepository.WithTx: %T is not a postgres.DBTX", tx)
 	}
-	return NewSubscriptionPaymentRepository(dbtx)
+	return NewSubscriptionPaymentRepository(dbtx), nil
 }
 
 // Create inserts a new subscription payment.
@@ -87,6 +88,7 @@ func (r *SubscriptionPaymentRepository) GetByIDAdmin(ctx context.Context, id uui
 		PaymentUrl:            row.PaymentUrl,
 		Status:                row.Status,
 		RefundedAmountKopecks: row.RefundedAmountKopecks,
+		ChargeAttempts:        row.ChargeAttempts,
 		ErrorCode:             row.ErrorCode,
 		CreatedAt:             row.CreatedAt,
 		UpdatedAt:             row.UpdatedAt,
@@ -154,6 +156,22 @@ func (r *SubscriptionPaymentRepository) ListPendingPayments(ctx context.Context,
 	return mapSubscriptionPayments(rows), nil
 }
 
+// ListStaleRefundingPayments returns refunding subscription payments whose
+// refund reservation was taken before the provided cutoff, ordered by the
+// reservation time ascending, limited to the given number of rows. It is used
+// by the reconciliation worker to find refunds that were neither finalized nor
+// reverted and need to be resolved with the provider.
+func (r *SubscriptionPaymentRepository) ListStaleRefundingPayments(ctx context.Context, updatedBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error) {
+	rows, err := r.q().ListStaleRefundingPayments(ctx, postgres.ListStaleRefundingPaymentsParams{
+		UpdatedAt: pgtype.Timestamptz{Time: updatedBefore.UTC(), Valid: true},
+		Limit:     limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list stale refunding payments: %w", err)
+	}
+	return mapSubscriptionPayments(rows), nil
+}
+
 // ListAll returns all subscription payments for admin view.
 func (r *SubscriptionPaymentRepository) ListAll(ctx context.Context, status string, userID uuid.UUID, limit, offset int) ([]application.SubscriptionPaymentWithUser, int64, error) {
 	pgUserID := pgtype.UUID{Bytes: userID, Valid: userID != uuid.Nil}
@@ -184,6 +202,7 @@ func (r *SubscriptionPaymentRepository) ListAll(ctx context.Context, status stri
 			PaymentUrl:            row.PaymentUrl,
 			Status:                row.Status,
 			RefundedAmountKopecks: row.RefundedAmountKopecks,
+			ChargeAttempts:        row.ChargeAttempts,
 			ErrorCode:             row.ErrorCode,
 			CreatedAt:             row.CreatedAt,
 			UpdatedAt:             row.UpdatedAt,
@@ -231,8 +250,8 @@ func (r *SubscriptionPaymentRepository) MarkSucceeded(ctx context.Context, id uu
 	}
 
 	if _, err := r.q().MarkSubscriptionPaymentSucceeded(ctx, postgres.MarkSubscriptionPaymentSucceededParams{
-		ID:        pgtype.UUID{Bytes: id, Valid: true},
-		UpdatedAt: pgtype.Timestamptz{Time: payment.UpdatedAt, Valid: true},
+		ID:          pgtype.UUID{Bytes: id, Valid: true},
+		SucceededAt: pgconv.TimePtrToPgtype(payment.SucceededAt),
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrInvalidPaymentStatus
@@ -259,8 +278,7 @@ func (r *SubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.
 
 	if _, err := r.q().MarkSubscriptionPaymentFailed(ctx, postgres.MarkSubscriptionPaymentFailedParams{
 		ID:        pgtype.UUID{Bytes: id, Valid: true},
-		ErrorCode: textPtr(errorCode),
-		UpdatedAt: pgtype.Timestamptz{Time: payment.UpdatedAt, Valid: true},
+		ErrorCode: pgconv.StringPtrToPgtype(errorCode),
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrInvalidPaymentStatus
@@ -270,9 +288,10 @@ func (r *SubscriptionPaymentRepository) MarkFailed(ctx context.Context, id uuid.
 	return nil
 }
 
-// MarkRefunded transitions a succeeded or pending subscription payment to refunded or partial_refunded
-// and records the refunded amount.
-func (r *SubscriptionPaymentRepository) MarkRefunded(ctx context.Context, id uuid.UUID, status domain.PaymentStatus, amountKopecks int64, now time.Time) error {
+// MarkRefunded transitions a succeeded, pending, or refunding subscription payment
+// to refunded, recording the full payment amount as refunded. Partial refunds are
+// no longer initiated by the system.
+func (r *SubscriptionPaymentRepository) MarkRefunded(ctx context.Context, id uuid.UUID, now time.Time) error {
 	row, err := r.q().GetSubscriptionPaymentByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -282,20 +301,109 @@ func (r *SubscriptionPaymentRepository) MarkRefunded(ctx context.Context, id uui
 	}
 
 	payment := mapSubscriptionPayment(row)
-	if err := payment.MarkRefunded(amountKopecks, now); err != nil {
+	if err := payment.MarkRefunded(now); err != nil {
 		return err
 	}
 
 	if _, err := r.q().MarkSubscriptionPaymentRefunded(ctx, postgres.MarkSubscriptionPaymentRefundedParams{
 		ID:                    pgtype.UUID{Bytes: id, Valid: true},
 		Status:                string(payment.Status),
-		RefundedAmountKopecks: int64Ptr(payment.RefundedAmountKopecks),
-		UpdatedAt:             pgtype.Timestamptz{Time: payment.UpdatedAt, Valid: true},
+		RefundedAmountKopecks: pgconv.Int8PtrToPgtype(payment.RefundedAmountKopecks),
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrInvalidPaymentStatus
 		}
 		return fmt.Errorf("mark subscription payment refunded: %w", err)
+	}
+	return nil
+}
+
+// MarkReconciledSucceeded transitions a failed subscription payment to succeeded
+// after an explicit provider-side status check.
+func (r *SubscriptionPaymentRepository) MarkReconciledSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error {
+	row, err := r.q().GetSubscriptionPaymentByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.ErrNotFound
+		}
+		return fmt.Errorf("get subscription payment: %w", err)
+	}
+
+	payment := mapSubscriptionPayment(row)
+	if err := payment.ReconcileToSucceeded(now); err != nil {
+		return err
+	}
+
+	if _, err := r.q().MarkSubscriptionPaymentReconciledSucceeded(ctx, postgres.MarkSubscriptionPaymentReconciledSucceededParams{
+		ID:          pgtype.UUID{Bytes: id, Valid: true},
+		SucceededAt: pgconv.TimePtrToPgtype(payment.SucceededAt),
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrInvalidPaymentStatus
+		}
+		return fmt.Errorf("mark subscription payment reconciled succeeded: %w", err)
+	}
+	return nil
+}
+
+// MarkReconciledRefunded transitions a failed subscription payment to refunded
+// after an explicit provider-side status check.
+func (r *SubscriptionPaymentRepository) MarkReconciledRefunded(ctx context.Context, id uuid.UUID, now time.Time) error {
+	row, err := r.q().GetSubscriptionPaymentByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.ErrNotFound
+		}
+		return fmt.Errorf("get subscription payment: %w", err)
+	}
+
+	payment := mapSubscriptionPayment(row)
+	if err := payment.ReconcileToRefunded(now); err != nil {
+		return err
+	}
+
+	if _, err := r.q().MarkSubscriptionPaymentReconciledRefunded(ctx, postgres.MarkSubscriptionPaymentReconciledRefundedParams{
+		ID:                    pgtype.UUID{Bytes: id, Valid: true},
+		RefundedAmountKopecks: pgconv.Int8PtrToPgtype(payment.RefundedAmountKopecks),
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrInvalidPaymentStatus
+		}
+		return fmt.Errorf("mark subscription payment reconciled refunded: %w", err)
+	}
+	return nil
+}
+
+// BeginRefund atomically reserves a succeeded or pending subscription payment for
+// an in-flight refund by moving it to the refunding status. It returns
+// domain.ErrInvalidPaymentStatus when the payment is not in a refundable state,
+// which is what rejects concurrent refund attempts. updated_at is maintained by
+// the table trigger, so the now argument is not written directly.
+func (r *SubscriptionPaymentRepository) BeginRefund(ctx context.Context, id uuid.UUID, _ time.Time) error {
+	tag, err := r.q().BeginSubscriptionPaymentRefund(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		return fmt.Errorf("begin subscription payment refund: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrInvalidPaymentStatus
+	}
+	return nil
+}
+
+// RevertRefund rolls back an in-flight refund reservation, restoring the payment
+// to its previous status. It returns domain.ErrInvalidPaymentStatus when the
+// payment is no longer in the refunding state. updated_at is maintained by the
+// table trigger, so the now argument is not written directly.
+func (r *SubscriptionPaymentRepository) RevertRefund(ctx context.Context, id uuid.UUID, prev domain.PaymentStatus, _ time.Time) error {
+	tag, err := r.q().RevertSubscriptionPaymentRefund(ctx, postgres.RevertSubscriptionPaymentRefundParams{
+		ID:     pgtype.UUID{Bytes: id, Valid: true},
+		Status: string(prev),
+	})
+	if err != nil {
+		return fmt.Errorf("revert subscription payment refund: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrInvalidPaymentStatus
 	}
 	return nil
 }
@@ -364,19 +472,32 @@ func (r *SubscriptionPaymentRepository) UpdatePaymentMethodID(ctx context.Contex
 	return mapSubscriptionPayment(row), nil
 }
 
+// IncrementChargeAttempts atomically increments the renewal charge attempt
+// counter of a subscription payment and returns the new value.
+func (r *SubscriptionPaymentRepository) IncrementChargeAttempts(ctx context.Context, id uuid.UUID) (int, error) {
+	attempts, err := r.q().IncrementSubscriptionPaymentChargeAttempts(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, application.ErrNotFound
+		}
+		return 0, fmt.Errorf("increment subscription payment charge attempts: %w", err)
+	}
+	return int(attempts), nil
+}
+
 func mapCreateSubscriptionPaymentParams(payment domain.SubscriptionPayment) postgres.CreateSubscriptionPaymentParams {
 	return postgres.CreateSubscriptionPaymentParams{
 		UserID:            pgtype.UUID{Bytes: payment.UserID, Valid: true},
 		SubscriptionID:    pgtype.UUID{Bytes: payment.SubscriptionID, Valid: true},
 		TariffID:          pgtype.UUID{Bytes: payment.TariffID, Valid: true},
-		PaymentMethodID:   uuidPtr(payment.PaymentMethodID),
+		PaymentMethodID:   pgconv.UUIDToPgtypePtr(payment.PaymentMethodID),
 		Period:            string(payment.Period),
 		AmountKopecks:     payment.AmountKopecks,
 		Provider:          string(payment.Provider),
-		ProviderPaymentID: textPtr(payment.ProviderPaymentID),
-		PaymentUrl:        textPtr(payment.PaymentURL),
+		ProviderPaymentID: pgconv.StringPtrToPgtype(payment.ProviderPaymentID),
+		PaymentUrl:        pgconv.StringPtrToPgtype(payment.PaymentURL),
 		Status:            string(payment.Status),
-		ErrorCode:         textPtr(payment.ErrorCode),
+		ErrorCode:         pgconv.StringPtrToPgtype(payment.ErrorCode),
 	}
 }
 
@@ -386,15 +507,16 @@ func mapSubscriptionPayment(row postgres.SubscriptionPayment) domain.Subscriptio
 		UserID:                uuid.UUID(row.UserID.Bytes),
 		SubscriptionID:        uuid.UUID(row.SubscriptionID.Bytes),
 		TariffID:              uuid.UUID(row.TariffID.Bytes),
-		PaymentMethodID:       uuidPtrFromPgtype(row.PaymentMethodID),
+		PaymentMethodID:       pgconv.UUIDFromPgtypePtr(row.PaymentMethodID),
 		Period:                domain.SubscriptionPeriod(row.Period),
 		AmountKopecks:         row.AmountKopecks,
 		Provider:              domain.PaymentProvider(row.Provider),
-		ProviderPaymentID:     stringPtrFromPgtype(row.ProviderPaymentID),
-		PaymentURL:            stringPtrFromPgtype(row.PaymentUrl),
+		ProviderPaymentID:     pgconv.TextToPtrString(row.ProviderPaymentID),
+		PaymentURL:            pgconv.TextToPtrString(row.PaymentUrl),
 		Status:                domain.PaymentStatus(row.Status),
-		RefundedAmountKopecks: int64PtrFromPgtype(row.RefundedAmountKopecks),
-		ErrorCode:             stringPtrFromPgtype(row.ErrorCode),
+		RefundedAmountKopecks: pgconv.Int8ToPtr(row.RefundedAmountKopecks),
+		ChargeAttempts:        int(row.ChargeAttempts),
+		ErrorCode:             pgconv.TextToPtrString(row.ErrorCode),
 		CreatedAt:             row.CreatedAt.Time,
 		UpdatedAt:             row.UpdatedAt.Time,
 	}

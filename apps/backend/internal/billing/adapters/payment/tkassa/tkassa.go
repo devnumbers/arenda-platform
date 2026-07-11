@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"math"
+	"math/rand/v2"
 	"net/http"
 	"sort"
 	"strconv"
@@ -20,8 +22,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 const (
@@ -38,6 +46,12 @@ const (
 	maxResponseBytes              = 1 << 20 // 1 MiB
 	maxDescriptionLength          = 140     // T-Kassa limit for Description field
 )
+
+// instrumentationName is the OpenTelemetry tracer scope for this adapter.
+const instrumentationName = "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/tkassa"
+
+// tracer is the package-level OpenTelemetry tracer used to span provider operations.
+var tracer = otel.Tracer(instrumentationName)
 
 // ProviderError is returned when T-Kassa responds with Success=false and a non-zero ErrorCode.
 type ProviderError struct {
@@ -62,6 +76,29 @@ func (e *ProviderError) Error() string {
 // handlers can persist it without importing this package.
 func (e *ProviderError) ProviderErrorCode() string { return e.ErrorCode }
 
+// metricStatus maps an adapter error to the RED "status" metric label.
+//
+// RED convention: status is "error" ONLY for genuine operational failures —
+// transport errors, timeouts, context cancellation, request-build / marshal
+// errors, non-2xx HTTP status, and response-unmarshal errors. Any definitive
+// provider response is a completed operation and reports "ok", even when it
+// carries a business outcome such as a declined payment, a parsed provider
+// error-code (surfaced as *ProviderError), or a card-not-found outcome
+// (application.ErrProviderCardNotFound). Definitive provider responses
+// (declines and card-not-found) are ok; only operational failures are error.
+// This matches the fake adapter (which returns nil err on decline) and keeps
+// payment.provider.errors comparable across providers.
+func metricStatus(err error) string {
+	if err == nil {
+		return "ok"
+	}
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) || errors.Is(err, application.ErrProviderCardNotFound) {
+		return "ok"
+	}
+	return "error"
+}
+
 // Provider is a T-Kassa payment adapter.
 type Provider struct {
 	baseURL     string
@@ -69,7 +106,22 @@ type Provider struct {
 	password    string
 	client      *http.Client
 	log         *slog.Logger
+	metrics     *payment.Metrics
 }
+
+// Compile-time assertions that Provider satisfies the aggregate Provider port
+// and each of its narrow capability interfaces.
+var (
+	_ application.Provider             = (*Provider)(nil)
+	_ application.PaymentInitiator     = (*Provider)(nil)
+	_ application.PaymentCharger       = (*Provider)(nil)
+	_ application.PaymentCanceler      = (*Provider)(nil)
+	_ application.PaymentStatusChecker = (*Provider)(nil)
+	_ application.WebhookParser        = (*Provider)(nil)
+	_ application.CardManager          = (*Provider)(nil)
+	_ application.CardLister           = (*Provider)(nil)
+	_ application.WebhookResponder     = (*Provider)(nil)
+)
 
 // baseResponse is embedded in all T-Kassa API responses.
 type baseResponse struct {
@@ -126,9 +178,20 @@ type removeCardResponse struct {
 	CustomerKey string `json:"CustomerKey"`
 }
 
+// cardListItem is a single card entry in the T-Kassa GetCardList response.
+type cardListItem struct {
+	CardID   string `json:"CardId"`
+	Pan      string `json:"Pan"`
+	ExpDate  string `json:"ExpDate"`
+	Status   string `json:"Status"`
+	RebillID string `json:"RebillId"`
+}
+
 // NewProvider creates a T-Kassa provider instance.
 // If baseURL is empty, the sandbox URL is used. If timeout is zero, a 30s default is used.
-func NewProvider(baseURL, terminalKey, password string, timeout time.Duration, log *slog.Logger) *Provider {
+// If maxRetries is positive, the HTTP client wraps the default transport with an
+// exponential backoff retry layer for temporary network errors.
+func NewProvider(baseURL, terminalKey, password string, timeout time.Duration, maxRetries int, retryBaseDelay, retryMaxDelay time.Duration, log *slog.Logger, metrics *payment.Metrics) *Provider {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
@@ -136,12 +199,33 @@ func NewProvider(baseURL, terminalKey, password string, timeout time.Duration, l
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
+	base := http.DefaultTransport
+	if maxRetries > 0 {
+		rt := newRetryTransport(base, maxRetries, retryBaseDelay, retryMaxDelay)
+		// Full-jitter: the actual sleep is drawn uniformly from [0, d], where d
+		// is the deterministic exponential-backoff delay. This desynchronizes
+		// concurrent retries and avoids thundering-herd spikes against T-Kassa.
+		rt.jitter = func(d time.Duration) time.Duration {
+			return time.Duration(rand.Float64() * float64(d)) //nolint:gosec // full-jitter only desynchronizes retry timing; it is not used for security.
+		}
+		base = rt
+	}
+	instrumentedTransport := otelhttp.NewTransport(base,
+		otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string {
+			return "tkassa-http"
+		}),
+	)
+	client := &http.Client{
+		Timeout:   timeout,
+		Transport: instrumentedTransport,
+	}
 	return &Provider{
 		baseURL:     baseURL,
 		terminalKey: terminalKey,
 		password:    password,
-		client:      &http.Client{Timeout: timeout},
+		client:      client,
 		log:         log,
+		metrics:     metrics,
 	}
 }
 
@@ -151,7 +235,24 @@ func (p *Provider) Name() domain.PaymentProvider {
 }
 
 // Init starts a new payment through T-Kassa.
-func (p *Provider) Init(ctx context.Context, req application.InitRequest) (application.InitResult, error) {
+func (p *Provider) Init(ctx context.Context, req application.InitRequest) (res application.InitResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := metricStatus(err)
+		p.metrics.RecordRequest(ctx, "tkassa", "Init", status, time.Since(start))
+	}()
+
+	ctx, span := tracer.Start(ctx, "tkassa.Init")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("internal_payment_id", req.PaymentID.String()),
+		attribute.Int64("amount_kopecks", req.AmountKopecks),
+	)
+
+	log := logger.WithCorrelation(ctx, p.log)
+
 	operationInitiatorType := req.OperationInitiatorType
 	if operationInitiatorType == "" {
 		operationInitiatorType = firstPaymentInitiatorType
@@ -177,7 +278,7 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 		body["Description"] = truncateDescription(req.Description, maxDescriptionLength)
 	}
 
-	p.log.InfoContext(ctx, "tkassa init",
+	log.InfoContext(ctx, "tkassa init",
 		"internal_payment_id", req.PaymentID.String(),
 		"user_id", req.UserID.String(),
 		"amount_kopecks", req.AmountKopecks,
@@ -185,6 +286,8 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 
 	var resp initResponse
 	if err := p.post(ctx, "Init", body, &resp); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return application.InitResult{}, err
 	}
 
@@ -200,14 +303,32 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 // Charge performs a recurrent charge through T-Kassa.
 // Amount is intentionally omitted from the request body: T-Kassa takes the
 // charge amount from the original Init call.
-func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (application.ChargeResult, error) {
+func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (res application.ChargeResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := metricStatus(err)
+		p.metrics.RecordRequest(ctx, "tkassa", "Charge", status, time.Since(start))
+	}()
+
+	ctx, span := tracer.Start(ctx, "tkassa.Charge")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("internal_payment_id", req.PaymentID.String()),
+		attribute.String("provider_payment_id", req.ProviderPaymentID),
+		attribute.Int64("amount_kopecks", req.AmountKopecks),
+	)
+
+	log := logger.WithCorrelation(ctx, p.log)
+
 	body := map[string]any{
 		"TerminalKey": p.terminalKey,
 		"PaymentId":   req.ProviderPaymentID,
 		"RebillId":    req.Token,
 	}
 
-	p.log.InfoContext(ctx, "tkassa charge",
+	log.InfoContext(ctx, "tkassa charge",
 		"internal_payment_id", req.PaymentID.String(),
 		"provider_payment_id", req.ProviderPaymentID,
 		"amount_kopecks", req.AmountKopecks,
@@ -215,6 +336,8 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 
 	var resp chargeResponse
 	if err := p.post(ctx, "Charge", body, &resp); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return application.ChargeResult{}, err
 	}
 
@@ -225,19 +348,38 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 }
 
 // Status queries the current status of a payment through T-Kassa.
-func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error) {
+func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (status domain.PaymentStatus, err error) {
+	start := time.Now()
+	defer func() {
+		recStatus := metricStatus(err)
+		p.metrics.RecordRequest(ctx, "tkassa", "Status", recStatus, time.Since(start))
+	}()
+
+	ctx, span := tracer.Start(ctx, "tkassa.Status")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("internal_payment_id", paymentID.String()),
+		attribute.String("provider_payment_id", providerPaymentID),
+	)
+
+	log := logger.WithCorrelation(ctx, p.log)
+
 	body := map[string]any{
 		"TerminalKey": p.terminalKey,
 		"PaymentId":   providerPaymentID,
 	}
 
-	p.log.InfoContext(ctx, "tkassa get state",
+	log.InfoContext(ctx, "tkassa get state",
 		"internal_payment_id", paymentID.String(),
 		"provider_payment_id", providerPaymentID,
 	)
 
 	var resp getStateResponse
 	if err := p.post(ctx, "GetState", body, &resp); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return "", err
 	}
 
@@ -245,16 +387,33 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 }
 
 // Cancel refunds or cancels a payment through T-Kassa.
-func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (application.CancelResult, error) {
+func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (res application.CancelResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := metricStatus(err)
+		p.metrics.RecordRequest(ctx, "tkassa", "Cancel", status, time.Since(start))
+	}()
+
+	ctx, span := tracer.Start(ctx, "tkassa.Cancel")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("internal_payment_id", req.PaymentID.String()),
+		attribute.String("provider_payment_id", req.ProviderPaymentID),
+		attribute.Int64("amount_kopecks", req.AmountKopecks),
+	)
+
+	log := logger.WithCorrelation(ctx, p.log)
+
+	// The system always refunds the full amount.
 	body := map[string]any{
 		"TerminalKey": p.terminalKey,
 		"PaymentId":   req.ProviderPaymentID,
-	}
-	if req.AmountKopecks > 0 {
-		body["Amount"] = req.AmountKopecks
+		"Amount":      req.AmountKopecks,
 	}
 
-	p.log.InfoContext(ctx, "tkassa cancel",
+	log.InfoContext(ctx, "tkassa cancel",
 		"internal_payment_id", req.PaymentID.String(),
 		"provider_payment_id", req.ProviderPaymentID,
 		"amount_kopecks", req.AmountKopecks,
@@ -262,16 +421,21 @@ func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (a
 
 	var resp cancelResponse
 	if err := p.post(ctx, "Cancel", body, &resp); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return application.CancelResult{}, err
 	}
 
 	if !resp.Success {
-		return application.CancelResult{}, &ProviderError{
+		err = &ProviderError{
 			Method:    "Cancel",
 			ErrorCode: resp.ErrorCode,
 			Message:   resp.Message,
 			Details:   resp.Details,
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return application.CancelResult{}, err
 	}
 
 	status := mapCancelStatus(resp.Status)
@@ -280,10 +444,7 @@ func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (a
 	// are present. Fall back to the requested amount only when the response does
 	// not contain them.
 	if resp.OriginalAmount > 0 || resp.NewAmount > 0 {
-		refundedAmount = resp.OriginalAmount - resp.NewAmount
-		if refundedAmount < 0 {
-			refundedAmount = 0
-		}
+		refundedAmount = max(resp.OriginalAmount-resp.NewAmount, 0)
 	}
 
 	return application.CancelResult{
@@ -303,7 +464,23 @@ type cancelResponse struct {
 }
 
 // InitAddCard initializes attaching a new card to a T-Kassa customer.
-func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (application.InitAddCardResult, error) {
+func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (res application.InitAddCardResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := metricStatus(err)
+		p.metrics.RecordRequest(ctx, "tkassa", "InitAddCard", status, time.Since(start))
+	}()
+
+	ctx, span := tracer.Start(ctx, "tkassa.InitAddCard")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("customer_key", req.CustomerKey),
+	)
+
+	log := logger.WithCorrelation(ctx, p.log)
+
 	// The T-Kassa AddCard schema requires the customer to already exist, so we
 	// call AddCustomer first. If the customer was already created (for example,
 	// by a previous Init payment), T-Kassa returns ErrorCode 7. That is not a
@@ -316,11 +493,14 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 	if err := p.post(ctx, "AddCustomer", customerBody, &customerResp); err != nil {
 		var providerErr *ProviderError
 		if errors.As(err, &providerErr) && providerErr.ErrorCode == "7" {
-			p.log.InfoContext(ctx, "tkassa customer already exists, proceeding to add card",
+			log.InfoContext(ctx, "tkassa customer already exists, proceeding to add card",
 				"customer_key", req.CustomerKey,
 			)
 		} else {
-			return application.InitAddCardResult{}, fmt.Errorf("tkassa: add customer failed: %w", err)
+			wrappedErr := fmt.Errorf("tkassa: add customer failed: %w", err)
+			span.RecordError(wrappedErr)
+			span.SetStatus(codes.Error, wrappedErr.Error())
+			return application.InitAddCardResult{}, wrappedErr
 		}
 	}
 
@@ -337,12 +517,14 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 		"CheckType":   checkType,
 	}
 
-	p.log.InfoContext(ctx, "tkassa add card",
+	log.InfoContext(ctx, "tkassa add card",
 		"customer_key", req.CustomerKey,
 	)
 
 	var cardResp addCardResponse
 	if err := p.post(ctx, "AddCard", cardBody, &cardResp); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return application.InitAddCardResult{}, err
 	}
 
@@ -354,14 +536,31 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 }
 
 // RemoveCard detaches a card from a T-Kassa customer.
-func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) error {
+func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) (err error) {
+	start := time.Now()
+	defer func() {
+		status := metricStatus(err)
+		p.metrics.RecordRequest(ctx, "tkassa", "RemoveCard", status, time.Since(start))
+	}()
+
+	ctx, span := tracer.Start(ctx, "tkassa.RemoveCard")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("customer_key", customerKey),
+		attribute.String("card_id", cardID),
+	)
+
+	log := logger.WithCorrelation(ctx, p.log)
+
 	body := map[string]any{
 		"TerminalKey": p.terminalKey,
 		"CustomerKey": customerKey,
 		"CardId":      cardID,
 	}
 
-	p.log.InfoContext(ctx, "tkassa remove card",
+	log.InfoContext(ctx, "tkassa remove card",
 		"customer_key", customerKey,
 	)
 
@@ -370,9 +569,92 @@ func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) e
 		if isCardNotFoundError(err) {
 			return application.ErrProviderCardNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	return nil
+}
+
+// GetCardList returns the cards bound to a T-Kassa customer.
+func (p *Provider) GetCardList(ctx context.Context, customerKey string) (cards []application.ProviderCard, err error) {
+	start := time.Now()
+	defer func() {
+		status := metricStatus(err)
+		p.metrics.RecordRequest(ctx, "tkassa", "GetCardList", status, time.Since(start))
+	}()
+
+	ctx, span := tracer.Start(ctx, "tkassa.GetCardList")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("customer_key", customerKey),
+	)
+
+	log := logger.WithCorrelation(ctx, p.log)
+
+	body := map[string]any{
+		"TerminalKey": p.terminalKey,
+		"CustomerKey": customerKey,
+	}
+
+	log.InfoContext(ctx, "tkassa get card list",
+		"customer_key", customerKey,
+	)
+
+	// GetCardList answers with a bare JSON array of cards on success and with
+	// the usual response envelope on failure, so the base-response check inside
+	// post cannot fire. Decode the raw body and handle both shapes explicitly.
+	var raw json.RawMessage
+	if err := p.post(ctx, "GetCardList", body, &raw); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	if trimmed := bytes.TrimSpace(raw); len(trimmed) == 0 || trimmed[0] != '[' {
+		var base baseResponse
+		if decodeErr := json.Unmarshal(raw, &base); decodeErr != nil {
+			err = fmt.Errorf("tkassa: decode GetCardList response: %w", decodeErr)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+		if !base.Success && base.ErrorCode != "" && base.ErrorCode != "0" {
+			err = &ProviderError{
+				Method:    "GetCardList",
+				ErrorCode: base.ErrorCode,
+				Message:   base.Message,
+				Details:   base.Details,
+			}
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+		// A successful non-array envelope carries no cards.
+		return []application.ProviderCard{}, nil
+	}
+
+	var items []cardListItem
+	if decodeErr := json.Unmarshal(raw, &items); decodeErr != nil {
+		err = fmt.Errorf("tkassa: decode GetCardList response: %w", decodeErr)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	cards = make([]application.ProviderCard, 0, len(items))
+	for _, item := range items {
+		cards = append(cards, application.ProviderCard{
+			CardID:   item.CardID,
+			Pan:      item.Pan,
+			ExpDate:  item.ExpDate,
+			RebillID: item.RebillID,
+			Status:   application.ProviderCardStatus(item.Status),
+		})
+	}
+	return cards, nil
 }
 
 // WebhookResponse returns the fixed success response T-Kassa expects HTTP
@@ -421,7 +703,10 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 	}
 
 	orderID := getString(data, "OrderId")
-	internalPaymentID, _ := uuid.Parse(orderID)
+	internalPaymentID, err := uuid.Parse(orderID)
+	if err != nil {
+		return application.WebhookPayload{}, fmt.Errorf("tkassa: parse OrderId %q: %w", orderID, err)
+	}
 
 	status := mapStatus(getString(data, "Status"))
 	errorCode := getString(data, "ErrorCode")
@@ -430,12 +715,17 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 		errorCodePtr = &errorCode
 	}
 
+	amount, err := getInt64(data, "Amount")
+	if err != nil {
+		return application.WebhookPayload{}, err
+	}
+
 	return application.WebhookPayload{
 		InternalPaymentID: internalPaymentID,
 		ProviderPaymentID: getString(data, "PaymentId"),
 		Status:            status,
 		ErrorCode:         errorCodePtr,
-		AmountKopecks:     getInt64(data, "Amount"),
+		AmountKopecks:     amount,
 		RebillID:          getString(data, "RebillId"),
 		CardID:            getString(data, "CardId"),
 		Pan:               getString(data, "Pan"),
@@ -580,11 +870,7 @@ func stringifyValue(v any) string {
 }
 
 func cloneBody(body map[string]any) map[string]any {
-	cloned := make(map[string]any, len(body)+1)
-	for k, v := range body {
-		cloned[k] = v
-	}
-	return cloned
+	return maps.Clone(body)
 }
 
 func verifyToken(payload []byte, password string) error {
@@ -620,20 +906,20 @@ func getString(data map[string]any, key string) string {
 	return stringifyValue(v)
 }
 
-func getInt64(data map[string]any, key string) int64 {
+func getInt64(data map[string]any, key string) (int64, error) {
 	v, ok := data[key]
 	if !ok {
-		return 0
+		return 0, nil
 	}
 	s := stringifyValue(v)
 	if s == "" {
-		return 0
+		return 0, nil
 	}
 	n, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return 0
+		return 0, fmt.Errorf("tkassa: parse %s=%q: %w", key, s, err)
 	}
-	return n
+	return n, nil
 }
 
 func isAddCardSuccessful(data map[string]any) bool {
@@ -645,10 +931,18 @@ func isAddCardSuccessful(data map[string]any) bool {
 }
 
 // mapStatus maps T-Kassa payment statuses to the domain status model.
+// REVERSED/PARTIAL_REVERSED here come from GetState/webhook: the provider
+// reports a reversal of the payment (a dispute or chargeback) whose outcome for
+// our subscription payment is unclear, so they are treated as failed. In
+// mapCancelStatus the same statuses answer a Cancel call we made ourselves, so
+// they mean the refund we requested succeeded and map to refunded instead.
 func mapStatus(status string) domain.PaymentStatus {
 	switch status {
 	case statusNew, statusAuthorized, statusAuthorizing, status3DSChecking,
 		status3DSChecked, statusConfirming, statusFormShowed, statusAsyncRefunding:
+		return domain.PaymentStatusPending
+	case statusReversing, statusRefunding:
+		// Transitional statuses, waiting for the final one.
 		return domain.PaymentStatusPending
 	case statusConfirmed:
 		return domain.PaymentStatusSucceeded
@@ -674,8 +968,14 @@ func mapCancelStatus(status string) domain.PaymentStatus {
 	case statusPartialRefunded, statusPartialReversed:
 		return domain.PaymentStatusPartialRefunded
 	case statusNew, statusAuthorized, statusAuthorizing, status3DSChecking,
-		status3DSChecked, statusConfirming, statusFormShowed, statusAsyncRefunding:
+		status3DSChecked, statusConfirming, statusFormShowed:
 		return domain.PaymentStatusPending
+	case statusReversing, statusRefunding, statusAsyncRefunding:
+		// The provider accepted the refund but has not settled it yet: the refund
+		// is in flight, so keep the internal refunding reservation instead of
+		// failing it. ASYNC_REFUNDING is an async-acquiring refund the provider
+		// settles in the background.
+		return domain.PaymentStatusRefunding
 	default:
 		return domain.PaymentStatusFailed
 	}

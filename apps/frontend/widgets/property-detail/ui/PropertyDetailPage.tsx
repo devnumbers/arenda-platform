@@ -3,7 +3,7 @@
 import {useParams, useRouter} from 'next/navigation';
 import type {JSX} from 'react';
 import {useCallback, useMemo, useState} from 'react';
-import { notify } from '@/shared/lib/toast';
+import {notify} from '@/shared/lib/toast';
 import {ROUTES} from '@/shared/config/routes';
 import {
     useArchiveProperty,
@@ -100,12 +100,18 @@ export function PropertyDetailPage(): JSX.Element {
             }
             updateProperty.mutate(
                 {id, data: {status: 'maintenance'}},
-                {onError: showMutationError},
+                {
+                    onSuccess: () => notify.success('Объект переведён на ремонт'),
+                    onError: showMutationError,
+                },
             );
         } else {
             updateProperty.mutate(
                 {id, data: {status: 'active'}},
-                {onError: showMutationError},
+                {
+                    onSuccess: () => notify.success('Объект возвращён в работу'),
+                    onError: showMutationError,
+                },
             );
         }
     }, [property, currentLease, id, updateProperty]);
@@ -113,13 +119,19 @@ export function PropertyDetailPage(): JSX.Element {
     const handleToggleArchive = useCallback(() => {
         if (!property) return;
         if (property.status === 'archived') {
-            unarchiveProperty.mutate(id, {onError: showMutationError});
+            unarchiveProperty.mutate(id, {
+                onSuccess: () => notify.success('Объект возвращён из архива'),
+                onError: showMutationError,
+            });
         } else {
             if (currentLease) {
                 setBlockedOpen(true);
                 return;
             }
-            archiveProperty.mutate(id, {onError: showMutationError});
+            archiveProperty.mutate(id, {
+                onSuccess: () => notify.success('Объект переведён в архив'),
+                onError: showMutationError,
+            });
         }
     }, [property, currentLease, id, archiveProperty, unarchiveProperty]);
 
@@ -187,28 +199,7 @@ export function PropertyDetailPage(): JSX.Element {
         summaryQuery.isError ||
         operationsQuery.isError;
 
-    if (propertyQuery.isPending || leasesQuery.isPending) {
-        return <PropertyDetailLoading/>;
-    }
-
-    if (hasAnyError || !property) {
-        return (
-            <PropertyDetailError
-                onRetry={() => {
-                    propertyQuery.refetch();
-                    leasesQuery.refetch();
-                    summaryQuery.refetch();
-                    operationsQuery.refetch();
-                }}
-                isLoading={
-                    propertyQuery.isFetching ||
-                    leasesQuery.isFetching ||
-                    summaryQuery.isFetching ||
-                    operationsQuery.isFetching
-                }
-            />
-        );
-    }
+    const isLoading = propertyQuery.isPending || leasesQuery.isPending;
 
     return (
         <div className={styles.root}>
@@ -216,7 +207,8 @@ export function PropertyDetailPage(): JSX.Element {
                 title="Мой объект"
                 actions={
                     <PropertyActionMenu
-                        status={property.status}
+                        status={property?.status}
+                        disabled={isLoading || hasAnyError || !property}
                         onEdit={handleEdit}
                         onToggleMaintenance={handleToggleMaintenance}
                         onToggleArchive={handleToggleArchive}
@@ -224,40 +216,66 @@ export function PropertyDetailPage(): JSX.Element {
                 }
             />
 
-            <PropertyGallery/>
+            {isLoading && <PropertyDetailLoading/>}
 
-            <PropertyStatusSection
-                property={property}
-                leases={leases}
-                summary={summaryQuery.data}
-            />
+            {!isLoading && (hasAnyError || !property) && (
+                <PropertyDetailError
+                    onRetry={() => {
+                        propertyQuery.refetch();
+                        leasesQuery.refetch();
+                        summaryQuery.refetch();
+                        operationsQuery.refetch();
+                    }}
+                    isLoading={
+                        propertyQuery.isFetching ||
+                        leasesQuery.isFetching ||
+                        summaryQuery.isFetching ||
+                        operationsQuery.isFetching
+                    }
+                />
+            )}
 
-            <PropertyLeaseCard
-                lease={currentLease}
-                status={pageStatus}
-                overdueRentCount={summaryQuery.data?.overdue_rent_count ?? 0}
-                propertyId={id}
-                onPayRent={handlePayRent}
-                isPayRentLoading={isPayRentLoading}
-                onEndLease={handleEndLease}
-            />
+            {!isLoading && !hasAnyError && property && (
+                <>
+                    <PropertyGallery/>
 
-            <PropertyTenantCard lease={property.activeLease}/>
+                    <PropertyStatusSection
+                        property={property}
+                        leases={leases}
+                        summary={summaryQuery.data}
+                    />
 
-            <PropertyPaymentsCard
-                property={property}
-                operations={operationsQuery.data?.items ?? []}
-                overdueCount={summaryQuery.data?.overdue_total_count ?? 0}
-            />
+                    <PropertyLeaseCard
+                        lease={currentLease}
+                        status={pageStatus}
+                        propertyId={id}
+                        onPayRent={handlePayRent}
+                        isPayRentLoading={isPayRentLoading}
+                        onEndLease={handleEndLease}
+                    />
 
-            <PropertyOverdueOperationsCard propertyId={id}/>
+                    <PropertyTenantCard lease={property.activeLease}/>
 
-            <PropertyOperationsCard
-                propertyName={property.name}
-                summary={summaryQuery.data}
-            />
+                    <PropertyPaymentsCard
+                        property={property}
+                        operations={operationsQuery.data?.items ?? []}
+                        overdueCount={summaryQuery.data?.overdue_total_count ?? 0}
+                    />
 
-            <PropertyInfoCard description={property.description} propertyId={id}/>
+                    <PropertyOverdueOperationsCard propertyId={id}/>
+
+                    <PropertyOperationsCard
+                        propertyName={property.name}
+                        summary={summaryQuery.data}
+                    />
+
+                    <PropertyInfoCard
+                        description={property.description}
+                        propertyId={id}
+                        isArchived={property.status === 'archived'}
+                    />
+                </>
+            )}
 
             <PropertyBlockedModal
                 isOpen={blockedOpen}

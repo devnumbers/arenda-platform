@@ -1,5 +1,6 @@
-import LandingPage from './landing/landing-page';
+import { redirect } from 'next/navigation';
+import { ROUTES } from '@/shared/config/routes';
 
 export default function Home() {
-    return <LandingPage />;
+  redirect(ROUTES.dashboard);
 }

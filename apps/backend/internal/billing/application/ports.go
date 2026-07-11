@@ -32,7 +32,7 @@ type TariffRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Tariff, error)
 	GetByName(ctx context.Context, name domain.TariffName) (domain.Tariff, error)
 	List(ctx context.Context) ([]domain.Tariff, error)
-	WithTx(tx transaction.Tx) TariffRepository
+	WithTx(tx transaction.Tx) (TariffRepository, error)
 }
 
 type SubscriptionRepository interface {
@@ -47,7 +47,7 @@ type SubscriptionRepository interface {
 	ListExpiredNonRenewing(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error)
 	ListExpiredCancelled(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error)
 	ListPendingChanges(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error)
-	WithTx(tx transaction.Tx) SubscriptionRepository
+	WithTx(tx transaction.Tx) (SubscriptionRepository, error)
 }
 
 type PaymentMethodRepository interface {
@@ -57,7 +57,23 @@ type PaymentMethodRepository interface {
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error)
 	SetActive(ctx context.Context, userID, methodID uuid.UUID) error
 	Delete(ctx context.Context, userID, methodID uuid.UUID) error
-	WithTx(tx transaction.Tx) PaymentMethodRepository
+	WithTx(tx transaction.Tx) (PaymentMethodRepository, error)
+}
+
+// PaymentMethodInUseChecker checks whether a payment method is referenced by an
+// active subscription. The check lives in the application layer so the
+// repository does not own business rules.
+type PaymentMethodInUseChecker interface {
+	IsInUse(ctx context.Context, methodID uuid.UUID) (bool, error)
+	WithTx(tx transaction.Tx) (PaymentMethodInUseChecker, error)
+}
+
+// PropertyLimiter returns the maximum number of active properties a user is
+// allowed to own based on their subscription. The rule lives in the billing
+// application layer, not in the postgres adapter.
+type PropertyLimiter interface {
+	ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error)
+	WithTx(tx transaction.Tx) (PropertyLimiter, error)
 }
 
 type SubscriptionPaymentRepository interface {
@@ -70,15 +86,21 @@ type SubscriptionPaymentRepository interface {
 	GetLastSucceededBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) (domain.SubscriptionPayment, error)
 	ListPendingUpgradePayments(ctx context.Context, createdBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error)
 	ListPendingPayments(ctx context.Context, createdBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error)
+	ListStaleRefundingPayments(ctx context.Context, updatedBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error)
 	ListAll(ctx context.Context, status string, userID uuid.UUID, limit, offset int) ([]SubscriptionPaymentWithUser, int64, error)
 	MarkSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, errorCode *string, now time.Time) error
-	MarkRefunded(ctx context.Context, id uuid.UUID, status domain.PaymentStatus, amountKopecks int64, now time.Time) error
+	MarkRefunded(ctx context.Context, id uuid.UUID, now time.Time) error
+	MarkReconciledSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error
+	MarkReconciledRefunded(ctx context.Context, id uuid.UUID, now time.Time) error
+	BeginRefund(ctx context.Context, id uuid.UUID, now time.Time) error
+	RevertRefund(ctx context.Context, id uuid.UUID, prev domain.PaymentStatus, now time.Time) error
 	UpdateProviderPaymentID(ctx context.Context, id uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
 	UpdatePaymentURL(ctx context.Context, id uuid.UUID, paymentURL string) (domain.SubscriptionPayment, error)
 	UpdatePaymentMethodAndProviderID(ctx context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
 	UpdatePaymentMethodID(ctx context.Context, id, paymentMethodID uuid.UUID) (domain.SubscriptionPayment, error)
-	WithTx(tx transaction.Tx) SubscriptionPaymentRepository
+	IncrementChargeAttempts(ctx context.Context, id uuid.UUID) (int, error)
+	WithTx(tx transaction.Tx) (SubscriptionPaymentRepository, error)
 }
 
 // PropertyArchiver archives properties when a subscription is downgraded to a
@@ -100,17 +122,113 @@ type PaymentURLProvider interface {
 	PaymentURL(ctx context.Context, paymentID uuid.UUID) (string, error)
 }
 
-// Provider abstracts the external payment processor used for subscription payments.
-type Provider interface {
-	Name() domain.PaymentProvider
+// PaymentInitiator starts a new payment at the provider.
+type PaymentInitiator interface {
 	Init(ctx context.Context, req InitRequest) (InitResult, error)
+}
+
+// PaymentCharger performs a recurrent charge using a previously saved token.
+type PaymentCharger interface {
 	Charge(ctx context.Context, req ChargeRequest) (ChargeResult, error)
+}
+
+// PaymentCanceler cancels or refunds a finalized payment.
+type PaymentCanceler interface {
 	Cancel(ctx context.Context, req CancelRequest) (CancelResult, error)
+}
+
+// PaymentStatusChecker queries the current provider-side status of a payment.
+type PaymentStatusChecker interface {
 	Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error)
+}
+
+// WebhookParser parses and verifies an incoming provider webhook payload.
+type WebhookParser interface {
 	ParseWebhook(ctx context.Context, payload []byte) (WebhookPayload, error)
+}
+
+// CardManager manages customer cards bound at the provider.
+type CardManager interface {
 	InitAddCard(ctx context.Context, req InitAddCardRequest) (InitAddCardResult, error)
 	RemoveCard(ctx context.Context, customerKey, cardID string) error
+}
+
+// CardLister lists cards bound to a customer at the provider.
+type CardLister interface {
+	GetCardList(ctx context.Context, customerKey string) ([]ProviderCard, error)
+}
+
+// WebhookResponder returns the fixed body the provider expects as a webhook ack.
+type WebhookResponder interface {
 	WebhookResponse() []byte
+}
+
+// ProviderNamer identifies the payment provider implementation.
+type ProviderNamer interface {
+	Name() domain.PaymentProvider
+}
+
+// Provider abstracts the external payment processor used for subscription payments.
+// It is the aggregate of the narrow payment capability interfaces above plus the
+// provider identity. Consumers that need only a subset should depend on the
+// narrow interface directly.
+type Provider interface {
+	PaymentInitiator
+	PaymentCharger
+	PaymentCanceler
+	PaymentStatusChecker
+	WebhookParser
+	CardManager
+	CardLister
+	WebhookResponder
+	ProviderNamer
+}
+
+// RenewalProvider aggregates the capabilities used by RenewalService.
+type RenewalProvider interface {
+	PaymentInitiator
+	PaymentCharger
+	PaymentStatusChecker
+	ProviderNamer
+}
+
+// WebhookProvider aggregates the capabilities used by WebhookService.
+type WebhookProvider interface {
+	WebhookParser
+	WebhookResponder
+	PaymentStatusChecker
+	ProviderNamer
+}
+
+// PaymentManager aggregates the capabilities used by PaymentService.
+type PaymentManager interface {
+	PaymentCanceler
+	PaymentStatusChecker
+	ProviderNamer
+}
+
+// CardProvider aggregates the capabilities used by PaymentMethodService.
+type CardProvider interface {
+	CardManager
+	CardLister
+	ProviderNamer
+}
+
+// SubscriptionPaymentProvider aggregates the capabilities used by SubscriptionService.
+type SubscriptionPaymentProvider interface {
+	PaymentInitiator
+	ProviderNamer
+}
+
+// OnboardingService creates default billing state for newly-registered owners.
+type OnboardingService interface {
+	SetupDefaultSubscription(ctx context.Context, userID uuid.UUID) error
+}
+
+// UserRegisteredHandler handles the user registration event. Billing owns this
+// narrow port so it does not depend on the identity context.
+type UserRegisteredHandler interface {
+	OnUserRegistered(ctx context.Context, userID uuid.UUID) error
 }
 
 type InitRequest struct {
@@ -149,7 +267,7 @@ type ChargeResult struct {
 }
 
 // CancelRequest asks the provider to cancel or refund a finalized payment.
-// AmountKopecks = 0 means a full refund.
+// The system always refunds the full amount; AmountKopecks carries that amount.
 type CancelRequest struct {
 	PaymentID         uuid.UUID
 	ProviderPaymentID string
@@ -190,4 +308,26 @@ type InitAddCardResult struct {
 	PaymentURL  string
 	RequestKey  string
 	CustomerKey string
+}
+
+// ProviderCardStatus is the provider-side status of a bound card. The values
+// mirror the T-Kassa card list wire format.
+type ProviderCardStatus string
+
+const (
+	// ProviderCardStatusActive marks a card that is bound and chargeable.
+	ProviderCardStatusActive ProviderCardStatus = "A"
+	// ProviderCardStatusInactive marks a temporarily inactive card.
+	ProviderCardStatusInactive ProviderCardStatus = "I"
+	// ProviderCardStatusDeleted marks a card detached from the customer.
+	ProviderCardStatusDeleted ProviderCardStatus = "D"
+)
+
+// ProviderCard describes a card bound to a customer at the payment provider.
+type ProviderCard struct {
+	CardID   string
+	Pan      string
+	ExpDate  string
+	RebillID string
+	Status   ProviderCardStatus
 }

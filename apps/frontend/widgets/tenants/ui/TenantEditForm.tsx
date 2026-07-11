@@ -64,7 +64,6 @@ function TenantEditFormError({
 function TenantEditLoading(): JSX.Element {
   return (
     <div className={styles.loading} role="status" aria-busy="true" aria-label="Загрузка формы арендатора">
-      <Skeleton className={styles.skeletonTitle} />
       <Skeleton className={styles.skeletonField} />
       <Skeleton className={styles.skeletonField} />
       <Skeleton className={styles.skeletonField} />
@@ -199,35 +198,32 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
     return <TenantEditFormNotFound />;
   }
 
-  if (isPending) {
-    return <TenantEditLoading />;
-  }
-
-  if (isError) {
-    return (
-      <TenantEditFormError onRetry={refetch} isLoading={isFetching} />
-    );
-  }
-
-  if (!initialData) {
-    return <TenantEditFormNotFound />;
-  }
-
   return (
     <>
       <PageHeader
         title="Редактирование арендатора"
         backHref={ROUTES.tenant(tenantId)}
       />
-      <TenantForm
-        initialData={initialData}
-        submitLabel="Сохранить изменения"
-        isLoading={updateTenantContact.isPending}
-        error={submitError}
-        onSubmit={handleSubmit}
-        onChange={handleChange}
-        backHref={ROUTES.tenant(tenantId)}
-      />
+
+      {isPending && <TenantEditLoading />}
+
+      {!isPending && isError && (
+        <TenantEditFormError onRetry={refetch} isLoading={isFetching} />
+      )}
+
+      {!isPending && !isError && !initialData && <TenantEditFormNotFound />}
+
+      {!isPending && !isError && initialData && (
+        <TenantForm
+          initialData={initialData}
+          submitLabel="Сохранить изменения"
+          isLoading={updateTenantContact.isPending}
+          error={submitError}
+          onSubmit={handleSubmit}
+          onChange={handleChange}
+          backHref={ROUTES.tenant(tenantId)}
+        />
+      )}
     </>
   );
 }

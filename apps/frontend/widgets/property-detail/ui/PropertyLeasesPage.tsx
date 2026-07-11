@@ -5,8 +5,10 @@ import { useMemo } from 'react';
 import NextLink from 'next/link';
 import { useParams } from 'next/navigation';
 import type { components } from '@/shared/api/generated';
+import { Plus } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
+import { Icon } from '@/shared/ui/icon';
 import { PageHeader } from '@/shared/ui/page-header';
 import { LinkButton } from '@/shared/ui/link-button';
 import { useProperty } from '@/features/properties/api/hooks';
@@ -120,8 +122,10 @@ export function PropertyLeasesPage(): JSX.Element {
   const isError = propertyQuery.isError || leasesQuery.isError;
   const isFetching = propertyQuery.isFetching || leasesQuery.isFetching;
   const propertyName = propertyQuery.data?.name ?? 'Мой объект';
+  const isArchived = propertyQuery.data?.status === 'archived';
   const hasOpenLease = leases.some((lease) => isOpenLease(lease.status));
-  const canCreateLease = !isLoading && !isError && !hasOpenLease;
+  const canCreateLease = !isLoading && !isError && !hasOpenLease && !isArchived;
+  const showCreateLeaseAction = !isLoading && !isError && !hasOpenLease;
 
   const handleRetry = (): void => {
     propertyQuery.refetch();
@@ -141,15 +145,40 @@ export function PropertyLeasesPage(): JSX.Element {
         title={title}
         backHref={ROUTES.property(id)}
         actions={
-          canCreateLease && (
-            <LinkButton
-              href={`${ROUTES.leaseNew}?propertyId=${id}`}
-              variant="primary"
-              size="small"
+          isLoading ? (
+            <button
+              type="button"
+              disabled
+              className={styles.addButton}
+              aria-label="Создать аренду"
             >
-              Создать аренду
-            </LinkButton>
-          )
+              <Icon size="s">
+                <Plus />
+              </Icon>
+            </button>
+          ) : isArchived && !isError && !hasOpenLease ? (
+            <button
+              type="button"
+              disabled
+              className={styles.addButton}
+              aria-label="Создать аренду"
+              title="Объект в архиве"
+            >
+              <Icon size="s">
+                <Plus />
+              </Icon>
+            </button>
+          ) : canCreateLease ? (
+            <NextLink
+              href={`${ROUTES.leaseNew}?propertyId=${id}`}
+              className={styles.addButton}
+              aria-label="Создать аренду"
+            >
+              <Icon size="s">
+                <Plus />
+              </Icon>
+            </NextLink>
+          ) : null
         }
       />
 
@@ -162,11 +191,13 @@ export function PropertyLeasesPage(): JSX.Element {
       {!isLoading && !isError && leases.length === 0 && (
         <section className={styles.empty}>
           <h2 className={styles.emptyTitle}>Аренд пока нет</h2>
-          {canCreateLease && (
+          {showCreateLeaseAction && (
             <LinkButton
               href={`${ROUTES.leaseNew}?propertyId=${id}`}
               variant="primary"
               size="medium"
+              disabled={isArchived}
+              title={isArchived ? 'Объект в архиве' : undefined}
             >
               Создать аренду
             </LinkButton>

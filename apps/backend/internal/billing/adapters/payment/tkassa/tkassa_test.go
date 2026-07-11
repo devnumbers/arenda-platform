@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -30,7 +31,7 @@ func discardLogger() *slog.Logger {
 }
 
 func newTestProvider(serverURL string) *Provider {
-	return NewProvider(serverURL, testTerminalKey, testPassword, 5*time.Second, discardLogger())
+	return NewProvider(serverURL, testTerminalKey, testPassword, 5*time.Second, 0, 0, 0, discardLogger(), nil)
 }
 
 func verifyRequestToken(t *testing.T, r *http.Request, password string) map[string]any {
@@ -106,7 +107,7 @@ func TestSignSkipsNullBlankAndNested(t *testing.T) {
 func TestVerifyWebhookToken(t *testing.T) {
 	payload := map[string]any{
 		"TerminalKey": testTerminalKey,
-		"OrderId":     "order-123",
+		"OrderId":     "11111111-1111-1111-1111-111111111111",
 		"Status":      "CONFIRMED",
 		"Success":     true,
 		"PaymentId":   json.Number("12345"),
@@ -137,11 +138,11 @@ func TestVerifyWebhookToken(t *testing.T) {
 
 func TestParseWebhookRefundStatuses(t *testing.T) {
 	tests := []struct {
-		name            string
-		status          string
-		amount          int64
-		wantStatus      domain.PaymentStatus
-		wantAmount      int64
+		name       string
+		status     string
+		amount     int64
+		wantStatus domain.PaymentStatus
+		wantAmount int64
 	}{
 		{"refunded", "REFUNDED", 99000, domain.PaymentStatusRefunded, 99000},
 		{"partial_refunded", "PARTIAL_REFUNDED", 49000, domain.PaymentStatusPartialRefunded, 49000},
@@ -151,7 +152,7 @@ func TestParseWebhookRefundStatuses(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			payload := map[string]any{
 				"TerminalKey": testTerminalKey,
-				"OrderId":     "order-refund",
+				"OrderId":     "22222222-2222-2222-2222-222222222222",
 				"PaymentId":   json.Number("12345"),
 				"Status":      tt.status,
 				"Amount":      json.Number(strconv.FormatInt(tt.amount, 10)),
@@ -750,6 +751,91 @@ func TestProviderRemoveCardNotFound(t *testing.T) {
 	}
 }
 
+func TestProviderGetCardList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/GetCardList" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		data := verifyRequestToken(t, r, testPassword)
+		if got, want := data["TerminalKey"], testTerminalKey; got != want {
+			t.Fatalf("TerminalKey: got %v, want %v", got, want)
+		}
+		if got, want := data["CustomerKey"], "customer-1"; got != want {
+			t.Fatalf("CustomerKey: got %v, want %v", got, want)
+		}
+		// T-Kassa answers GetCardList with a bare JSON array, and RebillId may
+		// be absent for cards that were not saved for recurrent charges.
+		_ = json.NewEncoder(w).Encode([]cardListItem{
+			{CardID: "card-1", Pan: "430000******0777", ExpDate: "1230", Status: "A", RebillID: "rebill-1"},
+			{CardID: "card-2", Pan: "430000******0888", ExpDate: "1231", Status: "I"},
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	cards, err := p.GetCardList(context.Background(), "customer-1")
+	if err != nil {
+		t.Fatalf("GetCardList failed: %v", err)
+	}
+	if len(cards) != 2 {
+		t.Fatalf("expected 2 cards, got %d", len(cards))
+	}
+	if cards[0].CardID != "card-1" || cards[0].Pan != "430000******0777" || cards[0].ExpDate != "1230" {
+		t.Fatalf("unexpected first card: %+v", cards[0])
+	}
+	if cards[0].RebillID != "rebill-1" {
+		t.Fatalf("RebillID: got %q, want %q", cards[0].RebillID, "rebill-1")
+	}
+	if cards[0].Status != application.ProviderCardStatusActive {
+		t.Fatalf("Status: got %q, want %q", cards[0].Status, application.ProviderCardStatusActive)
+	}
+	if cards[1].RebillID != "" {
+		t.Fatalf("expected missing RebillId to decode as empty, got %q", cards[1].RebillID)
+	}
+	if cards[1].Status != application.ProviderCardStatusInactive {
+		t.Fatalf("Status: got %q, want %q", cards[1].Status, application.ProviderCardStatusInactive)
+	}
+}
+
+func TestProviderGetCardListEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = verifyRequestToken(t, r, testPassword)
+		_ = json.NewEncoder(w).Encode([]cardListItem{})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	cards, err := p.GetCardList(context.Background(), "customer-1")
+	if err != nil {
+		t.Fatalf("GetCardList failed: %v", err)
+	}
+	if len(cards) != 0 {
+		t.Fatalf("expected no cards, got %d", len(cards))
+	}
+}
+
+func TestProviderGetCardListError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = verifyRequestToken(t, r, testPassword)
+		_ = json.NewEncoder(w).Encode(baseResponse{
+			Success:   false,
+			ErrorCode: "503",
+			Message:   "CustomerKey not found",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	_, err := p.GetCardList(context.Background(), "customer-1")
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) || providerErr.ErrorCode != "503" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestProviderWebhookResponse(t *testing.T) {
 	p := newTestProvider("")
 	if got, want := string(p.WebhookResponse()), "OK"; got != want {
@@ -906,6 +992,69 @@ func TestParseWebhookUnknownNotificationType(t *testing.T) {
 	}
 }
 
+func TestGetInt64(t *testing.T) {
+	t.Run("missing key returns zero without error", func(t *testing.T) {
+		got, err := getInt64(map[string]any{}, "Amount")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 0 {
+			t.Fatalf("got %d, want 0", got)
+		}
+	})
+
+	t.Run("empty string returns zero without error", func(t *testing.T) {
+		got, err := getInt64(map[string]any{"Amount": ""}, "Amount")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 0 {
+			t.Fatalf("got %d, want 0", got)
+		}
+	})
+
+	t.Run("valid number returns value", func(t *testing.T) {
+		got, err := getInt64(map[string]any{"Amount": json.Number("99000")}, "Amount")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 99000 {
+			t.Fatalf("got %d, want 99000", got)
+		}
+	})
+
+	t.Run("non-numeric string returns error", func(t *testing.T) {
+		_, err := getInt64(map[string]any{"Amount": "not-a-number"}, "Amount")
+		if err == nil {
+			t.Fatalf("expected error for non-numeric string")
+		}
+		if !strings.Contains(err.Error(), "tkassa: parse Amount") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestParseWebhookInvalidOrderID(t *testing.T) {
+	payload := map[string]any{
+		"TerminalKey": testTerminalKey,
+		"OrderId":     "not-a-uuid",
+		"PaymentId":   json.Number("12345"),
+		"Status":      "CONFIRMED",
+		"Success":     true,
+	}
+	payload["Token"] = sign(payload, testPassword)
+	body, _ := json.Marshal(payload)
+
+	p := newTestProvider("")
+	_, err := p.ParseWebhook(context.Background(), body)
+	if err == nil {
+		t.Fatalf("expected error for invalid OrderId")
+	}
+	if !strings.Contains(err.Error(), "parse OrderId") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestProviderHTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -949,7 +1098,7 @@ func TestProviderTimeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewProvider(server.URL+"/v2/", testTerminalKey, testPassword, 1*time.Nanosecond, discardLogger())
+	p := NewProvider(server.URL+"/v2/", testTerminalKey, testPassword, 1*time.Nanosecond, 0, 0, 0, discardLogger(), nil)
 	_, err := p.Status(context.Background(), uuid.New(), "1")
 	if err == nil {
 		t.Fatalf("expected timeout error")
@@ -980,6 +1129,13 @@ func TestMapStatus(t *testing.T) {
 		{"CONFIRMED", domain.PaymentStatusSucceeded},
 		{"REJECTED", domain.PaymentStatusFailed},
 		{"AUTH_FAIL", domain.PaymentStatusFailed},
+		{"REVERSED", domain.PaymentStatusFailed},
+		{"PARTIAL_REVERSED", domain.PaymentStatusFailed},
+		{"REVERSING", domain.PaymentStatusPending},
+		{"REFUNDING", domain.PaymentStatusPending},
+		{"ASYNC_REFUNDING", domain.PaymentStatusPending},
+		{"REFUNDED", domain.PaymentStatusRefunded},
+		{"PARTIAL_REFUNDED", domain.PaymentStatusPartialRefunded},
 		{"UNKNOWN", domain.PaymentStatusPending},
 	}
 	for _, tc := range cases {
@@ -989,8 +1145,32 @@ func TestMapStatus(t *testing.T) {
 	}
 }
 
+func TestMapCancelStatus(t *testing.T) {
+	cases := []struct {
+		in   string
+		want domain.PaymentStatus
+	}{
+		{"REFUNDED", domain.PaymentStatusRefunded},
+		{"REVERSED", domain.PaymentStatusRefunded},
+		{"PARTIAL_REFUNDED", domain.PaymentStatusPartialRefunded},
+		{"PARTIAL_REVERSED", domain.PaymentStatusPartialRefunded},
+		{"NEW", domain.PaymentStatusPending},
+		{"AUTHORIZED", domain.PaymentStatusPending},
+		{"REVERSING", domain.PaymentStatusRefunding},
+		{"REFUNDING", domain.PaymentStatusRefunding},
+		{"ASYNC_REFUNDING", domain.PaymentStatusRefunding},
+		{"REJECTED", domain.PaymentStatusFailed},
+		{"UNKNOWN", domain.PaymentStatusFailed},
+	}
+	for _, tc := range cases {
+		if got := mapCancelStatus(tc.in); got != tc.want {
+			t.Errorf("mapCancelStatus(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestNewProviderDefaults(t *testing.T) {
-	p := NewProvider("", testTerminalKey, testPassword, 0, discardLogger())
+	p := NewProvider("", testTerminalKey, testPassword, 0, 0, 0, 0, discardLogger(), nil)
 	if !strings.HasSuffix(p.baseURL, "/") {
 		t.Fatalf("baseURL should have trailing slash: %q", p.baseURL)
 	}
@@ -1000,7 +1180,7 @@ func TestNewProviderDefaults(t *testing.T) {
 }
 
 func TestNewProviderTrimsTrailingSlash(t *testing.T) {
-	p := NewProvider("https://example.com/rest", testTerminalKey, testPassword, 0, discardLogger())
+	p := NewProvider("https://example.com/rest", testTerminalKey, testPassword, 0, 0, 0, 0, discardLogger(), nil)
 	if p.baseURL != "https://example.com/rest/" {
 		t.Fatalf("baseURL: got %q", p.baseURL)
 	}
@@ -1008,16 +1188,12 @@ func TestNewProviderTrimsTrailingSlash(t *testing.T) {
 
 func TestSignDoesNotMutateInput(t *testing.T) {
 	data := map[string]any{"TerminalKey": "T", "Amount": int64(1)}
-	original := make(map[string]any, len(data))
-	for k, v := range data {
-		original[k] = v
-	}
+	original := maps.Clone(data)
 	_ = sign(data, testPassword)
 	if len(data) != len(original) {
 		t.Fatalf("sign mutated input map")
 	}
 }
-
 
 func TestProviderCancel_FullRefund(t *testing.T) {
 	paymentID := uuid.New()
@@ -1031,8 +1207,8 @@ func TestProviderCancel_FullRefund(t *testing.T) {
 		if got, want := data["PaymentId"], providerPaymentID; got != want {
 			t.Fatalf("PaymentId: got %v, want %v", got, want)
 		}
-		if _, ok := data["Amount"]; ok {
-			t.Fatal("expected Amount omitted for full refund")
+		if got, want := data["Amount"], float64(10000); got != want {
+			t.Fatalf("Amount: got %v, want %v", got, want)
 		}
 
 		_ = json.NewEncoder(w).Encode(cancelResponse{
@@ -1046,10 +1222,10 @@ func TestProviderCancel_FullRefund(t *testing.T) {
 	defer server.Close()
 
 	p := newTestProvider(server.URL + "/v2/")
-	result, err := p.Cancel(context.Background(), application.CancelRequest{
+	result, err := p.Cancel(t.Context(), application.CancelRequest{
 		PaymentID:         paymentID,
 		ProviderPaymentID: providerPaymentID,
-		AmountKopecks:     0,
+		AmountKopecks:     10000,
 	})
 	if err != nil {
 		t.Fatalf("Cancel failed: %v", err)
@@ -1059,46 +1235,6 @@ func TestProviderCancel_FullRefund(t *testing.T) {
 	}
 	if result.RefundedAmountKopecks != 10000 {
 		t.Fatalf("RefundedAmountKopecks: got %d, want 10000", result.RefundedAmountKopecks)
-	}
-}
-
-func TestProviderCancel_PartialRefund(t *testing.T) {
-	paymentID := uuid.New()
-	providerPaymentID := "cancel-456"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v2/Cancel" {
-			t.Fatalf("unexpected path: %s", r.URL.Path)
-		}
-		data := verifyRequestToken(t, r, testPassword)
-		if got, want := data["Amount"], float64(3000); got != want {
-			t.Fatalf("Amount: got %v, want %v", got, want)
-		}
-
-		_ = json.NewEncoder(w).Encode(cancelResponse{
-			baseResponse:   baseResponse{Success: true, Status: "PARTIAL_REFUNDED"},
-			PaymentID:      providerPaymentID,
-			OrderID:        paymentID.String(),
-			OriginalAmount: 10000,
-			NewAmount:      7000,
-		})
-	}))
-	defer server.Close()
-
-	p := newTestProvider(server.URL + "/v2/")
-	result, err := p.Cancel(context.Background(), application.CancelRequest{
-		PaymentID:         paymentID,
-		ProviderPaymentID: providerPaymentID,
-		AmountKopecks:     3000,
-	})
-	if err != nil {
-		t.Fatalf("Cancel failed: %v", err)
-	}
-	if result.Status != domain.PaymentStatusPartialRefunded {
-		t.Fatalf("Status: got %v, want %v", result.Status, domain.PaymentStatusPartialRefunded)
-	}
-	if result.RefundedAmountKopecks != 3000 {
-		t.Fatalf("RefundedAmountKopecks: got %d, want 3000", result.RefundedAmountKopecks)
 	}
 }
 

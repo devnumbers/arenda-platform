@@ -3,8 +3,10 @@
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/shared/ui/button';
+import { LinkButton } from '@/shared/ui/link-button';
 import { WizardHeader } from '@/shared/ui/wizard-header';
 import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
 import {
   expenseCategories,
   incomeCategories,
@@ -12,12 +14,15 @@ import {
 } from '@/entities/operation/model/types';
 import { getCategoriesByType } from '@/entities/operation/lib/categories';
 import { useCreateOperation } from '@/features/operations/api';
+import { useProperties, useProperty } from '@/features/properties/api';
 import { useCreateRecurringOperation } from '@/features/recurring-operations/api/hooks';
 import { ApiError } from '@/shared/api/errors';
 import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
+import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { useSubscription } from '@/features/subscription/api/hooks';
 import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
 import { OperationBasicInfoStep } from './OperationBasicInfoStep';
+import { OperationCreateWizardLoading } from './OperationCreateWizardLoading';
 import { OperationReminderStep } from './OperationReminderStep';
 import { OperationScheduleStep } from './OperationScheduleStep';
 import { OperationSuccessScreen } from './OperationSuccessScreen';
@@ -29,13 +34,15 @@ import {
   type ScheduleData,
   type ScheduleErrors,
 } from '../model/types';
+import {
+  useOperationCreateDraft,
+  type OperationCreateStep,
+} from '../lib/use-operation-create-draft';
 import styles from './OperationCreateWizard.module.css';
 
-type Step = 'basic' | 'schedule' | 'reminder' | 'success';
+const stepOrder: Exclude<OperationCreateStep, 'success'>[] = ['basic', 'schedule', 'reminder'];
 
-const stepOrder: Exclude<Step, 'success'>[] = ['basic', 'schedule', 'reminder'];
-
-const stepNumber: Record<Step, number> = {
+const stepNumber: Record<OperationCreateStep, number> = {
   basic: 1,
   schedule: 2,
   reminder: 3,
@@ -109,50 +116,63 @@ function validateSchedule(data: ScheduleData): ScheduleErrors {
 export function OperationCreateWizard({ type, propertyId }: OperationCreateWizardProps): JSX.Element {
   const router = useRouter();
 
-  const { data: subscription } = useSubscription();
+  const { data: subscription, isPending: isSubscriptionPending } = useSubscription();
   const readonly = isSubscriptionReadonly(subscription);
 
-  const [operationType, setOperationType] = useState<OperationType>(type);
+  const {
+    data: properties,
+    isLoading: isPropertiesLoading,
+    isError: isPropertiesError,
+    isFetching: isPropertiesFetching,
+    refetch: refetchProperties,
+  } = useProperties();
 
-  const [step, setStep] = useState<Step>('basic');
-  const [basicInfo, setBasicInfo] = useState<BasicInfoData>({
-    amount: '',
-    name: '',
-    category: undefined,
-    propertyId: propertyId ?? undefined,
-    comment: '',
-    type,
-  });
+  const preselectedPropertyQuery = useProperty(propertyId ?? '');
+  const isPreselectedArchived =
+    Boolean(propertyId) && preselectedPropertyQuery.data?.status === 'archived';
+
+  const { draft, setDraft } = useOperationCreateDraft(type, propertyId);
+  const { step, operationType, basicInfo, schedule, reminder } = draft;
+
+  const setStep = (next: OperationCreateStep) =>
+    setDraft((prev) => ({ ...prev, step: next }));
+  const setBasicInfo = (next: BasicInfoData) =>
+    setDraft((prev) => ({ ...prev, basicInfo: next }));
+  const setSchedule = (next: ScheduleData) =>
+    setDraft((prev) => ({ ...prev, schedule: next }));
+  const setReminder = (next: ReminderData) =>
+    setDraft((prev) => ({ ...prev, reminder: next }));
+
   const [basicErrors, setBasicErrors] = useState<BasicInfoErrors>({});
-  const [schedule, setSchedule] = useState<ScheduleData>({
-    frequency: 'once',
-    date: undefined,
-    endDate: undefined,
-  });
   const [scheduleErrors, setScheduleErrors] = useState<ScheduleErrors>({});
-  const [reminder, setReminder] = useState<ReminderData>({
-    enabled: false,
-    offsetDays: 1,
-  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | undefined>(undefined);
 
   const createOperation = useCreateOperation();
   const createRecurringOperation = useCreateRecurringOperation();
 
+  const isEmpty = !isPropertiesLoading && !isPropertiesError && properties?.length === 0;
+  const isPageLoading =
+    isPropertiesLoading ||
+    isSubscriptionPending ||
+    (Boolean(propertyId) && preselectedPropertyQuery.isPending);
+
   const handleTypeChange = (nextType: OperationType) => {
-    setOperationType(nextType);
-    setBasicInfo((prev) => {
+    setDraft((prev) => {
       const validCategories = getCategoriesByType(nextType);
-      const category = validCategories.some((option) => option.value === prev.category)
-        ? prev.category
+      const category = validCategories.some((option) => option.value === prev.basicInfo.category)
+        ? prev.basicInfo.category
         : undefined;
-      return { ...prev, type: nextType, category };
+      return {
+        ...prev,
+        operationType: nextType,
+        basicInfo: { ...prev.basicInfo, type: nextType, category },
+      };
     });
   };
 
   const handleCancel = () => {
-    router.push(ROUTES.finance);
+    goBack(router, ROUTES.finance);
   };
 
   const handleBack = () => {
@@ -164,7 +184,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     if (currentIndex > 0) {
       setStep(stepOrder[currentIndex - 1]);
     } else {
-      router.push(ROUTES.finance);
+      goBack(router, ROUTES.finance);
     }
   };
 
@@ -260,11 +280,77 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     }
   };
 
+  const currentStepNumber = stepNumber[step];
+  const isBasicValid = Object.keys(validateBasicInfo(basicInfo, operationType)).length === 0;
+  const isScheduleValid = Object.keys(validateSchedule(schedule)).length === 0;
+  const isNextDisabled =
+    readonly || (step === 'basic' && !isBasicValid) || (step === 'schedule' && !isScheduleValid);
+
   if (step === 'success') {
     return <OperationSuccessScreen type={operationType} propertyId={basicInfo.propertyId} />;
   }
 
-  const currentStepNumber = stepNumber[step];
+  if (isPageLoading) {
+    return (
+      <div className={styles.root}>
+        <WizardHeader
+          title="Создание операции"
+          step={currentStepNumber}
+          totalSteps={3}
+          onBack={handleBack}
+          onCancel={handleCancel}
+        />
+        <OperationCreateWizardLoading />
+      </div>
+    );
+  }
+
+  if (isPropertiesError) {
+    return (
+      <div className={styles.root}>
+        <WizardHeader
+          title="Создание операции"
+          step={currentStepNumber}
+          totalSteps={3}
+          onBack={handleBack}
+          onCancel={handleCancel}
+        />
+        <div className={styles.content}>
+          <FinanceErrorState onRetry={refetchProperties} isLoading={isPropertiesFetching} />
+        </div>
+      </div>
+    );
+  }
+
+  if (isPreselectedArchived && propertyId) {
+    return (
+      <div className={styles.root}>
+        <WizardHeader
+          title="Создание операции"
+          step={currentStepNumber}
+          totalSteps={3}
+          onBack={handleBack}
+          onCancel={handleCancel}
+        />
+        <div className={styles.content}>
+          <div className={styles.blocked}>
+            <h2 className={styles.blockedTitle}>Операция недоступна</h2>
+            <p className={styles.blockedText}>
+              Объект в архиве. Добавить операцию можно только для объекта в работе
+              или на ремонте.
+            </p>
+            <LinkButton
+              href={ROUTES.property(propertyId)}
+              variant="primary"
+              size="medium"
+            >
+              К объекту
+            </LinkButton>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.root}>
@@ -286,6 +372,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
             onTypeChange={handleTypeChange}
             errors={basicErrors}
             readonly={readonly}
+            isEmpty={isEmpty}
           />
         )}
         {step === 'schedule' && (
@@ -312,7 +399,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
           size="large"
           fullWidth
           loading={isSubmitting}
-          disabled={readonly}
+          disabled={isNextDisabled}
           onClick={step === 'reminder' ? handleSubmit : handleNext}
         >
           {step === 'reminder' ? 'Создать операцию' : 'Далее'}

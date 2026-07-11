@@ -3,12 +3,13 @@
 import {type JSX, useMemo} from 'react';
 import {Icon} from '@/shared/ui/icon';
 import {PageHeader} from '@/shared/ui/page-header';
-import {ArrowRight, Plus} from '@/shared/assets/icons';
+import {ArrowRight} from '@/shared/assets/icons';
 import {LinkButton} from '@/shared/ui/link-button';
 import {ROUTES} from '@/shared/config/routes';
 import {useFinanceReport} from '@/features/finance/api/hooks';
 import {useOperations} from '@/features/operations/api/hooks';
 import {formatDateForApi} from '@/entities/operation/lib/dates';
+import {FinanceCreateOperationButton} from './FinanceCreateOperationButton';
 import {FinanceEmptyState} from './FinanceEmptyState';
 import {FinanceLoading} from './FinanceLoading';
 import {FinanceErrorState} from './FinanceErrorState';
@@ -20,13 +21,6 @@ import {isSubscriptionReadonly} from '@/features/subscription/lib/is-subscriptio
 import styles from './FinancePage.module.css';
 import sectionStyles from './FinanceSection.module.css';
 
-function getCurrentMonthRange(): { from: string; to: string } {
-    const now = new Date();
-    const from = new Date(now.getFullYear(), now.getMonth(), 1);
-    const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    return {from: formatDateForApi(from), to: formatDateForApi(to)};
-}
-
 function getUpcomingMonthRange(): { from: string; to: string } {
     const today = new Date();
     const until = new Date(today);
@@ -35,7 +29,6 @@ function getUpcomingMonthRange(): { from: string; to: string } {
 }
 
 export function FinancePage(): JSX.Element {
-    const {from, to} = useMemo(() => getCurrentMonthRange(), []);
     const upcomingRange = useMemo(() => getUpcomingMonthRange(), []);
 
     const {
@@ -44,7 +37,7 @@ export function FinancePage(): JSX.Element {
         isError: isReportError,
         isFetching: isReportFetching,
         refetch: refetchReport,
-    } = useFinanceReport(from, to);
+    } = useFinanceReport();
 
     const {
         data: operationsData,
@@ -105,28 +98,15 @@ export function FinancePage(): JSX.Element {
         !isErrorOverdue &&
         !isErrorUpcoming;
 
-    const {data: subscription} = useSubscription();
-    const readonly = isSubscriptionReadonly(subscription);
+    const {data: subscription, isPending: isSubscriptionPending} = useSubscription();
+    const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
     return (
         <div className={styles.root}>
             <PageHeader
                 title="Финансы"
                 actions={
-                    !readonly && (
-                        <LinkButton
-                            href={ROUTES.financeCreateOperation}
-                            variant="primary"
-                            size="small"
-                            leftIcon={
-                                <Icon size="s">
-                                    <Plus/>
-                                </Icon>
-                            }
-                        >
-                            Добавить операцию
-                        </LinkButton>
-                    )
+                    !readonly && <FinanceCreateOperationButton/>
                 }
             />
 

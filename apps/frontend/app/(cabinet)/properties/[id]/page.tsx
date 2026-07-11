@@ -1,25 +1,19 @@
-import type { Metadata } from 'next';
-import { Suspense } from 'react';
-import { PropertyDetailPage } from '@/widgets/property-detail';
-import { PropertyDetailLoading } from '@/widgets/property-detail/ui/PropertyDetailLoading';
+import type {Metadata} from 'next';
+import {PropertyDetailPage} from '@/widgets/property-detail';
 
 type PropertyDetailRoutePageProps = {
-  params: Promise<{ id: string }>;
+    params: Promise<{ id: string }>;
 };
 
 export const metadata: Metadata = {
-  title: 'Мой объект — Рентли',
-  description: 'Просмотр объекта недвижимости',
+    title: 'Мой объект — Рентли',
+    description: 'Просмотр объекта недвижимости',
 };
 
 export default async function PropertyDetailRoutePage({
-  params,
+    params,
 }: PropertyDetailRoutePageProps) {
-  await params;
+    await params;
 
-  return (
-    <Suspense fallback={<PropertyDetailLoading />}>
-      <PropertyDetailPage />
-    </Suspense>
-  );
+    return <PropertyDetailPage/>;
 }

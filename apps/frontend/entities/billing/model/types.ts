@@ -22,7 +22,7 @@ export const PAYMENT_PERIOD_LABELS: Record<PaymentPeriod, string> = {
   year: 'год',
 };
 
-export type SubscriptionStatus = 'active' | 'grace' | 'blocked' | 'cancelled';
+export type SubscriptionStatus = 'active' | 'grace' | 'cancelled';
 
 export type Tariff = {
   id: string;

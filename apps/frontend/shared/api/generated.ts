@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/auth/phone/send": {
+    "/auth/send": {
         parameters: {
             query?: never;
             header?: never;
@@ -13,15 +13,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @deprecated */
-        post: operations["sendPhoneCode"];
+        post: operations["sendCode"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/auth/phone/verify": {
+    "/auth/verify": {
         parameters: {
             query?: never;
             header?: never;
@@ -30,40 +29,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @deprecated */
-        post: operations["verifyPhoneCode"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/email/send": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["sendEmailCode"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/email/verify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["verifyEmailCode"];
+        post: operations["verifyCode"];
         delete?: never;
         options?: never;
         head?: never;
@@ -774,6 +740,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/subscription/payment-methods/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["syncPaymentMethods"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/subscription/payments": {
         parameters: {
             query?: never;
@@ -782,6 +764,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listAdminSubscriptionPayments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/subscription/payments/{paymentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAdminSubscriptionPayment"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1018,20 +1016,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        SendPhoneCodeRequest: {
-            /** @example +79990001122 */
-            phone: string;
-        };
-        VerifyPhoneCodeRequest: {
-            phone: string;
-            /** @example 123456 */
-            code: string;
-        };
-        SendEmailCodeRequest: {
+        SendCodeRequest: {
             phone: string;
             email: string;
         };
-        VerifyEmailCodeRequest: {
+        SendCodeResponse: {
+            /** @description Seconds before another code can be requested */
+            retryAfter: number;
+        };
+        VerifyCodeRequest: {
             phone: string;
             email: string;
             code: string;
@@ -1154,6 +1147,8 @@ export interface components {
             paymentMethodId?: string | null;
             /** Format: date-time */
             createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
         AdminSubscriptionPaymentsResponse: {
             items: components["schemas"]["AdminSubscriptionPayment"][];
@@ -1341,6 +1336,7 @@ export interface components {
             occupancy: "free" | "occupied";
             photos?: components["schemas"]["PropertyPhoto"][];
             active_lease: components["schemas"]["LeaseResponse"] | null;
+            overdue_rent_count: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1411,6 +1407,20 @@ export interface components {
             rent_amount_kopecks: number;
             deposit_amount_kopecks: number;
             payment_day: number;
+            /** @description Deprecated. Kept for backward compatibility; true when the lease has any overdue rent operation. The frontend no longer relies on it. */
+            current_period_overdue: boolean;
+            /** @description True when the lease has at least one overdue rent operation of any period. */
+            has_overdue: boolean;
+            /**
+             * Format: date
+             * @description Earliest overdue rent operation date of any period.
+             */
+            overdue_since?: string | null;
+            /**
+             * Format: date
+             * @description Nearest pending rent operation date on or after as_of.
+             */
+            next_payment_date?: string | null;
             comment?: string | null;
             /** Format: date-time */
             created_at: string;
@@ -1468,7 +1478,7 @@ export interface components {
         /** @enum {string} */
         LeaseStatus: "awaiting_start" | "active" | "requires_action" | "completed" | "archived";
         /** @enum {string} */
-        SubscriptionStatus: "active" | "grace" | "blocked" | "cancelled";
+        SubscriptionStatus: "active" | "grace" | "cancelled";
         /** @enum {string} */
         SubscriptionPaymentStatus: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded";
         /** @enum {string} */
@@ -1666,10 +1676,6 @@ export interface components {
             /** Format: date */
             reminder_date: string;
         };
-        RefundSubscriptionPaymentRequest: {
-            /** @description Optional partial refund amount in kopecks. If omitted, the full payment amount is refunded. */
-            amount_kopecks?: number;
-        };
         RemindersResponse: {
             items: components["schemas"]["ReminderResponse"][];
         };
@@ -1751,6 +1757,8 @@ export interface components {
         /** @description Too many requests */
         TooManyRequests: {
             headers: {
+                /** @description Seconds to wait before retrying the request */
+                "Retry-After"?: number;
                 [name: string]: unknown;
             };
             content: {
@@ -1759,6 +1767,15 @@ export interface components {
         };
         /** @description Conflict */
         Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Gone */
+        Gone: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1792,7 +1809,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    sendPhoneCode: {
+    sendCode: {
         parameters: {
             query?: never;
             header?: never;
@@ -1801,22 +1818,25 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SendPhoneCodeRequest"];
+                "application/json": components["schemas"]["SendCodeRequest"];
             };
         };
         responses: {
             /** @description Code sent */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["SendCodeResponse"];
+                };
             };
             400: components["responses"]["BadRequest"];
             429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
         };
     };
-    verifyPhoneCode: {
+    verifyCode: {
         parameters: {
             query?: never;
             header?: never;
@@ -1825,7 +1845,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["VerifyPhoneCodeRequest"];
+                "application/json": components["schemas"]["VerifyCodeRequest"];
             };
         };
         responses: {
@@ -1841,60 +1861,9 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            429: components["responses"]["TooManyRequests"];
-        };
-    };
-    sendEmailCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SendEmailCodeRequest"];
-            };
-        };
-        responses: {
-            /** @description Code sent */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            400: components["responses"]["BadRequest"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["TooManyRequests"];
-        };
-    };
-    verifyEmailCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VerifyEmailCodeRequest"];
-            };
-        };
-        responses: {
-            /** @description Authenticated */
-            200: {
-                headers: {
-                    "Set-Cookie"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MeResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     logout: {
@@ -1935,6 +1904,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     getMe: {
@@ -2011,6 +1981,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     changePhone: {
@@ -2579,9 +2550,9 @@ export interface operations {
     };
     getFinanceReport: {
         parameters: {
-            query: {
-                from: string;
-                to: string;
+            query?: {
+                from?: string;
+                to?: string;
             };
             header?: never;
             path?: never;
@@ -3404,6 +3375,28 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    syncPaymentMethods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment methods synced with the provider */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     listAdminSubscriptionPayments: {
         parameters: {
             query?: {
@@ -3433,6 +3426,32 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    getAdminSubscriptionPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin subscription payment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSubscriptionPayment"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     refundSubscriptionPayment: {
         parameters: {
             query?: never;
@@ -3442,11 +3461,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["RefundSubscriptionPaymentRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Payment refunded */
             204: {

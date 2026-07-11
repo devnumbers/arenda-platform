@@ -1,20 +1,20 @@
-import type { Metadata } from 'next';
-import { Suspense } from 'react';
-import { PageHeader } from '@/shared/ui/page-header';
-import { PropertiesPage, PropertiesLoading } from '@/widgets/properties';
+import type {Metadata} from 'next';
+import {PropertiesPage} from '@/widgets/properties';
+import {parseFiltersFromParams, parseSortFromParams} from '@/widgets/properties/lib/parse-property-search-params';
 
 export const metadata: Metadata = {
-  title: 'Мои объекты — Рентли',
-  description: 'Список объектов',
+    title: 'Мои объекты — Рентли',
+    description: 'Список объектов',
 };
 
-export default function PropertiesRoutePage() {
-  return (
-    <>
-      <PageHeader title="Мои объекты" />
-      <Suspense fallback={<PropertiesLoading />}>
-        <PropertiesPage />
-      </Suspense>
-    </>
-  );
+type PropertiesRoutePageProps = {
+    readonly searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function PropertiesRoutePage({searchParams}: PropertiesRoutePageProps) {
+    const resolved = searchParams ? await searchParams : {};
+    const initialFilters = parseFiltersFromParams(resolved);
+    const initialSort = parseSortFromParams(resolved);
+
+    return <PropertiesPage initialFilters={initialFilters} initialSort={initialSort}/>;
 }

@@ -58,7 +58,7 @@ export const authProvider: AuthProvider = {
   login: async ({ phone, email, code }) => {
     const normalizedPhone = normalizePhone(String(phone ?? ''));
     try {
-      await httpClient(`${API_PREFIX}/auth/email/verify`, {
+      await httpClient(`${API_PREFIX}/auth/verify`, {
         method: 'POST',
         body: JSON.stringify({ phone: normalizedPhone, email, code }),
       });

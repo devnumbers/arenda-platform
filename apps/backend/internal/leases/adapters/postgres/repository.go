@@ -1080,6 +1080,42 @@ func (r *OperationRepository) GetPropertyOperationsSummary(ctx context.Context, 
 	}, nil
 }
 
+func (r *OperationRepository) ListOverdueRentOperations(ctx context.Context, ownerID uuid.UUID) ([]application.OverdueRentOperation, error) {
+	rows, err := r.q().ListOverdueRentOperationsByOwner(ctx, pgconv.UUIDToPgtype(ownerID))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]application.OverdueRentOperation, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, application.OverdueRentOperation{
+			LeaseID:       pgconv.UUIDFromPgtype(row.LeaseID),
+			OperationDate: row.OperationDate.Time,
+		})
+	}
+	return result, nil
+}
+
+func (r *OperationRepository) ListNextRentPayments(ctx context.Context, ownerID uuid.UUID, asOf time.Time) ([]application.NextRentPayment, error) {
+	rows, err := r.q().ListNextRentPaymentsByOwner(ctx, postgres.ListNextRentPaymentsByOwnerParams{
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		AsOf:    pgconv.DateToPgtype(asOf),
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]application.NextRentPayment, 0, len(rows))
+	for _, row := range rows {
+		if !row.NextPaymentDate.Valid {
+			continue
+		}
+		result = append(result, application.NextRentPayment{
+			LeaseID:         pgconv.UUIDFromPgtype(row.LeaseID),
+			NextPaymentDate: row.NextPaymentDate.Time,
+		})
+	}
+	return result, nil
+}
+
 func (r *OperationRepository) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Operation, error) {
 	row, err := r.q().GetOperationByIDAndOwner(ctx, postgres.GetOperationByIDAndOwnerParams{
 		ID:      pgconv.UUIDToPgtype(id),
@@ -1256,11 +1292,11 @@ func (r *OperationRepository) SoftDeleteOperation(ctx context.Context, id, owner
 	return nil
 }
 
-func (r *OperationRepository) GetFinanceReportTotals(ctx context.Context, ownerID uuid.UUID, from, to time.Time) (application.FinanceReportTotals, error) {
+func (r *OperationRepository) GetFinanceReportTotals(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) (application.FinanceReportTotals, error) {
 	row, err := r.q().GetFinanceReportTotals(ctx, postgres.GetFinanceReportTotalsParams{
-		OwnerID:         pgconv.UUIDToPgtype(ownerID),
-		OperationDate:   pgconv.DateToPgtype(from),
-		OperationDate_2: pgconv.DateToPgtype(to),
+		OwnerID:  pgconv.UUIDToPgtype(ownerID),
+		FromDate: pgconv.DatePtrToPgtype(from),
+		ToDate:   pgconv.DatePtrToPgtype(to),
 	})
 	if err != nil {
 		return application.FinanceReportTotals{}, err
@@ -1271,11 +1307,11 @@ func (r *OperationRepository) GetFinanceReportTotals(ctx context.Context, ownerI
 	}, nil
 }
 
-func (r *OperationRepository) GetFinanceReportByProperty(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]application.FinanceReportPropertyRow, error) {
+func (r *OperationRepository) GetFinanceReportByProperty(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]application.FinanceReportPropertyRow, error) {
 	rows, err := r.q().GetFinanceReportByProperty(ctx, postgres.GetFinanceReportByPropertyParams{
-		OwnerID:         pgconv.UUIDToPgtype(ownerID),
-		OperationDate:   pgconv.DateToPgtype(from),
-		OperationDate_2: pgconv.DateToPgtype(to),
+		OwnerID:  pgconv.UUIDToPgtype(ownerID),
+		FromDate: pgconv.DatePtrToPgtype(from),
+		ToDate:   pgconv.DatePtrToPgtype(to),
 	})
 	if err != nil {
 		return nil, err
@@ -1292,11 +1328,11 @@ func (r *OperationRepository) GetFinanceReportByProperty(ctx context.Context, ow
 	return result, nil
 }
 
-func (r *OperationRepository) GetFinanceReportByCategory(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]application.FinanceReportCategoryRow, error) {
+func (r *OperationRepository) GetFinanceReportByCategory(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]application.FinanceReportCategoryRow, error) {
 	rows, err := r.q().GetFinanceReportByCategory(ctx, postgres.GetFinanceReportByCategoryParams{
-		OwnerID:         pgconv.UUIDToPgtype(ownerID),
-		OperationDate:   pgconv.DateToPgtype(from),
-		OperationDate_2: pgconv.DateToPgtype(to),
+		OwnerID:  pgconv.UUIDToPgtype(ownerID),
+		FromDate: pgconv.DatePtrToPgtype(from),
+		ToDate:   pgconv.DatePtrToPgtype(to),
 	})
 	if err != nil {
 		return nil, err
@@ -1321,11 +1357,11 @@ func (r *OperationRepository) GetFinanceReportByCategory(ctx context.Context, ow
 	return result, nil
 }
 
-func (r *OperationRepository) GetFinanceReportByMonth(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]application.FinanceReportMonthRow, error) {
+func (r *OperationRepository) GetFinanceReportByMonth(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]application.FinanceReportMonthRow, error) {
 	rows, err := r.q().GetFinanceReportByMonth(ctx, postgres.GetFinanceReportByMonthParams{
-		OwnerID:         pgconv.UUIDToPgtype(ownerID),
-		OperationDate:   pgconv.DateToPgtype(from),
-		OperationDate_2: pgconv.DateToPgtype(to),
+		OwnerID:  pgconv.UUIDToPgtype(ownerID),
+		FromDate: pgconv.DatePtrToPgtype(from),
+		ToDate:   pgconv.DatePtrToPgtype(to),
 	})
 	if err != nil {
 		return nil, err
@@ -1422,6 +1458,22 @@ func (r *PropertyRepository) ExistsByOwner(ctx context.Context, id, ownerID uuid
 		return false, err
 	}
 	return true, nil
+}
+
+// GetStatusByOwner returns the property status for the owner, or an empty
+// string when the property does not exist.
+func (r *PropertyRepository) GetStatusByOwner(ctx context.Context, id, ownerID uuid.UUID) (string, error) {
+	status, err := r.q().GetPropertyStatusByOwner(ctx, postgres.GetPropertyStatusByOwnerParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return status, nil
 }
 
 // HasOpenLease reports whether the property currently has an open lease.

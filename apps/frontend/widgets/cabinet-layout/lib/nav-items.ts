@@ -12,5 +12,5 @@ export const navItems: ReadonlyArray<NavItemConfig> = [
   { label: 'Арендаторы', href: '/tenants', icon: 'NavTenants', showInBottomNav: false },
   { label: 'Финансы', href: '/finance', icon: 'NavWallet', bottomIcon: 'BottomWallet', showInBottomNav: true },
   { label: 'Профиль', href: '/profile', icon: 'NavProfile', bottomIcon: 'BottomProfile', showInBottomNav: true },
-  { label: 'Поддержка', href: '/profile/support', icon: 'NavSupport', showInBottomNav: false },
+  { label: 'Поддержка', href: '/support', icon: 'NavSupport', showInBottomNav: false },
 ];

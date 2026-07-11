@@ -17,7 +17,7 @@ const menuItems: MenuItem[] = [
     {title: 'Мои данные', href: ROUTES.profilePersonal},
     {title: 'Аккаунт', href: '/profile/account'},
     {title: 'Тариф', href: '/profile/tariff'},
-    {title: 'Поддержка', href: '/profile/support'},
+    {title: 'Поддержка', href: '/support'},
     {title: 'Информация', href: '/profile/info'},
 ];
 

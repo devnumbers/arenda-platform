@@ -23,5 +23,10 @@ export type Lease = {
   readonly rentKopecks: number;
   readonly startDate: string;
   readonly endDate?: string;
+  readonly paymentDay: number;
+  readonly currentPeriodOverdue: boolean;
+  readonly hasOverdue: boolean;
+  readonly overdueSince?: string;
+  readonly nextPaymentDate?: string;
   readonly status: LeaseStatus;
 };

@@ -11,6 +11,7 @@ import {
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { recurringOperationKeys } from './keys';
+import { financeKeys } from '@/features/finance/api/keys';
 import { operationKeys } from '@/features/operations/api/keys';
 import type { components } from '@/shared/api/generated';
 
@@ -114,6 +115,10 @@ export function useUpdateRecurringOperation(): UseMutationResult<
       queryClient.invalidateQueries({
         queryKey: operationKeys.summary(propertyId),
       });
+      queryClient.invalidateQueries({
+        queryKey: operationKeys.byProperty(propertyId),
+      });
+      queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
     },
   });
 }

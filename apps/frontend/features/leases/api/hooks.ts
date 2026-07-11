@@ -10,6 +10,7 @@ import {
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { leaseKeys } from './keys';
+import { financeKeys } from '@/features/finance/api/keys';
 import { operationKeys } from '@/features/operations/api/keys';
 import { propertyKeys } from '@/features/properties/api/keys';
 import type { components } from '@/shared/api/generated';
@@ -65,11 +66,20 @@ export function useCreateLease(): UseMutationResult<
       }),
     onSuccess: (lease) => {
       queryClient.invalidateQueries({ queryKey: leaseKeys.all });
+      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+      queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
       if (lease.property_id) {
         queryClient.invalidateQueries({ queryKey: propertyKeys.list });
         queryClient.invalidateQueries({ queryKey: propertyKeys.detail(lease.property_id) });
         queryClient.invalidateQueries({
           queryKey: leaseKeys.byProperty(lease.property_id),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.byProperty(lease.property_id),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.summary(lease.property_id),
         });
       }
     },
@@ -94,6 +104,9 @@ export function useUpdateLease(): UseMutationResult<
       queryClient.invalidateQueries({
         queryKey: operationKeys.operations({ lease_id: id }),
       });
+      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+      queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
       if (lease.property_id) {
         queryClient.invalidateQueries({ queryKey: propertyKeys.list });
         queryClient.invalidateQueries({ queryKey: propertyKeys.detail(lease.property_id) });
@@ -128,6 +141,9 @@ export function useCompleteLease(): UseMutationResult<
       queryClient.invalidateQueries({
         queryKey: operationKeys.operations({ lease_id: lease.id }),
       });
+      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+      queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
       if (lease.property_id) {
         queryClient.invalidateQueries({ queryKey: propertyKeys.list });
         queryClient.invalidateQueries({ queryKey: propertyKeys.detail(lease.property_id) });
@@ -162,6 +178,9 @@ export function useReturnDeposit(): UseMutationResult<
       queryClient.invalidateQueries({
         queryKey: operationKeys.operations({ lease_id: lease.id }),
       });
+      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+      queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
       if (lease.property_id) {
         queryClient.invalidateQueries({
           queryKey: leaseKeys.byProperty(lease.property_id),

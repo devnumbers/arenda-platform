@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_subscription_payments_provider_payment_id;

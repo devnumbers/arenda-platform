@@ -11,6 +11,8 @@ apps/frontend/node_modules
 apps/frontend/.next
 apps/admin/node_modules
 apps/admin/dist
+apps/landing/node_modules
+apps/landing/dist
 
 apps/backend/perf/fixtures.json
 apps/backend/perf/results

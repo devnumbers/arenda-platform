@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -59,7 +59,17 @@ func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, ownerID uu
 		}
 		return domain.Property{}, err
 	}
-	return propertyFromRow(row), nil
+	return propertyFromOverdueRow(postgres.Property{
+		ID:          row.ID,
+		OwnerID:     row.OwnerID,
+		Name:        row.Name,
+		Type:        row.Type,
+		Address:     row.Address,
+		Description: row.Description,
+		Status:      row.Status,
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
+	}, row.OverdueRentCount), nil
 }
 
 func (r *PropertyRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Property, error) {
@@ -83,7 +93,17 @@ func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, ownerID uuid
 	}
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
-		properties = append(properties, propertyFromRow(row))
+		properties = append(properties, propertyFromOverdueRow(postgres.Property{
+			ID:          row.ID,
+			OwnerID:     row.OwnerID,
+			Name:        row.Name,
+			Type:        row.Type,
+			Address:     row.Address,
+			Description: row.Description,
+			Status:      row.Status,
+			CreatedAt:   row.CreatedAt,
+			UpdatedAt:   row.UpdatedAt,
+		}, row.OverdueRentCount))
 	}
 	return properties, nil
 }
@@ -95,7 +115,17 @@ func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, ownerID uu
 	}
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
-		properties = append(properties, propertyFromRow(row))
+		properties = append(properties, propertyFromOverdueRow(postgres.Property{
+			ID:          row.ID,
+			OwnerID:     row.OwnerID,
+			Name:        row.Name,
+			Type:        row.Type,
+			Address:     row.Address,
+			Description: row.Description,
+			Status:      row.Status,
+			CreatedAt:   row.CreatedAt,
+			UpdatedAt:   row.UpdatedAt,
+		}, row.OverdueRentCount))
 	}
 	return properties, nil
 }
@@ -161,4 +191,10 @@ func propertyFromRow(row postgres.Property) domain.Property {
 		CreatedAt:   row.CreatedAt.Time,
 		UpdatedAt:   row.UpdatedAt.Time,
 	}
+}
+
+func propertyFromOverdueRow(row postgres.Property, overdueRentCount int64) domain.Property {
+	p := propertyFromRow(row)
+	p.OverdueRentCount = int(overdueRentCount)
+	return p
 }

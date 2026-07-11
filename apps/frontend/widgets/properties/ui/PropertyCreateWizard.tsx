@@ -3,6 +3,7 @@
 import {type JSX, useEffect, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {ROUTES} from '@/shared/config/routes';
+import {goBack} from '@/shared/lib/navigation';
 import {useCreateProperty} from '@/features/properties/api';
 import {type CreateStep, usePropertyCreateDraft,} from '@/widgets/properties/lib/use-property-create-draft';
 import {WizardHeader} from '@/shared/ui/wizard-header';
@@ -29,12 +30,12 @@ export function PropertyCreateWizard(): JSX.Element {
     }, [draft.step, draft.type, draft.address, setDraft]);
 
     const handleCancel = () => {
-        router.push(ROUTES.properties);
+        goBack(router, ROUTES.properties);
     };
 
     const handleBack = () => {
         if (draft.step === 1) {
-            router.push(ROUTES.properties);
+            goBack(router, ROUTES.properties);
             return;
         }
 

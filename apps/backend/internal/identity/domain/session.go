@@ -2,7 +2,6 @@ package domain
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -18,7 +17,9 @@ const (
 )
 
 type Session struct {
-	UserID     uuid.UUID
+	UserID uuid.UUID
+	// TokenHash is intentionally left empty by NewSession. The caller must hash
+	// the raw token (RawSession.Token) and set this field before persisting.
 	TokenHash  string
 	ExpiresAt  time.Time
 	CreatedAt  time.Time
@@ -56,18 +57,20 @@ func (s *Session) Refresh(now time.Time) bool {
 	return true
 }
 
+// NewSession creates a new session and a raw token. The returned Session has
+// TokenHash left empty; the caller must hash RawSession.Token and assign the
+// hash to Session.TokenHash before persisting it.
 func NewSession(userID uuid.UUID, now time.Time) (RawSession, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return RawSession{}, fmt.Errorf("generate token: %w", err)
 	}
 	token := hex.EncodeToString(b)
-	sum := sha256.Sum256([]byte(token))
 	return RawSession{
 		Token: token,
 		Session: Session{
 			UserID:     userID,
-			TokenHash:  hex.EncodeToString(sum[:]),
+			TokenHash:  "",
 			ExpiresAt:  now.Add(SessionBaseTTL),
 			CreatedAt:  now,
 			LastUsedAt: now,

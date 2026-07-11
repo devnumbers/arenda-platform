@@ -1,7 +1,6 @@
 import type {JSX, ReactNode} from 'react';
 import clsx from 'clsx';
-import {IconLink} from '@/shared/ui/icon-link';
-import {ArrowLeft} from '@/shared/assets/icons';
+import {BackButton} from '@/shared/ui/back-button';
 import styles from './PageHeader.module.css';
 
 export interface PageHeaderProps {
@@ -16,13 +15,7 @@ export function PageHeader({backHref, title, actions, className}: PageHeaderProp
         <header className={clsx(styles.header, className)}>
             <div className={styles.left}>
                 {backHref && (
-                    <IconLink
-                        href={backHref}
-                        size={'large'}
-                        aria-label="Назад"
-                        icon={<ArrowLeft/>}
-                        variant="secondary"
-                    />
+                    <BackButton fallbackHref={backHref}/>
                 )}
                 <h1 className={styles.title}>{title}</h1>
             </div>

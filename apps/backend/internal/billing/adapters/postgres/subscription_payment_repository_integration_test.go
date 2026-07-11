@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 )
 
 func setupSubscriptionPaymentTest(t *testing.T) (context.Context, pgx.Tx, func(), *SubscriptionPaymentRepository, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) {
@@ -241,5 +241,225 @@ func TestSubscriptionPaymentRepositoryIntegration_ListPendingSubscriptionPayment
 	}
 	if list[0].ID != createdPending.ID {
 		t.Errorf("ListPendingSubscriptionPaymentsByUserID[0].ID = %v, want %v", list[0].ID, createdPending.ID)
+	}
+}
+
+func TestSubscriptionPaymentRepository_MarkRefunded_PendingPayment(t *testing.T) {
+	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	defer cleanup()
+
+	ctx := t.Context()
+
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new subscription payment: %v", err)
+	}
+	created, err := repo.Create(ctx, payment)
+	if err != nil {
+		t.Fatalf("Create error = %v", err)
+	}
+	if created.Status != domain.PaymentStatusPending {
+		t.Fatalf("precondition Status = %q, want %q", created.Status, domain.PaymentStatusPending)
+	}
+
+	if err := repo.MarkRefunded(ctx, created.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkRefunded on pending payment error = %v, want nil (must not be ErrInvalidPaymentStatus)", err)
+	}
+
+	got, err := repo.GetByID(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("GetByID error = %v", err)
+	}
+	if got.Status != domain.PaymentStatusRefunded {
+		t.Errorf("Status = %q, want %q", got.Status, domain.PaymentStatusRefunded)
+	}
+	if got.RefundedAmountKopecks == nil || *got.RefundedAmountKopecks != created.AmountKopecks {
+		t.Errorf("RefundedAmountKopecks = %v, want %d", got.RefundedAmountKopecks, created.AmountKopecks)
+	}
+}
+
+func TestSubscriptionPaymentRepository_BeginRefund_Guard(t *testing.T) {
+	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	defer cleanup()
+
+	ctx := t.Context()
+
+	// Each helper call creates a fresh pending payment. The unique index on
+	// (user_id, tariff_id, period) only applies to pending rows, and every test
+	// case transitions its payment out of pending before returning, so the next
+	// case can create another pending payment for the same user/tariff/period.
+	createPending := func() domain.SubscriptionPayment {
+		t.Helper()
+		payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
+		if err != nil {
+			t.Fatalf("new subscription payment: %v", err)
+		}
+		created, err := repo.Create(ctx, payment)
+		if err != nil {
+			t.Fatalf("Create error = %v", err)
+		}
+		return created
+	}
+
+	t.Run("succeeded to refunding ok", func(t *testing.T) {
+		p := createPending()
+		if err := repo.MarkSucceeded(ctx, p.ID, time.Now().UTC()); err != nil {
+			t.Fatalf("MarkSucceeded error = %v", err)
+		}
+		if err := repo.BeginRefund(ctx, p.ID, time.Now().UTC()); err != nil {
+			t.Fatalf("BeginRefund on succeeded error = %v", err)
+		}
+		got, err := repo.GetByID(ctx, p.ID)
+		if err != nil {
+			t.Fatalf("GetByID error = %v", err)
+		}
+		if got.Status != domain.PaymentStatusRefunding {
+			t.Errorf("Status = %q, want %q", got.Status, domain.PaymentStatusRefunding)
+		}
+	})
+
+	t.Run("refunding to refunding rejected", func(t *testing.T) {
+		p := createPending()
+		if err := repo.BeginRefund(ctx, p.ID, time.Now().UTC()); err != nil {
+			t.Fatalf("first BeginRefund error = %v", err)
+		}
+		err := repo.BeginRefund(ctx, p.ID, time.Now().UTC())
+		if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+			t.Errorf("second BeginRefund error = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+
+	t.Run("refunded rejected", func(t *testing.T) {
+		p := createPending()
+		if err := repo.MarkRefunded(ctx, p.ID, time.Now().UTC()); err != nil {
+			t.Fatalf("MarkRefunded error = %v", err)
+		}
+		err := repo.BeginRefund(ctx, p.ID, time.Now().UTC())
+		if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+			t.Errorf("BeginRefund on refunded error = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+
+	t.Run("failed rejected", func(t *testing.T) {
+		p := createPending()
+		if err := repo.MarkFailed(ctx, p.ID, nil, time.Now().UTC()); err != nil {
+			t.Fatalf("MarkFailed error = %v", err)
+		}
+		err := repo.BeginRefund(ctx, p.ID, time.Now().UTC())
+		if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+			t.Errorf("BeginRefund on failed error = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+}
+
+func TestSubscriptionPaymentRepository_MarkRefunded_GuardAlreadyRefunded(t *testing.T) {
+	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	defer cleanup()
+
+	ctx := t.Context()
+
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new subscription payment: %v", err)
+	}
+	created, err := repo.Create(ctx, payment)
+	if err != nil {
+		t.Fatalf("Create error = %v", err)
+	}
+
+	if err := repo.MarkSucceeded(ctx, created.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkSucceeded error = %v", err)
+	}
+	if err := repo.MarkRefunded(ctx, created.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("first MarkRefunded error = %v", err)
+	}
+
+	err = repo.MarkRefunded(ctx, created.ID, time.Now().UTC())
+	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+		t.Errorf("second MarkRefunded error = %v, want ErrInvalidPaymentStatus", err)
+	}
+}
+
+func TestSubscriptionPaymentRepository_Create_DuplicateProviderPaymentID(t *testing.T) {
+	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	defer cleanup()
+
+	ctx := t.Context()
+	providerPaymentID := "duplicate-provider-payment-id"
+
+	first, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new first subscription payment: %v", err)
+	}
+	first.ProviderPaymentID = &providerPaymentID
+	first, err = repo.Create(ctx, first)
+	if err != nil {
+		t.Fatalf("Create first error = %v", err)
+	}
+	if err := repo.MarkSucceeded(ctx, first.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkSucceeded first error = %v", err)
+	}
+
+	second, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodYear, 490000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new second subscription payment: %v", err)
+	}
+	second.ProviderPaymentID = &providerPaymentID
+	_, err = repo.Create(ctx, second)
+	if err == nil {
+		t.Fatal("expected error creating payment with duplicate (provider, provider_payment_id), got nil")
+	}
+}
+
+func TestSubscriptionPaymentRepository_MarkFailed_GuardAlreadySucceeded(t *testing.T) {
+	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	defer cleanup()
+
+	ctx := t.Context()
+
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new subscription payment: %v", err)
+	}
+	created, err := repo.Create(ctx, payment)
+	if err != nil {
+		t.Fatalf("Create error = %v", err)
+	}
+
+	if err := repo.MarkSucceeded(ctx, created.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkSucceeded error = %v", err)
+	}
+
+	err = repo.MarkFailed(ctx, created.ID, nil, time.Now().UTC())
+	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+		t.Errorf("MarkFailed after succeeded error = %v, want ErrInvalidPaymentStatus", err)
+	}
+}
+
+func TestSubscriptionPaymentRepository_MarkFailed_GuardAlreadyRefunded(t *testing.T) {
+	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	defer cleanup()
+
+	ctx := t.Context()
+
+	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("new subscription payment: %v", err)
+	}
+	created, err := repo.Create(ctx, payment)
+	if err != nil {
+		t.Fatalf("Create error = %v", err)
+	}
+
+	if err := repo.MarkSucceeded(ctx, created.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkSucceeded error = %v", err)
+	}
+	if err := repo.MarkRefunded(ctx, created.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkRefunded error = %v", err)
+	}
+
+	err = repo.MarkFailed(ctx, created.ID, nil, time.Now().UTC())
+	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+		t.Errorf("MarkFailed after refunded error = %v, want ErrInvalidPaymentStatus", err)
 	}
 }

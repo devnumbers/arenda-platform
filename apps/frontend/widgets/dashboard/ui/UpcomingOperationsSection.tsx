@@ -47,8 +47,8 @@ export function UpcomingOperationsSection(): JSX.Element {
         );
     }, [data]);
 
-    const {data: subscription} = useSubscription();
-    const readonly = isSubscriptionReadonly(subscription);
+    const {data: subscription, isPending: isSubscriptionPending} = useSubscription();
+    const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
     if (isLoading) {
         return (

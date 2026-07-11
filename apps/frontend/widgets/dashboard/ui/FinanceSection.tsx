@@ -1,9 +1,10 @@
 'use client';
 
 import type {JSX} from 'react';
+import NextLink from 'next/link';
 import {Card} from '@heroui/react/card';
 import {Skeleton} from '@heroui/react/skeleton';
-import {BoldWallet, Logo} from '@/shared/assets/icons';
+import {BoldWallet} from '@/shared/assets/icons';
 import type {Property} from '@/entities/property/model/types';
 import {useOperationsForProperties} from '../lib/use-operations-for-properties';
 import {aggregateOperations} from '../lib/finance-aggregator';
@@ -23,7 +24,13 @@ export function FinanceSection({properties, isLoading}: FinanceSectionProps): JS
     const {operationsList, isLoading: operationsLoading} = useOperationsForProperties(properties);
     const showLoading = isLoading || operationsLoading;
 
-    const {actual, pending} = aggregateOperations(operationsList);
+    const now = new Date();
+    const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const monthOperationsList = operationsList.map((response) => ({
+        ...response,
+        items: response.items.filter((op) => op.operation_date.slice(0, 7) === currentYM),
+    }));
+    const {actual, pending} = aggregateOperations(monthOperationsList);
     const {incomeKopecks, expenseKopecks, profitKopecks} = actual;
     const hasPending = pending.incomeKopecks !== 0 || pending.expenseKopecks !== 0;
 
@@ -66,33 +73,27 @@ export function FinanceSection({properties, isLoading}: FinanceSectionProps): JS
     return (
         <section className={styles.section}>
             <SectionHeader title="Финансы и операции" href="/finance"/>
-            <Card className={styles.card}>
-                <span className={styles.logo3d} aria-hidden="true"/>
-                <div className={styles.top}>
-                    <div className={styles.profit}>
-                        <span className={styles.profitValue}>{formatMoneyKopecks(profitKopecks, {round: true})}</span>
-                        <span className={styles.profitLabel}>Прибыль за {currentMonth}</span>
-                        {hasPending && (
-                            <div className={styles.pending}>
-                                <span className={styles.pendingLabel}>Ожидает оплаты</span>
-                                <span className={styles.pendingValue}>
-                  {formatMoneyKopecks(pending.incomeKopecks, {round: true})} / {formatMoneyKopecks(pending.expenseKopecks, {round: true})}
-                </span>
-                            </div>
-                        )}
+            <NextLink href="/finance" className={styles.cardLink}>
+                <Card className={styles.card}>
+                    <span className={styles.logo3d} aria-hidden="true"/>
+                    <div className={styles.top}>
+                        <div className={styles.profit}>
+                            <span className={styles.profitValue}>{formatMoneyKopecks(profitKopecks, {round: true})}</span>
+                            <span className={styles.profitLabel}>Прибыль за {currentMonth}</span>
+                        </div>
                     </div>
-                </div>
-                <div className={styles.bottom}>
-                    <div className={styles.column}>
-                        <span className={styles.value}>{formatMoneyKopecks(incomeKopecks, {round: true})}</span>
-                        <span className={styles.label}>Доходы</span>
+                    <div className={styles.bottom}>
+                        <div className={styles.column}>
+                            <span className={styles.value}>{formatMoneyKopecks(incomeKopecks, {round: true})}</span>
+                            <span className={styles.label}>Доходы</span>
+                        </div>
+                        <div className={styles.columnRight}>
+                            <span className={styles.value}>{formatMoneyKopecks(expenseKopecks, {round: true})}</span>
+                            <span className={styles.label}>Расходы</span>
+                        </div>
                     </div>
-                    <div className={styles.columnRight}>
-                        <span className={styles.value}>{formatMoneyKopecks(expenseKopecks, {round: true})}</span>
-                        <span className={styles.label}>Расходы</span>
-                    </div>
-                </div>
-            </Card>
+                </Card>
+            </NextLink>
         </section>
     );
 }

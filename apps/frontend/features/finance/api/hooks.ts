@@ -9,15 +9,16 @@ import type { components } from '@/shared/api/generated';
 type FinanceReportResponse = components['schemas']['FinanceReportResponse'];
 
 export function useFinanceReport(
-  from: string,
-  to: string,
+  from?: string,
+  to?: string,
 ): UseQueryResult<FinanceReportResponse, ApiError> {
+  const url =
+    from && to
+      ? `/finance/report?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+      : '/finance/report';
   return useQuery({
     queryKey: financeKeys.report(from, to),
-    queryFn: () =>
-      apiClient<FinanceReportResponse>(
-        `/finance/report?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-      ),
-    enabled: Boolean(from) && Boolean(to),
+    queryFn: () => apiClient<FinanceReportResponse>(url),
+    enabled: true,
   });
 }

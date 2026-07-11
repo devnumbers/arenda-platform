@@ -7,7 +7,6 @@ import styles from './TenantDetailLoading.module.css';
 export function TenantDetailLoading(): JSX.Element {
   return (
     <div className={styles.root} role="status" aria-busy="true" aria-label="Загрузка данных арендатора">
-      <Skeleton className={styles.header} />
       <Skeleton className={styles.section} />
       <Skeleton className={styles.section} />
     </div>

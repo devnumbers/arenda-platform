@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
@@ -31,7 +32,7 @@ func (p *leasePresenter) tenantContactIDs(ctx context.Context, ownerID uuid.UUID
 	return p.tenantContactSvc.ListTenantContactsByIDs(ctx, ownerID, ids)
 }
 
-func (p *leasePresenter) leaseResponse(ctx context.Context, ownerID uuid.UUID, lease leasesdomain.Lease, contacts map[uuid.UUID]leasesdomain.TenantContact) (openapi.LeaseResponse, error) {
+func (p *leasePresenter) leaseResponse(ctx context.Context, ownerID uuid.UUID, lease leasesdomain.Lease, contacts map[uuid.UUID]leasesdomain.TenantContact, overdueSince, nextPaymentDate *time.Time, hasOverdue bool) (openapi.LeaseResponse, error) {
 	resp := openapi.LeaseResponse{
 		Id:                   lease.ID,
 		OwnerId:              lease.OwnerID,
@@ -42,8 +43,16 @@ func (p *leasePresenter) leaseResponse(ctx context.Context, ownerID uuid.UUID, l
 		RentAmountKopecks:    int(lease.RentAmountKopecks),
 		DepositAmountKopecks: int(lease.DepositAmountKopecks),
 		PaymentDay:           lease.PaymentDay,
+		HasOverdue:           hasOverdue,
 		CreatedAt:            lease.CreatedAt,
 		UpdatedAt:            lease.UpdatedAt,
+	}
+	if overdueSince != nil {
+		resp.CurrentPeriodOverdue = true
+		resp.OverdueSince = datePtrToOpenAPI(overdueSince)
+	}
+	if nextPaymentDate != nil {
+		resp.NextPaymentDate = datePtrToOpenAPI(nextPaymentDate)
 	}
 	if lease.Comment != "" {
 		resp.Comment = &lease.Comment

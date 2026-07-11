@@ -2,8 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -43,10 +41,7 @@ func setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time, 
 	if secure {
 		sameSite = http.SameSiteStrictMode
 	}
-	maxAge := int(time.Until(expiresAt).Seconds())
-	if maxAge < 1 {
-		maxAge = 1
-	}
+	maxAge := max(1, int(time.Until(expiresAt).Seconds()))
 	//nolint:gosec // Secure/HttpOnly/SameSite are configured dynamically based on APP_ENV.
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName(secure),
@@ -85,12 +80,6 @@ func sessionTokenFromRequest(r *http.Request, secure bool) string {
 	return cookie.Value
 }
 
-// hashSessionToken hashes a raw session token for repository lookup.
-func hashSessionToken(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])
-}
-
 type fallbackClock struct{}
 
 func (fallbackClock) Now() time.Time { return time.Now().UTC() }
@@ -99,10 +88,8 @@ func (fallbackClock) Now() time.Time { return time.Now().UTC() }
 // They are explicitly public endpoints; authenticated handlers on these paths
 // must validate session themselves if they need it.
 var publicSessionSkippedPaths = []string{
-	"/auth/phone/send",
-	"/auth/phone/verify",
-	"/auth/email/send",
-	"/auth/email/verify",
+	"/auth/send",
+	"/auth/verify",
 	"/webhooks/",
 	"/internal/perf/",
 }
@@ -117,7 +104,7 @@ func isPublicSessionSkippedPath(path string) bool {
 }
 
 // SessionMiddleware loads the authenticated user from the session cookie into the request context.
-func SessionMiddleware(logger *slog.Logger, sessions application.SessionRepository, secure bool, clock clock.Clock) func(http.Handler) http.Handler {
+func SessionMiddleware(logger *slog.Logger, sessions application.SessionService, secure bool, clock clock.Clock) func(http.Handler) http.Handler {
 	if clock == nil {
 		clock = fallbackClock{}
 	}
@@ -135,7 +122,7 @@ func SessionMiddleware(logger *slog.Logger, sessions application.SessionReposito
 			}
 
 			now := clock.Now()
-			session, user, err := sessions.GetByTokenHash(r.Context(), hashSessionToken(token), now)
+			session, user, err := sessions.Load(r.Context(), token, now)
 			if err != nil {
 				if errors.Is(err, application.ErrNotFound) {
 					clearSessionCookie(w, secure)
@@ -154,13 +141,15 @@ func SessionMiddleware(logger *slog.Logger, sessions application.SessionReposito
 				return
 			}
 
-			if session.Refresh(now) {
-				if err := sessions.Update(r.Context(), session); err != nil {
+			refreshedSession := session
+			if refreshedSession.Refresh(now) {
+				if err := sessions.Update(r.Context(), refreshedSession); err != nil {
 					if logger != nil {
 						logger.ErrorContext(r.Context(), "failed to refresh session", slog.String("error", sanitizeError(err)))
 					}
 				} else {
-					setSessionCookie(w, token, session.ExpiresAt, secure)
+					setSessionCookie(w, token, refreshedSession.ExpiresAt, secure)
+					session = refreshedSession
 				}
 			}
 

@@ -15,6 +15,8 @@ import {
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { operationKeys } from './keys';
+import { financeKeys } from '@/features/finance/api/keys';
+import { leaseKeys } from '@/features/leases/api/keys';
 import type { components } from '@/shared/api/generated';
 
 type OperationResponse = components['schemas']['OperationResponse'];
@@ -78,6 +80,7 @@ function operationsQueryString(filters: Record<string, string | string[]>): stri
 function invalidateOperationLists(queryClient: QueryClient): void {
   queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
   queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+  queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
 }
 
 export function useOperations(
@@ -189,6 +192,9 @@ export function useCompleteOperation(): UseMutationResult<
         queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(propertyId) });
         queryClient.invalidateQueries({ queryKey: operationKeys.summary(propertyId) });
       }
+      if (operation.lease_id && operation.category === 'rent') {
+        queryClient.invalidateQueries({ queryKey: leaseKeys.all });
+      }
     },
   });
 }
@@ -211,6 +217,9 @@ export function useMarkOperationIncomplete(): UseMutationResult<
       if (propertyId) {
         queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(propertyId) });
         queryClient.invalidateQueries({ queryKey: operationKeys.summary(propertyId) });
+      }
+      if (operation.lease_id && operation.category === 'rent') {
+        queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       }
     },
   });
@@ -262,6 +271,9 @@ export function useUpdateOperation(): UseMutationResult<
       queryClient.invalidateQueries({
         queryKey: operationKeys.summary(propertyId),
       });
+      if (operation.lease_id && operation.category === 'rent') {
+        queryClient.invalidateQueries({ queryKey: leaseKeys.all });
+      }
     },
   });
 }

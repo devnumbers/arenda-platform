@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_login_codes_phone_purpose_user_id_unused;

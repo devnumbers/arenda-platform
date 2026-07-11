@@ -30,7 +30,6 @@ const userFilters = [
     choices={[
       { id: 'active', name: 'Активна' },
       { id: 'grace', name: 'Грейс-период' },
-      { id: 'blocked', name: 'Заблокирована' },
       { id: 'cancelled', name: 'Отменена' },
     ]}
   />,

@@ -49,6 +49,13 @@ func (h *OperationHandlers) handleOperationError(w http.ResponseWriter, r *http.
 			return
 		}
 		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
+	case errors.Is(err, leasesapp.ErrArchivedProperty):
+		detail, ok := UserFacingDetail(err)
+		if !ok {
+			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			return
+		}
+		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 	}

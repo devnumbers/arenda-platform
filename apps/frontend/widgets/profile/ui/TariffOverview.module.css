@@ -80,16 +80,12 @@
   color: var(--color-warning);
 }
 
-.blocked {
-  color: var(--color-error);
-}
-
 .cancelled {
   color: var(--color-text-muted);
 }
 
 .hint {
-  margin: 16px 0 0;
+  margin: 0;
   font-size: var(--font-size-text-s);
   line-height: var(--line-height-text-s);
   color: var(--color-text-muted);
@@ -112,6 +108,27 @@
 .bannerWarning {
   color: var(--color-warning);
   background: var(--color-warning-bg);
+}
+
+.bannerInfo {
+  color: var(--color-primary);
+  background: var(--color-clear-hover);
+}
+
+.bannerText {
+  margin: 0;
+}
+
+.bannerLink {
+  display: inline-block;
+  margin-top: 8px;
+  font-weight: 500;
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.bannerLink:hover {
+  text-decoration: underline;
 }
 
 .actions {

@@ -5,11 +5,6 @@
   width: 100%;
 }
 
-.logo {
-  width: 92px;
-  height: auto;
-}
-
 .header {
   display: flex;
   flex-direction: column;
@@ -45,29 +40,4 @@
   flex-direction: column;
   gap: 12px;
   width: 100%;
-}
-
-.timerRow {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-}
-
-.btn{
-  align-items: center;
-}
-
-.timerIcon {
-  width: 12px;
-  height: 12px;
-  opacity: 0.6;
-}
-
-.timerText {
-  font-family: 'Chivo Mono', monospace;
-  font-size: var(--font-size-text-s);
-  line-height: var(--line-height-text-s);
-  font-variant-numeric: tabular-nums;
-  opacity: 0.6;
 }

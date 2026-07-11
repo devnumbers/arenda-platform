@@ -1,16 +1,25 @@
 'use client';
 
-import {type JSX, useCallback} from 'react';
+import {type JSX, useCallback, useEffect, useRef} from 'react';
+import NextLink from 'next/link';
 import clsx from 'clsx';
+import {useQueryClient} from '@tanstack/react-query';
 import {Card} from '@heroui/react/card';
 import {Skeleton} from '@heroui/react/skeleton';
 import {notify} from '@/shared/lib/toast';
 import {Button} from '@/shared/ui/button';
 import {LinkButton} from '@/shared/ui/link-button';
-import {useCancelSubscription, useSubscription,} from '@/features/billing/api/hooks';
+import {
+    PAYMENT_STALE_MS,
+    useCancelSubscription,
+    usePendingPayment,
+    useSubscription,
+} from '@/features/billing/api/hooks';
+import {billingKeys} from '@/features/billing/api/keys';
 import {ROUTES} from '@/shared/config/routes';
 import {getTariffLabel} from '@/entities/user/lib/get-tariff-label';
 import {isPaidTariff} from '@/entities/user/lib/is-paid-tariff';
+import {PAYMENT_PERIOD_LABELS} from '@/entities/billing/model/types';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {formatDate} from '@/shared/lib/format-date';
 import type {Subscription} from '@/entities/billing/model/types';
@@ -18,12 +27,11 @@ import {ApiError} from '@/shared/api/errors';
 import styles from './TariffOverview.module.css';
 
 const STATUS_LABELS: Record<
-    'active' | 'grace' | 'blocked' | 'cancelled',
+    'active' | 'grace' | 'cancelled',
     string
 > = {
     active: 'Активна',
     grace: 'Льготный период',
-    blocked: 'Заблокирована',
     cancelled: 'Отменена',
 };
 
@@ -40,6 +48,10 @@ function isExpiringSoon(validUntil?: string): boolean {
     const diffMs = new Date(validUntil).getTime() - Date.now();
     const diffDays = diffMs / (1000 * 60 * 60 * 24);
     return diffDays >= 0 && diffDays <= 7;
+}
+
+function isPaymentStale(createdAt: string): boolean {
+    return Date.now() - new Date(createdAt).getTime() > PAYMENT_STALE_MS;
 }
 
 function TariffOverviewSkeleton(): JSX.Element {
@@ -61,7 +73,23 @@ export function TariffOverview(): JSX.Element {
         isError,
         refetch,
     } = useSubscription();
+    const {data: pendingPayment} = usePendingPayment();
+    const queryClient = useQueryClient();
     const cancel = useCancelSubscription();
+    const hadPendingPaymentRef = useRef(false);
+
+    useEffect(() => {
+        if (pendingPayment) {
+            hadPendingPaymentRef.current = true;
+            return;
+        }
+        if (hadPendingPaymentRef.current) {
+            hadPendingPaymentRef.current = false;
+            void queryClient.invalidateQueries({
+                queryKey: billingKeys.subscription,
+            });
+        }
+    }, [pendingPayment, queryClient]);
 
     const handleCancel = useCallback(() => {
         void notify.promise(cancel.mutateAsync(undefined), {
@@ -89,6 +117,9 @@ export function TariffOverview(): JSX.Element {
 
     const isPaid = isPaidTariff(subscription.tariff.name);
     const isCancelled = subscription.status === 'cancelled';
+    const isPendingPaymentStale = pendingPayment
+        ? isPaymentStale(pendingPayment.createdAt)
+        : false;
 
     const priceDisplay = (() => {
         if (subscription.currentPeriod === 'month') {
@@ -146,7 +177,7 @@ export function TariffOverview(): JSX.Element {
                     <div className={styles.row}>
                         <dt className={styles.label}>Действует до</dt>
                         <dd className={styles.value}>
-                            {formatDate(subscription.validUntil)}
+                            {isPaid ? formatDate(subscription.validUntil) : 'Навсегда'}
                         </dd>
                     </div>
 
@@ -174,6 +205,22 @@ export function TariffOverview(): JSX.Element {
                     )}*/}
             </Card>
 
+            {pendingPayment && (
+                <div className={clsx(styles.banner, styles.bannerInfo)}>
+                    <p className={styles.bannerText}>
+                        {isPendingPaymentStale
+                            ? 'Платёж обрабатывается дольше обычного, мы автоматически проверяем статус у банка'
+                            : `Ожидаем оплату: ${getTariffLabel(pendingPayment.tariff.name)}, ${PAYMENT_PERIOD_LABELS[pendingPayment.period]} — ${formatMoneyKopecks(pendingPayment.amountKopecks)}. Если вы ещё не завершили оплату, вернитесь на страницу банка.`}
+                    </p>
+                    <NextLink
+                        href={ROUTES.profilePaymentDetail(pendingPayment.id)}
+                        className={styles.bannerLink}
+                    >
+                        Детали платежа
+                    </NextLink>
+                </div>
+            )}
+
             {subscription.pendingTariff && subscription.pendingChangeAt && (
                 <div className={styles.banner}>
                     С {formatDate(subscription.pendingChangeAt)} тариф изменится на{" "}
@@ -193,9 +240,16 @@ export function TariffOverview(): JSX.Element {
                     variant="primary"
                     size="large"
                     fullWidth
+                    disabled={Boolean(pendingPayment)}
                 >
                     Сменить тариф
                 </LinkButton>
+
+                {pendingPayment && (
+                    <p className={styles.hint}>
+                        Дождитесь завершения текущего платежа
+                    </p>
+                )}
 
                 {isPaid && !isCancelled && (
                     <Button

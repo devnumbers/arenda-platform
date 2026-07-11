@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -15,13 +14,12 @@ import (
 // AdminHandlers implements the generated admin endpoints.
 type AdminHandlers struct {
 	adminService *adminapp.AdminService
-	billing      *billingapp.BillingService
 	logger       *slog.Logger
 }
 
 // NewAdminHandlers creates HTTP handlers for the admin API.
-func NewAdminHandlers(adminService *adminapp.AdminService, billing *billingapp.BillingService, logger *slog.Logger) *AdminHandlers {
-	return &AdminHandlers{adminService: adminService, billing: billing, logger: logger}
+func NewAdminHandlers(adminService *adminapp.AdminService, logger *slog.Logger) *AdminHandlers {
+	return &AdminHandlers{adminService: adminService, logger: logger}
 }
 
 func (h *AdminHandlers) handleAdminError(w http.ResponseWriter, r *http.Request, err error) {

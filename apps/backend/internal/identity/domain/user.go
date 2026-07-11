@@ -7,13 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type Role string
-
-const (
-	RoleOwner Role = "owner"
-	RoleAdmin Role = "admin"
-)
-
 type User struct {
 	ID              uuid.UUID
 	Phone           Phone
@@ -21,7 +14,7 @@ type User struct {
 	Name            *string
 	Surname         *string
 	Patronymic      *string
-	Email           *string
+	Email           *Email
 	EmailVerifiedAt *time.Time
 }
 
@@ -37,22 +30,22 @@ func NewOwner(phone Phone) (User, error) {
 	}, nil
 }
 
-func (u *User) UpdatePersonalData(name, surname, patronymic, email Optional[string]) error {
-	if name.Set {
-		u.Name = nonEmptyPtr(strings.TrimSpace(name.Value))
+func (u *User) UpdatePersonalData(name, surname, patronymic, email *string) error {
+	if name != nil {
+		u.Name = nonEmptyPtr(strings.TrimSpace(*name))
 	}
-	if surname.Set {
-		u.Surname = nonEmptyPtr(strings.TrimSpace(surname.Value))
+	if surname != nil {
+		u.Surname = nonEmptyPtr(strings.TrimSpace(*surname))
 	}
-	if patronymic.Set {
-		u.Patronymic = nonEmptyPtr(strings.TrimSpace(patronymic.Value))
+	if patronymic != nil {
+		u.Patronymic = nonEmptyPtr(strings.TrimSpace(*patronymic))
 	}
-	if email.Set {
-		v, err := NormalizeEmail(email.Value)
+	if email != nil {
+		v, err := NewEmail(*email)
 		if err != nil {
 			return err
 		}
-		u.Email = nonEmptyPtr(v)
+		u.Email = &v
 	}
 	return nil
 }

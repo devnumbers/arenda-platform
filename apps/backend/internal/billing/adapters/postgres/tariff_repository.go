@@ -51,12 +51,15 @@ func (r *TariffRepository) q() *postgres.Queries {
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
-func (r *TariffRepository) WithTx(tx transaction.Tx) application.TariffRepository {
+// The returned instance has its own empty in-memory cache and TTL, independent
+// of the parent instance, so transactional reads always see the latest database
+// state within the transaction.
+func (r *TariffRepository) WithTx(tx transaction.Tx) (application.TariffRepository, error) {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		panic(fmt.Sprintf("billing.TariffRepository.WithTx: %T is not a postgres.DBTX", tx))
+		return nil, fmt.Errorf("billing.TariffRepository.WithTx: %T is not a postgres.DBTX", tx)
 	}
-	return NewTariffRepository(dbtx, r.ttl, r.clock)
+	return NewTariffRepository(dbtx, r.ttl, r.clock), nil
 }
 
 // GetByID returns a tariff by ID.
@@ -143,6 +146,8 @@ func (r *TariffRepository) staleLocked() bool {
 	return r.cachedAt.IsZero() || r.clock.Now().Sub(r.cachedAt) >= r.ttl
 }
 
+// store caches a single tariff in this repository instance and refreshes the
+// instance-level cachedAt timestamp.
 func (r *TariffRepository) store(tariff domain.Tariff) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -151,6 +156,8 @@ func (r *TariffRepository) store(tariff domain.Tariff) {
 	r.cachedAt = r.clock.Now()
 }
 
+// storeList caches a full tariff list in this repository instance, refreshes the
+// instance-level cachedAt timestamp, and also populates the by-ID/by-name maps.
 func (r *TariffRepository) storeList(list []domain.Tariff) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

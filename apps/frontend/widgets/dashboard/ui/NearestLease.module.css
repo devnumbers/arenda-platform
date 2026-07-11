@@ -34,16 +34,17 @@
   gap: 12px;
 }
 
+.cardLink {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
 .propertyName {
   font-size: var(--font-size-text-l);
   font-weight: 500;
   line-height: var(--line-height-text-l);
   color: var(--color-text);
-}
-
-.propertyLink {
-  text-decoration: none;
-  color: inherit;
 }
 
 

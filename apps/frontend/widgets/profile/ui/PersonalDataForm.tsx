@@ -2,8 +2,10 @@
 
 import { useCallback, useState, type ChangeEvent, type FormEvent, type JSX } from 'react';
 import { notify } from '@/shared/lib/toast';
+import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
+import { PageHeader } from '@/shared/ui/page-header';
 import { useMe } from '@/features/auth/api/hooks';
 import { useUpdateMe } from '@/features/profile/api/hooks';
 import type { User, UserUpdateCommand } from '@/entities/user/model/types';
@@ -154,34 +156,33 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
 export function PersonalDataForm(): JSX.Element {
   const { data: me, isPending: isMeLoading, isError: isMeError, refetch } = useMe();
 
-  if (isMeError) {
-    return (
-      <div className={styles.error}>
-        <p className={styles.errorText}>Не удалось загрузить данные</p>
-        <Button onClick={() => refetch()} variant="secondary">
-          Повторить
-        </Button>
-      </div>
-    );
-  }
-
-  if (isMeLoading || !me) {
-    return (
-      <form className={styles.form}>
-        <div className={styles.fields}>
-          <TextField label="Фамилия" placeholder=" " value="" disabled fullWidth />
-          <TextField label="Имя" placeholder=" " value="" disabled fullWidth />
-          <TextField label="Отчество" placeholder=" " value="" disabled fullWidth />
-          <TextField label="Email" placeholder="email@example.com" value="" disabled fullWidth />
-        </div>
-        <div className={styles.actions}>
-          <Button type="submit" variant="primary" size="large" fullWidth disabled>
-            Сохранить
+  return (
+    <>
+      <PageHeader title="Мои данные" backHref={ROUTES.profile} />
+      {isMeError && (
+        <div className={styles.error}>
+          <p className={styles.errorText}>Не удалось загрузить данные</p>
+          <Button onClick={() => refetch()} variant="secondary">
+            Повторить
           </Button>
         </div>
-      </form>
-    );
-  }
-
-  return <PersonalDataFormView key={me.id} me={me} />;
+      )}
+      {!isMeError && (isMeLoading || !me) && (
+        <form className={styles.form}>
+          <div className={styles.fields}>
+            <TextField label="Фамилия" placeholder=" " value="" disabled fullWidth />
+            <TextField label="Имя" placeholder=" " value="" disabled fullWidth />
+            <TextField label="Отчество" placeholder=" " value="" disabled fullWidth />
+            <TextField label="Email" placeholder="email@example.com" value="" disabled fullWidth />
+          </div>
+          <div className={styles.actions}>
+            <Button type="submit" variant="primary" size="large" fullWidth disabled>
+              Сохранить
+            </Button>
+          </div>
+        </form>
+      )}
+      {!isMeError && !isMeLoading && me && <PersonalDataFormView key={me.id} me={me} />}
+    </>
+  );
 }

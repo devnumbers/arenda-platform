@@ -5,33 +5,37 @@ info:
 servers:
   - url: http://localhost:8080
 paths:
-  /auth/phone/send:
+  /auth/send:
     post:
-      operationId: sendPhoneCode
-      deprecated: true
+      operationId: sendCode
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SendPhoneCodeRequest'
+              $ref: '#/components/schemas/SendCodeRequest'
       responses:
-        '204':
+        '200':
           description: Code sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendCodeResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '429':
           $ref: '#/components/responses/TooManyRequests'
-  /auth/phone/verify:
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /auth/verify:
     post:
-      operationId: verifyPhoneCode
-      deprecated: true
+      operationId: verifyCode
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/VerifyPhoneCodeRequest'
+              $ref: '#/components/schemas/VerifyCodeRequest'
       responses:
         '200':
           description: Authenticated
@@ -47,52 +51,12 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-  /auth/email/send:
-    post:
-      operationId: sendEmailCode
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SendEmailCodeRequest'
-      responses:
-        '204':
-          description: Code sent
-        '400':
-          $ref: '#/components/responses/BadRequest'
         '409':
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
-  /auth/email/verify:
-    post:
-      operationId: verifyEmailCode
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/VerifyEmailCodeRequest'
-      responses:
-        '200':
-          description: Authenticated
-          headers:
-            Set-Cookie:
-              schema:
-                type: string
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MeResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /auth/logout:
     post:
       operationId: logout
@@ -121,6 +85,8 @@ paths:
                 type: string
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /me:
     get:
       operationId: getMe
@@ -184,6 +150,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /me/phone/change:
     post:
       operationId: changePhone
@@ -861,13 +829,13 @@ paths:
       parameters:
         - name: from
           in: query
-          required: true
+          required: false
           schema:
             type: string
             format: date
         - name: to
           in: query
-          required: true
+          required: false
           schema:
             type: string
             format: date
@@ -1643,6 +1611,23 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /subscription/payment-methods/sync:
+    post:
+      operationId: syncPaymentMethods
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Payment methods synced with the provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethodsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /admin/subscription/payments:
     get:
       operationId: listAdminSubscriptionPayments
@@ -1731,11 +1716,6 @@ paths:
           schema:
             type: string
             format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RefundSubscriptionPaymentRequest'
       responses:
         '204':
           description: Payment refunded
@@ -2252,27 +2232,13 @@ components:
       type: apiKey
       in: cookie
       name: session_id
+      description: >
+        The actual cookie name depends on the `cookieSecure` setting:
+        `session_id` when insecure and `__Host-session_id` when secure.
 
   schemas:
-    SendPhoneCodeRequest:
-      type: object
-      required: [phone]
-      properties:
-        phone:
-          type: string
-          example: '+79990001122'
 
-    VerifyPhoneCodeRequest:
-      type: object
-      required: [phone, code]
-      properties:
-        phone:
-          type: string
-        code:
-          type: string
-          example: '123456'
-
-    SendEmailCodeRequest:
+    SendCodeRequest:
       type: object
       required:
         - phone
@@ -2283,7 +2249,16 @@ components:
         email:
           type: string
 
-    VerifyEmailCodeRequest:
+    SendCodeResponse:
+      type: object
+      required:
+        - retryAfter
+      properties:
+        retryAfter:
+          type: integer
+          description: Seconds before another code can be requested
+
+    VerifyCodeRequest:
       type: object
       required:
         - phone
@@ -2296,6 +2271,9 @@ components:
           type: string
         code:
           type: string
+          minLength: 6
+          maxLength: 6
+          pattern: '^\d{6}$'
 
     MeResponse:
       type: object
@@ -2363,6 +2341,9 @@ components:
           example: '+79990001122'
         code:
           type: string
+          minLength: 6
+          maxLength: 6
+          pattern: '^\d{6}$'
           example: '123456'
 
     Tariff:
@@ -2945,7 +2926,7 @@ components:
 
     PropertyResponse:
       type: object
-      required: [id, name, type, address, status, occupancy, active_lease, created_at, updated_at]
+      required: [id, name, type, address, status, occupancy, active_lease, overdue_rent_count, created_at, updated_at]
       properties:
         id:
           type: string
@@ -2971,6 +2952,9 @@ components:
           nullable: true
           allOf:
             - $ref: '#/components/schemas/LeaseResponse'
+        overdue_rent_count:
+          type: integer
+          minimum: 0
         created_at:
           type: string
           format: date-time
@@ -3081,7 +3065,7 @@ components:
 
     LeaseResponse:
       type: object
-      required: [id, property_id, owner_id, tenant_contact, status, start_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, created_at, updated_at]
+      required: [id, property_id, owner_id, tenant_contact, status, start_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, current_period_overdue, has_overdue, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3111,6 +3095,26 @@ components:
           type: integer
         payment_day:
           type: integer
+        current_period_overdue:
+          type: boolean
+          description: >-
+            Deprecated. Kept for backward compatibility; true when the lease has
+            any overdue rent operation. The frontend no longer relies on it.
+        has_overdue:
+          type: boolean
+          description: >-
+            True when the lease has at least one overdue rent operation of any
+            period.
+        overdue_since:
+          type: string
+          format: date
+          nullable: true
+          description: Earliest overdue rent operation date of any period.
+        next_payment_date:
+          type: string
+          format: date
+          nullable: true
+          description: Nearest pending rent operation date on or after as_of.
         comment:
           type: string
           nullable: true
@@ -3241,7 +3245,7 @@ components:
 
     SubscriptionStatus:
       type: string
-      enum: [active, grace, blocked, cancelled]
+      enum: [active, grace, cancelled]
 
     SubscriptionPaymentStatus:
       type: string
@@ -3612,14 +3616,6 @@ components:
           type: string
           format: date
 
-    RefundSubscriptionPaymentRequest:
-      type: object
-      properties:
-        amount_kopecks:
-          type: integer
-          description: Optional partial refund amount in kopecks. If omitted, the full payment amount is refunded.
-          minimum: 1
-
     RemindersResponse:
       type: object
       required: [items]
@@ -3733,12 +3729,23 @@ components:
             $ref: '#/components/schemas/Problem'
     TooManyRequests:
       description: Too many requests
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying the request
+          schema:
+            type: integer
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Problem'
     Conflict:
       description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Gone:
+      description: Gone
       content:
         application/json:
           schema:

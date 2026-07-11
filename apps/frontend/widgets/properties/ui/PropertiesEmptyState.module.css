@@ -1,0 +1,18 @@
+.actionDisabled {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 20px;
+    border: none;
+    border-radius: var(--radius-button);
+    background: #f1f3f6;
+    color: #a1a3a6;
+    font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: var(--font-size-text-m);
+    font-weight: 500;
+    line-height: var(--line-height-text-m);
+    cursor: not-allowed;
+    opacity: 0.6;
+    pointer-events: none;
+}

@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
@@ -25,21 +27,36 @@ const (
 )
 
 type pendingEntry struct {
-	payload        application.WebhookPayload
-	savedToken     string
-	amountKopecks  int64
-	createdAt      time.Time
+	payload       application.WebhookPayload
+	savedToken    string
+	amountKopecks int64
+	createdAt     time.Time
 }
 
 // Provider is a fake payment processor that keeps pending payments in memory.
 type Provider struct {
-	baseURL        string
-	log            *slog.Logger
-	clock          clock.Clock
-	mu             sync.Mutex
-	pending        map[string]pendingEntry
+	baseURL          string
+	log              *slog.Logger
+	clock            clock.Clock
+	mu               sync.Mutex
+	pending          map[string]pendingEntry
 	confirmedAmounts map[string]int64
+	metrics          *payment.Metrics
 }
+
+// Compile-time assertions that Provider satisfies the aggregate Provider port
+// and each of its narrow capability interfaces.
+var (
+	_ application.Provider             = (*Provider)(nil)
+	_ application.PaymentInitiator     = (*Provider)(nil)
+	_ application.PaymentCharger       = (*Provider)(nil)
+	_ application.PaymentCanceler      = (*Provider)(nil)
+	_ application.PaymentStatusChecker = (*Provider)(nil)
+	_ application.WebhookParser        = (*Provider)(nil)
+	_ application.CardManager          = (*Provider)(nil)
+	_ application.CardLister           = (*Provider)(nil)
+	_ application.WebhookResponder     = (*Provider)(nil)
+)
 
 // Name returns the provider identity used by the application layer.
 func (p *Provider) Name() domain.PaymentProvider {
@@ -47,20 +64,30 @@ func (p *Provider) Name() domain.PaymentProvider {
 }
 
 // NewProvider creates a fake provider for local development and Bruno tests.
-func NewProvider(baseURL string, log *slog.Logger, clk clock.Clock) *Provider {
+func NewProvider(baseURL string, log *slog.Logger, clk clock.Clock, metrics *payment.Metrics) *Provider {
 	return &Provider{
 		baseURL:          strings.TrimRight(baseURL, "/"),
 		log:              log,
 		clock:            clk,
 		pending:          make(map[string]pendingEntry),
 		confirmedAmounts: make(map[string]int64),
+		metrics:          metrics,
 	}
 }
 
 // Init creates a pending payment and returns a confirmation URL.
 // Calling Init twice with the same internal payment id is idempotent: the
 // existing provider payment id and confirmation URL are returned.
-func (p *Provider) Init(ctx context.Context, req application.InitRequest) (application.InitResult, error) {
+func (p *Provider) Init(ctx context.Context, req application.InitRequest) (res application.InitResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "Init", status, time.Since(start))
+	}()
+
 	if req.PaymentID == uuid.Nil {
 		return application.InitResult{}, errors.New("fake: payment id is required")
 	}
@@ -68,12 +95,14 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 		return application.InitResult{}, errors.New("fake: amount must be positive")
 	}
 
+	log := logger.WithCorrelation(ctx, p.log)
+
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.purgeLocked()
 
 	if entry, ok := p.pending[req.PaymentID.String()]; ok {
-		p.mu.Unlock()
-		p.log.InfoContext(ctx, "fake payment init is idempotent",
+		log.InfoContext(ctx, "fake payment init is idempotent",
 			"provider_payment_id", entry.payload.ProviderPaymentID,
 			"internal_payment_id", req.PaymentID.String(),
 		)
@@ -98,9 +127,8 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (appli
 		amountKopecks: req.AmountKopecks,
 		createdAt:     p.clock.Now().UTC(),
 	}
-	p.mu.Unlock()
 
-	p.log.InfoContext(ctx, "fake payment initialized",
+	log.InfoContext(ctx, "fake payment initialized",
 		"provider_payment_id", providerPaymentID,
 		"internal_payment_id", req.PaymentID.String(),
 		"user_id", req.UserID.String(),
@@ -129,8 +157,16 @@ func (p *Provider) PaymentURL(ctx context.Context, paymentID uuid.UUID) (string,
 
 // Status returns the provider-side status of a payment. If the payment is not
 // found in the pending map it is assumed to have been completed and succeeded.
-func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error) {
-	_ = ctx
+func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (status domain.PaymentStatus, err error) {
+	start := time.Now()
+	defer func() {
+		recStatus := "ok"
+		if err != nil {
+			recStatus = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "Status", recStatus, time.Since(start))
+	}()
+
 	_ = providerPaymentID
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -143,7 +179,16 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 }
 
 // Charge performs a recurrent charge using a saved token.
-func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (application.ChargeResult, error) {
+func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (res application.ChargeResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "Charge", status, time.Since(start))
+	}()
+
 	if req.PaymentID == uuid.Nil {
 		return application.ChargeResult{}, errors.New("fake: payment id is required")
 	}
@@ -151,10 +196,12 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 		return application.ChargeResult{}, errors.New("fake: amount must be positive")
 	}
 
+	log := logger.WithCorrelation(ctx, p.log)
+
 	providerPaymentID := fakeProviderPaymentIDPrefix + uuid.NewString()
 
 	if strings.HasPrefix(req.Token, fakeFailTokenPrefix) {
-		p.log.InfoContext(ctx, "fake charge failed",
+		log.InfoContext(ctx, "fake charge failed",
 			"provider_payment_id", providerPaymentID,
 			"internal_payment_id", req.PaymentID.String(),
 		)
@@ -164,7 +211,7 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 		}, nil
 	}
 
-	p.log.InfoContext(ctx, "fake charge succeeded",
+	log.InfoContext(ctx, "fake charge succeeded",
 		"provider_payment_id", providerPaymentID,
 		"internal_payment_id", req.PaymentID.String(),
 	)
@@ -178,24 +225,65 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (a
 }
 
 // InitAddCard is not supported by the fake provider.
-func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (application.InitAddCardResult, error) {
-	_ = ctx
+func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardRequest) (res application.InitAddCardResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "InitAddCard", status, time.Since(start))
+	}()
+
 	_ = req
 	return application.InitAddCardResult{}, errors.New("fake: add card flow is not supported")
 }
 
 // RemoveCard is a no-op for the fake provider.
-func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) error {
-	_ = ctx
+func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) (err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "RemoveCard", status, time.Since(start))
+	}()
+
 	_ = customerKey
 	_ = cardID
 	return nil
 }
 
+// GetCardList always returns an empty list: the fake provider creates payment
+// methods synchronously from tokens and has no provider-side card storage.
+func (p *Provider) GetCardList(ctx context.Context, customerKey string) (cards []application.ProviderCard, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "GetCardList", status, time.Since(start))
+	}()
+
+	_ = customerKey
+	return []application.ProviderCard{}, nil
+}
+
 // Cancel refunds a finalized fake payment. For the fake provider we treat every
 // cancel as successful. For full refunds the original payment amount is reported
 // back so callers do not need to track it separately.
-func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (application.CancelResult, error) {
+func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (res application.CancelResult, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "Cancel", status, time.Since(start))
+	}()
+
 	if req.PaymentID == uuid.Nil {
 		return application.CancelResult{}, errors.New("fake: payment id is required")
 	}
@@ -203,23 +291,24 @@ func (p *Provider) Cancel(ctx context.Context, req application.CancelRequest) (a
 		return application.CancelResult{}, errors.New("fake: provider payment id is required")
 	}
 
+	log := logger.WithCorrelation(ctx, p.log)
+
 	refundedAmount := req.AmountKopecks
 	if refundedAmount == 0 {
 		p.mu.Lock()
+		defer p.mu.Unlock()
 		if amount, ok := p.confirmedAmounts[req.ProviderPaymentID]; ok {
 			refundedAmount = amount
 		} else if amount, ok := p.confirmedAmounts[req.PaymentID.String()]; ok {
 			refundedAmount = amount
 		}
-		p.mu.Unlock()
 	}
 
+	// Partial refunds are no longer initiated by the system; the fake provider
+	// always reports a full refund.
 	status := domain.PaymentStatusRefunded
-	if req.AmountKopecks > 0 {
-		status = domain.PaymentStatusPartialRefunded
-	}
 
-	p.log.InfoContext(ctx, "fake payment cancelled",
+	log.InfoContext(ctx, "fake payment cancelled",
 		"provider_payment_id", req.ProviderPaymentID,
 		"internal_payment_id", req.PaymentID.String(),
 		"amount_kopecks", refundedAmount,
@@ -280,25 +369,41 @@ func (p *Provider) ParseWebhook(_ context.Context, payload []byte) (application.
 // ConfirmPayment completes a previously initialized fake payment as succeeded.
 // It is used by the local fake confirmation HTTP handler and is not part of the
 // Provider interface.
-func (p *Provider) ConfirmPayment(ctx context.Context, internalPaymentID string) (application.WebhookPayload, error) {
-	_ = ctx
+func (p *Provider) ConfirmPayment(ctx context.Context, internalPaymentID string) (res application.WebhookPayload, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "ConfirmPayment", status, time.Since(start))
+	}()
+
 	return p.confirm(internalPaymentID, false, nil)
 }
 
 // ConfirmPaymentFailed completes a previously initialized fake payment as failed.
-func (p *Provider) ConfirmPaymentFailed(ctx context.Context, internalPaymentID string, errorCode *string) (application.WebhookPayload, error) {
-	_ = ctx
+func (p *Provider) ConfirmPaymentFailed(ctx context.Context, internalPaymentID string, errorCode *string) (res application.WebhookPayload, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "ConfirmPaymentFailed", status, time.Since(start))
+	}()
+
 	return p.confirm(internalPaymentID, true, errorCode)
 }
 
 func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *string) (application.WebhookPayload, error) {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.purgeLocked()
 	entry, ok := p.pending[internalPaymentID]
 	if ok {
 		delete(p.pending, internalPaymentID)
 	}
-	p.mu.Unlock()
 	if !ok {
 		return application.WebhookPayload{}, errors.New("fake: payment not found")
 	}
@@ -312,9 +417,7 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 		}
 	} else {
 		errorCode = nil
-		p.mu.Lock()
 		p.confirmedAmounts[internalPaymentID] = entry.amountKopecks
-		p.mu.Unlock()
 	}
 
 	return application.WebhookPayload{

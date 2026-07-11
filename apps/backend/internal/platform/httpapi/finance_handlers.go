@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"time"
 
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
@@ -23,16 +24,36 @@ func (h *FinanceHandlers) GetFinanceReport(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	report, err := h.svc.GetFinanceReport(r.Context(), ownerID, params.From.Time, params.To.Time)
+	var from, to *time.Time
+	if params.From != nil {
+		from = &params.From.Time
+	}
+	if params.To != nil {
+		to = &params.To.Time
+	}
+
+	report, err := h.svc.GetFinanceReport(r.Context(), ownerID, from, to)
 	if err != nil {
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		return
 	}
 
+	// Period echoes the requested date bounds. When a bound is omitted the report
+	// covers all time, so the required FinanceReportPeriod fields are filled with
+	// the zero date as an explicit "no boundary" sentinel.
+	periodFrom := openapi_types.Date{}
+	if params.From != nil {
+		periodFrom = *params.From
+	}
+	periodTo := openapi_types.Date{}
+	if params.To != nil {
+		periodTo = *params.To
+	}
+
 	resp := openapi.FinanceReportResponse{
 		Period: openapi.FinanceReportPeriod{
-			From: openapi_types.Date{Time: params.From.Time},
-			To:   openapi_types.Date{Time: params.To.Time},
+			From: periodFrom,
+			To:   periodTo,
 		},
 		Totals: openapi.FinanceReportTotals{
 			IncomeKopecks:  int(report.Totals.IncomeKopecks),

@@ -4,6 +4,7 @@ import type { JSX, ReactNode } from 'react';
 import { Icon } from '@/shared/ui/icon';
 import { BoldWallet } from '@/shared/assets/icons';
 import { LinkButton } from '@/shared/ui/link-button';
+import { Button } from '@/shared/ui/button';
 import styles from './FinanceEmptyState.module.css';
 
 export type FinanceEmptyStateProps = {
@@ -11,6 +12,8 @@ export type FinanceEmptyStateProps = {
   readonly subtitle?: string;
   readonly actionHref?: string;
   readonly actionText?: string;
+  readonly actionOnClick?: () => void;
+  readonly actionDisabled?: boolean;
 };
 
 export function FinanceEmptyState({
@@ -18,10 +21,21 @@ export function FinanceEmptyState({
   subtitle = 'Здесь будут отображаться финансовые операции',
   actionHref,
   actionText,
+  actionOnClick,
+  actionDisabled = false,
 }: FinanceEmptyStateProps): JSX.Element {
   const actionContent: ReactNode | null =
-    actionHref && actionText ? (
-      <LinkButton href={actionHref} variant="primary" size="medium">
+    actionOnClick && actionText ? (
+      <Button variant="primary" size="medium" onClick={actionOnClick}>
+        {actionText}
+      </Button>
+    ) : actionHref && actionText ? (
+      <LinkButton
+        href={actionHref}
+        variant="primary"
+        size="medium"
+        disabled={actionDisabled}
+      >
         {actionText}
       </LinkButton>
     ) : null;

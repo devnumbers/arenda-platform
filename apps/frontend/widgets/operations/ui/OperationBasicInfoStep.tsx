@@ -5,8 +5,6 @@ import { TextField } from '@/shared/ui/text-field';
 import { LinkButton } from '@/shared/ui/link-button';
 import { ROUTES } from '@/shared/config/routes';
 import { type OperationType } from '@/entities/operation/model/types';
-import { useProperties } from '@/features/properties/api';
-import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { type BasicInfoData, type BasicInfoErrors } from '../model/types';
 import { CategorySelect } from './CategorySelect';
 import { PropertySelect } from './PropertySelect';
@@ -20,6 +18,7 @@ export type OperationBasicInfoStepProps = {
   readonly onTypeChange: (type: OperationType) => void;
   readonly errors?: BasicInfoErrors;
   readonly readonly?: boolean;
+  readonly isEmpty?: boolean;
 };
 
 export function OperationBasicInfoStep({
@@ -29,16 +28,8 @@ export function OperationBasicInfoStep({
   onTypeChange,
   errors,
   readonly,
+  isEmpty,
 }: OperationBasicInfoStepProps): JSX.Element {
-  const {
-    data: properties,
-    isLoading: propertiesLoading,
-    isError: propertiesError,
-    isFetching: propertiesFetching,
-    refetch: refetchProperties,
-  } = useProperties();
-
-  const isEmpty = !propertiesLoading && !propertiesError && properties?.length === 0;
   const handleAmountChange = (event: ChangeEvent<HTMLInputElement>) => {
     onChange({ ...data, amount: event.currentTarget.value });
   };
@@ -54,12 +45,6 @@ export function OperationBasicInfoStep({
   return (
     <div className={styles.root}>
       <h2 className={styles.heading}>Основная информация</h2>
-      {propertiesError && (
-        <FinanceErrorState
-          onRetry={refetchProperties}
-          isLoading={propertiesFetching}
-        />
-      )}
       <div className={styles.fields}>
         <TypeSelect value={type} onChange={onTypeChange} disabled={readonly} />
         <TextField

@@ -3,6 +3,7 @@
 import {
   type ChangeEvent,
   type FormEvent,
+  useMemo,
   useState,
   type JSX,
 } from 'react';
@@ -10,7 +11,9 @@ import { useParams, useRouter } from 'next/navigation';
 import { PageHeader } from '@/shared/ui/page-header';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
-import { DatePickerField } from '@/shared/ui/date-picker-field';
+import { DateSelect } from '@/shared/ui/date-select';
+import { IconButton } from '@/shared/ui/icon-button';
+import { Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { ApiError } from '@/shared/api/errors';
 import {
@@ -50,6 +53,18 @@ type FormErrors = {
   operation_date?: string;
 };
 
+type Operation = {
+  readonly id: string;
+  readonly property_id: string;
+  readonly name: string;
+  readonly type: OperationType;
+  readonly category: OperationCategory;
+  readonly amount_kopecks: number;
+  readonly operation_date: string;
+  readonly comment?: string | null;
+  readonly reminder_offset_days?: 1 | 3 | 7 | null;
+};
+
 function formatAmountFromKopecks(kopecks: number): string {
   return (kopecks / 100).toFixed(2);
 }
@@ -87,18 +102,7 @@ function OperationEditFormContent({
   readonly,
 }: {
   readonly id: string;
-  readonly operation: {
-    readonly id: string;
-    readonly property_id: string;
-    readonly name: string;
-    readonly type: OperationType;
-    readonly category: OperationCategory;
-    readonly amount_kopecks: number;
-    readonly operation_date: string;
-    readonly comment?: string | null;
-    readonly lease_id?: string | null;
-    readonly reminder_offset_days?: 1 | 3 | 7 | null;
-  };
+  readonly operation: Operation;
   readonly readonly: boolean;
 }): JSX.Element {
   const router = useRouter();
@@ -115,6 +119,32 @@ function OperationEditFormContent({
     reminderOffsetDays: operation.reminder_offset_days ?? 1,
   });
   const [errors, setErrors] = useState<FormErrors>({});
+
+  const hasChanges = useMemo(() => {
+    const amountKopecks = parseAmountToKopecks(form.amount);
+    const currentReminder = form.reminderEnabled ? form.reminderOffsetDays : null;
+    const originalReminder = operation.reminder_offset_days ?? null;
+
+    return (
+      form.name.trim() !== operation.name ||
+      form.type !== operation.type ||
+      form.category !== operation.category ||
+      amountKopecks !== operation.amount_kopecks ||
+      form.operation_date !== operation.operation_date ||
+      (form.comment.trim() || undefined) !== (operation.comment ?? undefined) ||
+      currentReminder !== originalReminder
+    );
+  }, [
+    form.name,
+    form.type,
+    form.category,
+    form.amount,
+    form.operation_date,
+    form.comment,
+    form.reminderEnabled,
+    form.reminderOffsetDays,
+    operation,
+  ]);
 
   const handleTypeChange = (type: OperationType) => {
     setForm((prev) => {
@@ -136,8 +166,8 @@ function OperationEditFormContent({
     setForm((prev) => ({ ...prev, amount: value }));
   };
 
-  const handleDateChange = (value: string) => {
-    setForm((prev) => ({ ...prev, operation_date: value }));
+  const handleDateChange = (value: string | undefined) => {
+    setForm((prev) => ({ ...prev, operation_date: value ?? '' }));
   };
 
   const handleCommentChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -210,10 +240,6 @@ function OperationEditFormContent({
     );
   };
 
-  const handleCancel = () => {
-    router.push(ROUTES.financeOperation(id));
-  };
-
   return (
     <form className={styles.form} onSubmit={handleSubmit}>
       <div className={styles.fields}>
@@ -247,12 +273,11 @@ function OperationEditFormContent({
           onChange={handleAmountChange}
           error={errors.amount}
         />
-        <DatePickerField
+        <DateSelect
           label="Дата операции"
           value={form.operation_date}
           onChange={handleDateChange}
           required
-          fullWidth
           error={errors.operation_date}
         />
         <TextField
@@ -274,12 +299,6 @@ function OperationEditFormContent({
         />
       </div>
 
-      {operation.lease_id && (
-        <p className={styles.note}>
-          Эта операция создана из аренды. После изменения она станет исключением.
-        </p>
-      )}
-
       {updateOperation.error && (
         <p className={styles.error} role="alert">
           {formatErrorMessage(updateOperation.error)}
@@ -293,18 +312,9 @@ function OperationEditFormContent({
           size="large"
           fullWidth
           loading={updateOperation.isPending}
-          disabled={readonly}
+          disabled={readonly || updateOperation.isPending || !hasChanges}
         >
           Сохранить
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          size="large"
-          fullWidth
-          onClick={handleCancel}
-        >
-          Отмена
         </Button>
       </div>
     </form>
@@ -315,36 +325,43 @@ export function OperationEditForm(): JSX.Element {
   const id = useOperationId();
   const router = useRouter();
   const { data, isLoading, isError, refetch, isFetching } = useOperation(id ?? '');
-  const { data: subscription } = useSubscription();
-  const readonly = isSubscriptionReadonly(subscription);
+  const { data: subscription, isPending: isSubscriptionPending } = useSubscription();
+  const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
-  if (!id) {
-    return (
-      <div className={styles.root}>
-        <FinanceErrorState
-          onRetry={() => router.push(ROUTES.financeOperations)}
-          isLoading={false}
-        />
-      </div>
-    );
-  }
+  const headerActions = id ? (
+    <IconButton
+      variant="secondary"
+      size="large"
+      icon={<Cancel />}
+      aria-label="Отменить"
+      onClick={() => router.push(ROUTES.financeOperation(id))}
+    />
+  ) : undefined;
 
   return (
     <div className={styles.root}>
       <PageHeader
         title="Редактирование операции"
-        backHref={ROUTES.financeOperation(id)}
+        backHref={ROUTES.financeOperations}
+        actions={headerActions}
       />
 
       <SubscriptionReadonlyBanner />
 
-      {isLoading && <FinanceLoading />}
+      {!id && (
+        <FinanceErrorState
+          onRetry={() => router.push(ROUTES.financeOperations)}
+          isLoading={false}
+        />
+      )}
 
-      {!isLoading && isError && (
+      {id && isLoading && <FinanceLoading />}
+
+      {id && !isLoading && isError && (
         <FinanceErrorState onRetry={refetch} isLoading={isFetching} />
       )}
 
-      {!isLoading && !isError && data && (
+      {id && !isLoading && !isError && data && (
         <OperationEditFormContent id={id} operation={data} readonly={readonly} />
       )}
     </div>

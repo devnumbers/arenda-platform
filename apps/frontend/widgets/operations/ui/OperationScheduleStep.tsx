@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
-import { DatePickerField } from '@/shared/ui/date-picker-field';
+import { DateSelect } from '@/shared/ui/date-select';
 import { type ScheduleData, type ScheduleErrors } from '../model/types';
 import { FrequencySelect } from './FrequencySelect';
 import styles from './OperationScheduleStep.module.css';
@@ -25,14 +25,6 @@ export function OperationScheduleStep({
 }: OperationScheduleStepProps): JSX.Element {
   const recurring = isRecurring(data.frequency);
 
-  const handleDateChange = (value: string) => {
-    onChange({ ...data, date: value || undefined });
-  };
-
-  const handleEndDateChange = (value: string) => {
-    onChange({ ...data, endDate: value || undefined });
-  };
-
   return (
     <div className={styles.root}>
       <h2 className={styles.heading}>Дата и периодичность</h2>
@@ -43,23 +35,24 @@ export function OperationScheduleStep({
           error={errors?.frequency}
           disabled={readonly}
         />
-        <DatePickerField
+        <DateSelect
           label={recurring ? 'Дата первого повтора' : 'Дата операции'}
-          value={data.date ?? ''}
-          onChange={handleDateChange}
+          value={data.date}
+          placeholder="Выбрать дату"
           required
           disabled={readonly}
-          fullWidth
           error={errors?.date}
+          onChange={(v) => onChange({ ...data, date: v || undefined })}
         />
         {recurring && (
-          <DatePickerField
+          <DateSelect
             label="Дата окончания (необязательно)"
-            value={data.endDate ?? ''}
-            onChange={handleEndDateChange}
+            value={data.endDate}
+            placeholder="Выбрать дату"
+            minValue={data.date}
             disabled={readonly}
-            fullWidth
             error={errors?.endDate}
+            onChange={(v) => onChange({ ...data, endDate: v || undefined })}
           />
         )}
       </div>

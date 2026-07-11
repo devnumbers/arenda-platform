@@ -15,30 +15,33 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	adminpg "github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters/postgres"
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
 	paymentfake "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/fake"
 	paymenttkassa "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/tkassa"
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityemail "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/email"
+	identityevents "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/events"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
-	identitysms "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/sms"
+	identityscheduler "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/scheduler"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leasespg "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/postgres"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	emailnotifier "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/email"
 	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/cleaner"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
 	platformgenerated "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	mailerfake "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/fake"
 	mailersmtp "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/smtp"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/observability"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/dadata"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
@@ -47,10 +50,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"golang.org/x/time/rate"
 )
-
-type realClock struct{}
-
-func (realClock) Now() time.Time { return time.Now().UTC() }
 
 func dbPoolStats(pool *pgxpool.Pool) func() httpapi.DBPoolSnapshot {
 	return func() httpapi.DBPoolSnapshot {
@@ -91,13 +90,30 @@ func run(fallback *slog.Logger) error {
 	}
 	appLogger := slog.New(logHandler)
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	otelSDK, err := observability.NewSDK(ctx, observability.Config{
+		ServiceName:  cfg.OTelServiceName,
+		Enabled:      cfg.OTelEnabled,
+		OTLPEndpoint: cfg.OTelOTLPEndpoint,
+		TraceSampler: cfg.OTelTraceSampler,
+	})
+	if err != nil {
+		return fmt.Errorf("observability: %w", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if err := otelSDK.Shutdown(shutdownCtx); err != nil {
+			appLogger.ErrorContext(ctx, "observability shutdown failed", "error", err)
+		}
+	}()
+
 	renderer, err := mailer.NewRenderer(cfg.EmailTemplatesDir)
 	if err != nil {
 		return fmt.Errorf("failed to load email templates: %w", err)
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	encryptor, err := encryption.NewEncryptor(cfg.EncryptionKey)
 	if err != nil {
@@ -141,19 +157,34 @@ func run(fallback *slog.Logger) error {
 
 	tariffRepo := billingpg.NewTariffRepository(db, cfg.TariffCacheTTL, clock.Real{})
 	subscriptionRepo := billingpg.NewSubscriptionRepository(db)
-	onboardingService := billingpg.NewOnboardingService(tariffRepo, subscriptionRepo)
+	onboardingService := billingpg.NewOnboardingService(tariffRepo, subscriptionRepo, platformpostgres.NewBeginner(pool, appLogger))
 	paymentMethodRepo := billingpg.NewPaymentMethodRepository(db, encryptor)
+	paymentMethodInUseChecker := billingpg.NewPaymentMethodInUseChecker(db)
 	subscriptionPaymentRepo := billingpg.NewSubscriptionPaymentRepository(db)
 	appLogger.InfoContext(ctx, "billing repositories initialized",
 		"payment_methods", paymentMethodRepo != nil,
 		"subscription_payments", subscriptionPaymentRepo != nil)
 
 	var paymentProvider billingapp.Provider
+	paymentMetrics, err := payment.NewMetrics()
+	if err != nil {
+		return fmt.Errorf("payment metrics: %w", err)
+	}
 	switch cfg.PaymentProvider {
 	case "fake":
-		paymentProvider = paymentfake.NewProvider(cfg.AppBaseURL, appLogger, realClock{})
+		paymentProvider = paymentfake.NewProvider(cfg.AppBaseURL, appLogger, clock.Real{}, paymentMetrics)
 	case "tkassa":
-		paymentProvider = paymenttkassa.NewProvider(cfg.TKassaBaseURL, cfg.TKassaTerminalKey, cfg.TKassaPassword, cfg.TKassaTimeout, appLogger)
+		paymentProvider = paymenttkassa.NewProvider(
+			cfg.TKassaBaseURL,
+			cfg.TKassaTerminalKey,
+			cfg.TKassaPassword,
+			cfg.TKassaTimeout,
+			cfg.TKassaMaxRetries,
+			cfg.TKassaRetryBaseDelay,
+			cfg.TKassaRetryMaxDelay,
+			appLogger,
+			paymentMetrics,
+		)
 	}
 	appLogger.InfoContext(ctx, "payment provider initialized", "provider", cfg.PaymentProvider, "initialized", paymentProvider != nil)
 
@@ -161,6 +192,10 @@ func run(fallback *slog.Logger) error {
 	identityCodeRepo := identitypg.NewLoginCodeRepository(db, encryptor)
 	identityAttemptRepo := identitypg.NewAttemptRepository(db, encryptor)
 	identitySessionRepo := identitypg.NewSessionRepository(db, encryptor)
+	identitySessionService := identityapp.NewSessionService(identitySessionRepo, encryptor)
+
+	eventDispatcher := events.NewInProcessDispatcher()
+	identityEventPublisher := identityevents.NewPublisher(eventDispatcher)
 
 	if cfg.EncryptionKey != "" {
 		if err := backfillPhoneEncryption(ctx, db, encryptor, appLogger); err != nil {
@@ -168,19 +203,6 @@ func run(fallback *slog.Logger) error {
 		}
 	} else {
 		appLogger.WarnContext(ctx, "skipping phone encryption backfill: ENCRYPTION_KEY is empty")
-	}
-
-	var smsSender identityapp.SMSSender
-	switch cfg.SMSSender {
-	case "", "fake":
-		if cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
-			return fmt.Errorf("SMS_SENDER=fake is only allowed in local or dev environments")
-		}
-		smsSender = identitysms.NewFakeSender(appLogger)
-	case "disabled":
-		smsSender = identitysms.NewDisabledSender()
-	default:
-		return fmt.Errorf("unsupported SMS_SENDER: %s", cfg.SMSSender)
 	}
 
 	var emailMailer mailer.Sender
@@ -201,31 +223,57 @@ func run(fallback *slog.Logger) error {
 		return fmt.Errorf("unsupported EMAIL_SENDER: %s", cfg.EmailSender)
 	}
 
-	emailSender := identityemail.NewLoginCodeSender(emailMailer, renderer)
+	emailSender := identityemail.NewSender(emailMailer, renderer)
 
-	authService := identityapp.NewAuthService(
+	authenticationService := identityapp.NewAuthenticationService(
 		identityUserRepo,
 		identityCodeRepo,
 		identityAttemptRepo,
 		identitySessionRepo,
-		smsSender,
-		emailSender,
-		realClock{},
-		onboardingService,
+		identityapp.AuthenticationServiceConfig{
+			CodeSender: emailSender,
+			Clock:      clock.Real{},
+			Publisher:  identityEventPublisher,
+			DB:         platformpostgres.NewBeginner(pool, appLogger),
+			Logger:     appLogger,
+			Hasher:     encryptor,
+		},
+	)
+
+	phoneChangeService := identityapp.NewPhoneChangeService(
+		identityUserRepo,
+		identityCodeRepo,
+		identityAttemptRepo,
+		identitySessionRepo,
+		identityapp.PhoneChangeServiceConfig{
+			Sender: emailSender,
+			Clock:  clock.Real{},
+			DB:     platformpostgres.NewBeginner(pool, appLogger),
+			Hasher: encryptor,
+		},
+	)
+
+	profileService := identityapp.NewProfileService(
+		identityUserRepo,
 		platformpostgres.NewBeginner(pool, appLogger),
-		appLogger,
+	)
+
+	logoutService := identityapp.NewLogoutService(
+		identitySessionRepo,
+		encryptor,
 	)
 
 	propertyRepo := propertiespg.NewPropertyRepository(db)
 	propertyPhotoRepo := propertiespg.NewPropertyPhotoRepository(db)
 	occupancyProvider := propertiespg.NewOccupancyProvider(db)
-	limiter := billingpg.NewSubscriptionLimiter(db)
+	propertyLimiter := billingapp.NewSubscriptionPropertyLimiter(subscriptionRepo, tariffRepo)
+	limiter := billingpg.NewSubscriptionLimiter(propertyLimiter)
 	operationRepo := leasespg.NewOperationRepository(db)
 	recurringOpRepo := leasespg.NewRecurringOperationRepository(db)
 	leaseRepo := leasespg.NewLeaseRepository(db)
 	reminderRepo := notificationspg.NewReminderRepository(db)
-	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, realClock{})
-	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, reminderScheduler, realClock{})
+	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, clock.Real{})
+	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, reminderScheduler, clock.Real{})
 
 	var photoStorage propertiesapp.PhotoStorage
 	if cfg.PhotoStorageS3Enabled {
@@ -260,7 +308,7 @@ func run(fallback *slog.Logger) error {
 		propertyBillingLifecycle,
 		leaseRepo,
 		platformpostgres.NewBeginner(pool, appLogger),
-		realClock{},
+		clock.Real{},
 		appLogger,
 	)
 
@@ -272,21 +320,30 @@ func run(fallback *slog.Logger) error {
 		Logger:    appLogger,
 	})
 
-	billingService := billingapp.NewBillingService(
+	billing := billingapp.NewServices(
 		tariffRepo,
 		subscriptionRepo,
 		paymentMethodRepo,
 		subscriptionPaymentRepo,
 		paymentProvider,
 		platformpostgres.NewBeginner(pool, appLogger),
-		realClock{},
+		clock.Real{},
 		appLogger,
 		cfg.AppBaseURL,
 		propertyService,
+		onboardingService,
+		paymentMethodInUseChecker,
 	)
+	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
+		e, ok := event.(identityapp.UserRegistered)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return billing.OnUserRegistered(ctx, e.UserID)
+	})
 
-	adminRepo := adminpg.NewAdminRepository(db, encryptor, realClock{}, occupancyProvider)
-	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billingService, realClock{})
+	adminRepo := adminpg.NewAdminRepository(db, encryptor, clock.Real{}, occupancyProvider)
+	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billing.Subscriptions, clock.Real{})
 
 	leasePropertyRepo := leasespg.NewPropertyRepository(db)
 	tenantContactRepo := leasespg.NewTenantContactRepository(db)
@@ -299,12 +356,12 @@ func run(fallback *slog.Logger) error {
 		operationRepo,
 		reminderScheduler,
 		platformpostgres.NewBeginner(pool, appLogger),
-		realClock{},
+		clock.Real{},
 		appLogger,
 	)
 	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, appLogger)
-	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, reminderScheduler, platformpostgres.NewBeginner(pool, appLogger), realClock{}, appLogger)
-	reminderService := notificationsapp.NewReminderService(reminderRepo, realClock{})
+	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, reminderScheduler, platformpostgres.NewBeginner(pool, appLogger), clock.Real{}, appLogger)
+	reminderService := notificationsapp.NewReminderService(reminderRepo, clock.Real{})
 	recurringOperationService := leasesapp.NewRecurringOperationService(
 		recurringOpRepo,
 		operationRepo,
@@ -312,7 +369,7 @@ func run(fallback *slog.Logger) error {
 		reminderScheduler,
 		reminderService,
 		platformpostgres.NewBeginner(pool, appLogger),
-		realClock{},
+		clock.Real{},
 		appLogger,
 	)
 	queries := platformgenerated.New(db)
@@ -321,13 +378,13 @@ func run(fallback *slog.Logger) error {
 	notifiers := map[notificationsapp.Channel]notificationsapp.Notifier{
 		notificationsapp.ChannelEmail: emailNotifier,
 	}
-	reminderWorker := scheduler.NewReminderWorker(reminderRepo, renderer, notifiers, contactResolver, platformpostgres.NewBeginner(pool, appLogger), realClock{}, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, appLogger)
-	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, realClock{}, 1*time.Hour, 100, appLogger)
-	billingWorker := scheduler.NewBillingWorker(billingService, pool, realClock{}, cfg.BillingWorkerInterval, appLogger)
-	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(billingService, pool, realClock{}, cfg.PaymentReconciliationWorkerInterval, appLogger)
-	operationOverdueWorker := scheduler.NewOperationOverdueWorker(operationService, realClock{}, cfg.OverdueOperationWorkerInterval, 100, appLogger)
+	reminderWorker := scheduler.NewReminderWorker(reminderRepo, renderer, notifiers, contactResolver, platformpostgres.NewBeginner(pool, appLogger), clock.Real{}, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, appLogger)
+	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, clock.Real{}, 1*time.Hour, 100, appLogger)
+	billingWorker := scheduler.NewBillingWorker(billing.Renewals, billing.ScheduledChanges, pool, clock.Real{}, cfg.BillingWorkerInterval, appLogger)
+	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(billing.Payments, pool, clock.Real{}, cfg.PaymentReconciliationWorkerInterval, appLogger)
+	operationOverdueWorker := scheduler.NewOperationOverdueWorker(operationService, clock.Real{}, cfg.OverdueOperationWorkerInterval, 100, appLogger)
 
-	dataCleaner := cleaner.New(identitySessionRepo, identityCodeRepo, identityAttemptRepo, realClock{}, 1*time.Hour, 7*24*time.Hour, appLogger)
+	dataCleaner := identityscheduler.NewCleaner(identitySessionRepo, identityCodeRepo, identityAttemptRepo, clock.Real{}, 1*time.Hour, 7*24*time.Hour, appLogger)
 	var workers sync.WaitGroup
 	workers.Add(6)
 	go func() { defer workers.Done(); dataCleaner.Run(ctx) }()
@@ -339,23 +396,22 @@ func run(fallback *slog.Logger) error {
 
 	ipLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.IPRPS), cfg.RateLimit.IPBurst, 1*time.Hour)
 	defer ipLimiter.Stop()
-	phoneSendLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.PhoneSendPerHour)/3600, cfg.RateLimit.PhoneSendPerHour, 1*time.Hour)
-	defer phoneSendLimiter.Stop()
-	phoneVerifyLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.PhoneVerifyPer15Min)/(15*60), cfg.RateLimit.PhoneVerifyPer15Min, 1*time.Hour)
-	defer phoneVerifyLimiter.Stop()
-	emailSendBurst := 5
-	if cfg.RateLimit.EmailSendPerHour < emailSendBurst {
-		emailSendBurst = cfg.RateLimit.EmailSendPerHour
-	}
+
+	emailSendBurst := min(3, cfg.RateLimit.EmailSendPerHour)
 	emailSendLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.EmailSendPerHour)/3600, emailSendBurst, 1*time.Hour)
 	defer emailSendLimiter.Stop()
 
-	emailVerifyBurst := 10
-	if cfg.RateLimit.EmailVerifyPer15Min < emailVerifyBurst {
-		emailVerifyBurst = cfg.RateLimit.EmailVerifyPer15Min
-	}
+	emailVerifyBurst := min(5, cfg.RateLimit.EmailVerifyPer15Min)
 	emailVerifyLimiter := httpapi.NewRateLimiter(rate.Limit(cfg.RateLimit.EmailVerifyPer15Min)/(15*60), emailVerifyBurst, 1*time.Hour)
 	defer emailVerifyLimiter.Stop()
+
+	phoneChangeSendBurst := min(3, cfg.RateLimit.PhoneChangeSendPerHour)
+	phoneChangeSendLimiter := httpapi.NewRateLimiter(rate.Every(time.Hour/time.Duration(cfg.RateLimit.PhoneChangeSendPerHour)), phoneChangeSendBurst, 1*time.Hour)
+	defer phoneChangeSendLimiter.Stop()
+
+	phoneChangeVerifyBurst := min(5, cfg.RateLimit.PhoneChangeVerifyPer15Min)
+	phoneChangeVerifyLimiter := httpapi.NewRateLimiter(rate.Every(15*time.Minute/time.Duration(cfg.RateLimit.PhoneChangeVerifyPer15Min)), phoneChangeVerifyBurst, 1*time.Hour)
+	defer phoneChangeVerifyLimiter.Stop()
 
 	var poolStats func() httpapi.DBPoolSnapshot
 	if cfg.AppEnv == "local" {
@@ -363,30 +419,38 @@ func run(fallback *slog.Logger) error {
 	}
 
 	handler := httpapi.New(httpapi.Deps{
-		Auth:                  authService,
-		Billing:               billingService,
-		Admin:                 adminService,
-		Sessions:              identitySessionRepo,
-		Properties:            propertyService,
-		AddressSuggester:      dadataClient,
-		Leases:                leaseService,
-		TenantContacts:        tenantContactService,
-		Operations:            operationService,
-		RecurringOperations:   recurringOperationService,
-		Reminders:             reminderService,
-		AppBaseURL:            cfg.AppBaseURL,
-		CookieSecure:          cfg.CookieSecure,
-		Logger:                appLogger,
-		Clock:                 realClock{},
-		LogSuccessfulRequests: cfg.LogSuccessfulRequests,
-		IPRateLimiter:         ipLimiter,
-		PhoneSendLimiter:      phoneSendLimiter,
-		PhoneVerifyLimiter:    phoneVerifyLimiter,
-		EmailSendLimiter:      emailSendLimiter,
-		EmailVerifyLimiter:    emailVerifyLimiter,
-		DBPoolStats:           poolStats,
-		DevMode:               cfg.AppEnv == "local" && cfg.PaymentProvider == "fake",
-		TrustedProxies:        cfg.TrustedProxies,
+		Auth:                     authenticationService,
+		PhoneChange:              phoneChangeService,
+		Profile:                  profileService,
+		Logout:                   logoutService,
+		Sessions:                 identitySessionService,
+		MeEnricher:               httpapi.BillingMeEnricher(billing.Subscriptions),
+		Tariffs:                  billing.Tariffs,
+		Subscriptions:            billing.Subscriptions,
+		PaymentMethods:           billing.PaymentMethods,
+		Payments:                 billing.Payments,
+		Webhooks:                 billing.Webhooks,
+		Admin:                    adminService,
+		Properties:               propertyService,
+		AddressSuggester:         dadataClient,
+		Leases:                   leaseService,
+		TenantContacts:           tenantContactService,
+		Operations:               operationService,
+		RecurringOperations:      recurringOperationService,
+		Reminders:                reminderService,
+		AppBaseURL:               cfg.AppBaseURL,
+		CookieSecure:             cfg.CookieSecure,
+		Logger:                   appLogger,
+		Clock:                    clock.Real{},
+		LogSuccessfulRequests:    cfg.LogSuccessfulRequests,
+		IPRateLimiter:            ipLimiter,
+		EmailSendLimiter:         emailSendLimiter,
+		EmailVerifyLimiter:       emailVerifyLimiter,
+		PhoneChangeSendLimiter:   phoneChangeSendLimiter,
+		PhoneChangeVerifyLimiter: phoneChangeVerifyLimiter,
+		DBPoolStats:              poolStats,
+		DevMode:                  cfg.AppEnv == "local" && cfg.PaymentProvider == "fake",
+		TrustedProxies:           cfg.TrustedProxies,
 	})
 
 	server := &http.Server{
@@ -451,7 +515,7 @@ func backfillPhoneEncryption(ctx context.Context, db *database.InstrumentedPool,
 		return updated, nil
 	}
 
-	tables := []string{"users", "sms_codes", "login_attempts"}
+	tables := []string{"users", "login_attempts", "login_codes"}
 	for _, table := range tables {
 		count, err := backfillTable(table)
 		if err != nil {

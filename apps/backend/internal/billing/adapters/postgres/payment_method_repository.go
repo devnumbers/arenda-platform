@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -32,29 +33,41 @@ func (r *PaymentMethodRepository) q() *postgres.Queries {
 	return postgres.New(r.db)
 }
 
+type encryptor interface {
+	Encrypt(ctx context.Context, plaintext string) (string, error)
+}
+
+func encryptPaymentMethodFields(ctx context.Context, encryptor encryptor, pm domain.PaymentMethod) (token, cardID, expDate string, err error) {
+	token, err = encryptor.Encrypt(ctx, pm.ProviderToken)
+	if err != nil {
+		return "", "", "", fmt.Errorf("encrypt provider token: %w", err)
+	}
+	cardID, err = encryptOptional(ctx, encryptor, pm.ProviderCardID)
+	if err != nil {
+		return "", "", "", fmt.Errorf("encrypt provider card id: %w", err)
+	}
+	expDate, err = encryptOptional(ctx, encryptor, pm.ExpDate)
+	if err != nil {
+		return "", "", "", fmt.Errorf("encrypt expiry date: %w", err)
+	}
+	return token, cardID, expDate, nil
+}
+
 // WithTx returns a repository instance bound to the provided transaction.
-func (r *PaymentMethodRepository) WithTx(tx transaction.Tx) application.PaymentMethodRepository {
+func (r *PaymentMethodRepository) WithTx(tx transaction.Tx) (application.PaymentMethodRepository, error) {
 	dbtx, ok := tx.(postgres.DBTX)
 	if !ok {
-		panic(fmt.Sprintf("billing.PaymentMethodRepository.WithTx: %T is not a postgres.DBTX", tx))
+		return nil, fmt.Errorf("billing.PaymentMethodRepository.WithTx: %T is not a postgres.DBTX", tx)
 	}
-	return NewPaymentMethodRepository(dbtx, r.encryptor)
+	return NewPaymentMethodRepository(dbtx, r.encryptor), nil
 }
 
 // Create inserts a new payment method. The provider token, provider card id and
 // expiry date are encrypted at rest before persistence.
 func (r *PaymentMethodRepository) Create(ctx context.Context, pm domain.PaymentMethod) (domain.PaymentMethod, error) {
-	encryptedToken, err := r.encryptor.Encrypt(ctx, pm.ProviderToken)
+	encryptedToken, encryptedCardID, encryptedExpDate, err := encryptPaymentMethodFields(ctx, r.encryptor, pm)
 	if err != nil {
-		return domain.PaymentMethod{}, fmt.Errorf("encrypt provider token: %w", err)
-	}
-	encryptedCardID, err := encryptOptional(ctx, r.encryptor, pm.ProviderCardID)
-	if err != nil {
-		return domain.PaymentMethod{}, fmt.Errorf("encrypt provider card id: %w", err)
-	}
-	encryptedExpDate, err := encryptOptional(ctx, r.encryptor, pm.ExpDate)
-	if err != nil {
-		return domain.PaymentMethod{}, fmt.Errorf("encrypt expiry date: %w", err)
+		return domain.PaymentMethod{}, err
 	}
 
 	row, err := r.q().CreatePaymentMethod(ctx, postgres.CreatePaymentMethodParams{
@@ -81,17 +94,9 @@ func (r *PaymentMethodRepository) Create(ctx context.Context, pm domain.PaymentM
 // a row with the same (user_id, token_hash) already exists. Sensitive fields are
 // encrypted at rest before persistence.
 func (r *PaymentMethodRepository) UpsertByTokenHash(ctx context.Context, pm domain.PaymentMethod) (domain.PaymentMethod, error) {
-	encryptedToken, err := r.encryptor.Encrypt(ctx, pm.ProviderToken)
+	encryptedToken, encryptedCardID, encryptedExpDate, err := encryptPaymentMethodFields(ctx, r.encryptor, pm)
 	if err != nil {
-		return domain.PaymentMethod{}, fmt.Errorf("encrypt provider token: %w", err)
-	}
-	encryptedCardID, err := encryptOptional(ctx, r.encryptor, pm.ProviderCardID)
-	if err != nil {
-		return domain.PaymentMethod{}, fmt.Errorf("encrypt provider card id: %w", err)
-	}
-	encryptedExpDate, err := encryptOptional(ctx, r.encryptor, pm.ExpDate)
-	if err != nil {
-		return domain.PaymentMethod{}, fmt.Errorf("encrypt expiry date: %w", err)
+		return domain.PaymentMethod{}, err
 	}
 
 	row, err := r.q().UpsertPaymentMethodByTokenHash(ctx, postgres.UpsertPaymentMethodByTokenHashParams{
@@ -162,9 +167,9 @@ func (r *PaymentMethodRepository) SetActive(ctx context.Context, userID, methodI
 	return nil
 }
 
-// Delete removes a payment method for the given user.
-// Returns ErrPaymentMethodInUse if the method is referenced as the active payment
-// method of a subscription.
+// Delete removes a payment method for the given user after verifying that it
+// exists and belongs to the user. Callers are responsible for checking whether
+// the method is referenced by an active subscription.
 func (r *PaymentMethodRepository) Delete(ctx context.Context, userID, methodID uuid.UUID) error {
 	pm, err := r.q().GetPaymentMethodByIDForUpdate(ctx, pgtype.UUID{Bytes: methodID, Valid: true})
 	if err != nil {
@@ -178,14 +183,6 @@ func (r *PaymentMethodRepository) Delete(ctx context.Context, userID, methodID u
 	}
 
 	if pm.IsActive {
-		return application.ErrPaymentMethodInUse
-	}
-
-	count, err := r.q().CountSubscriptionsByActivePaymentMethodID(ctx, pgtype.UUID{Bytes: methodID, Valid: true})
-	if err != nil {
-		return fmt.Errorf("check active payment method usage: %w", err)
-	}
-	if count > 0 {
 		return application.ErrPaymentMethodInUse
 	}
 
@@ -204,11 +201,11 @@ func mapPaymentMethod(ctx context.Context, row postgres.PaymentMethod, encryptor
 	if err != nil {
 		return domain.PaymentMethod{}, fmt.Errorf("decrypt provider token: %w", err)
 	}
-	providerCardID, err := decryptOptional(ctx, encryptor, textString(row.ProviderCardID))
+	providerCardID, err := decryptOptional(ctx, encryptor, pgconv.TextToString(row.ProviderCardID))
 	if err != nil {
 		return domain.PaymentMethod{}, fmt.Errorf("decrypt provider card id: %w", err)
 	}
-	expDate, err := decryptOptional(ctx, encryptor, textString(row.ExpDate))
+	expDate, err := decryptOptional(ctx, encryptor, pgconv.TextToString(row.ExpDate))
 	if err != nil {
 		return domain.PaymentMethod{}, fmt.Errorf("decrypt expiry date: %w", err)
 	}
@@ -218,7 +215,7 @@ func mapPaymentMethod(ctx context.Context, row postgres.PaymentMethod, encryptor
 		Provider:       domain.PaymentProvider(row.Provider),
 		ProviderToken:  providerToken,
 		ProviderCardID: providerCardID,
-		DisplayMask:    textString(row.DisplayMask),
+		DisplayMask:    pgconv.TextToString(row.DisplayMask),
 		ExpDate:        expDate,
 		IsActive:       row.IsActive,
 		CreatedAt:      row.CreatedAt.Time,
@@ -226,7 +223,7 @@ func mapPaymentMethod(ctx context.Context, row postgres.PaymentMethod, encryptor
 	}, nil
 }
 
-func encryptOptional(ctx context.Context, encryptor encryption.Encryptor, plaintext string) (string, error) {
+func encryptOptional(ctx context.Context, encryptor encryptor, plaintext string) (string, error) {
 	if plaintext == "" {
 		return "", nil
 	}

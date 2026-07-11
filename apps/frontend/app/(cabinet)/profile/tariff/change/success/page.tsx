@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { PageHeader } from '@/shared/ui/page-header';
 import { PageShell } from '@/shared/ui/page-shell';
@@ -13,7 +14,9 @@ export default function TariffChangeSuccessPage() {
   return (
     <PageShell>
       <PageHeader title="Тариф изменён" backHref={ROUTES.profileTariff} />
-      <TariffChangeSuccess />
+      <Suspense fallback={null}>
+        <TariffChangeSuccess />
+      </Suspense>
     </PageShell>
   );
 }

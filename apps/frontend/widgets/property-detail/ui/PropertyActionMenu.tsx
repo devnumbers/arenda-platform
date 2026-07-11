@@ -1,70 +1,78 @@
 'use client';
 
-import {type JSX, useState} from 'react';
-import {Popover, PopoverContent, PopoverDialog, PopoverTrigger,} from '@heroui/react';
-import {IconButton} from '@/shared/ui/icon-button';
-import {Menu} from '@/shared/assets/icons';
-import type {PropertyStatus} from '@/entities/property/model/types';
+import { useMemo, useState } from 'react';
+import type { JSX } from 'react';
+import { Menu } from '@/shared/assets/icons';
+import type { PropertyStatus } from '@/entities/property/model/types';
+import { IconButton } from '@/shared/ui/icon-button';
+import { Select, type SelectOption } from '@/shared/ui/select';
 import styles from './PropertyActionMenu.module.css';
 
 export type PropertyActionMenuProps = {
-    readonly status: PropertyStatus;
+    readonly status?: PropertyStatus;
+    readonly disabled?: boolean;
     readonly onEdit: () => void;
     readonly onToggleMaintenance: () => void;
     readonly onToggleArchive: () => void;
 };
 
 export function PropertyActionMenu({
-                                       status,
-                                       onEdit,
-                                       onToggleMaintenance,
-                                       onToggleArchive,
-                                   }: PropertyActionMenuProps): JSX.Element {
-    const [isOpen, setIsOpen] = useState(false);
+    status,
+    disabled,
+    onEdit,
+    onToggleMaintenance,
+    onToggleArchive,
+}: PropertyActionMenuProps): JSX.Element {
+    const [selectedAction, setSelectedAction] = useState('');
 
-    const handleAction = (action: () => void) => {
-        action();
-        setIsOpen(false);
-    };
+    const options = useMemo<SelectOption[]>(() => {
+        const items: SelectOption[] = [];
+        if (status && status !== 'archived') {
+            items.push({ value: 'edit', label: 'Редактировать объект' });
+            items.push({
+                value: 'toggleMaintenance',
+                label: status === 'maintenance' ? 'Вернуть в работу' : 'На ремонт',
+            });
+        }
+        if (status) {
+            items.push({
+                value: 'toggleArchive',
+                label: status === 'archived' ? 'Вернуть из архива' : 'Перевести в архив',
+            });
+        }
+        return items;
+    }, [status]);
 
     return (
-        <Popover isOpen={isOpen} onOpenChange={setIsOpen}>
-            <PopoverTrigger>
-                <IconButton variant={'secondary'} size={'large'}  aria-label="Действия" icon={<Menu/>}/>
-            </PopoverTrigger>
-            <PopoverContent
-                placement="bottom end"
-                offset={8}
-                className={styles.menu}
-            >
-                <PopoverDialog aria-label="Действия с объектом" className={styles.dialog}>
-                    {status !== 'archived' && (
-                        <button
-                            type="button"
-                            className={styles.item}
-                            onClick={() => handleAction(onEdit)}
-                        >
-                            Редактировать объект
-                        </button>
-                    )}
-                    {status !== 'archived' && (
-                        <button
-                            type="button"
-                            className={styles.item}
-                            onClick={() => handleAction(onToggleMaintenance)}
-                        >
-                            {status === 'maintenance' ? 'Вернуть в работу' : 'На ремонт'}
-                        </button>
-                    )}
-                    <button
-                        type="button"
-                        className={styles.item}
-                        onClick={() => handleAction(onToggleArchive)}
-                    >
-                        {status === 'archived' ? 'Вернуть из архива' : 'Перевести в архив'}
-                    </button>
-                </PopoverDialog>
-            </PopoverContent>
-        </Popover>
+        <Select
+            value={selectedAction}
+            options={options}
+            dropdownAlign="right"
+            dropdownClassName={styles.dropdown}
+            onChange={(value) => {
+                switch (value) {
+                    case 'edit':
+                        onEdit();
+                        break;
+                    case 'toggleMaintenance':
+                        onToggleMaintenance();
+                        break;
+                    case 'toggleArchive':
+                        onToggleArchive();
+                        break;
+                }
+                setSelectedAction('');
+            }}
+            renderTrigger={({ onClick }) => (
+                <IconButton
+                    variant="secondary"
+                    size="large"
+                    aria-label="Действия"
+                    icon={<Menu />}
+                    disabled={disabled}
+                    onClick={onClick}
+                />
+            )}
+        />
     );
 }

@@ -7,7 +7,7 @@ import (
 
 // ChangeTariffRequest asks to move a user to another tariff for a period.
 type ChangeTariffRequest struct {
-	TariffName string
+	TariffName domain.TariffName
 	Period     domain.SubscriptionPeriod
 }
 
@@ -30,12 +30,14 @@ type AddPaymentMethodResponse struct {
 	PaymentMethod *domain.PaymentMethod
 }
 
-// SubscriptionView is the current subscription together with its tariff and active payment method.
+// SubscriptionView is the current subscription together with its tariff,
+// pending tariff, active payment method, and current paid period.
 type SubscriptionView struct {
 	Subscription        domain.Subscription
 	Tariff              domain.Tariff
 	PendingTariff       *domain.Tariff
 	ActivePaymentMethod *domain.PaymentMethod
+	CurrentPeriod       *domain.SubscriptionPeriod
 }
 
 // SubscriptionPaymentView is a subscription payment together with its tariff.

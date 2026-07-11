@@ -53,8 +53,10 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Новый номер должен отличаться от текущего", true
 	case errors.Is(err, identitydomain.ErrTooManyAttempts):
 		return "Слишком много попыток", true
-	case errors.Is(err, identityapp.ErrPhoneLoginDeprecated):
-		return "Вход по телефону больше не поддерживается", true
+	case errors.Is(err, identityapp.ErrEmailDoesNotMatch):
+		return "Некорректные учётные данные", true
+	case errors.Is(err, identityapp.ErrEmailAlreadyTaken):
+		return "Этот email уже используется", true
 
 	// Properties.
 	case errors.Is(err, propertiesapp.ErrInvalidInput):
@@ -93,6 +95,8 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Серию, созданную договором аренды, нельзя удалить", true
 	case errors.Is(err, leasesapp.ErrArchivedLease):
 		return "Нельзя изменить архивную аренду", true
+	case errors.Is(err, leasesapp.ErrArchivedProperty):
+		return "Объект в архиве", true
 	case errors.Is(err, leasesapp.ErrTenantContactNotFound):
 		return "Арендатор не найден", true
 	case errors.Is(err, leasesapp.ErrDuplicatePhone):
@@ -103,6 +107,8 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Сумма должна быть больше нуля", true
 	case errors.Is(err, billingdomain.ErrInvalidPeriod):
 		return "Период должен быть месяц или год", true
+	case errors.Is(err, billingdomain.ErrInvalidTariff):
+		return "Некорректное название тарифа", true
 	case errors.Is(err, billingdomain.ErrAlreadyOnTariff):
 		return "Вы уже на выбранном тарифе", true
 	case errors.Is(err, billingdomain.ErrInvalidTariffChange):

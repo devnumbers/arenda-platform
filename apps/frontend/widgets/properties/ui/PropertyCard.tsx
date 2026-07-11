@@ -3,14 +3,10 @@
 import type {JSX} from 'react';
 import NextLink from 'next/link';
 import {LinkButton} from '@/shared/ui/link-button';
-import {Icon} from '@/shared/ui/icon';
-import {ClockSmall, UserSmall} from '@/shared/assets/icons';
 import {ROUTES} from '@/shared/config/routes';
-import {formatMoneyKopecks} from '@/shared/lib/format-money';
-import {formatCurrentLeaseMonth, formatLeaseRemainingDuration,} from '@/shared/lib/format-lease-card-values';
+import {LeaseInfo} from '@/widgets/lease-card/ui/LeaseInfo';
 import {getDisplayStatus} from '@/features/properties/lib/property-statuses';
 import type {PropertyWithLease} from '../lib/use-property-list-data';
-import {LeaseProgressBar} from './LeaseProgressBar';
 import {PropertyStatusBadge} from './PropertyStatusBadge';
 import {PropertyThumbnail} from './PropertyThumbnail';
 import styles from './PropertyCard.module.css';
@@ -95,61 +91,40 @@ export function PropertyCard({property}: PropertyCardProps): JSX.Element {
         property.status,
         property.occupancy,
         property.activeLease?.status,
+        property.overdue_rent_count,
     );
     const action = getPropertyAction(property);
 
     const showLeaseInfo = lease !== null;
-    const remaining = lease
-        ? formatLeaseRemainingDuration(lease.startDate, lease.endDate)
-        : '';
-    const monthLabel = lease
-        ? formatCurrentLeaseMonth(lease.startDate, lease.status)
-        : '';
 
     return (
         <article className={styles.root}>
             <NextLink
                 href={ROUTES.property(property.id)}
-                className={styles.header}
+                className={styles.cardLink}
                 aria-label={`Открыть объект ${property.name}`}
-            >
+            />
+            <div className={styles.header}>
                 <div className={styles.meta}>
                     <h3 className={styles.title}>{property.name}</h3>
-                    {displayStatus && <PropertyStatusBadge status={displayStatus}/>}
+                    {displayStatus && <PropertyStatusBadge status={displayStatus} overdueCount={property.overdue_rent_count}/>}
                 </div>
                 <PropertyThumbnail size="small"/>
-            </NextLink>
+            </div>
 
             {showLeaseInfo && (
-                <div className={styles.lease}>
-                    <div className={styles.leaseRow}>
-                        <span className={styles.rent}>{formatMoneyKopecks(lease.rentKopecks)}</span>
-                        <span className={styles.duration}>{remaining}</span>
-                    </div>
-
-                    {lease.endDate && (
-                        <LeaseProgressBar
-                            startDate={lease.startDate}
-                            endDate={lease.endDate}
-                            active={lease.status === 'active' || lease.status === 'requires_action'}
-                        />
-                    )}
-
-                    <div className={styles.leaseRow}>
-            <span className={styles.tenant}>
-              <Icon size="s">
-                <UserSmall/>
-              </Icon>
-                {lease.tenantName}
-            </span>
-                        <span className={styles.month}>
-              <Icon size="s">
-                <ClockSmall/>
-              </Icon>
-                            {monthLabel}
-            </span>
-                    </div>
-                </div>
+                <LeaseInfo
+                    lease={{
+                        start_date: lease.startDate,
+                        payment_day: lease.paymentDay,
+                        rent_amount_kopecks: lease.rentKopecks,
+                        current_period_overdue: lease.currentPeriodOverdue,
+                        has_overdue: lease.hasOverdue,
+                        overdue_since: lease.overdueSince ?? null,
+                        next_payment_date: lease.nextPaymentDate ?? null,
+                        tenant_contact: lease.tenantContact ?? null,
+                    }}
+                />
             )}
 
             {action?.kind === 'single' && (

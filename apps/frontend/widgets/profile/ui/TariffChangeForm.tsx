@@ -7,15 +7,18 @@ import {
   type JSX,
 } from 'react';
 import { useRouter } from 'next/navigation';
+import NextLink from 'next/link';
 import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
 import { notify } from '@/shared/lib/toast';
 import { Button } from '@/shared/ui/button';
+import { PageHeader } from '@/shared/ui/page-header';
 import {
   useTariffs,
   useSubscription,
   useChangeTariff,
+  usePendingPayment,
 } from '@/features/billing/api/hooks';
 import { getTariffLabel } from '@/entities/user/lib/get-tariff-label';
 import { type TariffName } from '@/entities/user/model/types';
@@ -108,12 +111,14 @@ export function TariffChangeForm(): JSX.Element {
     refetch: refetchSubscription,
   } = useSubscription();
   const changeTariff = useChangeTariff();
+  const { data: pendingPayment } = usePendingPayment();
 
   const [period, setPeriod] = useState<Period>('month');
   const [selectedTariff, setSelectedTariff] = useState<TariffName | null>(null);
 
   const isPending = isTariffsPending || isSubscriptionPending;
   const isError = isTariffsError || isSubscriptionError;
+  const hasPendingPayment = Boolean(pendingPayment);
 
   const handleRetry = useCallback(() => {
     if (isTariffsError) {
@@ -154,84 +159,100 @@ export function TariffChangeForm(): JSX.Element {
     [changeTariff, period, router],
   );
 
-  if (isError) {
-    return (
-      <div className={styles.error}>
-        <p className={styles.errorText}>Не удалось загрузить данные тарифов</p>
-        <Button onClick={handleRetry} variant="secondary">
-          Повторить
-        </Button>
-      </div>
-    );
-  }
-
-  if (isPending || !tariffs || !subscription) {
-    return <TariffChangeSkeleton />;
-  }
-
-  const currentTariffName = subscription.tariff.name;
-
   return (
-    <div className={styles.root}>
-      <PeriodSelector
-        value={period}
-        onChange={setPeriod}
-        disabled={changeTariff.isPending}
-      />
-
-      <div className={styles.list}>
-        {tariffs.map((tariff) => {
-          const isCurrent = tariff.name === currentTariffName;
-          const isLoading =
-            changeTariff.isPending && selectedTariff === tariff.name;
-
-          return (
-            <Card
-              key={tariff.name}
-              className={clsx(styles.card, isCurrent && styles.currentCard)}
-            >
-              <div className={styles.cardHeader}>
-                <h3 className={styles.tariffName}>
-                  {getTariffLabel(tariff.name)}
-                </h3>
-                {isCurrent && (
-                  <span className={styles.currentBadge}>Текущий</span>
-                )}
-              </div>
-
-              <div className={styles.priceRow}>
-                <span className={styles.price}>
-                  {formatMoneyKopecks(
-                    period === 'year'
-                      ? tariff.yearlyPriceKopecks
-                      : tariff.monthlyPriceKopecks,
-                  )}
-                  <span className={styles.period}>
-                    {period === 'year' ? '/год' : '/мес'}
-                  </span>
-                </span>
-              </div>
-
-              <p className={styles.limit}>
-                {tariff.activePropertyLimit < 0
-                  ? 'Неограниченно'
-                  : `До ${tariff.activePropertyLimit} объектов`}
+    <>
+      <PageHeader title="Сменить тариф" backHref={ROUTES.profileTariff} />
+      {isError && (
+        <div className={styles.error}>
+          <p className={styles.errorText}>Не удалось загрузить данные тарифов</p>
+          <Button onClick={handleRetry} variant="secondary">
+            Повторить
+          </Button>
+        </div>
+      )}
+      {!isError && (isPending || !tariffs || !subscription) && (
+        <TariffChangeSkeleton />
+      )}
+      {!isError && !isPending && tariffs && subscription && (
+        <div className={styles.root}>
+          {pendingPayment && (
+            <div className={clsx(styles.banner, styles.bannerInfo)}>
+              <p className={styles.bannerText}>
+                У вас есть платёж в обработке — дождитесь его завершения,
+                чтобы сменить тариф
               </p>
-
-              <Button
-                variant={isCurrent ? 'secondary' : 'primary'}
-                size="large"
-                fullWidth
-                loading={isLoading}
-                disabled={isCurrent || changeTariff.isPending}
-                onClick={() => handleSelect(tariff.name)}
+              <NextLink
+                href={ROUTES.profilePaymentDetail(pendingPayment.id)}
+                className={styles.bannerLink}
               >
-                {isCurrent ? 'Текущий' : 'Выбрать'}
-              </Button>
-            </Card>
-          );
-        })}
-      </div>
-    </div>
+                Детали платежа
+              </NextLink>
+            </div>
+          )}
+
+          <PeriodSelector
+            value={period}
+            onChange={setPeriod}
+            disabled={changeTariff.isPending || hasPendingPayment}
+          />
+
+          <div className={styles.list}>
+            {tariffs.map((tariff) => {
+              const isCurrent = tariff.name === subscription.tariff.name;
+              const isLoading =
+                changeTariff.isPending && selectedTariff === tariff.name;
+
+              return (
+                <Card
+                  key={tariff.name}
+                  className={clsx(styles.card, isCurrent && styles.currentCard)}
+                >
+                  <div className={styles.cardHeader}>
+                    <h3 className={styles.tariffName}>
+                      {getTariffLabel(tariff.name)}
+                    </h3>
+                    {isCurrent && (
+                      <span className={styles.currentBadge}>Текущий</span>
+                    )}
+                  </div>
+
+                  <div className={styles.priceRow}>
+                    <span className={styles.price}>
+                      {formatMoneyKopecks(
+                        period === 'year'
+                          ? tariff.yearlyPriceKopecks
+                          : tariff.monthlyPriceKopecks,
+                      )}
+                      <span className={styles.period}>
+                        {period === 'year' ? '/год' : '/мес'}
+                      </span>
+                    </span>
+                  </div>
+
+                  <p className={styles.limit}>
+                    {tariff.activePropertyLimit < 0
+                      ? 'Неограниченно'
+                      : `До ${tariff.activePropertyLimit} объектов`}
+                  </p>
+
+                  <Button
+                    variant={isCurrent ? 'secondary' : 'primary'}
+                    size="large"
+                    fullWidth
+                    loading={isLoading}
+                    disabled={
+                      isCurrent || changeTariff.isPending || hasPendingPayment
+                    }
+                    onClick={() => handleSelect(tariff.name)}
+                  >
+                    {isCurrent ? 'Текущий' : 'Выбрать'}
+                  </Button>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

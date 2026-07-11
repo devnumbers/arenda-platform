@@ -1,6 +1,8 @@
 'use client';
 
 import type { JSX } from 'react';
+import NextLink from 'next/link';
+import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import styles from './FinanceSummaryCards.module.css';
 
@@ -17,18 +19,26 @@ export function FinanceSummaryCards({
 }: FinanceSummaryCardsProps): JSX.Element {
   return (
     <div className={styles.root}>
-      <div className={styles.card}>
+      <NextLink
+        href={`${ROUTES.financeOperations}?type=income&period=all`}
+        className={styles.card}
+        aria-label="Перейти к операциям: Доходы"
+      >
         <span className={styles.label}>Доходы</span>
         <span className={`${styles.value} ${styles.income}`}>
           {formatMoneyKopecks(incomeKopecks, { round: true })}
         </span>
-      </div>
-      <div className={styles.card}>
+      </NextLink>
+      <NextLink
+        href={`${ROUTES.financeOperations}?type=expense&period=all`}
+        className={styles.card}
+        aria-label="Перейти к операциям: Расходы"
+      >
         <span className={styles.label}>Расходы</span>
         <span className={`${styles.value} ${styles.expense}`}>
           {formatMoneyKopecks(expenseKopecks, { round: true })}
         </span>
-      </div>
+      </NextLink>
       <div className={styles.card}>
         <span className={styles.label}>Прибыль</span>
         <span className={styles.value}>{formatMoneyKopecks(profitKopecks, { round: true })}</span>

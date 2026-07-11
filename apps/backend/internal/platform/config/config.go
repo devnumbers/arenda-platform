@@ -1,12 +1,14 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -21,13 +23,15 @@ type Config struct {
 	DatabaseURL                         string
 	MigrationsDir                       string
 	CookieSecure                        bool
-	SMSSender                           string
 	PaymentProvider                     string
 	AppBaseURL                          string
 	TKassaTerminalKey                   string
 	TKassaPassword                      string
 	TKassaBaseURL                       string
 	TKassaTimeout                       time.Duration
+	TKassaMaxRetries                    int
+	TKassaRetryBaseDelay                time.Duration
+	TKassaRetryMaxDelay                 time.Duration
 	DaDataAPIKey                        string
 	DaDataSecretKey                     string
 	DaDataBaseURL                       string
@@ -59,16 +63,20 @@ type Config struct {
 	SMTPFrom                            string
 	SMTPFromName                        string
 	SMTPTimeout                         time.Duration
+	OTelServiceName                     string
+	OTelEnabled                         bool
+	OTelTraceSampler                    float64
+	OTelOTLPEndpoint                    string
 }
 
 // RateLimit holds per-key rate-limiting configuration.
 type RateLimit struct {
-	IPRPS               float64
-	IPBurst             int
-	PhoneSendPerHour    int
-	PhoneVerifyPer15Min int
-	EmailSendPerHour    int
-	EmailVerifyPer15Min int
+	IPRPS                     float64
+	IPBurst                   int
+	EmailSendPerHour          int
+	EmailVerifyPer15Min       int
+	PhoneChangeSendPerHour    int
+	PhoneChangeVerifyPer15Min int
 }
 
 // DBPoolConfig holds PostgreSQL connection pool settings.
@@ -90,7 +98,6 @@ func Load() (Config, error) {
 		LogFormat:         os.Getenv("LOG_FORMAT"),
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		MigrationsDir:     os.Getenv("MIGRATIONS_DIR"),
-		SMSSender:         os.Getenv("SMS_SENDER"),
 		EmailSender:       os.Getenv("EMAIL_SENDER"),
 		EmailTemplatesDir: os.Getenv("EMAIL_TEMPLATES_DIR"),
 		SMTPHost:          os.Getenv("SMTP_HOST"),
@@ -109,6 +116,20 @@ func Load() (Config, error) {
 		DaDataSecretKey:   os.Getenv("DADATA_SECRET_KEY"),
 		DaDataBaseURL:     os.Getenv("DADATA_BASE_URL"),
 		EncryptionKey:     os.Getenv("ENCRYPTION_KEY"),
+		OTelServiceName:   cmp.Or(os.Getenv("OTEL_SERVICE_NAME"), "arenda-api"),
+		OTelEnabled: (os.Getenv("OTEL_TRACES_EXPORTER") != "" && os.Getenv("OTEL_TRACES_EXPORTER") != "none") ||
+			(os.Getenv("OTEL_METRICS_EXPORTER") != "" && os.Getenv("OTEL_METRICS_EXPORTER") != "none"),
+		OTelOTLPEndpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+	}
+
+	sampler, err := parseFloatEnv("OTEL_TRACES_SAMPLER_ARG", 1.0)
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid OTEL_TRACES_SAMPLER_ARG %q: %w", os.Getenv("OTEL_TRACES_SAMPLER_ARG"), err)
+	}
+	cfg.OTelTraceSampler = sampler
+
+	if cfg.OTelEnabled && cfg.OTelOTLPEndpoint == "" {
+		return Config{}, fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL_TRACES_EXPORTER or OTEL_METRICS_EXPORTER is set to a value other than 'none'")
 	}
 
 	if cfg.AppEnv == "" {
@@ -199,12 +220,12 @@ func Load() (Config, error) {
 	}
 
 	cfg.RateLimit = RateLimit{
-		IPRPS:               20,
-		IPBurst:             40,
-		PhoneSendPerHour:    5,
-		PhoneVerifyPer15Min: 10,
-		EmailSendPerHour:    60,
-		EmailVerifyPer15Min: 30,
+		IPRPS:                     20,
+		IPBurst:                   40,
+		EmailSendPerHour:          60,
+		EmailVerifyPer15Min:       30,
+		PhoneChangeSendPerHour:    5,
+		PhoneChangeVerifyPer15Min: 10,
 	}
 	if v := os.Getenv("RATE_LIMIT_IP_RPS"); v != "" {
 		rps, err := strconv.ParseFloat(v, 64)
@@ -220,20 +241,6 @@ func Load() (Config, error) {
 		}
 		cfg.RateLimit.IPBurst = burst
 	}
-	if v := os.Getenv("RATE_LIMIT_PHONE_SEND_PER_HOUR"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return Config{}, fmt.Errorf("invalid RATE_LIMIT_PHONE_SEND_PER_HOUR %q: %w", v, err)
-		}
-		cfg.RateLimit.PhoneSendPerHour = n
-	}
-	if v := os.Getenv("RATE_LIMIT_PHONE_VERIFY_PER_15MIN"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return Config{}, fmt.Errorf("invalid RATE_LIMIT_PHONE_VERIFY_PER_15MIN %q: %w", v, err)
-		}
-		cfg.RateLimit.PhoneVerifyPer15Min = n
-	}
 	if v := os.Getenv("RATE_LIMIT_EMAIL_SEND_PER_HOUR"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
@@ -248,23 +255,41 @@ func Load() (Config, error) {
 		}
 		cfg.RateLimit.EmailVerifyPer15Min = n
 	}
+	if v := os.Getenv("RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR %q: %w", v, err)
+		}
+		cfg.RateLimit.PhoneChangeSendPerHour = n
+	} else if cfg.RateLimit.PhoneChangeSendPerHour <= 0 {
+		cfg.RateLimit.PhoneChangeSendPerHour = 5
+	}
+	if v := os.Getenv("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN %q: %w", v, err)
+		}
+		cfg.RateLimit.PhoneChangeVerifyPer15Min = n
+	} else if cfg.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
+		cfg.RateLimit.PhoneChangeVerifyPer15Min = 10
+	}
 	if cfg.RateLimit.IPRPS <= 0 {
 		return Config{}, fmt.Errorf("RATE_LIMIT_IP_RPS must be positive")
 	}
 	if cfg.RateLimit.IPBurst <= 0 {
 		return Config{}, fmt.Errorf("RATE_LIMIT_IP_BURST must be positive")
 	}
-	if cfg.RateLimit.PhoneSendPerHour <= 0 {
-		return Config{}, fmt.Errorf("RATE_LIMIT_PHONE_SEND_PER_HOUR must be positive")
-	}
-	if cfg.RateLimit.PhoneVerifyPer15Min <= 0 {
-		return Config{}, fmt.Errorf("RATE_LIMIT_PHONE_VERIFY_PER_15MIN must be positive")
-	}
 	if cfg.RateLimit.EmailSendPerHour <= 0 {
 		return Config{}, fmt.Errorf("RATE_LIMIT_EMAIL_SEND_PER_HOUR must be positive")
 	}
 	if cfg.RateLimit.EmailVerifyPer15Min <= 0 {
 		return Config{}, fmt.Errorf("RATE_LIMIT_EMAIL_VERIFY_PER_15MIN must be positive")
+	}
+	if cfg.RateLimit.PhoneChangeSendPerHour <= 0 {
+		return Config{}, fmt.Errorf("RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR must be positive")
+	}
+	if cfg.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
+		return Config{}, fmt.Errorf("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN must be positive")
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -346,11 +371,6 @@ func Load() (Config, error) {
 	}
 	if cfg.DBPool.MinConns > cfg.DBPool.MaxConns {
 		return Config{}, fmt.Errorf("DB_MIN_CONNS must not exceed DB_MAX_CONNS")
-	}
-
-	allowedSenders := map[string]bool{"": true, "fake": true, "disabled": true}
-	if !allowedSenders[cfg.SMSSender] {
-		return Config{}, fmt.Errorf("invalid SMS_SENDER %q: must be empty, fake, or disabled", cfg.SMSSender)
 	}
 
 	allowedEmailSenders := map[string]bool{"": true, "fake": true, "smtp": true}
@@ -479,6 +499,42 @@ func Load() (Config, error) {
 			}
 			cfg.TKassaTimeout = d
 		}
+
+		cfg.TKassaMaxRetries = 3
+		if v := os.Getenv("T_KASSA_MAX_RETRIES"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid T_KASSA_MAX_RETRIES %q: %w", v, err)
+			}
+			if n < 0 {
+				return Config{}, fmt.Errorf("T_KASSA_MAX_RETRIES must be non-negative")
+			}
+			cfg.TKassaMaxRetries = n
+		}
+
+		cfg.TKassaRetryBaseDelay = 500 * time.Millisecond
+		if v := os.Getenv("T_KASSA_RETRY_BASE_DELAY"); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid T_KASSA_RETRY_BASE_DELAY %q: %w", v, err)
+			}
+			if d <= 0 {
+				return Config{}, fmt.Errorf("T_KASSA_RETRY_BASE_DELAY must be positive")
+			}
+			cfg.TKassaRetryBaseDelay = d
+		}
+
+		cfg.TKassaRetryMaxDelay = 5 * time.Second
+		if v := os.Getenv("T_KASSA_RETRY_MAX_DELAY"); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid T_KASSA_RETRY_MAX_DELAY %q: %w", v, err)
+			}
+			if d <= 0 {
+				return Config{}, fmt.Errorf("T_KASSA_RETRY_MAX_DELAY must be positive")
+			}
+			cfg.TKassaRetryMaxDelay = d
+		}
 	}
 
 	if cfg.AppEnv != "local" && cfg.EncryptionKey == "" {
@@ -509,13 +565,7 @@ func Load() (Config, error) {
 		cfg.PhotoStorageSecretKey,
 		cfg.PhotoStoragePublicBaseURL,
 	}
-	s3Complete := true
-	for _, f := range s3Fields {
-		if f == "" {
-			s3Complete = false
-			break
-		}
-	}
+	s3Complete := !slices.Contains(s3Fields, "")
 	if cfg.PhotoStorageProvider == "" {
 		if cfg.AppEnv == "local" && !s3Complete {
 			cfg.PhotoStorageProvider = "fake"
@@ -598,4 +648,16 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func parseFloatEnv(key string, defaultValue float64) (float64, error) {
+	s := os.Getenv(key)
+	if s == "" {
+		return defaultValue, nil
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
 }
