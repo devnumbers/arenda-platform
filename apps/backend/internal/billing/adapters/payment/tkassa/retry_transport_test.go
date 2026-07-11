@@ -388,3 +388,129 @@ var _ http.RoundTripper = (*countingRoundTripper)(nil)
 var _ net.Error = (*timeoutNetError)(nil)
 var _ net.Error = (*nonTimeoutNetError)(nil)
 var _ net.Error = (*permanentNetError)(nil)
+
+// hangingServer reads the request body and then blocks until the client
+// gives up, producing a real ResponseHeaderTimeout after WroteRequest.
+func hangingServer(t *testing.T, hits *atomic.Int32) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = io.Copy(io.Discard, r.Body)
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func timeoutTransport() *http.Transport {
+	return &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+		ResponseHeaderTimeout: 50 * time.Millisecond,
+	}
+}
+
+// TestRetryTransportWriteMethodsNoDuplicateAfterReadTimeout is the H1
+// regression guard: with a real read timeout happening after the request was
+// sent, Charge/Cancel (and unknown future methods) reach the server exactly
+// once, while Init/GetState are retried.
+func TestRetryTransportWriteMethodsNoDuplicateAfterReadTimeout(t *testing.T) {
+	cases := []struct {
+		method   string
+		wantHits int32
+	}{
+		{"Charge", 1},
+		{"Cancel", 1},
+		{"AddCard", 1},
+		{"RemoveCard", 1},
+		{"AddCustomer", 1},
+		{"SomeFutureMethod", 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.method, func(t *testing.T) {
+			var hits atomic.Int32
+			srv := hangingServer(t, &hits)
+			tr := newRetryTransport(timeoutTransport(), 3, time.Millisecond, 5*time.Millisecond)
+
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/v2/"+tc.method, bytes.NewReader([]byte(`{}`)))
+			if err != nil {
+				t.Fatalf("create request: %v", err)
+			}
+			resp, err := tr.RoundTrip(req)
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			if err == nil {
+				t.Fatalf("expected read timeout error")
+			}
+			if hits.Load() != tc.wantHits {
+				t.Fatalf("%s reached server %d times, want %d (duplicate request would double-charge)", tc.method, hits.Load(), tc.wantHits)
+			}
+		})
+	}
+}
+
+func TestRetryTransportReadMethodsRetriedAfterReadTimeout(t *testing.T) {
+	for _, method := range []string{"Init", "GetState"} {
+		t.Run(method, func(t *testing.T) {
+			var hits atomic.Int32
+			srv := hangingServer(t, &hits)
+			tr := newRetryTransport(timeoutTransport(), 2, time.Millisecond, 5*time.Millisecond)
+
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/v2/"+method, bytes.NewReader([]byte(`{}`)))
+			if err != nil {
+				t.Fatalf("create request: %v", err)
+			}
+			resp, err := tr.RoundTrip(req)
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			if err == nil {
+				t.Fatalf("expected read timeout error")
+			}
+			if hits.Load() != 3 {
+				t.Fatalf("%s reached server %d times, want 3 (1 initial + 2 retries)", method, hits.Load())
+			}
+		})
+	}
+}
+
+// signalingRoundTripper reports each call on the channel and then fails.
+type signalingRoundTripper struct {
+	calls chan struct{}
+	err   error
+}
+
+func (s *signalingRoundTripper) RoundTrip(_ *http.Request) (*http.Response, error) {
+	s.calls <- struct{}{}
+	return nil, s.err
+}
+
+func TestRetryTransportBackoffRespectsContextCancel(t *testing.T) {
+	base := &signalingRoundTripper{
+		calls: make(chan struct{}, 4),
+		err:   &timeoutNetError{errorString: "boom"},
+	}
+	tr := newRetryTransport(base, 3, time.Hour, time.Hour) // backoff that would hang without ctx awareness
+
+	ctx, cancel := context.WithCancel(t.Context())
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://securepay.tinkoff.ru/v2/Charge", nil)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := tr.RoundTrip(req)
+		done <- err
+	}()
+
+	<-base.calls // first attempt failed, backoff sleep started
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected context.Canceled after cancel during backoff, got %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("RoundTrip kept sleeping after context cancellation")
+	}
+}
