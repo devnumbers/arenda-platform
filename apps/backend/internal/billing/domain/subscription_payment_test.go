@@ -74,9 +74,22 @@ func TestNewSubscriptionPaymentInvalidAmount(t *testing.T) {
 	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
 
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
-	_, err := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodMonth, -1, ProviderFake, now)
-	if !errors.Is(err, ErrInvalidAmount) {
-		t.Errorf("NewSubscriptionPayment() error = %v, want ErrInvalidAmount", err)
+	tests := []struct {
+		name          string
+		amountKopecks int64
+		wantErr       error
+	}{
+		{"negative amount", -1, ErrInvalidAmount},
+		{"zero amount", 0, ErrInvalidAmount},
+		{"positive amount", 1, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewSubscriptionPayment(userID, subscriptionID, tariffID, nil, PeriodMonth, tt.amountKopecks, ProviderFake, now)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("NewSubscriptionPayment() error = %v, want %v", err, tt.wantErr)
+			}
+		})
 	}
 }
 

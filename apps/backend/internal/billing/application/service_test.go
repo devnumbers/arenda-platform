@@ -309,9 +309,13 @@ type fakeSubscriptionPaymentRepo struct {
 	forUpdateStatus            map[uuid.UUID]domain.PaymentStatus
 	updateProviderPaymentIDErr error
 	onMarkFailed               func()
+	beforeCreate               func()
 }
 
 func (r *fakeSubscriptionPaymentRepo) Create(_ context.Context, p domain.SubscriptionPayment) (domain.SubscriptionPayment, error) {
+	if r.beforeCreate != nil {
+		r.beforeCreate()
+	}
 	for _, existing := range r.payments {
 		if existing.UserID == p.UserID && existing.TariffID == p.TariffID && existing.Period == p.Period && existing.Status == domain.PaymentStatusPending {
 			return domain.SubscriptionPayment{}, ErrAlreadyExists
@@ -2957,6 +2961,84 @@ func TestBilling_ProcessRenewals_UpdatesStalePaymentMethodID(t *testing.T) {
 	p := d.subscriptionPayments.payments[paymentID]
 	if p.PaymentMethodID == nil || *p.PaymentMethodID != newMethodID {
 		t.Errorf("expected payment method id updated to %s, got %v", newMethodID, p.PaymentMethodID)
+	}
+}
+
+func TestBilling_ProcessRenewals_RecoversExistingPendingPaymentOnCreateRace(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	subID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	existingPaymentID := uuid.MustParse("66666666-6666-6666-6666-666666666666")
+	validUntil := fixedNow
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(domain.Subscription{
+		ID:                    subID,
+		UserID:                userID,
+		TariffID:              proID,
+		Source:                domain.SubscriptionSourcePaid,
+		Status:                domain.SubscriptionStatusActive,
+		ValidUntil:            &validUntil,
+		AutoRenewEnabled:      true,
+		ActivePaymentMethodID: &methodID,
+	})
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:            methodID,
+		UserID:        userID,
+		Provider:      domain.ProviderFake,
+		ProviderToken: "fake_token_1234",
+		IsActive:      true,
+	}
+	// Simulate a concurrent renewal run that commits its pending payment after
+	// our pre-lookup misses it but before our Create executes, so Create hits
+	// ErrAlreadyExists from the partial unique index backstop.
+	d.subscriptionPayments.beforeCreate = func() {
+		d.subscriptionPayments.payments[existingPaymentID] = domain.SubscriptionPayment{
+			ID:              existingPaymentID,
+			UserID:          userID,
+			SubscriptionID:  subID,
+			TariffID:        proID,
+			PaymentMethodID: &methodID,
+			Period:          domain.PeriodMonth,
+			AmountKopecks:   5000,
+			Provider:        domain.ProviderFake,
+			Status:          domain.PaymentStatusPending,
+		}
+	}
+	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_1", Status: domain.PaymentStatusSucceeded}
+
+	count, err := d.service.Renewals.ProcessRenewals(t.Context(), fixedNow)
+	if err != nil {
+		t.Fatalf("ProcessRenewals error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 renewal, got %d", count)
+	}
+
+	// The conflicting pending payment must be reused: no duplicate created.
+	if len(d.subscriptionPayments.payments) != 1 {
+		t.Errorf("expected exactly 1 payment (no duplicate), got %d", len(d.subscriptionPayments.payments))
+	}
+	if d.provider.initReq.PaymentID != existingPaymentID {
+		t.Errorf("expected provider init for existing payment %s, got %s", existingPaymentID, d.provider.initReq.PaymentID)
+	}
+	if !d.provider.chargeCalled || d.provider.chargeReq.PaymentID != existingPaymentID {
+		t.Errorf("expected charge for existing payment %s, got %s (called=%v)", existingPaymentID, d.provider.chargeReq.PaymentID, d.provider.chargeCalled)
+	}
+	p := d.subscriptionPayments.payments[existingPaymentID]
+	if p.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("expected existing payment succeeded, got %s", p.Status)
+	}
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected status active, got %s", sub.Status)
+	}
+	if sub.ValidUntil == nil || !sub.ValidUntil.After(fixedNow) {
+		t.Errorf("expected valid_until extended, got %v", sub.ValidUntil)
 	}
 }
 

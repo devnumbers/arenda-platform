@@ -830,6 +830,7 @@ FROM subscription_payments sp
 JOIN user_subscriptions us ON us.id = sp.subscription_id
 WHERE sp.status = 'pending'
   AND sp.provider_payment_id IS NOT NULL
+  AND sp.provider_payment_id <> ''
   AND sp.tariff_id != us.tariff_id
   AND sp.created_at < $1
 ORDER BY sp.created_at ASC

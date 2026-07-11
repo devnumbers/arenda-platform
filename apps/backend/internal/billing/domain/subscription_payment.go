@@ -56,7 +56,7 @@ type SubscriptionPayment struct {
 
 // NewSubscriptionPayment creates a new pending subscription payment.
 func NewSubscriptionPayment(userID, subscriptionID, tariffID uuid.UUID, paymentMethodID *uuid.UUID, period SubscriptionPeriod, amountKopecks int64, provider PaymentProvider, now time.Time) (SubscriptionPayment, error) {
-	if amountKopecks < 0 {
+	if amountKopecks <= 0 {
 		return SubscriptionPayment{}, ErrInvalidAmount
 	}
 	if period != PeriodMonth && period != PeriodYear {

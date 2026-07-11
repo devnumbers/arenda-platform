@@ -254,6 +254,20 @@ func (r *RenewalService) prepareRenewalPayment(
 
 		payment, err = txSubscriptionPayments.Create(ctx, payment)
 		if err != nil {
+			if errors.Is(err, ErrAlreadyExists) {
+				// A concurrent run created the pending payment first. Return the
+				// existing one instead of failing.
+				pending, listErr := txSubscriptionPayments.ListPendingSubscriptionPaymentsByUserID(ctx, sub.UserID)
+				if listErr != nil {
+					return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("list pending subscription payments: %w", listErr)
+				}
+				for _, p := range pending {
+					if p.SubscriptionID == sub.ID && p.TariffID == renewalTariff.ID && p.Period == period {
+						_ = tx.Rollback(ctx)
+						return p, pm, amount, period, renewalTariff, nil
+					}
+				}
+			}
 			return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, fmt.Errorf("save renewal payment: %w", err)
 		}
 	}
