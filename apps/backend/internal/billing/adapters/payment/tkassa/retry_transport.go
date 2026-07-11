@@ -7,6 +7,9 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
+	"path"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,6 +17,13 @@ import (
 // network errors. It does not retry on HTTP 4xx/5xx from the provider because
 // those are business/provider-level outcomes, and it does not retry when the
 // caller has already canceled the context.
+//
+// Retry safety is per-method: T-Kassa write operations (Charge first of all)
+// are not idempotent — the Charge body carries only PaymentId/RebillId without
+// an OrderId, so repeating it after a read timeout would charge the card
+// twice. Non-idempotent methods are retried only when the request never left
+// the client (tracked via httptrace WroteRequest). Read and idempotent
+// methods (GetState, Init-by-OrderId) are retried on any timeout.
 type retryTransport struct {
 	base       http.RoundTripper
 	maxRetries int
@@ -23,6 +33,17 @@ type retryTransport struct {
 	// It defaults to the identity so callers (and tests) that do not configure
 	// it observe the exact backoff values; production wiring installs full-jitter.
 	jitter func(time.Duration) time.Duration
+}
+
+// retryOnTimeoutMethods may be retried even after the request bytes reached
+// the provider: GetState is a pure read and Init is idempotent by OrderId —
+// T-Kassa returns the existing payment when the same OrderId is initialized
+// again. Every other method (Charge, Cancel, AddCustomer, AddCard,
+// RemoveCard, and anything unknown) is retried only before the request is
+// sent.
+var retryOnTimeoutMethods = map[string]bool{
+	"Init":     true,
+	"GetState": true,
 }
 
 func newRetryTransport(base http.RoundTripper, maxRetries int, baseDelay, maxDelay time.Duration) *retryTransport {
@@ -54,8 +75,17 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 
+	method := path.Base(req.URL.Path)
+
 	for attempt := 0; attempt <= t.maxRetries; attempt++ {
-		attemptReq := req.Clone(req.Context())
+		// Track whether the request bytes were actually written to the wire:
+		// a timeout after WroteRequest means the provider may already be
+		// processing the call, so non-idempotent methods must not retry.
+		var wroteRequest atomic.Bool
+		trace := &httptrace.ClientTrace{
+			WroteRequest: func(httptrace.WroteRequestInfo) { wroteRequest.Store(true) },
+		}
+		attemptReq := req.Clone(httptrace.WithClientTrace(req.Context(), trace))
 		if body != nil {
 			attemptReq.Body = io.NopCloser(bytes.NewReader(body))
 			attemptReq.ContentLength = int64(len(body))
@@ -68,10 +98,12 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		if err == nil {
 			return resp, nil
 		}
-		if !isRetriable(err) || attempt == t.maxRetries {
+		if !canRetry(method, err, wroteRequest.Load()) || attempt == t.maxRetries {
 			return nil, err
 		}
-		time.Sleep(t.jitter(t.backoff(attempt)))
+		if sleepErr := sleepContext(req.Context(), t.jitter(t.backoff(attempt))); sleepErr != nil {
+			return nil, sleepErr
+		}
 	}
 	return resp, err
 }
@@ -87,7 +119,25 @@ func (t *retryTransport) backoff(attempt int) time.Duration {
 	return d
 }
 
-func isRetriable(err error) bool {
+// sleepContext waits for d or until ctx is done, whichever happens first, so
+// a canceled request does not sit out the whole backoff delay.
+func sleepContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// canRetry reports whether a failed RoundTrip may be safely repeated.
+//
+// Only timeout network errors are retriable, and context.Canceled never is.
+// Read/idempotent methods retry on any such timeout; non-idempotent writes
+// retry only when the request was never written to the wire.
+func canRetry(method string, err error, wroteRequest bool) bool {
 	if err == nil {
 		return false
 	}
@@ -95,8 +145,11 @@ func isRetriable(err error) bool {
 		return false
 	}
 	var netErr net.Error
-	if errors.As(err, &netErr) {
-		return netErr.Timeout()
+	if !errors.As(err, &netErr) || !netErr.Timeout() {
+		return false
 	}
-	return false
+	if retryOnTimeoutMethods[method] {
+		return true
+	}
+	return !wroteRequest
 }

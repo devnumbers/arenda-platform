@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -240,24 +241,88 @@ func TestRetryTransportBackoffOverflowCap(t *testing.T) {
 	}
 }
 
-func TestRetryTransportIsRetriable(t *testing.T) {
-	if isRetriable(nil) {
-		t.Fatalf("nil error should not be retriable")
+func TestRetryTransportCanRetry(t *testing.T) {
+	timeout := &timeoutNetError{errorString: "timeout"}
+	cases := []struct {
+		name         string
+		method       string
+		err          error
+		wroteRequest bool
+		want         bool
+	}{
+		{"nil error", "GetState", nil, false, false},
+		{"context canceled", "GetState", context.Canceled, false, false},
+		{"non-timeout net error", "GetState", &nonTimeoutNetError{errorString: "temp"}, false, false},
+		{"permanent net error", "GetState", &permanentNetError{errorString: "perm"}, false, false},
+		{"plain error", "GetState", errors.New("plain"), false, false},
+		{"read method retries timeout after send", "GetState", timeout, true, true},
+		{"idempotent Init retries timeout after send", "Init", timeout, true, true},
+		{"Charge retries timeout before send", "Charge", timeout, false, true},
+		{"Charge never retries after send", "Charge", timeout, true, false},
+		{"Cancel never retries after send", "Cancel", timeout, true, false},
+		{"AddCard never retries after send", "AddCard", timeout, true, false},
+		{"RemoveCard never retries after send", "RemoveCard", timeout, true, false},
+		{"AddCustomer never retries after send", "AddCustomer", timeout, true, false},
+		{"unknown method is conservative after send", "SomeFutureMethod", timeout, true, false},
+		{"unknown method retries before send", "SomeFutureMethod", timeout, false, true},
 	}
-	if !isRetriable(&timeoutNetError{errorString: "timeout"}) {
-		t.Fatalf("timeout net error should be retriable")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := canRetry(tc.method, tc.err, tc.wroteRequest)
+			if got != tc.want {
+				t.Errorf("canRetry(%q, %v, %v) = %v, want %v", tc.method, tc.err, tc.wroteRequest, got, tc.want)
+			}
+		})
 	}
-	if isRetriable(&nonTimeoutNetError{errorString: "temp"}) {
-		t.Fatalf("non-timeout net error should not be retriable")
+}
+
+// wroteRequestRoundTripper fires the request's httptrace WroteRequest callback
+// before failing, simulating an error that happened after the request bytes
+// were sent to the provider.
+type wroteRequestRoundTripper struct {
+	calls atomic.Int32
+	err   error
+}
+
+func (w *wroteRequestRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	w.calls.Add(1)
+	if trace := httptrace.ContextClientTrace(req.Context()); trace != nil && trace.WroteRequest != nil {
+		trace.WroteRequest(httptrace.WroteRequestInfo{})
 	}
-	if isRetriable(&permanentNetError{errorString: "perm"}) {
-		t.Fatalf("permanent net error should not be retriable")
+	return nil, w.err
+}
+
+func TestRetryTransportChargeNotRetriedAfterRequestSent(t *testing.T) {
+	base := &wroteRequestRoundTripper{err: &timeoutNetError{errorString: "read timeout"}}
+	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://securepay.tinkoff.ru/v2/Charge", nil)
+	resp, err := tr.RoundTrip(req)
+	if resp != nil {
+		_ = resp.Body.Close()
 	}
-	if isRetriable(errors.New("plain")) {
-		t.Fatalf("plain error should not be retriable")
+	if err == nil {
+		t.Fatalf("expected error")
 	}
-	if isRetriable(context.Canceled) {
-		t.Fatalf("context.Canceled should not be retriable")
+	if base.calls.Load() != 1 {
+		t.Fatalf("Charge must not be retried after the request was sent: got %d calls, want 1", base.calls.Load())
+	}
+}
+
+func TestRetryTransportInitRetriedAfterRequestSent(t *testing.T) {
+	base := &wroteRequestRoundTripper{err: &timeoutNetError{errorString: "read timeout"}}
+	tr := newRetryTransport(base, 2, 1*time.Millisecond, 10*time.Millisecond)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://securepay.tinkoff.ru/v2/Init", nil)
+	resp, err := tr.RoundTrip(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if base.calls.Load() != 3 {
+		t.Fatalf("Init is idempotent by OrderId and must be retried: got %d calls, want 3", base.calls.Load())
 	}
 }
 
