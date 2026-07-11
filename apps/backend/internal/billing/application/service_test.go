@@ -304,6 +304,8 @@ type fakeSubscriptionPaymentRepo struct {
 	listPendingErr             error
 	listPendingLimit           int32
 	listPendingCalls           int
+	listStaleRefundingErr      error
+	listStaleRefundingCalls    int
 	forUpdateStatus            map[uuid.UUID]domain.PaymentStatus
 	updateProviderPaymentIDErr error
 	onMarkFailed               func()
@@ -399,6 +401,28 @@ func (r *fakeSubscriptionPaymentRepo) ListPendingPayments(_ context.Context, cre
 		out = append(out, p)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	if len(out) > int(limit) {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (r *fakeSubscriptionPaymentRepo) ListStaleRefundingPayments(_ context.Context, updatedBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error) {
+	r.listStaleRefundingCalls++
+	if r.listStaleRefundingErr != nil {
+		return nil, r.listStaleRefundingErr
+	}
+	var out []domain.SubscriptionPayment
+	for _, p := range r.payments {
+		if p.Status != domain.PaymentStatusRefunding || !p.UpdatedAt.Before(updatedBefore) {
+			continue
+		}
+		if p.ProviderPaymentID == nil || *p.ProviderPaymentID == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].UpdatedAt.Before(out[j].UpdatedAt) })
 	if len(out) > int(limit) {
 		out = out[:limit]
 	}
@@ -6108,6 +6132,222 @@ func TestBilling_ReconcilePendingPayments_SyncsInBatches(t *testing.T) {
 		}
 		if count != 0 {
 			t.Errorf("expected 0 payments synced on list error, got %d", count)
+		}
+	})
+}
+
+func TestBilling_ReconcileStaleRefunds(t *testing.T) {
+	basicID := uuid.MustParse("44444444-4444-4444-4444-44444444444b")
+	proID := uuid.MustParse("55555555-5555-5555-5555-55555555555a")
+	staleAt := fixedNow.Add(-time.Hour)
+
+	addTariffs := func(d *testDeps) {
+		d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000})
+		d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	}
+	addRefundingPayment := func(d *testDeps, userID, subscriptionID, paymentID uuid.UUID, providerPaymentID string, updatedAt time.Time) {
+		validUntil := fixedNow.AddDate(0, 1, 0)
+		d.addSubscription(domain.Subscription{
+			ID:               subscriptionID,
+			UserID:           userID,
+			TariffID:         proID,
+			Source:           domain.SubscriptionSourcePaid,
+			Status:           domain.SubscriptionStatusActive,
+			ValidUntil:       &validUntil,
+			AutoRenewEnabled: true,
+		})
+		d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+			ID:                paymentID,
+			UserID:            userID,
+			SubscriptionID:    subscriptionID,
+			TariffID:          proID,
+			Period:            domain.PeriodMonth,
+			AmountKopecks:     5000,
+			Provider:          domain.ProviderFake,
+			ProviderPaymentID: &providerPaymentID,
+			Status:            domain.PaymentStatusRefunding,
+			CreatedAt:         updatedAt.Add(-time.Minute),
+			UpdatedAt:         updatedAt,
+		}
+	}
+
+	t.Run("provider refunded finalizes the refund and downgrades to basic", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666601")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666602")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666603")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_finalize", staleAt)
+
+		d.provider.statusRes = domain.PaymentStatusRefunded
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected 1 payment resolved, got %d", count)
+		}
+		if !d.provider.statusCalled {
+			t.Error("expected provider.Status to be called")
+		}
+
+		payment := d.subscriptionPayments.payments[paymentID]
+		if payment.Status != domain.PaymentStatusRefunded {
+			t.Errorf("expected payment refunded, got %s", payment.Status)
+		}
+		if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != 5000 {
+			t.Errorf("expected refunded amount 5000, got %v", payment.RefundedAmountKopecks)
+		}
+
+		sub := d.subscriptions.subs[userID]
+		if sub.TariffID != basicID {
+			t.Errorf("expected subscription downgraded to basic, got tariff %s", sub.TariffID)
+		}
+		if sub.Status != domain.SubscriptionStatusActive {
+			t.Errorf("expected subscription status active, got %s", sub.Status)
+		}
+		if sub.ValidUntil != nil {
+			t.Errorf("expected valid_until nil after refund, got %v", sub.ValidUntil)
+		}
+		if sub.AutoRenewEnabled {
+			t.Error("expected auto_renew disabled after refund")
+		}
+		if len(d.propertyArchiver.calls) != 1 || d.propertyArchiver.calls[0].limit != 5 {
+			t.Errorf("expected property archiver called with limit 5, got %v", d.propertyArchiver.calls)
+		}
+	})
+
+	t.Run("provider succeeded reverts the refund reservation", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666611")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666612")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666613")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_revert", staleAt)
+
+		d.provider.statusRes = domain.PaymentStatusSucceeded
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected 1 payment resolved, got %d", count)
+		}
+
+		payment := d.subscriptionPayments.payments[paymentID]
+		if payment.Status != domain.PaymentStatusSucceeded {
+			t.Errorf("expected payment back to succeeded, got %s", payment.Status)
+		}
+		if payment.RefundedAmountKopecks != nil {
+			t.Errorf("expected refunded amount nil, got %v", *payment.RefundedAmountKopecks)
+		}
+
+		sub := d.subscriptions.subs[userID]
+		if sub.TariffID != proID {
+			t.Errorf("expected subscription to stay on pro, got tariff %s", sub.TariffID)
+		}
+		if len(d.propertyArchiver.calls) != 0 {
+			t.Errorf("expected property archiver not called, got %v", d.propertyArchiver.calls)
+		}
+	})
+
+	t.Run("provider pending keeps the payment refunding", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666621")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666622")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666623")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_pending", staleAt)
+
+		d.provider.statusRes = domain.PaymentStatusPending
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected 1 payment visited, got %d", count)
+		}
+
+		payment := d.subscriptionPayments.payments[paymentID]
+		if payment.Status != domain.PaymentStatusRefunding {
+			t.Errorf("expected payment to stay refunding, got %s", payment.Status)
+		}
+		if payment.RefundedAmountKopecks != nil {
+			t.Errorf("expected refunded amount nil, got %v", *payment.RefundedAmountKopecks)
+		}
+	})
+
+	t.Run("provider partial refund is an anomaly and stays refunding", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666631")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666632")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666633")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_partial", staleAt)
+
+		d.provider.statusRes = domain.PaymentStatusPartialRefunded
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected 1 payment visited, got %d", count)
+		}
+
+		payment := d.subscriptionPayments.payments[paymentID]
+		if payment.Status != domain.PaymentStatusRefunding {
+			t.Errorf("expected payment to stay refunding, got %s", payment.Status)
+		}
+		if len(d.propertyArchiver.calls) != 0 {
+			t.Errorf("expected property archiver not called, got %v", d.propertyArchiver.calls)
+		}
+	})
+
+	t.Run("recent refunding payment is untouched", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666641")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666642")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666643")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_recent", fixedNow)
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds error: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("expected 0 payments resolved, got %d", count)
+		}
+		if d.provider.statusCalled {
+			t.Error("expected provider.Status not called for a non-stale payment")
+		}
+
+		payment := d.subscriptionPayments.payments[paymentID]
+		if payment.Status != domain.PaymentStatusRefunding {
+			t.Errorf("expected payment to stay refunding, got %s", payment.Status)
+		}
+	})
+
+	t.Run("returns list error", func(t *testing.T) {
+		d := newTestDeps(t)
+		addTariffs(d)
+		userID := uuid.MustParse("66666666-6666-6666-6666-666666666651")
+		subscriptionID := uuid.MustParse("66666666-6666-6666-6666-666666666652")
+		paymentID := uuid.MustParse("66666666-6666-6666-6666-666666666653")
+		addRefundingPayment(d, userID, subscriptionID, paymentID, "stale_refund_list_err", staleAt)
+
+		d.subscriptionPayments.listStaleRefundingErr = errors.New("list failed")
+
+		count, err := d.service.Payments.ReconcileStaleRefunds(t.Context(), fixedNow)
+		if err == nil {
+			t.Fatal("expected error from ListStaleRefundingPayments")
+		}
+		if count != 0 {
+			t.Errorf("expected 0 payments resolved on list error, got %d", count)
 		}
 	})
 }

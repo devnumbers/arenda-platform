@@ -38,6 +38,7 @@ type PaymentProcessor interface {
 	RefundPayment(ctx context.Context, paymentID uuid.UUID) error
 	SyncPendingPayment(ctx context.Context, paymentID uuid.UUID) error
 	ReconcilePendingPayments(ctx context.Context, now time.Time) (int, error)
+	ReconcileStaleRefunds(ctx context.Context, now time.Time) (int, error)
 }
 
 // WebhookHandler handles provider webhooks.

@@ -91,6 +91,13 @@ func (w *PaymentReconciliationWorker) tick(ctx context.Context) error {
 		return fmt.Errorf("reconcile pending payments: %w", err)
 	}
 	w.logger.InfoContext(ctx, "payment reconciliation processed pending payments", "count", count)
+
+	refundCount, err := w.payments.ReconcileStaleRefunds(ctx, now)
+	if err != nil {
+		w.logger.ErrorContext(ctx, "stale refund reconciliation failed", "error", sanitize.Error(err))
+		return fmt.Errorf("reconcile stale refunds: %w", err)
+	}
+	w.logger.InfoContext(ctx, "payment reconciliation processed stale refunding payments", "count", refundCount)
 	return nil
 }
 

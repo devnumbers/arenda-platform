@@ -551,3 +551,191 @@ func (s *PaymentService) ReconcilePendingPayments(ctx context.Context, now time.
 
 	return processed, nil
 }
+
+// ReconcileStaleRefunds resolves payments stuck in the refunding state by
+// asking the provider for ground truth: a refunded provider payment finalizes
+// the refund; a still-captured charge reverts the refund reservation. Returns
+// the number of payments resolved.
+func (s *PaymentService) ReconcileStaleRefunds(ctx context.Context, now time.Time) (int, error) {
+	processed := 0
+	updatedBefore := now.Add(-pendingPaymentStalenessThreshold).UTC()
+
+	for {
+		payments, err := s.deps.subscriptionPayments.ListStaleRefundingPayments(ctx, updatedBefore, renewalBatchSize)
+		if err != nil {
+			return processed, fmt.Errorf("list stale refunding payments: %w", err)
+		}
+		if len(payments) == 0 {
+			break
+		}
+
+		for _, payment := range payments {
+			if err := s.syncRefundingPayment(ctx, payment.ID); err != nil {
+				s.deps.log.ErrorContext(ctx, "failed to sync refunding payment",
+					slog.String("payment_id", payment.ID.String()),
+					slog.String("error", sanitize.Error(err)))
+				continue
+			}
+			processed++
+		}
+
+		if len(payments) < renewalBatchSize {
+			break
+		}
+	}
+
+	return processed, nil
+}
+
+// syncRefundingPayment queries the provider for the current status of a single
+// refunding subscription payment and resolves the stuck refund reservation
+// based on the response.
+//
+// A refunded provider payment finalizes the refund exactly like the synchronous
+// refund path: the payment is marked refunded and the subscription is
+// downgraded to basic. A still-captured charge (succeeded) means the provider
+// cancel never reached the provider or never happened, so the reservation is
+// reverted. A partial refund is an anomaly the system never initiates, so it is
+// logged for manual review and left untouched. Any other status means the
+// provider has not settled yet, so the payment is retried on the next tick.
+func (s *PaymentService) syncRefundingPayment(ctx context.Context, paymentID uuid.UUID) error {
+	payment, err := s.deps.subscriptionPayments.GetByID(ctx, paymentID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrPaymentNotFound
+		}
+		return fmt.Errorf("get payment: %w", err)
+	}
+
+	if payment.Status != domain.PaymentStatusRefunding {
+		return fmt.Errorf("%w: cannot sync refund for payment with status %s", domain.ErrInvalidPaymentStatus, payment.Status)
+	}
+	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
+		return fmt.Errorf("%w: payment has no provider payment id", domain.ErrInvalidPaymentStatus)
+	}
+
+	status, err := s.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
+	if err != nil {
+		return fmt.Errorf("provider status: %w", err)
+	}
+
+	switch status {
+	case domain.PaymentStatusRefunded:
+		return s.finalizeStuckRefund(ctx, payment)
+	case domain.PaymentStatusSucceeded:
+		return s.revertStuckRefund(ctx, payment)
+	case domain.PaymentStatusPartialRefunded:
+		// The system always refunds the full amount, so a partial refund is an
+		// anomaly that must be reviewed manually instead of auto-finalized.
+		s.deps.log.WarnContext(ctx, "provider reports partial refund for a stuck refunding payment, manual review required",
+			slog.String("payment_id", paymentID.String()),
+			slog.String("subscription_id", payment.SubscriptionID.String()))
+		return nil
+	default:
+		// The provider payment has not settled yet (pending, failed, or an
+		// unknown status); leave the reservation for the next tick.
+		s.deps.log.DebugContext(ctx, "provider status does not resolve stuck refund yet",
+			slog.String("payment_id", paymentID.String()),
+			slog.String("subscription_id", payment.SubscriptionID.String()),
+			slog.String("status", string(status)))
+		return nil
+	}
+}
+
+// finalizeStuckRefund completes an in-flight refund after the provider
+// confirmed the payment is refunded: the payment is marked refunded and the
+// subscription is downgraded to basic in the same transaction, mirroring the
+// synchronous refund path.
+func (s *PaymentService) finalizeStuckRefund(ctx context.Context, payment domain.SubscriptionPayment) error {
+	tx, err := s.deps.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+
+	payment, err = txSubscriptionPayments.GetByIDForUpdate(ctx, payment.ID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrPaymentNotFound
+		}
+		return fmt.Errorf("get payment for update: %w", err)
+	}
+
+	if payment.Status != domain.PaymentStatusRefunding {
+		// A concurrent refund or another reconcile already finalized the payment.
+		return nil
+	}
+
+	if err := txSubscriptionPayments.MarkRefunded(ctx, payment.ID, s.deps.clock.Now().UTC()); err != nil {
+		return fmt.Errorf("mark payment refunded: %w", err)
+	}
+
+	if err := applyRefundToSubscription(ctx, refundDeps{
+		subscriptions:    s.deps.subscriptions,
+		tariffs:          s.deps.tariffs,
+		propertyArchiver: s.deps.propertyArchiver,
+	}, tx, payment.SubscriptionID); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit stuck refund finalization transaction: %w", err)
+	}
+
+	s.deps.log.InfoContext(ctx, "stuck refund finalized from provider state",
+		slog.String("payment_id", payment.ID.String()),
+		slog.String("subscription_id", payment.SubscriptionID.String()))
+
+	return nil
+}
+
+// revertStuckRefund rolls back an in-flight refund reservation after the
+// provider confirmed the charge is still captured. refunding can only be
+// entered from succeeded or pending; since the provider reports the charge as
+// captured, succeeded is the truthful state to restore.
+func (s *PaymentService) revertStuckRefund(ctx context.Context, payment domain.SubscriptionPayment) error {
+	now := s.deps.clock.Now().UTC()
+
+	tx, err := s.deps.beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind subscription payments transaction: %w", err)
+	}
+
+	locked, err := txSubscriptionPayments.GetByIDForUpdate(ctx, payment.ID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrPaymentNotFound
+		}
+		return fmt.Errorf("get payment for update: %w", err)
+	}
+
+	if locked.Status != domain.PaymentStatusRefunding {
+		// A concurrent refund or another reconcile already finalized the payment.
+		return nil
+	}
+
+	if err := txSubscriptionPayments.RevertRefund(ctx, payment.ID, domain.PaymentStatusSucceeded, now); err != nil {
+		return fmt.Errorf("revert refund reservation: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit stuck refund revert transaction: %w", err)
+	}
+
+	s.deps.log.InfoContext(ctx, "stuck refund reverted, charge still captured at provider",
+		slog.String("payment_id", payment.ID.String()),
+		slog.String("subscription_id", payment.SubscriptionID.String()))
+
+	return nil
+}

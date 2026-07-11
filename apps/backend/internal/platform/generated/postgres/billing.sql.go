@@ -878,6 +878,61 @@ func (q *Queries) ListPendingUpgradePayments(ctx context.Context, arg ListPendin
 	return items, nil
 }
 
+const listStaleRefundingPayments = `-- name: ListStaleRefundingPayments :many
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks
+FROM subscription_payments
+WHERE status = 'refunding'
+  AND provider_payment_id IS NOT NULL
+  AND provider_payment_id <> ''
+  AND updated_at < $1
+ORDER BY updated_at ASC
+LIMIT $2
+`
+
+type ListStaleRefundingPaymentsParams struct {
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	Limit     int32              `json:"limit"`
+}
+
+// Payments stuck in the refunding state (refund reserved but never finalized or
+// reverted). updated_at is trigger-maintained and marks entry into refunding.
+func (q *Queries) ListStaleRefundingPayments(ctx context.Context, arg ListStaleRefundingPaymentsParams) ([]SubscriptionPayment, error) {
+	rows, err := q.db.Query(ctx, listStaleRefundingPayments, arg.UpdatedAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SubscriptionPayment{}
+	for rows.Next() {
+		var i SubscriptionPayment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.SubscriptionID,
+			&i.TariffID,
+			&i.PaymentMethodID,
+			&i.Period,
+			&i.AmountKopecks,
+			&i.Provider,
+			&i.ProviderPaymentID,
+			&i.Status,
+			&i.ErrorCode,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PaymentUrl,
+			&i.SucceededAt,
+			&i.RefundedAmountKopecks,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSubscriptionPaymentsAdmin = `-- name: ListSubscriptionPaymentsAdmin :many
 SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id, sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.status, sp.error_code, sp.created_at, sp.updated_at, sp.payment_url, sp.succeeded_at, sp.refunded_amount_kopecks, u.phone AS user_phone
 FROM subscription_payments sp

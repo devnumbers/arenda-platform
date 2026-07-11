@@ -86,6 +86,7 @@ type SubscriptionPaymentRepository interface {
 	GetLastSucceededBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) (domain.SubscriptionPayment, error)
 	ListPendingUpgradePayments(ctx context.Context, createdBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error)
 	ListPendingPayments(ctx context.Context, createdBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error)
+	ListStaleRefundingPayments(ctx context.Context, updatedBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error)
 	ListAll(ctx context.Context, status string, userID uuid.UUID, limit, offset int) ([]SubscriptionPaymentWithUser, int64, error)
 	MarkSucceeded(ctx context.Context, id uuid.UUID, now time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, errorCode *string, now time.Time) error

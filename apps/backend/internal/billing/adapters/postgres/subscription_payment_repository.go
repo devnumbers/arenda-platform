@@ -155,6 +155,22 @@ func (r *SubscriptionPaymentRepository) ListPendingPayments(ctx context.Context,
 	return mapSubscriptionPayments(rows), nil
 }
 
+// ListStaleRefundingPayments returns refunding subscription payments whose
+// refund reservation was taken before the provided cutoff, ordered by the
+// reservation time ascending, limited to the given number of rows. It is used
+// by the reconciliation worker to find refunds that were neither finalized nor
+// reverted and need to be resolved with the provider.
+func (r *SubscriptionPaymentRepository) ListStaleRefundingPayments(ctx context.Context, updatedBefore time.Time, limit int32) ([]domain.SubscriptionPayment, error) {
+	rows, err := r.q().ListStaleRefundingPayments(ctx, postgres.ListStaleRefundingPaymentsParams{
+		UpdatedAt: pgtype.Timestamptz{Time: updatedBefore.UTC(), Valid: true},
+		Limit:     limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list stale refunding payments: %w", err)
+	}
+	return mapSubscriptionPayments(rows), nil
+}
+
 // ListAll returns all subscription payments for admin view.
 func (r *SubscriptionPaymentRepository) ListAll(ctx context.Context, status string, userID uuid.UUID, limit, offset int) ([]application.SubscriptionPaymentWithUser, int64, error) {
 	pgUserID := pgtype.UUID{Bytes: userID, Valid: userID != uuid.Nil}

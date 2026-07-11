@@ -15,12 +15,18 @@ import (
 
 type fakePaymentReconciliationService struct {
 	billingapp.PaymentProcessor
-	count int
-	err   error
+	count       int
+	err         error
+	refundCount int
+	refundErr   error
 }
 
 func (s *fakePaymentReconciliationService) ReconcilePendingPayments(context.Context, time.Time) (int, error) {
 	return s.count, s.err
+}
+
+func (s *fakePaymentReconciliationService) ReconcileStaleRefunds(context.Context, time.Time) (int, error) {
+	return s.refundCount, s.refundErr
 }
 
 func TestPaymentReconciliationWorker_Tick_LogsCount(t *testing.T) {

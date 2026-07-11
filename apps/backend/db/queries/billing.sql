@@ -306,6 +306,18 @@ WHERE status = 'pending'
 ORDER BY created_at ASC
 LIMIT $2;
 
+-- name: ListStaleRefundingPayments :many
+-- Payments stuck in the refunding state (refund reserved but never finalized or
+-- reverted). updated_at is trigger-maintained and marks entry into refunding.
+SELECT *
+FROM subscription_payments
+WHERE status = 'refunding'
+  AND provider_payment_id IS NOT NULL
+  AND provider_payment_id <> ''
+  AND updated_at < $1
+ORDER BY updated_at ASC
+LIMIT $2;
+
 -- name: ListSubscriptionPaymentsAdmin :many
 SELECT sp.*, u.phone AS user_phone
 FROM subscription_payments sp
