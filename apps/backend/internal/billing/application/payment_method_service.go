@@ -103,7 +103,7 @@ func (s *PaymentMethodService) SetActivePaymentMethod(ctx context.Context, userI
 		}
 		return fmt.Errorf("get subscription: %w", err)
 	}
-	sub.ActivePaymentMethodID = &methodID
+	sub.SetActivePaymentMethod(methodID)
 	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("update subscription active payment method: %w", err)
 	}

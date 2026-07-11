@@ -103,7 +103,7 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 				return fmt.Errorf("get subscription for add card: %w", err)
 			}
 		} else {
-			sub.ActivePaymentMethodID = &pm.ID
+			sub.SetActivePaymentMethod(pm.ID)
 			if err := txSubscriptions.Update(ctx, sub); err != nil {
 				return fmt.Errorf("update subscription active payment method: %w", err)
 			}

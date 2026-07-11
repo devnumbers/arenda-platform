@@ -201,6 +201,7 @@ func TestSubscriptionApplyTariffChange(t *testing.T) {
 	pendingID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14")
 	paymentID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a19")
 	pendingAt := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	pendingPeriod := PeriodMonth
 
 	sub := Subscription{
 		ID:              uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15"),
@@ -209,6 +210,7 @@ func TestSubscriptionApplyTariffChange(t *testing.T) {
 		Status:          SubscriptionStatusActive,
 		PendingTariffID: &pendingID,
 		PendingChangeAt: &pendingAt,
+		PendingPeriod:   &pendingPeriod,
 	}
 
 	basic := Tariff{ID: basicID, Name: TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000}
@@ -229,7 +231,7 @@ func TestSubscriptionApplyTariffChange(t *testing.T) {
 	if sub.LastAppliedPaymentID == nil || *sub.LastAppliedPaymentID != paymentID {
 		t.Errorf("LastAppliedPaymentID = %v, want %v", sub.LastAppliedPaymentID, paymentID)
 	}
-	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil {
+	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
 		t.Error("expected pending change cleared")
 	}
 	if sub.Status != SubscriptionStatusActive {
@@ -404,14 +406,13 @@ func TestSubscriptionApplyScheduledDowngrade(t *testing.T) {
 	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
 	paymentID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a19")
 	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	pendingPeriod := PeriodMonth
 
 	basic := Tariff{ID: basicID, Name: TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000}
 
 	newSub := func(period SubscriptionPeriod) Subscription {
 		pendingTariffID := basicID
 		pendingChangeAt := validUntil
-		pendingPeriodCopy := pendingPeriod
+		pendingPeriodCopy := period
 		lastPayment := paymentID
 		return Subscription{
 			ID:                   uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15"),
@@ -524,5 +525,118 @@ func TestSubscriptionClearPendingChange(t *testing.T) {
 	baseline.PendingPeriod = nil
 	if sub != baseline {
 		t.Errorf("ClearPendingChange mutated non-pending fields: got %+v, want %+v", sub, baseline)
+	}
+}
+
+func TestSubscriptionApplyScheduledDowngradePreconditions(t *testing.T) {
+	now := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	basicID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	otherID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14")
+	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	pendingAt := now.Add(-time.Hour)
+	otherPeriod := PeriodYear
+
+	basic := Tariff{ID: basicID, Name: TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000}
+
+	validSub := func() Subscription {
+		pendingTariffID := basicID
+		pendingChangeAt := pendingAt
+		pendingPeriod := PeriodMonth
+		return Subscription{
+			ID:              uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15"),
+			UserID:          userID,
+			TariffID:        proID,
+			Source:          SubscriptionSourcePaid,
+			Status:          SubscriptionStatusActive,
+			ValidUntil:      &validUntil,
+			PendingTariffID: &pendingTariffID,
+			PendingChangeAt: &pendingChangeAt,
+			PendingPeriod:   &pendingPeriod,
+		}
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*Subscription)
+	}{
+		{"status grace", func(s *Subscription) { s.Status = SubscriptionStatusGrace }},
+		{"status cancelled", func(s *Subscription) { s.Status = SubscriptionStatusCancelled }},
+		{"pending tariff mismatch", func(s *Subscription) { s.PendingTariffID = &otherID }},
+		{"no pending tariff", func(s *Subscription) { s.PendingTariffID = nil }},
+		{"pending period mismatch", func(s *Subscription) { s.PendingPeriod = &otherPeriod }},
+		{"no pending period", func(s *Subscription) { s.PendingPeriod = nil }},
+		{"pending change in the future", func(s *Subscription) { future := now.Add(time.Hour); s.PendingChangeAt = &future }},
+		{"no pending change at", func(s *Subscription) { s.PendingChangeAt = nil }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sub := validSub()
+			tt.mutate(&sub)
+			before := sub
+
+			if err := sub.ApplyScheduledDowngrade(basic, PeriodMonth, now); !errors.Is(err, ErrInvalidSubscriptionState) {
+				t.Errorf("ApplyScheduledDowngrade() error = %v, want ErrInvalidSubscriptionState", err)
+			}
+			if sub != before {
+				t.Errorf("ApplyScheduledDowngrade mutated fields on precondition failure: got %+v, want %+v", sub, before)
+			}
+		})
+	}
+}
+
+func TestReconstituteSubscription(t *testing.T) {
+	id := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	paymentMethodID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15")
+	validUntil := time.Date(2026, 12, 31, 23, 59, 59, 0, time.UTC)
+
+	validSub := func() Subscription {
+		return Subscription{
+			ID:                    id,
+			UserID:                userID,
+			TariffID:              tariffID,
+			Source:                SubscriptionSourcePaid,
+			Status:                SubscriptionStatusActive,
+			ValidUntil:            &validUntil,
+			AutoRenewEnabled:      true,
+			ActivePaymentMethodID: &paymentMethodID,
+		}
+	}
+
+	t.Run("accepts valid aggregate", func(t *testing.T) {
+		want := validSub()
+		got, err := ReconstituteSubscription(want)
+		if err != nil {
+			t.Fatalf("ReconstituteSubscription() error = %v", err)
+		}
+		if got != want {
+			t.Errorf("ReconstituteSubscription() = %+v, want %+v", got, want)
+		}
+	})
+
+	tests := []struct {
+		name   string
+		mutate func(*Subscription)
+	}{
+		{"unknown status", func(s *Subscription) { s.Status = SubscriptionStatus("paused") }},
+		{"empty status", func(s *Subscription) { s.Status = "" }},
+		{"unknown source", func(s *Subscription) { s.Source = SubscriptionSource("trial") }},
+		{"missing id", func(s *Subscription) { s.ID = uuid.Nil }},
+		{"missing user id", func(s *Subscription) { s.UserID = uuid.Nil }},
+		{"missing tariff id", func(s *Subscription) { s.TariffID = uuid.Nil }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sub := validSub()
+			tt.mutate(&sub)
+			if _, err := ReconstituteSubscription(sub); err == nil {
+				t.Error("ReconstituteSubscription() error = nil, want error")
+			}
+		})
 	}
 }

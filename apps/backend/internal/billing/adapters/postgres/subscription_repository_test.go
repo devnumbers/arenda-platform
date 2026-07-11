@@ -37,7 +37,10 @@ func TestMapSubscription(t *testing.T) {
 		LastAppliedPaymentID:  pgtype.UUID{Bytes: lastAppliedPaymentID, Valid: true},
 	}
 
-	got := mapSubscription(row)
+	got, err := mapSubscription(row)
+	if err != nil {
+		t.Fatalf("mapSubscription() error = %v", err)
+	}
 	want := domain.Subscription{
 		ID:                    id,
 		UserID:                userID,
@@ -76,7 +79,10 @@ func TestMapSubscriptionNullables(t *testing.T) {
 		ActivePaymentMethodID: pgtype.UUID{Valid: false},
 	}
 
-	got := mapSubscription(row)
+	got, err := mapSubscription(row)
+	if err != nil {
+		t.Fatalf("mapSubscription() error = %v", err)
+	}
 	want := domain.Subscription{
 		ID:               id,
 		UserID:           userID,

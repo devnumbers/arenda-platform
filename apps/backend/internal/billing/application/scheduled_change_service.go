@@ -77,16 +77,19 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 	if err != nil {
 		return fmt.Errorf("get subscription for update: %w", err)
 	}
-	if sub.Status != domain.SubscriptionStatusActive || sub.PendingTariffID == nil || sub.PendingChangeAt == nil || sub.PendingChangeAt.After(now) {
-		return nil
-	}
-
-	pendingTariff, err := txTariffs.GetByID(ctx, *sub.PendingTariffID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrTariffNotFound
+	// The scheduled-change preconditions (active status, matching pending
+	// tariff/period, change due) are enforced by ApplyScheduledDowngrade. The
+	// lookup below only resolves the pending tariff to pass into it; a nil
+	// PendingTariffID skips the lookup and makes the domain method reject.
+	var pendingTariff domain.Tariff
+	if sub.PendingTariffID != nil {
+		pendingTariff, err = txTariffs.GetByID(ctx, *sub.PendingTariffID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrTariffNotFound
+			}
+			return fmt.Errorf("get pending tariff: %w", err)
 		}
-		return fmt.Errorf("get pending tariff: %w", err)
 	}
 
 	period := domain.PeriodMonth

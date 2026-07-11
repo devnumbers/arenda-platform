@@ -320,7 +320,7 @@ func applySubscriptionRenewalBestEffort(ctx context.Context, d renewalBestEffort
 	}
 
 	if payment.PaymentMethodID != nil {
-		sub.ActivePaymentMethodID = payment.PaymentMethodID
+		sub.SetActivePaymentMethod(*payment.PaymentMethodID)
 	}
 
 	sub, renewalTariff, err := applyRenewalChanges(ctx, renewalChangeDeps{
@@ -401,7 +401,7 @@ func applyFreeRenewalOrDowngrade(ctx context.Context, d freeRenewalDeps, tx tran
 	if renewalTariff.Name == domain.TariffBasic {
 		sub.DowngradeToBasic(renewalTariff.ID)
 		if paymentID != uuid.Nil {
-			sub.LastAppliedPaymentID = &paymentID
+			sub.MarkPaymentApplied(paymentID)
 		}
 		if err := txSubscriptions.Update(ctx, *sub); err != nil {
 			return fmt.Errorf("update subscription after free downgrade to basic: %w", err)

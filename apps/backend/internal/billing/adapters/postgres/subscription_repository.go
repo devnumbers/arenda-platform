@@ -48,7 +48,7 @@ func (r *SubscriptionRepository) GetByID(ctx context.Context, id uuid.UUID) (dom
 		}
 		return domain.Subscription{}, fmt.Errorf("get subscription by id: %w", err)
 	}
-	return mapSubscription(row), nil
+	return mapSubscription(row)
 }
 
 // GetByUserID returns a subscription by user ID.
@@ -60,7 +60,7 @@ func (r *SubscriptionRepository) GetByUserID(ctx context.Context, userID uuid.UU
 		}
 		return domain.Subscription{}, fmt.Errorf("get subscription by user id: %w", err)
 	}
-	return mapSubscription(row), nil
+	return mapSubscription(row)
 }
 
 // GetByIDForUpdate returns a subscription by ID, locking the row for update.
@@ -72,7 +72,7 @@ func (r *SubscriptionRepository) GetByIDForUpdate(ctx context.Context, id uuid.U
 		}
 		return domain.Subscription{}, fmt.Errorf("get subscription by id for update: %w", err)
 	}
-	return mapSubscription(row), nil
+	return mapSubscription(row)
 }
 
 // GetByUserIDForUpdate returns a subscription by user ID, locking the row for update.
@@ -84,7 +84,7 @@ func (r *SubscriptionRepository) GetByUserIDForUpdate(ctx context.Context, userI
 		}
 		return domain.Subscription{}, fmt.Errorf("get subscription by user id for update: %w", err)
 	}
-	return mapSubscription(row), nil
+	return mapSubscription(row)
 }
 
 // Create inserts a new subscription. If a subscription already exists for the
@@ -97,11 +97,11 @@ func (r *SubscriptionRepository) Create(ctx context.Context, sub domain.Subscrip
 			if err != nil {
 				return domain.Subscription{}, fmt.Errorf("fetch existing subscription: %w", err)
 			}
-			return mapSubscription(existing), nil
+			return mapSubscription(existing)
 		}
 		return domain.Subscription{}, fmt.Errorf("create subscription: %w", err)
 	}
-	return mapSubscription(row), nil
+	return mapSubscription(row)
 }
 
 // Update persists all mutable fields of the subscription.
@@ -127,7 +127,11 @@ func (r *SubscriptionRepository) ListUpForRenewal(ctx context.Context, now time.
 	}
 	subs := make([]domain.Subscription, 0, len(rows))
 	for _, row := range rows {
-		subs = append(subs, mapSubscription(row))
+		sub, err := mapSubscription(row)
+		if err != nil {
+			return nil, fmt.Errorf("map subscription row: %w", err)
+		}
+		subs = append(subs, sub)
 	}
 	return subs, nil
 }
@@ -143,7 +147,11 @@ func (r *SubscriptionRepository) ListInExpiredGrace(ctx context.Context, now tim
 	}
 	subs := make([]domain.Subscription, 0, len(rows))
 	for _, row := range rows {
-		subs = append(subs, mapSubscription(row))
+		sub, err := mapSubscription(row)
+		if err != nil {
+			return nil, fmt.Errorf("map subscription row: %w", err)
+		}
+		subs = append(subs, sub)
 	}
 	return subs, nil
 }
@@ -160,7 +168,11 @@ func (r *SubscriptionRepository) ListExpiredNonRenewing(ctx context.Context, now
 	}
 	subs := make([]domain.Subscription, 0, len(rows))
 	for _, row := range rows {
-		subs = append(subs, mapSubscription(row))
+		sub, err := mapSubscription(row)
+		if err != nil {
+			return nil, fmt.Errorf("map subscription row: %w", err)
+		}
+		subs = append(subs, sub)
 	}
 	return subs, nil
 }
@@ -177,7 +189,11 @@ func (r *SubscriptionRepository) ListExpiredCancelled(ctx context.Context, now t
 	}
 	subs := make([]domain.Subscription, 0, len(rows))
 	for _, row := range rows {
-		subs = append(subs, mapSubscription(row))
+		sub, err := mapSubscription(row)
+		if err != nil {
+			return nil, fmt.Errorf("map subscription row: %w", err)
+		}
+		subs = append(subs, sub)
 	}
 	return subs, nil
 }
@@ -194,7 +210,11 @@ func (r *SubscriptionRepository) ListPendingChanges(ctx context.Context, now tim
 	}
 	subs := make([]domain.Subscription, 0, len(rows))
 	for _, row := range rows {
-		subs = append(subs, mapSubscription(row))
+		sub, err := mapSubscription(row)
+		if err != nil {
+			return nil, fmt.Errorf("map subscription row: %w", err)
+		}
+		subs = append(subs, sub)
 	}
 	return subs, nil
 }
@@ -238,13 +258,13 @@ func mapUpdateSubscriptionParams(sub domain.Subscription) postgres.UpdateSubscri
 	}
 }
 
-func mapSubscription(row postgres.UserSubscription) domain.Subscription {
+func mapSubscription(row postgres.UserSubscription) (domain.Subscription, error) {
 	var pendingPeriod *domain.SubscriptionPeriod
 	if row.PendingPeriod.Valid {
 		p := domain.SubscriptionPeriod(row.PendingPeriod.String)
 		pendingPeriod = &p
 	}
-	return domain.Subscription{
+	return domain.ReconstituteSubscription(domain.Subscription{
 		ID:                    pgconv.UUIDFromPgtype(row.ID),
 		UserID:                pgconv.UUIDFromPgtype(row.UserID),
 		TariffID:              pgconv.UUIDFromPgtype(row.TariffID),
@@ -257,7 +277,7 @@ func mapSubscription(row postgres.UserSubscription) domain.Subscription {
 		PendingPeriod:         pendingPeriod,
 		ActivePaymentMethodID: pgconv.UUIDFromPgtypePtr(row.ActivePaymentMethodID),
 		LastAppliedPaymentID:  pgconv.UUIDFromPgtypePtr(row.LastAppliedPaymentID),
-	}
+	})
 }
 
 

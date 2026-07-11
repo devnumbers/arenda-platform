@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -64,6 +65,34 @@ func NewOwnerSubscription(userID, tariffID uuid.UUID) (Subscription, error) {
 		AutoRenewEnabled: false,
 		ValidUntil:       nil,
 	}, nil
+}
+
+// ReconstituteSubscription validates a Subscription assembled from persisted
+// state and returns it. Persistence adapters build the aggregate from raw
+// storage values (including unchecked enum casts) and pass it here so that
+// unknown statuses/sources or missing identity fields are rejected with a
+// descriptive error instead of silently producing an invalid aggregate.
+func ReconstituteSubscription(sub Subscription) (Subscription, error) {
+	if sub.ID == uuid.Nil {
+		return Subscription{}, fmt.Errorf("reconstitute subscription: missing id")
+	}
+	if sub.UserID == uuid.Nil {
+		return Subscription{}, fmt.Errorf("reconstitute subscription: missing user id")
+	}
+	if sub.TariffID == uuid.Nil {
+		return Subscription{}, fmt.Errorf("reconstitute subscription: missing tariff id")
+	}
+	switch sub.Status {
+	case SubscriptionStatusActive, SubscriptionStatusGrace, SubscriptionStatusCancelled:
+	default:
+		return Subscription{}, fmt.Errorf("reconstitute subscription: unknown status %q", sub.Status)
+	}
+	switch sub.Source {
+	case SubscriptionSourcePaid, SubscriptionSourceService:
+	default:
+		return Subscription{}, fmt.Errorf("reconstitute subscription: unknown source %q", sub.Source)
+	}
+	return sub, nil
 }
 
 // CanMutateData reports whether the subscription allows the user to mutate
@@ -168,6 +197,7 @@ func (s *Subscription) ApplyTariffChange(paymentID uuid.UUID, currentTariff, new
 	s.LastAppliedPaymentID = &paymentID
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
+	s.PendingPeriod = nil
 	s.Status = SubscriptionStatusActive
 	return nil
 }
@@ -195,16 +225,31 @@ func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeri
 }
 
 // ApplyScheduledDowngrade applies a deferred downgrade at the end of the paid
-// period. Per ADR 0008 §3 there is no charge at apply time: it switches the
-// tariff, extends valid_until by the chosen period from now, enables auto-renew,
-// sets status to active, and clears the pending change. LastAppliedPaymentID
-// is intentionally left untouched because no payment is involved.
+// period. It requires the subscription to be active with a matching pending
+// change that is already due: the pending tariff and period must equal the
+// requested ones and pending_change_at must be set at or before now.
+// Per ADR 0008 §3 there is no charge at apply time: it switches the tariff,
+// extends valid_until by the chosen period from now, enables auto-renew, sets
+// status to active, and clears the pending change. LastAppliedPaymentID is
+// intentionally left untouched because no payment is involved.
 func (s *Subscription) ApplyScheduledDowngrade(newTariff Tariff, period SubscriptionPeriod, now time.Time) error {
 	if period != PeriodMonth && period != PeriodYear {
 		return ErrInvalidPeriod
 	}
 	if s.TariffID == newTariff.ID {
 		return ErrAlreadyOnTariff
+	}
+	if s.Status != SubscriptionStatusActive {
+		return ErrInvalidSubscriptionState
+	}
+	if s.PendingTariffID == nil || *s.PendingTariffID != newTariff.ID {
+		return ErrInvalidSubscriptionState
+	}
+	if s.PendingPeriod == nil || *s.PendingPeriod != period {
+		return ErrInvalidSubscriptionState
+	}
+	if s.PendingChangeAt == nil || s.PendingChangeAt.After(now) {
+		return ErrInvalidSubscriptionState
 	}
 	validUntil := addSubscriptionPeriod(now, period)
 	s.TariffID = newTariff.ID
@@ -223,6 +268,18 @@ func (s *Subscription) ClearPendingChange() {
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
+}
+
+// SetActivePaymentMethod records the payment method that future renewals
+// should charge.
+func (s *Subscription) SetActivePaymentMethod(id uuid.UUID) {
+	s.ActivePaymentMethodID = &id
+}
+
+// MarkPaymentApplied records the payment whose effects are already reflected
+// in the subscription state, so the same payment is never applied twice.
+func (s *Subscription) MarkPaymentApplied(paymentID uuid.UUID) {
+	s.LastAppliedPaymentID = &paymentID
 }
 
 // SetAutoRenew toggles automatic subscription renewal. Enabling auto-renew is
