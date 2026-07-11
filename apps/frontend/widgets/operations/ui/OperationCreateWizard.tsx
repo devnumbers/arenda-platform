@@ -3,6 +3,7 @@
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/shared/ui/button';
+import { LinkButton } from '@/shared/ui/link-button';
 import { WizardHeader } from '@/shared/ui/wizard-header';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
@@ -13,7 +14,7 @@ import {
 } from '@/entities/operation/model/types';
 import { getCategoriesByType } from '@/entities/operation/lib/categories';
 import { useCreateOperation } from '@/features/operations/api';
-import { useProperties } from '@/features/properties/api';
+import { useProperties, useProperty } from '@/features/properties/api';
 import { useCreateRecurringOperation } from '@/features/recurring-operations/api/hooks';
 import { ApiError } from '@/shared/api/errors';
 import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
@@ -126,6 +127,10 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     refetch: refetchProperties,
   } = useProperties();
 
+  const preselectedPropertyQuery = useProperty(propertyId ?? '');
+  const isPreselectedArchived =
+    Boolean(propertyId) && preselectedPropertyQuery.data?.status === 'archived';
+
   const { draft, setDraft } = useOperationCreateDraft(type, propertyId);
   const { step, operationType, basicInfo, schedule, reminder } = draft;
 
@@ -147,7 +152,10 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
   const createRecurringOperation = useCreateRecurringOperation();
 
   const isEmpty = !isPropertiesLoading && !isPropertiesError && properties?.length === 0;
-  const isPageLoading = isPropertiesLoading || isSubscriptionPending;
+  const isPageLoading =
+    isPropertiesLoading ||
+    isSubscriptionPending ||
+    (Boolean(propertyId) && preselectedPropertyQuery.isPending);
 
   const handleTypeChange = (nextType: OperationType) => {
     setDraft((prev) => {
@@ -309,6 +317,36 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
         />
         <div className={styles.content}>
           <FinanceErrorState onRetry={refetchProperties} isLoading={isPropertiesFetching} />
+        </div>
+      </div>
+    );
+  }
+
+  if (isPreselectedArchived && propertyId) {
+    return (
+      <div className={styles.root}>
+        <WizardHeader
+          title="Создание операции"
+          step={currentStepNumber}
+          totalSteps={3}
+          onBack={handleBack}
+          onCancel={handleCancel}
+        />
+        <div className={styles.content}>
+          <div className={styles.blocked}>
+            <h2 className={styles.blockedTitle}>Операция недоступна</h2>
+            <p className={styles.blockedText}>
+              Объект в архиве. Добавить операцию можно только для объекта в работе
+              или на ремонте.
+            </p>
+            <LinkButton
+              href={ROUTES.property(propertyId)}
+              variant="primary"
+              size="medium"
+            >
+              К объекту
+            </LinkButton>
+          </div>
         </div>
       </div>
     );

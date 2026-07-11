@@ -13,6 +13,9 @@ import (
 type PropertyRepository interface {
 	ExistsActiveByOwner(ctx context.Context, id, ownerID uuid.UUID) (bool, error)
 	ExistsByOwner(ctx context.Context, id, ownerID uuid.UUID) (bool, error)
+	// GetStatusByOwner returns the property status for the owner, or an empty
+	// string when the property does not exist.
+	GetStatusByOwner(ctx context.Context, id, ownerID uuid.UUID) (string, error)
 	HasOpenLease(ctx context.Context, id uuid.UUID) (bool, error)
 	WithTx(tx transaction.Tx) PropertyRepository
 }

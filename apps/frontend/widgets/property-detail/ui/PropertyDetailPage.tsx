@@ -269,7 +269,11 @@ export function PropertyDetailPage(): JSX.Element {
                         summary={summaryQuery.data}
                     />
 
-                    <PropertyInfoCard description={property.description} propertyId={id}/>
+                    <PropertyInfoCard
+                        description={property.description}
+                        propertyId={id}
+                        isArchived={property.status === 'archived'}
+                    />
                 </>
             )}
 

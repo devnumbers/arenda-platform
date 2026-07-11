@@ -41,8 +41,7 @@ export function Header() {
 
   const handleLogin = () => {
     setOpen(false);
-    // Neutral placeholder: no dedicated login page exists yet.
-    alert("Вход в сервис появится позже");
+    window.location.assign("/dashboard");
   };
 
   return (

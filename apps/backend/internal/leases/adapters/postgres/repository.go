@@ -1460,6 +1460,22 @@ func (r *PropertyRepository) ExistsByOwner(ctx context.Context, id, ownerID uuid
 	return true, nil
 }
 
+// GetStatusByOwner returns the property status for the owner, or an empty
+// string when the property does not exist.
+func (r *PropertyRepository) GetStatusByOwner(ctx context.Context, id, ownerID uuid.UUID) (string, error) {
+	status, err := r.q().GetPropertyStatusByOwner(ctx, postgres.GetPropertyStatusByOwnerParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return status, nil
+}
+
 // HasOpenLease reports whether the property currently has an open lease.
 func (r *PropertyRepository) HasOpenLease(ctx context.Context, id uuid.UUID) (bool, error) {
 	count, err := r.q().CountOpenLeasesByProperty(ctx, pgconv.UUIDToPgtype(id))

@@ -13,6 +13,7 @@ export type FinanceEmptyStateProps = {
   readonly actionHref?: string;
   readonly actionText?: string;
   readonly actionOnClick?: () => void;
+  readonly actionDisabled?: boolean;
 };
 
 export function FinanceEmptyState({
@@ -21,6 +22,7 @@ export function FinanceEmptyState({
   actionHref,
   actionText,
   actionOnClick,
+  actionDisabled = false,
 }: FinanceEmptyStateProps): JSX.Element {
   const actionContent: ReactNode | null =
     actionOnClick && actionText ? (
@@ -28,7 +30,12 @@ export function FinanceEmptyState({
         {actionText}
       </Button>
     ) : actionHref && actionText ? (
-      <LinkButton href={actionHref} variant="primary" size="medium">
+      <LinkButton
+        href={actionHref}
+        variant="primary"
+        size="medium"
+        disabled={actionDisabled}
+      >
         {actionText}
       </LinkButton>
     ) : null;

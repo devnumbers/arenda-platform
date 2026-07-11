@@ -15,6 +15,7 @@ type fakePropertyRepo struct {
 	existsByOwner       map[uuid.UUID]bool
 	existsActiveByOwner map[uuid.UUID]bool
 	hasOpenLease        map[uuid.UUID]bool
+	statuses            map[uuid.UUID]string
 }
 
 func (r *fakePropertyRepo) ExistsByOwner(_ context.Context, id, _ uuid.UUID) (bool, error) {
@@ -23,6 +24,16 @@ func (r *fakePropertyRepo) ExistsByOwner(_ context.Context, id, _ uuid.UUID) (bo
 
 func (r *fakePropertyRepo) ExistsActiveByOwner(_ context.Context, id, _ uuid.UUID) (bool, error) {
 	return r.existsActiveByOwner[id], nil
+}
+
+func (r *fakePropertyRepo) GetStatusByOwner(_ context.Context, id, _ uuid.UUID) (string, error) {
+	if status, ok := r.statuses[id]; ok {
+		return status, nil
+	}
+	if r.existsByOwner[id] {
+		return "active", nil
+	}
+	return "", nil
 }
 
 func (r *fakePropertyRepo) HasOpenLease(_ context.Context, id uuid.UUID) (bool, error) {

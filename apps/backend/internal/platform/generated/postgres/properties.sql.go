@@ -229,6 +229,23 @@ func (q *Queries) GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetP
 	return i, err
 }
 
+const getPropertyStatusByOwner = `-- name: GetPropertyStatusByOwner :one
+SELECT status FROM properties
+WHERE id = $1 AND owner_id = $2
+`
+
+type GetPropertyStatusByOwnerParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) GetPropertyStatusByOwner(ctx context.Context, arg GetPropertyStatusByOwnerParams) (string, error) {
+	row := q.db.QueryRow(ctx, getPropertyStatusByOwner, arg.ID, arg.OwnerID)
+	var status string
+	err := row.Scan(&status)
+	return status, err
+}
+
 const listActivePropertiesByOwner = `-- name: ListActivePropertiesByOwner :many
 SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at,
        (SELECT COUNT(*) FROM operations o

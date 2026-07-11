@@ -24,9 +24,9 @@ type txBeginner interface {
 }
 
 const (
-	maxPhotoCount      = 10
-	maxPhotoSize       = 5 * 1024 * 1024 // 5 MiB
-	photoKeyPrefix     = "properties"
+	maxPhotoCount  = 10
+	maxPhotoSize   = 5 * 1024 * 1024 // 5 MiB
+	photoKeyPrefix = "properties"
 )
 
 var allowedPhotoContentTypes = map[string]string{
@@ -51,16 +51,16 @@ type UpdatePropertyCommand struct {
 }
 
 type PropertyService struct {
-	repo             PropertyRepository
-	photoRepo        PropertyPhotoRepository
-	photoStorage     PhotoStorage
+	repo              PropertyRepository
+	photoRepo         PropertyPhotoRepository
+	photoStorage      PhotoStorage
 	occupancyProvider OccupancyProvider
-	limiter          SubscriptionLimiter
-	billingLifecycle PropertyBillingLifecycle
-	leaseRepo        LeaseRepository
-	db               txBeginner
-	clock            clock.Clock
-	logger           *slog.Logger
+	limiter           SubscriptionLimiter
+	billingLifecycle  PropertyBillingLifecycle
+	leaseRepo         LeaseRepository
+	db                txBeginner
+	clock             clock.Clock
+	logger            *slog.Logger
 }
 
 func NewPropertyService(
@@ -79,16 +79,16 @@ func NewPropertyService(
 		logger = slog.Default()
 	}
 	return &PropertyService{
-		repo:             repo,
-		photoRepo:        photoRepo,
-		photoStorage:     photoStorage,
+		repo:              repo,
+		photoRepo:         photoRepo,
+		photoStorage:      photoStorage,
 		occupancyProvider: occupancyProvider,
-		limiter:          limiter,
-		billingLifecycle: billingLifecycle,
-		leaseRepo:        leaseRepo,
-		db:               db,
-		clock:            clock,
-		logger:           logger,
+		limiter:           limiter,
+		billingLifecycle:  billingLifecycle,
+		leaseRepo:         leaseRepo,
+		db:                db,
+		clock:             clock,
+		logger:            logger,
 	}
 }
 
@@ -536,7 +536,16 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, ownerID, propert
 		return domain.Property{}, fmt.Errorf("%w: file size %d exceeds %d bytes", ErrInvalidInput, size, maxPhotoSize)
 	}
 
-	property, err := s.repo.GetByIDAndOwner(ctx, propertyID, ownerID)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := s.repo.WithTx(tx)
+	txPhotoRepo := s.photoRepo.WithTx(tx)
+
+	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, ownerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
@@ -544,7 +553,11 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, ownerID, propert
 		return domain.Property{}, fmt.Errorf("get property: %w", err)
 	}
 
-	count, err := s.photoRepo.CountByPropertyID(ctx, propertyID)
+	if property.Status == domain.PropertyStatusArchived {
+		return domain.Property{}, ErrArchivedProperty
+	}
+
+	count, err := txPhotoRepo.CountByPropertyID(ctx, propertyID)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("count photos: %w", err)
 	}
@@ -565,8 +578,12 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, ownerID, propert
 		return domain.Property{}, fmt.Errorf("upload photo: %w", err)
 	}
 
-	if _, err := s.photoRepo.Create(ctx, propertyID, url); err != nil {
+	if _, err := txPhotoRepo.Create(ctx, propertyID, url); err != nil {
 		return domain.Property{}, fmt.Errorf("create photo record: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Property{}, fmt.Errorf("commit tx: %w", err)
 	}
 
 	photos, err := s.photoRepo.GetByPropertyID(ctx, propertyID)
@@ -592,12 +609,16 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, ownerID, prop
 	txRepo := s.repo.WithTx(tx)
 	txPhotoRepo := s.photoRepo.WithTx(tx)
 
-	_, err = txRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, ownerID)
+	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, ownerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
 		}
 		return fmt.Errorf("get property: %w", err)
+	}
+
+	if property.Status == domain.PropertyStatusArchived {
+		return ErrArchivedProperty
 	}
 
 	photo, err := txPhotoRepo.GetByIDAndPropertyID(ctx, photoID, propertyID)

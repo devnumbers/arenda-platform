@@ -106,7 +106,7 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 	ownerID uuid.UUID,
 	cmd CreateRecurringOperationCommand,
 ) (domain.RecurringOperation, error) {
-	if err := validateProperty(ctx, s.properties, ownerID, cmd.PropertyID); err != nil {
+	if err := validatePropertyNotArchived(ctx, s.properties, ownerID, cmd.PropertyID); err != nil {
 		return domain.RecurringOperation{}, err
 	}
 
@@ -276,6 +276,10 @@ func (s *RecurringOperationService) DeleteRecurringOperation(
 		return fmt.Errorf("get recurring operation: %w", err)
 	}
 
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), ownerID, rec.PropertyID); err != nil {
+		return err
+	}
+
 	if rec.LeaseID != uuid.Nil {
 		return ErrRecurringOperationLeaseCreated
 	}
@@ -330,6 +334,10 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 			return domain.RecurringOperation{}, ErrNotFound
 		}
 		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
+	}
+
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), ownerID, rec.PropertyID); err != nil {
+		return domain.RecurringOperation{}, err
 	}
 
 	now := s.clock.Now()
@@ -655,12 +663,16 @@ func (s *RecurringOperationService) PauseRecurringOperation(
 	txRecurring := s.recurringOps.WithTx(tx)
 	var rec domain.RecurringOperation
 
-	_, err = txRecurring.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
+	rec, err = txRecurring.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.RecurringOperation{}, ErrNotFound
 		}
 		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
+	}
+
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), ownerID, rec.PropertyID); err != nil {
+		return domain.RecurringOperation{}, err
 	}
 
 	if s.scheduler != nil {
@@ -706,6 +718,10 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 			return domain.RecurringOperation{}, ErrNotFound
 		}
 		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
+	}
+
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), ownerID, rec.PropertyID); err != nil {
+		return domain.RecurringOperation{}, err
 	}
 
 	if rec.Status == domain.RecurringOperationStatusActive {
@@ -797,6 +813,10 @@ func (s *RecurringOperationService) SetReminderOffset(
 		return fmt.Errorf("get recurring operation: %w", err)
 	}
 
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), ownerID, rec.PropertyID); err != nil {
+		return err
+	}
+
 	ops, err := txOps.ListByRecurringOperation(ctx, id)
 	if err != nil {
 		return fmt.Errorf("list operations: %w", err)
@@ -886,6 +906,10 @@ func (s *RecurringOperationService) CreateReminder(
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get recurring operation: %w", err)
+	}
+
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), ownerID, rec.PropertyID); err != nil {
+		return nil, err
 	}
 
 	ops, err := txOps.ListByRecurringOperation(ctx, recurringOperationID)

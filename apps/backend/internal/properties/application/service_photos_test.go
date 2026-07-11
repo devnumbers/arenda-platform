@@ -266,3 +266,32 @@ func TestWithPhotos_Empty(t *testing.T) {
 		t.Errorf("expected 0 properties, got %d", len(properties))
 	}
 }
+
+func TestAddPropertyPhoto_ArchivedProperty(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	repo := newLockingFakePropertyRepo(domain.Property{ID: propertyID, OwnerID: ownerID, Status: domain.PropertyStatusArchived})
+	svc := newPhotoService(t, repo, &fakePhotoRepo{photos: map[uuid.UUID][]domain.Photo{}}, &fakePhotoStorage{})
+
+	_, err := svc.AddPropertyPhoto(ctx, ownerID, propertyID, bytes.NewReader([]byte("x")), "file.jpg", "image/jpeg", 100)
+	if !errors.Is(err, ErrArchivedProperty) {
+		t.Fatalf("expected ErrArchivedProperty, got %v", err)
+	}
+}
+
+func TestDeletePropertyPhoto_ArchivedProperty(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	photoID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+
+	repo := newLockingFakePropertyRepo(domain.Property{ID: propertyID, OwnerID: ownerID, Status: domain.PropertyStatusArchived})
+	svc := newPhotoService(t, repo, &fakePhotoRepo{photos: map[uuid.UUID][]domain.Photo{}}, &fakePhotoStorage{})
+
+	err := svc.DeletePropertyPhoto(ctx, ownerID, propertyID, photoID)
+	if !errors.Is(err, ErrArchivedProperty) {
+		t.Fatalf("expected ErrArchivedProperty, got %v", err)
+	}
+}

@@ -1,0 +1,198 @@
+package application
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+)
+
+func newOperationGuardService(opRepo *fakeOperationRepo, propertyRepo *fakePropertyRepo) *OperationService {
+	return NewOperationService(opRepo, propertyRepo, nil, nil, nil, fakeTxBeginner{}, fakeClock{now: date(2026, 6, 15)}, nil)
+}
+
+func newGuardTestOperation(id, ownerID, propertyID uuid.UUID, status domain.OperationStatus) domain.Operation {
+	return domain.Operation{
+		ID:            id,
+		OwnerID:       ownerID,
+		PropertyID:    propertyID,
+		Type:          domain.OperationTypeExpense,
+		Category:      domain.OperationCategoryUtilities,
+		Status:        status,
+		Name:          "test",
+		AmountKopecks: 1000,
+		OperationDate: date(2026, 6, 10),
+	}
+}
+
+func TestCreateOperation_ArchivedPropertyGuard(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	cmd := CreateOperationCommand{
+		PropertyID:    propertyID,
+		Type:          "expense",
+		Category:      "utilities",
+		Name:          "test",
+		AmountKopecks: 1000,
+		OperationDate: date(2026, 6, 10),
+	}
+
+	for _, tc := range []struct {
+		name    string
+		status  string
+		wantErr error
+	}{
+		{name: "archived rejected", status: "archived", wantErr: ErrArchivedProperty},
+		{name: "active allowed", status: "active", wantErr: nil},
+		{name: "maintenance allowed", status: "maintenance", wantErr: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newOperationGuardService(&fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}})
+			_, err := svc.CreateOperation(ctx, ownerID, cmd)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("CreateOperation: want %v, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestUpdateOperation_ArchivedPropertyGuard(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+
+	name := "updated"
+	cmd := UpdateOperationCommand{Name: &name}
+
+	for _, tc := range []struct {
+		name    string
+		status  string
+		wantErr error
+	}{
+		{name: "archived rejected", status: "archived", wantErr: ErrArchivedProperty},
+		{name: "active allowed", status: "active", wantErr: nil},
+		{name: "maintenance allowed", status: "maintenance", wantErr: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opRepo := &fakeOperationRepo{}
+			_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusPending))
+			svc := newOperationGuardService(opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}})
+			_, err := svc.UpdateOperation(ctx, ownerID, operationID, cmd)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("UpdateOperation: want %v, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestUpdateOperation_NoPropertySkipsGuard(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+
+	opRepo := &fakeOperationRepo{}
+	_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, uuid.Nil, domain.OperationStatusPending))
+	svc := newOperationGuardService(opRepo, &fakePropertyRepo{})
+
+	name := "updated"
+	updated, err := svc.UpdateOperation(ctx, ownerID, operationID, UpdateOperationCommand{Name: &name})
+	if err != nil {
+		t.Fatalf("UpdateOperation without property: %v", err)
+	}
+	if updated.Name != "updated" {
+		t.Errorf("name = %q, want updated", updated.Name)
+	}
+}
+
+func TestDeleteOperation_ArchivedPropertyGuard(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+
+	t.Run("archived rejected", func(t *testing.T) {
+		opRepo := &fakeOperationRepo{}
+		_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusPending))
+		svc := newOperationGuardService(opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "archived"}})
+		if err := svc.DeleteOperation(ctx, ownerID, operationID); !errors.Is(err, ErrArchivedProperty) {
+			t.Fatalf("DeleteOperation: want ErrArchivedProperty, got %v", err)
+		}
+		if _, err := opRepo.GetByIDAndOwner(ctx, operationID, ownerID); err != nil {
+			t.Fatalf("operation must not be deleted: %v", err)
+		}
+	})
+
+	for _, status := range []string{"active", "maintenance"} {
+		t.Run(status+" allowed", func(t *testing.T) {
+			opRepo := &fakeOperationRepo{}
+			_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusPending))
+			svc := newOperationGuardService(opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: status}})
+			if err := svc.DeleteOperation(ctx, ownerID, operationID); err != nil {
+				t.Fatalf("DeleteOperation: %v", err)
+			}
+		})
+	}
+}
+
+func TestCompleteOperation_ArchivedPropertyGuard(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+
+	cmd := CompleteOperationCommand{OwnerID: ownerID, OperationID: operationID}
+
+	for _, tc := range []struct {
+		name    string
+		status  string
+		wantErr error
+	}{
+		{name: "archived rejected", status: "archived", wantErr: ErrArchivedProperty},
+		{name: "active allowed", status: "active", wantErr: nil},
+		{name: "maintenance allowed", status: "maintenance", wantErr: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opRepo := &fakeOperationRepo{}
+			_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusPending))
+			svc := newOperationGuardService(opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}})
+			_, err := svc.CompleteOperation(ctx, cmd)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("CompleteOperation: want %v, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestMarkOperationIncomplete_ArchivedPropertyGuard(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+
+	cmd := MarkOperationIncompleteCommand{OwnerID: ownerID, OperationID: operationID}
+
+	for _, tc := range []struct {
+		name    string
+		status  string
+		wantErr error
+	}{
+		{name: "archived rejected", status: "archived", wantErr: ErrArchivedProperty},
+		{name: "active allowed", status: "active", wantErr: nil},
+		{name: "maintenance allowed", status: "maintenance", wantErr: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opRepo := &fakeOperationRepo{}
+			_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusPaid))
+			svc := newOperationGuardService(opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}})
+			_, err := svc.MarkOperationIncomplete(ctx, cmd)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("MarkOperationIncomplete: want %v, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}

@@ -122,8 +122,10 @@ export function PropertyLeasesPage(): JSX.Element {
   const isError = propertyQuery.isError || leasesQuery.isError;
   const isFetching = propertyQuery.isFetching || leasesQuery.isFetching;
   const propertyName = propertyQuery.data?.name ?? 'Мой объект';
+  const isArchived = propertyQuery.data?.status === 'archived';
   const hasOpenLease = leases.some((lease) => isOpenLease(lease.status));
-  const canCreateLease = !isLoading && !isError && !hasOpenLease;
+  const canCreateLease = !isLoading && !isError && !hasOpenLease && !isArchived;
+  const showCreateLeaseAction = !isLoading && !isError && !hasOpenLease;
 
   const handleRetry = (): void => {
     propertyQuery.refetch();
@@ -154,6 +156,18 @@ export function PropertyLeasesPage(): JSX.Element {
                 <Plus />
               </Icon>
             </button>
+          ) : isArchived && !isError && !hasOpenLease ? (
+            <button
+              type="button"
+              disabled
+              className={styles.addButton}
+              aria-label="Создать аренду"
+              title="Объект в архиве"
+            >
+              <Icon size="s">
+                <Plus />
+              </Icon>
+            </button>
           ) : canCreateLease ? (
             <NextLink
               href={`${ROUTES.leaseNew}?propertyId=${id}`}
@@ -177,11 +191,13 @@ export function PropertyLeasesPage(): JSX.Element {
       {!isLoading && !isError && leases.length === 0 && (
         <section className={styles.empty}>
           <h2 className={styles.emptyTitle}>Аренд пока нет</h2>
-          {canCreateLease && (
+          {showCreateLeaseAction && (
             <LinkButton
               href={`${ROUTES.leaseNew}?propertyId=${id}`}
               variant="primary"
               size="medium"
+              disabled={isArchived}
+              title={isArchived ? 'Объект в архиве' : undefined}
             >
               Создать аренду
             </LinkButton>

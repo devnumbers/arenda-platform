@@ -9,11 +9,13 @@ import styles from './PropertyInfoCard.module.css';
 export type PropertyInfoCardProps = {
   readonly description: string | undefined;
   readonly propertyId: string;
+  readonly isArchived?: boolean;
 };
 
 export function PropertyInfoCard({
   description,
   propertyId,
+  isArchived = false,
 }: PropertyInfoCardProps): JSX.Element {
   return (
     <PropertyDetailSection>
@@ -26,6 +28,8 @@ export function PropertyInfoCard({
           href={ROUTES.propertyEdit(propertyId)}
           variant="primary"
           fullWidth
+          disabled={isArchived}
+          title={isArchived ? 'Объект в архиве' : undefined}
         >
           Добавить описание
         </LinkButton>

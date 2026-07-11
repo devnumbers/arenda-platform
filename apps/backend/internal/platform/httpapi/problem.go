@@ -95,6 +95,8 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Серию, созданную договором аренды, нельзя удалить", true
 	case errors.Is(err, leasesapp.ErrArchivedLease):
 		return "Нельзя изменить архивную аренду", true
+	case errors.Is(err, leasesapp.ErrArchivedProperty):
+		return "Объект в архиве", true
 	case errors.Is(err, leasesapp.ErrTenantContactNotFound):
 		return "Арендатор не найден", true
 	case errors.Is(err, leasesapp.ErrDuplicatePhone):

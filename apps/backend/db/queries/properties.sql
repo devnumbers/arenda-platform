@@ -19,6 +19,10 @@ WHERE properties.id = $1 AND properties.owner_id = $2;
 SELECT * FROM properties WHERE id = $1 AND owner_id = $2
 FOR UPDATE;
 
+-- name: GetPropertyStatusByOwner :one
+SELECT status FROM properties
+WHERE id = $1 AND owner_id = $2;
+
 -- name: ListActivePropertiesByOwner :many
 SELECT properties.*,
        (SELECT COUNT(*) FROM operations o
