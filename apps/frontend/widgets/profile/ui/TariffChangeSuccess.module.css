@@ -26,6 +26,24 @@
   color: var(--color-primary);
 }
 
+.iconError {
+  color: var(--color-error);
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .text {
   display: flex;
   flex-direction: column;

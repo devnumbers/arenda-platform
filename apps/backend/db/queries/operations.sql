@@ -212,6 +212,29 @@ SELECT
 FROM operations
 WHERE owner_id = $1 AND property_id = $2 AND deleted_at IS NULL;
 
+-- name: ListOverdueRentOperationsByOwner :many
+SELECT lease_id, operation_date
+FROM operations
+WHERE owner_id = sqlc.arg('owner_id')::uuid
+  AND status = 'overdue'
+  AND type = 'income'
+  AND category = 'rent'
+  AND lease_id IS NOT NULL
+  AND deleted_at IS NULL
+ORDER BY lease_id, operation_date;
+
+-- name: ListNextRentPaymentsByOwner :many
+SELECT lease_id, MIN(operation_date)::date AS next_payment_date
+FROM operations
+WHERE owner_id = sqlc.arg('owner_id')::uuid
+  AND status = 'pending'
+  AND operation_date >= sqlc.arg('as_of')::date
+  AND type = 'income'
+  AND category = 'rent'
+  AND lease_id IS NOT NULL
+  AND deleted_at IS NULL
+GROUP BY lease_id;
+
 -- name: HasDepositReturnForLease :one
 SELECT EXISTS(
     SELECT 1 FROM operations

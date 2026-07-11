@@ -24,7 +24,13 @@ export function FinanceSection({properties, isLoading}: FinanceSectionProps): JS
     const {operationsList, isLoading: operationsLoading} = useOperationsForProperties(properties);
     const showLoading = isLoading || operationsLoading;
 
-    const {actual, pending} = aggregateOperations(operationsList);
+    const now = new Date();
+    const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const monthOperationsList = operationsList.map((response) => ({
+        ...response,
+        items: response.items.filter((op) => op.operation_date.slice(0, 7) === currentYM),
+    }));
+    const {actual, pending} = aggregateOperations(monthOperationsList);
     const {incomeKopecks, expenseKopecks, profitKopecks} = actual;
     const hasPending = pending.incomeKopecks !== 0 || pending.expenseKopecks !== 0;
 
@@ -74,14 +80,6 @@ export function FinanceSection({properties, isLoading}: FinanceSectionProps): JS
                         <div className={styles.profit}>
                             <span className={styles.profitValue}>{formatMoneyKopecks(profitKopecks, {round: true})}</span>
                             <span className={styles.profitLabel}>Прибыль за {currentMonth}</span>
-                            {hasPending && (
-                                <div className={styles.pending}>
-                                    <span className={styles.pendingLabel}>Ожидает оплаты</span>
-                                    <span className={styles.pendingValue}>
-                      {formatMoneyKopecks(pending.incomeKopecks, {round: true})} / {formatMoneyKopecks(pending.expenseKopecks, {round: true})}
-                    </span>
-                                </div>
-                            )}
                         </div>
                     </div>
                     <div className={styles.bottom}>

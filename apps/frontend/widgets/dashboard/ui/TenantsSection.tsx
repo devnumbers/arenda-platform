@@ -3,7 +3,7 @@
 import {type JSX, useMemo} from 'react';
 import {Skeleton} from '@heroui/react/skeleton';
 import {Icon} from '@/shared/ui/icon';
-import {Arendators} from '@/shared/assets/icons';
+import {Arendator, Arendators} from '@/shared/assets/icons';
 import type {components} from '@/shared/api/generated';
 import {getEffectiveLeaseStatus, isOpenLeaseStatus} from '@/entities/lease/lib/status';
 import {SectionHeader} from './SectionHeader';
@@ -65,6 +65,11 @@ export function TenantsSection({leases, isLoading}: TenantsSectionProps): JSX.El
                 {tenants.map((tenant) => (
                     <EntityCard
                         key={tenant.id}
+                        icon={
+                            <Icon size="l">
+                                <Arendator/>
+                            </Icon>
+                        }
                         href={`/tenants/${tenant.id}`}
                         title={tenant.name}
                         subtitle={tenant.surname ?? undefined}

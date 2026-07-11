@@ -1,6 +1,6 @@
 'use client';
 
-import {type JSX, useCallback, useMemo,} from 'react';
+import {type JSX, useCallback, useMemo, useState,} from 'react';
 import {useRouter} from 'next/navigation';
 import {notify} from '@/shared/lib/toast';
 import NextLink from 'next/link';
@@ -12,6 +12,7 @@ import {useSubscription} from '@/features/subscription/api/hooks';
 import {isSubscriptionReadonly} from '@/features/subscription/lib/is-subscription-readonly';
 import {ApiError} from '@/shared/api/errors';
 import {Button} from '@/shared/ui/button';
+import {ConfirmModal} from '@/shared/ui/confirm-modal';
 import {PageHeader} from '@/shared/ui/page-header';
 import {PropertyDetailSection} from '@/widgets/property-detail';
 import {OperationListItem} from '@/widgets/operations/ui/OperationListItem';
@@ -208,11 +209,14 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
         category: 'deposit_return',
         limit: 1,
     });
-    const {data: subscription} = useSubscription();
-    const readonly = isSubscriptionReadonly(subscription);
+    const {data: subscription, isPending: isSubscriptionPending} = useSubscription();
+    const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
     const completeLease = useCompleteLease();
     const returnDeposit = useReturnDeposit();
+
+    const [isCompleteModalOpen, setCompleteModalOpen] = useState(false);
+    const [isDepositModalOpen, setDepositModalOpen] = useState(false);
 
     const lease = leaseQuery.data;
     const propertyQuery = useProperty(lease?.property_id ?? '');
@@ -251,11 +255,7 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
         rentOperationsQuery.refetch();
     }, [rentOperationsQuery]);
 
-    const handleComplete = useCallback(() => {
-        if (!confirm('Завершить аренду?')) {
-            return;
-        }
-
+    const confirmComplete = useCallback(() => {
         void notify.promise(completeLease.mutateAsync(id), {
             loading: 'Завершаем аренду...',
             success: 'Аренда завершена',
@@ -264,11 +264,7 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
         });
     }, [completeLease, id]);
 
-    const handleReturnDeposit = useCallback(() => {
-        if (!confirm('Вернуть залог?')) {
-            return;
-        }
-
+    const confirmReturnDeposit = useCallback(() => {
         void notify.promise(returnDeposit.mutateAsync(id), {
             loading: 'Возвращаем залог...',
             success: 'Залог возвращён',
@@ -311,8 +307,8 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
                         canEdit={!readonly && lease !== undefined && !isLoading}
                         canComplete={canCompleteLease}
                         canReturnDeposit={canReturnDeposit}
-                        onComplete={handleComplete}
-                        onReturnDeposit={handleReturnDeposit}
+                        onComplete={() => setCompleteModalOpen(true)}
+                        onReturnDeposit={() => setDepositModalOpen(true)}
                     />
                 }
             />
@@ -337,6 +333,22 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
                     />
                 </>
             )}
+
+            <ConfirmModal
+                isOpen={isCompleteModalOpen}
+                title="Завершить аренду?"
+                description="Информацию по этой аренде можно будет посмотреть в разделе «Аренда»."
+                confirmLabel="Завершить аренду"
+                onClose={() => setCompleteModalOpen(false)}
+                onConfirm={confirmComplete}
+            />
+            <ConfirmModal
+                isOpen={isDepositModalOpen}
+                title="Вернуть залог?"
+                confirmLabel="Вернуть залог"
+                onClose={() => setDepositModalOpen(false)}
+                onConfirm={confirmReturnDeposit}
+            />
         </div>
     );
 }

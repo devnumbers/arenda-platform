@@ -829,13 +829,13 @@ paths:
       parameters:
         - name: from
           in: query
-          required: true
+          required: false
           schema:
             type: string
             format: date
         - name: to
           in: query
-          required: true
+          required: false
           schema:
             type: string
             format: date
@@ -1608,6 +1608,23 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription/payment-methods/sync:
+    post:
+      operationId: syncPaymentMethods
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Payment methods synced with the provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethodsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -2909,7 +2926,7 @@ components:
 
     PropertyResponse:
       type: object
-      required: [id, name, type, address, status, occupancy, active_lease, created_at, updated_at]
+      required: [id, name, type, address, status, occupancy, active_lease, overdue_rent_count, created_at, updated_at]
       properties:
         id:
           type: string
@@ -2935,6 +2952,9 @@ components:
           nullable: true
           allOf:
             - $ref: '#/components/schemas/LeaseResponse'
+        overdue_rent_count:
+          type: integer
+          minimum: 0
         created_at:
           type: string
           format: date-time
@@ -3045,7 +3065,7 @@ components:
 
     LeaseResponse:
       type: object
-      required: [id, property_id, owner_id, tenant_contact, status, start_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, created_at, updated_at]
+      required: [id, property_id, owner_id, tenant_contact, status, start_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, current_period_overdue, has_overdue, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3075,6 +3095,26 @@ components:
           type: integer
         payment_day:
           type: integer
+        current_period_overdue:
+          type: boolean
+          description: >-
+            Deprecated. Kept for backward compatibility; true when the lease has
+            any overdue rent operation. The frontend no longer relies on it.
+        has_overdue:
+          type: boolean
+          description: >-
+            True when the lease has at least one overdue rent operation of any
+            period.
+        overdue_since:
+          type: string
+          format: date
+          nullable: true
+          description: Earliest overdue rent operation date of any period.
+        next_payment_date:
+          type: string
+          format: date
+          nullable: true
+          description: Nearest pending rent operation date on or after as_of.
         comment:
           type: string
           nullable: true

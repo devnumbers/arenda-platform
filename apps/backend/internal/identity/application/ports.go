@@ -26,6 +26,7 @@ type UserRepository interface {
 	GetByPhone(ctx context.Context, phone domain.Phone) (domain.User, error)
 	// GetByPhoneForUpdate acquires a row-level pessimistic lock and must only be called inside a transaction.
 	GetByPhoneForUpdate(ctx context.Context, phone domain.Phone) (domain.User, error)
+	GetByEmail(ctx context.Context, email domain.Email) (domain.User, error)
 	Create(ctx context.Context, user domain.User) (domain.User, error)
 	Update(ctx context.Context, user domain.User) (domain.User, error)
 	UpdatePhone(ctx context.Context, id uuid.UUID, phone domain.Phone) (domain.User, error)

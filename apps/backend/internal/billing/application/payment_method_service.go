@@ -194,3 +194,115 @@ func (s *PaymentMethodService) ListPaymentMethods(ctx context.Context, userID uu
 	}
 	return list, nil
 }
+
+// SyncPaymentMethods imports the cards bound at the provider into local payment
+// methods and returns the user's up-to-date list. It is the self-healing path
+// for card binding when the AddCard webhook is not delivered (for example on
+// demo terminals without a configured notification URL). Only cards the
+// provider reports as active with a recurrent token are imported, and the
+// upsert is keyed by token hash, so repeated syncs and webhook deliveries
+// converge on the same row. When the user has no active method after the
+// import, the freshest imported card is activated and linked to the
+// subscription, mirroring the AddCard webhook flow. The method is idempotent.
+func (s *PaymentMethodService) SyncPaymentMethods(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error) {
+	cards, err := s.provider.GetCardList(ctx, userID.String())
+	if err != nil {
+		return nil, sanitize.Wrap(err, "get card list")
+	}
+
+	var importable []ProviderCard
+	for _, card := range cards {
+		if card.Status != ProviderCardStatusActive || card.RebillID == "" {
+			continue
+		}
+		importable = append(importable, card)
+	}
+
+	if len(importable) == 0 {
+		return s.ListPaymentMethods(ctx, userID)
+	}
+
+	tx, err := s.deps.beginner.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txPaymentMethods, err := s.deps.paymentMethods.WithTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("bind payment methods transaction: %w", err)
+	}
+	txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("bind subscriptions transaction: %w", err)
+	}
+
+	now := s.deps.clock.Now().UTC()
+	var freshest *domain.PaymentMethod
+	for _, card := range importable {
+		pm, err := domain.NewPaymentMethod(userID, s.provider.Name(), card.RebillID, card.Pan, now)
+		if err != nil {
+			return nil, fmt.Errorf("create payment method from provider card: %w", err)
+		}
+		pm.ProviderCardID = card.CardID
+		pm.ExpDate = card.ExpDate
+		pm, err = txPaymentMethods.UpsertByTokenHash(ctx, pm)
+		if err != nil {
+			return nil, fmt.Errorf("upsert synced payment method: %w", err)
+		}
+		if freshest == nil || !pm.CreatedAt.Before(freshest.CreatedAt) {
+			freshest = &pm
+		}
+	}
+
+	methods, err := txPaymentMethods.ListByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list payment methods after sync: %w", err)
+	}
+
+	hasActive := false
+	for _, m := range methods {
+		if m.IsActive {
+			hasActive = true
+			break
+		}
+	}
+
+	// Only bootstrap activation when nothing is active yet: an explicit user
+	// choice (or a webhook-activated method) must not be overridden by a sync.
+	if !hasActive && freshest != nil {
+		if err := txPaymentMethods.SetActive(ctx, userID, freshest.ID); err != nil {
+			return nil, fmt.Errorf("activate synced payment method: %w", err)
+		}
+
+		// Link the activated card to the subscription so renewals charge the
+		// right method. A missing subscription is not fatal, same as in the
+		// AddCard webhook flow.
+		sub, err := txSubscriptions.GetByUserIDForUpdate(ctx, userID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				s.deps.log.WarnContext(ctx, "sync payment methods: subscription not found; skipping active method link",
+					slog.String("user_id", userID.String()),
+					slog.String("payment_method_id", freshest.ID.String()))
+			} else {
+				return nil, fmt.Errorf("get subscription for synced payment method: %w", err)
+			}
+		} else {
+			sub.SetActivePaymentMethod(freshest.ID)
+			if err := txSubscriptions.Update(ctx, sub); err != nil {
+				return nil, fmt.Errorf("update subscription active payment method: %w", err)
+			}
+		}
+
+		methods, err = txPaymentMethods.ListByUserID(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("list payment methods after activation: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit sync payment methods transaction: %w", err)
+	}
+
+	return methods, nil
+}

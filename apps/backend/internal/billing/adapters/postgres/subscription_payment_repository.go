@@ -88,6 +88,7 @@ func (r *SubscriptionPaymentRepository) GetByIDAdmin(ctx context.Context, id uui
 		PaymentUrl:            row.PaymentUrl,
 		Status:                row.Status,
 		RefundedAmountKopecks: row.RefundedAmountKopecks,
+		ChargeAttempts:        row.ChargeAttempts,
 		ErrorCode:             row.ErrorCode,
 		CreatedAt:             row.CreatedAt,
 		UpdatedAt:             row.UpdatedAt,
@@ -201,6 +202,7 @@ func (r *SubscriptionPaymentRepository) ListAll(ctx context.Context, status stri
 			PaymentUrl:            row.PaymentUrl,
 			Status:                row.Status,
 			RefundedAmountKopecks: row.RefundedAmountKopecks,
+			ChargeAttempts:        row.ChargeAttempts,
 			ErrorCode:             row.ErrorCode,
 			CreatedAt:             row.CreatedAt,
 			UpdatedAt:             row.UpdatedAt,
@@ -470,6 +472,19 @@ func (r *SubscriptionPaymentRepository) UpdatePaymentMethodID(ctx context.Contex
 	return mapSubscriptionPayment(row), nil
 }
 
+// IncrementChargeAttempts atomically increments the renewal charge attempt
+// counter of a subscription payment and returns the new value.
+func (r *SubscriptionPaymentRepository) IncrementChargeAttempts(ctx context.Context, id uuid.UUID) (int, error) {
+	attempts, err := r.q().IncrementSubscriptionPaymentChargeAttempts(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, application.ErrNotFound
+		}
+		return 0, fmt.Errorf("increment subscription payment charge attempts: %w", err)
+	}
+	return int(attempts), nil
+}
+
 func mapCreateSubscriptionPaymentParams(payment domain.SubscriptionPayment) postgres.CreateSubscriptionPaymentParams {
 	return postgres.CreateSubscriptionPaymentParams{
 		UserID:            pgtype.UUID{Bytes: payment.UserID, Valid: true},
@@ -500,6 +515,7 @@ func mapSubscriptionPayment(row postgres.SubscriptionPayment) domain.Subscriptio
 		PaymentURL:            pgconv.TextToPtrString(row.PaymentUrl),
 		Status:                domain.PaymentStatus(row.Status),
 		RefundedAmountKopecks: pgconv.Int8ToPtr(row.RefundedAmountKopecks),
+		ChargeAttempts:        int(row.ChargeAttempts),
 		ErrorCode:             pgconv.TextToPtrString(row.ErrorCode),
 		CreatedAt:             row.CreatedAt.Time,
 		UpdatedAt:             row.UpdatedAt.Time,

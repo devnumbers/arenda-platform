@@ -108,8 +108,8 @@ export function PropertyOperationsPage(): JSX.Element {
 
   const propertyName = propertyQuery.data?.name ?? 'Мой объект';
   const operations = operationsQuery.data?.pages.flatMap((page) => page.items) ?? [];
-  const { data: subscription } = useSubscription();
-  const readonly = isSubscriptionReadonly(subscription);
+  const { data: subscription, isPending: isSubscriptionPending } = useSubscription();
+  const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
   return (
     <div className={styles.root}>

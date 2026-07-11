@@ -204,7 +204,7 @@ type FinanceReport struct {
 	ByMonth    []FinanceReportMonthRow
 }
 
-func (s *OperationService) GetFinanceReport(ctx context.Context, ownerID uuid.UUID, from, to time.Time) (FinanceReport, error) {
+func (s *OperationService) GetFinanceReport(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) (FinanceReport, error) {
 	totals, err := s.operations.GetFinanceReportTotals(ctx, ownerID, from, to)
 	if err != nil {
 		return FinanceReport{}, fmt.Errorf("report totals: %w", err)
@@ -343,8 +343,14 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 
 	op.IsException = true
 	now := s.clock.Now()
-	if cmd.OperationDate != nil && op.Status == domain.OperationStatusOverdue && !op.OperationDate.Before(timeutil.Date(now)) {
-		op.Status = domain.OperationStatusPending
+	if cmd.OperationDate != nil {
+		today := timeutil.Date(now)
+		switch {
+		case op.Status == domain.OperationStatusOverdue && !op.OperationDate.Before(today):
+			op.Status = domain.OperationStatusPending
+		case op.Status == domain.OperationStatusPending && op.OperationDate.Before(today):
+			op.Status = domain.OperationStatusOverdue
+		}
 	}
 	op.UpdatedAt = now
 

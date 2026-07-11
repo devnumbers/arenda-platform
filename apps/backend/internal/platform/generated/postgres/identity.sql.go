@@ -112,7 +112,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, phone, role, phone_encrypted, email, email_verified_at)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (phone) DO NOTHING
+ON CONFLICT DO NOTHING
 RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted
 `
 
@@ -465,6 +465,29 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, arg GetSessionByTok
 		&i.Email,
 		&i.EmailVerifiedAt,
 		&i.PhoneEncrypted,
+	)
+	return i, err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE LOWER(email) = LOWER($1::text)
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, dollar_1 string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, dollar_1)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.Role,
+		&i.Name,
+		&i.Surname,
+		&i.Patronymic,
+		&i.Email,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PhoneEncrypted,
+		&i.EmailVerifiedAt,
 	)
 	return i, err
 }

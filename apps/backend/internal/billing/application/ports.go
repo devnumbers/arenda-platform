@@ -99,6 +99,7 @@ type SubscriptionPaymentRepository interface {
 	UpdatePaymentURL(ctx context.Context, id uuid.UUID, paymentURL string) (domain.SubscriptionPayment, error)
 	UpdatePaymentMethodAndProviderID(ctx context.Context, id, paymentMethodID uuid.UUID, providerPaymentID string) (domain.SubscriptionPayment, error)
 	UpdatePaymentMethodID(ctx context.Context, id, paymentMethodID uuid.UUID) (domain.SubscriptionPayment, error)
+	IncrementChargeAttempts(ctx context.Context, id uuid.UUID) (int, error)
 	WithTx(tx transaction.Tx) (SubscriptionPaymentRepository, error)
 }
 
@@ -152,6 +153,11 @@ type CardManager interface {
 	RemoveCard(ctx context.Context, customerKey, cardID string) error
 }
 
+// CardLister lists cards bound to a customer at the provider.
+type CardLister interface {
+	GetCardList(ctx context.Context, customerKey string) ([]ProviderCard, error)
+}
+
 // WebhookResponder returns the fixed body the provider expects as a webhook ack.
 type WebhookResponder interface {
 	WebhookResponse() []byte
@@ -173,6 +179,7 @@ type Provider interface {
 	PaymentStatusChecker
 	WebhookParser
 	CardManager
+	CardLister
 	WebhookResponder
 	ProviderNamer
 }
@@ -203,6 +210,7 @@ type PaymentManager interface {
 // CardProvider aggregates the capabilities used by PaymentMethodService.
 type CardProvider interface {
 	CardManager
+	CardLister
 	ProviderNamer
 }
 
@@ -300,4 +308,26 @@ type InitAddCardResult struct {
 	PaymentURL  string
 	RequestKey  string
 	CustomerKey string
+}
+
+// ProviderCardStatus is the provider-side status of a bound card. The values
+// mirror the T-Kassa card list wire format.
+type ProviderCardStatus string
+
+const (
+	// ProviderCardStatusActive marks a card that is bound and chargeable.
+	ProviderCardStatusActive ProviderCardStatus = "A"
+	// ProviderCardStatusInactive marks a temporarily inactive card.
+	ProviderCardStatusInactive ProviderCardStatus = "I"
+	// ProviderCardStatusDeleted marks a card detached from the customer.
+	ProviderCardStatusDeleted ProviderCardStatus = "D"
+)
+
+// ProviderCard describes a card bound to a customer at the payment provider.
+type ProviderCard struct {
+	CardID   string
+	Pan      string
+	ExpDate  string
+	RebillID string
+	Status   ProviderCardStatus
 }

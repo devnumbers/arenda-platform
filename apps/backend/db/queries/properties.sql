@@ -4,21 +4,46 @@ VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: GetPropertyByIDAndOwner :one
-SELECT * FROM properties WHERE id = $1 AND owner_id = $2;
+SELECT properties.*,
+       (SELECT COUNT(*) FROM operations o
+         WHERE o.property_id = properties.id
+           AND o.owner_id = properties.owner_id
+           AND o.status = 'overdue'
+           AND o.type = 'income'
+           AND o.category = 'rent'
+           AND o.deleted_at IS NULL) AS overdue_rent_count
+FROM properties
+WHERE properties.id = $1 AND properties.owner_id = $2;
 
 -- name: GetPropertyByIDAndOwnerForUpdate :one
 SELECT * FROM properties WHERE id = $1 AND owner_id = $2
 FOR UPDATE;
 
 -- name: ListActivePropertiesByOwner :many
-SELECT * FROM properties
-WHERE owner_id = $1 AND status IN ('active', 'maintenance')
-ORDER BY updated_at DESC;
+SELECT properties.*,
+       (SELECT COUNT(*) FROM operations o
+         WHERE o.property_id = properties.id
+           AND o.owner_id = properties.owner_id
+           AND o.status = 'overdue'
+           AND o.type = 'income'
+           AND o.category = 'rent'
+           AND o.deleted_at IS NULL) AS overdue_rent_count
+FROM properties
+WHERE properties.owner_id = $1 AND properties.status IN ('active', 'maintenance')
+ORDER BY properties.updated_at DESC;
 
 -- name: ListArchivedPropertiesByOwner :many
-SELECT * FROM properties
-WHERE owner_id = $1 AND status = 'archived'
-ORDER BY updated_at DESC;
+SELECT properties.*,
+       (SELECT COUNT(*) FROM operations o
+         WHERE o.property_id = properties.id
+           AND o.owner_id = properties.owner_id
+           AND o.status = 'overdue'
+           AND o.type = 'income'
+           AND o.category = 'rent'
+           AND o.deleted_at IS NULL) AS overdue_rent_count
+FROM properties
+WHERE properties.owner_id = $1 AND properties.status = 'archived'
+ORDER BY properties.updated_at DESC;
 
 -- name: UpdateProperty :one
 UPDATE properties

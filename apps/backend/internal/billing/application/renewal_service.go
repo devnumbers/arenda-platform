@@ -84,6 +84,7 @@ func (r *RenewalService) processSubscriptionBatch(
 		if len(subs) == 0 {
 			break
 		}
+		batchProcessed := 0
 		for _, sub := range subs {
 			if err := process(ctx, sub, now.UTC()); err != nil {
 				r.deps.log.ErrorContext(ctx, fmt.Sprintf("%s subscription failed", op),
@@ -92,9 +93,18 @@ func (r *RenewalService) processSubscriptionBatch(
 					slog.String("error", sanitize.Error(err)))
 				continue
 			}
-			processed++
+			batchProcessed++
 		}
+		processed += batchProcessed
 		if len(subs) < int(renewalBatchSize) {
+			break
+		}
+		if batchProcessed == 0 {
+			// A full batch with zero progress means every item failed and
+			// stays in the selection; defer to the next tick instead of
+			// spinning in an infinite retry loop.
+			r.deps.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", op))
 			break
 		}
 	}
@@ -339,13 +349,20 @@ func (r *RenewalService) finalizeRenewalCharge(
 	// provider status before re-charging to avoid duplicate charges.
 	if chargeProviderPaymentID != "" {
 		status, statusErr := r.provider.Status(ctx, payment.ID, chargeProviderPaymentID)
-		if statusErr == nil {
-			switch status {
-			case domain.PaymentStatusSucceeded:
-				return r.markRenewalSucceededAndApply(ctx, payment, sub.ID, now)
-			case domain.PaymentStatusFailed:
-				return r.markRenewalFailedAndGrace(ctx, payment.ID, sub.ID, nil, now)
-			}
+		if statusErr != nil {
+			// The provider status is unknown: the previous charge may have
+			// succeeded. Do not blindly re-charge; leave the payment pending
+			// until a later tick can determine the status.
+			r.deps.log.WarnContext(ctx, "provider status unavailable; skipping charge attempt this tick",
+				slog.String("payment_id", payment.ID.String()),
+				slog.String("error", sanitize.Error(statusErr)))
+			return nil
+		}
+		switch status {
+		case domain.PaymentStatusSucceeded:
+			return r.markRenewalSucceededAndApply(ctx, payment, sub.ID, now)
+		case domain.PaymentStatusFailed:
+			return r.markRenewalFailedAndGrace(ctx, payment.ID, sub.ID, nil, now)
 		}
 	}
 
@@ -363,7 +380,7 @@ func (r *RenewalService) finalizeRenewalCharge(
 		if recErr := r.recoverRenewalFailure(ctx, payment.ID, sub.ID, hint, providerErrorCode(chargeErr), now); recErr != nil {
 			return fmt.Errorf("provider charge error: %w; recovery failed: %w", chargeErr, recErr)
 		}
-		r.deps.log.ErrorContext(ctx, "provider charge failed; subscription moved to grace",
+		r.deps.log.ErrorContext(ctx, "provider charge failed; running renewal recovery",
 			slog.String("subscription_id", sub.ID.String()),
 			slog.String("payment_id", payment.ID.String()),
 			slog.String("error", sanitize.Error(chargeErr)))
@@ -517,20 +534,13 @@ func (r *RenewalService) recoverRenewalFailure(ctx context.Context, paymentID, s
 	}
 
 	status, err := r.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
-	if err != nil || status == domain.PaymentStatusPending {
-		statusStr := string(status)
-		if statusStr == "" {
-			statusStr = "unknown"
-		}
-		logAttrs := []any{
+	if err != nil {
+		// The money status is unknown, so this must not count as a charge
+		// attempt: the payment may already be charged on the provider side.
+		r.deps.log.WarnContext(ctx, "provider status unknown during renewal recovery; leaving subscription active and payment pending",
 			slog.String("subscription_id", subscriptionID.String()),
 			slog.String("payment_id", paymentID.String()),
-			slog.String("status", statusStr),
-		}
-		if err != nil {
-			logAttrs = append(logAttrs, slog.String("error", sanitize.Error(err)))
-		}
-		r.deps.log.WarnContext(ctx, "provider status unknown during renewal recovery; leaving subscription active and payment pending", logAttrs...)
+			slog.String("error", sanitize.Error(err)))
 		return nil
 	}
 
@@ -538,15 +548,34 @@ func (r *RenewalService) recoverRenewalFailure(ctx context.Context, paymentID, s
 		return r.markRenewalFailedAndGrace(ctx, paymentID, subscriptionID, errorCode, now)
 	}
 
-	if status != domain.PaymentStatusSucceeded {
-		r.deps.log.WarnContext(ctx, "unexpected provider status during renewal recovery; leaving subscription active and payment pending",
-			slog.String("subscription_id", subscriptionID.String()),
-			slog.String("payment_id", paymentID.String()),
-			slog.String("status", string(status)))
-		return nil
+	if status == domain.PaymentStatusSucceeded {
+		return r.markRenewalSucceededAndApply(ctx, payment, subscriptionID, now)
 	}
 
-	return r.markRenewalSucceededAndApply(ctx, payment, subscriptionID, now)
+	// The charge is still pending at the provider or the status is unexpected.
+	// Count the attempt and give up after maxRenewalChargeAttempts so that a
+	// permanently failing charge (e.g. blocked recurrent payments) does not
+	// keep the expired subscription active forever.
+	attempts, incErr := r.deps.subscriptionPayments.IncrementChargeAttempts(ctx, paymentID)
+	if incErr != nil {
+		return fmt.Errorf("increment charge attempts during renewal recovery: %w", incErr)
+	}
+	if attempts >= maxRenewalChargeAttempts {
+		return r.markRenewalFailedAndGrace(ctx, paymentID, subscriptionID, errorCode, now)
+	}
+
+	logAttrs := []any{
+		slog.String("subscription_id", subscriptionID.String()),
+		slog.String("payment_id", paymentID.String()),
+		slog.String("status", string(status)),
+		slog.Int("charge_attempts", attempts),
+	}
+	if status == domain.PaymentStatusPending {
+		r.deps.log.WarnContext(ctx, "provider status pending during renewal recovery; leaving subscription active and payment pending", logAttrs...)
+		return nil
+	}
+	r.deps.log.WarnContext(ctx, "unexpected provider status during renewal recovery; leaving subscription active and payment pending", logAttrs...)
+	return nil
 }
 
 func (r *RenewalService) persistProviderPaymentIDHint(ctx context.Context, paymentID uuid.UUID, providerPaymentIDHint string) error {
@@ -753,6 +782,7 @@ func (r *RenewalService) ProcessExpiredGrace(ctx context.Context, now time.Time)
 		if len(subs) == 0 {
 			break
 		}
+		batchProcessed := 0
 		for _, sub := range subs {
 			if err := r.downgradeToBasic(ctx, sub, basicTariff, now.UTC()); err != nil {
 				r.deps.log.ErrorContext(ctx, "downgrade to basic after grace failed",
@@ -761,9 +791,18 @@ func (r *RenewalService) ProcessExpiredGrace(ctx context.Context, now time.Time)
 					slog.String("error", sanitize.Error(err)))
 				continue
 			}
-			processed++
+			batchProcessed++
 		}
+		processed += batchProcessed
 		if len(subs) < graceBatchSize {
+			break
+		}
+		if batchProcessed == 0 {
+			// A full batch with zero progress means every item failed and
+			// stays in the selection; defer to the next tick instead of
+			// spinning in an infinite retry loop.
+			r.deps.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", "expire grace"))
 			break
 		}
 	}
@@ -866,6 +905,7 @@ func (r *RenewalService) ProcessPendingUpgradePayments(ctx context.Context, now 
 			break
 		}
 
+		finalized := 0
 		for _, payment := range payments {
 			if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
 				continue
@@ -887,13 +927,16 @@ func (r *RenewalService) ProcessPendingUpgradePayments(ctx context.Context, now 
 					r.deps.log.ErrorContext(ctx, "failed to apply succeeded upgrade payment",
 						slog.String("payment_id", payment.ID.String()),
 						slog.String("error", sanitize.Error(err)))
+					continue
 				}
+				finalized++
 			case domain.PaymentStatusFailed:
 				markPaymentFailedBestEffort(ctx, markFailedDeps{
 					beginner:             r.deps.beginner,
 					subscriptionPayments: r.deps.subscriptionPayments,
 					log:                  r.deps.log,
 				}, payment.ID, now.UTC())
+				finalized++
 			case domain.PaymentStatusPending:
 				// Provider has not finalized the payment yet; leave it pending.
 			default:
@@ -904,6 +947,14 @@ func (r *RenewalService) ProcessPendingUpgradePayments(ctx context.Context, now 
 		}
 
 		if len(payments) < renewalBatchSize {
+			break
+		}
+		if finalized == 0 {
+			// A full batch with zero finalized payments means every item
+			// stays in the selection; defer to the next tick instead of
+			// spinning in an infinite retry loop.
+			r.deps.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", "pending upgrade payments"))
 			break
 		}
 	}

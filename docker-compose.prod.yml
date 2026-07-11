@@ -76,6 +76,25 @@ services:
     networks:
       - arenda-prod
 
+  landing:
+    build:
+      context: .
+      dockerfile: apps/landing/Dockerfile
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    logging: *default-logging
+    ports:
+      - "127.0.0.1:13002:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - arenda-prod
+
   admin:
     build:
       context: .

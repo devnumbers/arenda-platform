@@ -740,6 +740,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/subscription/payment-methods/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["syncPaymentMethods"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/subscription/payments": {
         parameters: {
             query?: never;
@@ -1320,6 +1336,7 @@ export interface components {
             occupancy: "free" | "occupied";
             photos?: components["schemas"]["PropertyPhoto"][];
             active_lease: components["schemas"]["LeaseResponse"] | null;
+            overdue_rent_count: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1390,6 +1407,20 @@ export interface components {
             rent_amount_kopecks: number;
             deposit_amount_kopecks: number;
             payment_day: number;
+            /** @description Deprecated. Kept for backward compatibility; true when the lease has any overdue rent operation. The frontend no longer relies on it. */
+            current_period_overdue: boolean;
+            /** @description True when the lease has at least one overdue rent operation of any period. */
+            has_overdue: boolean;
+            /**
+             * Format: date
+             * @description Earliest overdue rent operation date of any period.
+             */
+            overdue_since?: string | null;
+            /**
+             * Format: date
+             * @description Nearest pending rent operation date on or after as_of.
+             */
+            next_payment_date?: string | null;
             comment?: string | null;
             /** Format: date-time */
             created_at: string;
@@ -1447,7 +1478,7 @@ export interface components {
         /** @enum {string} */
         LeaseStatus: "awaiting_start" | "active" | "requires_action" | "completed" | "archived";
         /** @enum {string} */
-        SubscriptionStatus: "active" | "grace" | "blocked" | "cancelled";
+        SubscriptionStatus: "active" | "grace" | "cancelled";
         /** @enum {string} */
         SubscriptionPaymentStatus: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded";
         /** @enum {string} */
@@ -1644,10 +1675,6 @@ export interface components {
         ReminderUpdateRequest: {
             /** Format: date */
             reminder_date: string;
-        };
-        RefundSubscriptionPaymentRequest: {
-            /** @description Optional partial refund amount in kopecks. If omitted, the full payment amount is refunded. */
-            amount_kopecks?: number;
         };
         RemindersResponse: {
             items: components["schemas"]["ReminderResponse"][];
@@ -2523,9 +2550,9 @@ export interface operations {
     };
     getFinanceReport: {
         parameters: {
-            query: {
-                from: string;
-                to: string;
+            query?: {
+                from?: string;
+                to?: string;
             };
             header?: never;
             path?: never;
@@ -3348,6 +3375,28 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    syncPaymentMethods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment methods synced with the provider */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     listAdminSubscriptionPayments: {
         parameters: {
             query?: {
@@ -3412,11 +3461,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["RefundSubscriptionPaymentRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Payment refunded */
             204: {

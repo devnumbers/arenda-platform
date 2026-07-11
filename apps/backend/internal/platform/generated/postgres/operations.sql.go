@@ -539,6 +539,49 @@ func (q *Queries) ListFutureOperationsByLease(ctx context.Context, arg ListFutur
 	return items, nil
 }
 
+const listNextRentPaymentsByOwner = `-- name: ListNextRentPaymentsByOwner :many
+SELECT lease_id, MIN(operation_date)::date AS next_payment_date
+FROM operations
+WHERE owner_id = $1::uuid
+  AND status = 'pending'
+  AND operation_date >= $2::date
+  AND type = 'income'
+  AND category = 'rent'
+  AND lease_id IS NOT NULL
+  AND deleted_at IS NULL
+GROUP BY lease_id
+`
+
+type ListNextRentPaymentsByOwnerParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	AsOf    pgtype.Date `json:"as_of"`
+}
+
+type ListNextRentPaymentsByOwnerRow struct {
+	LeaseID         pgtype.UUID `json:"lease_id"`
+	NextPaymentDate pgtype.Date `json:"next_payment_date"`
+}
+
+func (q *Queries) ListNextRentPaymentsByOwner(ctx context.Context, arg ListNextRentPaymentsByOwnerParams) ([]ListNextRentPaymentsByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, listNextRentPaymentsByOwner, arg.OwnerID, arg.AsOf)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListNextRentPaymentsByOwnerRow{}
+	for rows.Next() {
+		var i ListNextRentPaymentsByOwnerRow
+		if err := rows.Scan(&i.LeaseID, &i.NextPaymentDate); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOperationDatesByLease = `-- name: ListOperationDatesByLease :many
 SELECT COALESCE(source_operation_date, operation_date)::date AS operation_date FROM operations
 WHERE lease_id = $1
@@ -1009,6 +1052,43 @@ func (q *Queries) ListOperationsByRecurringOperation(ctx context.Context, recurr
 			&i.ReminderOffsetDays,
 			&i.SourceOperationDate,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOverdueRentOperationsByOwner = `-- name: ListOverdueRentOperationsByOwner :many
+SELECT lease_id, operation_date
+FROM operations
+WHERE owner_id = $1::uuid
+  AND status = 'overdue'
+  AND type = 'income'
+  AND category = 'rent'
+  AND lease_id IS NOT NULL
+  AND deleted_at IS NULL
+ORDER BY lease_id, operation_date
+`
+
+type ListOverdueRentOperationsByOwnerRow struct {
+	LeaseID       pgtype.UUID `json:"lease_id"`
+	OperationDate pgtype.Date `json:"operation_date"`
+}
+
+func (q *Queries) ListOverdueRentOperationsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListOverdueRentOperationsByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, listOverdueRentOperationsByOwner, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOverdueRentOperationsByOwnerRow{}
+	for rows.Next() {
+		var i ListOverdueRentOperationsByOwnerRow
+		if err := rows.Scan(&i.LeaseID, &i.OperationDate); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -54,6 +54,7 @@ var (
 	_ application.PaymentStatusChecker = (*Provider)(nil)
 	_ application.WebhookParser        = (*Provider)(nil)
 	_ application.CardManager          = (*Provider)(nil)
+	_ application.CardLister           = (*Provider)(nil)
 	_ application.WebhookResponder     = (*Provider)(nil)
 )
 
@@ -252,6 +253,22 @@ func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) (
 	_ = customerKey
 	_ = cardID
 	return nil
+}
+
+// GetCardList always returns an empty list: the fake provider creates payment
+// methods synchronously from tokens and has no provider-side card storage.
+func (p *Provider) GetCardList(ctx context.Context, customerKey string) (cards []application.ProviderCard, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "GetCardList", status, time.Since(start))
+	}()
+
+	_ = customerKey
+	return []application.ProviderCard{}, nil
 }
 
 // Cancel refunds a finalized fake payment. For the fake provider we treat every

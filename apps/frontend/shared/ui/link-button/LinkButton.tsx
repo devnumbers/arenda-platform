@@ -10,6 +10,7 @@ import styles from './LinkButton.module.css';
 
 export type LinkButtonProps = {
   href: string;
+  disabled?: boolean;
 } & Omit<ButtonProps, keyof ButtonHTMLAttributes<HTMLButtonElement>> & AnchorHTMLAttributes<HTMLAnchorElement>;
 
 const spinnerSizeMap: Record<ButtonSize, 'l' | 'm' | 's' | 'xs'> = {
@@ -26,16 +27,19 @@ export function LinkButton({
   rounded = false,
   fullWidth = false,
   loading = false,
+  disabled = false,
   leftIcon,
   rightIcon,
   subtitle,
   className,
   children,
+  onClick,
   ...rest
 }: LinkButtonProps): JSX.Element {
   return (
     <NextLink
       href={href}
+      aria-disabled={disabled || undefined}
       className={clsx(
         styles.button,
         styles[variant],
@@ -43,9 +47,17 @@ export function LinkButton({
         rounded && styles.rounded,
         fullWidth && styles.fullWidth,
         loading && styles.loading,
+        disabled && styles.disabled,
         className
       )}
       {...rest}
+      onClick={(event) => {
+        if (disabled) {
+          event.preventDefault();
+          return;
+        }
+        onClick?.(event);
+      }}
     >
       {loading ? (
         <Icon size={spinnerSizeMap[size]} className={styles.spinner}>

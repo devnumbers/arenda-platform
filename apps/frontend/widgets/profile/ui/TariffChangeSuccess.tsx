@@ -1,16 +1,109 @@
 'use client';
 
-import type { JSX } from 'react';
-import { StatusGood } from '@/shared/assets/icons';
+import { useEffect, type JSX } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import clsx from 'clsx';
+import { Loading, StatusDanger, StatusGood } from '@/shared/assets/icons';
 import { Icon } from '@/shared/ui/icon';
 import { LinkButton } from '@/shared/ui/link-button';
-import { useSubscription } from '@/features/billing/api/hooks';
+import {
+  PAYMENT_STALE_MS,
+  useSubscription,
+  useSubscriptionPayment,
+} from '@/features/billing/api/hooks';
+import { billingKeys } from '@/features/billing/api/keys';
 import { formatDate } from '@/shared/lib/format-date';
 import { ROUTES } from '@/shared/config/routes';
 import styles from './TariffChangeSuccess.module.css';
 
+function isPaymentStale(createdAt: string): boolean {
+  return Date.now() - new Date(createdAt).getTime() > PAYMENT_STALE_MS;
+}
+
 export function TariffChangeSuccess(): JSX.Element {
+  const searchParams = useSearchParams();
+  const paymentId = searchParams.get('paymentId');
+  const queryClient = useQueryClient();
   const { data: subscription, isPending } = useSubscription();
+  const { data: payment, isPending: isPaymentPending } =
+    useSubscriptionPayment(paymentId ?? '', Boolean(paymentId));
+
+  useEffect(() => {
+    if (payment?.status === 'succeeded') {
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+    }
+  }, [payment?.status, queryClient]);
+
+  if (paymentId) {
+    if (isPaymentPending || payment?.status === 'pending') {
+      const isStale = payment ? isPaymentStale(payment.createdAt) : false;
+
+      return (
+        <div className={styles.root}>
+          <div className={styles.card}>
+            <div className={styles.iconWrapper}>
+              <Icon size="l" className={styles.spinner}>
+                <Loading />
+              </Icon>
+            </div>
+
+            <div className={styles.text}>
+              <h2 className={styles.heading}>Платёж обрабатывается</h2>
+              <p className={styles.subtext}>
+                Обычно это занимает до минуты, страница обновится
+                автоматически
+              </p>
+              {isStale && (
+                <p className={styles.subtext}>
+                  Проверяем статус у банка, это может занять несколько минут
+                </p>
+              )}
+            </div>
+
+            <LinkButton
+              href={ROUTES.profileTariff}
+              variant="primary"
+              size="large"
+              fullWidth
+            >
+              Вернуться к тарифу
+            </LinkButton>
+          </div>
+        </div>
+      );
+    }
+
+    if (payment?.status === 'failed') {
+      return (
+        <div className={styles.root}>
+          <div className={styles.card}>
+            <div className={clsx(styles.iconWrapper, styles.iconError)}>
+              <Icon size="l">
+                <StatusDanger />
+              </Icon>
+            </div>
+
+            <div className={styles.text}>
+              <h2 className={styles.heading}>Оплата не прошла</h2>
+              <p className={styles.subtext}>
+                Попробуйте сменить тариф ещё раз
+              </p>
+            </div>
+
+            <LinkButton
+              href={ROUTES.profileTariffChange}
+              variant="primary"
+              size="large"
+              fullWidth
+            >
+              Попробовать снова
+            </LinkButton>
+          </div>
+        </div>
+      );
+    }
+  }
 
   const pending = subscription?.pendingTariff;
   const pendingChangeAt = subscription?.pendingChangeAt;

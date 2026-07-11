@@ -325,8 +325,8 @@ export function OperationEditForm(): JSX.Element {
   const id = useOperationId();
   const router = useRouter();
   const { data, isLoading, isError, refetch, isFetching } = useOperation(id ?? '');
-  const { data: subscription } = useSubscription();
-  const readonly = isSubscriptionReadonly(subscription);
+  const { data: subscription, isPending: isSubscriptionPending } = useSubscription();
+  const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
   const headerActions = id ? (
     <IconButton

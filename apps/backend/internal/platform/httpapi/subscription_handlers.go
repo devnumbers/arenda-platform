@@ -211,6 +211,27 @@ func (h *SubscriptionHandlers) ListPaymentMethods(w http.ResponseWriter, r *http
 	writeJSON(r.Context(), w, http.StatusOK, openapi.PaymentMethodsResponse{Items: items})
 }
 
+// SyncPaymentMethods implements POST /subscription/payment-methods/sync.
+func (h *SubscriptionHandlers) SyncPaymentMethods(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	methods, err := h.paymentMethods.SyncPaymentMethods(r.Context(), ownerID)
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.PaymentMethod, 0, len(methods))
+	for _, m := range methods {
+		items = append(items, *paymentMethodResponse(m))
+	}
+	writeJSON(r.Context(), w, http.StatusOK, openapi.PaymentMethodsResponse{Items: items})
+}
+
 // AddPaymentMethod implements POST /subscription/payment-methods.
 func (h *SubscriptionHandlers) AddPaymentMethod(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerIDFromContext(r)

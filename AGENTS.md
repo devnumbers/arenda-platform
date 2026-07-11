@@ -21,6 +21,7 @@ The main Kimi Code agent is always an **Orchestrator**. It does not write, edit,
 - Backend: `apps/backend`, a separate Go module linked by root `go.work`.
 - Frontend: `apps/frontend`, a Next.js React application.
 - Admin: `apps/admin`, a Next.js React application.
+- Landing: `apps/landing`, a standalone Vite + React SPA (export from Figma Make) served by nginx as the public site at `/`.
 - Product docs: `docs/`; domain glossary: `CONTEXT.md`; architecture decisions: `docs/adr/`.
 - Local infrastructure runs through `docker-compose.local.yml`; run the backend on the host with Go.
 
@@ -75,6 +76,9 @@ make local-infra-up
 make local-infra-down
 make backend-run
 make backend-lint
+make landing-install
+make landing-dev
+make landing-build
 ```
 
 Use `make local-infra-reset` only when intentionally deleting local Docker volumes, including database data.

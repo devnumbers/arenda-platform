@@ -564,7 +564,7 @@ func (s *PaymentService) ReconcilePendingPayments(ctx context.Context, now time.
 	processed := 0
 	createdBefore := now.Add(-pendingPaymentStalenessThreshold).UTC()
 
-	for batch := 0; batch < maxReconcileBatchesPerTick; batch++ {
+	for range maxReconcileBatchesPerTick {
 		payments, err := s.deps.subscriptionPayments.ListPendingPayments(ctx, createdBefore, renewalBatchSize)
 		if err != nil {
 			return processed, fmt.Errorf("list pending payments: %w", err)
@@ -600,7 +600,7 @@ func (s *PaymentService) ReconcileStaleRefunds(ctx context.Context, now time.Tim
 	processed := 0
 	updatedBefore := now.Add(-pendingPaymentStalenessThreshold).UTC()
 
-	for batch := 0; batch < maxReconcileBatchesPerTick; batch++ {
+	for range maxReconcileBatchesPerTick {
 		payments, err := s.deps.subscriptionPayments.ListStaleRefundingPayments(ctx, updatedBefore, renewalBatchSize)
 		if err != nil {
 			return processed, fmt.Errorf("list stale refunding payments: %w", err)

@@ -10,9 +10,34 @@ import styles from './PropertiesEmptyState.module.css';
 
 export type PropertiesEmptyStateProps = {
   readonly canAdd?: boolean;
+  readonly isLoading?: boolean;
 };
 
-export function PropertiesEmptyState({ canAdd }: PropertiesEmptyStateProps): JSX.Element {
+export function PropertiesEmptyState({ canAdd, isLoading }: PropertiesEmptyStateProps): JSX.Element {
+  if (isLoading) {
+    return (
+      <EmptyState
+        imageSrc="/images/empty-logo.png"
+        imageAlt="Логотип"
+        title="Здесь будут отображаться ваши объекты"
+        subtitle="Добавьте свою квартиру, студию, помещение или другой объект недвижимости"
+        actionNode={
+          <button
+            type="button"
+            disabled
+            className={styles.actionDisabled}
+            aria-label="Создать объект"
+          >
+            <Icon size="m">
+              <HomeAdd />
+            </Icon>
+            Создать объект
+          </button>
+        }
+      />
+    );
+  }
+
   if (canAdd === false) {
     return (
       <EmptyState

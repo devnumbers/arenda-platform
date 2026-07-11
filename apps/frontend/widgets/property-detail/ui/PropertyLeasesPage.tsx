@@ -5,8 +5,10 @@ import { useMemo } from 'react';
 import NextLink from 'next/link';
 import { useParams } from 'next/navigation';
 import type { components } from '@/shared/api/generated';
+import { Plus } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
+import { Icon } from '@/shared/ui/icon';
 import { PageHeader } from '@/shared/ui/page-header';
 import { LinkButton } from '@/shared/ui/link-button';
 import { useProperty } from '@/features/properties/api/hooks';
@@ -141,15 +143,28 @@ export function PropertyLeasesPage(): JSX.Element {
         title={title}
         backHref={ROUTES.property(id)}
         actions={
-          canCreateLease && (
-            <LinkButton
-              href={`${ROUTES.leaseNew}?propertyId=${id}`}
-              variant="primary"
-              size="small"
+          isLoading ? (
+            <button
+              type="button"
+              disabled
+              className={styles.addButton}
+              aria-label="Создать аренду"
             >
-              Создать аренду
-            </LinkButton>
-          )
+              <Icon size="s">
+                <Plus />
+              </Icon>
+            </button>
+          ) : canCreateLease ? (
+            <NextLink
+              href={`${ROUTES.leaseNew}?propertyId=${id}`}
+              className={styles.addButton}
+              aria-label="Создать аренду"
+            >
+              <Icon size="s">
+                <Plus />
+              </Icon>
+            </NextLink>
+          ) : null
         }
       />
 

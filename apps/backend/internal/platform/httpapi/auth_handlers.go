@@ -164,6 +164,8 @@ func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
 			writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Неверный телефон, почта или код"))
 		case errors.Is(err, application.ErrEmailDoesNotMatch):
 			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Некорректные учётные данные")))
+		case errors.Is(err, application.ErrEmailAlreadyTaken):
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Этот email уже используется")))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}

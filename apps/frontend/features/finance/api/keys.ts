@@ -1,3 +1,5 @@
 export const financeKeys = {
-  report: (from: string, to: string) => ['finance', 'report', from, to] as const,
+  reports: () => ['finance', 'report'] as const,
+  report: (from?: string, to?: string) =>
+    [...financeKeys.reports(), from ?? 'all', to ?? 'all'] as const,
 };

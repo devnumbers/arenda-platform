@@ -5,6 +5,7 @@ import {useRouter} from 'next/navigation';
 import {useCreateTenantContact} from '@/features/tenant-contacts/api';
 import {ApiError} from '@/shared/api/errors';
 import {ROUTES} from '@/shared/config/routes';
+import {goBack} from '@/shared/lib/navigation';
 import {WizardHeader} from '@/shared/ui/wizard-header';
 import {useTenantCreateDraft} from '../lib/use-tenant-create-draft';
 import {TenantFormStep} from './TenantFormStep';
@@ -33,7 +34,7 @@ export function TenantCreateWizard(): JSX.Element {
 
     const handleClose = () => {
         clearDraft();
-        router.push(ROUTES.tenants);
+        goBack(router, ROUTES.tenants);
     };
 
     const handleChange = useCallback(

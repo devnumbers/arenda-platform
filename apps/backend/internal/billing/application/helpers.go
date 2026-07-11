@@ -15,6 +15,10 @@ const tkassaDescriptionLimit = 140
 const (
 	renewalBatchSize = 100
 	graceBatchSize   = 100
+	// maxRenewalChargeAttempts caps how many times a renewal charge may fail
+	// with an unresolved (pending or unexpected) provider outcome before the
+	// payment is marked failed and the subscription is moved to grace.
+	maxRenewalChargeAttempts = 3
 )
 
 const (

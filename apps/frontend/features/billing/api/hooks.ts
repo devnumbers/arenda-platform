@@ -37,6 +37,28 @@ type ChangeTariffRequest = Omit<
   tariffName: TariffName;
 };
 type AddPaymentMethodRequest = components['schemas']['AddPaymentMethodRequest'];
+type SubscriptionPaymentsResponse =
+  components['schemas']['SubscriptionPaymentsResponse'];
+
+/** Pending-платёж старше этого возраста считается «зависшим» — UI меняет текст. */
+export const PAYMENT_STALE_MS = 15 * 60 * 1000;
+
+const PAYMENT_POLL_INTERVAL_MS = 5000;
+const PAYMENT_POLL_MAX_AGE_MS = 30 * 60 * 1000;
+
+/** Polling продолжается, пока есть pending-платёж не старше PAYMENT_POLL_MAX_AGE_MS. */
+function hasRecentPendingPayment(
+  data: SubscriptionPaymentsResponse | undefined,
+  paymentId?: string,
+): boolean {
+  if (!data) return false;
+  return data.items.some((item) => {
+    if (item.status !== 'pending') return false;
+    if (paymentId && item.id !== paymentId) return false;
+    const ageMs = Date.now() - new Date(item.createdAt).getTime();
+    return ageMs < PAYMENT_POLL_MAX_AGE_MS;
+  });
+}
 
 export function useTariffs(): UseQueryResult<Tariff[], ApiError> {
   return useQuery({
@@ -165,6 +187,26 @@ export function useActivatePaymentMethod(): UseMutationResult<
   });
 }
 
+export function useSyncPaymentMethods(): UseMutationResult<
+  components['schemas']['PaymentMethodsResponse'],
+  ApiError,
+  void
+> {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () =>
+      apiClient<components['schemas']['PaymentMethodsResponse']>(
+        '/subscription/payment-methods/sync',
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
+      queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+    },
+  });
+}
+
 export function useDeletePaymentMethod(): UseMutationResult<
   void,
   ApiError,
@@ -198,8 +240,32 @@ export function useSubscriptionPayments(): UseQueryResult<
   });
 }
 
+export function usePendingPayment(): UseQueryResult<
+  SubscriptionPayment | undefined,
+  ApiError
+> {
+  return useQuery({
+    queryKey: billingKeys.payments,
+    queryFn: () =>
+      apiClient<components['schemas']['SubscriptionPaymentsResponse']>('/subscription/payments'),
+    select: (data) =>
+      data.items
+        .map(mapSubscriptionPaymentResponse)
+        .filter((payment) => payment.status === 'pending')
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )[0],
+    refetchInterval: (query) =>
+      hasRecentPendingPayment(query.state.data)
+        ? PAYMENT_POLL_INTERVAL_MS
+        : false,
+  });
+}
+
 export function useSubscriptionPayment(
   id: string,
+  enabled = true,
 ): UseQueryResult<SubscriptionPayment | undefined, ApiError> {
   return useQuery({
     queryKey: billingKeys.payment(id),
@@ -209,5 +275,10 @@ export function useSubscriptionPayment(
       data.items
         .map(mapSubscriptionPaymentResponse)
         .find((payment) => payment.id === id),
+    enabled,
+    refetchInterval: (query) =>
+      hasRecentPendingPayment(query.state.data, id)
+        ? PAYMENT_POLL_INTERVAL_MS
+        : false,
   });
 }

@@ -6,8 +6,8 @@ import clsx from 'clsx';
 import styles from './EntityCard.module.css';
 
 export type EntityCardProps = {
+    readonly icon: ReactNode;
     readonly imageUrl?: string | null;
-    readonly placeholderIcon?: ReactNode;
     readonly title: string;
     readonly subtitle?: string;
     readonly href?: string;
@@ -16,33 +16,33 @@ export type EntityCardProps = {
 };
 
 export function EntityCard({
-  imageUrl,
-  placeholderIcon,
-  title,
-  subtitle,
-  href,
-  size = 'medium',
-  className,
-}: EntityCardProps): JSX.Element {
-  const content = (
-    <>
-      <div
-        className={clsx(
-          styles.image,
-          size === 'medium' && styles.medium,
-          size === 'small' && styles.small,
-          !imageUrl && styles.placeholder,
-        )}
-        style={imageUrl ? { backgroundImage: `url(${imageUrl})` } : undefined}
-      >
-        {!imageUrl && placeholderIcon}
-      </div>
-      <div className={styles.text}>
-        <span className={styles.title}>{title}</span>
-        {subtitle && <span className={styles.subtitle}>{subtitle}</span>}
-      </div>
-    </>
-  );
+                               imageUrl,
+                               icon,
+                               title,
+                               subtitle,
+                               href,
+                               size = 'medium',
+                               className,
+                           }: EntityCardProps): JSX.Element {
+    const content = (
+        <>
+            <div
+                className={clsx(
+                    styles.image,
+                    size === 'medium' && styles.medium,
+                    size === 'small' && styles.small,
+                    !imageUrl && styles.placeholder,
+                )}
+                style={imageUrl ? {backgroundImage: `url(${imageUrl})`} : undefined}
+            >
+                {icon}
+            </div>
+            <div className={styles.text}>
+                <span className={styles.title}>{title}</span>
+                {subtitle && <span className={styles.subtitle}>{subtitle}</span>}
+            </div>
+        </>
+    );
 
     const cardClassName = clsx(styles.root, className);
 

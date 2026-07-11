@@ -5,18 +5,17 @@ import NextLink from 'next/link';
 import {Card} from '@heroui/react/card';
 import {Skeleton} from '@heroui/react/skeleton';
 import {Icon} from '@/shared/ui/icon';
-import {BoldWallet, ClockSmall, Key, UserSmall} from '@/shared/assets/icons';
+import {BoldWallet, Key} from '@/shared/assets/icons';
 import type {components} from '@/shared/api/generated';
 import type {Property} from '@/entities/property/model/types';
-import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {ROUTES} from '@/shared/config/routes';
-import {formatCurrentLeaseMonth, formatLeaseRemainingDuration,} from '@/shared/lib/format-lease-card-values';
+import {LeaseInfo} from '@/widgets/lease-card/ui/LeaseInfo';
 import {EmptyState} from '@/shared/ui/empty-state';
 import {getEffectiveLeaseStatus, isOpenLeaseStatus,} from '@/entities/lease/lib/status';
 import {PropertyThumbnail} from '@/widgets/properties/ui/PropertyThumbnail';
+import {PropertyStatusBadge} from '@/widgets/properties/ui/PropertyStatusBadge';
 import {SectionHeader} from './SectionHeader';
 import {StatusBadge} from './StatusBadge';
-import {LeaseProgress} from './LeaseProgress';
 import {IconActionCard} from './IconActionCard';
 import styles from './NearestLease.module.css';
 
@@ -113,11 +112,9 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
     }
 
     const propertyName = getPropertyName(lease.property_id, properties);
+    const property = properties?.find((p) => p.id === lease.property_id);
+    const overdueRentCount = property?.overdue_rent_count ?? 0;
     const leaseHref = lease.id ? ROUTES.lease(lease.id) : ROUTES.properties;
-    const tenantName = lease.tenant_contact?.name ?? null;
-    const amount = formatMoneyKopecks(lease.rent_amount_kopecks, {round: true});
-    const remaining = formatLeaseRemainingDuration(lease.start_date, lease.end_date);
-    const currentMonth = formatCurrentLeaseMonth(lease.start_date, lease.status);
 
     return (
         <section className={styles.section}>
@@ -127,31 +124,15 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
                     <div className={styles.header}>
                         <div className={styles.info}>
                             <span className={styles.propertyName}>{propertyName}</span>
-                            <StatusBadge status={lease.status}/>
+                            {overdueRentCount > 0 ? (
+                                <PropertyStatusBadge status="overdue" overdueCount={overdueRentCount}/>
+                            ) : (
+                                <StatusBadge status={lease.status}/>
+                            )}
                         </div>
                         <PropertyThumbnail size="medium"/>
                     </div>
-                    <div className={styles.amountRow}>
-                        <span className={styles.amount}>{amount}</span>
-                        <span className={styles.duration}>{remaining}</span>
-                    </div>
-                    <LeaseProgress startDate={lease.start_date} endDate={lease.end_date}/>
-                    <div className={styles.footer}>
-          <span className={styles.footerItem}>
-            <Icon size="s">
-              <UserSmall/>
-            </Icon>
-              {tenantName ?? 'Нет арендатора'}
-          </span>
-                        {currentMonth && (
-                            <span className={styles.footerItem}>
-              <Icon size="s">
-                <ClockSmall/>
-              </Icon>
-                                {currentMonth}
-            </span>
-                        )}
-                    </div>
+                    <LeaseInfo lease={lease}/>
                 </Card>
             </NextLink>
             <div className={styles.actions}>

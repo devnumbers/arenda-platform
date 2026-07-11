@@ -40,11 +40,6 @@
   color: inherit;
 }
 
-.cardLink:hover .propertyName,
-.cardLink:focus-visible .propertyName {
-  text-decoration: underline;
-}
-
 .propertyName {
   font-size: var(--font-size-text-l);
   font-weight: 500;

@@ -100,12 +100,18 @@ export function PropertyDetailPage(): JSX.Element {
             }
             updateProperty.mutate(
                 {id, data: {status: 'maintenance'}},
-                {onError: showMutationError},
+                {
+                    onSuccess: () => notify.success('Объект переведён на ремонт'),
+                    onError: showMutationError,
+                },
             );
         } else {
             updateProperty.mutate(
                 {id, data: {status: 'active'}},
-                {onError: showMutationError},
+                {
+                    onSuccess: () => notify.success('Объект возвращён в работу'),
+                    onError: showMutationError,
+                },
             );
         }
     }, [property, currentLease, id, updateProperty]);
@@ -113,13 +119,19 @@ export function PropertyDetailPage(): JSX.Element {
     const handleToggleArchive = useCallback(() => {
         if (!property) return;
         if (property.status === 'archived') {
-            unarchiveProperty.mutate(id, {onError: showMutationError});
+            unarchiveProperty.mutate(id, {
+                onSuccess: () => notify.success('Объект возвращён из архива'),
+                onError: showMutationError,
+            });
         } else {
             if (currentLease) {
                 setBlockedOpen(true);
                 return;
             }
-            archiveProperty.mutate(id, {onError: showMutationError});
+            archiveProperty.mutate(id, {
+                onSuccess: () => notify.success('Объект переведён в архив'),
+                onError: showMutationError,
+            });
         }
     }, [property, currentLease, id, archiveProperty, unarchiveProperty]);
 
@@ -236,7 +248,6 @@ export function PropertyDetailPage(): JSX.Element {
                     <PropertyLeaseCard
                         lease={currentLease}
                         status={pageStatus}
-                        overdueRentCount={summaryQuery.data?.overdue_rent_count ?? 0}
                         propertyId={id}
                         onPayRent={handlePayRent}
                         isPayRentLoading={isPayRentLoading}

@@ -9,6 +9,7 @@
 *.exe
 api
 node_modules/
+apps/landing/dist
 *.log
 .tmp
 

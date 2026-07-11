@@ -7,6 +7,7 @@ import {
   type JSX,
 } from 'react';
 import { useRouter } from 'next/navigation';
+import NextLink from 'next/link';
 import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
@@ -17,6 +18,7 @@ import {
   useTariffs,
   useSubscription,
   useChangeTariff,
+  usePendingPayment,
 } from '@/features/billing/api/hooks';
 import { getTariffLabel } from '@/entities/user/lib/get-tariff-label';
 import { type TariffName } from '@/entities/user/model/types';
@@ -109,12 +111,14 @@ export function TariffChangeForm(): JSX.Element {
     refetch: refetchSubscription,
   } = useSubscription();
   const changeTariff = useChangeTariff();
+  const { data: pendingPayment } = usePendingPayment();
 
   const [period, setPeriod] = useState<Period>('month');
   const [selectedTariff, setSelectedTariff] = useState<TariffName | null>(null);
 
   const isPending = isTariffsPending || isSubscriptionPending;
   const isError = isTariffsError || isSubscriptionError;
+  const hasPendingPayment = Boolean(pendingPayment);
 
   const handleRetry = useCallback(() => {
     if (isTariffsError) {
@@ -171,10 +175,25 @@ export function TariffChangeForm(): JSX.Element {
       )}
       {!isError && !isPending && tariffs && subscription && (
         <div className={styles.root}>
+          {pendingPayment && (
+            <div className={clsx(styles.banner, styles.bannerInfo)}>
+              <p className={styles.bannerText}>
+                У вас есть платёж в обработке — дождитесь его завершения,
+                чтобы сменить тариф
+              </p>
+              <NextLink
+                href={ROUTES.profilePaymentDetail(pendingPayment.id)}
+                className={styles.bannerLink}
+              >
+                Детали платежа
+              </NextLink>
+            </div>
+          )}
+
           <PeriodSelector
             value={period}
             onChange={setPeriod}
-            disabled={changeTariff.isPending}
+            disabled={changeTariff.isPending || hasPendingPayment}
           />
 
           <div className={styles.list}>
@@ -221,7 +240,9 @@ export function TariffChangeForm(): JSX.Element {
                     size="large"
                     fullWidth
                     loading={isLoading}
-                    disabled={isCurrent || changeTariff.isPending}
+                    disabled={
+                      isCurrent || changeTariff.isPending || hasPendingPayment
+                    }
                     onClick={() => handleSelect(tariff.name)}
                   >
                     {isCurrent ? 'Текущий' : 'Выбрать'}

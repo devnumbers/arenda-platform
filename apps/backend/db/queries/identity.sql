@@ -10,10 +10,13 @@ SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at
 -- name: GetUserByPhoneForUpdate :one
 SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE phone = $1 FOR UPDATE;
 
+-- name: GetUserByEmail :one
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE LOWER(email) = LOWER($1::text);
+
 -- name: CreateUser :one
 INSERT INTO users (id, phone, role, phone_encrypted, email, email_verified_at)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (phone) DO NOTHING
+ON CONFLICT DO NOTHING
 RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted;
 
 -- name: GetLatestLoginCodeByPhoneAndEmailAndPurpose :one

@@ -231,6 +231,15 @@ SET payment_method_id = $2, updated_at = now()
 WHERE id = $1
 RETURNING *;
 
+-- name: IncrementSubscriptionPaymentChargeAttempts :one
+-- Atomically increment the renewal charge attempt counter and return the new
+-- value so the renewal job can cap retries on persistent charge failures.
+-- updated_at is maintained by the trg_subscription_payments_updated_at trigger.
+UPDATE subscription_payments
+SET charge_attempts = charge_attempts + 1
+WHERE id = $1
+RETURNING charge_attempts;
+
 -- name: ListSubscriptionsUpForRenewal :many
 SELECT * FROM user_subscriptions
 WHERE status = 'active'

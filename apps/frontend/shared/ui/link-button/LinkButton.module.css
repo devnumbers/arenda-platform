@@ -13,6 +13,11 @@
   transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
 }
 
+.button.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .button.loading {
   opacity: 0.6;
 }
@@ -67,11 +72,11 @@
   color: var(--color-white);
 }
 
-.primary:hover {
+.primary:hover:not(.disabled) {
   background-color: var(--color-primary-hover);
 }
 
-.primary:active {
+.primary:active:not(.disabled) {
   background-color: var(--color-primary-pressed);
 }
 
@@ -80,11 +85,11 @@
   color: var(--color-text);
 }
 
-.secondary:hover {
+.secondary:hover:not(.disabled) {
   background-color: var(--color-secondary-hover);
 }
 
-.secondary:active {
+.secondary:active:not(.disabled) {
   background-color: var(--color-secondary-pressed);
 }
 
@@ -93,11 +98,11 @@
   color: var(--color-primary);
 }
 
-.clear:hover {
+.clear:hover:not(.disabled) {
   background-color: var(--color-clear-hover);
 }
 
-.clear:active {
+.clear:active:not(.disabled) {
   background-color: var(--color-clear-pressed);
 }
 
@@ -106,11 +111,11 @@
   color: var(--color-text);
 }
 
-.icon-black:hover {
+.icon-black:hover:not(.disabled) {
   background-color: var(--color-black-icon-hover);
 }
 
-.icon-black:active {
+.icon-black:active:not(.disabled) {
   background-color: var(--color-black-icon-pressed);
 }
 

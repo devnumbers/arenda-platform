@@ -10,6 +10,8 @@ import (
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -19,15 +21,17 @@ type LeaseHandlers struct {
 	tenantContactSvc *leasesapp.TenantContactService
 	logger           *slog.Logger
 	presenter        *leasePresenter
+	clock            clock.Clock
 }
 
 // NewLeaseHandlers creates HTTP handlers for the leases API.
-func NewLeaseHandlers(leaseSvc *leasesapp.LeaseService, tenantContactSvc *leasesapp.TenantContactService, logger *slog.Logger) *LeaseHandlers {
+func NewLeaseHandlers(leaseSvc *leasesapp.LeaseService, tenantContactSvc *leasesapp.TenantContactService, logger *slog.Logger, clk clock.Clock) *LeaseHandlers {
 	return &LeaseHandlers{
 		leaseSvc:         leaseSvc,
 		tenantContactSvc: tenantContactSvc,
 		logger:           logger,
 		presenter:        newLeasePresenter(tenantContactSvc),
+		clock:            clk,
 	}
 }
 
@@ -104,7 +108,7 @@ func (h *LeaseHandlers) CreateLease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, nil)
+	resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, nil, nil, nil, false)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -133,9 +137,17 @@ func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	asOf := timeutil.Date(h.clock.Now())
+	scheduleIndex, err := h.leaseSvc.LeasePaymentScheduleIndex(r.Context(), ownerID, leases, asOf)
+	if err != nil {
+		h.handleLeaseError(w, r, err)
+		return
+	}
+
 	items := make([]openapi.LeaseResponse, 0, len(leases))
 	for _, lease := range leases {
-		resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, contacts)
+		schedule := scheduleIndex[lease.ID]
+		resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, contacts, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
 		if err != nil {
 			h.handleLeaseError(w, r, err)
 			return
@@ -160,7 +172,15 @@ func (h *LeaseHandlers) GetLease(w http.ResponseWriter, r *http.Request, id uuid
 		return
 	}
 
-	resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, nil)
+	asOf := timeutil.Date(h.clock.Now())
+	scheduleIndex, err := h.leaseSvc.LeasePaymentScheduleIndex(r.Context(), ownerID, []leasesdomain.Lease{lease}, asOf)
+	if err != nil {
+		h.handleLeaseError(w, r, err)
+		return
+	}
+	schedule := scheduleIndex[lease.ID]
+
+	resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, nil, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -207,7 +227,7 @@ func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id u
 		return
 	}
 
-	resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, nil)
+	resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, nil, nil, nil, false)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -230,7 +250,7 @@ func (h *LeaseHandlers) CompleteLease(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 
-	resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, nil)
+	resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, nil, nil, nil, false)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -253,7 +273,7 @@ func (h *LeaseHandlers) ReturnLeaseDeposit(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, nil)
+	resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, nil, nil, nil, false)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -319,7 +339,7 @@ func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Reques
 		}
 
 		if contact.ActiveLease != nil {
-			leaseResp, err := h.presenter.leaseResponse(r.Context(), ownerID, *contact.ActiveLease, contactsMap)
+			leaseResp, err := h.presenter.leaseResponse(r.Context(), ownerID, *contact.ActiveLease, contactsMap, nil, nil, false)
 			if err != nil {
 				handleTenantContactError(w, r, err)
 				return
@@ -327,7 +347,7 @@ func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Reques
 			resp.ActiveLease = &leaseResp
 		}
 		if contact.LastLease != nil {
-			leaseResp, err := h.presenter.leaseResponse(r.Context(), ownerID, *contact.LastLease, contactsMap)
+			leaseResp, err := h.presenter.leaseResponse(r.Context(), ownerID, *contact.LastLease, contactsMap, nil, nil, false)
 			if err != nil {
 				handleTenantContactError(w, r, err)
 				return

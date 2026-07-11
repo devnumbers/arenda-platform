@@ -73,20 +73,21 @@ export function PropertiesPage({mode = 'active', initialFilters, initialSort}: P
 
     const isEmpty = !isLoading && !isError && visible.length === 0;
 
+    const isActionLoading = subscriptionQuery.isPending || activeProperties === undefined;
+
     const canAdd = useMemo(() => {
-        if (subscriptionQuery.isLoading || !subscriptionQuery.data) return false;
-        if (activeProperties === undefined) return false;
+        if (!subscriptionQuery.data || activeProperties === undefined) return false;
         const limit = subscriptionQuery.data.tariff.activePropertyLimit;
         if (limit < 0) return true;
         return activeProperties.length < limit;
-    }, [subscriptionQuery.isLoading, subscriptionQuery.data, activeProperties]);
+    }, [subscriptionQuery.data, activeProperties]);
 
     return (
         <div className={styles.root}>
             <PageHeader
                 title={mode === 'archived' ? 'Архивные объекты' : 'Мои объекты'}
                 backHref={mode === 'archived' ? ROUTES.properties : undefined}
-                actions={<PropertyCreateButton canAdd={canAdd}/>}
+                actions={<PropertyCreateButton canAdd={canAdd} isLoading={isActionLoading}/>}
             />
 
             <PropertiesToolbar mode={mode} filters={filters} sort={sort} onChange={handleChange}/>
@@ -95,7 +96,7 @@ export function PropertiesPage({mode = 'active', initialFilters, initialSort}: P
 
             {!isLoading && isError && <PropertiesErrorState onRetry={refetch} isLoading={isFetching}/>}
 
-            {!isLoading && !isError && isEmpty && <PropertiesEmptyState canAdd={canAdd}/>}
+            {!isLoading && !isError && isEmpty && <PropertiesEmptyState canAdd={canAdd} isLoading={isActionLoading}/>}
 
             {!isLoading && !isError && !isEmpty && (
                 <ul className={styles.list}>

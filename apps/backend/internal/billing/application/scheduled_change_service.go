@@ -35,6 +35,7 @@ func (c *ScheduledChangeService) ProcessScheduledChanges(ctx context.Context, no
 		if len(subs) == 0 {
 			break
 		}
+		batchProcessed := 0
 		for _, sub := range subs {
 			if err := c.applyScheduledChange(ctx, sub, now); err != nil {
 				c.deps.log.ErrorContext(ctx, "apply scheduled change failed",
@@ -43,9 +44,18 @@ func (c *ScheduledChangeService) ProcessScheduledChanges(ctx context.Context, no
 					slog.String("error", sanitize.Error(err)))
 				continue
 			}
-			processed++
+			batchProcessed++
 		}
+		processed += batchProcessed
 		if len(subs) < renewalBatchSize {
+			break
+		}
+		if batchProcessed == 0 {
+			// A full batch with zero progress means every item failed and
+			// stays in the selection; defer to the next tick instead of
+			// spinning in an infinite retry loop.
+			c.deps.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", "apply scheduled changes"))
 			break
 		}
 	}

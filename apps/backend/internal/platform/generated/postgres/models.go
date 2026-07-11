@@ -323,6 +323,7 @@ type SubscriptionPayment struct {
 	PaymentUrl            pgtype.Text        `json:"payment_url"`
 	SucceededAt           pgtype.Timestamptz `json:"succeeded_at"`
 	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
+	ChargeAttempts        int32              `json:"charge_attempts"`
 }
 
 type Tariff struct {

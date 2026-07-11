@@ -48,6 +48,7 @@ type SubscriptionPayment struct {
 	PaymentURL            *string
 	Status                PaymentStatus
 	RefundedAmountKopecks *int64
+	ChargeAttempts        int
 	ErrorCode             *string
 	CreatedAt             time.Time
 	UpdatedAt             time.Time

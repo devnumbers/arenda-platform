@@ -87,17 +87,18 @@ const (
 )
 
 type Property struct {
-	ID          uuid.UUID
-	OwnerID     uuid.UUID
-	Name        string
-	Type        PropertyType
-	Address     string
-	Description string
-	Status      PropertyStatus
-	Occupancy   PropertyOccupancy
-	Photos      []Photo
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID               uuid.UUID
+	OwnerID          uuid.UUID
+	Name             string
+	Type             PropertyType
+	Address          string
+	Description      string
+	Status           PropertyStatus
+	Occupancy        PropertyOccupancy
+	Photos           []Photo
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	OverdueRentCount int
 }
 
 // Photo is a photo attached to a property.

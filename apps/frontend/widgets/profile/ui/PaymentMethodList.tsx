@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type JSX } from 'react';
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
@@ -12,6 +12,7 @@ import {
   usePaymentMethods,
   useActivatePaymentMethod,
   useDeletePaymentMethod,
+  useSyncPaymentMethods,
 } from '@/features/billing/api/hooks';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDate } from '@/shared/lib/format-date';
@@ -102,7 +103,9 @@ export function PaymentMethodList({
   } = usePaymentMethods();
   const activate = useActivatePaymentMethod();
   const remove = useDeletePaymentMethod();
+  const sync = useSyncPaymentMethods();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const hasAutoSyncedRef = useRef(false);
 
   useEffect(() => {
     if (addCardResult === 'success') {
@@ -118,6 +121,23 @@ export function PaymentMethodList({
       window.history.replaceState({}, '', url.toString());
     }
   }, [addCardResult, refetch]);
+
+  const notifySyncError = useCallback((error: ApiError) => {
+    notify.warning(error.detail ?? 'Не удалось обновить список карт');
+  }, []);
+
+  const handleSync = useCallback(() => {
+    sync.mutate(undefined, { onError: notifySyncError });
+  }, [sync, notifySyncError]);
+
+  // Sync with the provider once on mount, so a card linked on the bank
+  // form appears without a manual refresh. The ref guards against the
+  // StrictMode double effect run in dev; the mutation is idempotent anyway.
+  useEffect(() => {
+    if (hasAutoSyncedRef.current) return;
+    hasAutoSyncedRef.current = true;
+    handleSync();
+  }, [handleSync]);
 
   const handleActivate = useCallback(
     (id: string) => {
@@ -184,12 +204,30 @@ export function PaymentMethodList({
         >
           Добавить карту
         </LinkButton>
+        <Button
+          variant="secondary"
+          size="small"
+          onClick={handleSync}
+          loading={sync.isPending}
+        >
+          Обновить
+        </Button>
       </div>
     );
   }
 
   return (
     <div className={styles.root}>
+      <div className={styles.toolbar}>
+        <Button
+          variant="secondary"
+          size="small"
+          onClick={handleSync}
+          loading={sync.isPending}
+        >
+          Обновить
+        </Button>
+      </div>
       <div className={styles.list}>
         {items.map((method) => (
           <Card

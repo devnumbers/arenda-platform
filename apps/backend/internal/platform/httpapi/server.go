@@ -108,8 +108,8 @@ func New(deps Deps) http.Handler {
 		deps.PhoneChangeVerifyLimiter,
 		deps.MeEnricher,
 	)
-	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Logger)
-	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger)
+	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Logger, deps.Clock)
+	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock)
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Logger)
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Logger)
 	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)

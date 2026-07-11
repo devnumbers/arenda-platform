@@ -751,6 +751,91 @@ func TestProviderRemoveCardNotFound(t *testing.T) {
 	}
 }
 
+func TestProviderGetCardList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/GetCardList" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		data := verifyRequestToken(t, r, testPassword)
+		if got, want := data["TerminalKey"], testTerminalKey; got != want {
+			t.Fatalf("TerminalKey: got %v, want %v", got, want)
+		}
+		if got, want := data["CustomerKey"], "customer-1"; got != want {
+			t.Fatalf("CustomerKey: got %v, want %v", got, want)
+		}
+		// T-Kassa answers GetCardList with a bare JSON array, and RebillId may
+		// be absent for cards that were not saved for recurrent charges.
+		_ = json.NewEncoder(w).Encode([]cardListItem{
+			{CardID: "card-1", Pan: "430000******0777", ExpDate: "1230", Status: "A", RebillID: "rebill-1"},
+			{CardID: "card-2", Pan: "430000******0888", ExpDate: "1231", Status: "I"},
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	cards, err := p.GetCardList(context.Background(), "customer-1")
+	if err != nil {
+		t.Fatalf("GetCardList failed: %v", err)
+	}
+	if len(cards) != 2 {
+		t.Fatalf("expected 2 cards, got %d", len(cards))
+	}
+	if cards[0].CardID != "card-1" || cards[0].Pan != "430000******0777" || cards[0].ExpDate != "1230" {
+		t.Fatalf("unexpected first card: %+v", cards[0])
+	}
+	if cards[0].RebillID != "rebill-1" {
+		t.Fatalf("RebillID: got %q, want %q", cards[0].RebillID, "rebill-1")
+	}
+	if cards[0].Status != application.ProviderCardStatusActive {
+		t.Fatalf("Status: got %q, want %q", cards[0].Status, application.ProviderCardStatusActive)
+	}
+	if cards[1].RebillID != "" {
+		t.Fatalf("expected missing RebillId to decode as empty, got %q", cards[1].RebillID)
+	}
+	if cards[1].Status != application.ProviderCardStatusInactive {
+		t.Fatalf("Status: got %q, want %q", cards[1].Status, application.ProviderCardStatusInactive)
+	}
+}
+
+func TestProviderGetCardListEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = verifyRequestToken(t, r, testPassword)
+		_ = json.NewEncoder(w).Encode([]cardListItem{})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	cards, err := p.GetCardList(context.Background(), "customer-1")
+	if err != nil {
+		t.Fatalf("GetCardList failed: %v", err)
+	}
+	if len(cards) != 0 {
+		t.Fatalf("expected no cards, got %d", len(cards))
+	}
+}
+
+func TestProviderGetCardListError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = verifyRequestToken(t, r, testPassword)
+		_ = json.NewEncoder(w).Encode(baseResponse{
+			Success:   false,
+			ErrorCode: "503",
+			Message:   "CustomerKey not found",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	_, err := p.GetCardList(context.Background(), "customer-1")
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) || providerErr.ErrorCode != "503" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestProviderWebhookResponse(t *testing.T) {
 	p := newTestProvider("")
 	if got, want := string(p.WebhookResponse()), "OK"; got != want {

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/shared/ui/button';
 import { WizardHeader } from '@/shared/ui/wizard-header';
 import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
 import {
   expenseCategories,
   incomeCategories,
@@ -163,7 +164,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
   };
 
   const handleCancel = () => {
-    router.push(ROUTES.finance);
+    goBack(router, ROUTES.finance);
   };
 
   const handleBack = () => {
@@ -175,7 +176,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     if (currentIndex > 0) {
       setStep(stepOrder[currentIndex - 1]);
     } else {
-      router.push(ROUTES.finance);
+      goBack(router, ROUTES.finance);
     }
   };
 

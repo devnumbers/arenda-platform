@@ -518,8 +518,8 @@ export function RecurringOperationEditPage(): JSX.Element {
     refetch,
     isFetching,
   } = useRecurringOperation(id ?? '');
-  const { data: subscription } = useSubscription();
-  const readonly = isSubscriptionReadonly(subscription);
+  const { data: subscription, isPending: isSubscriptionPending } = useSubscription();
+  const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
   if (!id) {
     return (

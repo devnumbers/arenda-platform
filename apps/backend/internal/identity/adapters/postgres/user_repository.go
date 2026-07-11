@@ -172,6 +172,17 @@ func (r *UserRepository) GetByPhoneForUpdate(ctx context.Context, phone domain.P
 	return mapUser(ctx, r.enc, userRowFromGeneratedUser(row))
 }
 
+func (r *UserRepository) GetByEmail(ctx context.Context, email domain.Email) (domain.User, error) {
+	row, err := r.q().GetUserByEmail(ctx, email.String())
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, application.ErrNotFound
+		}
+		return domain.User{}, fmt.Errorf("get user by email: %w", err)
+	}
+	return mapUser(ctx, r.enc, userRowFromGeneratedUser(row))
+}
+
 func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.User, error) {
 	encryptedPhone, err := encryptPhone(ctx, r.enc, user.Phone.String())
 	if err != nil {
@@ -187,11 +198,38 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.U
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return r.GetByPhone(ctx, user.Phone)
+			return r.resolveConflictingUser(ctx, user)
 		}
 		return domain.User{}, fmt.Errorf("create user: %w", err)
 	}
 	return mapUser(ctx, r.enc, userRowFromCreateUserRow(row))
+}
+
+func (r *UserRepository) resolveConflictingUser(ctx context.Context, user domain.User) (domain.User, error) {
+	existing, err := r.GetByPhone(ctx, user.Phone)
+	if err == nil {
+		return existing, nil
+	}
+	if !errors.Is(err, application.ErrNotFound) {
+		return domain.User{}, fmt.Errorf("resolve conflicting user by phone: %w", err)
+	}
+
+	if user.Email == nil {
+		return domain.User{}, fmt.Errorf("resolve conflicting user: no user by phone and no email to look up")
+	}
+
+	existing, err = r.GetByEmail(ctx, *user.Email)
+	if err != nil {
+		if errors.Is(err, application.ErrNotFound) {
+			return domain.User{}, fmt.Errorf("resolve conflicting user: conflict resolved without finding user")
+		}
+		return domain.User{}, fmt.Errorf("resolve conflicting user by email: %w", err)
+	}
+
+	if existing.Phone != user.Phone {
+		return domain.User{}, application.ErrEmailAlreadyTaken
+	}
+	return existing, nil
 }
 
 func (r *UserRepository) Update(ctx context.Context, user domain.User) (domain.User, error) {

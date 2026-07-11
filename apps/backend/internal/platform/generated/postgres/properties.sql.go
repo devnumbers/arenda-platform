@@ -154,7 +154,16 @@ func (q *Queries) GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (Pro
 }
 
 const getPropertyByIDAndOwner = `-- name: GetPropertyByIDAndOwner :one
-SELECT id, owner_id, name, type, address, description, status, created_at, updated_at FROM properties WHERE id = $1 AND owner_id = $2
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at,
+       (SELECT COUNT(*) FROM operations o
+         WHERE o.property_id = properties.id
+           AND o.owner_id = properties.owner_id
+           AND o.status = 'overdue'
+           AND o.type = 'income'
+           AND o.category = 'rent'
+           AND o.deleted_at IS NULL) AS overdue_rent_count
+FROM properties
+WHERE properties.id = $1 AND properties.owner_id = $2
 `
 
 type GetPropertyByIDAndOwnerParams struct {
@@ -162,9 +171,22 @@ type GetPropertyByIDAndOwnerParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
-func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (Property, error) {
+type GetPropertyByIDAndOwnerRow struct {
+	ID               pgtype.UUID        `json:"id"`
+	OwnerID          pgtype.UUID        `json:"owner_id"`
+	Name             string             `json:"name"`
+	Type             string             `json:"type"`
+	Address          string             `json:"address"`
+	Description      pgtype.Text        `json:"description"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	OverdueRentCount int64              `json:"overdue_rent_count"`
+}
+
+func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (GetPropertyByIDAndOwnerRow, error) {
 	row := q.db.QueryRow(ctx, getPropertyByIDAndOwner, arg.ID, arg.OwnerID)
-	var i Property
+	var i GetPropertyByIDAndOwnerRow
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
@@ -175,6 +197,7 @@ func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyBy
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OverdueRentCount,
 	)
 	return i, err
 }
@@ -207,20 +230,41 @@ func (q *Queries) GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetP
 }
 
 const listActivePropertiesByOwner = `-- name: ListActivePropertiesByOwner :many
-SELECT id, owner_id, name, type, address, description, status, created_at, updated_at FROM properties
-WHERE owner_id = $1 AND status IN ('active', 'maintenance')
-ORDER BY updated_at DESC
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at,
+       (SELECT COUNT(*) FROM operations o
+         WHERE o.property_id = properties.id
+           AND o.owner_id = properties.owner_id
+           AND o.status = 'overdue'
+           AND o.type = 'income'
+           AND o.category = 'rent'
+           AND o.deleted_at IS NULL) AS overdue_rent_count
+FROM properties
+WHERE properties.owner_id = $1 AND properties.status IN ('active', 'maintenance')
+ORDER BY properties.updated_at DESC
 `
 
-func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Property, error) {
+type ListActivePropertiesByOwnerRow struct {
+	ID               pgtype.UUID        `json:"id"`
+	OwnerID          pgtype.UUID        `json:"owner_id"`
+	Name             string             `json:"name"`
+	Type             string             `json:"type"`
+	Address          string             `json:"address"`
+	Description      pgtype.Text        `json:"description"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	OverdueRentCount int64              `json:"overdue_rent_count"`
+}
+
+func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error) {
 	rows, err := q.db.Query(ctx, listActivePropertiesByOwner, ownerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Property{}
+	items := []ListActivePropertiesByOwnerRow{}
 	for rows.Next() {
-		var i Property
+		var i ListActivePropertiesByOwnerRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OwnerID,
@@ -231,6 +275,7 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OverdueRentCount,
 		); err != nil {
 			return nil, err
 		}
@@ -243,20 +288,41 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 }
 
 const listArchivedPropertiesByOwner = `-- name: ListArchivedPropertiesByOwner :many
-SELECT id, owner_id, name, type, address, description, status, created_at, updated_at FROM properties
-WHERE owner_id = $1 AND status = 'archived'
-ORDER BY updated_at DESC
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at,
+       (SELECT COUNT(*) FROM operations o
+         WHERE o.property_id = properties.id
+           AND o.owner_id = properties.owner_id
+           AND o.status = 'overdue'
+           AND o.type = 'income'
+           AND o.category = 'rent'
+           AND o.deleted_at IS NULL) AS overdue_rent_count
+FROM properties
+WHERE properties.owner_id = $1 AND properties.status = 'archived'
+ORDER BY properties.updated_at DESC
 `
 
-func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Property, error) {
+type ListArchivedPropertiesByOwnerRow struct {
+	ID               pgtype.UUID        `json:"id"`
+	OwnerID          pgtype.UUID        `json:"owner_id"`
+	Name             string             `json:"name"`
+	Type             string             `json:"type"`
+	Address          string             `json:"address"`
+	Description      pgtype.Text        `json:"description"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	OverdueRentCount int64              `json:"overdue_rent_count"`
+}
+
+func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error) {
 	rows, err := q.db.Query(ctx, listArchivedPropertiesByOwner, ownerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Property{}
+	items := []ListArchivedPropertiesByOwnerRow{}
 	for rows.Next() {
-		var i Property
+		var i ListArchivedPropertiesByOwnerRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OwnerID,
@@ -267,6 +333,7 @@ func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgt
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OverdueRentCount,
 		); err != nil {
 			return nil, err
 		}

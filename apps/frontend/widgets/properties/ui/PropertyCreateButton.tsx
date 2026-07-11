@@ -10,9 +10,25 @@ import styles from './PropertyCreateButton.module.css';
 
 export type PropertyCreateButtonProps = {
     readonly canAdd: boolean;
+    readonly isLoading?: boolean;
 };
 
-export function PropertyCreateButton({canAdd}: PropertyCreateButtonProps): JSX.Element {
+export function PropertyCreateButton({canAdd, isLoading}: PropertyCreateButtonProps): JSX.Element {
+    if (isLoading) {
+        return (
+            <button
+                type="button"
+                disabled
+                className={styles.addButton}
+                aria-label="Добавить объект"
+            >
+                <Icon size="l">
+                    <HomeAdd/>
+                </Icon>
+            </button>
+        );
+    }
+
     if (canAdd) {
         return (
             <NextLink
@@ -35,7 +51,7 @@ export function PropertyCreateButton({canAdd}: PropertyCreateButtonProps): JSX.E
                     className={styles.addButton}
                     aria-label="Сменить тариф"
                 >
-                    <Icon size="m">
+                    <Icon size="l">
                         <HomeAdd/>
                     </Icon>
                 </NextLink>

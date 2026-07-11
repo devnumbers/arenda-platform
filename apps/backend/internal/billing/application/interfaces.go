@@ -27,6 +27,7 @@ type PaymentMethodManager interface {
 	SetActivePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error
 	DeletePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error
 	ListPaymentMethods(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error)
+	SyncPaymentMethods(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error)
 }
 
 // PaymentProcessor lists and acts on subscription payments.

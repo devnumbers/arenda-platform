@@ -9,6 +9,7 @@ import {useCreateLease, usePropertyLeases} from '@/features/leases/api';
 import {isOpenLeaseStatus} from '@/entities/lease/lib/status';
 import {ApiError} from '@/shared/api/errors';
 import {ROUTES} from '@/shared/config/routes';
+import {goBack} from '@/shared/lib/navigation';
 import {Button} from '@/shared/ui/button';
 import {LinkButton} from '@/shared/ui/link-button';
 import {type LeaseCreateStep, useLeaseCreateDraft} from '../lib/use-lease-create-draft';
@@ -64,13 +65,13 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
     const isLeaseBlocked = openLease !== undefined;
 
     const handleCancel = () => {
-        router.push(ROUTES.properties);
+        goBack(router, ROUTES.properties);
     };
 
     const handleBack = () => {
         setSubmitError(undefined);
         if (draft.step === 1) {
-            router.push(ROUTES.properties);
+            goBack(router, ROUTES.properties);
             return;
         }
         setDraft((prev) => ({...prev, step: ((prev.step - 1) as LeaseCreateStep)}));

@@ -119,6 +119,7 @@ var (
 	_ application.PaymentStatusChecker = (*Provider)(nil)
 	_ application.WebhookParser        = (*Provider)(nil)
 	_ application.CardManager          = (*Provider)(nil)
+	_ application.CardLister           = (*Provider)(nil)
 	_ application.WebhookResponder     = (*Provider)(nil)
 )
 
@@ -175,6 +176,15 @@ type removeCardResponse struct {
 	baseResponse
 	CardID      string `json:"CardId"`
 	CustomerKey string `json:"CustomerKey"`
+}
+
+// cardListItem is a single card entry in the T-Kassa GetCardList response.
+type cardListItem struct {
+	CardID   string `json:"CardId"`
+	Pan      string `json:"Pan"`
+	ExpDate  string `json:"ExpDate"`
+	Status   string `json:"Status"`
+	RebillID string `json:"RebillId"`
 }
 
 // NewProvider creates a T-Kassa provider instance.
@@ -564,6 +574,87 @@ func (p *Provider) RemoveCard(ctx context.Context, customerKey, cardID string) (
 		return err
 	}
 	return nil
+}
+
+// GetCardList returns the cards bound to a T-Kassa customer.
+func (p *Provider) GetCardList(ctx context.Context, customerKey string) (cards []application.ProviderCard, err error) {
+	start := time.Now()
+	defer func() {
+		status := metricStatus(err)
+		p.metrics.RecordRequest(ctx, "tkassa", "GetCardList", status, time.Since(start))
+	}()
+
+	ctx, span := tracer.Start(ctx, "tkassa.GetCardList")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("provider", "tkassa"),
+		attribute.String("customer_key", customerKey),
+	)
+
+	log := logger.WithCorrelation(ctx, p.log)
+
+	body := map[string]any{
+		"TerminalKey": p.terminalKey,
+		"CustomerKey": customerKey,
+	}
+
+	log.InfoContext(ctx, "tkassa get card list",
+		"customer_key", customerKey,
+	)
+
+	// GetCardList answers with a bare JSON array of cards on success and with
+	// the usual response envelope on failure, so the base-response check inside
+	// post cannot fire. Decode the raw body and handle both shapes explicitly.
+	var raw json.RawMessage
+	if err := p.post(ctx, "GetCardList", body, &raw); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	if trimmed := bytes.TrimSpace(raw); len(trimmed) == 0 || trimmed[0] != '[' {
+		var base baseResponse
+		if decodeErr := json.Unmarshal(raw, &base); decodeErr != nil {
+			err = fmt.Errorf("tkassa: decode GetCardList response: %w", decodeErr)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+		if !base.Success && base.ErrorCode != "" && base.ErrorCode != "0" {
+			err = &ProviderError{
+				Method:    "GetCardList",
+				ErrorCode: base.ErrorCode,
+				Message:   base.Message,
+				Details:   base.Details,
+			}
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+		// A successful non-array envelope carries no cards.
+		return []application.ProviderCard{}, nil
+	}
+
+	var items []cardListItem
+	if decodeErr := json.Unmarshal(raw, &items); decodeErr != nil {
+		err = fmt.Errorf("tkassa: decode GetCardList response: %w", decodeErr)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	cards = make([]application.ProviderCard, 0, len(items))
+	for _, item := range items {
+		cards = append(cards, application.ProviderCard{
+			CardID:   item.CardID,
+			Pan:      item.Pan,
+			ExpDate:  item.ExpDate,
+			RebillID: item.RebillID,
+			Status:   application.ProviderCardStatus(item.Status),
+		})
+	}
+	return cards, nil
 }
 
 // WebhookResponse returns the fixed success response T-Kassa expects HTTP

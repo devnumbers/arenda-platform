@@ -11,6 +11,7 @@
 - Prod backend использует `APP_ENV=production`.
 - Stage/prod директории на сервере принадлежат `root:root`; деплой выполняется под `root`.
 - Настоящие `.env.stage` и `.env.prod` хранятся только на сервере с правами `600`.
+- Лендинг (`apps/landing`) слушает `127.0.0.1:13002` в prod и `127.0.0.1:23002` в stage; Caddy отдаёт его как fallback для `/`.
 
 ## DNS
 
@@ -78,8 +79,13 @@ rentlee.ru {
 		reverse_proxy 127.0.0.1:18080
 	}
 
-	handle {
+	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png
+	handle @frontend {
 		reverse_proxy 127.0.0.1:13000
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:13002
 	}
 }
 
@@ -106,8 +112,13 @@ dev.rentlee.ru {
 		reverse_proxy 127.0.0.1:28080
 	}
 
-	handle {
+	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png
+	handle @frontend {
 		reverse_proxy 127.0.0.1:23000
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:23002
 	}
 }
 
@@ -123,6 +134,9 @@ admin.dev.rentlee.ru {
 	}
 }
 ```
+
+При добавлении нового top-level роута в Next.js-фронт его нужно добавить в
+`@frontend path` и перечитать Caddy: `sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy`.
 
 Проверка и применение:
 
@@ -147,6 +161,7 @@ docker compose -f docker-compose.stage.yml config
 docker compose -f docker-compose.stage.yml up -d --build --remove-orphans
 curl -fsS http://127.0.0.1:28080/healthz | grep -q '"status":"ok"'
 curl -fsS http://127.0.0.1:23000/login >/dev/null
+test "$(curl -fsS http://127.0.0.1:23002/healthz)" = "ok"
 test "$(curl -fsS http://127.0.0.1:23001/healthz)" = "ok"
 ```
 
@@ -164,18 +179,21 @@ docker compose -f docker-compose.prod.yml config
 docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
 curl -fsS http://127.0.0.1:18080/healthz | grep -q '"status":"ok"'
 curl -fsS http://127.0.0.1:13000/login >/dev/null
+test "$(curl -fsS http://127.0.0.1:13002/healthz)" = "ok"
 test "$(curl -fsS http://127.0.0.1:13001/healthz)" = "ok"
 ```
 
 ## Smoke Checks
 
 ```bash
+curl -fsS https://dev.rentlee.ru/ | grep -q 'id="root"'
 curl -fsS https://dev.rentlee.ru/login | grep -qi '<html'
 curl -fsS https://admin.dev.rentlee.ru/ | grep -q 'id="root"'
 test "$(curl -fsS https://admin.dev.rentlee.ru/healthz)" = "ok"
 curl -fsS https://dev.rentlee.ru/api/healthz | grep -q '"status":"ok"'
 test "$(curl -sS -o /tmp/arenda-stage-me.out -w '%{http_code}' https://dev.rentlee.ru/api/me)" = "401"
 
+curl -fsS https://rentlee.ru/ | grep -q 'id="root"'
 curl -fsS https://rentlee.ru/login | grep -qi '<html'
 curl -fsS https://admin.rentlee.ru/ | grep -q 'id="root"'
 test "$(curl -fsS https://admin.rentlee.ru/healthz)" = "ok"
@@ -196,7 +214,8 @@ esac
   ротацию Docker JSON-логов: `max-size=10m`, `max-file=5`.
 - Все runtime images имеют Dockerfile `HEALTHCHECK`; compose healthchecks
   остаются как orchestration checks для `depends_on`.
-- Base images закреплены по digest. При обновлении базового образа сначала
+- Runtime base images закреплены по digest (build-стадии `node:24-alpine`
+  намеренно по тегу). При обновлении базового образа сначала
   проверить новый digest через `docker buildx imagetools inspect <image>:<tag>`,
   затем обновить Dockerfiles/compose и повторить полный build/test.
 - `git clean -ffdx` в deploy директории удаляет любой drift checkout-а. В этих

@@ -1,11 +1,13 @@
 COMPOSE_LOCAL := docker compose -f docker-compose.local.yml
 BACKEND_DIR := apps/backend
 ADMIN_DIR := apps/admin
+LANDING_DIR := apps/landing
 GOLANGCI_LINT_VERSION := v2.12.2
 
 .PHONY: local-infra-up local-infra-down local-infra-reset backend-run backend-lint check-bruno-coverage check-backend-env check-migrate-env migrate-up migrate-down \
         perf-db-up perf-db-down perf-db-reset perf-backend-run perf-seed perf-sustainable perf-breakdown \
-        admin-install admin-dev admin-build admin-typecheck
+        admin-install admin-dev admin-build admin-typecheck \
+        landing-install landing-dev landing-build
 
 local-infra-up:
 	$(COMPOSE_LOCAL) up -d
@@ -45,6 +47,15 @@ admin-build:
 
 admin-typecheck:
 	cd $(ADMIN_DIR) && npm run typecheck
+
+landing-install:
+	cd $(LANDING_DIR) && npm install
+
+landing-dev:
+	cd $(LANDING_DIR) && npm run dev
+
+landing-build:
+	cd $(LANDING_DIR) && npm run build
 
 check-bruno-coverage:
 	./tools/e2e/check-bruno-coverage.sh

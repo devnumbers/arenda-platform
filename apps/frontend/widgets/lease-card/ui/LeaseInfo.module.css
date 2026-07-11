@@ -1,0 +1,78 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.amount {
+  font-size: var(--font-size-text-l);
+  font-weight: 600;
+  line-height: var(--line-height-text-l);
+  color: var(--color-text);
+}
+
+.muted {
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  color: var(--color-text-muted);
+}
+
+.tenant {
+  font-size: var(--font-size-text-m);
+  font-weight: 500;
+  line-height: var(--line-height-text-m);
+  color: var(--color-text-muted);
+}
+
+.progress {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  height: 6px;
+}
+
+.track {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--color-white);
+}
+
+.fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 16px;
+  background: var(--color-primary);
+}
+
+.marker {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  transform: translateY(-50%);
+}
+
+.fillDanger,
+.markerDanger {
+  background: var(--color-error);
+}
+
+.fillSuccess,
+.markerSuccess {
+  background: var(--color-success);
+}

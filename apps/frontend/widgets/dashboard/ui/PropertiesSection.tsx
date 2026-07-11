@@ -59,7 +59,7 @@ export function PropertiesSection({
                         key={property.id}
                         href={`/properties/${property.id}`}
                         title={property.name}
-                        placeholderIcon={
+                        icon={
                             <Icon size="l">
                                 <Home/>
                             </Icon>

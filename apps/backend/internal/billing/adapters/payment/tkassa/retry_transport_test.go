@@ -511,7 +511,10 @@ func TestRetryTransportBackoffRespectsContextCancel(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := tr.RoundTrip(req)
+		resp, err := tr.RoundTrip(req)
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
 		done <- err
 	}()
 

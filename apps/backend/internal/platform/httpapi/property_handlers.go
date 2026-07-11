@@ -14,6 +14,8 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 )
 
 // PropertyHandlers implements the generated property endpoints.
@@ -21,13 +23,15 @@ type PropertyHandlers struct {
 	svc              *propertiesapp.PropertyService
 	addressSuggester propertiesapp.AddressSuggester
 	opSvc            *leasesapp.OperationService
+	leaseSvc         *leasesapp.LeaseService
 	logger           *slog.Logger
 	presenter        *leasePresenter
+	clock            clock.Clock
 }
 
 // NewPropertyHandlers creates HTTP handlers for the properties API.
-func NewPropertyHandlers(svc *propertiesapp.PropertyService, addressSuggester propertiesapp.AddressSuggester, tenantContactSvc *leasesapp.TenantContactService, opSvc *leasesapp.OperationService, logger *slog.Logger) *PropertyHandlers {
-	return &PropertyHandlers{svc: svc, addressSuggester: addressSuggester, opSvc: opSvc, logger: logger, presenter: newLeasePresenter(tenantContactSvc)}
+func NewPropertyHandlers(svc *propertiesapp.PropertyService, addressSuggester propertiesapp.AddressSuggester, tenantContactSvc *leasesapp.TenantContactService, opSvc *leasesapp.OperationService, leaseSvc *leasesapp.LeaseService, logger *slog.Logger, clk clock.Clock) *PropertyHandlers {
+	return &PropertyHandlers{svc: svc, addressSuggester: addressSuggester, opSvc: opSvc, leaseSvc: leaseSvc, logger: logger, presenter: newLeasePresenter(tenantContactSvc), clock: clk}
 }
 
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
@@ -297,9 +301,17 @@ func (h *PropertyHandlers) ListPropertyLeases(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	asOf := timeutil.Date(h.clock.Now())
+	scheduleIndex, err := h.leaseSvc.LeasePaymentScheduleIndex(r.Context(), ownerID, leases, asOf)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
 	items := make([]openapi.LeaseResponse, 0, len(leases))
 	for _, lease := range leases {
-		resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, contacts)
+		schedule := scheduleIndex[lease.ID]
+		resp, err := h.presenter.leaseResponse(r.Context(), ownerID, lease, contacts, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
 		if err != nil {
 			h.handlePropertyError(w, r, err)
 			return
@@ -417,14 +429,15 @@ func (h *PropertyHandlers) GetAddressSuggestions(w http.ResponseWriter, r *http.
 
 func (h *PropertyHandlers) propertyResponse(ctx context.Context, ownerID uuid.UUID, property domain.Property, activeLease leasesdomain.Lease) (openapi.PropertyResponse, error) {
 	resp := openapi.PropertyResponse{
-		Id:        property.ID,
-		Name:      property.Name,
-		Type:      openapi.PropertyType(property.Type),
-		Address:   property.Address,
-		Status:    openapi.PropertyStatus(property.Status),
-		Occupancy: openapi.PropertyResponseOccupancy(property.Occupancy),
-		CreatedAt: property.CreatedAt,
-		UpdatedAt: property.UpdatedAt,
+		Id:               property.ID,
+		Name:             property.Name,
+		Type:             openapi.PropertyType(property.Type),
+		Address:          property.Address,
+		Status:           openapi.PropertyStatus(property.Status),
+		Occupancy:        openapi.PropertyResponseOccupancy(property.Occupancy),
+		OverdueRentCount: property.OverdueRentCount,
+		CreatedAt:        property.CreatedAt,
+		UpdatedAt:        property.UpdatedAt,
 	}
 	if property.Description != "" {
 		resp.Description = &property.Description
@@ -437,7 +450,7 @@ func (h *PropertyHandlers) propertyResponse(ctx context.Context, ownerID uuid.UU
 		resp.Photos = &photos
 	}
 	if activeLease.ID != uuid.Nil {
-		leaseResp, err := h.presenter.leaseResponse(ctx, ownerID, activeLease, nil)
+		leaseResp, err := h.presenter.leaseResponse(ctx, ownerID, activeLease, nil, nil, nil, false)
 		if err != nil {
 			return openapi.PropertyResponse{}, fmt.Errorf("map active lease: %w", err)
 		}

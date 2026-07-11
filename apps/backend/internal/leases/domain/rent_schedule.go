@@ -65,3 +65,28 @@ func nextPaymentDateYearly(current time.Time, paymentDay int) time.Time {
 func lastDayOfMonth(year int, month time.Month) int {
 	return time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
 }
+
+// CurrentPeriodDueDate returns the planned payment date of the current period:
+// the last paymentDay (clamped to the month's length) on or before asOf. It
+// reports ok=false when the lease has not started yet (startDate is after asOf).
+func CurrentPeriodDueDate(startDate time.Time, paymentDay int, asOf time.Time) (due time.Time, ok bool) {
+	start := date(startDate)
+	asOfDate := date(asOf)
+	if start.After(asOfDate) {
+		return time.Time{}, false
+	}
+
+	year, month, _ := asOfDate.Date()
+	candidate := clampedPaymentDate(year, month, paymentDay)
+	if !candidate.After(asOfDate) {
+		return candidate, true
+	}
+
+	prev := asOfDate.AddDate(0, -1, 0)
+	return clampedPaymentDate(prev.Year(), prev.Month(), paymentDay), true
+}
+
+func clampedPaymentDate(year int, month time.Month, paymentDay int) time.Time {
+	day := min(paymentDay, lastDayOfMonth(year, month))
+	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+}
