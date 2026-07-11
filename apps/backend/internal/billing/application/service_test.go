@@ -2344,6 +2344,98 @@ func TestBilling_HandleWebhook_DuplicateRenewalWebhookIsIdempotent(t *testing.T)
 	}
 }
 
+func TestBilling_HandleWebhook_DuplicateSucceededIsIdempotent(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777778")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888889")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab")
+	tariffID := uuid.MustParse("99999999-9999-9999-9999-99999999999a")
+	providerPaymentID := "stub_webhook_duplicate_succeeded"
+	existingValidUntil := fixedNow.AddDate(0, 0, 15)
+
+	// Active paid subscription on a paid tariff with a PENDING renewal payment
+	// for the SAME tariff, so the success path is ApplyRenewal (extends
+	// valid_until by the payment period and records LastAppliedPaymentID) rather
+	// than ApplyTariffChange.
+	d.addTariff(domain.Tariff{
+		ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         tariffID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &existingValidUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          tariffID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusPending,
+	}
+
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			ProviderPaymentID: providerPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusSucceeded,
+		}, nil
+	}
+
+	// Act 1: first succeeded webhook marks the payment succeeded and applies the
+	// renewal, extending valid_until and recording LastAppliedPaymentID.
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("first HandleWebhook error: %v", err)
+	}
+
+	wantValidUntil := existingValidUntil.AddDate(0, 1, 0)
+	sub := d.subscriptions.subs[userID]
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+		t.Fatalf("after first webhook: expected valid_until extended to %v, got %v", wantValidUntil, sub.ValidUntil)
+	}
+	if sub.LastAppliedPaymentID == nil || *sub.LastAppliedPaymentID != paymentID {
+		t.Fatalf("after first webhook: expected LastAppliedPaymentID = %s, got %v", paymentID, sub.LastAppliedPaymentID)
+	}
+	if got := d.subscriptionPayments.payments[paymentID].Status; got != domain.PaymentStatusSucceeded {
+		t.Fatalf("after first webhook: expected payment succeeded, got %s", got)
+	}
+
+	// Snapshot the post-1st state. For a same-tariff renewal the archiver is not
+	// invoked (applySubscriptionRenewalAndArchive only archives when the tariff
+	// changes), so archiverCalls1 is 0; the meaningful assertion is that the
+	// duplicate webhook does not change it.
+	validUntil1 := *sub.ValidUntil
+	lastApplied1 := *sub.LastAppliedPaymentID
+	archiverCalls1 := len(d.propertyArchiver.calls)
+
+	// Act 2: the SAME succeeded webhook arrives again. The payment is already
+	// succeeded, so HandleWebhook must return nil and leave state untouched.
+	if err := d.service.Webhooks.HandleWebhook(context.Background(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("second HandleWebhook error: %v", err)
+	}
+
+	sub = d.subscriptions.subs[userID]
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(validUntil1) {
+		t.Errorf("duplicate succeeded webhook extended valid_until: expected %v, got %v", validUntil1, sub.ValidUntil)
+	}
+	if sub.LastAppliedPaymentID == nil || *sub.LastAppliedPaymentID != lastApplied1 {
+		t.Errorf("duplicate succeeded webhook changed LastAppliedPaymentID: expected %s, got %v", lastApplied1, sub.LastAppliedPaymentID)
+	}
+	if got := len(d.propertyArchiver.calls); got != archiverCalls1 {
+		t.Errorf("duplicate succeeded webhook invoked archiver again: expected %d calls, got %d", archiverCalls1, got)
+	}
+	if got := d.subscriptionPayments.payments[paymentID].Status; got != domain.PaymentStatusSucceeded {
+		t.Errorf("expected payment to remain succeeded, got %s", got)
+	}
+}
+
 func TestBilling_ChangeTariff_RejectServiceSubscription(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
