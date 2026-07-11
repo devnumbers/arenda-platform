@@ -2436,6 +2436,179 @@ func TestBilling_HandleWebhook_DuplicateSucceededIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestBilling_HandleWebhook_DuplicateRefundedIsIdempotent(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777d")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888d")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaad")
+	basicID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	proID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	providerPaymentID := "stub_webhook_duplicate_refunded"
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
+	})
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+		SucceededAt:       &validUntil,
+	}
+
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			ProviderPaymentID: providerPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusRefunded,
+			AmountKopecks:     5000,
+		}, nil
+	}
+
+	// Act 1: the first refunded webhook marks the payment refunded and downgrades
+	// the subscription to basic.
+	if err := d.service.Webhooks.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("first HandleWebhook error: %v", err)
+	}
+
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusRefunded {
+		t.Fatalf("after first webhook: expected payment refunded, got %s", payment.Status)
+	}
+	if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != 5000 {
+		t.Fatalf("after first webhook: expected refunded amount 5000, got %v", payment.RefundedAmountKopecks)
+	}
+	sub := d.subscriptions.subs[userID]
+	if sub.TariffID != basicID {
+		t.Fatalf("after first webhook: expected subscription downgraded to basic, got tariff %s", sub.TariffID)
+	}
+
+	// Snapshot the post-1st state, including the archiver call count: the
+	// duplicate webhook must not trigger a second downgrade.
+	refundedAmount1 := *payment.RefundedAmountKopecks
+	archiverCalls1 := len(d.propertyArchiver.calls)
+
+	// Act 2: the SAME refunded webhook arrives again. The payment is already
+	// refunded, so HandleWebhook must return nil and leave state untouched.
+	if err := d.service.Webhooks.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("second HandleWebhook error: %v", err)
+	}
+
+	payment = d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusRefunded {
+		t.Errorf("expected payment to remain refunded, got %s", payment.Status)
+	}
+	if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != refundedAmount1 {
+		t.Errorf("duplicate refunded webhook changed refunded amount: expected %d, got %v", refundedAmount1, payment.RefundedAmountKopecks)
+	}
+	sub = d.subscriptions.subs[userID]
+	if sub.TariffID != basicID {
+		t.Errorf("duplicate refunded webhook changed tariff: expected basic, got %s", sub.TariffID)
+	}
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("duplicate refunded webhook changed subscription status: expected active, got %s", sub.Status)
+	}
+	if sub.ValidUntil != nil {
+		t.Errorf("duplicate refunded webhook changed valid_until: expected nil, got %v", sub.ValidUntil)
+	}
+	if sub.AutoRenewEnabled {
+		t.Error("duplicate refunded webhook re-enabled auto_renew")
+	}
+	if got := len(d.propertyArchiver.calls); got != archiverCalls1 {
+		t.Errorf("duplicate refunded webhook invoked archiver again: expected %d calls, got %d", archiverCalls1, got)
+	}
+}
+
+func TestBilling_HandleWebhook_PartialRefundedIsIgnored(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-77777777777e")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-88888888888e")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaae")
+	proID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	providerPaymentID := "stub_webhook_partial_refunded"
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+		SucceededAt:       &validUntil,
+	}
+
+	d.provider.parseWebhook = func(_ []byte) (WebhookPayload, error) {
+		return WebhookPayload{
+			ProviderPaymentID: providerPaymentID,
+			InternalPaymentID: paymentID,
+			Status:            domain.PaymentStatusPartialRefunded,
+			AmountKopecks:     2500,
+		}, nil
+	}
+
+	// Partial refunds are impossible in this product: the external notification
+	// is an anomaly that must be logged and ignored without any state change.
+	if err := d.service.Webhooks.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook error: %v", err)
+	}
+
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("expected payment to remain succeeded, got %s", payment.Status)
+	}
+	if payment.RefundedAmountKopecks != nil {
+		t.Errorf("expected refunded amount to stay nil, got %v", *payment.RefundedAmountKopecks)
+	}
+	sub := d.subscriptions.subs[userID]
+	if sub.TariffID != proID {
+		t.Errorf("expected subscription to stay on pro tariff, got %s", sub.TariffID)
+	}
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected subscription status active, got %s", sub.Status)
+	}
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(validUntil) {
+		t.Errorf("expected valid_until unchanged at %v, got %v", validUntil, sub.ValidUntil)
+	}
+	if !sub.AutoRenewEnabled {
+		t.Error("expected auto_renew to stay enabled")
+	}
+	if got := len(d.propertyArchiver.calls); got != 0 {
+		t.Errorf("expected no archiver calls, got %d", got)
+	}
+}
+
 func TestBilling_ChangeTariff_RejectServiceSubscription(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
@@ -5483,10 +5656,10 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 		})
 	})
 
-	t.Run("partial_refunded recorded as full refund", func(t *testing.T) {
+	t.Run("partial_refunded ignored as anomaly", func(t *testing.T) {
 		runSyncCases(t, []syncCase{
 			{
-				name: "downgrades subscription to basic and records external partial refund as full refund",
+				name: "ignores external partial refund notification without state change",
 				setup: func(d *testDeps) uuid.UUID {
 					userID := uuid.MustParse("11111111-1111-1111-1111-11111111111b")
 					basicID := uuid.MustParse("22222222-2222-2222-2222-22222222222d")
@@ -5526,27 +5699,27 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
 					payment := d.subscriptionPayments.payments[paymentID]
-					// Without a real refund amount from GetState, the synthetic payload
-					// uses the full payment amount, so the payment is recorded as refunded.
-					if payment.Status != domain.PaymentStatusRefunded {
-						t.Errorf("expected payment recorded as refunded, got %s", payment.Status)
+					// Partial refunds are impossible in this product: the external
+					// notification is an anomaly that is logged and ignored.
+					if payment.Status != domain.PaymentStatusPending {
+						t.Errorf("expected payment to stay pending, got %s", payment.Status)
 					}
-					if payment.RefundedAmountKopecks == nil || *payment.RefundedAmountKopecks != 5000 {
-						t.Errorf("expected refunded amount 5000, got %v", payment.RefundedAmountKopecks)
+					if payment.RefundedAmountKopecks != nil {
+						t.Errorf("expected refunded amount to stay nil, got %v", *payment.RefundedAmountKopecks)
 					}
 					sub := d.subscriptions.subs[payment.UserID]
-					basicID := uuid.MustParse("22222222-2222-2222-2222-22222222222d")
-					if sub.TariffID != basicID {
-						t.Errorf("expected subscription downgraded to basic, got %s", sub.TariffID)
+					proID := uuid.MustParse("33333333-3333-3333-3333-33333333333e")
+					if sub.TariffID != proID {
+						t.Errorf("expected subscription to stay on pro tariff, got %s", sub.TariffID)
 					}
 					if sub.Status != domain.SubscriptionStatusActive {
-						t.Errorf("expected subscription active after downgrade, got %s", sub.Status)
+						t.Errorf("expected subscription active, got %s", sub.Status)
 					}
-					if sub.AutoRenewEnabled {
-						t.Error("expected auto-renew disabled after refund downgrade")
+					if !sub.AutoRenewEnabled {
+						t.Error("expected auto-renew to stay enabled")
 					}
-					if len(d.propertyArchiver.calls) != 1 {
-						t.Errorf("expected property archiver called once, got %d", len(d.propertyArchiver.calls))
+					if len(d.propertyArchiver.calls) != 0 {
+						t.Errorf("expected no archiver calls, got %d", len(d.propertyArchiver.calls))
 					}
 				},
 			},

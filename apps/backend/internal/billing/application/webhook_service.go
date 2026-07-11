@@ -193,6 +193,10 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 		return tx.Commit(ctx)
 
 	case domain.PaymentStatusSucceeded, domain.PaymentStatusFailed, domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
+		// Remember whether the payment was already refunded before applying the
+		// webhook: a duplicate refund notification must not re-apply the
+		// subscription downgrade.
+		alreadyRefunded := payment.Status == domain.PaymentStatusRefunded
 		if err := applyPaymentResult(ctx, paymentResultDeps{
 			subscriptionPayments: s.deps.subscriptionPayments,
 			paymentMethods:       s.deps.paymentMethods,
@@ -216,13 +220,19 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 				}
 			}
 
-		case domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
-			if err := applyRefundToSubscription(ctx, refundDeps{
-				subscriptions:    s.deps.subscriptions,
-				tariffs:          s.deps.tariffs,
-				propertyArchiver: s.deps.propertyArchiver,
-			}, tx, payment.SubscriptionID); err != nil {
-				return err
+		case domain.PaymentStatusRefunded:
+			// A partial-refund notification never reaches this branch: it is an
+			// anomaly that applyPaymentResult logs and ignores without any state
+			// change. A duplicate refund notification for an already-refunded
+			// payment leaves the subscription untouched.
+			if !alreadyRefunded {
+				if err := applyRefundToSubscription(ctx, refundDeps{
+					subscriptions:    s.deps.subscriptions,
+					tariffs:          s.deps.tariffs,
+					propertyArchiver: s.deps.propertyArchiver,
+				}, tx, payment.SubscriptionID); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -311,7 +321,9 @@ func (s *WebhookService) reconcileFailedPayment(ctx context.Context, payment dom
 	}
 
 	switch status {
-	case domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
+	case domain.PaymentStatusRefunded:
+		// A partial-refund provider status is an anomaly that applyPaymentResult
+		// logs and ignores, so only a full refund downgrades the subscription.
 		if err := applyRefundToSubscription(ctx, refundDeps{
 			subscriptions:    s.deps.subscriptions,
 			tariffs:          s.deps.tariffs,

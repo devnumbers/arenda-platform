@@ -186,14 +186,22 @@ func applyPaymentResult(
 			return fmt.Errorf("apply failed transition: %w", err)
 		}
 
-	case domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
-		// The system no longer initiates partial refunds. If a provider reports
-		// one anyway (external anomaly), record a full refund and warn.
-		if payload.Status == domain.PaymentStatusPartialRefunded {
-			d.log.WarnContext(ctx, "provider reported partial refund, which the system no longer initiates",
-				slog.String("payment_id", payment.ID.String()),
-				slog.String("provider_payment_id", payload.ProviderPaymentID),
-				slog.Int64("payload_amount_kopecks", payload.AmountKopecks))
+	case domain.PaymentStatusPartialRefunded:
+		// Partial refunds are impossible in this product: all refunds are full
+		// and admin-initiated. An external partial-refund notification is an
+		// anomaly, so it is logged and ignored without any state change.
+		d.log.WarnContext(ctx, "provider reported partial refund, which the system no longer initiates",
+			slog.String("payment_id", payment.ID.String()),
+			slog.String("provider_payment_id", payload.ProviderPaymentID),
+			slog.Int64("payload_amount_kopecks", payload.AmountKopecks))
+		return nil
+
+	case domain.PaymentStatusRefunded:
+		// A duplicate refund notification for an already-refunded payment is an
+		// idempotent no-op, mirroring the duplicate-succeeded guard in
+		// HandleWebhook.
+		if payment.Status == domain.PaymentStatusRefunded {
+			return nil
 		}
 		// Out-of-order webhooks may reconcile an already-failed payment to
 		// refunded after an explicit provider-side status check.

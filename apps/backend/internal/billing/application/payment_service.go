@@ -487,7 +487,9 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 			}
 		}
 
-	case domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
+	case domain.PaymentStatusRefunded:
+		// A partial-refund provider status is an anomaly that applyPaymentResult
+		// logs and ignores, so only a full refund downgrades the subscription.
 		if err := applyRefundToSubscription(ctx, refundDeps{
 			subscriptions:    s.deps.subscriptions,
 			tariffs:          s.deps.tariffs,
