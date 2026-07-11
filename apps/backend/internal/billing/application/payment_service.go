@@ -206,7 +206,10 @@ func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 // reservation race (BeginRefund returns ErrInvalidPaymentStatus) and never
 // reaches the provider. If the provider call fails or returns a non-refund
 // status, the reservation is reverted to the previous status in a separate
-// short transaction so the payment can be refunded again later.
+// short transaction so the payment can be refunded again later. If the provider
+// accepts the refund but has not settled it yet (refunding), the reservation is
+// kept: the ReconcileStaleRefunds watchdog finalizes or reverts it from the
+// provider state.
 func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID) error {
 	// Phase 1 (tx, reserve): load the payment under a row lock, validate that it
 	// can be refunded, and atomically move it to the refunding status. A
@@ -259,7 +262,8 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 	// Phase 2 (outside tx): call the provider. The database connection is not
 	// held during the unbounded external HTTP request. On failure, or on a
 	// non-refund response, the reservation is reverted in a separate short
-	// transaction.
+	// transaction. An in-flight refund (refunding) keeps the reservation for the
+	// reconciliation watchdog.
 	cancelRes, err := s.provider.Cancel(ctx, CancelRequest{
 		PaymentID:         paymentID,
 		ProviderPaymentID: providerPaymentID,
@@ -274,6 +278,18 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 			slog.String("error", sanitize.Error(err)))
 		s.revertRefundBestEffort(ctx, paymentID, prevStatus)
 		return fmt.Errorf("provider cancel: %w", err)
+	}
+
+	if cancelRes.Status == domain.PaymentStatusRefunding {
+		// The provider accepted the refund but has not settled it yet. Leave the
+		// payment in the refunding status: ReconcileStaleRefunds will finalize or
+		// revert it from the provider state. Reverting here would cancel a refund
+		// that is actually in flight.
+		s.deps.log.InfoContext(ctx, "provider cancel accepted, refund in progress",
+			slog.String("payment_id", paymentID.String()),
+			slog.String("subscription_id", subscriptionID.String()),
+			slog.String("user_id", userID.String()))
+		return nil
 	}
 
 	if cancelRes.Status != domain.PaymentStatusRefunded && cancelRes.Status != domain.PaymentStatusPartialRefunded {

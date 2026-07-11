@@ -840,10 +840,18 @@ func isAddCardSuccessful(data map[string]any) bool {
 }
 
 // mapStatus maps T-Kassa payment statuses to the domain status model.
+// REVERSED/PARTIAL_REVERSED here come from GetState/webhook: the provider
+// reports a reversal of the payment (a dispute or chargeback) whose outcome for
+// our subscription payment is unclear, so they are treated as failed. In
+// mapCancelStatus the same statuses answer a Cancel call we made ourselves, so
+// they mean the refund we requested succeeded and map to refunded instead.
 func mapStatus(status string) domain.PaymentStatus {
 	switch status {
 	case statusNew, statusAuthorized, statusAuthorizing, status3DSChecking,
 		status3DSChecked, statusConfirming, statusFormShowed, statusAsyncRefunding:
+		return domain.PaymentStatusPending
+	case statusReversing, statusRefunding:
+		// Transitional statuses, waiting for the final one.
 		return domain.PaymentStatusPending
 	case statusConfirmed:
 		return domain.PaymentStatusSucceeded
@@ -871,6 +879,11 @@ func mapCancelStatus(status string) domain.PaymentStatus {
 	case statusNew, statusAuthorized, statusAuthorizing, status3DSChecking,
 		status3DSChecked, statusConfirming, statusFormShowed, statusAsyncRefunding:
 		return domain.PaymentStatusPending
+	case statusReversing, statusRefunding:
+		// The provider accepted the refund but has not settled it yet: the refund
+		// is in flight, so keep the internal refunding reservation instead of
+		// failing it.
+		return domain.PaymentStatusRefunding
 	default:
 		return domain.PaymentStatusFailed
 	}

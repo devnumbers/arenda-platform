@@ -5426,6 +5426,69 @@ func TestBilling_RefundPayment_CancelFailureRevertsStatus(t *testing.T) {
 	}
 }
 
+func TestBilling_RefundPayment_CancelRefundingKeepsReservation(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777775")
+	paymentID := uuid.MustParse("88888888-8888-8888-8888-888888888885")
+	subscriptionID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5")
+	basicID := uuid.MustParse("00000000-0000-0000-0000-0000000000b5")
+	proID := uuid.MustParse("00000000-0000-0000-0000-0000000000c5")
+	providerPaymentID := "stub_cancel_refunding"
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000,
+	})
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderFake,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+		SucceededAt:       &validUntil,
+	}
+	d.provider.cancelRes = CancelResult{
+		ProviderPaymentID: providerPaymentID,
+		Status:            domain.PaymentStatusRefunding,
+	}
+
+	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
+		t.Fatalf("RefundPayment error: %v", err)
+	}
+
+	// The refund is in flight at the provider: the reservation must stay in
+	// refunding (NOT reverted to succeeded) and the subscription must NOT be
+	// downgraded. The ReconcileStaleRefunds watchdog resolves the payment.
+	if got := d.subscriptionPayments.payments[paymentID].Status; got != domain.PaymentStatusRefunding {
+		t.Errorf("status after in-flight refund = %s, want refunding (kept for the watchdog)", got)
+	}
+	if got := d.subscriptions.subs[userID].TariffID; got != proID {
+		t.Errorf("subscription tariff = %s, want pro %s (must not downgrade)", got, proID)
+	}
+	if len(d.propertyArchiver.calls) != 0 {
+		t.Errorf("downgrade applied %d times, want 0", len(d.propertyArchiver.calls))
+	}
+	if d.provider.cancelCount != 1 {
+		t.Errorf("provider.Cancel called %d times, want 1", d.provider.cancelCount)
+	}
+}
+
 func TestBilling_SyncPendingPayment(t *testing.T) {
 	type syncCase struct {
 		name               string

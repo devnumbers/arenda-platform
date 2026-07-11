@@ -1044,11 +1044,40 @@ func TestMapStatus(t *testing.T) {
 		{"CONFIRMED", domain.PaymentStatusSucceeded},
 		{"REJECTED", domain.PaymentStatusFailed},
 		{"AUTH_FAIL", domain.PaymentStatusFailed},
+		{"REVERSED", domain.PaymentStatusFailed},
+		{"PARTIAL_REVERSED", domain.PaymentStatusFailed},
+		{"REVERSING", domain.PaymentStatusPending},
+		{"REFUNDING", domain.PaymentStatusPending},
+		{"REFUNDED", domain.PaymentStatusRefunded},
+		{"PARTIAL_REFUNDED", domain.PaymentStatusPartialRefunded},
 		{"UNKNOWN", domain.PaymentStatusPending},
 	}
 	for _, tc := range cases {
 		if got := mapStatus(tc.in); got != tc.want {
 			t.Errorf("mapStatus(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestMapCancelStatus(t *testing.T) {
+	cases := []struct {
+		in   string
+		want domain.PaymentStatus
+	}{
+		{"REFUNDED", domain.PaymentStatusRefunded},
+		{"REVERSED", domain.PaymentStatusRefunded},
+		{"PARTIAL_REFUNDED", domain.PaymentStatusPartialRefunded},
+		{"PARTIAL_REVERSED", domain.PaymentStatusPartialRefunded},
+		{"NEW", domain.PaymentStatusPending},
+		{"AUTHORIZED", domain.PaymentStatusPending},
+		{"REVERSING", domain.PaymentStatusRefunding},
+		{"REFUNDING", domain.PaymentStatusRefunding},
+		{"REJECTED", domain.PaymentStatusFailed},
+		{"UNKNOWN", domain.PaymentStatusFailed},
+	}
+	for _, tc := range cases {
+		if got := mapCancelStatus(tc.in); got != tc.want {
+			t.Errorf("mapCancelStatus(%q) = %v, want %v", tc.in, got, tc.want)
 		}
 	}
 }
