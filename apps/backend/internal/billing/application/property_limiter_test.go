@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
@@ -21,6 +22,9 @@ func TestSubscriptionPropertyLimiterActivePropertyLimit(t *testing.T) {
 	unlimitedTariff := domain.Tariff{ID: unlimitedTariffID, Name: domain.TariffBusiness, ActivePropertyLimit: domain.UnlimitedPropertyLimit}
 
 	errBoom := errors.New("tariff repo boom")
+
+	validUntilFuture := time.Now().Add(time.Hour)
+	validUntilPast := time.Now().Add(-time.Hour)
 
 	activeSub := func(tID uuid.UUID) domain.Subscription {
 		return domain.Subscription{UserID: userID, TariffID: tID, Status: domain.SubscriptionStatusActive}
@@ -48,6 +52,30 @@ func TestSubscriptionPropertyLimiterActivePropertyLimit(t *testing.T) {
 			},
 			tariffs:   &fakeTariffRepo{byName: map[domain.TariffName]domain.Tariff{finiteTariff.Name: finiteTariff}},
 			wantLimit: 0,
+		},
+		{
+			name: "cancelled with future valid_until returns limit",
+			subscriptions: map[uuid.UUID]domain.Subscription{
+				userID: {UserID: userID, TariffID: tariffID, Status: domain.SubscriptionStatusCancelled, ValidUntil: &validUntilFuture},
+			},
+			tariffs:   &fakeTariffRepo{byName: map[domain.TariffName]domain.Tariff{finiteTariff.Name: finiteTariff}},
+			wantLimit: 5,
+		},
+		{
+			name: "cancelled with expired valid_until returns zero",
+			subscriptions: map[uuid.UUID]domain.Subscription{
+				userID: {UserID: userID, TariffID: tariffID, Status: domain.SubscriptionStatusCancelled, ValidUntil: &validUntilPast},
+			},
+			tariffs:   &fakeTariffRepo{byName: map[domain.TariffName]domain.Tariff{finiteTariff.Name: finiteTariff}},
+			wantLimit: 0,
+		},
+		{
+			name: "cancelled unlimited with future valid_until returns max int32",
+			subscriptions: map[uuid.UUID]domain.Subscription{
+				userID: {UserID: userID, TariffID: unlimitedTariffID, Status: domain.SubscriptionStatusCancelled, ValidUntil: &validUntilFuture},
+			},
+			tariffs:   &fakeTariffRepo{byName: map[domain.TariffName]domain.Tariff{unlimitedTariff.Name: unlimitedTariff}},
+			wantLimit: math.MaxInt32,
 		},
 		{
 			name: "active with finite limit returns limit",
