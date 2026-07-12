@@ -4522,6 +4522,12 @@ func TestBilling_AddPaymentMethod_TkassaReturnsConfirmURL(t *testing.T) {
 	if d.provider.initAddCardReq.CheckType != "3DSHOLD" {
 		t.Errorf("expected check type 3DSHOLD, got %s", d.provider.initAddCardReq.CheckType)
 	}
+	if want := "http://localhost/api/subscription/payment-methods/add-card/success"; d.provider.initAddCardReq.SuccessURL != want {
+		t.Errorf("expected success url %s, got %s", want, d.provider.initAddCardReq.SuccessURL)
+	}
+	if want := "http://localhost/api/subscription/payment-methods/add-card/fail"; d.provider.initAddCardReq.FailURL != want {
+		t.Errorf("expected fail url %s, got %s", want, d.provider.initAddCardReq.FailURL)
+	}
 }
 
 func TestBilling_SyncPaymentMethods_ImportsCardActivatesAndLinksSubscription(t *testing.T) {

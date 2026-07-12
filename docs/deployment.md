@@ -45,14 +45,18 @@ chmod 600 .env.prod
 `APP_BASE_URL` должен быть `https://rentlee.ru`, а `T_KASSA_BASE_URL` -
 `https://securepay.tinkoff.ru/v2/`.
 
-Для production-терминала T-Bank указать URL уведомлений:
+Для production-терминала T-Bank обязательно указать URL уведомлений — на него
+приходят вебхуки платежей и привязки карт (`AddCard` не поддерживает per-request
+`NotificationURL`):
 
 ```text
 https://rentlee.ru/webhooks/payment/tkassa
 ```
 
-`SuccessURL` и `FailURL` backend передаёт в T-Bank динамически из
-`APP_BASE_URL` для каждого платежа. Если `REGRU_S3_PUBLIC_BASE_URL` указывает
+Redirect-URL (`SuccessURL`/`FailURL` для платежей, `RedirectUrl`/`FailRedirectUrl`
+для `AddCard`) backend передаёт в T-Bank динамически из `APP_BASE_URL` в каждом
+запросе, поэтому настройка return URL в терминале не требуется — её можно задать
+лишь как опциональный backup. Если `REGRU_S3_PUBLIC_BASE_URL` указывает
 на `https://cdn.rentlee.ru`, этот DNS/публичный URL должен быть настроен до
 запуска backend; иначе указать рабочий публичный URL REG.RU S3.
 

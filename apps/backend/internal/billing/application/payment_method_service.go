@@ -62,10 +62,13 @@ func (s *PaymentMethodService) AddPaymentMethod(ctx context.Context, userID uuid
 		return AddPaymentMethodResponse{PaymentMethod: &pm}, nil
 	}
 
+	successURL, failURL := tkassaAddCardReturnURLs(s.deps.callbackBaseURL)
 	result, err := s.provider.InitAddCard(ctx, InitAddCardRequest{
 		UserID:      userID,
 		CustomerKey: userID.String(),
 		CheckType:   "3DSHOLD",
+		SuccessURL:  successURL,
+		FailURL:     failURL,
 	})
 	if err != nil {
 		return AddPaymentMethodResponse{}, sanitize.Wrap(err, "init add card")

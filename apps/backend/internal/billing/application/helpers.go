@@ -67,6 +67,17 @@ func tkassaCallbackURLs(baseURL string, paymentID uuid.UUID) (notification, succ
 	return
 }
 
+// tkassaAddCardReturnURLs builds the return URLs passed per-request to T-Kassa
+// AddCard. The /api prefix is the public path: Caddy strips it on prod and the
+// Next.js rewrite adds it locally, while the backend itself serves the routes
+// without the prefix.
+func tkassaAddCardReturnURLs(baseURL string) (success, fail string) {
+	baseURL = strings.TrimRight(baseURL, "/")
+	success = baseURL + "/api/subscription/payment-methods/add-card/success"
+	fail = baseURL + "/api/subscription/payment-methods/add-card/fail"
+	return
+}
+
 func maskToken(token string) string {
 	if len(token) <= 4 {
 		return "****"

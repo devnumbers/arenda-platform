@@ -509,12 +509,19 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 		checkType = checkType3DSHold
 	}
 
-	// The AddCard schema only supports TerminalKey, CustomerKey, CheckType, IP and
-	// ResidentState. Return URLs are configured in the terminal, not in the request.
+	// The AddCard schema only supports TerminalKey, CustomerKey, CheckType, IP,
+	// ResidentState and the redirect URLs below. RedirectUrl/FailRedirectUrl are
+	// passed per request so the flow does not depend on the terminal's return URL
+	// settings: an unconfigured return URL makes T-Kassa fail the bank-form
+	// redirect with error 9 ("Переадресовываемый url пуст"). AddCard does not
+	// support NotificationURL — add-card webhooks arrive on the terminal-level
+	// notification URL (ADR 0010).
 	cardBody := map[string]any{
-		"TerminalKey": p.terminalKey,
-		"CustomerKey": req.CustomerKey,
-		"CheckType":   checkType,
+		"TerminalKey":     p.terminalKey,
+		"CustomerKey":     req.CustomerKey,
+		"CheckType":       checkType,
+		"RedirectUrl":     req.SuccessURL,
+		"FailRedirectUrl": req.FailURL,
 	}
 
 	log.InfoContext(ctx, "tkassa add card",
