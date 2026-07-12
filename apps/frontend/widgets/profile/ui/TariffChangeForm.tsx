@@ -133,28 +133,32 @@ export function TariffChangeForm(): JSX.Element {
     (tariffName: TariffName) => {
       setSelectedTariff(tariffName);
 
-      const promise = changeTariff.mutateAsync({ tariffName, period });
+      const loadingToastId = notify.loading('Меняем тариф...');
 
-      void notify.promise(promise, {
-        loading: 'Меняем тариф...',
-        success: 'Тариф изменён',
-        error: (error) =>
-          (error as ApiError).detail ?? 'Не удалось сменить тариф',
-      });
-
-      promise
+      changeTariff
+        .mutateAsync({ tariffName, period })
         .then((data) => {
+          notify.close(loadingToastId);
+
           if (data?.confirmUrl) {
+            // Upgrade: платёж только создан (pending) — редирект на оплату
+            // без success-toast; тариф применится по webhook CONFIRMED.
             window.location.href = data.confirmUrl;
             return;
           }
 
-          return router.push(ROUTES.profileTariffChangeSuccess);
+          notify.success('Изменение тарифа запланировано');
+          void router.push(ROUTES.profileTariffChangeSuccess);
+        })
+        .catch((error: unknown) => {
+          notify.close(loadingToastId);
+          notify.error(
+            (error as ApiError).detail ?? 'Не удалось сменить тариф',
+          );
         })
         .finally(() => {
           setSelectedTariff(null);
-        })
-        .catch(() => {}); // error is already reported by notify.promise
+        });
     },
     [changeTariff, period, router],
   );

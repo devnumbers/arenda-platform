@@ -25,7 +25,11 @@ var (
 	// ErrProviderCardNotFound is returned when a provider reports that the card
 	// has already been removed or does not exist.
 	ErrProviderCardNotFound = errors.New("provider card not found")
-	ErrInvalidFilter        = errors.New("invalid filter")
+	// ErrProviderCustomerNotFound is returned when a provider reports that the
+	// customer does not exist yet. For read operations such as card listing it
+	// semantically means the user has no cards, not a failure.
+	ErrProviderCustomerNotFound = errors.New("provider customer not found")
+	ErrInvalidFilter            = errors.New("invalid filter")
 )
 
 type TariffRepository interface {

@@ -66,6 +66,15 @@ export const notify = {
       timeout: options?.duration ?? DEFAULT_DURATIONS.warning,
     }),
 
+  /** Persistent loading toast; dismiss it manually via `notify.close`. */
+  loading: (title: string): string =>
+    toast(title, {
+      isLoading: true,
+      timeout: 0,
+    }),
+
+  close: (key: string): void => toast.close(key),
+
   promise: <T>(
     promise: Promise<T>,
     options: {
