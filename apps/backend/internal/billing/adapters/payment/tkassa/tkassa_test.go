@@ -36,6 +36,16 @@ func newTestProvider(serverURL string) *Provider {
 
 func verifyRequestToken(t *testing.T, r *http.Request, password string) map[string]any {
 	t.Helper()
+	return verifyRequestTokenExcluding(t, r, password)
+}
+
+// verifyRequestTokenExcluding models the T-Kassa server token check: the token
+// is recomputed over the request body without the excluded keys. The server
+// ignores fields outside the method schema — e.g. RedirectUrl/FailRedirectUrl
+// for AddCard (prod incident, error 204) — so a server-faithful check must
+// exclude them instead of mirroring the client's sign over the whole body.
+func verifyRequestTokenExcluding(t *testing.T, r *http.Request, password string, exclude ...string) map[string]any {
+	t.Helper()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		t.Fatalf("read request body: %v", err)
@@ -49,7 +59,11 @@ func verifyRequestToken(t *testing.T, r *http.Request, password string) map[stri
 	if !ok {
 		t.Fatalf("request missing Token field")
 	}
-	expected := sign(data, password)
+	signData := maps.Clone(data)
+	for _, k := range exclude {
+		delete(signData, k)
+	}
+	expected := sign(signData, password)
 	if token != expected {
 		t.Fatalf("token mismatch: got %q, want %q", token, expected)
 	}
@@ -546,7 +560,10 @@ func TestProviderInitAddCard(t *testing.T) {
 				CustomerKey:  "customer-1",
 			})
 		case "/v2/AddCard":
-			data := verifyRequestToken(t, r, testPassword)
+			// The T-Kassa server verifies the AddCard token over the schema
+			// fields only; RedirectUrl/FailRedirectUrl are outside the schema
+			// and excluded from the check.
+			data := verifyRequestTokenExcluding(t, r, testPassword, "RedirectUrl", "FailRedirectUrl")
 			if got, want := data["CheckType"], "3DSHOLD"; got != want {
 				t.Fatalf("CheckType: got %v, want %v", got, want)
 			}

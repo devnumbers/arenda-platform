@@ -509,27 +509,34 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 		checkType = checkType3DSHold
 	}
 
-	// The AddCard schema only supports TerminalKey, CustomerKey, CheckType, IP,
-	// ResidentState and the redirect URLs below. RedirectUrl/FailRedirectUrl are
-	// passed per request so the flow does not depend on the terminal's return URL
-	// settings: an unconfigured return URL makes T-Kassa fail the bank-form
-	// redirect with error 9 ("Переадресовываемый url пуст"). AddCard does not
-	// support NotificationURL — add-card webhooks arrive on the terminal-level
+	// The official AddCard schema (developer.tbank.ru/eacq/api/add-card) only
+	// contains TerminalKey, CustomerKey, Token, CheckType, IP and
+	// ResidentState. RedirectUrl/FailRedirectUrl are outside the schema: the
+	// T-Kassa server excludes them from token verification while sign() hashes
+	// the whole body, so including them in the signature produced error 204
+	// ("Неверный токен") in prod. The token is therefore computed over the
+	// schema fields only; the redirect URLs are appended to the request body
+	// afterwards so the bank-form redirect does not depend on the terminal's
+	// return URL settings (an unconfigured return URL fails the redirect with
+	// error 9, "Переадресовываемый url пуст"). AddCard does not support
+	// NotificationURL — add-card webhooks arrive on the terminal-level
 	// notification URL (ADR 0010).
 	cardBody := map[string]any{
-		"TerminalKey":     p.terminalKey,
-		"CustomerKey":     req.CustomerKey,
-		"CheckType":       checkType,
-		"RedirectUrl":     req.SuccessURL,
-		"FailRedirectUrl": req.FailURL,
+		"TerminalKey": p.terminalKey,
+		"CustomerKey": req.CustomerKey,
+		"CheckType":   checkType,
 	}
+	token := sign(cardBody, p.password)
+	cardBody["RedirectUrl"] = req.SuccessURL
+	cardBody["FailRedirectUrl"] = req.FailURL
+	cardBody["Token"] = token
 
 	log.InfoContext(ctx, "tkassa add card",
 		"customer_key", req.CustomerKey,
 	)
 
 	var cardResp addCardResponse
-	if err := p.post(ctx, "AddCard", cardBody, &cardResp); err != nil {
+	if err := p.send(ctx, "AddCard", cardBody, &cardResp); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return application.InitAddCardResult{}, err
@@ -750,11 +757,16 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 	}, nil
 }
 
-// post sends a signed JSON POST request to a T-Kassa method and decodes the response.
+// post signs body and sends it as a JSON POST request to a T-Kassa method.
 func (p *Provider) post(ctx context.Context, method string, body map[string]any, out any) error {
 	reqBody := cloneBody(body)
 	reqBody["Token"] = sign(body, p.password)
+	return p.send(ctx, method, reqBody, out)
+}
 
+// send posts a prepared request body (Token already set) to a T-Kassa method
+// and decodes the response.
+func (p *Provider) send(ctx context.Context, method string, reqBody map[string]any, out any) error {
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(reqBody); err != nil {
 		return fmt.Errorf("tkassa: encode %s request: %w", method, err)
