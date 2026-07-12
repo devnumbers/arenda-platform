@@ -550,11 +550,11 @@ func TestProviderInitAddCard(t *testing.T) {
 			if got, want := data["CheckType"], "3DSHOLD"; got != want {
 				t.Fatalf("CheckType: got %v, want %v", got, want)
 			}
-			if _, ok := data["SuccessURL"]; ok {
-				t.Fatalf("AddCard must not contain SuccessURL")
+			if got, want := data["RedirectUrl"], "https://app.example/api/subscription/payment-methods/add-card/success"; got != want {
+				t.Fatalf("RedirectUrl: got %v, want %v", got, want)
 			}
-			if _, ok := data["FailURL"]; ok {
-				t.Fatalf("AddCard must not contain FailURL")
+			if got, want := data["FailRedirectUrl"], "https://app.example/api/subscription/payment-methods/add-card/fail"; got != want {
+				t.Fatalf("FailRedirectUrl: got %v, want %v", got, want)
 			}
 			if _, ok := data["NotificationURL"]; ok {
 				t.Fatalf("AddCard must not contain NotificationURL")
@@ -574,6 +574,8 @@ func TestProviderInitAddCard(t *testing.T) {
 	result, err := p.InitAddCard(context.Background(), application.InitAddCardRequest{
 		UserID:      uuid.New(),
 		CustomerKey: "customer-1",
+		SuccessURL:  "https://app.example/api/subscription/payment-methods/add-card/success",
+		FailURL:     "https://app.example/api/subscription/payment-methods/add-card/fail",
 	})
 	if err != nil {
 		t.Fatalf("InitAddCard failed: %v", err)

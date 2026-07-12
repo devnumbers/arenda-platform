@@ -48,11 +48,12 @@ type subscriptionServiceDeps struct {
 
 // paymentMethodServiceDeps is the narrow dependency bundle for PaymentMethodService.
 type paymentMethodServiceDeps struct {
-	paymentMethods PaymentMethodRepository
-	subscriptions  SubscriptionRepository
-	beginner       transaction.Beginner
-	clock          clock.Clock
-	log            *slog.Logger
+	paymentMethods  PaymentMethodRepository
+	subscriptions   SubscriptionRepository
+	beginner        transaction.Beginner
+	clock           clock.Clock
+	log             *slog.Logger
+	callbackBaseURL string
 }
 
 // paymentServiceDeps is the narrow dependency bundle for PaymentService.
@@ -133,11 +134,12 @@ func NewServices(
 			callbackBaseURL:      callbackBaseURL,
 		}, provider),
 		PaymentMethods: NewPaymentMethodService(paymentMethodServiceDeps{
-			paymentMethods: paymentMethods,
-			subscriptions:  subscriptions,
-			beginner:       beginner,
-			clock:          clk,
-			log:            log,
+			paymentMethods:  paymentMethods,
+			subscriptions:   subscriptions,
+			beginner:        beginner,
+			clock:           clk,
+			log:             log,
+			callbackBaseURL: callbackBaseURL,
 		}, paymentMethodInUseChecker, provider),
 		Payments: NewPaymentService(paymentServiceDeps{
 			subscriptionPayments: subscriptionPayments,

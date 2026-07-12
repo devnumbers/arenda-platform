@@ -305,6 +305,8 @@ type InitAddCardRequest struct {
 	UserID      uuid.UUID
 	CustomerKey string
 	CheckType   string
+	SuccessURL  string
+	FailURL     string
 }
 
 // InitAddCardResult carries the T-Kassa response for AddCard initialization.
