@@ -628,6 +628,15 @@ func (p *Provider) GetCardList(ctx context.Context, customerKey string) (cards [
 				Message:   base.Message,
 				Details:   base.Details,
 			}
+			if isCustomerNotFoundError(err) {
+				log.InfoContext(ctx, "tkassa customer not found, treating as empty card list",
+					"customer_key", customerKey,
+				)
+				// Keep the *ProviderError in the chain so errors.As on it still
+				// works for callers and metricStatus.
+				err = fmt.Errorf("%w: %w", application.ErrProviderCustomerNotFound, err)
+				return nil, err
+			}
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
@@ -1015,6 +1024,21 @@ func isCardNotFoundError(err error) bool {
 		return true
 	}
 	return false
+}
+
+// isCustomerNotFoundError reports whether the provider error means the customer
+// does not exist at T-Kassa. Customers are created lazily (by Init with a
+// CustomerKey, AddCustomer, or AddCard), so GetCardList for a user who never
+// paid or bound a card returns ErrorCode 7 ("customer not found"). For
+// GetCardList that means the user has no cards, not a failure. Note that code 7
+// carries a different meaning for AddCustomer ("customer already exists"), so
+// this helper is only valid in the GetCardList flow.
+func isCustomerNotFoundError(err error) bool {
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		return false
+	}
+	return providerErr.ErrorCode == "7"
 }
 
 func truncateDescription(s string, maxLen int) string {

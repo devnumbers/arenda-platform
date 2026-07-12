@@ -203,10 +203,15 @@ func (s *PaymentMethodService) ListPaymentMethods(ctx context.Context, userID uu
 // upsert is keyed by token hash, so repeated syncs and webhook deliveries
 // converge on the same row. When the user has no active method after the
 // import, the freshest imported card is activated and linked to the
-// subscription, mirroring the AddCard webhook flow. The method is idempotent.
+// subscription, mirroring the AddCard webhook flow. A customer that does not
+// exist at the provider yet (never paid or bound a card) is treated as "no
+// cards": the sync returns the local list unchanged. The method is idempotent.
 func (s *PaymentMethodService) SyncPaymentMethods(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error) {
 	cards, err := s.provider.GetCardList(ctx, userID.String())
 	if err != nil {
+		if errors.Is(err, ErrProviderCustomerNotFound) {
+			return s.ListPaymentMethods(ctx, userID)
+		}
 		return nil, sanitize.Wrap(err, "get card list")
 	}
 
