@@ -55,8 +55,10 @@ https://rentlee.ru/webhooks/payment/tkassa
 
 Redirect-URL (`SuccessURL`/`FailURL` для платежей, `RedirectUrl`/`FailRedirectUrl`
 для `AddCard`) backend передаёт в T-Bank динамически из `APP_BASE_URL` в каждом
-запросе, поэтому настройка return URL в терминале не требуется — её можно задать
-лишь как опциональный backup. Если `REGRU_S3_PUBLIC_BASE_URL` указывает
+запросе — это основной путь, настройка return URL в терминале не требуется.
+Для `AddCard` redirect-поля находятся вне официальной схемы API и исключены из
+подписи токена (prod-инцидент, error 204). Документированный fallback —
+настройка Success/Fail Add Card URL в параметрах терминала. Если `REGRU_S3_PUBLIC_BASE_URL` указывает
 на `https://cdn.rentlee.ru`, этот DNS/публичный URL должен быть настроен до
 запуска backend; иначе указать рабочий публичный URL REG.RU S3.
 
