@@ -506,7 +506,7 @@ paths:
             type: array
             items:
               $ref: '#/components/schemas/OperationType'
-        - name: category
+        - name: category_id
           in: query
           required: false
           style: form
@@ -514,7 +514,8 @@ paths:
           schema:
             type: array
             items:
-              $ref: '#/components/schemas/OperationCategory'
+              type: string
+              format: uuid
         - name: from
           in: query
           required: false
@@ -615,7 +616,7 @@ paths:
             type: array
             items:
               $ref: '#/components/schemas/OperationStatus'
-        - name: category
+        - name: category_id
           in: query
           required: false
           style: form
@@ -623,7 +624,8 @@ paths:
           schema:
             type: array
             items:
-              $ref: '#/components/schemas/OperationCategory'
+              type: string
+              format: uuid
         - name: property_id
           in: query
           required: false
@@ -823,6 +825,49 @@ paths:
           $ref: '#/components/responses/SubscriptionBlocked'
         '404':
           $ref: '#/components/responses/NotFound'
+  /operation-categories:
+    get:
+      operationId: listOperationCategories
+      tags: [Operations]
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OperationType'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OperationCategory'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: createOperationCategory
+      tags: [Operations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationCategoryCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationCategory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /finance/report:
     get:
       operationId: getFinanceReport
@@ -2793,8 +2838,9 @@ components:
           nullable: true
         type:
           $ref: '#/components/schemas/OperationType'
-        category:
-          $ref: '#/components/schemas/OperationCategory'
+        category_id:
+          type: string
+          format: uuid
         name:
           type: string
         amountKopecks:
@@ -3267,8 +3313,28 @@ components:
       enum: [income, expense]
 
     OperationCategory:
-      type: string
-      enum: [rent, other_income, utilities, repair, tax, other_expense, deposit_return]
+      type: object
+      required: [id, type, name, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/OperationType'
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    OperationCategoryCreateRequest:
+      type: object
+      required: [type, name]
+      properties:
+        type:
+          $ref: '#/components/schemas/OperationType'
+        name:
+          type: string
 
     OperationStatus:
       type: string
@@ -3281,12 +3347,13 @@ components:
 
     OperationCreateRequest:
       type: object
-      required: [type, category, name, amount_kopecks, operation_date]
+      required: [type, category_id, name, amount_kopecks, operation_date]
       properties:
         type:
           $ref: '#/components/schemas/OperationType'
-        category:
-          $ref: '#/components/schemas/OperationCategory'
+        category_id:
+          type: string
+          format: uuid
         name:
           type: string
           maxLength: 50
@@ -3313,8 +3380,9 @@ components:
       properties:
         type:
           $ref: '#/components/schemas/OperationType'
-        category:
-          $ref: '#/components/schemas/OperationCategory'
+        category_id:
+          type: string
+          format: uuid
         name:
           type: string
           maxLength: 50
@@ -3337,7 +3405,7 @@ components:
 
     OperationResponse:
       type: object
-      required: [id, owner_id, property_id, type, category, name, amount_kopecks, operation_date, status, is_exception, created_at, updated_at]
+      required: [id, owner_id, property_id, type, category_id, name, amount_kopecks, operation_date, status, is_exception, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3358,8 +3426,9 @@ components:
           nullable: true
         type:
           $ref: '#/components/schemas/OperationType'
-        category:
-          $ref: '#/components/schemas/OperationCategory'
+        category_id:
+          type: string
+          format: uuid
         name:
           type: string
         amount_kopecks:
@@ -3408,12 +3477,13 @@ components:
 
     RecurringOperationCreateRequest:
       type: object
-      required: [type, category, name, amount_kopecks, start_date]
+      required: [type, category_id, name, amount_kopecks, start_date]
       properties:
         type:
           $ref: '#/components/schemas/OperationType'
-        category:
-          $ref: '#/components/schemas/OperationCategory'
+        category_id:
+          type: string
+          format: uuid
         name:
           type: string
           maxLength: 50
@@ -3447,8 +3517,9 @@ components:
       properties:
         type:
           $ref: '#/components/schemas/OperationType'
-        category:
-          $ref: '#/components/schemas/OperationCategory'
+        category_id:
+          type: string
+          format: uuid
         name:
           type: string
           maxLength: 50
@@ -3482,7 +3553,7 @@ components:
 
     RecurringOperationResponse:
       type: object
-      required: [id, owner_id, property_id, type, category, name, amount_kopecks, start_date, payment_day, periodicity, status, created_at, updated_at]
+      required: [id, owner_id, property_id, type, category_id, name, amount_kopecks, start_date, payment_day, periodicity, status, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3499,8 +3570,9 @@ components:
           nullable: true
         type:
           $ref: '#/components/schemas/OperationType'
-        category:
-          $ref: '#/components/schemas/OperationCategory'
+        category_id:
+          type: string
+          format: uuid
         name:
           type: string
         amount_kopecks:
@@ -3683,12 +3755,13 @@ components:
           type: integer
     FinanceReportCategoryRow:
       type: object
-      required: [type, category, total_kopecks]
+      required: [category_id, category_name, total_kopecks]
       properties:
-        type:
-          $ref: '#/components/schemas/OperationType'
-        category:
-          $ref: '#/components/schemas/OperationCategory'
+        category_id:
+          type: string
+          format: uuid
+        category_name:
+          type: string
         total_kopecks:
           type: integer
     FinanceReportMonthRow:
