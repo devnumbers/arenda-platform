@@ -39,19 +39,19 @@ export function EmailStep({
         }
     };
 
-    const errorMessage = trimmed === '' ? 'Введите email' : 'Введите корректный email';
+    const errorMessage = trimmed === '' ? 'Введите почту' : 'Введите корректную почту';
 
     return (
         <div className={styles.root}>
             <div className={styles.header}>
-                <h1 className={styles.title}>Введите email</h1>
+                <h1 className={styles.title}>Введите почту</h1>
                 <p className={styles.subtitle}>На него придёт код для входа</p>
             </div>
 
             <form className={styles.form} onSubmit={handleSubmit}>
                 <TextField
                     labelPlacement="inside"
-                    label="Email"
+                    label="Почта"
                     type="email"
                     autoComplete="email"
                     placeholder="you@example.com"

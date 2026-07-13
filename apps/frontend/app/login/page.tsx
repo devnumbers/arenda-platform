@@ -3,6 +3,7 @@
 import {type JSX} from "react";
 import {useRouter} from "next/navigation";
 import {notify} from "@/shared/lib/toast";
+import {type ApiError} from "@/shared/api/errors";
 import {AuthForm} from "@/features/auth/ui/auth-form";
 import {useSendCode, useVerifyCode} from "@/features/auth/api/hooks";
 import {normalizePhone, isPhoneValid} from "@/shared/lib/phone";
@@ -19,12 +20,32 @@ export default function LoginPage(): JSX.Element {
     const sendCode = useSendCode();
     const verifyCode = useVerifyCode();
 
+    const handleSendCodeError = (error: ApiError) => {
+        if (error.status === 429 && typeof error.retryAfter === 'number') {
+            recordSendWithRemainingSeconds(error.retryAfter);
+        }
+        notify.error(error);
+    };
+
     const handleSendPhone = (formattedPhone: string) => {
         if (!isPhoneValid(formattedPhone)) {
             return;
         }
 
-        setDraft((prev) => ({...prev, phone: formattedPhone, step: "email"}));
+        sendCode.mutate(
+            {phone: normalizePhone(formattedPhone)},
+            {
+                onSuccess: (data) => {
+                    if (data.sent) {
+                        recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
+                        setDraft((prev) => ({...prev, phone: formattedPhone, email: "", step: "code"}));
+                    } else {
+                        setDraft((prev) => ({...prev, phone: formattedPhone, step: "email"}));
+                    }
+                },
+                onError: handleSendCodeError,
+            },
+        );
     };
 
     const handleSendEmail = () => {
@@ -37,27 +58,28 @@ export default function LoginPage(): JSX.Element {
             {phone: normalizePhone(draft.phone), email: trimmedEmail},
             {
                 onSuccess: (data) => {
+                    if (!data.sent) {
+                        setDraft((prev) => ({...prev, step: "email"}));
+                        return;
+                    }
                     recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
                     setDraft((prev) => ({...prev, step: "code"}));
                 },
-                onError: (error) => {
-                    if (error.status === 429 && typeof error.retryAfter === 'number') {
-                        recordSendWithRemainingSeconds(error.retryAfter);
-                    }
-                    notify.error(error);
-                },
+                onError: handleSendCodeError,
             },
         );
     };
 
     const handleVerifyCode = (code: string) => {
         const trimmedEmail = draft.email.trim();
-        if (code.length !== 6 || !isPhoneValid(draft.phone) || !trimmedEmail) {
+        if (code.length !== 6 || !isPhoneValid(draft.phone)) {
             return;
         }
 
         verifyCode.mutate(
-            {phone: normalizePhone(draft.phone), email: trimmedEmail, code},
+            trimmedEmail
+                ? {phone: normalizePhone(draft.phone), email: trimmedEmail, code}
+                : {phone: normalizePhone(draft.phone), code},
             {
                 onSuccess: () => {
                     router.push("/dashboard");
@@ -84,22 +106,23 @@ export default function LoginPage(): JSX.Element {
 
     const handleResend = () => {
         const trimmedEmail = draft.email.trim();
-        if (!isPhoneValid(draft.phone) || !trimmedEmail) {
+        if (!isPhoneValid(draft.phone)) {
             return;
         }
 
         sendCode.mutate(
-            {phone: normalizePhone(draft.phone), email: trimmedEmail},
+            trimmedEmail
+                ? {phone: normalizePhone(draft.phone), email: trimmedEmail}
+                : {phone: normalizePhone(draft.phone)},
             {
                 onSuccess: (data) => {
+                    if (!data.sent) {
+                        setDraft((prev) => ({...prev, step: "email"}));
+                        return;
+                    }
                     recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
                 },
-                onError: (error) => {
-                    if (error.status === 429 && typeof error.retryAfter === 'number') {
-                        recordSendWithRemainingSeconds(error.retryAfter);
-                    }
-                    notify.error(error);
-                },
+                onError: handleSendCodeError,
             },
         );
     };
@@ -128,6 +151,7 @@ export default function LoginPage(): JSX.Element {
                         onPhoneChange={(phone) => setDraft((prev) => ({...prev, phone}))}
                         email={draft.email}
                         onEmailChange={(email) => setDraft((prev) => ({...prev, email}))}
+                        isSending={sendCode.isPending}
                         isSendingEmail={sendCode.isPending}
                         isVerifying={verifyCode.isPending}
                         isResending={sendCode.isPending}

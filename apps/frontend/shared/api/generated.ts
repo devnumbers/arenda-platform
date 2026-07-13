@@ -1018,15 +1018,17 @@ export interface components {
     schemas: {
         SendCodeRequest: {
             phone: string;
-            email: string;
+            email?: string;
         };
         SendCodeResponse: {
+            /** @description Whether a code was sent (false = email step required) */
+            sent: boolean;
             /** @description Seconds before another code can be requested */
-            retryAfter: number;
+            retryAfter?: number;
         };
         VerifyCodeRequest: {
             phone: string;
-            email: string;
+            email?: string;
             code: string;
         };
         MeResponse: {
@@ -1832,6 +1834,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
             429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };

@@ -79,6 +79,15 @@ func (s *AuthenticationService) SendCode(ctx context.Context, phone domain.Phone
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("get user: %w", err)
 	}
+	if errors.Is(err, ErrNotFound) {
+		// New phone: reject the registration early when the email already
+		// belongs to another account instead of failing later at verify.
+		if _, emailErr := s.users.GetByEmail(ctx, email); emailErr == nil {
+			return ErrEmailAlreadyTaken
+		} else if !errors.Is(emailErr, ErrNotFound) {
+			return fmt.Errorf("get user by email: %w", emailErr)
+		}
+	}
 	if err == nil && user.Email != nil && *user.Email != email {
 		return ErrEmailDoesNotMatch
 	}
@@ -91,9 +100,35 @@ func (s *AuthenticationService) SendCode(ctx context.Context, phone domain.Phone
 	return flow.sendCode(ctx, phone, email, purpose, userID)
 }
 
+// SendCodeByPhone sends a login code to the email stored for the given
+// phone. It returns sent=false when the user does not exist or has no
+// email on file; the caller should then ask the user for an email.
+func (s *AuthenticationService) SendCodeByPhone(ctx context.Context, phone domain.Phone) (bool, error) {
+	user, err := s.users.GetByPhone(ctx, phone)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("get user: %w", err)
+	}
+	if user.Email == nil {
+		return false, nil
+	}
+	if err := s.SendCode(ctx, phone, *user.Email, domain.LoginCodePurposeLogin); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // VerifyCode verifies a login code and creates a session for the user.
-func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Phone, email domain.Email, code string) (domain.RawSession, domain.User, error) {
+// A nil email is resolved from the stored user record for the phone.
+func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Phone, email *domain.Email, code string) (domain.RawSession, domain.User, error) {
 	now := s.clock.Now()
+
+	resolvedEmail, err := s.resolveEmail(ctx, phone, email)
+	if err != nil {
+		return domain.RawSession{}, domain.User{}, err
+	}
 
 	if _, err := checkNotBlocked(ctx, s.attempts, s.clock, phone); err != nil {
 		return domain.RawSession{}, domain.User{}, err
@@ -115,7 +150,7 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 
 	flow := newLoginCodeFlow(s.codes, s.attempts, s.codeSender, s.clock, s.db, s.hasher, s.logger)
 
-	loginCode, err := flow.verifyCode(ctx, tx, phone, email, domain.LoginCodePurposeLogin, code, uuid.Nil)
+	loginCode, err := flow.verifyCode(ctx, tx, phone, resolvedEmail, domain.LoginCodePurposeLogin, code, uuid.Nil)
 	if err != nil {
 		if errors.Is(err, domain.ErrLoginCodeInvalid) || errors.Is(err, domain.ErrTooManyAttempts) {
 			if commitErr := tx.Commit(ctx); commitErr != nil {
@@ -133,7 +168,7 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 		return domain.RawSession{}, domain.User{}, fmt.Errorf("mark code used: %w", err)
 	}
 
-	raw, user, isNewUser, err := s.authenticate(ctx, tx, phone, email, now)
+	raw, user, isNewUser, err := s.authenticate(ctx, tx, phone, resolvedEmail, now)
 	if err != nil {
 		return domain.RawSession{}, domain.User{}, err
 	}
@@ -147,12 +182,28 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 	}
 
 	if isNewUser {
-		if err := s.publisher.PublishUserRegistered(ctx, UserRegistered{UserID: user.ID, Phone: phone, Email: email, At: now}); err != nil {
+		if err := s.publisher.PublishUserRegistered(ctx, UserRegistered{UserID: user.ID, Phone: phone, Email: resolvedEmail, At: now}); err != nil {
 			s.logger.ErrorContext(ctx, "failed to publish user registered event", slog.String("error", sanitize.Error(err)))
 		}
 	}
 
 	return raw, user, nil
+}
+
+// resolveEmail returns the given email or, when it is nil, the email stored
+// for the phone. ErrNotFound maps to 401 in the HTTP handler.
+func (s *AuthenticationService) resolveEmail(ctx context.Context, phone domain.Phone, email *domain.Email) (domain.Email, error) {
+	if email != nil {
+		return *email, nil
+	}
+	user, err := s.users.GetByPhone(ctx, phone)
+	if err != nil {
+		return domain.Email{}, err
+	}
+	if user.Email == nil {
+		return domain.Email{}, ErrNotFound
+	}
+	return *user.Email, nil
 }
 
 func (s *AuthenticationService) authenticate(ctx context.Context, tx transaction.Tx, phone domain.Phone, email domain.Email, now time.Time) (domain.RawSession, domain.User, bool, error) {

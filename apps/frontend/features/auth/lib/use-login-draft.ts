@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import { isPhoneValid } from '@/shared/lib/phone';
 
 export type LoginStep = 'phone' | 'email' | 'code';
 
@@ -85,8 +86,11 @@ function validateDraft(parsed: unknown): LoginDraft {
   if (!isString(record.phone)) return DEFAULT_DRAFT;
   if (!isString(record.email)) return DEFAULT_DRAFT;
 
+  // Steps beyond "phone" require a valid phone; otherwise restart the flow.
+  const step: LoginStep = record.step !== 'phone' && !isPhoneValid(record.phone) ? 'phone' : record.step;
+
   return {
-    step: record.step,
+    step,
     phone: record.phone,
     email: record.email,
   };
