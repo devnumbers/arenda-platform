@@ -81,6 +81,7 @@ export function PropertyOperationsPage(): JSX.Element {
   const filters = useMemo(
     () => ({
       property_id: id,
+      sort: 'operation_date_asc' as const,
       ...dateRange,
       status: statusFilter === 'actual' ? ['pending', 'overdue'] : undefined,
       limit: 50,

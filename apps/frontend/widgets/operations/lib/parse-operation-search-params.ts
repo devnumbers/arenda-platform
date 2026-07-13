@@ -38,7 +38,7 @@ type ResolvedOperationPeriod = {
     readonly isDefaultPeriod: boolean;
 };
 
-export const DEFAULT_OPERATION_SORT: OperationListSort = 'operation_date_desc';
+export const DEFAULT_OPERATION_SORT: OperationListSort = 'operation_date_asc';
 
 function readString(value: string | string[] | undefined): string | undefined {
     return Array.isArray(value) ? value[0] : value;
