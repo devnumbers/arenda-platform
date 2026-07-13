@@ -161,10 +161,7 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 		}
 	}
 	if params.CategoryId != nil {
-		filter.CategoryIDs = make([]uuid.UUID, 0, len(*params.CategoryId))
-		for _, c := range *params.CategoryId {
-			filter.CategoryIDs = append(filter.CategoryIDs, c)
-		}
+		filter.CategoryIDs = append(filter.CategoryIDs, *params.CategoryId...)
 	}
 	if params.From != nil {
 		filter.FromDate = &params.From.Time
@@ -209,10 +206,7 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	if params.CategoryId != nil {
-		filter.CategoryIDs = make([]uuid.UUID, 0, len(*params.CategoryId))
-		for _, c := range *params.CategoryId {
-			filter.CategoryIDs = append(filter.CategoryIDs, c)
-		}
+		filter.CategoryIDs = append(filter.CategoryIDs, *params.CategoryId...)
 	}
 	if params.PropertyId != nil {
 		filter.PropertyID = *params.PropertyId

@@ -178,7 +178,7 @@ func formatOperationAmountAndDate(op OperationInfo) string {
 	rubles := op.AmountKopecks / 100
 	kopecks := op.AmountKopecks % 100
 	amountStr := fmt.Sprintf("%d.%02d", rubles, kopecks)
-	return fmt.Sprintf("%s на %s ₽ от %s", operationCategoryDisplayName(op.Category), amountStr, op.OperationDate.Format("02.01.2006"))
+	return fmt.Sprintf("%s на %s ₽ от %s", operationCategoryDisplayName(op.CategoryName), amountStr, op.OperationDate.Format("02.01.2006"))
 }
 
 func operationCategoryDisplayName(category string) string {

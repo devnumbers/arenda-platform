@@ -197,7 +197,12 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 			return domain.RecurringOperation{}, fmt.Errorf("list operations for scheduling: %w", err)
 		}
 		txScheduler := s.scheduler.WithTx(tx)
-		if err := scheduleRemindersForOperations(ctx, txScheduler, created, persistedOps, now); err != nil {
+		txCategories := s.categories.WithTx(tx)
+		categoryNames, err := buildCategoryNamesMap(ctx, txCategories, ownerID)
+		if err != nil {
+			return domain.RecurringOperation{}, err
+		}
+		if err := scheduleRemindersForOperations(ctx, txScheduler, created, persistedOps, categoryNames, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -472,7 +477,12 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 			return domain.RecurringOperation{}, fmt.Errorf("list operations for scheduling: %w", err)
 		}
 		txScheduler := s.scheduler.WithTx(tx)
-		if err := scheduleRemindersForOperations(ctx, txScheduler, updated, persistedOps, now); err != nil {
+		txCategories := s.categories.WithTx(tx)
+		categoryNames, err := buildCategoryNamesMap(ctx, txCategories, ownerID)
+		if err != nil {
+			return domain.RecurringOperation{}, err
+		}
+		if err := scheduleRemindersForOperations(ctx, txScheduler, updated, persistedOps, categoryNames, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -643,6 +653,11 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 
 	if s.scheduler != nil && (rec.ReminderOffsetDays != nil || created.ReminderOffsetDays != nil) {
 		txScheduler := s.scheduler.WithTx(tx)
+		txCategories := s.categories.WithTx(tx)
+		categoryNames, err := buildCategoryNamesMap(ctx, txCategories, ownerID)
+		if err != nil {
+			return domain.RecurringOperation{}, err
+		}
 		if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, rec.ID); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("cancel recurring reminders: %w", err)
 		}
@@ -651,7 +666,7 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 		if err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("list retained operations for scheduling: %w", err)
 		}
-		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, retainedOps, now); err != nil {
+		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, retainedOps, categoryNames, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders for retained operations: %w", err)
 		}
 
@@ -659,7 +674,7 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 		if err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("list operations for scheduling: %w", err)
 		}
-		if err := scheduleRemindersForOperations(ctx, txScheduler, created, persistedOps, now); err != nil {
+		if err := scheduleRemindersForOperations(ctx, txScheduler, created, persistedOps, categoryNames, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -771,7 +786,12 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 			return domain.RecurringOperation{}, fmt.Errorf("list operations for scheduling: %w", err)
 		}
 		txScheduler := s.scheduler.WithTx(tx)
-		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, persistedOps, now); err != nil {
+		txCategories := s.categories.WithTx(tx)
+		categoryNames, err := buildCategoryNamesMap(ctx, txCategories, ownerID)
+		if err != nil {
+			return domain.RecurringOperation{}, err
+		}
+		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, persistedOps, categoryNames, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -878,6 +898,11 @@ func (s *RecurringOperationService) applyReminderOffsetInTx(
 	}
 
 	txScheduler := s.scheduler.WithTx(tx)
+	txCategories := s.categories.WithTx(tx)
+	categoryNames, err := buildCategoryNamesMap(ctx, txCategories, ownerID)
+	if err != nil {
+		return err
+	}
 	if err := txScheduler.CancelByRecurringOperation(ctx, ownerID, rec.ID); err != nil {
 		return fmt.Errorf("cancel recurring reminders: %w", err)
 	}
@@ -886,7 +911,7 @@ func (s *RecurringOperationService) applyReminderOffsetInTx(
 	}
 
 	rec.ReminderOffsetDays = normalizedOffsetDays
-	if err := scheduleRemindersForOperations(ctx, txScheduler, rec, ops, now); err != nil {
+	if err := scheduleRemindersForOperations(ctx, txScheduler, rec, ops, categoryNames, now); err != nil {
 		return fmt.Errorf("schedule reminders: %w", err)
 	}
 	return nil
@@ -1078,6 +1103,18 @@ func stringOrEmpty(s *string) string {
 	return *s
 }
 
+func buildCategoryNamesMap(ctx context.Context, categories OperationCategoryRepository, ownerID uuid.UUID) (map[uuid.UUID]string, error) {
+	cats, err := categories.ListByOwner(ctx, ownerID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list categories for reminders: %w", err)
+	}
+	categoryNames := make(map[uuid.UUID]string, len(cats))
+	for _, c := range cats {
+		categoryNames[c.ID] = c.Name
+	}
+	return categoryNames, nil
+}
+
 func futureOperations(ops []domain.Operation, now time.Time) []domain.Operation {
 	today := timeutil.Date(now)
 	out := make([]domain.Operation, 0, len(ops))
@@ -1094,6 +1131,7 @@ func scheduleRemindersForOperations(
 	scheduler ReminderScheduler,
 	rec domain.RecurringOperation,
 	ops []domain.Operation,
+	categoryNames map[uuid.UUID]string,
 	now time.Time,
 ) error {
 	if scheduler == nil {
@@ -1132,7 +1170,7 @@ func scheduleRemindersForOperations(
 		LeaseID:    domain.LeaseIDPtr(rec.LeaseID),
 	}
 
-	if err := scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, ToOperationInfoSlice(filtered)); err != nil {
+	if err := scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, ToOperationInfoSlice(filtered, categoryNames)); err != nil {
 		if errors.Is(err, notificationsdomain.ErrInvalidReminderDate) {
 			return newInvalidInputError("reminder date must be today or in the future")
 		}

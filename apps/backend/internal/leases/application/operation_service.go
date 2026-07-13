@@ -184,9 +184,14 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 
 	if s.scheduler != nil && created.ReminderOffsetDays != nil {
 		txScheduler := s.scheduler.WithTx(tx)
+		txCategories := s.categories.WithTx(tx)
+		cat, err := txCategories.GetByIDAndOwner(ctx, created.CategoryID, ownerID)
+		if err != nil {
+			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
+		}
 		reminderDate := created.OperationDate.AddDate(0, 0, -(*created.ReminderOffsetDays))
 		if !reminderDate.Before(timeutil.Date(s.clock.Now())) {
-			if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(created), reminderDate); err != nil {
+			if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(created, cat.Name), reminderDate); err != nil {
 				return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
 			}
 		}
@@ -385,6 +390,10 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	dateChanged := !originalOperationDate.Equal(updated.OperationDate)
 	if s.scheduler != nil && (offsetChanged || dateChanged) {
 		txScheduler := s.scheduler.WithTx(tx)
+		cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, ownerID)
+		if err != nil {
+			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
+		}
 
 		if err := txScheduler.CancelByOperation(ctx, ownerID, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
@@ -396,7 +405,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 		if updated.ReminderOffsetDays != nil {
 			reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
 			if !reminderDate.Before(timeutil.Date(now)) {
-				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated), reminderDate); err != nil {
+				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
 					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
 				}
 			}
@@ -525,6 +534,11 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 
 	if s.scheduler != nil {
 		txScheduler := s.scheduler.WithTx(tx)
+		txCategories := s.categories.WithTx(tx)
+		cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, cmd.OwnerID)
+		if err != nil {
+			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
+		}
 		if err := txScheduler.CancelByOperation(ctx, cmd.OwnerID, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
 		}
@@ -533,13 +547,13 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 		}
 
 		if updated.Status == domain.OperationStatusOverdue {
-			if err := txScheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(updated), now); err != nil {
+			if err := txScheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(updated, cat.Name), now); err != nil {
 				return domain.Operation{}, fmt.Errorf("schedule overdue reminder: %w", err)
 			}
 		} else if updated.ReminderOffsetDays != nil {
 			reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
 			if !reminderDate.Before(timeutil.Date(op.UpdatedAt)) {
-				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated), reminderDate); err != nil {
+				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
 					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
 				}
 			}
@@ -613,7 +627,12 @@ func (s *OperationService) ProcessOverdueOperation(ctx context.Context, ownerID,
 
 	if s.scheduler != nil {
 		txScheduler := s.scheduler.WithTx(tx)
-		if err := txScheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(op), asOf); err != nil {
+		txCategories := s.categories.WithTx(tx)
+		cat, err := txCategories.GetByIDAndOwner(ctx, op.CategoryID, ownerID)
+		if err != nil {
+			return false, fmt.Errorf("get category for reminder: %w", err)
+		}
+		if err := txScheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(op, cat.Name), asOf); err != nil {
 			return false, fmt.Errorf("schedule overdue reminder: %w", err)
 		}
 	}

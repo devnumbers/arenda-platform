@@ -364,7 +364,12 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 					if err != nil {
 						return domain.Lease{}, fmt.Errorf("list operations for scheduling: %w", err)
 					}
-					if err := scheduleRemindersForOperations(ctx, txScheduler, rec, ops, now); err != nil {
+					txCategories := s.categories.WithTx(tx)
+					categoryNames, err := buildCategoryNamesMap(ctx, txCategories, ownerID)
+					if err != nil {
+						return domain.Lease{}, err
+					}
+					if err := scheduleRemindersForOperations(ctx, txScheduler, rec, ops, categoryNames, now); err != nil {
 						return domain.Lease{}, fmt.Errorf("schedule recurring reminders: %w", err)
 					}
 				}

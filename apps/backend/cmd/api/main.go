@@ -275,7 +275,7 @@ func run(fallback *slog.Logger) error {
 	categoryService := leasesapp.NewCategoryService(categoryRepo)
 	reminderRepo := notificationspg.NewReminderRepository(db)
 	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, clock.Real{})
-	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, reminderScheduler, clock.Real{})
+	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, categoryRepo, reminderScheduler, clock.Real{})
 
 	var photoStorage propertiesapp.PhotoStorage
 	if cfg.PhotoStorageS3Enabled {

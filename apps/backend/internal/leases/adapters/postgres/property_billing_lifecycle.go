@@ -20,13 +20,14 @@ import (
 type PropertyBillingLifecycle struct {
 	ops          *OperationRepository
 	recurringOps *RecurringOperationRepository
+	categories   leasesapp.OperationCategoryRepository
 	scheduler    leasesapp.ReminderScheduler
 	clock        clock.Clock
 }
 
 // NewPropertyBillingLifecycle creates a new property billing lifecycle adapter.
-func NewPropertyBillingLifecycle(ops *OperationRepository, recurringOps *RecurringOperationRepository, scheduler leasesapp.ReminderScheduler, clock clock.Clock) *PropertyBillingLifecycle {
-	return &PropertyBillingLifecycle{ops: ops, recurringOps: recurringOps, scheduler: scheduler, clock: clock}
+func NewPropertyBillingLifecycle(ops *OperationRepository, recurringOps *RecurringOperationRepository, categories leasesapp.OperationCategoryRepository, scheduler leasesapp.ReminderScheduler, clock clock.Clock) *PropertyBillingLifecycle {
+	return &PropertyBillingLifecycle{ops: ops, recurringOps: recurringOps, categories: categories, scheduler: scheduler, clock: clock}
 }
 
 // WithTx returns an instance bound to the provided transaction.
@@ -38,6 +39,7 @@ func (l *PropertyBillingLifecycle) WithTx(tx transaction.Tx) propertiesapp.Prope
 	return NewPropertyBillingLifecycle(
 		l.ops.WithTx(tx).(*OperationRepository),
 		l.recurringOps.WithTx(tx).(*RecurringOperationRepository),
+		l.categories.WithTx(tx),
 		txScheduler,
 		l.clock,
 	)
@@ -76,6 +78,15 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.U
 	recs, err := l.recurringOps.ListByProperty(ctx, ownerID, propertyID)
 	if err != nil {
 		return fmt.Errorf("list recurring operations: %w", err)
+	}
+
+	cats, err := l.categories.ListByOwner(ctx, ownerID, nil)
+	if err != nil {
+		return fmt.Errorf("list categories for reminders: %w", err)
+	}
+	categoryNames := make(map[uuid.UUID]string, len(cats))
+	for _, c := range cats {
+		categoryNames[c.ID] = c.Name
 	}
 
 	from := timeutil.Date(asOf)
@@ -150,7 +161,7 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.U
 					LeaseID:    leasesdomain.LeaseIDPtr(rec.LeaseID),
 				}
 				baseReminderDate := futureOps[0].OperationDate.AddDate(0, 0, -(*rec.ReminderOffsetDays))
-				if err := l.scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, leasesapp.ToOperationInfoSlice(futureOps)); err != nil {
+				if err := l.scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, leasesapp.ToOperationInfoSlice(futureOps, categoryNames)); err != nil {
 					return fmt.Errorf("schedule reminders: %w", err)
 				}
 			}

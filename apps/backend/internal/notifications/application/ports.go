@@ -130,7 +130,7 @@ type OperationInfo struct {
 	RecurringOperationID *uuid.UUID
 	OperationDate        time.Time
 	Type                 string
-	Category             string
+	CategoryName         string
 	AmountKopecks        int64
 }
 
