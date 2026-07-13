@@ -271,6 +271,8 @@ func run(fallback *slog.Logger) error {
 	operationRepo := leasespg.NewOperationRepository(db)
 	recurringOpRepo := leasespg.NewRecurringOperationRepository(db)
 	leaseRepo := leasespg.NewLeaseRepository(db)
+	categoryRepo := leasespg.NewOperationCategoryRepository(db)
+	categoryService := leasesapp.NewCategoryService(categoryRepo)
 	reminderRepo := notificationspg.NewReminderRepository(db)
 	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, clock.Real{})
 	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, reminderScheduler, clock.Real{})
@@ -341,6 +343,13 @@ func run(fallback *slog.Logger) error {
 		}
 		return billing.OnUserRegistered(ctx, e.UserID)
 	})
+	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
+		e, ok := event.(identityapp.UserRegistered)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return categoryService.SeedDefaultCategories(ctx, e.UserID)
+	})
 
 	adminRepo := adminpg.NewAdminRepository(db, encryptor, clock.Real{}, occupancyProvider)
 	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billing.Subscriptions, clock.Real{})
@@ -354,18 +363,20 @@ func run(fallback *slog.Logger) error {
 		tenantContactRepo,
 		recurringOpRepo,
 		operationRepo,
+		categoryRepo,
 		reminderScheduler,
 		platformpostgres.NewBeginner(pool, appLogger),
 		clock.Real{},
 		appLogger,
 	)
 	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, appLogger)
-	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, reminderScheduler, platformpostgres.NewBeginner(pool, appLogger), clock.Real{}, appLogger)
+	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, categoryRepo, reminderScheduler, platformpostgres.NewBeginner(pool, appLogger), clock.Real{}, appLogger)
 	reminderService := notificationsapp.NewReminderService(reminderRepo, clock.Real{})
 	recurringOperationService := leasesapp.NewRecurringOperationService(
 		recurringOpRepo,
 		operationRepo,
 		leasePropertyRepo,
+		categoryRepo,
 		reminderScheduler,
 		reminderService,
 		platformpostgres.NewBeginner(pool, appLogger),
@@ -437,6 +448,7 @@ func run(fallback *slog.Logger) error {
 		TenantContacts:           tenantContactService,
 		Operations:               operationService,
 		RecurringOperations:      recurringOperationService,
+		Categories:               categoryService,
 		Reminders:                reminderService,
 		AppBaseURL:               cfg.AppBaseURL,
 		CookieSecure:             cfg.CookieSecure,
