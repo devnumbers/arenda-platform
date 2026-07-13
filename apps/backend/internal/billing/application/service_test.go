@@ -4777,8 +4777,8 @@ func TestBilling_ChangeTariff_TkassaFirstPaymentInitFields(t *testing.T) {
 	if !req.Recurrent {
 		t.Error("expected recurrent true")
 	}
-	if req.OperationInitiatorType != "2" {
-		t.Errorf("expected initiator type 2, got %s", req.OperationInitiatorType)
+	if req.OperationInitiatorType != "1" {
+		t.Errorf("expected initiator type 1, got %s", req.OperationInitiatorType)
 	}
 	if req.NotificationURL == "" || req.SuccessURL == "" || req.FailURL == "" {
 		t.Errorf("expected callback urls set, got notification=%q success=%q fail=%q", req.NotificationURL, req.SuccessURL, req.FailURL)
@@ -4906,8 +4906,8 @@ func TestBilling_ProcessRenewals_TkassaInitChargeFlow(t *testing.T) {
 	if initReq.AmountKopecks != 5000 {
 		t.Errorf("expected amount 5000, got %d", initReq.AmountKopecks)
 	}
-	if !initReq.Recurrent {
-		t.Errorf("expected Recurrent true for renewal, got false")
+	if initReq.Recurrent {
+		t.Errorf("expected Recurrent false for renewal, got true")
 	}
 
 	if d.provider.chargeReq.ProviderPaymentID != "tkassa_renewal_1" {

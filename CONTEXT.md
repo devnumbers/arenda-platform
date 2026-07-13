@@ -107,3 +107,27 @@ This file is a domain glossary. It intentionally avoids implementation details.
 ## Льготный период / Grace Period
 
 Срок после неудачного автосписания, в течение которого подписка остается в статусе `grace` и пользователь может обновить способ оплаты. По истечении льготного периода подписка переходит на базовый тариф, а избыточные объекты автоматически архивируются.
+
+## CC (Card Credentials)
+
+Платёж по введённым карточным данным; родительский платёж CC/COF-связки.
+
+## COF (Credentials on File)
+
+Платёж по сохранённым реквизитам (RebillId).
+
+## CIT (Customer-Initiated Transaction)
+
+Операция, инициированная покупателем.
+
+## MIT (Merchant-Initiated Transaction)
+
+Операция, инициированная мерчантом (например, автопродление подписки).
+
+## RebillId
+
+Идентификатор сохранённых реквизитов в Т-Кассе, выдаётся после родительского платежа с Recurrent=Y.
+
+## OperationInitiatorType
+
+Тип COF-операции в запросе Init (поле DATA): 0/1/2/R/I/D/N, см. ADR 0017 (docs/adr/0017-tkassa-acquiring-contract.md).

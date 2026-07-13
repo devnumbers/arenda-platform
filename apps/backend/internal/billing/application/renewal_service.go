@@ -310,7 +310,10 @@ func (r *RenewalService) finalizeRenewalCharge(
 			Period:                 period,
 			UserID:                 sub.UserID,
 			CustomerKey:            sub.UserID.String(),
-			Recurrent:              true,
+			// Child MIT payment: Recurrent=Y marks only the parent payment and
+			// must be omitted here — combined with a child
+			// OperationInitiatorType it is rejected by T-Kassa (error 1126).
+			Recurrent:              false,
 			OperationInitiatorType: "R",
 			NotificationURL:        notification,
 			SuccessURL:             successURL,

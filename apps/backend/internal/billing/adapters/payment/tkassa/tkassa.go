@@ -39,7 +39,7 @@ const (
 	recurrentYes                  = "Y"
 	payTypeOneStage               = "O"
 	checkType3DSHold              = "3DSHOLD"
-	firstPaymentInitiatorType     = "2" // CIT COF (customer-initiated credential-on-file first payment to obtain RebillId)
+	firstPaymentInitiatorType     = "1" // CIT CC (customer-initiated card credentials payment — the parent payment of a CC/COF chain that obtains the RebillId)
 	renewalInitiatorType          = "R" // MIT COF recurring
 	notificationTypeAddCard       = "NotificationAddCard"
 	notificationTypeAddCardLegacy = "AddCard"
@@ -715,6 +715,14 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 	}
 
 	notificationType := getString(data, "NotificationType")
+	// The official NotificationAddCard payload omits NotificationType and
+	// OrderId: discriminate by RequestKey (present on add-card notifications,
+	// absent on payment notifications) so it does not fall into the payment
+	// branch and fail OrderId parsing with a 500. Normalize the type so
+	// downstream handling is uniform.
+	if notificationType == "" && getString(data, "RequestKey") != "" && getString(data, "OrderId") == "" {
+		notificationType = notificationTypeAddCard
+	}
 	switch notificationType {
 	case notificationTypeAddCard, notificationTypeAddCardLegacy:
 		if !isAddCardSuccessful(data) {
@@ -962,7 +970,7 @@ func getInt64(data map[string]any, key string) (int64, error) {
 }
 
 func isAddCardSuccessful(data map[string]any) bool {
-	if status := getString(data, "Status"); status != "SUCCESS" {
+	if status := getString(data, "Status"); status != "COMPLETED" {
 		return false
 	}
 	success, _ := data["Success"].(bool)

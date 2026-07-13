@@ -272,7 +272,7 @@ func (s *SubscriptionService) changeTariffUpgrade(
 		UserID:                 userID,
 		CustomerKey:            userID.String(),
 		Recurrent:              true,
-		OperationInitiatorType: "2",
+		OperationInitiatorType: "1", // CIT CC: parent payment of the CC/COF chain that obtains the RebillId
 		NotificationURL:        notification,
 		SuccessURL:             successURL,
 		FailURL:                failURL,
@@ -320,7 +320,7 @@ func (s *SubscriptionService) recoverUpgradeProviderReference(ctx context.Contex
 		UserID:                 userID,
 		CustomerKey:            userID.String(),
 		Recurrent:              true,
-		OperationInitiatorType: "2",
+		OperationInitiatorType: "1", // CIT CC: parent payment of the CC/COF chain that obtains the RebillId
 		NotificationURL:        notification,
 		SuccessURL:             successURL,
 		FailURL:                failURL,

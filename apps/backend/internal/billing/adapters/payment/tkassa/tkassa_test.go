@@ -938,7 +938,7 @@ func TestParseWebhookAddCard(t *testing.T) {
 		"CardId":           "card-1",
 		"Pan":              "430000******0777",
 		"ExpDate":          "12/25",
-		"Status":           "SUCCESS",
+		"Status":           "COMPLETED",
 		"Success":          true,
 	}
 	payload["Token"] = sign(payload, testPassword)
@@ -970,7 +970,7 @@ func TestParseWebhookAddCardRejectsNonSuccess(t *testing.T) {
 		"CardId":           "card-1",
 		"Pan":              "430000******0777",
 		"ExpDate":          "12/25",
-		"Status":           "FAILED",
+		"Status":           "REJECTED",
 		"Success":          false,
 	}
 	payload["Token"] = sign(payload, testPassword)
@@ -996,7 +996,7 @@ func TestParseWebhookAddCardLegacyType(t *testing.T) {
 		"CardId":           "card-1",
 		"Pan":              "430000******0777",
 		"ExpDate":          "12/25",
-		"Status":           "SUCCESS",
+		"Status":           "COMPLETED",
 		"Success":          true,
 	}
 	payload["Token"] = sign(payload, testPassword)
@@ -1012,6 +1012,45 @@ func TestParseWebhookAddCardLegacyType(t *testing.T) {
 	}
 	if result.RequestKey != "request-key-1" {
 		t.Fatalf("RequestKey: got %q", result.RequestKey)
+	}
+}
+
+func TestParseWebhookAddCardWithoutNotificationType(t *testing.T) {
+	// The official NotificationAddCard payload omits NotificationType and
+	// OrderId; it must be routed to the add-card branch via RequestKey.
+	payload := map[string]any{
+		"TerminalKey": testTerminalKey,
+		"CustomerKey": "customer-1",
+		"RequestKey":  "request-key-1",
+		"RebillId":    "rebill-1",
+		"CardId":      "card-1",
+		"Pan":         "430000******0777",
+		"ExpDate":     "12/25",
+		"Status":      "COMPLETED",
+		"Success":     true,
+	}
+	payload["Token"] = sign(payload, testPassword)
+	body, _ := json.Marshal(payload)
+
+	p := newTestProvider("")
+	result, err := p.ParseWebhook(context.Background(), body)
+	if err != nil {
+		t.Fatalf("ParseWebhook failed: %v", err)
+	}
+	if result.NotificationType != notificationTypeAddCard {
+		t.Fatalf("NotificationType: got %q, want %q", result.NotificationType, notificationTypeAddCard)
+	}
+	if result.InternalPaymentID != uuid.Nil {
+		t.Fatalf("InternalPaymentID should be zero for AddCard webhook")
+	}
+	if result.RequestKey != "request-key-1" {
+		t.Fatalf("RequestKey: got %q", result.RequestKey)
+	}
+	if result.CustomerKey != "customer-1" {
+		t.Fatalf("CustomerKey: got %q", result.CustomerKey)
+	}
+	if result.RebillID != "rebill-1" {
+		t.Fatalf("RebillID: got %q", result.RebillID)
 	}
 }
 
@@ -1402,7 +1441,7 @@ func TestProviderInitContract(t *testing.T) {
 				FailURL:         "https://example.com/fail",
 				Recurrent:       true,
 			},
-			wantOperationInitiator: firstPaymentInitiatorType,
+			wantOperationInitiator: "1", // CIT CC per the T-Kassa spec
 			wantRecurrent:          true,
 		},
 		{
@@ -1415,7 +1454,7 @@ func TestProviderInitContract(t *testing.T) {
 				Recurrent:              false,
 				OperationInitiatorType: renewalInitiatorType,
 			},
-			wantOperationInitiator: renewalInitiatorType,
+			wantOperationInitiator: "R", // MIT COF Recurring per the T-Kassa spec
 			wantRecurrent:          false,
 		},
 	}
