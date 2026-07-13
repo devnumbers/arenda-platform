@@ -390,17 +390,6 @@ func (r *fakeOperationRepo) ListByPropertyWithStatuses(_ context.Context, _, _ u
 	return nil, nil
 }
 
-func (r *fakeOperationRepo) HasDepositReturnForLease(_ context.Context, leaseID uuid.UUID) (bool, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, op := range r.ops {
-		if op.LeaseID == leaseID && op.Type == domain.OperationTypeExpense && op.CategoryID == testDepositReturnCategoryID && op.DeletedAt == nil {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 func (r *fakeOperationRepo) ListPendingOperationsWithPastDate(_ context.Context, _ uuid.UUID, _ time.Time, _ int) ([]domain.Operation, error) {
 	return nil, nil
 }
@@ -628,7 +617,7 @@ func TestRebuildSchedule_DeletedManualLeaseOperationDoesNotBlockGeneratedRent(t 
 		PropertyID:    propertyID,
 		LeaseID:       leaseID,
 		Type:          domain.OperationTypeIncome,
-		CategoryID:    testOtherIncomeCategoryID,
+		CategoryID:    testCustomIncomeCategoryID,
 		AmountKopecks: 5000,
 		OperationDate: blockedDate,
 		IsException:   true,

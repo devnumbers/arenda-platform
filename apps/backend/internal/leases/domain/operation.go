@@ -39,13 +39,10 @@ type OperationCategory struct {
 type OperationCategoryDefaultCode string
 
 const (
-	OperationCategoryCodeRent          OperationCategoryDefaultCode = "rent"
-	OperationCategoryCodeOtherIncome   OperationCategoryDefaultCode = "other_income"
-	OperationCategoryCodeUtilities     OperationCategoryDefaultCode = "utilities"
-	OperationCategoryCodeRepair        OperationCategoryDefaultCode = "repair"
-	OperationCategoryCodeTax           OperationCategoryDefaultCode = "tax"
-	OperationCategoryCodeOtherExpense  OperationCategoryDefaultCode = "other_expense"
-	OperationCategoryCodeDepositReturn OperationCategoryDefaultCode = "deposit_return"
+	OperationCategoryCodeRent      OperationCategoryDefaultCode = "rent"
+	OperationCategoryCodeUtilities OperationCategoryDefaultCode = "utilities"
+	OperationCategoryCodeRepair    OperationCategoryDefaultCode = "repair"
+	OperationCategoryCodeTax       OperationCategoryDefaultCode = "tax"
 )
 
 type OperationStatus string

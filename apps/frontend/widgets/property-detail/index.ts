@@ -14,7 +14,6 @@ export { PropertyOperationsCard } from './ui/PropertyOperationsCard';
 export { PropertyInfoCard } from './ui/PropertyInfoCard';
 export { PropertyBlockedModal } from './ui/PropertyBlockedModal';
 export { PropertyEndLeaseModal } from './ui/PropertyEndLeaseModal';
-export { PropertyDepositReturnModal } from './ui/PropertyDepositReturnModal';
 export { PropertySuccessBanner } from './ui/PropertySuccessBanner';
 export { PropertyOperationsPage } from './ui/PropertyOperationsPage';
 export { PropertyLeasesPage } from './ui/PropertyLeasesPage';

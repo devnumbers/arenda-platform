@@ -362,7 +362,11 @@ export function OperationEditForm(): JSX.Element {
       )}
 
       {id && !isLoading && !isError && data && (
-        <OperationEditFormContent id={id} operation={data} readonly={readonly} />
+        <OperationEditFormContent
+          id={id}
+          operation={{...data, category: data.category as OperationCategory}}
+          readonly={readonly}
+        />
       )}
     </div>
   );

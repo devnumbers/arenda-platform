@@ -6,7 +6,6 @@ export {
   useCreateLease,
   useUpdateLease,
   useCompleteLease,
-  useReturnDeposit,
   useLeaseReminders,
   useCreateLeaseReminder,
 } from './hooks';

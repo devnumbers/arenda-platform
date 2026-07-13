@@ -11,7 +11,7 @@ import {
     useUnarchiveProperty,
     useUpdateProperty
 } from '@/features/properties/api/hooks';
-import {useCompleteLease, usePropertyLeases, useReturnDeposit,} from '@/features/leases/api/hooks';
+import {useCompleteLease, usePropertyLeases,} from '@/features/leases/api/hooks';
 import {
     type OperationsFilters,
     useOperations,
@@ -32,7 +32,6 @@ import {PropertyInfoCard} from './PropertyInfoCard';
 import {PropertyActionMenu} from './PropertyActionMenu';
 import {PropertyBlockedModal} from './PropertyBlockedModal';
 import {PropertyEndLeaseModal} from './PropertyEndLeaseModal';
-import {PropertyDepositReturnModal} from './PropertyDepositReturnModal';
 import {PropertySuccessBanner} from './PropertySuccessBanner';
 import {PropertyDetailLoading} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
@@ -56,11 +55,9 @@ export function PropertyDetailPage(): JSX.Element {
     const archiveProperty = useArchiveProperty();
     const unarchiveProperty = useUnarchiveProperty();
     const completeLease = useCompleteLease();
-    const returnDeposit = useReturnDeposit();
 
     const [blockedOpen, setBlockedOpen] = useState(false);
     const [endLeaseOpen, setEndLeaseOpen] = useState(false);
-    const [depositOpen, setDepositOpen] = useState(false);
     const [successBannerOpen, setSuccessBannerOpen] = useState(false);
     const [selectedLeaseId, setSelectedLeaseId] = useState<string>('');
 
@@ -72,10 +69,6 @@ export function PropertyDetailPage(): JSX.Element {
         [property, leases],
     );
     const currentLease = useMemo(() => findCurrentLease(leases), [leases]);
-    const selectedLease = useMemo(
-        () => leases.find((lease) => lease.id === selectedLeaseId),
-        [leases, selectedLeaseId],
-    );
     const payableRentFilters = useMemo<OperationsFilters>(
         () => ({
             lease_id: currentLease?.id,
@@ -152,22 +145,6 @@ export function PropertyDetailPage(): JSX.Element {
             onError: showMutationError,
         });
     }, [selectedLeaseId, completeLease]);
-
-    const handleDepositReturn = useCallback(() => {
-        const leaseId = selectedLeaseId || currentLease?.id;
-        if (leaseId) {
-            setSelectedLeaseId(leaseId);
-            setDepositOpen(true);
-        }
-    }, [currentLease?.id, selectedLeaseId]);
-
-    const confirmDepositReturn = useCallback(() => {
-        if (!selectedLeaseId) return;
-        returnDeposit.mutate(selectedLeaseId, {
-            onSuccess: () => setDepositOpen(false),
-            onError: showMutationError,
-        });
-    }, [selectedLeaseId, returnDeposit]);
 
     const handleEdit = useCallback(() => {
         router.push(ROUTES.propertyEdit(id));
@@ -289,21 +266,9 @@ export function PropertyDetailPage(): JSX.Element {
                 onConfirm={confirmEndLease}
             />
 
-            <PropertyDepositReturnModal
-                isOpen={depositOpen}
-                onClose={() => setDepositOpen(false)}
-                onConfirm={confirmDepositReturn}
-                depositAmountKopecks={
-                    selectedLease?.deposit_amount_kopecks ??
-                    currentLease?.deposit_amount_kopecks ??
-                    0
-                }
-            />
-
             {successBannerOpen && (
                 <PropertySuccessBanner
                     onOpenLease={() => router.push(ROUTES.lease(selectedLeaseId))}
-                    onDepositReturn={handleDepositReturn}
                 />
             )}
         </div>

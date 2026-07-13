@@ -19,7 +19,7 @@ func newGuardTestOperation(id, ownerID, propertyID uuid.UUID, status domain.Oper
 		OwnerID:       ownerID,
 		PropertyID:    propertyID,
 		Type:          domain.OperationTypeExpense,
-		CategoryID:    testUtilitiesCategoryID,
+		CategoryID:    testCustomExpenseCategoryID,
 		Status:        status,
 		Name:          "test",
 		AmountKopecks: 1000,
@@ -35,7 +35,7 @@ func TestCreateOperation_ArchivedPropertyGuard(t *testing.T) {
 	cmd := CreateOperationCommand{
 		PropertyID:    propertyID,
 		Type:          "expense",
-		CategoryID:    testUtilitiesCategoryID,
+		CategoryID:    testCustomExpenseCategoryID,
 		Name:          "test",
 		AmountKopecks: 1000,
 		OperationDate: date(2026, 6, 10),

@@ -124,7 +124,6 @@ type Querier interface {
 	GetUserByPhone(ctx context.Context, phone string) (User, error)
 	GetUserByPhoneForUpdate(ctx context.Context, phone string) (User, error)
 	GetVerifiedEmailByUserID(ctx context.Context, id pgtype.UUID) (pgtype.Text, error)
-	HasDepositReturnForLease(ctx context.Context, leaseID pgtype.UUID) (bool, error)
 	HasReminderForLeaseEvent(ctx context.Context, arg HasReminderForLeaseEventParams) (bool, error)
 	HasReminderForOperationEvent(ctx context.Context, arg HasReminderForOperationEventParams) (bool, error)
 	// Atomically increment the renewal charge attempt counter and return the new

@@ -195,8 +195,6 @@ func operationCategoryDisplayName(category string) string {
 		return "Налог"
 	case "other_expense":
 		return "Прочий расход"
-	case "deposit_return":
-		return "Возврат депозита"
 	default:
 		return category
 	}

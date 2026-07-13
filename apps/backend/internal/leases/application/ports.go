@@ -147,7 +147,6 @@ type OperationRepository interface {
 	GetPropertyOperationsSummary(ctx context.Context, ownerID, propertyID uuid.UUID, asOf time.Time) (OperationsSummary, error)
 	ListOverdueRentOperations(ctx context.Context, ownerID uuid.UUID) ([]OverdueRentOperation, error)
 	ListNextRentPayments(ctx context.Context, ownerID uuid.UUID, asOf time.Time) ([]NextRentPayment, error)
-	HasDepositReturnForLease(ctx context.Context, leaseID uuid.UUID) (bool, error)
 	GetFinanceReportTotals(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) (FinanceReportTotals, error)
 	GetFinanceReportByProperty(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]FinanceReportPropertyRow, error)
 	GetFinanceReportByCategory(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]FinanceReportCategoryRow, error)

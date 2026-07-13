@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -100,145 +99,6 @@ func (r *fakeLeaseRepo) ListByProperty(_ context.Context, _, _ uuid.UUID) ([]dom
 
 func (r *fakeLeaseRepo) WithTx(_ transaction.Tx) LeaseRepository { return r }
 
-func TestLeaseService_ReturnDeposit(t *testing.T) {
-	ctx := context.Background()
-	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	leaseID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-
-	lease := domain.Lease{
-		ID:                   leaseID,
-		OwnerID:              ownerID,
-		PropertyID:           propertyID,
-		Status:               domain.LeaseStatusCompleted,
-		StartDate:            time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-		RentAmountKopecks:    10000,
-		DepositAmountKopecks: 20000,
-		PaymentDay:           1,
-	}
-
-	leaseRepo := &fakeLeaseRepo{leases: map[uuid.UUID]domain.Lease{leaseID: lease}}
-	opRepo := &fakeOperationRepo{}
-	svc := NewLeaseService(leaseRepo, nil, nil, nil, opRepo, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
-
-	returnedLease, op, err := svc.ReturnDeposit(ctx, ownerID, leaseID)
-	if err != nil {
-		t.Fatalf("ReturnDeposit failed: %v", err)
-	}
-
-	if returnedLease.Status != domain.LeaseStatusCompleted {
-		t.Errorf("expected lease status completed, got %q", returnedLease.Status)
-	}
-	if op.Type != domain.OperationTypeExpense {
-		t.Errorf("expected expense operation, got %q", op.Type)
-	}
-	if op.CategoryID != testDepositReturnCategoryID {
-		t.Errorf("expected deposit_return category, got %q", op.CategoryID)
-	}
-	if op.Status != domain.OperationStatusPaid {
-		t.Errorf("expected paid status, got %q", op.Status)
-	}
-	if op.AmountKopecks != lease.DepositAmountKopecks {
-		t.Errorf("expected amount %d, got %d", lease.DepositAmountKopecks, op.AmountKopecks)
-	}
-	if op.Comment != "Возврат залога" {
-		t.Errorf("expected comment %q, got %q", "Возврат залога", op.Comment)
-	}
-}
-
-func TestLeaseService_ReturnDeposit_Duplicate(t *testing.T) {
-	ctx := context.Background()
-	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	leaseID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-
-	lease := domain.Lease{
-		ID:                   leaseID,
-		OwnerID:              ownerID,
-		PropertyID:           propertyID,
-		Status:               domain.LeaseStatusCompleted,
-		StartDate:            time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-		RentAmountKopecks:    10000,
-		DepositAmountKopecks: 20000,
-		PaymentDay:           1,
-	}
-
-	leaseRepo := &fakeLeaseRepo{leases: map[uuid.UUID]domain.Lease{leaseID: lease}}
-	opRepo := &fakeOperationRepo{}
-	svc := NewLeaseService(leaseRepo, nil, nil, nil, opRepo, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
-
-	if _, _, err := svc.ReturnDeposit(ctx, ownerID, leaseID); err != nil {
-		t.Fatalf("first ReturnDeposit failed: %v", err)
-	}
-	_, _, err := svc.ReturnDeposit(ctx, ownerID, leaseID)
-	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("expected ErrInvalidInput on duplicate, got %v", err)
-	}
-}
-
-func TestLeaseService_ReturnDeposit_EffectiveStatus(t *testing.T) {
-	ctx := context.Background()
-	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	leaseID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-	endDate := time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC)
-
-	lease := domain.Lease{
-		ID:                   leaseID,
-		OwnerID:              ownerID,
-		PropertyID:           propertyID,
-		Status:               domain.LeaseStatusActive,
-		StartDate:            time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-		EndDate:              &endDate,
-		RentAmountKopecks:    10000,
-		DepositAmountKopecks: 20000,
-		PaymentDay:           1,
-	}
-
-	leaseRepo := &fakeLeaseRepo{leases: map[uuid.UUID]domain.Lease{leaseID: lease}}
-	opRepo := &fakeOperationRepo{}
-	svc := NewLeaseService(leaseRepo, nil, nil, nil, opRepo, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
-
-	_, op, err := svc.ReturnDeposit(ctx, ownerID, leaseID)
-	if err != nil {
-		t.Fatalf("ReturnDeposit failed for past-end open lease: %v", err)
-	}
-	if op.CategoryID != testDepositReturnCategoryID {
-		t.Errorf("expected deposit_return category, got %q", op.CategoryID)
-	}
-}
-
-func TestLeaseService_ReturnDeposit_InvalidStatus(t *testing.T) {
-	ctx := context.Background()
-	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	leaseID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-
-	lease := domain.Lease{
-		ID:                   leaseID,
-		OwnerID:              ownerID,
-		PropertyID:           propertyID,
-		Status:               domain.LeaseStatusActive,
-		StartDate:            time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-		RentAmountKopecks:    10000,
-		DepositAmountKopecks: 20000,
-		PaymentDay:           1,
-	}
-
-	leaseRepo := &fakeLeaseRepo{leases: map[uuid.UUID]domain.Lease{leaseID: lease}}
-	opRepo := &fakeOperationRepo{}
-	svc := NewLeaseService(leaseRepo, nil, nil, nil, opRepo, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
-
-	_, _, err := svc.ReturnDeposit(ctx, ownerID, leaseID)
-	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("expected ErrInvalidInput for active lease, got %v", err)
-	}
-}
-
 func TestOperationService_GetPropertyOperationsSummary(t *testing.T) {
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
@@ -266,7 +126,7 @@ func TestOperationService_GetPropertyOperationsSummary(t *testing.T) {
 		PropertyID:    propertyID,
 		LeaseID:       leaseID,
 		Type:          domain.OperationTypeExpense,
-		CategoryID:    testUtilitiesCategoryID,
+		CategoryID:    testCustomExpenseCategoryID,
 		Status:        domain.OperationStatusPaid,
 		AmountKopecks: 10000,
 		OperationDate: time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),

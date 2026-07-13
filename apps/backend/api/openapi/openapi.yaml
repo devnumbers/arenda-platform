@@ -1213,33 +1213,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
-  /leases/{id}/deposit-return:
-    post:
-      operationId: returnLeaseDeposit
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Deposit returned
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LeaseResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '403':
-          $ref: '#/components/responses/SubscriptionBlocked'
   /leases/{leaseId}/reminders:
     get:
       operationId: listLeaseReminders

@@ -227,7 +227,7 @@ function RecurringOperationEditPageContent({
 
   const [form, setForm] = useState<FormData>({
     type: operation.type,
-    category: operation.category,
+    category: operation.category as OperationCategory,
     name: operation.name,
     amount: formatAmountFromKopecks(operation.amount_kopecks),
     periodicity: operation.periodicity,

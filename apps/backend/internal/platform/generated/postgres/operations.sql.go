@@ -488,24 +488,6 @@ func (q *Queries) GetPropertyOperationsSummary(ctx context.Context, arg GetPrope
 	return i, err
 }
 
-const hasDepositReturnForLease = `-- name: HasDepositReturnForLease :one
-SELECT EXISTS(
-    SELECT 1 FROM operations op
-    JOIN operation_categories cat ON cat.id = op.category_id
-    WHERE op.lease_id = $1
-      AND op.type = 'expense'
-      AND cat.code = 'deposit_return'
-      AND op.deleted_at IS NULL
-) AS has_deposit_return
-`
-
-func (q *Queries) HasDepositReturnForLease(ctx context.Context, leaseID pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, hasDepositReturnForLease, leaseID)
-	var has_deposit_return bool
-	err := row.Scan(&has_deposit_return)
-	return has_deposit_return, err
-}
-
 const listAllPendingOperationsWithPastDate = `-- name: ListAllPendingOperationsWithPastDate :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date, category_id FROM operations
 WHERE status = 'pending'

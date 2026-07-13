@@ -161,41 +161,6 @@ export function useCompleteLease(): UseMutationResult<
   });
 }
 
-export function useReturnDeposit(): UseMutationResult<
-  LeaseResponse,
-  ApiError,
-  string
-> {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id) =>
-      apiClient<LeaseResponse>(`/leases/${id}/deposit-return`, {
-        method: 'POST',
-      }),
-    onSuccess: (lease) => {
-      queryClient.invalidateQueries({ queryKey: leaseKeys.detail(lease.id) });
-      queryClient.invalidateQueries({ queryKey: leaseKeys.all });
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.operations({ lease_id: lease.id }),
-      });
-      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-      queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
-      if (lease.property_id) {
-        queryClient.invalidateQueries({
-          queryKey: leaseKeys.byProperty(lease.property_id),
-        });
-        queryClient.invalidateQueries({
-          queryKey: operationKeys.byProperty(lease.property_id),
-        });
-        queryClient.invalidateQueries({
-          queryKey: operationKeys.summary(lease.property_id),
-        });
-      }
-    },
-  });
-}
-
 export function useLeaseReminders(
   id: string,
 ): UseQueryResult<RemindersResponse, ApiError> {

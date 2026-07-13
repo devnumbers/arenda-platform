@@ -6,8 +6,7 @@ export type OperationCategory =
   | 'utilities'
   | 'repair'
   | 'tax'
-  | 'other_expense'
-  | 'deposit_return';
+  | 'other_expense';
 
 export type OperationStatus = 'pending' | 'overdue' | 'paid' | 'received';
 
@@ -23,5 +22,4 @@ export const expenseCategories: { value: OperationCategory; label: string }[] = 
   { value: 'repair', label: 'Ремонт' },
   { value: 'tax', label: 'Налог' },
   { value: 'other_expense', label: 'Прочее' },
-  { value: 'deposit_return', label: 'Возврат депозита' },
 ];

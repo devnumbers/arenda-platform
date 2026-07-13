@@ -1067,14 +1067,6 @@ func (r *OperationRepository) ListByProperty(ctx context.Context, ownerID, prope
 	return ops, nil
 }
 
-func (r *OperationRepository) HasDepositReturnForLease(ctx context.Context, leaseID uuid.UUID) (bool, error) {
-	found, err := r.q().HasDepositReturnForLease(ctx, pgconv.UUIDToPgtype(leaseID))
-	if err != nil {
-		return false, err
-	}
-	return found, nil
-}
-
 func (r *OperationRepository) GetPropertyOperationsSummary(ctx context.Context, ownerID, propertyID uuid.UUID, asOf time.Time) (application.OperationsSummary, error) {
 	row, err := r.q().GetPropertyOperationsSummary(ctx, postgres.GetPropertyOperationsSummaryParams{
 		OwnerID:    pgconv.UUIDToPgtype(ownerID),
@@ -1558,12 +1550,9 @@ func (r *OperationCategoryRepository) CreateDefaultCategories(ctx context.Contex
 		name          string
 	}{
 		{code: string(domain.OperationCategoryCodeRent), operationType: string(domain.OperationTypeIncome), name: string(domain.OperationCategoryCodeRent)},
-		{code: string(domain.OperationCategoryCodeOtherIncome), operationType: string(domain.OperationTypeIncome), name: string(domain.OperationCategoryCodeOtherIncome)},
 		{code: string(domain.OperationCategoryCodeUtilities), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeUtilities)},
 		{code: string(domain.OperationCategoryCodeRepair), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeRepair)},
 		{code: string(domain.OperationCategoryCodeTax), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeTax)},
-		{code: string(domain.OperationCategoryCodeOtherExpense), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeOtherExpense)},
-		{code: string(domain.OperationCategoryCodeDepositReturn), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeDepositReturn)},
 	}
 	for _, cat := range defaults {
 		err := r.q().CreateOperationCategoryIgnoreConflict(ctx, postgres.CreateOperationCategoryIgnoreConflictParams{

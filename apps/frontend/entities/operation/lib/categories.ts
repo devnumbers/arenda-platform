@@ -15,11 +15,10 @@ const categoryLabelMap: Record<OperationCategory, string> = {
   repair: 'Ремонт',
   tax: 'Налог',
   other_expense: 'Прочее',
-  deposit_return: 'Возврат депозита',
 };
 
-export function getCategoryLabel(category: OperationCategory): string {
-  return categoryLabelMap[category] ?? category;
+export function getCategoryLabel(category: string): string {
+  return categoryLabelMap[category as OperationCategory] ?? category;
 }
 
 export function getCategoriesByType(
