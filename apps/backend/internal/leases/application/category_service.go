@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
@@ -13,6 +12,9 @@ type CategoryService struct {
 }
 
 func NewCategoryService(categories OperationCategoryRepository) *CategoryService {
+	if categories == nil {
+		panic("categories repository is required")
+	}
 	return &CategoryService{categories: categories}
 }
 
@@ -22,7 +24,7 @@ func (s *CategoryService) CreateCategory(ctx context.Context, ownerID uuid.UUID,
 	}
 	opType, err := domain.ParseOperationType(cmd.Type)
 	if err != nil {
-		return domain.OperationCategory{}, err
+		return domain.OperationCategory{}, newInvalidInputError(err.Error())
 	}
 	return s.categories.Create(ctx, ownerID, opType, cmd.Name)
 }
@@ -50,7 +52,7 @@ type CreateOperationCategoryCommand struct {
 
 func (c CreateOperationCategoryCommand) validate() error {
 	if c.Name == "" {
-		return fmt.Errorf("category name is required")
+		return newInvalidInputError("category name is required")
 	}
 	return nil
 }

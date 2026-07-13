@@ -120,7 +120,7 @@ func TestLeaseService_ReturnDeposit(t *testing.T) {
 
 	leaseRepo := &fakeLeaseRepo{leases: map[uuid.UUID]domain.Lease{leaseID: lease}}
 	opRepo := &fakeOperationRepo{}
-	svc := NewLeaseService(leaseRepo, nil, nil, nil, opRepo, nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
+	svc := NewLeaseService(leaseRepo, nil, nil, nil, opRepo, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
 
 	returnedLease, op, err := svc.ReturnDeposit(ctx, ownerID, leaseID)
 	if err != nil {
@@ -133,8 +133,8 @@ func TestLeaseService_ReturnDeposit(t *testing.T) {
 	if op.Type != domain.OperationTypeExpense {
 		t.Errorf("expected expense operation, got %q", op.Type)
 	}
-	if op.Category != domain.OperationCategoryDepositReturn {
-		t.Errorf("expected deposit_return category, got %q", op.Category)
+	if op.CategoryID != testDepositReturnCategoryID {
+		t.Errorf("expected deposit_return category, got %q", op.CategoryID)
 	}
 	if op.Status != domain.OperationStatusPaid {
 		t.Errorf("expected paid status, got %q", op.Status)
@@ -167,7 +167,7 @@ func TestLeaseService_ReturnDeposit_Duplicate(t *testing.T) {
 
 	leaseRepo := &fakeLeaseRepo{leases: map[uuid.UUID]domain.Lease{leaseID: lease}}
 	opRepo := &fakeOperationRepo{}
-	svc := NewLeaseService(leaseRepo, nil, nil, nil, opRepo, nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
+	svc := NewLeaseService(leaseRepo, nil, nil, nil, opRepo, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
 
 	if _, _, err := svc.ReturnDeposit(ctx, ownerID, leaseID); err != nil {
 		t.Fatalf("first ReturnDeposit failed: %v", err)
@@ -200,14 +200,14 @@ func TestLeaseService_ReturnDeposit_EffectiveStatus(t *testing.T) {
 
 	leaseRepo := &fakeLeaseRepo{leases: map[uuid.UUID]domain.Lease{leaseID: lease}}
 	opRepo := &fakeOperationRepo{}
-	svc := NewLeaseService(leaseRepo, nil, nil, nil, opRepo, nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
+	svc := NewLeaseService(leaseRepo, nil, nil, nil, opRepo, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
 
 	_, op, err := svc.ReturnDeposit(ctx, ownerID, leaseID)
 	if err != nil {
 		t.Fatalf("ReturnDeposit failed for past-end open lease: %v", err)
 	}
-	if op.Category != domain.OperationCategoryDepositReturn {
-		t.Errorf("expected deposit_return category, got %q", op.Category)
+	if op.CategoryID != testDepositReturnCategoryID {
+		t.Errorf("expected deposit_return category, got %q", op.CategoryID)
 	}
 }
 
@@ -231,7 +231,7 @@ func TestLeaseService_ReturnDeposit_InvalidStatus(t *testing.T) {
 
 	leaseRepo := &fakeLeaseRepo{leases: map[uuid.UUID]domain.Lease{leaseID: lease}}
 	opRepo := &fakeOperationRepo{}
-	svc := NewLeaseService(leaseRepo, nil, nil, nil, opRepo, nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
+	svc := NewLeaseService(leaseRepo, nil, nil, nil, opRepo, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
 
 	_, _, err := svc.ReturnDeposit(ctx, ownerID, leaseID)
 	if !errors.Is(err, ErrInvalidInput) {
@@ -255,7 +255,7 @@ func TestOperationService_GetPropertyOperationsSummary(t *testing.T) {
 		PropertyID:    propertyID,
 		LeaseID:       leaseID,
 		Type:          domain.OperationTypeIncome,
-		Category:      domain.OperationCategoryRent,
+		CategoryID:    testRentCategoryID,
 		Status:        domain.OperationStatusReceived,
 		AmountKopecks: 50000,
 		OperationDate: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
@@ -266,7 +266,7 @@ func TestOperationService_GetPropertyOperationsSummary(t *testing.T) {
 		PropertyID:    propertyID,
 		LeaseID:       leaseID,
 		Type:          domain.OperationTypeExpense,
-		Category:      domain.OperationCategoryUtilities,
+		CategoryID:    testUtilitiesCategoryID,
 		Status:        domain.OperationStatusPaid,
 		AmountKopecks: 10000,
 		OperationDate: time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
@@ -274,7 +274,7 @@ func TestOperationService_GetPropertyOperationsSummary(t *testing.T) {
 	_, _ = opRepo.Create(ctx, incomeOp)
 	_, _ = opRepo.Create(ctx, expenseOp)
 
-	svc := NewOperationService(opRepo, propertyRepo, nil, nil, nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
+	svc := NewOperationService(opRepo, propertyRepo, nil, nil, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, fakeClock{now: now}, nil)
 
 	summary, err := svc.GetPropertyOperationsSummary(ctx, ownerID, propertyID)
 	if err != nil {

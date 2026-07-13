@@ -18,7 +18,7 @@ import (
 type CreateOperationCommand struct {
 	PropertyID         uuid.UUID
 	Type               string
-	Category           string
+	CategoryID         uuid.UUID
 	Name               string
 	AmountKopecks      int64
 	OperationDate      time.Time
@@ -30,7 +30,7 @@ type CreateOperationCommand struct {
 // UpdateOperationCommand carries the optional updates for an operation.
 type UpdateOperationCommand struct {
 	Type               *string
-	Category           *string
+	CategoryID         *uuid.UUID
 	Name               *string
 	AmountKopecks      *int64
 	OperationDate      *time.Time
@@ -58,6 +58,7 @@ type OperationService struct {
 	properties   PropertyRepository
 	leases       LeaseRepository
 	recurringOps RecurringOperationRepository
+	categories   OperationCategoryRepository
 	scheduler    ReminderScheduler
 	db           txBeginner
 	clock        clock.Clock
@@ -70,6 +71,7 @@ func NewOperationService(
 	properties PropertyRepository,
 	leases LeaseRepository,
 	recurringOps RecurringOperationRepository,
+	categories OperationCategoryRepository,
 	scheduler ReminderScheduler,
 	db txBeginner,
 	clock clock.Clock,
@@ -81,6 +83,9 @@ func NewOperationService(
 	if clock == nil {
 		panic("clock is required")
 	}
+	if categories == nil {
+		panic("categories repository is required")
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -89,6 +94,7 @@ func NewOperationService(
 		properties:   properties,
 		leases:       leases,
 		recurringOps: recurringOps,
+		categories:   categories,
 		scheduler:    scheduler,
 		db:           db,
 		clock:        clock,
@@ -102,8 +108,11 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		return domain.Operation{}, err
 	}
 
-	opType, category, err := parseTypeAndCategory(cmd.Type, cmd.Category)
+	opType, categoryID, err := parseTypeAndCategory(cmd.Type, cmd.CategoryID)
 	if err != nil {
+		return domain.Operation{}, err
+	}
+	if err := validateCategory(ctx, s.categories, ownerID, opType, categoryID); err != nil {
 		return domain.Operation{}, err
 	}
 
@@ -146,7 +155,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		PropertyID:         cmd.PropertyID,
 		LeaseID:            leaseID,
 		Type:               opType,
-		Category:           category,
+		CategoryID:         categoryID,
 		Status:             domain.OperationStatusPending,
 		Name:               name,
 		AmountKopecks:      cmd.AmountKopecks,
@@ -274,6 +283,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txOps := s.operations.WithTx(tx)
+	txCategories := s.categories.WithTx(tx)
 
 	op, err := txOps.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
@@ -290,20 +300,25 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	originalOffset := op.ReminderOffsetDays
 	originalOperationDate := op.OperationDate
 
-	typeStr := string(op.Type)
-	categoryStr := string(op.Category)
+	opType := op.Type
+	categoryID := op.CategoryID
 	if cmd.Type != nil {
-		typeStr = *cmd.Type
+		parsedType, err := domain.ParseOperationType(*cmd.Type)
+		if err != nil {
+			return domain.Operation{}, err
+		}
+		opType = parsedType
 	}
-	if cmd.Category != nil {
-		categoryStr = *cmd.Category
+	if cmd.CategoryID != nil {
+		categoryID = *cmd.CategoryID
 	}
-	opType, category, err := parseTypeAndCategory(typeStr, categoryStr)
-	if err != nil {
-		return domain.Operation{}, err
+	if cmd.Type != nil || cmd.CategoryID != nil {
+		if err := validateCategory(ctx, txCategories, ownerID, opType, categoryID); err != nil {
+			return domain.Operation{}, err
+		}
 	}
 	op.Type = opType
-	op.Category = category
+	op.CategoryID = categoryID
 
 	if cmd.Name != nil {
 		name := strings.TrimSpace(*cmd.Name)

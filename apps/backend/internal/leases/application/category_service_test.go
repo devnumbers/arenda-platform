@@ -2,11 +2,11 @@ package application
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 type fakeCategoryRepo struct {
@@ -34,7 +34,7 @@ func (f *fakeCategoryRepo) GetByIDAndOwner(ctx context.Context, id, ownerID uuid
 			return c, nil
 		}
 	}
-	return domain.OperationCategory{}, fmt.Errorf("not found")
+	return domain.OperationCategory{}, ErrNotFound
 }
 
 func (f *fakeCategoryRepo) GetByOwnerAndCode(ctx context.Context, ownerID uuid.UUID, code domain.OperationCategoryDefaultCode) (domain.OperationCategory, error) {
@@ -43,11 +43,15 @@ func (f *fakeCategoryRepo) GetByOwnerAndCode(ctx context.Context, ownerID uuid.U
 			return c, nil
 		}
 	}
-	return domain.OperationCategory{}, fmt.Errorf("not found")
+	return domain.OperationCategory{}, ErrNotFound
 }
 
 func (f *fakeCategoryRepo) CreateDefaultCategories(ctx context.Context, ownerID uuid.UUID) error {
 	return nil
+}
+
+func (f *fakeCategoryRepo) WithTx(tx transaction.Tx) OperationCategoryRepository {
+	return f
 }
 
 func TestCreateOperationCategoryCommand_Validate(t *testing.T) {

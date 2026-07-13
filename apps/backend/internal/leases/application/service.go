@@ -47,6 +47,7 @@ type LeaseService struct {
 	tenantContacts TenantContactRepository
 	recurringOps   RecurringOperationRepository
 	operations     OperationRepository
+	categories     OperationCategoryRepository
 	scheduler      notificationsapp.ReminderScheduler
 	db             txBeginner
 	clock          clock.Clock
@@ -59,6 +60,7 @@ func NewLeaseService(
 	tenantContacts TenantContactRepository,
 	recurringOps RecurringOperationRepository,
 	operations OperationRepository,
+	categories OperationCategoryRepository,
 	scheduler notificationsapp.ReminderScheduler,
 	db txBeginner,
 	clock clock.Clock,
@@ -70,6 +72,9 @@ func NewLeaseService(
 	if clock == nil {
 		panic("clock is required")
 	}
+	if categories == nil {
+		panic("categories repository is required")
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -79,6 +84,7 @@ func NewLeaseService(
 		tenantContacts: tenantContacts,
 		recurringOps:   recurringOps,
 		operations:     operations,
+		categories:     categories,
 		scheduler:      scheduler,
 		db:             db,
 		clock:          clock,
@@ -123,6 +129,11 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 	lease.CreatedAt = now
 	lease.UpdatedAt = now
 
+	rentCategoryID, err := getDefaultCategoryID(ctx, s.categories, ownerID, domain.OperationCategoryCodeRent)
+	if err != nil {
+		return domain.Lease{}, fmt.Errorf("rent category: %w", err)
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.Lease{}, fmt.Errorf("begin tx: %w", err)
@@ -133,7 +144,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
 	txProperties := s.properties.WithTx(tx)
-	txRentService := NewRentService(txOps, txRecurring, s.clock)
+	txRentService := NewRentService(txOps, txRecurring, s.categories.WithTx(tx), s.clock)
 
 	hasOpen, err := txProperties.HasOpenLease(ctx, cmd.PropertyID)
 	if err != nil {
@@ -159,7 +170,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		PropertyID:    created.PropertyID,
 		LeaseID:       created.ID,
 		Type:          domain.OperationTypeIncome,
-		Category:      domain.OperationCategoryRent,
+		CategoryID:    rentCategoryID,
 		Name:          "Арендная плата",
 		AmountKopecks: created.RentAmountKopecks,
 		StartDate:     created.StartDate,
@@ -176,7 +187,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		return domain.Lease{}, fmt.Errorf("create recurring operation: %w", err)
 	}
 
-	ops := txRentService.GenerateRentOperations(ctx, created, createdRecurring.ID, ownerID)
+	ops := txRentService.GenerateRentOperations(ctx, created, createdRecurring.ID, ownerID, rentCategoryID)
 	if len(ops) > 0 {
 		if err := txOps.BulkCreate(ctx, ops); err != nil {
 			return domain.Lease{}, fmt.Errorf("bulk create operations: %w", err)
@@ -242,7 +253,7 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 	txTenantContacts := s.tenantContacts.WithTx(tx)
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
-	txRentService := NewRentService(txOps, txRecurring, s.clock)
+	txRentService := NewRentService(txOps, txRecurring, s.categories.WithTx(tx), s.clock)
 
 	lease, err := txLeases.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
@@ -472,6 +483,7 @@ func (s *LeaseService) ReturnDeposit(ctx context.Context, ownerID, leaseID uuid.
 
 	txLeases := s.leases.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
+	txCategories := s.categories.WithTx(tx)
 
 	lease, err := txLeases.GetByIDAndOwnerForUpdate(ctx, leaseID, ownerID)
 	if err != nil {
@@ -487,6 +499,11 @@ func (s *LeaseService) ReturnDeposit(ctx context.Context, ownerID, leaseID uuid.
 	now := s.clock.Now()
 	if lease.EffectiveStatus(now) == domain.LeaseStatusAwaitingStart || lease.EffectiveStatus(now) == domain.LeaseStatusActive {
 		return domain.Lease{}, domain.Operation{}, fmt.Errorf("%w: cannot return deposit for an active or not-yet-started lease", ErrInvalidInput)
+	}
+
+	depositReturnCategoryID, err := getDefaultCategoryID(ctx, txCategories, ownerID, domain.OperationCategoryCodeDepositReturn)
+	if err != nil {
+		return domain.Lease{}, domain.Operation{}, fmt.Errorf("deposit return category: %w", err)
 	}
 
 	exists, err := txOps.HasDepositReturnForLease(ctx, lease.ID)
@@ -508,7 +525,7 @@ func (s *LeaseService) ReturnDeposit(ctx context.Context, ownerID, leaseID uuid.
 		PropertyID:    lease.PropertyID,
 		LeaseID:       lease.ID,
 		Type:          domain.OperationTypeExpense,
-		Category:      domain.OperationCategoryDepositReturn,
+		CategoryID:    depositReturnCategoryID,
 		Status:        domain.OperationStatusPaid,
 		Name:          depositReturnComment,
 		AmountKopecks: lease.DepositAmountKopecks,

@@ -15,7 +15,7 @@ func ToOperationInfo(op domain.Operation) notificationsapp.OperationInfo {
 		RecurringOperationID: domain.LeaseIDPtr(op.RecurringOperationID),
 		OperationDate:        op.OperationDate,
 		Type:                 string(op.Type),
-		Category:             string(op.Category),
+		Category:             op.CategoryID.String(),
 		AmountKopecks:        op.AmountKopecks,
 	}
 }

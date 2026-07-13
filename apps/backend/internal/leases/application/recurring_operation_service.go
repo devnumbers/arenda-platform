@@ -22,7 +22,7 @@ import (
 type CreateRecurringOperationCommand struct {
 	PropertyID         uuid.UUID
 	Type               string
-	Category           string
+	CategoryID         uuid.UUID
 	Name               string
 	AmountKopecks      int64
 	StartDate          time.Time
@@ -36,7 +36,7 @@ type CreateRecurringOperationCommand struct {
 // UpdateRecurringOperationCommand carries optional updates for a recurring operation.
 type UpdateRecurringOperationCommand struct {
 	Type               *string
-	Category           *string
+	CategoryID         *uuid.UUID
 	Name               *string
 	AmountKopecks      *int64
 	StartDate          *time.Time
@@ -54,6 +54,7 @@ type RecurringOperationService struct {
 	recurringOps RecurringOperationRepository
 	operations   OperationRepository
 	properties   PropertyRepository
+	categories   OperationCategoryRepository
 	scheduler    ReminderScheduler
 	reminders    ReminderLister
 	db           txBeginner
@@ -72,6 +73,7 @@ func NewRecurringOperationService(
 	recurringOps RecurringOperationRepository,
 	operations OperationRepository,
 	properties PropertyRepository,
+	categories OperationCategoryRepository,
 	scheduler ReminderScheduler,
 	reminders ReminderLister,
 	db txBeginner,
@@ -84,6 +86,9 @@ func NewRecurringOperationService(
 	if clock == nil {
 		panic("clock is required")
 	}
+	if categories == nil {
+		panic("categories repository is required")
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -91,6 +96,7 @@ func NewRecurringOperationService(
 		recurringOps: recurringOps,
 		operations:   operations,
 		properties:   properties,
+		categories:   categories,
 		scheduler:    scheduler,
 		reminders:    reminders,
 		db:           db,
@@ -137,7 +143,7 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		paymentDay = cmd.StartDate.Day()
 	}
 
-	if err := s.validateCommand(cmd.Type, cmd.Category, cmd.AmountKopecks, cmd.StartDate, paymentDay, cmd.EndDate); err != nil {
+	if err := s.validateCommand(ctx, s.categories, ownerID, cmd.Type, cmd.CategoryID, cmd.AmountKopecks, cmd.StartDate, paymentDay, cmd.EndDate); err != nil {
 		return domain.RecurringOperation{}, err
 	}
 
@@ -152,7 +158,7 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		OwnerID:            ownerID,
 		PropertyID:         cmd.PropertyID,
 		Type:               domain.OperationType(cmd.Type),
-		Category:           domain.OperationCategory(cmd.Category),
+		CategoryID:         cmd.CategoryID,
 		Name:               name,
 		AmountKopecks:      cmd.AmountKopecks,
 		StartDate:          cmd.StartDate,
@@ -327,6 +333,7 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
+	txCategories := s.categories.WithTx(tx)
 
 	rec, err := txRecurring.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
@@ -357,20 +364,25 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		return newRec, nil
 	}
 
-	typeStr := string(rec.Type)
-	categoryStr := string(rec.Category)
+	opType := rec.Type
+	categoryID := rec.CategoryID
 	if cmd.Type != nil {
-		typeStr = *cmd.Type
+		parsedType, err := domain.ParseOperationType(*cmd.Type)
+		if err != nil {
+			return domain.RecurringOperation{}, err
+		}
+		opType = parsedType
 	}
-	if cmd.Category != nil {
-		categoryStr = *cmd.Category
+	if cmd.CategoryID != nil {
+		categoryID = *cmd.CategoryID
 	}
-	opType, category, err := parseTypeAndCategory(typeStr, categoryStr)
-	if err != nil {
-		return domain.RecurringOperation{}, err
+	if cmd.Type != nil || cmd.CategoryID != nil {
+		if err := validateCategory(ctx, txCategories, ownerID, opType, categoryID); err != nil {
+			return domain.RecurringOperation{}, err
+		}
 	}
 	rec.Type = opType
-	rec.Category = category
+	rec.CategoryID = categoryID
 
 	if cmd.Name != nil {
 		name := strings.TrimSpace(*cmd.Name)
@@ -416,7 +428,7 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		rec.ReminderOffsetDays = normalizeReminderOffsetDays(cmd.ReminderOffsetDays)
 	}
 
-	if err := s.validateCommand(string(rec.Type), string(rec.Category), rec.AmountKopecks, rec.StartDate, rec.PaymentDay, rec.EndDate); err != nil {
+	if err := s.validateCommand(ctx, txCategories, ownerID, string(rec.Type), rec.CategoryID, rec.AmountKopecks, rec.StartDate, rec.PaymentDay, rec.EndDate); err != nil {
 		return domain.RecurringOperation{}, err
 	}
 
@@ -485,6 +497,7 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 ) (domain.RecurringOperation, error) {
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
+	txCategories := s.categories.WithTx(tx)
 
 	applyFromDate := timeutil.Date(*cmd.ApplyFromDate)
 	today := timeutil.Date(now)
@@ -504,17 +517,22 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 		return domain.RecurringOperation{}, fmt.Errorf("generate recurring operation id: %w", err)
 	}
 
-	typeStr := string(rec.Type)
-	categoryStr := string(rec.Category)
+	opType := rec.Type
+	categoryID := rec.CategoryID
 	if cmd.Type != nil {
-		typeStr = *cmd.Type
+		parsedType, err := domain.ParseOperationType(*cmd.Type)
+		if err != nil {
+			return domain.RecurringOperation{}, err
+		}
+		opType = parsedType
 	}
-	if cmd.Category != nil {
-		categoryStr = *cmd.Category
+	if cmd.CategoryID != nil {
+		categoryID = *cmd.CategoryID
 	}
-	opType, category, err := parseTypeAndCategory(typeStr, categoryStr)
-	if err != nil {
-		return domain.RecurringOperation{}, err
+	if cmd.Type != nil || cmd.CategoryID != nil {
+		if err := validateCategory(ctx, txCategories, ownerID, opType, categoryID); err != nil {
+			return domain.RecurringOperation{}, err
+		}
 	}
 
 	name := rec.Name
@@ -572,7 +590,7 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 		}
 	}
 
-	if err := s.validateCommand(string(opType), string(category), amountKopecks, applyFromDate, paymentDay, newEndDate); err != nil {
+	if err := s.validateCommand(ctx, txCategories, ownerID, string(opType), categoryID, amountKopecks, applyFromDate, paymentDay, newEndDate); err != nil {
 		return domain.RecurringOperation{}, err
 	}
 
@@ -582,7 +600,7 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 		PropertyID:         rec.PropertyID,
 		LeaseID:            rec.LeaseID,
 		Type:               opType,
-		Category:           category,
+		CategoryID:         categoryID,
 		Name:               name,
 		AmountKopecks:      amountKopecks,
 		StartDate:          applyFromDate,
@@ -949,8 +967,12 @@ func (s *RecurringOperationService) CreateReminder(
 	return reminders, nil
 }
 
-func (s *RecurringOperationService) validateCommand(opType, category string, amount int64, startDate time.Time, paymentDay int, endDate *time.Time) error {
-	if _, _, err := parseTypeAndCategory(opType, category); err != nil {
+func (s *RecurringOperationService) validateCommand(ctx context.Context, categories OperationCategoryRepository, ownerID uuid.UUID, opType string, categoryID uuid.UUID, amount int64, startDate time.Time, paymentDay int, endDate *time.Time) error {
+	parsedType, _, err := parseTypeAndCategory(opType, categoryID)
+	if err != nil {
+		return err
+	}
+	if err := validateCategory(ctx, categories, ownerID, parsedType, categoryID); err != nil {
 		return err
 	}
 	if amount < 0 {
@@ -1032,7 +1054,7 @@ func (s *RecurringOperationService) buildOperations(
 			LeaseID:              rec.LeaseID,
 			RecurringOperationID: rec.ID,
 			Type:                 rec.Type,
-			Category:             rec.Category,
+			CategoryID:           rec.CategoryID,
 			Status:               domain.OperationStatusPending,
 			Name:                 rec.Name,
 			AmountKopecks:        rec.AmountKopecks,

@@ -161,4 +161,5 @@ type OperationCategoryRepository interface {
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.OperationCategory, error)
 	GetByOwnerAndCode(ctx context.Context, ownerID uuid.UUID, code domain.OperationCategoryDefaultCode) (domain.OperationCategory, error)
 	CreateDefaultCategories(ctx context.Context, ownerID uuid.UUID) error
+	WithTx(tx transaction.Tx) OperationCategoryRepository
 }

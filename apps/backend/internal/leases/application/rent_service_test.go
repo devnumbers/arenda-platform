@@ -153,11 +153,11 @@ func (r *fakeOperationRepo) GetPropertyOperationsSummary(_ context.Context, owne
 			}
 			if op.Status == domain.OperationStatusOverdue {
 				overdueTotalCount++
-				if op.Category == domain.OperationCategoryRent {
+				if op.CategoryID == testRentCategoryID {
 					overdueRentCount++
 				}
 			}
-			if (op.Status == domain.OperationStatusPending || op.Status == domain.OperationStatusOverdue) && op.Category == domain.OperationCategoryRent {
+			if (op.Status == domain.OperationStatusPending || op.Status == domain.OperationStatusOverdue) && op.CategoryID == testRentCategoryID {
 				if nextPaymentDate == nil || opDate.Before(*nextPaymentDate) {
 					d := opDate
 					nextPaymentDate = &d
@@ -194,7 +194,7 @@ func (r *fakeOperationRepo) ListOverdueRentOperations(_ context.Context, ownerID
 			op.LeaseID == uuid.Nil ||
 			op.Status != domain.OperationStatusOverdue ||
 			op.Type != domain.OperationTypeIncome ||
-			op.Category != domain.OperationCategoryRent {
+			op.CategoryID != testRentCategoryID {
 			continue
 		}
 		out = append(out, OverdueRentOperation{LeaseID: op.LeaseID, OperationDate: timeutil.Date(op.OperationDate)})
@@ -212,7 +212,7 @@ func (r *fakeOperationRepo) ListNextRentPayments(_ context.Context, ownerID uuid
 			op.LeaseID == uuid.Nil ||
 			op.Status != domain.OperationStatusPending ||
 			op.Type != domain.OperationTypeIncome ||
-			op.Category != domain.OperationCategoryRent {
+			op.CategoryID != testRentCategoryID {
 			continue
 		}
 		d := timeutil.Date(op.OperationDate)
@@ -264,7 +264,7 @@ func (r *fakeOperationRepo) SoftDeleteOperation(_ context.Context, id, _ uuid.UU
 	for i := range r.ops {
 		if r.ops[i].ID == id {
 			r.ops[i].DeletedAt = &now
-			if r.ops[i].RecurringOperationID != uuid.Nil || (r.ops[i].LeaseID != uuid.Nil && r.ops[i].Category == domain.OperationCategoryRent) {
+			if r.ops[i].RecurringOperationID != uuid.Nil || (r.ops[i].LeaseID != uuid.Nil && r.ops[i].CategoryID == testRentCategoryID) {
 				r.ops[i].IsException = true
 			}
 			return nil
@@ -394,7 +394,7 @@ func (r *fakeOperationRepo) HasDepositReturnForLease(_ context.Context, leaseID 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, op := range r.ops {
-		if op.LeaseID == leaseID && op.Type == domain.OperationTypeExpense && op.Category == domain.OperationCategoryDepositReturn && op.DeletedAt == nil {
+		if op.LeaseID == leaseID && op.Type == domain.OperationTypeExpense && op.CategoryID == testDepositReturnCategoryID && op.DeletedAt == nil {
 			return true, nil
 		}
 	}
@@ -452,7 +452,7 @@ func operationSourceDate(op domain.Operation) time.Time {
 }
 
 func operationBlocksLeaseRentSchedule(op domain.Operation) bool {
-	return op.RecurringOperationID != uuid.Nil || op.Category == domain.OperationCategoryRent
+	return op.RecurringOperationID != uuid.Nil || op.CategoryID == testRentCategoryID
 }
 
 type fakeRecurringOperationRepo struct {
@@ -571,8 +571,8 @@ func TestGenerateRentOperations_BackdatedLeaseMarksPastPeriodsReceived(t *testin
 		PaymentDay:        1,
 	}
 
-	svc := NewRentService(&fakeOperationRepo{}, &fakeRecurringOperationRepo{}, fakeClock{now: date(2024, 6, 30)})
-	ops := svc.GenerateRentOperations(ctx, lease, recID, ownerID)
+	svc := NewRentService(&fakeOperationRepo{}, &fakeRecurringOperationRepo{}, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: date(2024, 6, 30)})
+	ops := svc.GenerateRentOperations(ctx, lease, recID, ownerID, testRentCategoryID)
 	if len(ops) == 0 {
 		t.Fatal("expected generated rent operations")
 	}
@@ -611,7 +611,7 @@ func TestRebuildSchedule_DeletedManualLeaseOperationDoesNotBlockGeneratedRent(t 
 		PropertyID:    propertyID,
 		LeaseID:       leaseID,
 		Type:          domain.OperationTypeIncome,
-		Category:      domain.OperationCategoryRent,
+		CategoryID:    testRentCategoryID,
 		AmountKopecks: 10000,
 		StartDate:     start,
 		PaymentDay:    1,
@@ -628,14 +628,14 @@ func TestRebuildSchedule_DeletedManualLeaseOperationDoesNotBlockGeneratedRent(t 
 		PropertyID:    propertyID,
 		LeaseID:       leaseID,
 		Type:          domain.OperationTypeIncome,
-		Category:      domain.OperationCategoryOtherIncome,
+		CategoryID:    testOtherIncomeCategoryID,
 		AmountKopecks: 5000,
 		OperationDate: blockedDate,
 		IsException:   true,
 		DeletedAt:     &deletedAt,
 	})
 
-	svc := NewRentService(opsRepo, recRepo, fakeClock{now: date(2024, 6, 1)})
+	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: date(2024, 6, 1)})
 	if err := svc.RebuildSchedule(ctx, lease, start); err != nil {
 		t.Fatalf("RebuildSchedule failed: %v", err)
 	}
@@ -647,7 +647,7 @@ func TestRebuildSchedule_DeletedManualLeaseOperationDoesNotBlockGeneratedRent(t 
 
 	var generatedRentOnBlockedDate bool
 	for _, op := range finalOps {
-		if op.Category == domain.OperationCategoryRent && timeutil.Date(op.OperationDate).Equal(blockedDate) {
+		if op.CategoryID == testRentCategoryID && timeutil.Date(op.OperationDate).Equal(blockedDate) {
 			generatedRentOnBlockedDate = true
 			break
 		}
@@ -685,7 +685,7 @@ func TestRebuildSchedule_MovedGeneratedRentOperationBlocksOriginalScheduleDate(t
 		PropertyID:    propertyID,
 		LeaseID:       leaseID,
 		Type:          domain.OperationTypeIncome,
-		Category:      domain.OperationCategoryRent,
+		CategoryID:    testRentCategoryID,
 		AmountKopecks: 10000,
 		StartDate:     start,
 		PaymentDay:    1,
@@ -703,14 +703,14 @@ func TestRebuildSchedule_MovedGeneratedRentOperationBlocksOriginalScheduleDate(t
 		LeaseID:              leaseID,
 		RecurringOperationID: recID,
 		Type:                 domain.OperationTypeIncome,
-		Category:             domain.OperationCategoryRent,
+		CategoryID:           testRentCategoryID,
 		AmountKopecks:        10000,
 		OperationDate:        movedDate,
 		SourceOperationDate:  &originalScheduleDate,
 		IsException:          true,
 	})
 
-	svc := NewRentService(opsRepo, recRepo, fakeClock{now: now})
+	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: now})
 	if err := svc.RebuildSchedule(ctx, lease, start); err != nil {
 		t.Fatalf("RebuildSchedule failed: %v", err)
 	}
@@ -765,7 +765,7 @@ func TestRebuildSchedule_EarlierStartDatePreservesPastOperations(t *testing.T) {
 		PropertyID:    propertyID,
 		LeaseID:       leaseID,
 		Type:          domain.OperationTypeIncome,
-		Category:      domain.OperationCategoryRent,
+		CategoryID:    testRentCategoryID,
 		AmountKopecks: 10000,
 		StartDate:     originalStart,
 		PaymentDay:    1,
@@ -784,7 +784,7 @@ func TestRebuildSchedule_EarlierStartDatePreservesPastOperations(t *testing.T) {
 			LeaseID:              leaseID,
 			RecurringOperationID: recID,
 			Type:                 domain.OperationTypeIncome,
-			Category:             domain.OperationCategoryRent,
+			CategoryID:           testRentCategoryID,
 			AmountKopecks:        10000,
 			OperationDate:        d,
 			IsException:          false,
@@ -799,13 +799,13 @@ func TestRebuildSchedule_EarlierStartDatePreservesPastOperations(t *testing.T) {
 		PropertyID:    propertyID,
 		LeaseID:       leaseID,
 		Type:          domain.OperationTypeIncome,
-		Category:      domain.OperationCategoryRent,
+		CategoryID:    testRentCategoryID,
 		AmountKopecks: 5000,
 		OperationDate: date(2024, 4, 1),
 		IsException:   true,
 	})
 
-	svc := NewRentService(opsRepo, recRepo, fakeClock{now: now})
+	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: now})
 	if err := svc.RebuildSchedule(ctx, lease, originalStart); err != nil {
 		t.Fatalf("RebuildSchedule failed: %v", err)
 	}
