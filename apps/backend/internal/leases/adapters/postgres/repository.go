@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -487,7 +488,7 @@ func (r *RecurringOperationRepository) Create(ctx context.Context, op domain.Rec
 		PropertyID:    pgconv.UUIDToPgtype(op.PropertyID),
 		LeaseID:       pgconv.UUIDToPgtype(op.LeaseID),
 		Type:          string(op.Type),
-		Category:      string(op.Category),
+		CategoryID:    pgconv.UUIDToPgtype(op.CategoryID),
 		Name:          op.Name,
 		AmountKopecks: op.AmountKopecks,
 		StartDate:     pgconv.DateToPgtype(op.StartDate),
@@ -582,7 +583,7 @@ func (r *RecurringOperationRepository) Update(ctx context.Context, op domain.Rec
 	params := postgres.UpdateRecurringOperationParams{
 		ID:            pgconv.UUIDToPgtype(op.ID),
 		Type:          string(op.Type),
-		Category:      string(op.Category),
+		CategoryID:    pgconv.UUIDToPgtype(op.CategoryID),
 		Name:          op.Name,
 		AmountKopecks: op.AmountKopecks,
 		StartDate:     pgconv.DateToPgtype(op.StartDate),
@@ -715,7 +716,7 @@ func recurringOperationFromRow(row postgres.RecurringOperation) domain.Recurring
 		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
 		LeaseID:       pgconv.UUIDFromPgtype(row.LeaseID),
 		Type:          domain.OperationType(row.Type),
-		Category:      domain.OperationCategory(row.Category),
+		CategoryID:    pgconv.UUIDFromPgtype(row.CategoryID),
 		Name:          row.Name,
 		AmountKopecks: row.AmountKopecks,
 		StartDate:     row.StartDate.Time,
@@ -762,7 +763,7 @@ func (r *OperationRepository) Create(ctx context.Context, op domain.Operation) (
 		LeaseID:              pgconv.UUIDToPgtype(op.LeaseID),
 		RecurringOperationID: pgconv.UUIDToPgtype(op.RecurringOperationID),
 		Type:                 string(op.Type),
-		Category:             string(op.Category),
+		CategoryID:           pgconv.UUIDToPgtype(op.CategoryID),
 		Name:                 op.Name,
 		AmountKopecks:        op.AmountKopecks,
 		OperationDate:        pgconv.DateToPgtype(op.OperationDate),
@@ -800,7 +801,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 			pgconv.UUIDToPgtype(op.LeaseID),
 			pgconv.UUIDToPgtype(op.RecurringOperationID),
 			string(op.Type),
-			string(op.Category),
+			pgconv.UUIDToPgtype(op.CategoryID),
 			op.Name,
 			op.AmountKopecks,
 			pgconv.DateToPgtype(op.OperationDate),
@@ -819,7 +820,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 
 	_, err := copier.CopyFrom(ctx, pgx.Identifier{"operations"}, []string{
 		"owner_id", "property_id", "lease_id", "recurring_operation_id",
-		"type", "category", "name", "amount_kopecks", "operation_date", "source_operation_date", "comment", "is_exception", "status",
+		"type", "category_id", "name", "amount_kopecks", "operation_date", "source_operation_date", "comment", "is_exception", "status",
 		"reminder_offset_days",
 	}, pgx.CopyFromRows(rows))
 	if err != nil {
@@ -841,9 +842,9 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID
 	for _, s := range filter.Statuses {
 		statuses = append(statuses, string(s))
 	}
-	categories := make([]string, 0, len(filter.Categories))
-	for _, c := range filter.Categories {
-		categories = append(categories, string(c))
+	categoryIDs := make([]pgtype.UUID, 0, len(filter.CategoryIDs))
+	for _, c := range filter.CategoryIDs {
+		categoryIDs = append(categoryIDs, pgconv.UUIDToPgtype(c))
 	}
 
 	fromDate := pgconv.DatePtrToPgtype(filter.FromDate)
@@ -859,14 +860,13 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID
 	}
 
 	sort := application.NormalizeOperationSort(filter.Sort)
-	var rows []postgres.Operation
-	var err error
+	var rows []any
 	if sort == application.OperationSortOperationDateAsc {
-		rows, err = r.q().ListOperationsByOwnerAsc(ctx, postgres.ListOperationsByOwnerAscParams{
+		ascRows, err := r.q().ListOperationsByOwnerAsc(ctx, postgres.ListOperationsByOwnerAscParams{
 			OwnerID:              pgconv.UUIDToPgtype(ownerID),
 			Types:                types,
 			Statuses:             statuses,
-			Categories:           categories,
+			CategoryIds:          categoryIDs,
 			PropertyID:           pgconv.UUIDToPgtype(filter.PropertyID),
 			LeaseID:              pgconv.UUIDToPgtype(filter.LeaseID),
 			FromDate:             fromDate,
@@ -876,12 +876,16 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID
 			//nolint:gosec // Pagination offset is bounded by the API layer.
 			Offset: int32(filter.Offset),
 		})
+		if err != nil {
+			return nil, err
+		}
+		rows = toAnySlice(ascRows)
 	} else {
-		rows, err = r.q().ListOperationsByOwner(ctx, postgres.ListOperationsByOwnerParams{
+		descRows, err := r.q().ListOperationsByOwner(ctx, postgres.ListOperationsByOwnerParams{
 			OwnerID:              pgconv.UUIDToPgtype(ownerID),
 			Types:                types,
 			Statuses:             statuses,
-			Categories:           categories,
+			CategoryIds:          categoryIDs,
 			PropertyID:           pgconv.UUIDToPgtype(filter.PropertyID),
 			LeaseID:              pgconv.UUIDToPgtype(filter.LeaseID),
 			FromDate:             fromDate,
@@ -891,14 +895,15 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID
 			//nolint:gosec // Pagination offset is bounded by the API layer.
 			Offset: int32(filter.Offset),
 		})
-	}
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
+		rows = toAnySlice(descRows)
 	}
 
 	ops := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		op, err := operationFromRow(row)
+		op, err := operationFromAnyRow(row)
 		if err != nil {
 			return nil, err
 		}
@@ -914,7 +919,7 @@ func (r *OperationRepository) ListByLease(ctx context.Context, leaseID uuid.UUID
 	}
 	ops := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		op, err := operationFromRow(row)
+		op, err := operationFromAnyRow(row)
 		if err != nil {
 			return nil, err
 		}
@@ -930,7 +935,7 @@ func (r *OperationRepository) ListByRecurringOperation(ctx context.Context, recu
 	}
 	ops := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		op, err := operationFromRow(row)
+		op, err := operationFromAnyRow(row)
 		if err != nil {
 			return nil, err
 		}
@@ -1045,7 +1050,7 @@ func (r *OperationRepository) ListByProperty(ctx context.Context, ownerID, prope
 	}
 	ops := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		op, err := operationFromRow(row)
+		op, err := operationFromAnyRow(row)
 		if err != nil {
 			return nil, err
 		}
@@ -1127,7 +1132,7 @@ func (r *OperationRepository) GetByIDAndOwner(ctx context.Context, id, ownerID u
 		}
 		return domain.Operation{}, err
 	}
-	return operationFromRow(row)
+	return operationFromAnyRow(row)
 }
 
 func (r *OperationRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Operation, error) {
@@ -1141,7 +1146,7 @@ func (r *OperationRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, 
 		}
 		return domain.Operation{}, err
 	}
-	return operationFromRow(row)
+	return operationFromAnyRow(row)
 }
 
 func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (domain.Operation, error) {
@@ -1149,7 +1154,7 @@ func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (
 		ID:            pgconv.UUIDToPgtype(op.ID),
 		OwnerID:       pgconv.UUIDToPgtype(op.OwnerID),
 		Type:          string(op.Type),
-		Category:      string(op.Category),
+		CategoryID:    pgconv.UUIDToPgtype(op.CategoryID),
 		Name:          op.Name,
 		AmountKopecks: op.AmountKopecks,
 		OperationDate: pgconv.DateToPgtype(op.OperationDate),
@@ -1192,7 +1197,7 @@ func (r *OperationRepository) ListByPropertyWithStatuses(ctx context.Context, ow
 
 	ops := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		op, err := operationFromRow(row)
+		op, err := operationFromAnyRow(row)
 		if err != nil {
 			return nil, err
 		}
@@ -1274,7 +1279,7 @@ func (r *OperationRepository) MarkOverdue(ctx context.Context, ownerID, id uuid.
 		}
 		return domain.Operation{}, false, err
 	}
-	op, err := operationFromRow(existing)
+	op, err := operationFromAnyRow(existing)
 	return op, false, err
 }
 
@@ -1329,28 +1334,17 @@ func (r *OperationRepository) GetFinanceReportByProperty(ctx context.Context, ow
 }
 
 func (r *OperationRepository) GetFinanceReportByCategory(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]application.FinanceReportCategoryRow, error) {
-	rows, err := r.q().GetFinanceReportByCategory(ctx, postgres.GetFinanceReportByCategoryParams{
-		OwnerID:  pgconv.UUIDToPgtype(ownerID),
-		FromDate: pgconv.DatePtrToPgtype(from),
-		ToDate:   pgconv.DatePtrToPgtype(to),
-	})
+	rows, err := r.q().GetFinanceReportByCategory(ctx, pgconv.UUIDToPgtype(ownerID))
 	if err != nil {
 		return nil, err
 	}
 
 	result := make([]application.FinanceReportCategoryRow, 0, len(rows))
 	for _, row := range rows {
-		opType, err := domain.ParseOperationType(row.Type)
-		if err != nil {
-			return nil, fmt.Errorf("invalid operation type in database: %w", err)
-		}
-		category, err := domain.ParseOperationCategory(row.Category)
-		if err != nil {
-			return nil, fmt.Errorf("invalid operation category in database: %w", err)
-		}
 		result = append(result, application.FinanceReportCategoryRow{
-			Type:         opType,
-			Category:     category,
+			Type:         domain.OperationType(row.Type),
+			CategoryID:   pgconv.UUIDFromPgtype(row.CategoryID),
+			CategoryName: row.CategoryName,
 			TotalKopecks: row.TotalKopecks,
 		})
 	}
@@ -1390,7 +1384,7 @@ func operationFromRow(row postgres.Operation) (domain.Operation, error) {
 		LeaseID:              pgconv.UUIDFromPgtype(row.LeaseID),
 		RecurringOperationID: pgconv.UUIDFromPgtype(row.RecurringOperationID),
 		Type:                 domain.OperationType(row.Type),
-		Category:             domain.OperationCategory(row.Category),
+		CategoryID:           pgconv.UUIDFromPgtype(row.CategoryID),
 		Status:               status,
 		Name:                 row.Name,
 		AmountKopecks:        row.AmountKopecks,
@@ -1409,6 +1403,42 @@ func operationFromRow(row postgres.Operation) (domain.Operation, error) {
 		op.DeletedAt = pgconv.TimestamptzToPtrTime(row.DeletedAt)
 	}
 	return op, nil
+}
+
+// toOperation copies any generated operation row struct to postgres.Operation
+// by copying fields with matching names and types. The row type must have the
+// same fields as postgres.Operation.
+func toOperation(row any) postgres.Operation {
+	if op, ok := row.(postgres.Operation); ok {
+		return op
+	}
+	var op postgres.Operation
+	rv := reflect.ValueOf(row)
+	ov := reflect.ValueOf(&op).Elem()
+	rt := rv.Type()
+	for i := 0; i < rt.NumField(); i++ {
+		fieldName := rt.Field(i).Name
+		src := rv.Field(i)
+		dst := ov.FieldByName(fieldName)
+		if dst.IsValid() && dst.Type() == src.Type() {
+			dst.Set(src)
+		}
+	}
+	return op
+}
+
+// operationFromAnyRow maps any generated operation row struct to a domain.Operation.
+func operationFromAnyRow(row any) (domain.Operation, error) {
+	return operationFromRow(toOperation(row))
+}
+
+// toAnySlice converts a typed slice to a slice of any values.
+func toAnySlice[T any](s []T) []any {
+	out := make([]any, len(s))
+	for i, v := range s {
+		out[i] = v
+	}
+	return out
 }
 
 func operationCategoryFromRow(row postgres.OperationCategory) domain.OperationCategory {
@@ -1437,6 +1467,11 @@ func NewOperationCategoryRepository(db postgres.DBTX) *OperationCategoryReposito
 
 func (r *OperationCategoryRepository) q() *postgres.Queries {
 	return postgres.New(r.db)
+}
+
+// WithTx returns a repository instance bound to the provided transaction.
+func (r *OperationCategoryRepository) WithTx(tx transaction.Tx) application.OperationCategoryRepository {
+	return NewOperationCategoryRepository(tx.(postgres.DBTX))
 }
 
 func (r *OperationCategoryRepository) Create(ctx context.Context, ownerID uuid.UUID, categoryType domain.OperationType, name string) (domain.OperationCategory, error) {
