@@ -314,14 +314,14 @@ func (r *RenewalService) finalizeRenewalCharge(
 			// must be omitted here — combined with a child
 			// OperationInitiatorType it is rejected by T-Kassa (error 1126).
 			Recurrent:              false,
-			OperationInitiatorType: "R",
+			OperationInitiatorType: InitiatorTypeMITRecurring,
 			NotificationURL:        notification,
 			SuccessURL:             successURL,
 			FailURL:                failURL,
 			Description:            truncateTkassaDescription(renewalPaymentDescription(renewalTariff.Name, period)),
 		})
 		if err != nil {
-			if recErr := r.recoverRenewalFailure(ctx, payment.ID, sub.ID, "", providerErrorCode(err), now); recErr != nil {
+			if recErr := r.recoverRenewalFailure(ctx, payment.ID, sub.ID, "", err, now); recErr != nil {
 				return fmt.Errorf("provider init error: %w; recovery failed: %w", err, recErr)
 			}
 			r.deps.log.ErrorContext(ctx, "provider init failed; subscription moved to grace",
@@ -351,7 +351,7 @@ func (r *RenewalService) finalizeRenewalCharge(
 	// If a previous run already registered a provider reference, query the
 	// provider status before re-charging to avoid duplicate charges.
 	if chargeProviderPaymentID != "" {
-		status, statusErr := r.provider.Status(ctx, payment.ID, chargeProviderPaymentID)
+		statusResult, statusErr := r.provider.Status(ctx, payment.ID, chargeProviderPaymentID)
 		if statusErr != nil {
 			// The provider status is unknown: the previous charge may have
 			// succeeded. Do not blindly re-charge; leave the payment pending
@@ -361,6 +361,7 @@ func (r *RenewalService) finalizeRenewalCharge(
 				slog.String("error", sanitize.Error(statusErr)))
 			return nil
 		}
+		status := statusResult.Status
 		switch status {
 		case domain.PaymentStatusSucceeded:
 			return r.markRenewalSucceededAndApply(ctx, payment, sub.ID, now)
@@ -380,7 +381,7 @@ func (r *RenewalService) finalizeRenewalCharge(
 		if hint == "" {
 			hint = chargeProviderPaymentID
 		}
-		if recErr := r.recoverRenewalFailure(ctx, payment.ID, sub.ID, hint, providerErrorCode(chargeErr), now); recErr != nil {
+		if recErr := r.recoverRenewalFailure(ctx, payment.ID, sub.ID, hint, chargeErr, now); recErr != nil {
 			return fmt.Errorf("provider charge error: %w; recovery failed: %w", chargeErr, recErr)
 		}
 		r.deps.log.ErrorContext(ctx, "provider charge failed; running renewal recovery",
@@ -509,8 +510,29 @@ func (r *RenewalService) finalizeRenewalCharge(
 // provider payment id hint, reloads the payment, and then queries the provider
 // for the payment status *outside* of a database transaction. Only after the
 // status is known does it open a short transaction to finalize the payment and,
-// if necessary, move the subscription to grace.
-func (r *RenewalService) recoverRenewalFailure(ctx context.Context, paymentID, subscriptionID uuid.UUID, providerPaymentIDHint string, errorCode *string, now time.Time) error {
+// if necessary, move the subscription to grace. cause is the provider error
+// that triggered the recovery (nil when the outcome is uncertain for other
+// reasons); its provider error code is persisted on a failed payment.
+func (r *RenewalService) recoverRenewalFailure(ctx context.Context, paymentID, subscriptionID uuid.UUID, providerPaymentIDHint string, cause error, now time.Time) error {
+	errorCode := providerErrorCode(cause)
+
+	switch {
+	case errors.Is(cause, ErrProviderChargeBlocked):
+		// T-Kassa error 10: charging is disabled on the terminal. Renewals
+		// cannot succeed until COF/recurring operations are enabled.
+		r.deps.log.ErrorContext(ctx, "renewal charge blocked by provider: COF/recurring operations are not enabled on the terminal; contact the T-Bank manager to enable them",
+			slog.String("subscription_id", subscriptionID.String()),
+			slog.String("payment_id", paymentID.String()),
+			slog.String("error", sanitize.Error(cause)))
+	case errors.Is(cause, ErrProviderInvalidOperation):
+		// T-Kassa errors 1125/1126: the operation parameters are inconsistent.
+		// This does not fix itself and needs an integration change.
+		r.deps.log.ErrorContext(ctx, "renewal rejected by provider as an invalid operation: integration misconfiguration (for example a mismatched OperationInitiatorType); investigate the provider integration",
+			slog.String("subscription_id", subscriptionID.String()),
+			slog.String("payment_id", paymentID.String()),
+			slog.String("error", sanitize.Error(cause)))
+	}
+
 	// Persist the hint in a dedicated transaction so the status query can use it,
 	// even if the payment row is currently locked by another request.
 	if providerPaymentIDHint != "" {
@@ -536,7 +558,7 @@ func (r *RenewalService) recoverRenewalFailure(ctx context.Context, paymentID, s
 		return r.markRenewalFailedAndGrace(ctx, paymentID, subscriptionID, errorCode, now)
 	}
 
-	status, err := r.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
+	statusResult, err := r.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
 	if err != nil {
 		// The money status is unknown, so this must not count as a charge
 		// attempt: the payment may already be charged on the provider side.
@@ -546,6 +568,7 @@ func (r *RenewalService) recoverRenewalFailure(ctx context.Context, paymentID, s
 			slog.String("error", sanitize.Error(err)))
 		return nil
 	}
+	status := statusResult.Status
 
 	if status == domain.PaymentStatusFailed {
 		return r.markRenewalFailedAndGrace(ctx, paymentID, subscriptionID, errorCode, now)
@@ -914,7 +937,7 @@ func (r *RenewalService) ProcessPendingUpgradePayments(ctx context.Context, now 
 				continue
 			}
 
-			status, statusErr := r.provider.Status(ctx, payment.ID, *payment.ProviderPaymentID)
+			statusResult, statusErr := r.provider.Status(ctx, payment.ID, *payment.ProviderPaymentID)
 			processed++
 
 			if statusErr != nil {
@@ -924,8 +947,18 @@ func (r *RenewalService) ProcessPendingUpgradePayments(ctx context.Context, now 
 				continue
 			}
 
-			switch status {
+			switch statusResult.Status {
 			case domain.PaymentStatusSucceeded:
+				// Recover the saved-card token when the AUTHORIZED webhook that
+				// delivers it was lost; no-op when the payment is already linked
+				// or the provider does not report a RebillId.
+				recoverPaymentMethodRebillID(ctx, recoverPaymentMethodDeps{
+					beginner:             r.deps.beginner,
+					subscriptionPayments: r.deps.subscriptionPayments,
+					paymentMethods:       r.deps.paymentMethods,
+					provider:             r.provider,
+					log:                  r.deps.log,
+				}, &payment, statusResult.RebillID, now.UTC())
 				if err := r.markRenewalSucceededAndApply(ctx, payment, payment.SubscriptionID, now.UTC()); err != nil {
 					r.deps.log.ErrorContext(ctx, "failed to apply succeeded upgrade payment",
 						slog.String("payment_id", payment.ID.String()),
@@ -945,7 +978,7 @@ func (r *RenewalService) ProcessPendingUpgradePayments(ctx context.Context, now 
 			default:
 				r.deps.log.WarnContext(ctx, "unexpected provider status for pending upgrade payment",
 					slog.String("payment_id", payment.ID.String()),
-					slog.String("status", string(status)))
+					slog.String("status", string(statusResult.Status)))
 			}
 		}
 

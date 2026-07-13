@@ -131,3 +131,19 @@ This file is a domain glossary. It intentionally avoids implementation details.
 ## OperationInitiatorType
 
 Тип COF-операции в запросе Init (поле DATA): 0/1/2/R/I/D/N, см. ADR 0017 (docs/adr/0017-tkassa-acquiring-contract.md).
+
+## CheckType
+
+Тип проверки карты при привязке в Т-Кассе: `NO`, `HOLD`, `3DS`, `3DSHOLD`, см. ADR 0017 (docs/adr/0017-tkassa-acquiring-contract.md).
+
+## PaymentId
+
+Идентификатор платежа в Т-Кассе, выдаётся в ответе `Init`.
+
+## RequestKey
+
+Идентификатор запроса на привязку карты в Т-Кассе, возвращается `AddCard` и приходит в add-card webhook.
+
+## NotificationURL
+
+URL мерчанта для webhook-уведомлений Т-Кассы о статусах платежа.

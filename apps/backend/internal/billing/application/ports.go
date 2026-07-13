@@ -35,6 +35,22 @@ var (
 	// rather than a hard failure, because the local payment methods are still
 	// valid from the user's point of view.
 	ErrProviderTerminalNotFound = errors.New("provider terminal not found")
+	// ErrProviderChargeBlocked is returned when the provider rejects a recurrent
+	// charge because charging is disabled or COF is not enabled on the terminal
+	// (T-Kassa error code 10).
+	ErrProviderChargeBlocked = errors.New("provider charge blocked")
+	// ErrProviderTokenInvalid is returned when the provider rejects the request
+	// token (T-Kassa error codes 204/205) — a signing or terminal-key
+	// misconfiguration.
+	ErrProviderTokenInvalid = errors.New("provider token invalid")
+	// ErrProviderPaymentNotFound is returned when the provider does not know the
+	// payment being operated on (T-Kassa error code 255).
+	ErrProviderPaymentNotFound = errors.New("provider payment not found")
+	// ErrProviderInvalidOperation is returned when the provider rejects the
+	// operation parameters as inconsistent (T-Kassa error codes 1125/1126) — an
+	// integration misconfiguration, for example a mismatched
+	// OperationInitiatorType.
+	ErrProviderInvalidOperation = errors.New("provider invalid operation")
 	ErrInvalidFilter            = errors.New("invalid filter")
 )
 
@@ -149,7 +165,15 @@ type PaymentCanceler interface {
 
 // PaymentStatusChecker queries the current provider-side status of a payment.
 type PaymentStatusChecker interface {
-	Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error)
+	Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (PaymentStatusResult, error)
+}
+
+// PaymentStatusResult is the provider-side state of a payment.
+type PaymentStatusResult struct {
+	Status domain.PaymentStatus
+	// RebillID is the saved-card token (T-Kassa RebillId) reported by the
+	// provider for this payment; empty when the provider does not report it.
+	RebillID string
 }
 
 // WebhookParser parses and verifies an incoming provider webhook payload.
@@ -167,6 +191,46 @@ type CardManager interface {
 type CardLister interface {
 	GetCardList(ctx context.Context, customerKey string) ([]ProviderCard, error)
 }
+
+// CardBindingStateChecker queries the state of a card-binding session started
+// by InitAddCard.
+type CardBindingStateChecker interface {
+	GetAddCardState(ctx context.Context, requestKey string) (CardBindingState, error)
+}
+
+// CardBindingState is the provider-side state of a card-binding session.
+type CardBindingState struct {
+	Status      CardBindingStatus
+	CardID      string
+	RebillID    string
+	CustomerKey string
+	// ErrorCode is the provider error code for failed bindings; empty on
+	// success.
+	ErrorCode string
+}
+
+// CardBindingStatus mirrors the T-Kassa GetAddCardState response statuses.
+type CardBindingStatus string
+
+const (
+	// CardBindingStatusNew is a freshly created card-binding session.
+	CardBindingStatusNew CardBindingStatus = "NEW"
+	// CardBindingStatusFormShowed means the binding form was shown to the user.
+	CardBindingStatusFormShowed CardBindingStatus = "FORM_SHOWED"
+	// CardBindingStatus3DSChecking means the user was sent to the 3DS check.
+	CardBindingStatus3DSChecking CardBindingStatus = "3DS_CHECKING"
+	// CardBindingStatus3DSChecked means the user passed the 3DS check.
+	CardBindingStatus3DSChecked CardBindingStatus = "3DS_CHECKED"
+	// CardBindingStatusAuthorizing means the 0 RUB authorization payment is in
+	// flight.
+	CardBindingStatusAuthorizing CardBindingStatus = "AUTHORIZING"
+	// CardBindingStatusAuthorized means the 0 RUB authorization succeeded.
+	CardBindingStatusAuthorized CardBindingStatus = "AUTHORIZED"
+	// CardBindingStatusCompleted means the card was bound successfully.
+	CardBindingStatusCompleted CardBindingStatus = "COMPLETED"
+	// CardBindingStatusRejected means the card could not be bound.
+	CardBindingStatusRejected CardBindingStatus = "REJECTED"
+)
 
 // WebhookResponder returns the fixed body the provider expects as a webhook ack.
 type WebhookResponder interface {
@@ -190,6 +254,7 @@ type Provider interface {
 	WebhookParser
 	CardManager
 	CardLister
+	CardBindingStateChecker
 	WebhookResponder
 	ProviderNamer
 }
@@ -221,6 +286,7 @@ type PaymentManager interface {
 type CardProvider interface {
 	CardManager
 	CardLister
+	CardBindingStateChecker
 	ProviderNamer
 }
 
@@ -253,8 +319,32 @@ type InitRequest struct {
 	SuccessURL             string
 	FailURL                string
 	Recurrent              bool
-	OperationInitiatorType string
+	OperationInitiatorType OperationInitiatorType
 }
+
+// OperationInitiatorType marks who initiated a payment operation. The values
+// mirror the T-Kassa OperationInitiatorType enum (DATA field of Init); the
+// application layer defines only the values it actually uses.
+type OperationInitiatorType string
+
+const (
+	// InitiatorTypeCITCC is a customer-initiated payment with card credentials
+	// (CIT CC): the parent payment of a CC/COF chain that obtains the RebillId.
+	InitiatorTypeCITCC OperationInitiatorType = "1"
+	// InitiatorTypeMITRecurring is a merchant-initiated recurring charge
+	// (MIT COF Recurring) on previously saved credentials.
+	InitiatorTypeMITRecurring OperationInitiatorType = "R"
+)
+
+// CardCheckType selects the verification performed when binding a card. The
+// values mirror the T-Kassa AddCard CheckType enum.
+type CardCheckType string
+
+const (
+	// CardCheckType3DSHold checks 3DS support while binding the card and holds
+	// 0 RUB when the card does not support 3DS.
+	CardCheckType3DSHold CardCheckType = "3DSHOLD"
+)
 
 type InitResult struct {
 	ProviderPaymentID string
@@ -310,7 +400,7 @@ type WebhookPayload struct {
 type InitAddCardRequest struct {
 	UserID      uuid.UUID
 	CustomerKey string
-	CheckType   string
+	CheckType   CardCheckType
 	SuccessURL  string
 	FailURL     string
 }

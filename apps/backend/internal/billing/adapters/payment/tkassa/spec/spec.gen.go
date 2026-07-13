@@ -5,6 +5,7 @@ package spec
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -1712,7 +1713,7 @@ type Cancel struct {
 	//
 	//
 	// При отмене операции в статусе `NEW` поле `Amount` игнорируется, даже если оно заполнено. Отмена проводится на полную сумму.
-	Amount *float32 `json:"Amount,omitempty"`
+	Amount *int64 `json:"Amount,omitempty"`
 
 	// ExternalRequestId Идентификатор операции на стороне мерчанта.
 	//
@@ -2014,7 +2015,7 @@ type Common struct {
 	// Если передавать значения параметров, которые не соответствуют таблице, MAPI вернет ошибку 1126 — несопоставимые
 	// значения `rebillId` или `Recurrent` с переданным значением `OperationInitiatorType`.
 	OperationInitiatorType *CommonOperationInitiatorType `json:"OperationInitiatorType,omitempty"`
-	AdditionalProperties   *string                       `json:"additionalProperties,omitempty"`
+	AdditionalProperties   map[string]string             `json:"-"`
 }
 
 // CommonOperationInitiatorType Признак инициатора операции для платежа. Параметр обязательный при создании
@@ -2688,7 +2689,7 @@ type Init struct {
 	// Amount * Сумма в копейках. Например, 3 руб. 12коп. — это число 312.
 	// * Параметр должен быть равен сумме всех параметров `Amount`, переданных в объекте `Items`.
 	// * Минимальная сумма операции с помощью СБП составляет 10 руб.
-	Amount float32 `json:"Amount"`
+	Amount int64 `json:"Amount"`
 
 	// CustomerKey Идентификатор покупателя в системе мерчанта. Нужен для сохранения карт на платежной форме — платежи в один клик.
 	//
@@ -4577,6 +4578,74 @@ type Submit3DSAuthorizationV2FormdataRequestBody Submit3DSAuthorizationV2Formdat
 
 // GetConfirmOperationJSONRequestBody defines body for GetConfirmOperation for application/json ContentType.
 type GetConfirmOperationJSONRequestBody GetConfirmOperationJSONBody
+
+// Getter for additional properties for Common. Returns the specified
+// element and whether it was found
+func (a Common) Get(fieldName string) (value string, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for Common
+func (a *Common) Set(fieldName string, value string) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]string)
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for Common to handle AdditionalProperties
+func (a *Common) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["OperationInitiatorType"]; found {
+		err = json.Unmarshal(raw, &a.OperationInitiatorType)
+		if err != nil {
+			return fmt.Errorf("error reading 'OperationInitiatorType': %w", err)
+		}
+		delete(object, "OperationInitiatorType")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]string)
+		for fieldName, fieldBuf := range object {
+			var fieldVal string
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for Common to handle AdditionalProperties
+func (a Common) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.OperationInitiatorType != nil {
+		object["OperationInitiatorType"], err = json.Marshal(a.OperationInitiatorType)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'OperationInitiatorType': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
 
 // AsAttachCardDATA0 returns the union data inside the AttachCard_DATA as a AttachCardDATA0
 func (t AttachCard_DATA) AsAttachCardDATA0() (AttachCardDATA0, error) {

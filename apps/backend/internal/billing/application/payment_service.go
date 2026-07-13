@@ -417,9 +417,11 @@ func (s *PaymentService) revertRefundBestEffort(ctx context.Context, paymentID u
 // pending subscription payment and finalizes it based on the response.
 //
 // Succeeded payments are marked as such and the subscription renewal/tariff
-// change is applied best-effort afterwards. Because T-Kassa GetState does not
-// return card tokens, a synthetic WebhookPayload without card data is used;
-// no new payment method is saved on this path.
+// change is applied best-effort afterwards. T-Kassa GetState reports the
+// RebillId of the payment, so a synthetic WebhookPayload carrying it is used:
+// when the AUTHORIZED webhook that normally delivers the card token was lost,
+// the token is recovered here and the payment method is saved and activated,
+// exactly like on the webhook path.
 //
 // Failed payments are marked as failed. If the payment was for the current
 // subscription tariff (a renewal), the subscription is moved to a grace period.
@@ -443,10 +445,11 @@ func (s *PaymentService) SyncPendingPayment(ctx context.Context, paymentID uuid.
 		return fmt.Errorf("%w: payment has no provider payment id", domain.ErrInvalidPaymentStatus)
 	}
 
-	status, err := s.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
+	statusResult, err := s.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
 	if err != nil {
 		return fmt.Errorf("provider status: %w", err)
 	}
+	status := statusResult.Status
 
 	switch status {
 	case domain.PaymentStatusPending:
@@ -454,13 +457,13 @@ func (s *PaymentService) SyncPendingPayment(ctx context.Context, paymentID uuid.
 		// status, so a missing provider payment id cannot be recovered here.
 		return nil
 	case domain.PaymentStatusSucceeded, domain.PaymentStatusFailed, domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
-		return s.finalizeSyncedPayment(ctx, payment, status)
+		return s.finalizeSyncedPayment(ctx, payment, statusResult)
 	default:
 		return fmt.Errorf("unexpected provider status: %s", status)
 	}
 }
 
-func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment domain.SubscriptionPayment, status domain.PaymentStatus) error {
+func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment domain.SubscriptionPayment, statusResult PaymentStatusResult) error {
 	tx, err := s.deps.beginner.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -492,8 +495,9 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 	payload := WebhookPayload{
 		ProviderPaymentID: *payment.ProviderPaymentID,
 		InternalPaymentID: payment.ID,
-		Status:            status,
+		Status:            statusResult.Status,
 		AmountKopecks:     payment.AmountKopecks,
+		RebillID:          statusResult.RebillID,
 	}
 
 	if err := applyPaymentResult(ctx, paymentResultDeps{
@@ -506,7 +510,7 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 		return err
 	}
 
-	switch status {
+	switch statusResult.Status {
 	case domain.PaymentStatusFailed:
 		sub, err := txSubscriptions.GetByIDForUpdate(ctx, payment.SubscriptionID)
 		if err != nil {
@@ -535,7 +539,7 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 		return fmt.Errorf("commit sync payment transaction: %w", err)
 	}
 
-	if status == domain.PaymentStatusSucceeded {
+	if statusResult.Status == domain.PaymentStatusSucceeded {
 		applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
 			beginner:         s.deps.beginner,
 			subscriptions:    s.deps.subscriptions,
@@ -656,12 +660,12 @@ func (s *PaymentService) syncRefundingPayment(ctx context.Context, paymentID uui
 		return fmt.Errorf("%w: payment has no provider payment id", domain.ErrInvalidPaymentStatus)
 	}
 
-	status, err := s.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
+	statusResult, err := s.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
 	if err != nil {
 		return fmt.Errorf("provider status: %w", err)
 	}
 
-	switch status {
+	switch statusResult.Status {
 	case domain.PaymentStatusRefunded:
 		return s.finalizeStuckRefund(ctx, payment)
 	case domain.PaymentStatusSucceeded:
@@ -687,7 +691,7 @@ func (s *PaymentService) syncRefundingPayment(ctx context.Context, paymentID uui
 		s.deps.log.DebugContext(ctx, "provider status does not resolve stuck refund yet",
 			slog.String("payment_id", paymentID.String()),
 			slog.String("subscription_id", payment.SubscriptionID.String()),
-			slog.String("status", string(status)))
+			slog.String("status", string(statusResult.Status)))
 		return nil
 	}
 }

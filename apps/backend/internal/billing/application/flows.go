@@ -98,6 +98,97 @@ type markFailedDeps struct {
 	log                  *slog.Logger
 }
 
+// recoverPaymentMethodDeps is the narrow dependency bundle used by
+// recoverPaymentMethodRebillID.
+type recoverPaymentMethodDeps struct {
+	beginner             transaction.Beginner
+	subscriptionPayments SubscriptionPaymentRepository
+	paymentMethods       PaymentMethodRepository
+	provider             ProviderNamer
+	log                  *slog.Logger
+}
+
+// recoverPaymentMethodRebillID persists a saved-card token (RebillId) reported
+// by a provider status poll when a succeeded payment has no payment method
+// carrying the token — the AUTHORIZED webhook that normally delivers it was
+// lost. The method is upserted by token hash (idempotent with the webhook and
+// sync paths), linked to the payment and made the active method, mirroring the
+// succeeded-webhook flow. It is best-effort: a failure must not block payment
+// finalization, so errors are only logged.
+func recoverPaymentMethodRebillID(ctx context.Context, d recoverPaymentMethodDeps, payment *domain.SubscriptionPayment, rebillID string, now time.Time) {
+	if rebillID == "" || payment.PaymentMethodID != nil || payment.ProviderPaymentID == nil {
+		// Nothing to recover: no token reported, or the payment is already
+		// linked (linked methods are created with their token).
+		return
+	}
+
+	tx, err := d.beginner.Begin(ctx)
+	if err != nil {
+		d.log.ErrorContext(ctx, "failed to begin transaction for payment method token recovery",
+			slog.String("payment_id", payment.ID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txPaymentMethods, err := d.paymentMethods.WithTx(tx)
+	if err != nil {
+		d.log.ErrorContext(ctx, "failed to bind payment methods transaction for token recovery",
+			slog.String("payment_id", payment.ID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+	txSubscriptionPayments, err := d.subscriptionPayments.WithTx(tx)
+	if err != nil {
+		d.log.ErrorContext(ctx, "failed to bind subscription payments transaction for token recovery",
+			slog.String("payment_id", payment.ID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+
+	pm, err := domain.NewPaymentMethod(payment.UserID, d.provider.Name(), rebillID, "", now)
+	if err != nil {
+		d.log.ErrorContext(ctx, "failed to create payment method for token recovery",
+			slog.String("payment_id", payment.ID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+	pm, err = txPaymentMethods.UpsertByTokenHash(ctx, pm)
+	if err != nil {
+		d.log.ErrorContext(ctx, "failed to upsert payment method for token recovery",
+			slog.String("payment_id", payment.ID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+
+	updated, err := txSubscriptionPayments.UpdatePaymentMethodAndProviderID(ctx, payment.ID, pm.ID, *payment.ProviderPaymentID)
+	if err != nil {
+		d.log.ErrorContext(ctx, "failed to link recovered payment method to payment",
+			slog.String("payment_id", payment.ID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+
+	if err := txPaymentMethods.SetActive(ctx, payment.UserID, pm.ID); err != nil {
+		d.log.ErrorContext(ctx, "failed to activate recovered payment method",
+			slog.String("payment_id", payment.ID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		d.log.ErrorContext(ctx, "failed to commit payment method token recovery transaction",
+			slog.String("payment_id", payment.ID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return
+	}
+
+	payment.PaymentMethodID = updated.PaymentMethodID
+	d.log.InfoContext(ctx, "recovered payment method token from provider status",
+		slog.String("payment_id", payment.ID.String()),
+		slog.String("payment_method_id", pm.ID.String()))
+}
+
 func applyPaymentResult(
 	ctx context.Context,
 	d paymentResultDeps,
@@ -166,9 +257,14 @@ func applyPaymentResult(
 			}
 			methodID = &pm.ID
 			if payment.PaymentMethodID == nil {
-				if _, updateErr := txSubscriptionPayments.UpdatePaymentMethodAndProviderID(ctx, payment.ID, pm.ID, payload.ProviderPaymentID); updateErr != nil {
+				updated, updateErr := txSubscriptionPayments.UpdatePaymentMethodAndProviderID(ctx, payment.ID, pm.ID, payload.ProviderPaymentID)
+				if updateErr != nil {
 					return fmt.Errorf("update payment method id: %w", updateErr)
 				}
+				// Keep the in-memory payment in sync so the post-success
+				// subscription renewal links the recovered method to the
+				// subscription.
+				payment.PaymentMethodID = updated.PaymentMethodID
 			}
 		}
 
