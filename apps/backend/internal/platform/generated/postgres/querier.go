@@ -36,6 +36,7 @@ type Querier interface {
 	CreateLoginCode(ctx context.Context, arg CreateLoginCodeParams) error
 	CreateOperation(ctx context.Context, arg CreateOperationParams) (Operation, error)
 	CreateOperationCategory(ctx context.Context, arg CreateOperationCategoryParams) (OperationCategory, error)
+	CreateOperationCategoryIgnoreConflict(ctx context.Context, arg CreateOperationCategoryIgnoreConflictParams) error
 	CreatePaymentMethod(ctx context.Context, arg CreatePaymentMethodParams) (PaymentMethod, error)
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
 	CreatePropertyPhoto(ctx context.Context, arg CreatePropertyPhotoParams) (PropertyPhoto, error)
@@ -72,7 +73,7 @@ type Querier interface {
 	DeleteUneditedOperationsByLease(ctx context.Context, arg DeleteUneditedOperationsByLeaseParams) error
 	DeleteUneditedOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedOperationsByRecurringOperationParams) error
 	DeleteUnusedLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndEmailParams) error
-	GetFinanceReportByCategory(ctx context.Context, ownerID pgtype.UUID) ([]GetFinanceReportByCategoryRow, error)
+	GetFinanceReportByCategory(ctx context.Context, arg GetFinanceReportByCategoryParams) ([]GetFinanceReportByCategoryRow, error)
 	GetFinanceReportByMonth(ctx context.Context, arg GetFinanceReportByMonthParams) ([]GetFinanceReportByMonthRow, error)
 	GetFinanceReportByProperty(ctx context.Context, arg GetFinanceReportByPropertyParams) ([]GetFinanceReportByPropertyRow, error)
 	GetFinanceReportTotals(ctx context.Context, arg GetFinanceReportTotalsParams) (GetFinanceReportTotalsRow, error)
@@ -85,7 +86,7 @@ type Querier interface {
 	GetLoginAttemptByPhone(ctx context.Context, phone string) (LoginAttempt, error)
 	GetLoginAttemptByPhoneForUpdate(ctx context.Context, phone string) (LoginAttempt, error)
 	GetOpenLeaseByProperty(ctx context.Context, arg GetOpenLeaseByPropertyParams) (Lease, error)
-	GetOperationByIDAdmin(ctx context.Context, id pgtype.UUID) (Operation, error)
+	GetOperationByIDAdmin(ctx context.Context, id pgtype.UUID) (GetOperationByIDAdminRow, error)
 	GetOperationByIDAndOwner(ctx context.Context, arg GetOperationByIDAndOwnerParams) (GetOperationByIDAndOwnerRow, error)
 	GetOperationByIDAndOwnerForUpdate(ctx context.Context, arg GetOperationByIDAndOwnerForUpdateParams) (GetOperationByIDAndOwnerForUpdateRow, error)
 	GetOperationCategoryByIDAndOwner(ctx context.Context, arg GetOperationCategoryByIDAndOwnerParams) (OperationCategory, error)
@@ -150,7 +151,7 @@ type Querier interface {
 	ListOperationDatesByRecurringOperation(ctx context.Context, recurringOperationID pgtype.UUID) ([]pgtype.Date, error)
 	ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID) ([]ListOperationsByLeaseRow, error)
 	ListOperationsByOwner(ctx context.Context, arg ListOperationsByOwnerParams) ([]ListOperationsByOwnerRow, error)
-	ListOperationsByOwnerAdmin(ctx context.Context, arg ListOperationsByOwnerAdminParams) ([]Operation, error)
+	ListOperationsByOwnerAdmin(ctx context.Context, arg ListOperationsByOwnerAdminParams) ([]ListOperationsByOwnerAdminRow, error)
 	ListOperationsByOwnerAsc(ctx context.Context, arg ListOperationsByOwnerAscParams) ([]ListOperationsByOwnerAscRow, error)
 	ListOperationsByProperty(ctx context.Context, arg ListOperationsByPropertyParams) ([]ListOperationsByPropertyRow, error)
 	ListOperationsByPropertyWithStatuses(ctx context.Context, arg ListOperationsByPropertyWithStatusesParams) ([]ListOperationsByPropertyWithStatusesRow, error)

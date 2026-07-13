@@ -34,7 +34,7 @@ func (s *CategoryService) ListCategories(ctx context.Context, ownerID uuid.UUID,
 	if q.Type != "" {
 		qt, err := domain.ParseOperationType(q.Type)
 		if err != nil {
-			return nil, err
+			return nil, newInvalidInputError(err.Error())
 		}
 		t = &qt
 	}

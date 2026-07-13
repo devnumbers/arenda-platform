@@ -444,10 +444,10 @@ func (r *AdminRepository) GetOperation(ctx context.Context, id uuid.UUID) (admin
 		}
 		return adminapp.AdminOperationView{}, fmt.Errorf("get operation: %w", err)
 	}
-	return r.operationViewFromRow(row)
+	return r.operationViewFromRow(adminGetOperationRowToListRow(row))
 }
 
-func (r *AdminRepository) operationViewFromRow(row postgres.Operation) (adminapp.AdminOperationView, error) {
+func (r *AdminRepository) operationViewFromRow(row postgres.ListOperationsByOwnerAdminRow) (adminapp.AdminOperationView, error) {
 	status, err := leasesdomain.ParseOperationStatus(row.Status)
 	if err != nil {
 		return adminapp.AdminOperationView{}, fmt.Errorf("invalid operation status: %w", err)
@@ -459,6 +459,7 @@ func (r *AdminRepository) operationViewFromRow(row postgres.Operation) (adminapp
 		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
 		Type:          leasesdomain.OperationType(row.Type),
 		CategoryID:    pgconv.UUIDFromPgtype(row.CategoryID),
+		CategoryName:  row.CategoryName,
 		Status:        status,
 		Name:          row.Name,
 		AmountKopecks: row.AmountKopecks,
@@ -485,6 +486,13 @@ func (r *AdminRepository) operationViewFromRow(row postgres.Operation) (adminapp
 	}
 
 	return view, nil
+}
+
+// adminGetOperationRowToListRow converts the generated get-row type to the
+// list-row type. Both structs carry the same fields because both admin
+// operation queries select operations columns plus category_name.
+func adminGetOperationRowToListRow(row postgres.GetOperationByIDAdminRow) postgres.ListOperationsByOwnerAdminRow {
+	return postgres.ListOperationsByOwnerAdminRow(row)
 }
 
 func (r *AdminRepository) decryptPhone(ctx context.Context, phone string, encrypted bool) (string, error) {

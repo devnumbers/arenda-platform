@@ -2817,7 +2817,7 @@ components:
 
     AdminOperation:
       type: object
-      required: [id, ownerId, propertyId, type, category, name, amountKopecks, operationDate, status, isException, createdAt, updatedAt]
+      required: [id, ownerId, propertyId, type, categoryId, categoryName, name, amountKopecks, operationDate, status, isException, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -2838,9 +2838,11 @@ components:
           nullable: true
         type:
           $ref: '#/components/schemas/OperationType'
-        category_id:
+        categoryId:
           type: string
           format: uuid
+        categoryName:
+          type: string
         name:
           type: string
         amountKopecks:
@@ -3755,8 +3757,10 @@ components:
           type: integer
     FinanceReportCategoryRow:
       type: object
-      required: [category_id, category_name, total_kopecks]
+      required: [type, category_id, category_name, total_kopecks]
       properties:
+        type:
+          $ref: '#/components/schemas/OperationType'
         category_id:
           type: string
           format: uuid

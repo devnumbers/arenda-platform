@@ -44,6 +44,29 @@ func (q *Queries) CreateOperationCategory(ctx context.Context, arg CreateOperati
 	return i, err
 }
 
+const createOperationCategoryIgnoreConflict = `-- name: CreateOperationCategoryIgnoreConflict :exec
+INSERT INTO operation_categories (owner_id, type, name, code)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (owner_id, type, lower(name)) DO NOTHING
+`
+
+type CreateOperationCategoryIgnoreConflictParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Type    string      `json:"type"`
+	Name    string      `json:"name"`
+	Code    pgtype.Text `json:"code"`
+}
+
+func (q *Queries) CreateOperationCategoryIgnoreConflict(ctx context.Context, arg CreateOperationCategoryIgnoreConflictParams) error {
+	_, err := q.db.Exec(ctx, createOperationCategoryIgnoreConflict,
+		arg.OwnerID,
+		arg.Type,
+		arg.Name,
+		arg.Code,
+	)
+	return err
+}
+
 const getOperationCategoryByIDAndOwner = `-- name: GetOperationCategoryByIDAndOwner :one
 SELECT id, owner_id, type, name, code, created_at, updated_at FROM operation_categories
 WHERE id = $1 AND owner_id = $2

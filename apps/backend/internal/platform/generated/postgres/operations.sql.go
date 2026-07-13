@@ -12,13 +12,14 @@ import (
 )
 
 const countOperationsByOwnerAdmin = `-- name: CountOperationsByOwnerAdmin :one
-SELECT COUNT(*) FROM operations
-WHERE owner_id = $1
-  AND deleted_at IS NULL
-  AND ($2::text = '' OR status = $2::text)
-  AND ($3::text = '' OR type = $3::text)
-  AND ($4::uuid IS NULL OR property_id = $4::uuid)
-  AND ($5::uuid IS NULL OR lease_id = $5::uuid)
+SELECT COUNT(*) FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = $1
+  AND op.deleted_at IS NULL
+  AND ($2::text = '' OR op.status = $2::text)
+  AND ($3::text = '' OR op.type = $3::text)
+  AND ($4::uuid IS NULL OR op.property_id = $4::uuid)
+  AND ($5::uuid IS NULL OR op.lease_id = $5::uuid)
 `
 
 type CountOperationsByOwnerAdminParams struct {
@@ -262,12 +263,37 @@ func (q *Queries) DeleteUneditedOperationsByRecurringOperation(ctx context.Conte
 }
 
 const getOperationByIDAdmin = `-- name: GetOperationByIDAdmin :one
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date, category_id FROM operations WHERE id = $1
+SELECT op.id, op.owner_id, op.property_id, op.lease_id, op.recurring_operation_id, op.type, op.amount_kopecks, op.operation_date, op.comment, op.is_exception, op.created_at, op.updated_at, op.deleted_at, op.status, op.name, op.reminder_offset_days, op.source_operation_date, op.category_id, cat.name AS category_name
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.id = $1
 `
 
-func (q *Queries) GetOperationByIDAdmin(ctx context.Context, id pgtype.UUID) (Operation, error) {
+type GetOperationByIDAdminRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	OwnerID              pgtype.UUID        `json:"owner_id"`
+	PropertyID           pgtype.UUID        `json:"property_id"`
+	LeaseID              pgtype.UUID        `json:"lease_id"`
+	RecurringOperationID pgtype.UUID        `json:"recurring_operation_id"`
+	Type                 string             `json:"type"`
+	AmountKopecks        int64              `json:"amount_kopecks"`
+	OperationDate        pgtype.Date        `json:"operation_date"`
+	Comment              pgtype.Text        `json:"comment"`
+	IsException          bool               `json:"is_exception"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
+	Status               string             `json:"status"`
+	Name                 string             `json:"name"`
+	ReminderOffsetDays   pgtype.Int4        `json:"reminder_offset_days"`
+	SourceOperationDate  pgtype.Date        `json:"source_operation_date"`
+	CategoryID           pgtype.UUID        `json:"category_id"`
+	CategoryName         string             `json:"category_name"`
+}
+
+func (q *Queries) GetOperationByIDAdmin(ctx context.Context, id pgtype.UUID) (GetOperationByIDAdminRow, error) {
 	row := q.db.QueryRow(ctx, getOperationByIDAdmin, id)
-	var i Operation
+	var i GetOperationByIDAdminRow
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
@@ -287,6 +313,7 @@ func (q *Queries) GetOperationByIDAdmin(ctx context.Context, id pgtype.UUID) (Op
 		&i.ReminderOffsetDays,
 		&i.SourceOperationDate,
 		&i.CategoryID,
+		&i.CategoryName,
 	)
 	return i, err
 }
@@ -872,14 +899,16 @@ func (q *Queries) ListOperationsByOwner(ctx context.Context, arg ListOperationsB
 }
 
 const listOperationsByOwnerAdmin = `-- name: ListOperationsByOwnerAdmin :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date, category_id FROM operations
-WHERE owner_id = $1
-  AND deleted_at IS NULL
-  AND ($2::text = '' OR status = $2::text)
-  AND ($3::text = '' OR type = $3::text)
-  AND ($4::uuid IS NULL OR property_id = $4::uuid)
-  AND ($5::uuid IS NULL OR lease_id = $5::uuid)
-ORDER BY operation_date DESC, id DESC
+SELECT op.id, op.owner_id, op.property_id, op.lease_id, op.recurring_operation_id, op.type, op.amount_kopecks, op.operation_date, op.comment, op.is_exception, op.created_at, op.updated_at, op.deleted_at, op.status, op.name, op.reminder_offset_days, op.source_operation_date, op.category_id, cat.name AS category_name
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = $1
+  AND op.deleted_at IS NULL
+  AND ($2::text = '' OR op.status = $2::text)
+  AND ($3::text = '' OR op.type = $3::text)
+  AND ($4::uuid IS NULL OR op.property_id = $4::uuid)
+  AND ($5::uuid IS NULL OR op.lease_id = $5::uuid)
+ORDER BY op.operation_date DESC, op.id DESC
 LIMIT $7::int OFFSET $6::int
 `
 
@@ -893,7 +922,29 @@ type ListOperationsByOwnerAdminParams struct {
 	Limit      int32       `json:"limit"`
 }
 
-func (q *Queries) ListOperationsByOwnerAdmin(ctx context.Context, arg ListOperationsByOwnerAdminParams) ([]Operation, error) {
+type ListOperationsByOwnerAdminRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	OwnerID              pgtype.UUID        `json:"owner_id"`
+	PropertyID           pgtype.UUID        `json:"property_id"`
+	LeaseID              pgtype.UUID        `json:"lease_id"`
+	RecurringOperationID pgtype.UUID        `json:"recurring_operation_id"`
+	Type                 string             `json:"type"`
+	AmountKopecks        int64              `json:"amount_kopecks"`
+	OperationDate        pgtype.Date        `json:"operation_date"`
+	Comment              pgtype.Text        `json:"comment"`
+	IsException          bool               `json:"is_exception"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
+	Status               string             `json:"status"`
+	Name                 string             `json:"name"`
+	ReminderOffsetDays   pgtype.Int4        `json:"reminder_offset_days"`
+	SourceOperationDate  pgtype.Date        `json:"source_operation_date"`
+	CategoryID           pgtype.UUID        `json:"category_id"`
+	CategoryName         string             `json:"category_name"`
+}
+
+func (q *Queries) ListOperationsByOwnerAdmin(ctx context.Context, arg ListOperationsByOwnerAdminParams) ([]ListOperationsByOwnerAdminRow, error) {
 	rows, err := q.db.Query(ctx, listOperationsByOwnerAdmin,
 		arg.OwnerID,
 		arg.Status,
@@ -907,9 +958,9 @@ func (q *Queries) ListOperationsByOwnerAdmin(ctx context.Context, arg ListOperat
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Operation{}
+	items := []ListOperationsByOwnerAdminRow{}
 	for rows.Next() {
-		var i Operation
+		var i ListOperationsByOwnerAdminRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OwnerID,
@@ -929,6 +980,7 @@ func (q *Queries) ListOperationsByOwnerAdmin(ctx context.Context, arg ListOperat
 			&i.ReminderOffsetDays,
 			&i.SourceOperationDate,
 			&i.CategoryID,
+			&i.CategoryName,
 		); err != nil {
 			return nil, err
 		}

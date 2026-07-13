@@ -280,24 +280,30 @@ ORDER BY operation_date ASC, id ASC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
 -- name: ListOperationsByOwnerAdmin :many
-SELECT * FROM operations
-WHERE owner_id = $1
-  AND deleted_at IS NULL
-  AND (sqlc.arg('status')::text = '' OR status = sqlc.arg('status')::text)
-  AND (sqlc.arg('type')::text = '' OR type = sqlc.arg('type')::text)
-  AND (sqlc.arg('property_id')::uuid IS NULL OR property_id = sqlc.arg('property_id')::uuid)
-  AND (sqlc.arg('lease_id')::uuid IS NULL OR lease_id = sqlc.arg('lease_id')::uuid)
-ORDER BY operation_date DESC, id DESC
+SELECT op.*, cat.name AS category_name
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = $1
+  AND op.deleted_at IS NULL
+  AND (sqlc.arg('status')::text = '' OR op.status = sqlc.arg('status')::text)
+  AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
+  AND (sqlc.arg('property_id')::uuid IS NULL OR op.property_id = sqlc.arg('property_id')::uuid)
+  AND (sqlc.arg('lease_id')::uuid IS NULL OR op.lease_id = sqlc.arg('lease_id')::uuid)
+ORDER BY op.operation_date DESC, op.id DESC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
 -- name: CountOperationsByOwnerAdmin :one
-SELECT COUNT(*) FROM operations
-WHERE owner_id = $1
-  AND deleted_at IS NULL
-  AND (sqlc.arg('status')::text = '' OR status = sqlc.arg('status')::text)
-  AND (sqlc.arg('type')::text = '' OR type = sqlc.arg('type')::text)
-  AND (sqlc.arg('property_id')::uuid IS NULL OR property_id = sqlc.arg('property_id')::uuid)
-  AND (sqlc.arg('lease_id')::uuid IS NULL OR lease_id = sqlc.arg('lease_id')::uuid);
+SELECT COUNT(*) FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = $1
+  AND op.deleted_at IS NULL
+  AND (sqlc.arg('status')::text = '' OR op.status = sqlc.arg('status')::text)
+  AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
+  AND (sqlc.arg('property_id')::uuid IS NULL OR op.property_id = sqlc.arg('property_id')::uuid)
+  AND (sqlc.arg('lease_id')::uuid IS NULL OR op.lease_id = sqlc.arg('lease_id')::uuid);
 
 -- name: GetOperationByIDAdmin :one
-SELECT * FROM operations WHERE id = $1;
+SELECT op.*, cat.name AS category_name
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.id = $1;

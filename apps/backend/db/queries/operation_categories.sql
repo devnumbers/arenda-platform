@@ -3,6 +3,11 @@ INSERT INTO operation_categories (owner_id, type, name, code)
 VALUES ($1, $2, $3, $4)
 RETURNING *;
 
+-- name: CreateOperationCategoryIgnoreConflict :exec
+INSERT INTO operation_categories (owner_id, type, name, code)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (owner_id, type, lower(name)) DO NOTHING;
+
 -- name: ListOperationCategoriesByOwner :many
 SELECT * FROM operation_categories
 WHERE owner_id = $1

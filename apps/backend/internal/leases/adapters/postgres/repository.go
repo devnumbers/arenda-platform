@@ -1342,7 +1342,11 @@ func (r *OperationRepository) GetFinanceReportByProperty(ctx context.Context, ow
 }
 
 func (r *OperationRepository) GetFinanceReportByCategory(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]application.FinanceReportCategoryRow, error) {
-	rows, err := r.q().GetFinanceReportByCategory(ctx, pgconv.UUIDToPgtype(ownerID))
+	rows, err := r.q().GetFinanceReportByCategory(ctx, postgres.GetFinanceReportByCategoryParams{
+		OwnerID:  pgconv.UUIDToPgtype(ownerID),
+		FromDate: pgconv.DatePtrToPgtype(from),
+		ToDate:   pgconv.DatePtrToPgtype(to),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -1562,7 +1566,7 @@ func (r *OperationCategoryRepository) CreateDefaultCategories(ctx context.Contex
 		{code: string(domain.OperationCategoryCodeDepositReturn), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeDepositReturn)},
 	}
 	for _, cat := range defaults {
-		_, err := r.q().CreateOperationCategory(ctx, postgres.CreateOperationCategoryParams{
+		err := r.q().CreateOperationCategoryIgnoreConflict(ctx, postgres.CreateOperationCategoryIgnoreConflictParams{
 			OwnerID: ownerPgID,
 			Type:    cat.operationType,
 			Name:    cat.name,

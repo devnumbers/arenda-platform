@@ -72,6 +72,7 @@ func (h *FinanceHandlers) GetFinanceReport(w http.ResponseWriter, r *http.Reques
 	}
 	for _, row := range report.ByCategory {
 		resp.ByCategory = append(resp.ByCategory, openapi.FinanceReportCategoryRow{
+			Type:         openapi.OperationType(row.Type),
 			CategoryId:   row.CategoryID,
 			CategoryName: row.CategoryName,
 			TotalKopecks: int(row.TotalKopecks),
