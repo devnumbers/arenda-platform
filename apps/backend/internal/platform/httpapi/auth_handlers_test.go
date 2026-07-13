@@ -171,8 +171,8 @@ func TestSendCode_WithEmail_EmailAlreadyTakenReturns409(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.Detail == nil || *resp.Detail != "Этот email уже используется" {
-		t.Fatalf("detail = %v, want %q", resp.Detail, "Этот email уже используется")
+	if resp.Detail == nil || *resp.Detail != "Эта почта уже используется" {
+		t.Fatalf("detail = %v, want %q", resp.Detail, "Эта почта уже используется")
 	}
 }
 
