@@ -5,9 +5,10 @@ CREATE TABLE operation_categories (
     name TEXT NOT NULL,
     code TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (owner_id, type, lower(name))
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE UNIQUE INDEX idx_operation_categories_owner_type_lower_name ON operation_categories(owner_id, type, lower(name));
 
 CREATE INDEX idx_operation_categories_owner_id ON operation_categories(owner_id);
 CREATE INDEX idx_operation_categories_owner_type ON operation_categories(owner_id, type);

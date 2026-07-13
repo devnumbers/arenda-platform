@@ -1,6 +1,6 @@
 -- name: CreateRecurringOperation :one
 INSERT INTO recurring_operations (
-    owner_id, property_id, lease_id, type, category, name,
+    owner_id, property_id, lease_id, type, category_id, name,
     amount_kopecks, start_date, payment_day, end_date,
     periodicity, status, comment, reminder_offset_days
 )
@@ -44,7 +44,7 @@ FOR UPDATE;
 -- name: UpdateRecurringOperation :one
 UPDATE recurring_operations
 SET type = $2,
-    category = $3,
+    category_id = $3,
     name = $4,
     amount_kopecks = $5,
     start_date = $6,

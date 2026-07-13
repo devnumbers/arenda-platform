@@ -13,33 +13,27 @@ import (
 
 const getFinanceReportByCategory = `-- name: GetFinanceReportByCategory :many
 SELECT
-  type,
-  category,
-  COALESCE(SUM(amount_kopecks), 0)::bigint AS total_kopecks
-FROM operations
-WHERE owner_id = $1::uuid
-  AND status IN ('paid', 'received')
-  AND ($2::date IS NULL OR operation_date >= $2::date)
-  AND ($3::date IS NULL OR operation_date <= $3::date)
-  AND deleted_at IS NULL
-GROUP BY type, category
-ORDER BY total_kopecks DESC
+  op.type,
+  op.category_id,
+  cat.name AS category_name,
+  COALESCE(SUM(op.amount_kopecks), 0)::bigint AS total_kopecks
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = $1::uuid
+  AND op.status IN ('paid', 'received')
+  AND op.deleted_at IS NULL
+GROUP BY op.type, op.category_id, cat.name
 `
 
-type GetFinanceReportByCategoryParams struct {
-	OwnerID  pgtype.UUID `json:"owner_id"`
-	FromDate pgtype.Date `json:"from_date"`
-	ToDate   pgtype.Date `json:"to_date"`
-}
-
 type GetFinanceReportByCategoryRow struct {
-	Type         string `json:"type"`
-	Category     string `json:"category"`
-	TotalKopecks int64  `json:"total_kopecks"`
+	Type         string      `json:"type"`
+	CategoryID   pgtype.UUID `json:"category_id"`
+	CategoryName string      `json:"category_name"`
+	TotalKopecks int64       `json:"total_kopecks"`
 }
 
-func (q *Queries) GetFinanceReportByCategory(ctx context.Context, arg GetFinanceReportByCategoryParams) ([]GetFinanceReportByCategoryRow, error) {
-	rows, err := q.db.Query(ctx, getFinanceReportByCategory, arg.OwnerID, arg.FromDate, arg.ToDate)
+func (q *Queries) GetFinanceReportByCategory(ctx context.Context, ownerID pgtype.UUID) ([]GetFinanceReportByCategoryRow, error) {
+	rows, err := q.db.Query(ctx, getFinanceReportByCategory, ownerID)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +41,12 @@ func (q *Queries) GetFinanceReportByCategory(ctx context.Context, arg GetFinance
 	items := []GetFinanceReportByCategoryRow{}
 	for rows.Next() {
 		var i GetFinanceReportByCategoryRow
-		if err := rows.Scan(&i.Type, &i.Category, &i.TotalKopecks); err != nil {
+		if err := rows.Scan(
+			&i.Type,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.TotalKopecks,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
