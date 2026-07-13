@@ -1411,6 +1411,122 @@ func operationFromRow(row postgres.Operation) (domain.Operation, error) {
 	return op, nil
 }
 
+func operationCategoryFromRow(row postgres.OperationCategory) domain.OperationCategory {
+	var code *string
+	if row.Code.Valid {
+		code = &row.Code.String
+	}
+	return domain.OperationCategory{
+		ID:      pgconv.UUIDFromPgtype(row.ID),
+		OwnerID: pgconv.UUIDFromPgtype(row.OwnerID),
+		Type:    domain.OperationType(row.Type),
+		Name:    row.Name,
+		Code:    code,
+	}
+}
+
+// OperationCategoryRepository persists operation categories.
+type OperationCategoryRepository struct {
+	db postgres.DBTX
+}
+
+// NewOperationCategoryRepository creates a new operation category repository.
+func NewOperationCategoryRepository(db postgres.DBTX) *OperationCategoryRepository {
+	return &OperationCategoryRepository{db: db}
+}
+
+func (r *OperationCategoryRepository) q() *postgres.Queries {
+	return postgres.New(r.db)
+}
+
+func (r *OperationCategoryRepository) Create(ctx context.Context, ownerID uuid.UUID, categoryType domain.OperationType, name string) (domain.OperationCategory, error) {
+	row, err := r.q().CreateOperationCategory(ctx, postgres.CreateOperationCategoryParams{
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		Type:    string(categoryType),
+		Name:    name,
+	})
+	if err != nil {
+		return domain.OperationCategory{}, err
+	}
+	return operationCategoryFromRow(row), nil
+}
+
+func (r *OperationCategoryRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID, categoryType *domain.OperationType) ([]domain.OperationCategory, error) {
+	var t string
+	if categoryType != nil {
+		t = string(*categoryType)
+	}
+	rows, err := r.q().ListOperationCategoriesByOwner(ctx, postgres.ListOperationCategoriesByOwnerParams{
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		Type:    t,
+	})
+	if err != nil {
+		return nil, err
+	}
+	categories := make([]domain.OperationCategory, 0, len(rows))
+	for _, row := range rows {
+		categories = append(categories, operationCategoryFromRow(row))
+	}
+	return categories, nil
+}
+
+func (r *OperationCategoryRepository) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.OperationCategory, error) {
+	row, err := r.q().GetOperationCategoryByIDAndOwner(ctx, postgres.GetOperationCategoryByIDAndOwnerParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.OperationCategory{}, application.ErrNotFound
+		}
+		return domain.OperationCategory{}, err
+	}
+	return operationCategoryFromRow(row), nil
+}
+
+func (r *OperationCategoryRepository) GetByOwnerAndCode(ctx context.Context, ownerID uuid.UUID, code domain.OperationCategoryDefaultCode) (domain.OperationCategory, error) {
+	row, err := r.q().GetOperationCategoryByOwnerAndCode(ctx, postgres.GetOperationCategoryByOwnerAndCodeParams{
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		Code:    pgtype.Text{String: string(code), Valid: true},
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.OperationCategory{}, application.ErrNotFound
+		}
+		return domain.OperationCategory{}, err
+	}
+	return operationCategoryFromRow(row), nil
+}
+
+func (r *OperationCategoryRepository) CreateDefaultCategories(ctx context.Context, ownerID uuid.UUID) error {
+	ownerPgID := pgconv.UUIDToPgtype(ownerID)
+	defaults := []struct {
+		code          string
+		operationType string
+		name          string
+	}{
+		{code: string(domain.OperationCategoryCodeRent), operationType: string(domain.OperationTypeIncome), name: string(domain.OperationCategoryCodeRent)},
+		{code: string(domain.OperationCategoryCodeOtherIncome), operationType: string(domain.OperationTypeIncome), name: string(domain.OperationCategoryCodeOtherIncome)},
+		{code: string(domain.OperationCategoryCodeUtilities), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeUtilities)},
+		{code: string(domain.OperationCategoryCodeRepair), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeRepair)},
+		{code: string(domain.OperationCategoryCodeTax), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeTax)},
+		{code: string(domain.OperationCategoryCodeOtherExpense), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeOtherExpense)},
+		{code: string(domain.OperationCategoryCodeDepositReturn), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeDepositReturn)},
+	}
+	for _, cat := range defaults {
+		_, err := r.q().CreateOperationCategory(ctx, postgres.CreateOperationCategoryParams{
+			OwnerID: ownerPgID,
+			Type:    cat.operationType,
+			Name:    cat.name,
+			Code:    pgtype.Text{String: cat.code, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("create default operation category %q: %w", cat.code, err)
+		}
+	}
+	return nil
+}
+
 // PropertyRepository provides property information needed by the lease bounded context.
 type PropertyRepository struct {
 	db postgres.DBTX
