@@ -85,7 +85,7 @@ func NormalizeOperationSort(sort OperationSort) OperationSort {
 type OperationFilter struct {
 	Types                []domain.OperationType
 	Statuses             []domain.OperationStatus
-	Categories           []domain.OperationCategory
+	CategoryIDs          []uuid.UUID
 	PropertyID           uuid.UUID
 	LeaseID              uuid.UUID
 	FromDate             *time.Time
@@ -109,7 +109,8 @@ type FinanceReportPropertyRow struct {
 
 type FinanceReportCategoryRow struct {
 	Type         domain.OperationType
-	Category     domain.OperationCategory
+	CategoryID   uuid.UUID
+	CategoryName string
 	TotalKopecks int64
 }
 
@@ -152,4 +153,12 @@ type OperationRepository interface {
 	GetFinanceReportByCategory(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]FinanceReportCategoryRow, error)
 	GetFinanceReportByMonth(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]FinanceReportMonthRow, error)
 	WithTx(tx transaction.Tx) OperationRepository
+}
+
+type OperationCategoryRepository interface {
+	Create(ctx context.Context, ownerID uuid.UUID, categoryType domain.OperationType, name string) (domain.OperationCategory, error)
+	ListByOwner(ctx context.Context, ownerID uuid.UUID, categoryType *domain.OperationType) ([]domain.OperationCategory, error)
+	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.OperationCategory, error)
+	GetByOwnerAndCode(ctx context.Context, ownerID uuid.UUID, code domain.OperationCategoryDefaultCode) (domain.OperationCategory, error)
+	CreateDefaultCategories(ctx context.Context, ownerID uuid.UUID) error
 }
