@@ -33,7 +33,7 @@ func NewOperationHandlers(svc *leasesapp.OperationService, logger *slog.Logger) 
 
 func (h *OperationHandlers) handleOperationError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, leasesapp.ErrInvalidInput):
+	case errors.Is(err, leasesapp.ErrInvalidInput), errors.Is(err, domain.ErrInvalidOperationType):
 		detail, ok := UserFacingDetail(err)
 		if !ok {
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
@@ -111,7 +111,7 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 	cmd := leasesapp.CreateOperationCommand{
 		PropertyID:    propertyId,
 		Type:          string(body.Type),
-		Category:      string(body.Category),
+		CategoryID:    body.CategoryId,
 		Name:          body.Name,
 		AmountKopecks: int64(body.AmountKopecks),
 		OperationDate: body.OperationDate.Time,
@@ -160,10 +160,10 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 			filter.Types = append(filter.Types, domain.OperationType(t))
 		}
 	}
-	if params.Category != nil {
-		filter.Categories = make([]domain.OperationCategory, 0, len(*params.Category))
-		for _, c := range *params.Category {
-			filter.Categories = append(filter.Categories, domain.OperationCategory(c))
+	if params.CategoryId != nil {
+		filter.CategoryIDs = make([]uuid.UUID, 0, len(*params.CategoryId))
+		for _, c := range *params.CategoryId {
+			filter.CategoryIDs = append(filter.CategoryIDs, c)
 		}
 	}
 	if params.From != nil {
@@ -208,10 +208,10 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 			filter.Statuses = append(filter.Statuses, domain.OperationStatus(s))
 		}
 	}
-	if params.Category != nil {
-		filter.Categories = make([]domain.OperationCategory, 0, len(*params.Category))
-		for _, c := range *params.Category {
-			filter.Categories = append(filter.Categories, domain.OperationCategory(c))
+	if params.CategoryId != nil {
+		filter.CategoryIDs = make([]uuid.UUID, 0, len(*params.CategoryId))
+		for _, c := range *params.CategoryId {
+			filter.CategoryIDs = append(filter.CategoryIDs, c)
 		}
 	}
 	if params.PropertyId != nil {
@@ -272,11 +272,11 @@ func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Reque
 	}
 
 	cmd := leasesapp.UpdateOperationCommand{
-		Type:     ptrString(body.Type),
-		Category: ptrString(body.Category),
-		Name:     body.Name,
-		Comment:  body.Comment,
-		LeaseID:  uuidPtrFromOpenAPI(body.LeaseId),
+		Type:       ptrString(body.Type),
+		CategoryID: uuidPtrFromOpenAPI(body.CategoryId),
+		Name:       body.Name,
+		Comment:    body.Comment,
+		LeaseID:    uuidPtrFromOpenAPI(body.LeaseId),
 	}
 	if body.AmountKopecks != nil {
 		cmd.AmountKopecks = new(int64(*body.AmountKopecks))
@@ -360,7 +360,7 @@ func operationResponse(op domain.Operation) openapi.OperationResponse {
 		OwnerId:       op.OwnerID,
 		PropertyId:    op.PropertyID,
 		Type:          openapi.OperationType(op.Type),
-		Category:      openapi.OperationCategory(op.Category),
+		CategoryId:    op.CategoryID,
 		Name:          op.Name,
 		AmountKopecks: int(op.AmountKopecks),
 		OperationDate: openapi_types.Date{Time: op.OperationDate},

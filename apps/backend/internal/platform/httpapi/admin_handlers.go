@@ -387,7 +387,7 @@ func adminOperationResponse(view adminapp.AdminOperationView) openapi.AdminOpera
 		OwnerId:       view.OwnerID,
 		PropertyId:    view.PropertyID,
 		Type:          openapi.OperationType(view.Type),
-		Category:      openapi.OperationCategory(view.Category),
+		CategoryId:    &view.CategoryID,
 		Name:          view.Name,
 		AmountKopecks: int(view.AmountKopecks),
 		OperationDate: openapi_types.Date{Time: view.OperationDate},

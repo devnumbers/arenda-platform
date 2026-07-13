@@ -426,6 +426,14 @@ func isOpenLeaseUniqueViolation(err error) bool {
 	return false
 }
 
+func isDuplicateCategoryNameError(err error) bool {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		return pgErr.Code == pgerrcode.UniqueViolation &&
+			strings.Contains(pgErr.ConstraintName, "idx_operation_categories_owner_type_lower_name")
+	}
+	return false
+}
+
 func tenantContactFromRow(row postgres.TenantContact) domain.TenantContact {
 	return domain.TenantContact{
 		ID:         pgconv.UUIDFromPgtype(row.ID),
@@ -1447,11 +1455,13 @@ func operationCategoryFromRow(row postgres.OperationCategory) domain.OperationCa
 		code = &row.Code.String
 	}
 	return domain.OperationCategory{
-		ID:      pgconv.UUIDFromPgtype(row.ID),
-		OwnerID: pgconv.UUIDFromPgtype(row.OwnerID),
-		Type:    domain.OperationType(row.Type),
-		Name:    row.Name,
-		Code:    code,
+		ID:        pgconv.UUIDFromPgtype(row.ID),
+		OwnerID:   pgconv.UUIDFromPgtype(row.OwnerID),
+		Type:      domain.OperationType(row.Type),
+		Name:      row.Name,
+		Code:      code,
+		CreatedAt: pgconv.TimestamptzToTime(row.CreatedAt),
+		UpdatedAt: pgconv.TimestamptzToTime(row.UpdatedAt),
 	}
 }
 
@@ -1481,6 +1491,9 @@ func (r *OperationCategoryRepository) Create(ctx context.Context, ownerID uuid.U
 		Name:    name,
 	})
 	if err != nil {
+		if isDuplicateCategoryNameError(err) {
+			return domain.OperationCategory{}, application.ErrDuplicateCategoryName
+		}
 		return domain.OperationCategory{}, err
 	}
 	return operationCategoryFromRow(row), nil

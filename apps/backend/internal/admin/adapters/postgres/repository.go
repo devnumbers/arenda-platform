@@ -458,7 +458,7 @@ func (r *AdminRepository) operationViewFromRow(row postgres.Operation) (adminapp
 		OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
 		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
 		Type:          leasesdomain.OperationType(row.Type),
-		Category:      leasesdomain.OperationCategory{ID: pgconv.UUIDFromPgtype(row.CategoryID)},
+		CategoryID:    pgconv.UUIDFromPgtype(row.CategoryID),
 		Status:        status,
 		Name:          row.Name,
 		AmountKopecks: row.AmountKopecks,

@@ -27,11 +27,13 @@ func ParseOperationType(s string) (OperationType, error) {
 }
 
 type OperationCategory struct {
-	ID      uuid.UUID
-	OwnerID uuid.UUID
-	Type    OperationType
-	Name    string
-	Code    *string
+	ID        uuid.UUID
+	OwnerID   uuid.UUID
+	Type      OperationType
+	Name      string
+	Code      *string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type OperationCategoryDefaultCode string

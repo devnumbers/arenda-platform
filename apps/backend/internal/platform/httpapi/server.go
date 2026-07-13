@@ -40,6 +40,7 @@ type Deps struct {
 	TenantContacts           *leasesapp.TenantContactService
 	Operations               *leasesapp.OperationService
 	RecurringOperations      *leasesapp.RecurringOperationService
+	Categories               *leasesapp.CategoryService
 	Reminders                *notificationsapp.ReminderService
 	AppBaseURL               string
 	CookieSecure             bool
@@ -112,6 +113,7 @@ func New(deps Deps) http.Handler {
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock)
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Logger)
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Logger)
+	categoryHandlers := NewCategoryHandlers(deps.Categories, deps.Logger)
 	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
 	subscriptionHandlers := NewSubscriptionHandlers(deps.Tariffs, deps.Subscriptions, deps.PaymentMethods, deps.Payments, deps.Webhooks, deps.Logger, deps.DevMode)
 	financeHandlers := NewFinanceHandlers(deps.Operations)
@@ -127,6 +129,7 @@ func New(deps Deps) http.Handler {
 		SubscriptionHandlers:       subscriptionHandlers,
 		FinanceHandlers:            financeHandlers,
 		AdminHandlers:              adminHandlers,
+		CategoryHandlers:           categoryHandlers,
 	}
 
 	// The generated OpenAPI router has no per-route middleware support, so we
@@ -216,4 +219,5 @@ type composedHandler struct {
 	*SubscriptionHandlers
 	*FinanceHandlers
 	*AdminHandlers
+	*CategoryHandlers
 }

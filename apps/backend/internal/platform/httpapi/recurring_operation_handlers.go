@@ -25,7 +25,7 @@ func NewRecurringOperationHandlers(svc *leasesapp.RecurringOperationService, log
 
 func (h *RecurringOperationHandlers) handleRecurringOperationError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, leasesapp.ErrInvalidInput):
+	case errors.Is(err, leasesapp.ErrInvalidInput), errors.Is(err, domain.ErrInvalidOperationType):
 		detail, ok := UserFacingDetail(err)
 		if !ok {
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
@@ -71,7 +71,7 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 	cmd := leasesapp.CreateRecurringOperationCommand{
 		PropertyID:    propertyId,
 		Type:          string(body.Type),
-		Category:      string(body.Category),
+		CategoryID:    body.CategoryId,
 		Name:          body.Name,
 		AmountKopecks: int64(body.AmountKopecks),
 		StartDate:     body.StartDate.Time,
@@ -195,10 +195,10 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 	}
 
 	cmd := leasesapp.UpdateRecurringOperationCommand{
-		Type:     ptrString(body.Type),
-		Category: ptrString(body.Category),
-		Name:     body.Name,
-		Comment:  body.Comment,
+		Type:       ptrString(body.Type),
+		CategoryID: uuidPtrFromOpenAPI(body.CategoryId),
+		Name:       body.Name,
+		Comment:    body.Comment,
 	}
 	if body.AmountKopecks != nil {
 		cmd.AmountKopecks = new(int64(*body.AmountKopecks))
@@ -273,7 +273,7 @@ func recurringOperationResponse(rec domain.RecurringOperation) openapi.Recurring
 		OwnerId:       rec.OwnerID,
 		PropertyId:    rec.PropertyID,
 		Type:          openapi.OperationType(rec.Type),
-		Category:      openapi.OperationCategory(rec.Category),
+		CategoryId:    rec.CategoryID,
 		Name:          rec.Name,
 		AmountKopecks: int(rec.AmountKopecks),
 		StartDate:     openapi_types.Date{Time: rec.StartDate},
