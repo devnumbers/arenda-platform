@@ -123,6 +123,12 @@ export function AuthForm({
         setCode(value);
     }, []);
 
+    // Clear any entered digits when the step changes (e.g. resend → email → code).
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setCode("");
+    }, [effectiveStep]);
+
     const handleSendPhone = useCallback(() => {
         onSendPhone?.(phone);
     }, [onSendPhone, phone]);
@@ -155,7 +161,7 @@ export function AuthForm({
     }, [onResend]);
 
     const isEmailFlow = email.length > 0;
-    const codeContactType = isEmailFlow ? "email" : "phone";
+    const codeContactType = isEmailFlow ? "email" : "stored-email";
     const codeContact = isEmailFlow ? email : phone;
     const handleCodeBack = isEmailFlow ? handleChangeEmail : handleChangePhone;
 
@@ -203,6 +209,7 @@ export function AuthForm({
                         onPhoneChange={handlePhoneChange}
                         onSubmit={handleSendPhone}
                         isLoading={isSending}
+                        resendTimer={resendTimer}
                     />
                 </StepTransition>
             )}

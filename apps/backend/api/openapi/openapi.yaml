@@ -23,6 +23,8 @@ paths:
                 $ref: '#/components/schemas/SendCodeResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '500':
@@ -2242,7 +2244,6 @@ components:
       type: object
       required:
         - phone
-        - email
       properties:
         phone:
           type: string
@@ -2252,8 +2253,11 @@ components:
     SendCodeResponse:
       type: object
       required:
-        - retryAfter
+        - sent
       properties:
+        sent:
+          type: boolean
+          description: Whether a code was sent (false = email step required)
         retryAfter:
           type: integer
           description: Seconds before another code can be requested
@@ -2262,7 +2266,6 @@ components:
       type: object
       required:
         - phone
-        - email
         - code
       properties:
         phone:

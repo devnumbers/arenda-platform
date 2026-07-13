@@ -5,7 +5,7 @@ meta {
 }
 
 post {
-  url: {{baseUrl}}/auth/phone/send
+  url: {{baseUrl}}/auth/send
   body: json
   auth: none
 }
@@ -21,7 +21,7 @@ body:json {
 }
 
 tests {
-  test("should return 204", function() {
-    expect(res.status).to.equal(204);
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
   });
 }

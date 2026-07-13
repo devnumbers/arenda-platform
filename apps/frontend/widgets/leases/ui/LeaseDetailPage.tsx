@@ -203,7 +203,7 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
     const router = useRouter();
 
     const leaseQuery = useLease(id);
-    const rentOperationsQuery = useOperations({lease_id: id, category: 'rent'});
+    const rentOperationsQuery = useOperations({lease_id: id, category: 'rent', sort: 'operation_date_asc'});
     const depositReturnQuery = useOperations({
         lease_id: id,
         category: 'deposit_return',

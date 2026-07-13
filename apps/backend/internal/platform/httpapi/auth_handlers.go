@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
@@ -77,9 +78,10 @@ func NewAuthHandlers(
 	}
 }
 
-// sendCodeResponse is the JSON body returned by successful code-send endpoints.
-type sendCodeResponse struct {
-	RetryAfter int `json:"retryAfter"`
+// authSendCodeResponse is the JSON body returned by POST /auth/send.
+type authSendCodeResponse struct {
+	Sent       bool `json:"sent"`
+	RetryAfter *int `json:"retryAfter,omitempty"`
 }
 
 // SendCode implements POST /auth/send.
@@ -98,31 +100,57 @@ func (h *AuthHandlers) SendCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email, err := domain.NewEmail(body.Email)
-	if err != nil {
-		h.logger.WarnContext(r.Context(), "invalid email in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "Некорректная почта"))
+	email, ok := parseOptionalEmail(w, r, body.Email)
+	if !ok {
 		return
 	}
 
-	if h.emailSend != nil && !h.emailSend.Allow(email.String()) {
+	// Phone-only and email requests use separate buckets; the service-level
+	// minSendInterval still caps actual code sends.
+	rateLimitKey := phone.String()
+	if email != nil {
+		rateLimitKey = email.String()
+	}
+	if h.emailSend != nil && !h.emailSend.Allow(rateLimitKey) {
 		writeTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
 
-	if err := h.auth.SendCode(r.Context(), phone, email, domain.LoginCodePurposeLogin); err != nil {
+	retry := retryAfterSeconds
+	if email == nil {
+		sent, err := h.auth.SendCodeByPhone(r.Context(), phone)
+		if err != nil {
+			switch {
+			case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
+				writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Превышен лимит запросов"))
+			default:
+				writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+			}
+			return
+		}
+		if !sent {
+			writeJSON(r.Context(), w, http.StatusOK, authSendCodeResponse{Sent: false})
+			return
+		}
+		writeJSON(r.Context(), w, http.StatusOK, authSendCodeResponse{Sent: true, RetryAfter: &retry})
+		return
+	}
+
+	if err := h.auth.SendCode(r.Context(), phone, *email, domain.LoginCodePurposeLogin); err != nil {
 		switch {
 		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
 			writeTooManyRequests(w, r, userFacingDetailOrDefault(r.Context(), err, "Превышен лимит запросов"))
 		case errors.Is(err, application.ErrEmailDoesNotMatch):
 			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Некорректные учётные данные")))
+		case errors.Is(err, application.ErrEmailAlreadyTaken):
+			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(r.Context(), err, "Этот email уже используется")))
 		default:
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
 		}
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, sendCodeResponse{RetryAfter: retryAfterSeconds})
+	writeJSON(r.Context(), w, http.StatusOK, authSendCodeResponse{Sent: true, RetryAfter: &retry})
 }
 
 // VerifyCode implements POST /auth/verify.
@@ -141,14 +169,18 @@ func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email, err := domain.NewEmail(body.Email)
-	if err != nil {
-		h.logger.WarnContext(r.Context(), "invalid email in request body", slog.String("error", sanitizeError(err)))
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "Некорректная почта"))
+	email, ok := parseOptionalEmail(w, r, body.Email)
+	if !ok {
 		return
 	}
 
-	if h.emailVerify != nil && !h.emailVerify.Allow(email.String()) {
+	// Phone-only verify requests are keyed by phone; brute force is
+	// additionally capped by the service-level attempt window.
+	rateLimitKey := phone.String()
+	if email != nil {
+		rateLimitKey = email.String()
+	}
+	if h.emailVerify != nil && !h.emailVerify.Allow(rateLimitKey) {
 		writeTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
@@ -449,6 +481,22 @@ func writeJSON(ctx context.Context, w http.ResponseWriter, status int, v any) {
 func writeTooManyRequests(w http.ResponseWriter, r *http.Request, detail string) {
 	w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds))
 	writeProblem(w, http.StatusTooManyRequests, problem(r.Context(), "Too many requests", detail))
+}
+
+// parseOptionalEmail parses an optional request email. It returns ok=false
+// after writing a 400 problem response when the provided email is invalid.
+// A nil or blank email is treated as absent and yields (nil, true).
+func parseOptionalEmail(w http.ResponseWriter, r *http.Request, raw *string) (*domain.Email, bool) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil, true
+	}
+	parsed, err := domain.NewEmail(*raw)
+	if err != nil {
+		loggerFromContext(r.Context()).WarnContext(r.Context(), "invalid email in request body", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "Некорректная почта"))
+		return nil, false
+	}
+	return &parsed, true
 }
 
 // userFacingDetailOrDefault returns a user-facing message for err if one is

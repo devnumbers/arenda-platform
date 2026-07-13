@@ -9,7 +9,7 @@ import styles from './CodeStep.module.css';
 
 export type CodeStepProps = {
     contact: string;
-    contactType: 'phone' | 'email';
+    contactType: 'email' | 'stored-email';
     code: string;
     onCodeChange: (value: string) => void;
     onVerify: (code: string) => void;
@@ -47,18 +47,24 @@ export function CodeStep({
     };
 
     const contactLabel = contactType === 'email'
-        ? 'Отправили код на email'
-        : 'Отправили СМС-код на номер';
+        ? 'Отправили код на почту'
+        : 'Мы отправили код на вашу почту';
 
-    const changeLabel = contactType === 'email' ? 'Изменить email' : 'Изменить номер';
+    const changeLabel = contactType === 'email' ? 'Изменить почту' : 'Изменить номер';
 
     return (
         <div className={styles.root}>
             <div className={styles.header}>
                 <h1 className={styles.title}>Введите код</h1>
                 <p className={styles.subtitle}>
-                    {contactLabel}{' '}
-                    <span className={styles.contact}>{contact}</span>
+                    {contactType === 'email' ? (
+                        <>
+                            {contactLabel}{' '}
+                            <span className={styles.contact}>{contact}</span>
+                        </>
+                    ) : (
+                        contactLabel
+                    )}
                 </p>
             </div>
 

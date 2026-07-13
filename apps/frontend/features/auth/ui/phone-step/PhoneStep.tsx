@@ -5,6 +5,7 @@ import {formatPhoneInput, isPhoneValid} from "@/shared/lib/phone";
 import {Support} from "@/shared/assets/icons";
 import {Button} from "@/shared/ui/button";
 import {TextField} from "@/shared/ui/text-field";
+import {SendCodeButton} from "@/features/auth/ui/send-code-button";
 import styles from "./PhoneStep.module.css";
 
 export type PhoneStepProps = {
@@ -12,6 +13,7 @@ export type PhoneStepProps = {
     onPhoneChange: (value: string) => void;
     onSubmit: () => void;
     isLoading: boolean;
+    resendTimer?: number;
 };
 
 export function PhoneStep({
@@ -19,6 +21,7 @@ export function PhoneStep({
                               onPhoneChange,
                               onSubmit,
                               isLoading,
+                              resendTimer = 0,
                           }: PhoneStepProps): JSX.Element {
     const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
         onPhoneChange(formatPhoneInput(event.target.value));
@@ -46,16 +49,15 @@ export function PhoneStep({
                     fullWidth
                 />
 
-                <Button
+                <SendCodeButton
                     type="submit"
-                    variant="primary"
-                    size="large"
-                    fullWidth
+                    remainingSeconds={resendTimer}
                     loading={isLoading}
                     disabled={!isPhoneValid(phone) || isLoading}
+                    timerLabel={() => `Отправить новый код`}
                 >
                     Войти
-                </Button>
+                </SendCodeButton>
             </form>
 
             <p className={styles.legal}>
