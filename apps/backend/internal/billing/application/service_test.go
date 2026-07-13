@@ -4695,6 +4695,40 @@ func TestBilling_SyncPaymentMethods_ProviderErrorPropagatesWithoutWrites(t *test
 	}
 }
 
+func TestBilling_SyncPaymentMethods_TerminalNotFoundReturnsLocalList(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777785")
+
+	existingID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb5")
+	d.paymentMethods.methods[existingID] = domain.PaymentMethod{
+		ID:            existingID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: "existing_token",
+		DisplayMask:   "****0777",
+		IsActive:      true,
+		CreatedAt:     fixedNow.Add(-time.Hour),
+		UpdatedAt:     fixedNow.Add(-time.Hour),
+	}
+
+	d.provider.getCardListErr = ErrProviderTerminalNotFound
+
+	methods, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods error: %v", err)
+	}
+	if len(methods) != 1 {
+		t.Fatalf("expected 1 local payment method, got %d", len(methods))
+	}
+	if methods[0].ID != existingID {
+		t.Errorf("expected local method %s, got %s", existingID, methods[0].ID)
+	}
+	if d.beginner.begun != 0 {
+		t.Fatalf("expected no transaction on terminal-not-found, got %d", d.beginner.begun)
+	}
+}
+
 func TestBilling_ChangeTariff_TkassaFirstPaymentInitFields(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
@@ -4743,8 +4777,8 @@ func TestBilling_ChangeTariff_TkassaFirstPaymentInitFields(t *testing.T) {
 	if !req.Recurrent {
 		t.Error("expected recurrent true")
 	}
-	if req.OperationInitiatorType != "1" {
-		t.Errorf("expected initiator type 1, got %s", req.OperationInitiatorType)
+	if req.OperationInitiatorType != "2" {
+		t.Errorf("expected initiator type 2, got %s", req.OperationInitiatorType)
 	}
 	if req.NotificationURL == "" || req.SuccessURL == "" || req.FailURL == "" {
 		t.Errorf("expected callback urls set, got notification=%q success=%q fail=%q", req.NotificationURL, req.SuccessURL, req.FailURL)

@@ -215,6 +215,12 @@ func (s *PaymentMethodService) SyncPaymentMethods(ctx context.Context, userID uu
 		if errors.Is(err, ErrProviderCustomerNotFound) {
 			return s.ListPaymentMethods(ctx, userID)
 		}
+		if errors.Is(err, ErrProviderTerminalNotFound) {
+			s.deps.log.WarnContext(ctx, "sync payment methods: terminal not found at provider; returning local list",
+				slog.String("user_id", userID.String()),
+				slog.String("error", sanitize.Error(err)))
+			return s.ListPaymentMethods(ctx, userID)
+		}
 		return nil, sanitize.Wrap(err, "get card list")
 	}
 

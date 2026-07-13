@@ -29,6 +29,12 @@ var (
 	// customer does not exist yet. For read operations such as card listing it
 	// semantically means the user has no cards, not a failure.
 	ErrProviderCustomerNotFound = errors.New("provider customer not found")
+	// ErrProviderTerminalNotFound is returned when a provider reports that the
+	// configured terminal does not exist (for example, a deleted or wrong test
+	// terminal). For card-list sync this is treated as "no cards at the provider"
+	// rather than a hard failure, because the local payment methods are still
+	// valid from the user's point of view.
+	ErrProviderTerminalNotFound = errors.New("provider terminal not found")
 	ErrInvalidFilter            = errors.New("invalid filter")
 )
 

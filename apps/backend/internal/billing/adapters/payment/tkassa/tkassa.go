@@ -39,7 +39,7 @@ const (
 	recurrentYes                  = "Y"
 	payTypeOneStage               = "O"
 	checkType3DSHold              = "3DSHOLD"
-	firstPaymentInitiatorType     = "1" // CIT CC (customer-initiated credential-on-file first payment)
+	firstPaymentInitiatorType     = "2" // CIT COF (customer-initiated credential-on-file first payment to obtain RebillId)
 	renewalInitiatorType          = "R" // MIT COF recurring
 	notificationTypeAddCard       = "NotificationAddCard"
 	notificationTypeAddCardLegacy = "AddCard"
@@ -93,7 +93,9 @@ func metricStatus(err error) string {
 		return "ok"
 	}
 	var providerErr *ProviderError
-	if errors.As(err, &providerErr) || errors.Is(err, application.ErrProviderCardNotFound) {
+	if errors.As(err, &providerErr) ||
+		errors.Is(err, application.ErrProviderCardNotFound) ||
+		errors.Is(err, application.ErrProviderTerminalNotFound) {
 		return "ok"
 	}
 	return "error"
@@ -651,6 +653,15 @@ func (p *Provider) GetCardList(ctx context.Context, customerKey string) (cards [
 				err = fmt.Errorf("%w: %w", application.ErrProviderCustomerNotFound, err)
 				return nil, err
 			}
+			if isTerminalNotFoundError(err) {
+				log.WarnContext(ctx, "tkassa terminal not found, treating as empty card list",
+					"customer_key", customerKey,
+				)
+				// Keep the *ProviderError in the chain so errors.As on it still
+				// works for callers and metricStatus.
+				err = fmt.Errorf("%w: %w", application.ErrProviderTerminalNotFound, err)
+				return nil, err
+			}
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
@@ -1058,6 +1069,18 @@ func isCustomerNotFoundError(err error) bool {
 		return false
 	}
 	return providerErr.ErrorCode == "7"
+}
+
+// isTerminalNotFoundError reports whether the provider error means the
+// configured terminal does not exist at T-Kassa. The test environment returns
+// ErrorCode 501 ("Терминал не найден") for removed or invalid terminals. For
+// GetCardList this is treated as an empty card list, not a failure.
+func isTerminalNotFoundError(err error) bool {
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		return false
+	}
+	return providerErr.ErrorCode == "501"
 }
 
 func truncateDescription(s string, maxLen int) string {

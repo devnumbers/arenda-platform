@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/tkassa/spec"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
@@ -855,6 +856,28 @@ func TestProviderGetCardListError(t *testing.T) {
 	}
 }
 
+func TestProviderGetCardListTerminalNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = verifyRequestToken(t, r, testPassword)
+		_ = json.NewEncoder(w).Encode(baseResponse{
+			Success:   false,
+			ErrorCode: "501",
+			Message:   "Терминал не найден",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	_, err := p.GetCardList(context.Background(), "customer-1")
+	if !errors.Is(err, application.ErrProviderTerminalNotFound) {
+		t.Fatalf("expected ErrProviderTerminalNotFound, got %v", err)
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) || providerErr.ErrorCode != "501" {
+		t.Fatalf("expected wrapped ProviderError with code 501, got %v", err)
+	}
+}
+
 func TestProviderWebhookResponse(t *testing.T) {
 	p := newTestProvider("")
 	if got, want := string(p.WebhookResponse()), "OK"; got != want {
@@ -1324,5 +1347,497 @@ func TestProviderCancel_Error(t *testing.T) {
 	var providerErr *ProviderError
 	if !errors.As(err, &providerErr) || providerErr.ErrorCode != "204" {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// captureRequest reads the request body, verifies the T-Kassa token, and returns
+// both the raw JSON and the decoded map. Fields in exclude are removed before
+// token verification to match the server-side schema (e.g. AddCard ignores
+// RedirectUrl/FailRedirectUrl).
+func captureRequest(t *testing.T, r *http.Request, exclude ...string) ([]byte, map[string]any) {
+	t.Helper()
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Fatalf("read request body: %v", err)
+	}
+
+	var data map[string]any
+	if err := json.Unmarshal(body, &data); err != nil {
+		t.Fatalf("unmarshal request body: %v", err)
+	}
+
+	token, ok := data["Token"].(string)
+	if !ok || token == "" {
+		t.Fatalf("request missing or empty Token field")
+	}
+
+	signData := maps.Clone(data)
+	for _, k := range exclude {
+		delete(signData, k)
+	}
+	if expected := sign(signData, testPassword); token != expected {
+		t.Fatalf("token mismatch: got %q, want %q", token, expected)
+	}
+
+	return body, data
+}
+
+func TestProviderInitContract(t *testing.T) {
+	tests := []struct {
+		name                   string
+		req                    application.InitRequest
+		wantOperationInitiator string
+		wantRecurrent          bool
+	}{
+		{
+			name: "first_payment_recurrent",
+			req: application.InitRequest{
+				PaymentID:       uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+				AmountKopecks:   10000,
+				UserID:          uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+				CustomerKey:     "customer-1",
+				Description:     "Test payment",
+				NotificationURL: "https://example.com/webhook",
+				SuccessURL:      "https://example.com/success",
+				FailURL:         "https://example.com/fail",
+				Recurrent:       true,
+			},
+			wantOperationInitiator: firstPaymentInitiatorType,
+			wantRecurrent:          true,
+		},
+		{
+			name: "renewal",
+			req: application.InitRequest{
+				PaymentID:              uuid.New(),
+				AmountKopecks:          500,
+				UserID:                 uuid.New(),
+				CustomerKey:            "customer-2",
+				Recurrent:              false,
+				OperationInitiatorType: renewalInitiatorType,
+			},
+			wantOperationInitiator: renewalInitiatorType,
+			wantRecurrent:          false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var captured []byte
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/v2/Init" {
+					t.Fatalf("unexpected path: %s", r.URL.Path)
+				}
+				captured, _ = captureRequest(t, r)
+				_ = json.NewEncoder(w).Encode(initResponse{
+					baseResponse: baseResponse{Success: true, Status: "NEW"},
+					PaymentID:    "123456",
+					PaymentURL:   "https://securepayments.tinkoff.ru/rest/show/123456",
+					OrderID:      tt.req.PaymentID.String(),
+				})
+			}))
+			defer server.Close()
+
+			p := newTestProvider(server.URL + "/v2/")
+			if _, err := p.Init(context.Background(), tt.req); err != nil {
+				t.Fatalf("Init failed: %v", err)
+			}
+			if captured == nil {
+				t.Fatalf("request was not captured")
+			}
+
+			var reqBody spec.Init
+			if err := json.Unmarshal(captured, &reqBody); err != nil {
+				t.Fatalf("unmarshal Init request: %v", err)
+			}
+
+			if reqBody.TerminalKey != testTerminalKey {
+				t.Errorf("TerminalKey: got %q, want %q", reqBody.TerminalKey, testTerminalKey)
+			}
+			if reqBody.Token == "" {
+				t.Errorf("Token is empty")
+			}
+			if reqBody.OrderId != tt.req.PaymentID.String() {
+				t.Errorf("OrderId: got %q, want %q", reqBody.OrderId, tt.req.PaymentID.String())
+			}
+			if reqBody.Amount != float32(tt.req.AmountKopecks) {
+				t.Errorf("Amount: got %v, want %v", reqBody.Amount, float32(tt.req.AmountKopecks))
+			}
+			if reqBody.PayType == nil || *reqBody.PayType != spec.O {
+				t.Errorf("PayType: got %v, want %v", reqBody.PayType, spec.O)
+			}
+			if reqBody.CustomerKey == nil || *reqBody.CustomerKey != tt.req.CustomerKey {
+				t.Errorf("CustomerKey: got %v, want %q", reqBody.CustomerKey, tt.req.CustomerKey)
+			}
+
+			if tt.wantRecurrent {
+				if reqBody.Recurrent == nil || *reqBody.Recurrent != spec.Y {
+					t.Errorf("Recurrent: got %v, want %v", reqBody.Recurrent, spec.Y)
+				}
+			} else {
+				if reqBody.Recurrent != nil {
+					t.Errorf("Recurrent should be omitted, got %v", *reqBody.Recurrent)
+				}
+			}
+
+			if tt.req.NotificationURL != "" {
+				if reqBody.NotificationURL == nil || *reqBody.NotificationURL != tt.req.NotificationURL {
+					t.Errorf("NotificationURL: got %v, want %q", reqBody.NotificationURL, tt.req.NotificationURL)
+				}
+			}
+			if tt.req.SuccessURL != "" {
+				if reqBody.SuccessURL == nil || *reqBody.SuccessURL != tt.req.SuccessURL {
+					t.Errorf("SuccessURL: got %v, want %q", reqBody.SuccessURL, tt.req.SuccessURL)
+				}
+			}
+			if tt.req.FailURL != "" {
+				if reqBody.FailURL == nil || *reqBody.FailURL != tt.req.FailURL {
+					t.Errorf("FailURL: got %v, want %q", reqBody.FailURL, tt.req.FailURL)
+				}
+			}
+			if tt.req.Description != "" {
+				wantDesc := truncateDescription(tt.req.Description, maxDescriptionLength)
+				if reqBody.Description == nil || *reqBody.Description != wantDesc {
+					t.Errorf("Description: got %v, want %q", reqBody.Description, wantDesc)
+				}
+			}
+
+			if reqBody.DATA == nil {
+				t.Fatalf("DATA is required for T-Kassa Init")
+			}
+			common, err := reqBody.DATA.AsCommon()
+			if err != nil {
+				t.Fatalf("DATA as Common: %v", err)
+			}
+			if common.OperationInitiatorType == nil || string(*common.OperationInitiatorType) != tt.wantOperationInitiator {
+				t.Errorf("DATA.OperationInitiatorType: got %v, want %q", common.OperationInitiatorType, tt.wantOperationInitiator)
+			}
+		})
+	}
+}
+
+func TestProviderChargeContract(t *testing.T) {
+	var captured []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/Charge" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		captured, _ = captureRequest(t, r)
+		_ = json.NewEncoder(w).Encode(chargeResponse{
+			baseResponse: baseResponse{Success: true, Status: "CONFIRMED"},
+			PaymentID:    "123",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	_, err := p.Charge(context.Background(), application.ChargeRequest{
+		PaymentID:         uuid.New(),
+		ProviderPaymentID: "123",
+		AmountKopecks:     10000,
+		Token:             "rebill-token",
+	})
+	if err != nil {
+		t.Fatalf("Charge failed: %v", err)
+	}
+	if captured == nil {
+		t.Fatalf("request was not captured")
+	}
+
+	var reqBody spec.Charge
+	if err := json.Unmarshal(captured, &reqBody); err != nil {
+		t.Fatalf("unmarshal Charge request: %v", err)
+	}
+	if reqBody.TerminalKey != testTerminalKey {
+		t.Errorf("TerminalKey: got %q, want %q", reqBody.TerminalKey, testTerminalKey)
+	}
+	if reqBody.Token == "" {
+		t.Errorf("Token is empty")
+	}
+	if reqBody.PaymentId != "123" {
+		t.Errorf("PaymentId: got %q, want %q", reqBody.PaymentId, "123")
+	}
+	if reqBody.RebillId != "rebill-token" {
+		t.Errorf("RebillId: got %q, want %q", reqBody.RebillId, "rebill-token")
+	}
+}
+
+func TestProviderGetStateContract(t *testing.T) {
+	var captured []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/GetState" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		captured, _ = captureRequest(t, r)
+		_ = json.NewEncoder(w).Encode(getStateResponse{
+			baseResponse: baseResponse{Success: true, Status: "AUTHORIZED"},
+			PaymentID:    "999",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	_, err := p.Status(context.Background(), uuid.New(), "999")
+	if err != nil {
+		t.Fatalf("Status failed: %v", err)
+	}
+	if captured == nil {
+		t.Fatalf("request was not captured")
+	}
+
+	var reqBody spec.GetState
+	if err := json.Unmarshal(captured, &reqBody); err != nil {
+		t.Fatalf("unmarshal GetState request: %v", err)
+	}
+	if reqBody.TerminalKey != testTerminalKey {
+		t.Errorf("TerminalKey: got %q, want %q", reqBody.TerminalKey, testTerminalKey)
+	}
+	if reqBody.Token == "" {
+		t.Errorf("Token is empty")
+	}
+	if reqBody.PaymentId != "999" {
+		t.Errorf("PaymentId: got %q, want %q", reqBody.PaymentId, "999")
+	}
+}
+
+func TestProviderCancelContract(t *testing.T) {
+	paymentID := uuid.New()
+	providerPaymentID := "cancel-contract-123"
+	var captured []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/Cancel" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		captured, _ = captureRequest(t, r)
+		_ = json.NewEncoder(w).Encode(cancelResponse{
+			baseResponse:   baseResponse{Success: true, Status: "REFUNDED"},
+			PaymentID:      providerPaymentID,
+			OrderID:        paymentID.String(),
+			OriginalAmount: 10000,
+			NewAmount:      0,
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	_, err := p.Cancel(context.Background(), application.CancelRequest{
+		PaymentID:         paymentID,
+		ProviderPaymentID: providerPaymentID,
+		AmountKopecks:     10000,
+	})
+	if err != nil {
+		t.Fatalf("Cancel failed: %v", err)
+	}
+	if captured == nil {
+		t.Fatalf("request was not captured")
+	}
+
+	var reqBody spec.Cancel
+	if err := json.Unmarshal(captured, &reqBody); err != nil {
+		t.Fatalf("unmarshal Cancel request: %v", err)
+	}
+	if reqBody.TerminalKey != testTerminalKey {
+		t.Errorf("TerminalKey: got %q, want %q", reqBody.TerminalKey, testTerminalKey)
+	}
+	if reqBody.Token == "" {
+		t.Errorf("Token is empty")
+	}
+	if reqBody.PaymentId != providerPaymentID {
+		t.Errorf("PaymentId: got %q, want %q", reqBody.PaymentId, providerPaymentID)
+	}
+	if reqBody.Amount == nil || *reqBody.Amount != 10000 {
+		t.Errorf("Amount: got %v, want %v", reqBody.Amount, 10000)
+	}
+}
+
+func TestProviderAddCustomerContract(t *testing.T) {
+	var captured []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v2/AddCustomer":
+			captured, _ = captureRequest(t, r)
+			_ = json.NewEncoder(w).Encode(addCustomerResponse{
+				baseResponse: baseResponse{Success: true},
+				CustomerKey:  "customer-1",
+			})
+		case "/v2/AddCard":
+			_ = json.NewEncoder(w).Encode(addCardResponse{
+				baseResponse: baseResponse{Success: true},
+				PaymentURL:   "https://securepayments.tinkoff.ru/rest/addcard/abc",
+				RequestKey:   "request-key-1",
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	_, err := p.InitAddCard(context.Background(), application.InitAddCardRequest{
+		UserID:      uuid.New(),
+		CustomerKey: "customer-1",
+		SuccessURL:  "https://app.example/api/subscription/payment-methods/add-card/success",
+		FailURL:     "https://app.example/api/subscription/payment-methods/add-card/fail",
+	})
+	if err != nil {
+		t.Fatalf("InitAddCard failed: %v", err)
+	}
+	if captured == nil {
+		t.Fatalf("AddCustomer request was not captured")
+	}
+
+	var reqBody spec.AddCustomer
+	if err := json.Unmarshal(captured, &reqBody); err != nil {
+		t.Fatalf("unmarshal AddCustomer request: %v", err)
+	}
+	if reqBody.TerminalKey != testTerminalKey {
+		t.Errorf("TerminalKey: got %q, want %q", reqBody.TerminalKey, testTerminalKey)
+	}
+	if reqBody.Token == "" {
+		t.Errorf("Token is empty")
+	}
+	if reqBody.CustomerKey != "customer-1" {
+		t.Errorf("CustomerKey: got %q, want %q", reqBody.CustomerKey, "customer-1")
+	}
+}
+
+func TestProviderAddCardContract(t *testing.T) {
+	var captured []byte
+	var capturedMap map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v2/AddCustomer":
+			_ = verifyRequestToken(t, r, testPassword)
+			_ = json.NewEncoder(w).Encode(addCustomerResponse{
+				baseResponse: baseResponse{Success: true},
+				CustomerKey:  "customer-1",
+			})
+		case "/v2/AddCard":
+			// The server verifies the AddCard token over the schema fields only;
+			// RedirectUrl/FailRedirectUrl are outside the schema and excluded.
+			captured, capturedMap = captureRequest(t, r, "RedirectUrl", "FailRedirectUrl")
+			_ = json.NewEncoder(w).Encode(addCardResponse{
+				baseResponse: baseResponse{Success: true},
+				PaymentURL:   "https://securepayments.tinkoff.ru/rest/addcard/abc",
+				RequestKey:   "request-key-1",
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	_, err := p.InitAddCard(context.Background(), application.InitAddCardRequest{
+		UserID:      uuid.New(),
+		CustomerKey: "customer-1",
+		SuccessURL:  "https://app.example/api/subscription/payment-methods/add-card/success",
+		FailURL:     "https://app.example/api/subscription/payment-methods/add-card/fail",
+	})
+	if err != nil {
+		t.Fatalf("InitAddCard failed: %v", err)
+	}
+	if captured == nil {
+		t.Fatalf("AddCard request was not captured")
+	}
+
+	var reqBody spec.AddCard
+	if err := json.Unmarshal(captured, &reqBody); err != nil {
+		t.Fatalf("unmarshal AddCard request: %v", err)
+	}
+	if reqBody.TerminalKey != testTerminalKey {
+		t.Errorf("TerminalKey: got %q, want %q", reqBody.TerminalKey, testTerminalKey)
+	}
+	if reqBody.Token == "" {
+		t.Errorf("Token is empty")
+	}
+	if reqBody.CustomerKey != "customer-1" {
+		t.Errorf("CustomerKey: got %q, want %q", reqBody.CustomerKey, "customer-1")
+	}
+	if reqBody.CheckType == nil || *reqBody.CheckType != spec.N3DSHOLD {
+		t.Errorf("CheckType: got %v, want %v", reqBody.CheckType, spec.N3DSHOLD)
+	}
+
+	if got, want := capturedMap["RedirectUrl"], "https://app.example/api/subscription/payment-methods/add-card/success"; got != want {
+		t.Errorf("RedirectUrl: got %v, want %q", got, want)
+	}
+	if got, want := capturedMap["FailRedirectUrl"], "https://app.example/api/subscription/payment-methods/add-card/fail"; got != want {
+		t.Errorf("FailRedirectUrl: got %v, want %q", got, want)
+	}
+	if _, ok := capturedMap["NotificationURL"]; ok {
+		t.Errorf("AddCard must not contain NotificationURL")
+	}
+}
+
+func TestProviderRemoveCardContract(t *testing.T) {
+	var captured []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/RemoveCard" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		captured, _ = captureRequest(t, r)
+		_ = json.NewEncoder(w).Encode(removeCardResponse{
+			baseResponse: baseResponse{Success: true},
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	if err := p.RemoveCard(context.Background(), "customer-1", "card-1"); err != nil {
+		t.Fatalf("RemoveCard failed: %v", err)
+	}
+	if captured == nil {
+		t.Fatalf("request was not captured")
+	}
+
+	var reqBody spec.RemoveCard
+	if err := json.Unmarshal(captured, &reqBody); err != nil {
+		t.Fatalf("unmarshal RemoveCard request: %v", err)
+	}
+	if reqBody.TerminalKey != testTerminalKey {
+		t.Errorf("TerminalKey: got %q, want %q", reqBody.TerminalKey, testTerminalKey)
+	}
+	if reqBody.Token == "" {
+		t.Errorf("Token is empty")
+	}
+	if reqBody.CustomerKey != "customer-1" {
+		t.Errorf("CustomerKey: got %q, want %q", reqBody.CustomerKey, "customer-1")
+	}
+	if reqBody.CardId != "card-1" {
+		t.Errorf("CardId: got %q, want %q", reqBody.CardId, "card-1")
+	}
+}
+
+func TestProviderGetCardListContract(t *testing.T) {
+	var captured []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/GetCardList" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		captured, _ = captureRequest(t, r)
+		_ = json.NewEncoder(w).Encode([]cardListItem{})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	_, err := p.GetCardList(context.Background(), "customer-1")
+	if err != nil {
+		t.Fatalf("GetCardList failed: %v", err)
+	}
+	if captured == nil {
+		t.Fatalf("request was not captured")
+	}
+
+	var reqBody spec.GetCardList
+	if err := json.Unmarshal(captured, &reqBody); err != nil {
+		t.Fatalf("unmarshal GetCardList request: %v", err)
+	}
+	if reqBody.TerminalKey != testTerminalKey {
+		t.Errorf("TerminalKey: got %q, want %q", reqBody.TerminalKey, testTerminalKey)
+	}
+	if reqBody.Token == "" {
+		t.Errorf("Token is empty")
+	}
+	if reqBody.CustomerKey != "customer-1" {
+		t.Errorf("CustomerKey: got %q, want %q", reqBody.CustomerKey, "customer-1")
 	}
 }
