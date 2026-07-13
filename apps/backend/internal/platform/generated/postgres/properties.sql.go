@@ -156,11 +156,12 @@ func (q *Queries) GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (Pro
 const getPropertyByIDAndOwner = `-- name: GetPropertyByIDAndOwner :one
 SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at,
        (SELECT COUNT(*) FROM operations o
+         JOIN operation_categories cat ON cat.id = o.category_id
          WHERE o.property_id = properties.id
            AND o.owner_id = properties.owner_id
            AND o.status = 'overdue'
            AND o.type = 'income'
-           AND o.category = 'rent'
+           AND cat.code = 'rent'
            AND o.deleted_at IS NULL) AS overdue_rent_count
 FROM properties
 WHERE properties.id = $1 AND properties.owner_id = $2
@@ -249,11 +250,12 @@ func (q *Queries) GetPropertyStatusByOwner(ctx context.Context, arg GetPropertyS
 const listActivePropertiesByOwner = `-- name: ListActivePropertiesByOwner :many
 SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at,
        (SELECT COUNT(*) FROM operations o
+         JOIN operation_categories cat ON cat.id = o.category_id
          WHERE o.property_id = properties.id
            AND o.owner_id = properties.owner_id
            AND o.status = 'overdue'
            AND o.type = 'income'
-           AND o.category = 'rent'
+           AND cat.code = 'rent'
            AND o.deleted_at IS NULL) AS overdue_rent_count
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status IN ('active', 'maintenance')
@@ -307,11 +309,12 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 const listArchivedPropertiesByOwner = `-- name: ListArchivedPropertiesByOwner :many
 SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at,
        (SELECT COUNT(*) FROM operations o
+         JOIN operation_categories cat ON cat.id = o.category_id
          WHERE o.property_id = properties.id
            AND o.owner_id = properties.owner_id
            AND o.status = 'overdue'
            AND o.type = 'income'
-           AND o.category = 'rent'
+           AND cat.code = 'rent'
            AND o.deleted_at IS NULL) AS overdue_rent_count
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status = 'archived'
