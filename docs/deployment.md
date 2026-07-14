@@ -45,6 +45,10 @@ chmod 600 .env.prod
 `APP_BASE_URL` должен быть `https://rentlee.ru`, а `T_KASSA_BASE_URL` -
 `https://securepay.tinkoff.ru/v2/`.
 
+При необходимости production можно временно направить на тестовую среду T-Kassa
+(`https://rest-api-test.tinkoff.ru/v2/`), но перед реальным трафиком нужно
+вернуться на `https://securepay.tinkoff.ru/v2/`.
+
 Для production-терминала T-Bank обязательно указать URL уведомлений — на него
 приходят вебхуки платежей и привязки карт (`AddCard` не поддерживает per-request
 `NotificationURL`):

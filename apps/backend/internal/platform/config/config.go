@@ -480,8 +480,8 @@ func Load() (Config, error) {
 					return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: non-local/dev environments must use https", cfg.TKassaBaseURL)
 				}
 				host := strings.ToLower(tku.Hostname())
-				if host != "securepay.tinkoff.ru" {
-					return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: production T-Kassa base URL must be https://securepay.tinkoff.ru/v2/", cfg.TKassaBaseURL)
+				if host != "securepay.tinkoff.ru" && host != "rest-api-test.tinkoff.ru" {
+					return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: production T-Kassa base URL must be https://securepay.tinkoff.ru/v2/ or https://rest-api-test.tinkoff.ru/v2/", cfg.TKassaBaseURL)
 				}
 				if strings.TrimSuffix(tku.Path, "/") != "/v2" {
 					return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: path must be /v2/", cfg.TKassaBaseURL)
