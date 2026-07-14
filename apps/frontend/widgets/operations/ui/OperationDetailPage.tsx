@@ -1,10 +1,11 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useState, type JSX } from 'react';
+import { useState, type ComponentType, type JSX } from 'react';
 import { Modal } from '@heroui/react';
 import type { components } from '@/shared/api/generated';
 import { ROUTES } from '@/shared/config/routes';
+import { BadgeDanger, BadgeGood, BadgeInfo } from '@/shared/assets/icons';
 import { Button } from '@/shared/ui/button';
 import { PageHeader } from '@/shared/ui/page-header';
 import {
@@ -39,6 +40,16 @@ const STATUS_VARIANT_CLASS: Record<
   danger: styles.statusDanger,
   success: styles.statusSuccess,
   default: styles.statusDefault,
+};
+
+const STATUS_VARIANT_ICON: Record<
+  NonNullable<ReturnType<typeof getStatusVariant>>,
+  ComponentType | null
+> = {
+  warning: BadgeInfo,
+  danger: BadgeDanger,
+  success: BadgeGood,
+  default: null,
 };
 
 function getStatusVariant(status: OperationStatus) {
@@ -122,12 +133,14 @@ function OperationDetailCard({
   const amountClass = isIncome ? styles.amountIncome : styles.amountExpense;
   const statusVariant = getStatusVariant(operation.status);
   const statusClass = statusVariant ? STATUS_VARIANT_CLASS[statusVariant] : '';
+  const StatusIcon = statusVariant ? STATUS_VARIANT_ICON[statusVariant] : null;
 
   return (
     <section className={styles.card}>
       <div className={styles.cardHeader}>
         <h2 className={styles.name}>{operation.name}</h2>
         <span className={`${styles.status} ${statusClass}`}>
+          {StatusIcon && <StatusIcon aria-hidden="true" />}
           {getOperationStatusLabel(operation.status)}
         </span>
       </div>
