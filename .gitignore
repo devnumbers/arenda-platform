@@ -8,6 +8,7 @@
 !.env.prod.example
 *.exe
 api
+!apps/frontend/features/operation-categories/api/
 node_modules/
 apps/landing/dist
 *.log

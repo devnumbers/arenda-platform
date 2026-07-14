@@ -13,18 +13,14 @@ export type LeaseActionMenuProps = {
     readonly leaseId: string;
     readonly canEdit: boolean;
     readonly canComplete: boolean;
-    readonly canReturnDeposit: boolean;
     readonly onComplete: () => void;
-    readonly onReturnDeposit: () => void;
 };
 
 export function LeaseActionMenu({
     leaseId,
     canEdit,
     canComplete,
-    canReturnDeposit,
     onComplete,
-    onReturnDeposit,
 }: LeaseActionMenuProps): JSX.Element {
     const router = useRouter();
     const [selectedAction, setSelectedAction] = useState('');
@@ -35,11 +31,8 @@ export function LeaseActionMenu({
         if (canComplete) {
             items.push({value: 'complete', label: 'Завершить аренду'});
         }
-        if (canReturnDeposit) {
-            items.push({value: 'returnDeposit', label: 'Вернуть залог'});
-        }
         return items;
-    }, [canComplete, canReturnDeposit]);
+    }, [canComplete]);
 
     return (
         <Select
@@ -55,9 +48,6 @@ export function LeaseActionMenu({
                         break;
                     case 'complete':
                         onComplete();
-                        break;
-                    case 'returnDeposit':
-                        onReturnDeposit();
                         break;
                 }
                 setSelectedAction('');

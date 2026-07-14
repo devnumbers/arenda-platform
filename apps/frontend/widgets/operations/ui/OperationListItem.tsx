@@ -5,7 +5,6 @@ import NextLink from 'next/link';
 import type { components } from '@/shared/api/generated';
 import { ROUTES } from '@/shared/config/routes';
 import { getOperationStatusLabel, operationStatusOptions } from '@/entities/operation/lib/statuses';
-import { getCategoryLabel } from '@/entities/operation/lib/categories';
 import { formatOperationDate } from '@/entities/operation/lib/dates';
 import { formatMoneyKopecks } from '@/entities/operation/lib/formatMoney';
 import styles from './OperationListItem.module.css';
@@ -40,7 +39,7 @@ export function OperationListItem({
   const amountClass = isIncome ? styles.amountIncome : styles.amountExpense;
   const statusLabel = getOperationStatusLabel(operation.status);
   const statusVariant = operationStatusOptions.find((option) => option.value === operation.status)?.variant ?? 'default';
-  const metaItems = [formatOperationDate(operation.operation_date), getCategoryLabel(operation.category)];
+  const metaItems = [formatOperationDate(operation.operation_date), operation.category_name];
 
   if (showProperty && propertyName) {
     metaItems.push(propertyName);

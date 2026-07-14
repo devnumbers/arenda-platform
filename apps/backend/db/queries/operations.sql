@@ -1,7 +1,7 @@
 -- name: CreateOperation :one
 INSERT INTO operations (
     owner_id, property_id, lease_id, recurring_operation_id,
-    type, category, name, amount_kopecks, operation_date, source_operation_date, comment, is_exception, status,
+    type, category_id, name, amount_kopecks, operation_date, source_operation_date, comment, is_exception, status,
     reminder_offset_days
 )
 VALUES (
@@ -12,16 +12,17 @@ VALUES (
 RETURNING *;
 
 -- name: ListOperationsByLease :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE lease_id = $1
   AND deleted_at IS NULL
 ORDER BY operation_date DESC;
 
 -- name: ListOperationDatesByLease :many
-SELECT COALESCE(source_operation_date, operation_date)::date AS operation_date FROM operations
-WHERE lease_id = $1
-  AND (recurring_operation_id IS NOT NULL OR category = 'rent')
-  AND (deleted_at IS NULL OR is_exception = true);
+SELECT COALESCE(op.source_operation_date, op.operation_date)::date AS operation_date FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.lease_id = $1
+  AND (op.recurring_operation_id IS NOT NULL OR cat.code = 'rent')
+  AND (op.deleted_at IS NULL OR op.is_exception = true);
 
 -- name: ListOperationDatesByRecurringOperation :many
 SELECT COALESCE(source_operation_date, operation_date)::date AS operation_date FROM operations
@@ -40,7 +41,7 @@ WHERE recurring_operation_id = $2
   AND reminder_offset_days IS DISTINCT FROM $1;
 
 -- name: ListOperationsByRecurringOperation :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE recurring_operation_id = $1
   AND deleted_at IS NULL
 ORDER BY operation_date ASC;
@@ -69,7 +70,7 @@ WHERE recurring_operation_id = $1
   AND deleted_at IS NULL;
 
 -- name: ListFutureOperationsByLease :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE lease_id = $1 AND operation_date > $2
   AND deleted_at IS NULL
 ORDER BY operation_date ASC;
@@ -103,25 +104,25 @@ WHERE lease_id = $1
   AND deleted_at IS NULL;
 
 -- name: ListOperationsByProperty :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE owner_id = $1 AND property_id = $2
   AND deleted_at IS NULL
 ORDER BY operation_date DESC;
 
 -- name: ListOperationsByPropertyWithStatuses :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE owner_id = $1 AND property_id = $2
   AND status = ANY(sqlc.arg('statuses')::text[])
   AND deleted_at IS NULL
 ORDER BY operation_date DESC;
 
 -- name: GetOperationByIDAndOwner :one
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL;
 
 -- name: GetOperationByIDAndOwnerForUpdate :one
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL
 FOR UPDATE;
@@ -129,7 +130,7 @@ FOR UPDATE;
 -- name: UpdateOperation :one
 UPDATE operations
 SET type = $3,
-    category = $4,
+    category_id = $4,
     name = $5,
     amount_kopecks = $6,
     operation_date = $7,
@@ -157,11 +158,11 @@ UPDATE operations
 SET deleted_at = now(),
     updated_at = now(),
     is_exception = CASE
-        WHEN recurring_operation_id IS NOT NULL OR (lease_id IS NOT NULL AND category = 'rent') THEN true
-        ELSE is_exception
+        WHEN operations.recurring_operation_id IS NOT NULL OR (operations.lease_id IS NOT NULL AND operations.category_id = (SELECT operation_categories.id FROM operation_categories WHERE owner_id = operations.owner_id AND code = 'rent')) THEN true
+        ELSE operations.is_exception
     END
-WHERE id = $1 AND owner_id = $2
-  AND deleted_at IS NULL
+WHERE operations.id = $1 AND operations.owner_id = $2
+  AND operations.deleted_at IS NULL
 RETURNING *;
 
 -- name: DeleteFutureUneditedOperationsByProperty :exec
@@ -191,66 +192,60 @@ LIMIT sqlc.arg('limit')::int;
 -- name: GetPropertyOperationsSummary :one
 SELECT
     (
-        COALESCE(SUM(CASE WHEN type = 'income' AND status = 'received' THEN amount_kopecks ELSE 0 END), 0) -
-        COALESCE(SUM(CASE WHEN type = 'expense' AND status = 'paid' THEN amount_kopecks ELSE 0 END), 0)
+        COALESCE(SUM(CASE WHEN op.type = 'income' AND op.status = 'received' THEN op.amount_kopecks ELSE 0 END), 0) -
+        COALESCE(SUM(CASE WHEN op.type = 'expense' AND op.status = 'paid' THEN op.amount_kopecks ELSE 0 END), 0)
     )::bigint AS all_time_profit_kopecks,
     (
         COALESCE(SUM(CASE
-            WHEN type = 'income' AND status = 'received'
-                AND operation_date >= date_trunc('month', sqlc.arg('as_of')::date)
-                AND operation_date < date_trunc('month', sqlc.arg('as_of')::date) + interval '1 month'
-            THEN amount_kopecks ELSE 0 END), 0) -
+            WHEN op.type = 'income' AND op.status = 'received'
+                AND op.operation_date >= date_trunc('month', sqlc.arg('as_of')::date)
+                AND op.operation_date < date_trunc('month', sqlc.arg('as_of')::date) + interval '1 month'
+            THEN op.amount_kopecks ELSE 0 END), 0) -
         COALESCE(SUM(CASE
-            WHEN type = 'expense' AND status = 'paid'
-                AND operation_date >= date_trunc('month', sqlc.arg('as_of')::date)
-                AND operation_date < date_trunc('month', sqlc.arg('as_of')::date) + interval '1 month'
-            THEN amount_kopecks ELSE 0 END), 0)
+            WHEN op.type = 'expense' AND op.status = 'paid'
+                AND op.operation_date >= date_trunc('month', sqlc.arg('as_of')::date)
+                AND op.operation_date < date_trunc('month', sqlc.arg('as_of')::date) + interval '1 month'
+            THEN op.amount_kopecks ELSE 0 END), 0)
     )::bigint AS monthly_profit_kopecks,
-    COUNT(*) FILTER (WHERE status = 'overdue' AND type = 'income' AND category = 'rent') AS overdue_rent_count,
-    COUNT(*) FILTER (WHERE status = 'overdue') AS overdue_total_count,
-    (MIN(operation_date) FILTER (WHERE status IN ('pending', 'overdue') AND type = 'income' AND category = 'rent'))::date AS next_payment_date
-FROM operations
-WHERE owner_id = $1 AND property_id = $2 AND deleted_at IS NULL;
+    COUNT(*) FILTER (WHERE op.status = 'overdue' AND op.type = 'income' AND cat.code = 'rent') AS overdue_rent_count,
+    COUNT(*) FILTER (WHERE op.status = 'overdue') AS overdue_total_count,
+    (MIN(op.operation_date) FILTER (WHERE op.status IN ('pending', 'overdue') AND op.type = 'income' AND cat.code = 'rent'))::date AS next_payment_date
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = $1 AND op.property_id = $2 AND op.deleted_at IS NULL;
 
 -- name: ListOverdueRentOperationsByOwner :many
-SELECT lease_id, operation_date
-FROM operations
-WHERE owner_id = sqlc.arg('owner_id')::uuid
-  AND status = 'overdue'
-  AND type = 'income'
-  AND category = 'rent'
-  AND lease_id IS NOT NULL
-  AND deleted_at IS NULL
-ORDER BY lease_id, operation_date;
+SELECT op.lease_id, op.operation_date
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = sqlc.arg('owner_id')::uuid
+  AND op.status = 'overdue'
+  AND op.type = 'income'
+  AND cat.code = 'rent'
+  AND op.lease_id IS NOT NULL
+  AND op.deleted_at IS NULL
+ORDER BY op.lease_id, op.operation_date;
 
 -- name: ListNextRentPaymentsByOwner :many
-SELECT lease_id, MIN(operation_date)::date AS next_payment_date
-FROM operations
-WHERE owner_id = sqlc.arg('owner_id')::uuid
-  AND status = 'pending'
-  AND operation_date >= sqlc.arg('as_of')::date
-  AND type = 'income'
-  AND category = 'rent'
-  AND lease_id IS NOT NULL
-  AND deleted_at IS NULL
-GROUP BY lease_id;
-
--- name: HasDepositReturnForLease :one
-SELECT EXISTS(
-    SELECT 1 FROM operations
-    WHERE lease_id = $1
-      AND type = 'expense'
-      AND category = 'deposit_return'
-      AND deleted_at IS NULL
-) AS has_deposit_return;
+SELECT op.lease_id, MIN(op.operation_date)::date AS next_payment_date
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = sqlc.arg('owner_id')::uuid
+  AND op.status = 'pending'
+  AND op.operation_date >= sqlc.arg('as_of')::date
+  AND op.type = 'income'
+  AND cat.code = 'rent'
+  AND op.lease_id IS NOT NULL
+  AND op.deleted_at IS NULL
+GROUP BY op.lease_id;
 
 -- name: ListOperationsByOwner :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE owner_id = $1
   AND deleted_at IS NULL
-  AND (sqlc.arg('types')::text[] = '{}'::text[] OR type = ANY(sqlc.arg('types')::text[]))
-  AND (sqlc.arg('statuses')::text[] = '{}'::text[] OR status = ANY(sqlc.arg('statuses')::text[]))
-  AND (sqlc.arg('categories')::text[] = '{}'::text[] OR category = ANY(sqlc.arg('categories')::text[]))
+  AND (COALESCE(sqlc.arg('types')::text[], '{}') = '{}'::text[] OR type = ANY(COALESCE(sqlc.arg('types')::text[], '{}')))
+  AND (COALESCE(sqlc.arg('statuses')::text[], '{}') = '{}'::text[] OR status = ANY(COALESCE(sqlc.arg('statuses')::text[], '{}')))
+  AND (COALESCE(sqlc.arg('category_ids')::uuid[], '{}') = '{}'::uuid[] OR category_id = ANY(COALESCE(sqlc.arg('category_ids')::uuid[], '{}')))
   AND (sqlc.arg('property_id')::uuid IS NULL OR property_id = sqlc.arg('property_id')::uuid)
   AND (sqlc.arg('from_date')::date IS NULL OR operation_date >= sqlc.arg('from_date')::date)
   AND (sqlc.arg('to_date')::date IS NULL OR operation_date <= sqlc.arg('to_date')::date)
@@ -260,12 +255,12 @@ ORDER BY operation_date DESC, id DESC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
 -- name: ListOperationsByOwnerAsc :many
-SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE owner_id = $1
   AND deleted_at IS NULL
-  AND (sqlc.arg('types')::text[] = '{}'::text[] OR type = ANY(sqlc.arg('types')::text[]))
-  AND (sqlc.arg('statuses')::text[] = '{}'::text[] OR status = ANY(sqlc.arg('statuses')::text[]))
-  AND (sqlc.arg('categories')::text[] = '{}'::text[] OR category = ANY(sqlc.arg('categories')::text[]))
+  AND (COALESCE(sqlc.arg('types')::text[], '{}') = '{}'::text[] OR type = ANY(COALESCE(sqlc.arg('types')::text[], '{}')))
+  AND (COALESCE(sqlc.arg('statuses')::text[], '{}') = '{}'::text[] OR status = ANY(COALESCE(sqlc.arg('statuses')::text[], '{}')))
+  AND (COALESCE(sqlc.arg('category_ids')::uuid[], '{}') = '{}'::uuid[] OR category_id = ANY(COALESCE(sqlc.arg('category_ids')::uuid[], '{}')))
   AND (sqlc.arg('property_id')::uuid IS NULL OR property_id = sqlc.arg('property_id')::uuid)
   AND (sqlc.arg('from_date')::date IS NULL OR operation_date >= sqlc.arg('from_date')::date)
   AND (sqlc.arg('to_date')::date IS NULL OR operation_date <= sqlc.arg('to_date')::date)
@@ -275,24 +270,30 @@ ORDER BY operation_date ASC, id ASC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
 -- name: ListOperationsByOwnerAdmin :many
-SELECT * FROM operations
-WHERE owner_id = $1
-  AND deleted_at IS NULL
-  AND (sqlc.arg('status')::text = '' OR status = sqlc.arg('status')::text)
-  AND (sqlc.arg('type')::text = '' OR type = sqlc.arg('type')::text)
-  AND (sqlc.arg('property_id')::uuid IS NULL OR property_id = sqlc.arg('property_id')::uuid)
-  AND (sqlc.arg('lease_id')::uuid IS NULL OR lease_id = sqlc.arg('lease_id')::uuid)
-ORDER BY operation_date DESC, id DESC
+SELECT op.*, cat.name AS category_name
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = $1
+  AND op.deleted_at IS NULL
+  AND (sqlc.arg('status')::text = '' OR op.status = sqlc.arg('status')::text)
+  AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
+  AND (sqlc.arg('property_id')::uuid IS NULL OR op.property_id = sqlc.arg('property_id')::uuid)
+  AND (sqlc.arg('lease_id')::uuid IS NULL OR op.lease_id = sqlc.arg('lease_id')::uuid)
+ORDER BY op.operation_date DESC, op.id DESC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
 -- name: CountOperationsByOwnerAdmin :one
-SELECT COUNT(*) FROM operations
-WHERE owner_id = $1
-  AND deleted_at IS NULL
-  AND (sqlc.arg('status')::text = '' OR status = sqlc.arg('status')::text)
-  AND (sqlc.arg('type')::text = '' OR type = sqlc.arg('type')::text)
-  AND (sqlc.arg('property_id')::uuid IS NULL OR property_id = sqlc.arg('property_id')::uuid)
-  AND (sqlc.arg('lease_id')::uuid IS NULL OR lease_id = sqlc.arg('lease_id')::uuid);
+SELECT COUNT(*) FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = $1
+  AND op.deleted_at IS NULL
+  AND (sqlc.arg('status')::text = '' OR op.status = sqlc.arg('status')::text)
+  AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
+  AND (sqlc.arg('property_id')::uuid IS NULL OR op.property_id = sqlc.arg('property_id')::uuid)
+  AND (sqlc.arg('lease_id')::uuid IS NULL OR op.lease_id = sqlc.arg('lease_id')::uuid);
 
 -- name: GetOperationByIDAdmin :one
-SELECT * FROM operations WHERE id = $1;
+SELECT op.*, cat.name AS category_name
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.id = $1;

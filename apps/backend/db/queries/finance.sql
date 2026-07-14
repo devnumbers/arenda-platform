@@ -28,17 +28,18 @@ ORDER BY (
 
 -- name: GetFinanceReportByCategory :many
 SELECT
-  type,
-  category,
-  COALESCE(SUM(amount_kopecks), 0)::bigint AS total_kopecks
-FROM operations
-WHERE owner_id = sqlc.arg('owner_id')::uuid
-  AND status IN ('paid', 'received')
-  AND (sqlc.arg('from_date')::date IS NULL OR operation_date >= sqlc.arg('from_date')::date)
-  AND (sqlc.arg('to_date')::date IS NULL OR operation_date <= sqlc.arg('to_date')::date)
-  AND deleted_at IS NULL
-GROUP BY type, category
-ORDER BY total_kopecks DESC;
+  op.type,
+  op.category_id,
+  cat.name AS category_name,
+  COALESCE(SUM(op.amount_kopecks), 0)::bigint AS total_kopecks
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = sqlc.arg('owner_id')::uuid
+  AND op.status IN ('paid', 'received')
+  AND (sqlc.arg('from_date')::date IS NULL OR op.operation_date >= sqlc.arg('from_date')::date)
+  AND (sqlc.arg('to_date')::date IS NULL OR op.operation_date <= sqlc.arg('to_date')::date)
+  AND op.deleted_at IS NULL
+GROUP BY op.type, op.category_id, cat.name;
 
 -- name: GetFinanceReportByMonth :many
 SELECT

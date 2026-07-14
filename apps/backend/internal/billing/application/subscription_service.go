@@ -207,6 +207,12 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 	return ChangeTariffResponse{}, nil
 }
 
+// paymentRedirectTTL bounds how long a user-facing payment form stays
+// payable. After the deadline T-Kassa moves the payment to
+// DEADLINE_EXPIRED and the user retries via the existing recovery flow.
+// See docs/plans/2026-07-13-tkassa-redirect-due-date-design.md.
+const paymentRedirectTTL = 15 * time.Minute
+
 func (s *SubscriptionService) changeTariffUpgrade(
 	ctx context.Context,
 	tx transaction.Tx,
@@ -272,10 +278,11 @@ func (s *SubscriptionService) changeTariffUpgrade(
 		UserID:                 userID,
 		CustomerKey:            userID.String(),
 		Recurrent:              true,
-		OperationInitiatorType: "1",
+		OperationInitiatorType: InitiatorTypeCITCC, // parent payment of the CC/COF chain that obtains the RebillId
 		NotificationURL:        notification,
 		SuccessURL:             successURL,
 		FailURL:                failURL,
+		RedirectDueDate:        now.Add(paymentRedirectTTL),
 		Description:            truncateTkassaDescription(upgradePaymentDescription(newTariff.Name, period)),
 	})
 	if err != nil {
@@ -320,10 +327,11 @@ func (s *SubscriptionService) recoverUpgradeProviderReference(ctx context.Contex
 		UserID:                 userID,
 		CustomerKey:            userID.String(),
 		Recurrent:              true,
-		OperationInitiatorType: "1",
+		OperationInitiatorType: InitiatorTypeCITCC, // parent payment of the CC/COF chain that obtains the RebillId
 		NotificationURL:        notification,
 		SuccessURL:             successURL,
 		FailURL:                failURL,
+		RedirectDueDate:        now.Add(paymentRedirectTTL),
 		Description:            truncateTkassaDescription(upgradePaymentDescription(newTariff.Name, period)),
 	})
 	if err != nil {

@@ -157,7 +157,7 @@ func TestUpdateRecurringOperation_ConcurrentUpdatesDoNotOverwrite(t *testing.T) 
 		OwnerID:       ownerID,
 		PropertyID:    propertyID,
 		Type:          domain.OperationTypeIncome,
-		Category:      domain.OperationCategoryRent,
+		CategoryID:    testRentCategoryID,
 		AmountKopecks: 1000,
 		StartDate:     date(2024, 1, 1),
 		PaymentDay:    1,
@@ -173,6 +173,7 @@ func TestUpdateRecurringOperation_ConcurrentUpdatesDoNotOverwrite(t *testing.T) 
 		recRepo,
 		opRepo,
 		propertyRepo,
+		newFakeCategoryRepoForOwner(ownerID),
 		nil, // scheduler
 		nil, // reminders
 		fakeTxBeginner{},
@@ -238,8 +239,8 @@ func (fakeReminderLister) ListByRecurringOperation(_ context.Context, _, _ uuid.
 	return nil, nil
 }
 
-func newRecurringGuardService(recRepo RecurringOperationRepository, opRepo *fakeOperationRepo, propertyRepo *fakePropertyRepo, reminders ReminderLister) *RecurringOperationService {
-	return NewRecurringOperationService(recRepo, opRepo, propertyRepo, nil, reminders, fakeTxBeginner{}, fakeClock{now: date(2026, 6, 15)}, nil)
+func newRecurringGuardService(ownerID uuid.UUID, recRepo RecurringOperationRepository, opRepo *fakeOperationRepo, propertyRepo *fakePropertyRepo, reminders ReminderLister) *RecurringOperationService {
+	return NewRecurringOperationService(recRepo, opRepo, propertyRepo, newFakeCategoryRepoForOwner(ownerID), nil, reminders, fakeTxBeginner{}, fakeClock{now: date(2026, 6, 15)}, nil)
 }
 
 func newGuardTestRecurringOperation(id, ownerID, propertyID uuid.UUID, status domain.RecurringOperationStatus) domain.RecurringOperation {
@@ -248,7 +249,7 @@ func newGuardTestRecurringOperation(id, ownerID, propertyID uuid.UUID, status do
 		OwnerID:       ownerID,
 		PropertyID:    propertyID,
 		Type:          domain.OperationTypeExpense,
-		Category:      domain.OperationCategoryUtilities,
+		CategoryID:    testCustomExpenseCategoryID,
 		Name:          "test",
 		AmountKopecks: 1000,
 		StartDate:     date(2026, 1, 1),
@@ -266,7 +267,7 @@ func TestCreateRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 	cmd := CreateRecurringOperationCommand{
 		PropertyID:    propertyID,
 		Type:          "expense",
-		Category:      "utilities",
+		CategoryID:    testCustomExpenseCategoryID,
 		Name:          "test",
 		AmountKopecks: 1000,
 		StartDate:     date(2026, 1, 1),
@@ -283,7 +284,7 @@ func TestCreateRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 		{name: "maintenance allowed", status: "maintenance", wantErr: nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := newRecurringGuardService(&fakeRecurringOperationRepo{}, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}}, nil)
+			svc := newRecurringGuardService(ownerID, &fakeRecurringOperationRepo{}, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}}, nil)
 			_, err := svc.CreateRecurringOperation(ctx, ownerID, cmd)
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("CreateRecurringOperation: want %v, got %v", tc.wantErr, err)
@@ -314,7 +315,7 @@ func TestUpdateRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 			recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 				recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusActive),
 			}}
-			svc := newRecurringGuardService(recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}}, nil)
+			svc := newRecurringGuardService(ownerID, recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}}, nil)
 			_, err := svc.UpdateRecurringOperation(ctx, ownerID, recID, cmd)
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("UpdateRecurringOperation: want %v, got %v", tc.wantErr, err)
@@ -331,7 +332,7 @@ func TestUpdateRecurringOperation_NoPropertySkipsGuard(t *testing.T) {
 	recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 		recID: newGuardTestRecurringOperation(recID, ownerID, uuid.Nil, domain.RecurringOperationStatusActive),
 	}}
-	svc := newRecurringGuardService(recRepo, &fakeOperationRepo{}, &fakePropertyRepo{}, nil)
+	svc := newRecurringGuardService(ownerID, recRepo, &fakeOperationRepo{}, &fakePropertyRepo{}, nil)
 
 	comment := "updated"
 	updated, err := svc.UpdateRecurringOperation(ctx, ownerID, recID, UpdateRecurringOperationCommand{Comment: &comment})
@@ -362,7 +363,7 @@ func TestDeleteRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 			recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 				recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusActive),
 			}}
-			svc := newRecurringGuardService(recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}}, nil)
+			svc := newRecurringGuardService(ownerID, recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}}, nil)
 			err := svc.DeleteRecurringOperation(ctx, ownerID, recID)
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("DeleteRecurringOperation: want %v, got %v", tc.wantErr, err)
@@ -395,7 +396,7 @@ func TestPauseRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 			recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 				recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusActive),
 			}}
-			svc := newRecurringGuardService(recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}}, nil)
+			svc := newRecurringGuardService(ownerID, recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}}, nil)
 			_, err := svc.PauseRecurringOperation(ctx, ownerID, recID)
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("PauseRecurringOperation: want %v, got %v", tc.wantErr, err)
@@ -414,7 +415,7 @@ func TestResumeRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 		recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 			recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusPaused),
 		}}
-		svc := newRecurringGuardService(recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "archived"}}, nil)
+		svc := newRecurringGuardService(ownerID, recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "archived"}}, nil)
 		if _, err := svc.ResumeRecurringOperation(ctx, ownerID, recID); !errors.Is(err, ErrArchivedProperty) {
 			t.Fatalf("ResumeRecurringOperation: want ErrArchivedProperty, got %v", err)
 		}
@@ -425,7 +426,7 @@ func TestResumeRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 			recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 				recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusActive),
 			}}
-			svc := newRecurringGuardService(recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: status}}, nil)
+			svc := newRecurringGuardService(ownerID, recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: status}}, nil)
 			if _, err := svc.ResumeRecurringOperation(ctx, ownerID, recID); err != nil {
 				t.Fatalf("ResumeRecurringOperation: %v", err)
 			}
@@ -452,7 +453,7 @@ func TestSetReminderOffset_ArchivedPropertyGuard(t *testing.T) {
 			recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 				recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusActive),
 			}}
-			svc := newRecurringGuardService(recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}}, nil)
+			svc := newRecurringGuardService(ownerID, recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}}, nil)
 			err := svc.SetReminderOffset(ctx, ownerID, recID, 1)
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("SetReminderOffset: want %v, got %v", tc.wantErr, err)
@@ -471,7 +472,7 @@ func TestCreateReminder_ArchivedPropertyGuard(t *testing.T) {
 		recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 			recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusActive),
 		}}
-		svc := newRecurringGuardService(recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "archived"}}, fakeReminderLister{})
+		svc := newRecurringGuardService(ownerID, recRepo, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "archived"}}, fakeReminderLister{})
 		if _, err := svc.CreateReminder(ctx, ownerID, recID, date(2026, 6, 15)); !errors.Is(err, ErrArchivedProperty) {
 			t.Fatalf("CreateReminder: want ErrArchivedProperty, got %v", err)
 		}
@@ -489,12 +490,12 @@ func TestCreateReminder_ArchivedPropertyGuard(t *testing.T) {
 				PropertyID:           propertyID,
 				RecurringOperationID: recID,
 				Type:                 domain.OperationTypeExpense,
-				Category:             domain.OperationCategoryUtilities,
+				CategoryID:           testCustomExpenseCategoryID,
 				Status:               domain.OperationStatusPending,
 				AmountKopecks:        1000,
 				OperationDate:        date(2026, 6, 20),
 			})
-			svc := newRecurringGuardService(recRepo, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: status}}, fakeReminderLister{})
+			svc := newRecurringGuardService(ownerID, recRepo, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: status}}, fakeReminderLister{})
 			if _, err := svc.CreateReminder(ctx, ownerID, recID, date(2026, 6, 15)); err != nil {
 				t.Fatalf("CreateReminder: %v", err)
 			}

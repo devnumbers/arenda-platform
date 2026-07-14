@@ -14,18 +14,19 @@ import (
 
 // RecurringOperationHandlers implements the generated recurring operation endpoints.
 type RecurringOperationHandlers struct {
-	svc    *leasesapp.RecurringOperationService
-	logger *slog.Logger
+	svc        *leasesapp.RecurringOperationService
+	categories *leasesapp.CategoryService
+	logger     *slog.Logger
 }
 
 // NewRecurringOperationHandlers creates HTTP handlers for the recurring operations API.
-func NewRecurringOperationHandlers(svc *leasesapp.RecurringOperationService, logger *slog.Logger) *RecurringOperationHandlers {
-	return &RecurringOperationHandlers{svc: svc, logger: logger}
+func NewRecurringOperationHandlers(svc *leasesapp.RecurringOperationService, categories *leasesapp.CategoryService, logger *slog.Logger) *RecurringOperationHandlers {
+	return &RecurringOperationHandlers{svc: svc, categories: categories, logger: logger}
 }
 
 func (h *RecurringOperationHandlers) handleRecurringOperationError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, leasesapp.ErrInvalidInput):
+	case errors.Is(err, leasesapp.ErrInvalidInput), errors.Is(err, domain.ErrInvalidOperationType):
 		detail, ok := UserFacingDetail(err)
 		if !ok {
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
@@ -71,7 +72,7 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 	cmd := leasesapp.CreateRecurringOperationCommand{
 		PropertyID:    propertyId,
 		Type:          string(body.Type),
-		Category:      string(body.Category),
+		CategoryID:    body.CategoryId,
 		Name:          body.Name,
 		AmountKopecks: int64(body.AmountKopecks),
 		StartDate:     body.StartDate.Time,
@@ -99,7 +100,13 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusCreated, recurringOperationResponse(rec))
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusCreated, recurringOperationResponse(rec, names))
 }
 
 // ListRecurringOperationsByProperty implements GET /properties/{propertyId}/recurring-operations.
@@ -116,9 +123,15 @@ func (h *RecurringOperationHandlers) ListRecurringOperationsByProperty(w http.Re
 		return
 	}
 
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
 	items := make([]openapi.RecurringOperationResponse, 0, len(recs))
 	for _, rec := range recs {
-		items = append(items, recurringOperationResponse(rec))
+		items = append(items, recurringOperationResponse(rec, names))
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, openapi.RecurringOperationsResponse{Items: items})
@@ -138,9 +151,15 @@ func (h *RecurringOperationHandlers) ListRecurringOperations(w http.ResponseWrit
 		return
 	}
 
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
 	items := make([]openapi.RecurringOperationResponse, 0, len(recs))
 	for _, rec := range recs {
-		items = append(items, recurringOperationResponse(rec))
+		items = append(items, recurringOperationResponse(rec, names))
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, openapi.RecurringOperationsResponse{Items: items})
@@ -160,7 +179,13 @@ func (h *RecurringOperationHandlers) GetRecurringOperation(w http.ResponseWriter
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, recurringOperationResponse(rec))
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, recurringOperationResponse(rec, names))
 }
 
 // DeleteRecurringOperation implements DELETE /recurring-operations/{id}.
@@ -195,10 +220,10 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 	}
 
 	cmd := leasesapp.UpdateRecurringOperationCommand{
-		Type:     ptrString(body.Type),
-		Category: ptrString(body.Category),
-		Name:     body.Name,
-		Comment:  body.Comment,
+		Type:       ptrString(body.Type),
+		CategoryID: uuidPtrFromOpenAPI(body.CategoryId),
+		Name:       body.Name,
+		Comment:    body.Comment,
 	}
 	if body.AmountKopecks != nil {
 		cmd.AmountKopecks = new(int64(*body.AmountKopecks))
@@ -230,7 +255,13 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, recurringOperationResponse(rec))
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, recurringOperationResponse(rec, names))
 }
 
 // PauseRecurringOperation implements POST /recurring-operations/{id}/pause.
@@ -247,7 +278,13 @@ func (h *RecurringOperationHandlers) PauseRecurringOperation(w http.ResponseWrit
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, recurringOperationResponse(rec))
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, recurringOperationResponse(rec, names))
 }
 
 // ResumeRecurringOperation implements POST /recurring-operations/{id}/resume.
@@ -264,16 +301,23 @@ func (h *RecurringOperationHandlers) ResumeRecurringOperation(w http.ResponseWri
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, recurringOperationResponse(rec))
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, recurringOperationResponse(rec, names))
 }
 
-func recurringOperationResponse(rec domain.RecurringOperation) openapi.RecurringOperationResponse {
+func recurringOperationResponse(rec domain.RecurringOperation, categoryNames map[uuid.UUID]string) openapi.RecurringOperationResponse {
 	resp := openapi.RecurringOperationResponse{
 		Id:            rec.ID,
 		OwnerId:       rec.OwnerID,
 		PropertyId:    rec.PropertyID,
 		Type:          openapi.OperationType(rec.Type),
-		Category:      openapi.OperationCategory(rec.Category),
+		CategoryId:    rec.CategoryID,
+		CategoryName:  categoryNames[rec.CategoryID],
 		Name:          rec.Name,
 		AmountKopecks: int(rec.AmountKopecks),
 		StartDate:     openapi_types.Date{Time: rec.StartDate},

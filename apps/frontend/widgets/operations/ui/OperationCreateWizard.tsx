@@ -7,12 +7,7 @@ import { LinkButton } from '@/shared/ui/link-button';
 import { WizardHeader } from '@/shared/ui/wizard-header';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import {
-  expenseCategories,
-  incomeCategories,
-  type OperationType,
-} from '@/entities/operation/model/types';
-import { getCategoriesByType } from '@/entities/operation/lib/categories';
+import { type OperationType } from '@/entities/operation/model/types';
 import { useCreateOperation } from '@/features/operations/api';
 import { useProperties, useProperty } from '@/features/properties/api';
 import { useCreateRecurringOperation } from '@/features/recurring-operations/api/hooks';
@@ -64,7 +59,7 @@ function formatErrorMessage(error: unknown): string {
   return 'Не удалось создать операцию. Попробуйте ещё раз.';
 }
 
-function validateBasicInfo(data: BasicInfoData, type: OperationType): BasicInfoErrors {
+function validateBasicInfo(data: BasicInfoData): BasicInfoErrors {
   const errors: BasicInfoErrors = {};
   const amountKopecks = toKopecks(data.amount);
 
@@ -81,11 +76,6 @@ function validateBasicInfo(data: BasicInfoData, type: OperationType): BasicInfoE
 
   if (!data.category) {
     errors.category = 'Выберите категорию';
-  } else {
-    const validOptions = type === 'income' ? incomeCategories : expenseCategories;
-    if (!validOptions.some((option) => option.value === data.category)) {
-      errors.category = 'Выберите категорию';
-    }
   }
 
   if (!data.propertyId) {
@@ -158,17 +148,11 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     (Boolean(propertyId) && preselectedPropertyQuery.isPending);
 
   const handleTypeChange = (nextType: OperationType) => {
-    setDraft((prev) => {
-      const validCategories = getCategoriesByType(nextType);
-      const category = validCategories.some((option) => option.value === prev.basicInfo.category)
-        ? prev.basicInfo.category
-        : undefined;
-      return {
-        ...prev,
-        operationType: nextType,
-        basicInfo: { ...prev.basicInfo, type: nextType, category },
-      };
-    });
+    setDraft((prev) => ({
+      ...prev,
+      operationType: nextType,
+      basicInfo: { ...prev.basicInfo, type: nextType, category: undefined },
+    }));
   };
 
   const handleCancel = () => {
@@ -192,7 +176,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     setSubmitError(undefined);
 
     if (step === 'basic') {
-      const errors = validateBasicInfo(basicInfo, operationType);
+      const errors = validateBasicInfo(basicInfo);
       setBasicErrors(errors);
       if (Object.keys(errors).length === 0) {
         setStep('schedule');
@@ -212,7 +196,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
   const handleSubmit = async () => {
     setSubmitError(undefined);
 
-    const basicValidation = validateBasicInfo(basicInfo, operationType);
+    const basicValidation = validateBasicInfo(basicInfo);
     const scheduleValidation = validateSchedule(schedule);
     setBasicErrors(basicValidation);
     setScheduleErrors(scheduleValidation);
@@ -247,7 +231,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
           propertyId: selectedPropertyId,
           data: {
             type: operationType,
-            category,
+            category_id: category,
             name: basicInfo.name.trim(),
             amount_kopecks: amountKopecks,
             operation_date: operationDate,
@@ -260,7 +244,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
           propertyId: selectedPropertyId,
           data: {
             type: operationType,
-            category,
+            category_id: category,
             name: basicInfo.name.trim(),
             amount_kopecks: amountKopecks,
             start_date: operationDate,
@@ -281,7 +265,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
   };
 
   const currentStepNumber = stepNumber[step];
-  const isBasicValid = Object.keys(validateBasicInfo(basicInfo, operationType)).length === 0;
+  const isBasicValid = Object.keys(validateBasicInfo(basicInfo)).length === 0;
   const isScheduleValid = Object.keys(validateSchedule(schedule)).length === 0;
   const isNextDisabled =
     readonly || (step === 'basic' && !isBasicValid) || (step === 'schedule' && !isScheduleValid);

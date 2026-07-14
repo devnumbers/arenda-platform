@@ -5,7 +5,8 @@ import {useRouter} from 'next/navigation';
 import {notify} from '@/shared/lib/toast';
 import NextLink from 'next/link';
 import {ROUTES} from '@/shared/config/routes';
-import {useCompleteLease, useLease, useReturnDeposit,} from '@/features/leases/api/hooks';
+import {useCompleteLease, useLease,} from '@/features/leases/api/hooks';
+import {useOperationCategories} from '@/features/operation-categories/api';
 import {useOperations} from '@/features/operations/api/hooks';
 import {useProperty} from '@/features/properties/api/hooks';
 import {useSubscription} from '@/features/subscription/api/hooks';
@@ -203,20 +204,24 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
     const router = useRouter();
 
     const leaseQuery = useLease(id);
-    const rentOperationsQuery = useOperations({lease_id: id, category: 'rent', sort: 'operation_date_asc'});
-    const depositReturnQuery = useOperations({
-        lease_id: id,
-        category: 'deposit_return',
-        limit: 1,
-    });
+    const categoriesQuery = useOperationCategories('income');
+    const rentCategoryId = categoriesQuery.data?.find(
+        (category) => category.code === 'rent',
+    )?.id;
+    const rentOperationsQuery = useOperations(
+        {
+            lease_id: id,
+            category_id: rentCategoryId ? [rentCategoryId] : undefined,
+            sort: 'operation_date_asc',
+        },
+        {enabled: Boolean(rentCategoryId)},
+    );
     const {data: subscription, isPending: isSubscriptionPending} = useSubscription();
     const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
     const completeLease = useCompleteLease();
-    const returnDeposit = useReturnDeposit();
 
     const [isCompleteModalOpen, setCompleteModalOpen] = useState(false);
-    const [isDepositModalOpen, setDepositModalOpen] = useState(false);
 
     const lease = leaseQuery.data;
     const propertyQuery = useProperty(lease?.property_id ?? '');
@@ -224,10 +229,6 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
     const rentOperations = useMemo(
         () => rentOperationsQuery.data?.items ?? [],
         [rentOperationsQuery.data],
-    );
-    const hasDepositReturn = useMemo(
-        () => (depositReturnQuery.data?.items ?? []).length > 0,
-        [depositReturnQuery.data],
     );
 
     const isLoading = leaseQuery.isPending;
@@ -237,14 +238,6 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
         lease !== undefined &&
         !readonly &&
         (lease.status === 'active' || lease.status === 'requires_action');
-    const canReturnDeposit =
-        lease !== undefined &&
-        !readonly &&
-        !depositReturnQuery.isPending &&
-        !depositReturnQuery.isError &&
-        (lease.status === 'completed' || lease.status === 'requires_action') &&
-        lease.deposit_amount_kopecks > 0 &&
-        !hasDepositReturn;
     const handleRetry = useCallback(() => {
         if (leaseQuery.isError) {
             leaseQuery.refetch();
@@ -252,8 +245,12 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
     }, [leaseQuery]);
 
     const handleOperationsRetry = useCallback(() => {
+        if (!rentCategoryId) {
+            categoriesQuery.refetch();
+            return;
+        }
         rentOperationsQuery.refetch();
-    }, [rentOperationsQuery]);
+    }, [rentCategoryId, categoriesQuery, rentOperationsQuery]);
 
     const confirmComplete = useCallback(() => {
         void notify.promise(completeLease.mutateAsync(id), {
@@ -263,15 +260,6 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
                 (error as ApiError).detail ?? 'Не удалось завершить аренду',
         });
     }, [completeLease, id]);
-
-    const confirmReturnDeposit = useCallback(() => {
-        void notify.promise(returnDeposit.mutateAsync(id), {
-            loading: 'Возвращаем залог...',
-            success: 'Залог возвращён',
-            error: (error) =>
-                (error as ApiError).detail ?? 'Не удалось вернуть залог',
-        });
-    }, [returnDeposit, id]);
 
     if (!id) {
         return (
@@ -306,9 +294,7 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
                         leaseId={id}
                         canEdit={!readonly && lease !== undefined && !isLoading}
                         canComplete={canCompleteLease}
-                        canReturnDeposit={canReturnDeposit}
                         onComplete={() => setCompleteModalOpen(true)}
-                        onReturnDeposit={() => setDepositModalOpen(true)}
                     />
                 }
             />
@@ -326,9 +312,18 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
 
                     <OperationsSection
                         operations={rentOperations}
-                        isLoading={rentOperationsQuery.isPending}
-                        isError={rentOperationsQuery.isError}
-                        isFetching={rentOperationsQuery.isFetching}
+                        isLoading={
+                            rentOperationsQuery.isPending &&
+                            !(!rentCategoryId && categoriesQuery.isError)
+                        }
+                        isError={
+                            rentOperationsQuery.isError ||
+                            (!rentCategoryId && categoriesQuery.isError)
+                        }
+                        isFetching={
+                            rentOperationsQuery.isFetching ||
+                            categoriesQuery.isFetching
+                        }
                         onRetry={handleOperationsRetry}
                     />
                 </>
@@ -341,13 +336,6 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
                 confirmLabel="Завершить аренду"
                 onClose={() => setCompleteModalOpen(false)}
                 onConfirm={confirmComplete}
-            />
-            <ConfirmModal
-                isOpen={isDepositModalOpen}
-                title="Вернуть залог?"
-                confirmLabel="Вернуть залог"
-                onClose={() => setDepositModalOpen(false)}
-                onConfirm={confirmReturnDeposit}
             />
         </div>
     );

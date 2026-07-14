@@ -4,7 +4,7 @@ ADMIN_DIR := apps/admin
 LANDING_DIR := apps/landing
 GOLANGCI_LINT_VERSION := v2.12.2
 
-.PHONY: local-infra-up local-infra-down local-infra-reset backend-run backend-lint check-bruno-coverage check-backend-env check-migrate-env migrate-up migrate-down \
+.PHONY: local-infra-up local-infra-down local-infra-reset backend-run backend-lint backend-tkassa-spec-check check-bruno-coverage check-backend-env check-migrate-env migrate-up migrate-down \
         perf-db-up perf-db-down perf-db-reset perf-backend-run perf-seed perf-sustainable perf-breakdown \
         admin-install admin-dev admin-build admin-typecheck \
         landing-install landing-dev landing-build
@@ -35,6 +35,26 @@ check-migrate-env:
 
 backend-lint:
 	cd $(BACKEND_DIR) && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --config ../../.golangci.yml ./...
+
+# Regenerates the T-Kassa spec artifacts and fails if regenerating changed
+# them, so CI catches a vendored/patched spec whose generated files were not
+# committed. Content hashes (git hash-object) are compared instead of
+# git status so the check also works on a dirty tree with in-flight spec work;
+# on CI's clean checkout a hash change is exactly a git status change.
+TKASSA_SPEC_DIR := $(BACKEND_DIR)/internal/billing/adapters/payment/tkassa/spec
+
+backend-tkassa-spec-check:
+	@cd $(TKASSA_SPEC_DIR) && \
+	before=$$(git hash-object openapi.patched.yaml spec.gen.go) && \
+	./patch.sh && go generate ./... && \
+	after=$$(git hash-object openapi.patched.yaml spec.gen.go) && \
+	if [ "$$before" != "$$after" ]; then \
+		echo "ERROR: T-Kassa spec generated files are stale — regenerating changed them:"; \
+		git -C $(CURDIR) status --porcelain -- $(TKASSA_SPEC_DIR); \
+		echo "Run 'cd $(TKASSA_SPEC_DIR) && ./patch.sh && go generate ./...' and commit the regenerated files (openapi.patched.yaml, spec.gen.go)."; \
+		exit 1; \
+	fi && \
+	echo "backend-tkassa-spec-check: spec generated files are fresh"
 
 admin-install:
 	cd $(ADMIN_DIR) && npm install

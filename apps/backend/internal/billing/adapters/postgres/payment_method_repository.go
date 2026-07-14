@@ -92,7 +92,10 @@ func (r *PaymentMethodRepository) Create(ctx context.Context, pm domain.PaymentM
 
 // UpsertByTokenHash inserts a payment method or updates the mutable fields when
 // a row with the same (user_id, token_hash) already exists. Sensitive fields are
-// encrypted at rest before persistence.
+// encrypted at rest before persistence. An empty incoming card id, display mask
+// or expiry date does not wipe the stored values (COALESCE in the query), so
+// recovery/status-poll upserts that do not know the card data cannot erase what
+// a previous webhook or card-list sync stored.
 func (r *PaymentMethodRepository) UpsertByTokenHash(ctx context.Context, pm domain.PaymentMethod) (domain.PaymentMethod, error) {
 	encryptedToken, encryptedCardID, encryptedExpDate, err := encryptPaymentMethodFields(ctx, r.encryptor, pm)
 	if err != nil {

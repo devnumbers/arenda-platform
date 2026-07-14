@@ -24,6 +24,9 @@ jobs:
       - name: Lint
         run: make backend-lint
 
+      - name: T-Kassa spec freshness
+        run: make backend-tkassa-spec-check
+
       - name: Test
         run: go test ./apps/backend/...
 

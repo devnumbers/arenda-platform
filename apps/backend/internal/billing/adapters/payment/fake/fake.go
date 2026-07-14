@@ -41,21 +41,23 @@ type Provider struct {
 	mu               sync.Mutex
 	pending          map[string]pendingEntry
 	confirmedAmounts map[string]int64
+	addCardStates    map[string]application.CardBindingState
 	metrics          *payment.Metrics
 }
 
 // Compile-time assertions that Provider satisfies the aggregate Provider port
 // and each of its narrow capability interfaces.
 var (
-	_ application.Provider             = (*Provider)(nil)
-	_ application.PaymentInitiator     = (*Provider)(nil)
-	_ application.PaymentCharger       = (*Provider)(nil)
-	_ application.PaymentCanceler      = (*Provider)(nil)
-	_ application.PaymentStatusChecker = (*Provider)(nil)
-	_ application.WebhookParser        = (*Provider)(nil)
-	_ application.CardManager          = (*Provider)(nil)
-	_ application.CardLister           = (*Provider)(nil)
-	_ application.WebhookResponder     = (*Provider)(nil)
+	_ application.Provider                = (*Provider)(nil)
+	_ application.PaymentInitiator        = (*Provider)(nil)
+	_ application.PaymentCharger          = (*Provider)(nil)
+	_ application.PaymentCanceler         = (*Provider)(nil)
+	_ application.PaymentStatusChecker    = (*Provider)(nil)
+	_ application.WebhookParser           = (*Provider)(nil)
+	_ application.CardManager             = (*Provider)(nil)
+	_ application.CardLister              = (*Provider)(nil)
+	_ application.CardBindingStateChecker = (*Provider)(nil)
+	_ application.WebhookResponder        = (*Provider)(nil)
 )
 
 // Name returns the provider identity used by the application layer.
@@ -71,6 +73,7 @@ func NewProvider(baseURL string, log *slog.Logger, clk clock.Clock, metrics *pay
 		clock:            clk,
 		pending:          make(map[string]pendingEntry),
 		confirmedAmounts: make(map[string]int64),
+		addCardStates:    make(map[string]application.CardBindingState),
 		metrics:          metrics,
 	}
 }
@@ -157,7 +160,7 @@ func (p *Provider) PaymentURL(ctx context.Context, paymentID uuid.UUID) (string,
 
 // Status returns the provider-side status of a payment. If the payment is not
 // found in the pending map it is assumed to have been completed and succeeded.
-func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (status domain.PaymentStatus, err error) {
+func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (res application.PaymentStatusResult, err error) {
 	start := time.Now()
 	defer func() {
 		recStatus := "ok"
@@ -173,9 +176,9 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 	p.purgeLocked()
 
 	if entry, ok := p.pending[paymentID.String()]; ok {
-		return entry.payload.Status, nil
+		return application.PaymentStatusResult{Status: entry.payload.Status}, nil
 	}
-	return domain.PaymentStatusSucceeded, nil
+	return application.PaymentStatusResult{Status: domain.PaymentStatusSucceeded}, nil
 }
 
 // Charge performs a recurrent charge using a saved token.
@@ -269,6 +272,37 @@ func (p *Provider) GetCardList(ctx context.Context, customerKey string) (cards [
 
 	_ = customerKey
 	return []application.ProviderCard{}, nil
+}
+
+// SetAddCardState programs the GetAddCardState result for a request key. It is
+// the fake counterpart of the T-Kassa add-card state polling and is used by
+// tests that drive the card-binding flow.
+func (p *Provider) SetAddCardState(requestKey string, state application.CardBindingState) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.addCardStates[requestKey] = state
+}
+
+// GetAddCardState returns the state programmed with SetAddCardState. The fake
+// provider has no provider-side card storage, so an unprogrammed request key
+// is an error.
+func (p *Provider) GetAddCardState(ctx context.Context, requestKey string) (res application.CardBindingState, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "GetAddCardState", status, time.Since(start))
+	}()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	state, ok := p.addCardStates[requestKey]
+	if !ok {
+		return application.CardBindingState{}, errors.New("fake: add card state not programmed for request key")
+	}
+	return state, nil
 }
 
 // Cancel refunds a finalized fake payment. For the fake provider we treat every

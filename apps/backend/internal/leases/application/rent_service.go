@@ -14,13 +14,18 @@ import (
 type RentService struct {
 	ops          OperationRepository
 	recurringOps RecurringOperationRepository
+	categories   OperationCategoryRepository
 	clock        clock.Clock
 }
 
-func NewRentService(ops OperationRepository, recurringOps RecurringOperationRepository, clock clock.Clock) *RentService {
+func NewRentService(ops OperationRepository, recurringOps RecurringOperationRepository, categories OperationCategoryRepository, clock clock.Clock) *RentService {
+	if categories == nil {
+		panic("categories repository is required")
+	}
 	return &RentService{
 		ops:          ops,
 		recurringOps: recurringOps,
+		categories:   categories,
 		clock:        clock,
 	}
 }
@@ -32,6 +37,7 @@ func (r *RentService) GenerateRentOperations(
 	lease domain.Lease,
 	recurringOpID uuid.UUID,
 	ownerID uuid.UUID,
+	rentCategoryID uuid.UUID,
 ) []domain.Operation {
 	dates := domain.GenerateDates(lease.StartDate, lease.PaymentDay, lease.EndDate, r.clock.Now(), domain.RecurringOperationPeriodicityMonthly)
 	if len(dates) == 0 {
@@ -50,7 +56,7 @@ func (r *RentService) GenerateRentOperations(
 			LeaseID:              lease.ID,
 			RecurringOperationID: recurringOpID,
 			Type:                 domain.OperationTypeIncome,
-			Category:             domain.OperationCategoryRent,
+			CategoryID:           rentCategoryID,
 			Status:               rentOperationStatus(d, today),
 			Name:                 "Арендная плата",
 			AmountKopecks:        lease.RentAmountKopecks,
@@ -86,6 +92,11 @@ func (r *RentService) RegenerateFutureOperations(
 		return fmt.Errorf("get recurring operation: %w", err)
 	}
 
+	rentCategoryID, err := getDefaultCategoryID(ctx, r.categories, lease.OwnerID, domain.OperationCategoryCodeRent)
+	if err != nil {
+		return fmt.Errorf("rent category: %w", err)
+	}
+
 	// Keep the recurring operation in sync with the lease terms.
 	rec.AmountKopecks = lease.RentAmountKopecks
 	rec.PaymentDay = lease.PaymentDay
@@ -105,7 +116,7 @@ func (r *RentService) RegenerateFutureOperations(
 		return fmt.Errorf("list existing operations: %w", err)
 	}
 
-	ops := r.GenerateRentOperations(ctx, lease, rec.ID, lease.OwnerID)
+	ops := r.GenerateRentOperations(ctx, lease, rec.ID, lease.OwnerID, rentCategoryID)
 	futureOps := filterFutureOperations(ops, fromDate)
 	futureOps = excludeExistingDates(futureOps, existingDates)
 	if len(futureOps) == 0 {
@@ -137,6 +148,11 @@ func (r *RentService) RebuildSchedule(
 		return fmt.Errorf("get recurring operation: %w", err)
 	}
 
+	rentCategoryID, err := getDefaultCategoryID(ctx, r.categories, lease.OwnerID, domain.OperationCategoryCodeRent)
+	if err != nil {
+		return fmt.Errorf("rent category: %w", err)
+	}
+
 	rec.StartDate = lease.StartDate
 	rec.AmountKopecks = lease.RentAmountKopecks
 	rec.PaymentDay = lease.PaymentDay
@@ -165,7 +181,7 @@ func (r *RentService) RebuildSchedule(
 		return fmt.Errorf("list existing operations: %w", err)
 	}
 
-	ops := r.GenerateRentOperations(ctx, lease, rec.ID, lease.OwnerID)
+	ops := r.GenerateRentOperations(ctx, lease, rec.ID, lease.OwnerID, rentCategoryID)
 	ops = excludeExistingDates(ops, existingDates)
 	if len(ops) == 0 {
 		return nil

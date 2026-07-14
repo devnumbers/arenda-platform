@@ -83,7 +83,8 @@ type AdminOperationView struct {
 	LeaseID              *uuid.UUID
 	RecurringOperationID *uuid.UUID
 	Type                 leasesdomain.OperationType
-	Category             leasesdomain.OperationCategory
+	CategoryID           uuid.UUID
+	CategoryName         string
 	Name                 string
 	AmountKopecks        int64
 	OperationDate        time.Time

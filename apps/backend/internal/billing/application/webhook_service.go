@@ -262,7 +262,7 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 // used when a late "succeeded" webhook arrives after the payment has already
 // been marked as failed.
 func (s *WebhookService) reconcileFailedPayment(ctx context.Context, payment domain.SubscriptionPayment, result WebhookPayload) error {
-	status, err := s.provider.Status(ctx, payment.ID, *payment.ProviderPaymentID)
+	statusResult, err := s.provider.Status(ctx, payment.ID, *payment.ProviderPaymentID)
 	if err != nil {
 		s.deps.log.ErrorContext(ctx, "failed to query provider status for reconciling failed payment",
 			slog.String("payment_id", payment.ID.String()),
@@ -271,6 +271,7 @@ func (s *WebhookService) reconcileFailedPayment(ctx context.Context, payment dom
 		return nil
 	}
 
+	status := statusResult.Status
 	switch status {
 	case domain.PaymentStatusSucceeded, domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
 		// fall through to apply the reconciliation.
@@ -309,6 +310,12 @@ func (s *WebhookService) reconcileFailedPayment(ctx context.Context, payment dom
 
 	reconcileResult := result
 	reconcileResult.Status = status
+	// GetState reports the RebillId of the payment; prefer it over the webhook
+	// payload so the card token is recovered even when the AUTHORIZED webhook
+	// that normally delivers it was lost.
+	if statusResult.RebillID != "" {
+		reconcileResult.RebillID = statusResult.RebillID
+	}
 
 	if err := applyPaymentResult(ctx, paymentResultDeps{
 		subscriptionPayments: s.deps.subscriptionPayments,

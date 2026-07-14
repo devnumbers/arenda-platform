@@ -18,7 +18,7 @@ import (
 type CreateOperationCommand struct {
 	PropertyID         uuid.UUID
 	Type               string
-	Category           string
+	CategoryID         uuid.UUID
 	Name               string
 	AmountKopecks      int64
 	OperationDate      time.Time
@@ -30,7 +30,7 @@ type CreateOperationCommand struct {
 // UpdateOperationCommand carries the optional updates for an operation.
 type UpdateOperationCommand struct {
 	Type               *string
-	Category           *string
+	CategoryID         *uuid.UUID
 	Name               *string
 	AmountKopecks      *int64
 	OperationDate      *time.Time
@@ -58,6 +58,7 @@ type OperationService struct {
 	properties   PropertyRepository
 	leases       LeaseRepository
 	recurringOps RecurringOperationRepository
+	categories   OperationCategoryRepository
 	scheduler    ReminderScheduler
 	db           txBeginner
 	clock        clock.Clock
@@ -70,6 +71,7 @@ func NewOperationService(
 	properties PropertyRepository,
 	leases LeaseRepository,
 	recurringOps RecurringOperationRepository,
+	categories OperationCategoryRepository,
 	scheduler ReminderScheduler,
 	db txBeginner,
 	clock clock.Clock,
@@ -81,6 +83,9 @@ func NewOperationService(
 	if clock == nil {
 		panic("clock is required")
 	}
+	if categories == nil {
+		panic("categories repository is required")
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -89,6 +94,7 @@ func NewOperationService(
 		properties:   properties,
 		leases:       leases,
 		recurringOps: recurringOps,
+		categories:   categories,
 		scheduler:    scheduler,
 		db:           db,
 		clock:        clock,
@@ -102,8 +108,11 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		return domain.Operation{}, err
 	}
 
-	opType, category, err := parseTypeAndCategory(cmd.Type, cmd.Category)
+	opType, categoryID, err := parseTypeAndCategory(cmd.Type, cmd.CategoryID)
 	if err != nil {
+		return domain.Operation{}, err
+	}
+	if err := validateCategory(ctx, s.categories, ownerID, opType, categoryID); err != nil {
 		return domain.Operation{}, err
 	}
 
@@ -146,7 +155,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		PropertyID:         cmd.PropertyID,
 		LeaseID:            leaseID,
 		Type:               opType,
-		Category:           category,
+		CategoryID:         categoryID,
 		Status:             domain.OperationStatusPending,
 		Name:               name,
 		AmountKopecks:      cmd.AmountKopecks,
@@ -175,9 +184,14 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 
 	if s.scheduler != nil && created.ReminderOffsetDays != nil {
 		txScheduler := s.scheduler.WithTx(tx)
+		txCategories := s.categories.WithTx(tx)
+		cat, err := txCategories.GetByIDAndOwner(ctx, created.CategoryID, ownerID)
+		if err != nil {
+			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
+		}
 		reminderDate := created.OperationDate.AddDate(0, 0, -(*created.ReminderOffsetDays))
 		if !reminderDate.Before(timeutil.Date(s.clock.Now())) {
-			if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(created), reminderDate); err != nil {
+			if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(created, cat.Name), reminderDate); err != nil {
 				return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
 			}
 		}
@@ -274,6 +288,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txOps := s.operations.WithTx(tx)
+	txCategories := s.categories.WithTx(tx)
 
 	op, err := txOps.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
@@ -290,20 +305,25 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	originalOffset := op.ReminderOffsetDays
 	originalOperationDate := op.OperationDate
 
-	typeStr := string(op.Type)
-	categoryStr := string(op.Category)
+	opType := op.Type
+	categoryID := op.CategoryID
 	if cmd.Type != nil {
-		typeStr = *cmd.Type
+		parsedType, err := domain.ParseOperationType(*cmd.Type)
+		if err != nil {
+			return domain.Operation{}, err
+		}
+		opType = parsedType
 	}
-	if cmd.Category != nil {
-		categoryStr = *cmd.Category
+	if cmd.CategoryID != nil {
+		categoryID = *cmd.CategoryID
 	}
-	opType, category, err := parseTypeAndCategory(typeStr, categoryStr)
-	if err != nil {
-		return domain.Operation{}, err
+	if cmd.Type != nil || cmd.CategoryID != nil {
+		if err := validateCategory(ctx, txCategories, ownerID, opType, categoryID); err != nil {
+			return domain.Operation{}, err
+		}
 	}
 	op.Type = opType
-	op.Category = category
+	op.CategoryID = categoryID
 
 	if cmd.Name != nil {
 		name := strings.TrimSpace(*cmd.Name)
@@ -370,6 +390,10 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	dateChanged := !originalOperationDate.Equal(updated.OperationDate)
 	if s.scheduler != nil && (offsetChanged || dateChanged) {
 		txScheduler := s.scheduler.WithTx(tx)
+		cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, ownerID)
+		if err != nil {
+			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
+		}
 
 		if err := txScheduler.CancelByOperation(ctx, ownerID, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
@@ -381,7 +405,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 		if updated.ReminderOffsetDays != nil {
 			reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
 			if !reminderDate.Before(timeutil.Date(now)) {
-				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated), reminderDate); err != nil {
+				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
 					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
 				}
 			}
@@ -510,6 +534,11 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 
 	if s.scheduler != nil {
 		txScheduler := s.scheduler.WithTx(tx)
+		txCategories := s.categories.WithTx(tx)
+		cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, cmd.OwnerID)
+		if err != nil {
+			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
+		}
 		if err := txScheduler.CancelByOperation(ctx, cmd.OwnerID, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
 		}
@@ -518,13 +547,13 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 		}
 
 		if updated.Status == domain.OperationStatusOverdue {
-			if err := txScheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(updated), now); err != nil {
+			if err := txScheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(updated, cat.Name), now); err != nil {
 				return domain.Operation{}, fmt.Errorf("schedule overdue reminder: %w", err)
 			}
 		} else if updated.ReminderOffsetDays != nil {
 			reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
 			if !reminderDate.Before(timeutil.Date(op.UpdatedAt)) {
-				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated), reminderDate); err != nil {
+				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
 					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
 				}
 			}
@@ -598,7 +627,12 @@ func (s *OperationService) ProcessOverdueOperation(ctx context.Context, ownerID,
 
 	if s.scheduler != nil {
 		txScheduler := s.scheduler.WithTx(tx)
-		if err := txScheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(op), asOf); err != nil {
+		txCategories := s.categories.WithTx(tx)
+		cat, err := txCategories.GetByIDAndOwner(ctx, op.CategoryID, ownerID)
+		if err != nil {
+			return false, fmt.Errorf("get category for reminder: %w", err)
+		}
+		if err := txScheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(op, cat.Name), asOf); err != nil {
 			return false, fmt.Errorf("schedule overdue reminder: %w", err)
 		}
 	}

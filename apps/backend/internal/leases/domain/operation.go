@@ -26,51 +26,24 @@ func ParseOperationType(s string) (OperationType, error) {
 	}
 }
 
-type OperationCategory string
+type OperationCategory struct {
+	ID        uuid.UUID
+	OwnerID   uuid.UUID
+	Type      OperationType
+	Name      string
+	Code      *string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type OperationCategoryDefaultCode string
 
 const (
-	OperationCategoryRent          OperationCategory = "rent"
-	OperationCategoryOtherIncome   OperationCategory = "other_income"
-	OperationCategoryUtilities     OperationCategory = "utilities"
-	OperationCategoryRepair        OperationCategory = "repair"
-	OperationCategoryTax           OperationCategory = "tax"
-	OperationCategoryOtherExpense  OperationCategory = "other_expense"
-	OperationCategoryDepositReturn OperationCategory = "deposit_return"
+	OperationCategoryCodeRent      OperationCategoryDefaultCode = "rent"
+	OperationCategoryCodeUtilities OperationCategoryDefaultCode = "utilities"
+	OperationCategoryCodeRepair    OperationCategoryDefaultCode = "repair"
+	OperationCategoryCodeTax       OperationCategoryDefaultCode = "tax"
 )
-
-var ErrInvalidOperationCategory = fmt.Errorf("invalid operation category")
-
-func ParseOperationCategory(s string) (OperationCategory, error) {
-	c := OperationCategory(s)
-	switch c {
-	case OperationCategoryRent,
-		OperationCategoryOtherIncome,
-		OperationCategoryUtilities,
-		OperationCategoryRepair,
-		OperationCategoryTax,
-		OperationCategoryOtherExpense,
-		OperationCategoryDepositReturn:
-		return c, nil
-	default:
-		return "", fmt.Errorf("%w: %q", ErrInvalidOperationCategory, s)
-	}
-}
-
-func IsValidCategoryForType(category OperationCategory, opType OperationType) bool {
-	switch opType {
-	case OperationTypeIncome:
-		switch category {
-		case OperationCategoryRent, OperationCategoryOtherIncome:
-			return true
-		}
-	case OperationTypeExpense:
-		switch category {
-		case OperationCategoryUtilities, OperationCategoryRepair, OperationCategoryTax, OperationCategoryOtherExpense, OperationCategoryDepositReturn:
-			return true
-		}
-	}
-	return false
-}
 
 type OperationStatus string
 
@@ -155,7 +128,7 @@ type Operation struct {
 	LeaseID              uuid.UUID
 	RecurringOperationID uuid.UUID
 	Type                 OperationType
-	Category             OperationCategory
+	CategoryID           uuid.UUID
 	Status               OperationStatus
 	Name                 string
 	AmountKopecks        int64
@@ -207,7 +180,7 @@ type RecurringOperation struct {
 	PropertyID         uuid.UUID
 	LeaseID            uuid.UUID
 	Type               OperationType
-	Category           OperationCategory
+	CategoryID         uuid.UUID
 	AmountKopecks      int64
 	StartDate          time.Time
 	PaymentDay         int

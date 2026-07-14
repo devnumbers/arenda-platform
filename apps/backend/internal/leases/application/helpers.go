@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -45,20 +46,35 @@ func validatePropertyNotArchived(ctx context.Context, properties PropertyReposit
 	return nil
 }
 
-func parseTypeAndCategory(typeStr, categoryStr string) (domain.OperationType, domain.OperationCategory, error) {
-	opType, err := domain.ParseOperationType(typeStr)
+func parseTypeAndCategory(cmdType string, categoryID uuid.UUID) (domain.OperationType, uuid.UUID, error) {
+	opType, err := domain.ParseOperationType(cmdType)
 	if err != nil {
-		return "", "", newInvalidInputError(err.Error())
+		return "", uuid.Nil, newInvalidInputError(err.Error())
 	}
+	if categoryID == uuid.Nil {
+		return "", uuid.Nil, newInvalidInputError("category_id is required")
+	}
+	return opType, categoryID, nil
+}
 
-	category, err := domain.ParseOperationCategory(categoryStr)
+func validateCategory(ctx context.Context, categories OperationCategoryRepository, ownerID uuid.UUID, opType domain.OperationType, categoryID uuid.UUID) error {
+	cat, err := categories.GetByIDAndOwner(ctx, categoryID, ownerID)
 	if err != nil {
-		return "", "", newInvalidInputError(err.Error())
+		if errors.Is(err, ErrNotFound) {
+			return newInvalidInputError("category not found")
+		}
+		return fmt.Errorf("get category: %w", err)
 	}
-
-	if !domain.IsValidCategoryForType(category, opType) {
-		return "", "", newInvalidInputError(fmt.Sprintf("category %q is not valid for type %q", category, opType))
+	if cat.Type != opType {
+		return newInvalidInputError("category type mismatch")
 	}
+	return nil
+}
 
-	return opType, category, nil
+func getDefaultCategoryID(ctx context.Context, categories OperationCategoryRepository, ownerID uuid.UUID, code domain.OperationCategoryDefaultCode) (uuid.UUID, error) {
+	cat, err := categories.GetByOwnerAndCode(ctx, ownerID, code)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("get default category %q: %w", code, err)
+	}
+	return cat.ID, nil
 }

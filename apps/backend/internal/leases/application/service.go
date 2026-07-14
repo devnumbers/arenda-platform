@@ -11,7 +11,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -47,6 +46,7 @@ type LeaseService struct {
 	tenantContacts TenantContactRepository
 	recurringOps   RecurringOperationRepository
 	operations     OperationRepository
+	categories     OperationCategoryRepository
 	scheduler      notificationsapp.ReminderScheduler
 	db             txBeginner
 	clock          clock.Clock
@@ -59,6 +59,7 @@ func NewLeaseService(
 	tenantContacts TenantContactRepository,
 	recurringOps RecurringOperationRepository,
 	operations OperationRepository,
+	categories OperationCategoryRepository,
 	scheduler notificationsapp.ReminderScheduler,
 	db txBeginner,
 	clock clock.Clock,
@@ -70,6 +71,9 @@ func NewLeaseService(
 	if clock == nil {
 		panic("clock is required")
 	}
+	if categories == nil {
+		panic("categories repository is required")
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -79,6 +83,7 @@ func NewLeaseService(
 		tenantContacts: tenantContacts,
 		recurringOps:   recurringOps,
 		operations:     operations,
+		categories:     categories,
 		scheduler:      scheduler,
 		db:             db,
 		clock:          clock,
@@ -123,6 +128,11 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 	lease.CreatedAt = now
 	lease.UpdatedAt = now
 
+	rentCategoryID, err := getDefaultCategoryID(ctx, s.categories, ownerID, domain.OperationCategoryCodeRent)
+	if err != nil {
+		return domain.Lease{}, fmt.Errorf("rent category: %w", err)
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.Lease{}, fmt.Errorf("begin tx: %w", err)
@@ -133,7 +143,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
 	txProperties := s.properties.WithTx(tx)
-	txRentService := NewRentService(txOps, txRecurring, s.clock)
+	txRentService := NewRentService(txOps, txRecurring, s.categories.WithTx(tx), s.clock)
 
 	hasOpen, err := txProperties.HasOpenLease(ctx, cmd.PropertyID)
 	if err != nil {
@@ -159,7 +169,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		PropertyID:    created.PropertyID,
 		LeaseID:       created.ID,
 		Type:          domain.OperationTypeIncome,
-		Category:      domain.OperationCategoryRent,
+		CategoryID:    rentCategoryID,
 		Name:          "Арендная плата",
 		AmountKopecks: created.RentAmountKopecks,
 		StartDate:     created.StartDate,
@@ -176,7 +186,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		return domain.Lease{}, fmt.Errorf("create recurring operation: %w", err)
 	}
 
-	ops := txRentService.GenerateRentOperations(ctx, created, createdRecurring.ID, ownerID)
+	ops := txRentService.GenerateRentOperations(ctx, created, createdRecurring.ID, ownerID, rentCategoryID)
 	if len(ops) > 0 {
 		if err := txOps.BulkCreate(ctx, ops); err != nil {
 			return domain.Lease{}, fmt.Errorf("bulk create operations: %w", err)
@@ -242,7 +252,7 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 	txTenantContacts := s.tenantContacts.WithTx(tx)
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
-	txRentService := NewRentService(txOps, txRecurring, s.clock)
+	txRentService := NewRentService(txOps, txRecurring, s.categories.WithTx(tx), s.clock)
 
 	lease, err := txLeases.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
@@ -353,7 +363,12 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 					if err != nil {
 						return domain.Lease{}, fmt.Errorf("list operations for scheduling: %w", err)
 					}
-					if err := scheduleRemindersForOperations(ctx, txScheduler, rec, ops, now); err != nil {
+					txCategories := s.categories.WithTx(tx)
+					categoryNames, err := buildCategoryNamesMap(ctx, txCategories, ownerID)
+					if err != nil {
+						return domain.Lease{}, err
+					}
+					if err := scheduleRemindersForOperations(ctx, txScheduler, rec, ops, categoryNames, now); err != nil {
 						return domain.Lease{}, fmt.Errorf("schedule recurring reminders: %w", err)
 					}
 				}
@@ -461,77 +476,6 @@ func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID)
 	}
 
 	return completed, nil
-}
-
-func (s *LeaseService) ReturnDeposit(ctx context.Context, ownerID, leaseID uuid.UUID) (domain.Lease, domain.Operation, error) {
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Lease{}, domain.Operation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txLeases := s.leases.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
-
-	lease, err := txLeases.GetByIDAndOwnerForUpdate(ctx, leaseID, ownerID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Lease{}, domain.Operation{}, ErrNotFound
-		}
-		return domain.Lease{}, domain.Operation{}, fmt.Errorf("get lease: %w", err)
-	}
-	if lease.DepositAmountKopecks <= 0 {
-		return domain.Lease{}, domain.Operation{}, fmt.Errorf("%w: no deposit to return", ErrInvalidInput)
-	}
-
-	now := s.clock.Now()
-	if lease.EffectiveStatus(now) == domain.LeaseStatusAwaitingStart || lease.EffectiveStatus(now) == domain.LeaseStatusActive {
-		return domain.Lease{}, domain.Operation{}, fmt.Errorf("%w: cannot return deposit for an active or not-yet-started lease", ErrInvalidInput)
-	}
-
-	exists, err := txOps.HasDepositReturnForLease(ctx, lease.ID)
-	if err != nil {
-		return domain.Lease{}, domain.Operation{}, fmt.Errorf("check deposit return: %w", err)
-	}
-	if exists {
-		return domain.Lease{}, domain.Operation{}, fmt.Errorf("%w: deposit has already been returned for this lease", ErrInvalidInput)
-	}
-
-	opID, err := uuid.NewRandom()
-	if err != nil {
-		return domain.Lease{}, domain.Operation{}, fmt.Errorf("generate operation id: %w", err)
-	}
-	const depositReturnComment = "Возврат залога"
-	op := domain.Operation{
-		ID:            opID,
-		OwnerID:       ownerID,
-		PropertyID:    lease.PropertyID,
-		LeaseID:       lease.ID,
-		Type:          domain.OperationTypeExpense,
-		Category:      domain.OperationCategoryDepositReturn,
-		Status:        domain.OperationStatusPaid,
-		Name:          depositReturnComment,
-		AmountKopecks: lease.DepositAmountKopecks,
-		OperationDate: timeutil.Date(now),
-		Comment:       depositReturnComment,
-		IsException:   true,
-		CreatedAt:     now,
-		UpdatedAt:     now,
-	}
-	if err := op.ValidateStatusForType(); err != nil {
-		return domain.Lease{}, domain.Operation{}, err
-	}
-	createdOp, err := txOps.Create(ctx, op)
-	if err != nil {
-		return domain.Lease{}, domain.Operation{}, fmt.Errorf("create deposit return operation: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Lease{}, domain.Operation{}, fmt.Errorf("commit tx: %w", err)
-	}
-
-	lease.Status = lease.EffectiveStatus(now)
-	return lease, createdOp, nil
 }
 
 // ListOpenLeasesWithPastEndDate returns open leases whose end date is before asOf.

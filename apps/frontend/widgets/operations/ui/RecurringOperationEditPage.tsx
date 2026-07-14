@@ -18,11 +18,7 @@ import { DatePickerField } from '@/shared/ui/date-picker-field';
 import { ROUTES } from '@/shared/config/routes';
 import { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/generated';
-import {
-  type OperationCategory,
-  type OperationType,
-} from '@/entities/operation/model/types';
-import { getCategoriesByType } from '@/entities/operation/lib/categories';
+import { type OperationType } from '@/entities/operation/model/types';
 import {
   useRecurringOperation,
   useUpdateRecurringOperation,
@@ -48,7 +44,7 @@ type RecurringPeriodicity = 'monthly' | 'yearly';
 
 type FormData = {
   type: OperationType;
-  category: OperationCategory | undefined;
+  category: string | undefined;
   name: string;
   amount: string;
   periodicity: RecurringPeriodicity;
@@ -227,7 +223,7 @@ function RecurringOperationEditPageContent({
 
   const [form, setForm] = useState<FormData>({
     type: operation.type,
-    category: operation.category,
+    category: operation.category_id,
     name: operation.name,
     amount: formatAmountFromKopecks(operation.amount_kopecks),
     periodicity: operation.periodicity,
@@ -241,13 +237,7 @@ function RecurringOperationEditPageContent({
   const [errors, setErrors] = useState<FormErrors>({});
 
   const handleTypeChange = (type: OperationType) => {
-    setForm((prev) => {
-      const validCategories = getCategoriesByType(type);
-      const category = validCategories.some((option) => option.value === prev.category)
-        ? prev.category
-        : undefined;
-      return { ...prev, type, category };
-    });
+    setForm((prev) => ({ ...prev, type, category: undefined }));
   };
 
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -318,7 +308,7 @@ function RecurringOperationEditPageContent({
 
     const data: RecurringOperationUpdateRequest = {
       type: form.type,
-      category: form.category,
+      category_id: form.category,
       name: form.name.trim(),
       amount_kopecks: amountKopecks,
       periodicity: form.periodicity,

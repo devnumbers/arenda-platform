@@ -9,12 +9,11 @@ import {
 } from '@/entities/operation/lib/dates';
 import { useFinanceReport } from '@/features/finance/api/hooks';
 import { useProperties } from '@/features/properties/api/hooks';
-import { getCategoryLabel } from '@/entities/operation/lib/categories';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
 import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { FinanceEmptyState } from '@/widgets/finance/ui/FinanceEmptyState';
-import type { OperationCategory, OperationType } from '@/entities/operation/model/types';
+import type { OperationType } from '@/entities/operation/model/types';
 import styles from './ProfitReport.module.css';
 
 type Period = 'month' | 'quarter' | 'year';
@@ -182,13 +181,13 @@ export function ProfitReport(): JSX.Element {
         <h2 className={styles.sectionTitle}>По категориям</h2>
         <ul className={styles.rows}>
           {report.by_category?.map((row, index) => (
-            <li key={`${row.type}-${row.category}-${index}`} className={styles.row}>
+            <li key={`${row.type}-${row.category_id}-${index}`} className={styles.row}>
               <div className={styles.rowMain}>
                 <span className={styles.rowName}>
-                  {getCategoryLabel(row.category as OperationCategory)}
+                  {row.category_name}
                 </span>
                 <span className={styles.rowMeta}>
-                  {getOperationTypeLabel(row.type as OperationType)}
+                  {getOperationTypeLabel(row.type)}
                 </span>
               </div>
               <span className={styles.rowAmount}>

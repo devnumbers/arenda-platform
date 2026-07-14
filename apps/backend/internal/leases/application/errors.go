@@ -20,6 +20,7 @@ var (
 	ErrArchivedProperty               = errors.New("cannot modify an archived property")
 	ErrTenantContactNotFound          = errors.New("tenant contact not found")
 	ErrDuplicatePhone                 = errors.New("tenant contact with this phone already exists")
+	ErrDuplicateCategoryName          = errors.New("category with this name already exists")
 )
 
 // invalidInputError is a user-facing invalid-input error that reports 400 in the

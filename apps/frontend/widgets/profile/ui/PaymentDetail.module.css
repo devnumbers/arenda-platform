@@ -63,6 +63,19 @@
   color: var(--color-text-muted);
 }
 
+.paymentLink {
+  align-self: flex-start;
+  font-size: var(--font-size-text-m);
+  font-weight: 500;
+  line-height: var(--line-height-text-m);
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.paymentLink:hover {
+  text-decoration: underline;
+}
+
 .rowSkeleton {
   height: 18px;
   width: 100%;

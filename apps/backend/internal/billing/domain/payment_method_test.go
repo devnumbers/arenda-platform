@@ -36,6 +36,64 @@ func TestNewPaymentMethod(t *testing.T) {
 	}
 }
 
+func TestPaymentMethodPendingCardBindingRequestKey(t *testing.T) {
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	t.Run("PendingCardBindingToken prefixes the request key", func(t *testing.T) {
+		if got := PendingCardBindingToken("req_1"); got != "addcard:req_1" {
+			t.Errorf("PendingCardBindingToken = %q, want %q", got, "addcard:req_1")
+		}
+	})
+
+	t.Run("placeholder row returns the stripped request key", func(t *testing.T) {
+		pm, err := NewPaymentMethod(userID, ProviderTkassa, PendingCardBindingToken("req_1"), "", now)
+		if err != nil {
+			t.Fatalf("NewPaymentMethod() error = %v", err)
+		}
+		if got := pm.PendingCardBindingRequestKey(); got != "req_1" {
+			t.Errorf("PendingCardBindingRequestKey = %q, want %q", got, "req_1")
+		}
+	})
+
+	t.Run("raw rebill id row is not a placeholder", func(t *testing.T) {
+		// Recovery paths store the raw RebillId with no card data yet; such a
+		// row must never be mistaken for a pending card binding.
+		pm, err := NewPaymentMethod(userID, ProviderTkassa, "rebill_1", "", now)
+		if err != nil {
+			t.Fatalf("NewPaymentMethod() error = %v", err)
+		}
+		if got := pm.PendingCardBindingRequestKey(); got != "" {
+			t.Errorf("PendingCardBindingRequestKey = %q, want empty", got)
+		}
+	})
+
+	t.Run("bound card row is not a placeholder", func(t *testing.T) {
+		pm, err := NewPaymentMethod(userID, ProviderTkassa, PendingCardBindingToken("req_1"), "****0777", now)
+		if err != nil {
+			t.Fatalf("NewPaymentMethod() error = %v", err)
+		}
+		if got := pm.PendingCardBindingRequestKey(); got != "" {
+			t.Errorf("PendingCardBindingRequestKey = %q, want empty", got)
+		}
+		pm.DisplayMask = ""
+		pm.ProviderCardID = "card_1"
+		if got := pm.PendingCardBindingRequestKey(); got != "" {
+			t.Errorf("PendingCardBindingRequestKey with card id = %q, want empty", got)
+		}
+	})
+
+	t.Run("non-tkassa row is not a placeholder", func(t *testing.T) {
+		pm, err := NewPaymentMethod(userID, ProviderFake, PendingCardBindingToken("req_1"), "", now)
+		if err != nil {
+			t.Fatalf("NewPaymentMethod() error = %v", err)
+		}
+		if got := pm.PendingCardBindingRequestKey(); got != "" {
+			t.Errorf("PendingCardBindingRequestKey = %q, want empty", got)
+		}
+	})
+}
+
 func TestPaymentMethodActivate(t *testing.T) {
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)

@@ -1762,9 +1762,9 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (user_id, token_hash)
 DO UPDATE SET
     provider_token = EXCLUDED.provider_token,
-    provider_card_id = EXCLUDED.provider_card_id,
-    display_mask = EXCLUDED.display_mask,
-    exp_date = EXCLUDED.exp_date,
+    provider_card_id = COALESCE(NULLIF(EXCLUDED.provider_card_id, ''), payment_methods.provider_card_id),
+    display_mask = COALESCE(NULLIF(EXCLUDED.display_mask, ''), payment_methods.display_mask),
+    exp_date = COALESCE(NULLIF(EXCLUDED.exp_date, ''), payment_methods.exp_date),
     updated_at = now()
 RETURNING id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at, provider_card_id, exp_date
 `

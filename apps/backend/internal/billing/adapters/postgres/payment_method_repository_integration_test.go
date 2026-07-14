@@ -187,3 +187,56 @@ func TestPaymentMethodRepositoryIntegration_ListByUserID(t *testing.T) {
 		t.Errorf("ListByUserID[0].ProviderToken = %q, want %q", list[0].ProviderToken, pmA.ProviderToken)
 	}
 }
+
+func TestPaymentMethodRepositoryIntegration_UpsertByTokenHash_EmptyFieldsPreserveCardData(t *testing.T) {
+	pool := setupIntegrationDB(t)
+	ctx, tx, cleanup := beginTx(t, pool)
+	defer cleanup()
+
+	q := genpostgres.New(tx)
+	userID := createTestUser(t, ctx, q)
+	repo := NewPaymentMethodRepository(tx, noopEncryptor(t))
+
+	// Initial upsert with full card data, as the AddCard webhook or a
+	// GetCardList sync stores it.
+	pm, _ := domain.NewPaymentMethod(userID, domain.ProviderTkassa, "rebill_preserve_1", "430000******0777", time.Now().UTC())
+	pm.ProviderCardID = "card_preserve_1"
+	pm.ExpDate = "12/30"
+	created, err := repo.UpsertByTokenHash(ctx, pm)
+	if err != nil {
+		t.Fatalf("initial UpsertByTokenHash error = %v", err)
+	}
+
+	// A recovery/status-poll upsert carries the same token but no card data:
+	// it must not wipe the previously stored card details.
+	recovery, _ := domain.NewPaymentMethod(userID, domain.ProviderTkassa, "rebill_preserve_1", "", time.Now().UTC())
+	updated, err := repo.UpsertByTokenHash(ctx, recovery)
+	if err != nil {
+		t.Fatalf("recovery UpsertByTokenHash error = %v", err)
+	}
+	if updated.ID != created.ID {
+		t.Errorf("expected the same row updated, got id %v, want %v", updated.ID, created.ID)
+	}
+	if updated.ProviderCardID != "card_preserve_1" {
+		t.Errorf("ProviderCardID = %q, want preserved %q", updated.ProviderCardID, "card_preserve_1")
+	}
+	if updated.DisplayMask != "430000******0777" {
+		t.Errorf("DisplayMask = %q, want preserved %q", updated.DisplayMask, "430000******0777")
+	}
+	if updated.ExpDate != "12/30" {
+		t.Errorf("ExpDate = %q, want preserved %q", updated.ExpDate, "12/30")
+	}
+
+	// A later upsert with real card data still overwrites the stored values.
+	refill, _ := domain.NewPaymentMethod(userID, domain.ProviderTkassa, "rebill_preserve_1", "430000******0999", time.Now().UTC())
+	refill.ProviderCardID = "card_preserve_2"
+	refill.ExpDate = "01/31"
+	refilled, err := repo.UpsertByTokenHash(ctx, refill)
+	if err != nil {
+		t.Fatalf("refill UpsertByTokenHash error = %v", err)
+	}
+	if refilled.ProviderCardID != "card_preserve_2" || refilled.DisplayMask != "430000******0999" || refilled.ExpDate != "01/31" {
+		t.Errorf("expected new card data to overwrite, got card=%q mask=%q exp=%q",
+			refilled.ProviderCardID, refilled.DisplayMask, refilled.ExpDate)
+	}
+}

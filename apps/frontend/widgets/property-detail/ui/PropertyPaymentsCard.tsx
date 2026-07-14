@@ -10,7 +10,6 @@ import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { formatDate } from '@/shared/lib/format-date';
 import type { components } from '@/shared/api/generated';
 import type { Property } from '@/entities/property/model/types';
-import { getCategoryLabel } from '@/entities/operation/lib/categories';
 import { formatOverdueCount } from '../lib/format-overdue-count';
 import { PropertyDetailSection } from './PropertyDetailSection';
 import styles from './PropertyPaymentsCard.module.css';
@@ -66,7 +65,7 @@ export function PropertyPaymentsCard({
                 className={styles.row}
               >
                 <span className={styles.category}>
-                  {getCategoryLabel(operation.category)}
+                  {operation.category_name}
                 </span>
                 <span className={styles.amount}>
                   {formatMoneyKopecks(operation.amount_kopecks)}

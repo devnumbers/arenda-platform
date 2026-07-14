@@ -239,13 +239,22 @@ func (r *fakePaymentMethodRepo) Create(_ context.Context, pm domain.PaymentMetho
 	return pm, nil
 }
 
+// UpsertByTokenHash mirrors the postgres upsert: the row is keyed by
+// (user, token), and an empty incoming card id, display mask or expiry date
+// preserves the stored value (the query uses COALESCE).
 func (r *fakePaymentMethodRepo) UpsertByTokenHash(_ context.Context, pm domain.PaymentMethod) (domain.PaymentMethod, error) {
 	for id, existing := range r.methods {
 		if existing.UserID == pm.UserID && existing.ProviderToken == pm.ProviderToken {
 			existing.ProviderToken = pm.ProviderToken
-			existing.ProviderCardID = pm.ProviderCardID
-			existing.DisplayMask = pm.DisplayMask
-			existing.ExpDate = pm.ExpDate
+			if pm.ProviderCardID != "" {
+				existing.ProviderCardID = pm.ProviderCardID
+			}
+			if pm.DisplayMask != "" {
+				existing.DisplayMask = pm.DisplayMask
+			}
+			if pm.ExpDate != "" {
+				existing.ExpDate = pm.ExpDate
+			}
 			existing.UpdatedAt = pm.UpdatedAt
 			r.methods[id] = existing
 			return existing, nil
@@ -667,11 +676,12 @@ type stubProvider struct {
 	chargeCalled bool
 	chargeCount  int
 
-	statusRes    domain.PaymentStatus
-	statusErr    error
-	statusFunc   func(uuid.UUID, string)
-	statusCalled bool
-	statusCount  int
+	statusRes      domain.PaymentStatus
+	statusRebillID string
+	statusErr      error
+	statusFunc     func(uuid.UUID, string)
+	statusCalled   bool
+	statusCount    int
 
 	parseWebhook func([]byte) (WebhookPayload, error)
 
@@ -690,6 +700,11 @@ type stubProvider struct {
 	getCardListCalled      bool
 	getCardListCount       int
 	getCardListCustomerKey string
+
+	getAddCardStateRes        CardBindingState
+	getAddCardStateErr        error
+	getAddCardStateCalled     bool
+	getAddCardStateRequestKey string
 
 	confirmPaymentRes        WebhookPayload
 	confirmPaymentErr        error
@@ -745,13 +760,13 @@ func (p *stubProvider) Charge(_ context.Context, req ChargeRequest) (ChargeResul
 	return p.chargeRes, p.chargeErr
 }
 
-func (p *stubProvider) Status(_ context.Context, paymentID uuid.UUID, providerPaymentID string) (domain.PaymentStatus, error) {
+func (p *stubProvider) Status(_ context.Context, paymentID uuid.UUID, providerPaymentID string) (PaymentStatusResult, error) {
 	p.statusCalled = true
 	p.statusCount++
 	if p.statusFunc != nil {
 		p.statusFunc(paymentID, providerPaymentID)
 	}
-	return p.statusRes, p.statusErr
+	return PaymentStatusResult{Status: p.statusRes, RebillID: p.statusRebillID}, p.statusErr
 }
 
 func (p *stubProvider) ParseWebhook(_ context.Context, payload []byte) (WebhookPayload, error) {
@@ -789,6 +804,12 @@ func (p *stubProvider) GetCardList(_ context.Context, customerKey string) ([]Pro
 		return nil, p.getCardListErr
 	}
 	return p.getCardListRes, nil
+}
+
+func (p *stubProvider) GetAddCardState(_ context.Context, requestKey string) (CardBindingState, error) {
+	p.getAddCardStateCalled = true
+	p.getAddCardStateRequestKey = requestKey
+	return p.getAddCardStateRes, p.getAddCardStateErr
 }
 
 func (p *stubProvider) WebhookResponse() []byte {
@@ -4104,6 +4125,9 @@ func TestBilling_ChangeTariff_UpgradeRecoversProviderReferenceAfterCrash(t *test
 	if !d.provider.initCalled {
 		t.Error("expected provider.Init to be called to recover provider reference")
 	}
+	if !d.provider.initReq.RedirectDueDate.Equal(fixedNow.Add(15 * time.Minute)) {
+		t.Errorf("expected redirect due date %v, got %v", fixedNow.Add(15*time.Minute), d.provider.initReq.RedirectDueDate)
+	}
 
 	payment := d.subscriptionPayments.payments[existingPaymentID]
 	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
@@ -4695,6 +4719,40 @@ func TestBilling_SyncPaymentMethods_ProviderErrorPropagatesWithoutWrites(t *test
 	}
 }
 
+func TestBilling_SyncPaymentMethods_TerminalNotFoundReturnsLocalList(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777785")
+
+	existingID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb5")
+	d.paymentMethods.methods[existingID] = domain.PaymentMethod{
+		ID:            existingID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: "existing_token",
+		DisplayMask:   "****0777",
+		IsActive:      true,
+		CreatedAt:     fixedNow.Add(-time.Hour),
+		UpdatedAt:     fixedNow.Add(-time.Hour),
+	}
+
+	d.provider.getCardListErr = ErrProviderTerminalNotFound
+
+	methods, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods error: %v", err)
+	}
+	if len(methods) != 1 {
+		t.Fatalf("expected 1 local payment method, got %d", len(methods))
+	}
+	if methods[0].ID != existingID {
+		t.Errorf("expected local method %s, got %s", existingID, methods[0].ID)
+	}
+	if d.beginner.begun != 0 {
+		t.Fatalf("expected no transaction on terminal-not-found, got %d", d.beginner.begun)
+	}
+}
+
 func TestBilling_ChangeTariff_TkassaFirstPaymentInitFields(t *testing.T) {
 	d := newTestDeps(t)
 	d.provider.name = domain.ProviderTkassa
@@ -4751,6 +4809,9 @@ func TestBilling_ChangeTariff_TkassaFirstPaymentInitFields(t *testing.T) {
 	}
 	if !strings.Contains(req.SuccessURL, resp.PaymentID.String()) {
 		t.Errorf("expected success url to contain payment id, got %q", req.SuccessURL)
+	}
+	if !req.RedirectDueDate.Equal(fixedNow.Add(15 * time.Minute)) {
+		t.Errorf("expected redirect due date %v, got %v", fixedNow.Add(15*time.Minute), req.RedirectDueDate)
 	}
 
 	payment := d.subscriptionPayments.payments[resp.PaymentID]
@@ -4872,8 +4933,11 @@ func TestBilling_ProcessRenewals_TkassaInitChargeFlow(t *testing.T) {
 	if initReq.AmountKopecks != 5000 {
 		t.Errorf("expected amount 5000, got %d", initReq.AmountKopecks)
 	}
-	if !initReq.Recurrent {
-		t.Errorf("expected Recurrent true for renewal, got false")
+	if initReq.Recurrent {
+		t.Errorf("expected Recurrent false for renewal, got true")
+	}
+	if !initReq.RedirectDueDate.IsZero() {
+		t.Errorf("expected no redirect due date for renewal, got %v", initReq.RedirectDueDate)
 	}
 
 	if d.provider.chargeReq.ProviderPaymentID != "tkassa_renewal_1" {
@@ -7417,5 +7481,620 @@ func TestBilling_ChangeTariff_UpgradeCommitFailure_RollsBackAndMarksFailed(t *te
 	}
 	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(validUntil) {
 		t.Errorf("expected valid_until unchanged at %v, got %v", validUntil, sub.ValidUntil)
+	}
+}
+
+// --- T-Kassa spec alignment: pending card binding polling, RebillId recovery,
+// typed provider error classification ---
+
+// stubProviderError is a test error carrying a provider error code, mirroring
+// the tkassa adapter's ProviderError shape.
+type stubProviderError struct{ code string }
+
+func (e stubProviderError) Error() string             { return "stub provider error " + e.code }
+func (e stubProviderError) ProviderErrorCode() string { return e.code }
+
+func TestBilling_AddPaymentMethod_TkassaPersistsPendingBinding(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777790")
+	d.provider.initAddCardRes = InitAddCardResult{
+		PaymentURL:  "http://localhost/add-card/form",
+		RequestKey:  "req_pending_1",
+		CustomerKey: userID.String(),
+	}
+
+	resp, err := d.service.PaymentMethods.AddPaymentMethod(context.Background(), userID, AddPaymentMethodRequest{})
+	if err != nil {
+		t.Fatalf("AddPaymentMethod error: %v", err)
+	}
+	if resp.ConfirmURL != "http://localhost/add-card/form" {
+		t.Errorf("expected confirm url from add card init, got %q", resp.ConfirmURL)
+	}
+
+	if len(d.paymentMethods.methods) != 1 {
+		t.Fatalf("expected 1 stored pending binding, got %d", len(d.paymentMethods.methods))
+	}
+	for _, pm := range d.paymentMethods.methods {
+		if pm.ProviderToken != domain.PendingCardBindingToken("req_pending_1") {
+			t.Errorf("expected pending binding to store the prefixed request key, got %q", pm.ProviderToken)
+		}
+		if pm.IsActive {
+			t.Error("expected pending binding to be inactive")
+		}
+		if pm.PendingCardBindingRequestKey() != "req_pending_1" {
+			t.Error("expected stored row to be recognized as a pending card binding")
+		}
+	}
+
+	// Pending bindings are internal sync state and must not be listed.
+	methods, err := d.service.PaymentMethods.ListPaymentMethods(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("ListPaymentMethods error: %v", err)
+	}
+	if len(methods) != 0 {
+		t.Fatalf("expected pending binding to be hidden from the list, got %d methods", len(methods))
+	}
+}
+
+func TestBilling_SyncPaymentMethods_CompletesPendingBindingViaGetAddCardState(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777791")
+	tariffID := uuid.MustParse("99999999-9999-9999-9999-999999999991")
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa91"),
+		UserID:           userID,
+		TariffID:         tariffID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+
+	pendingID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb91")
+	d.paymentMethods.methods[pendingID] = domain.PaymentMethod{
+		ID:            pendingID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: domain.PendingCardBindingToken("req_poll_1"),
+		CreatedAt:     fixedNow.Add(-time.Hour),
+		UpdatedAt:     fixedNow.Add(-time.Hour),
+	}
+
+	d.provider.getAddCardStateRes = CardBindingState{
+		Status:      CardBindingStatusCompleted,
+		CardID:      "card_poll_1",
+		RebillID:    "rebill_poll_1",
+		CustomerKey: userID.String(),
+	}
+	d.provider.getCardListRes = []ProviderCard{
+		{
+			CardID:   "card_poll_1",
+			Pan:      "430000******0777",
+			ExpDate:  "12/30",
+			RebillID: "rebill_poll_1",
+			Status:   ProviderCardStatusActive,
+		},
+	}
+
+	methods, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods error: %v", err)
+	}
+	if !d.provider.getAddCardStateCalled {
+		t.Fatal("expected provider.GetAddCardState to be called")
+	}
+	if d.provider.getAddCardStateRequestKey != "req_poll_1" {
+		t.Errorf("expected request key req_poll_1, got %q", d.provider.getAddCardStateRequestKey)
+	}
+
+	if len(methods) != 1 {
+		t.Fatalf("expected 1 payment method, got %d", len(methods))
+	}
+	pm := methods[0]
+	if pm.ProviderToken != "rebill_poll_1" {
+		t.Errorf("expected provider token rebill_poll_1, got %q", pm.ProviderToken)
+	}
+	if pm.ProviderCardID != "card_poll_1" {
+		t.Errorf("expected card id card_poll_1, got %q", pm.ProviderCardID)
+	}
+	if pm.DisplayMask != "430000******0777" {
+		t.Errorf("expected display mask from GetCardList, got %q", pm.DisplayMask)
+	}
+	if !pm.IsActive {
+		t.Error("expected completed binding to become the active method")
+	}
+	if _, ok := d.paymentMethods.methods[pendingID]; ok {
+		t.Error("expected pending binding placeholder to be dropped")
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.ActivePaymentMethodID == nil || *sub.ActivePaymentMethodID != pm.ID {
+		t.Errorf("expected subscription active payment method %s, got %v", pm.ID, sub.ActivePaymentMethodID)
+	}
+}
+
+func TestBilling_SyncPaymentMethods_CompletedBindingImportedFromStateWhenCardListLags(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777792")
+	tariffID := uuid.MustParse("99999999-9999-9999-9999-999999999992")
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa92"),
+		UserID:           userID,
+		TariffID:         tariffID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+
+	pendingID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb92")
+	d.paymentMethods.methods[pendingID] = domain.PaymentMethod{
+		ID:            pendingID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: domain.PendingCardBindingToken("req_poll_2"),
+		CreatedAt:     fixedNow.Add(-time.Hour),
+		UpdatedAt:     fixedNow.Add(-time.Hour),
+	}
+
+	d.provider.getAddCardStateRes = CardBindingState{
+		Status:      CardBindingStatusCompleted,
+		CardID:      "card_poll_2",
+		RebillID:    "rebill_poll_2",
+		CustomerKey: userID.String(),
+	}
+	// GetCardList does not report the card yet (eventual consistency).
+
+	methods, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods error: %v", err)
+	}
+	if len(methods) != 1 {
+		t.Fatalf("expected 1 payment method imported from the binding state, got %d", len(methods))
+	}
+	pm := methods[0]
+	if pm.ProviderToken != "rebill_poll_2" || pm.ProviderCardID != "card_poll_2" {
+		t.Errorf("expected method from binding state, got token=%q card=%q", pm.ProviderToken, pm.ProviderCardID)
+	}
+	if !pm.IsActive {
+		t.Error("expected completed binding to become the active method")
+	}
+	if _, ok := d.paymentMethods.methods[pendingID]; ok {
+		t.Error("expected pending binding placeholder to be dropped")
+	}
+}
+
+func TestBilling_SyncPaymentMethods_RejectedBindingDropped(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777793")
+
+	pendingID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb93")
+	d.paymentMethods.methods[pendingID] = domain.PaymentMethod{
+		ID:            pendingID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: domain.PendingCardBindingToken("req_rejected_1"),
+		CreatedAt:     fixedNow.Add(-time.Hour),
+		UpdatedAt:     fixedNow.Add(-time.Hour),
+	}
+
+	d.provider.getAddCardStateRes = CardBindingState{Status: CardBindingStatusRejected, ErrorCode: "7"}
+
+	methods, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods error: %v", err)
+	}
+	if len(methods) != 0 {
+		t.Fatalf("expected no payment methods, got %d", len(methods))
+	}
+	if _, ok := d.paymentMethods.methods[pendingID]; ok {
+		t.Error("expected rejected binding placeholder to be dropped")
+	}
+}
+
+func TestBilling_SyncPaymentMethods_UnknownRequestKeyDroppedAsExpired(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777794")
+
+	pendingID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb94")
+	d.paymentMethods.methods[pendingID] = domain.PaymentMethod{
+		ID:            pendingID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: domain.PendingCardBindingToken("req_unknown_1"),
+		CreatedAt:     fixedNow.Add(-time.Hour),
+		UpdatedAt:     fixedNow.Add(-time.Hour),
+	}
+
+	// T-Kassa error 502: no card found for the RequestKey — the binding
+	// session expired without completing.
+	d.provider.getAddCardStateErr = stubProviderError{code: "502"}
+
+	methods, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods error: %v", err)
+	}
+	if len(methods) != 0 {
+		t.Fatalf("expected no payment methods, got %d", len(methods))
+	}
+	if _, ok := d.paymentMethods.methods[pendingID]; ok {
+		t.Error("expected expired binding placeholder to be dropped")
+	}
+}
+
+func TestBilling_SyncPaymentMethods_IntermediateBindingStateKeptPending(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777795")
+
+	pendingID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb95")
+	d.paymentMethods.methods[pendingID] = domain.PaymentMethod{
+		ID:            pendingID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: domain.PendingCardBindingToken("req_inflight_1"),
+		CreatedAt:     fixedNow.Add(-time.Hour),
+		UpdatedAt:     fixedNow.Add(-time.Hour),
+	}
+
+	d.provider.getAddCardStateRes = CardBindingState{Status: CardBindingStatusAuthorizing}
+
+	methods, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods error: %v", err)
+	}
+	if len(methods) != 0 {
+		t.Fatalf("expected pending binding to stay hidden, got %d methods", len(methods))
+	}
+	if _, ok := d.paymentMethods.methods[pendingID]; !ok {
+		t.Error("expected in-flight binding placeholder to be kept")
+	}
+}
+
+// A payment-method row recovered from a provider status poll stores the raw
+// RebillId and has no card data yet. It must NOT be treated as a pending
+// card-binding placeholder: the sync must not poll GetAddCardState with the
+// RebillId, must not drop the row, and the row stays visible in the list.
+func TestBilling_SyncPaymentMethods_RecoveredRebillRowNotPolledAsPlaceholder(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777796")
+
+	recoveredID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb96")
+	d.paymentMethods.methods[recoveredID] = domain.PaymentMethod{
+		ID:            recoveredID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: "rebill_recovered_only",
+		IsActive:      true,
+		CreatedAt:     fixedNow.Add(-time.Hour),
+		UpdatedAt:     fixedNow.Add(-time.Hour),
+	}
+
+	// The provider reports no cards for the customer.
+	methods, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods error: %v", err)
+	}
+	if d.provider.getAddCardStateCalled {
+		t.Fatalf("expected no GetAddCardState poll for a raw RebillId row, got request key %q", d.provider.getAddCardStateRequestKey)
+	}
+	if len(methods) != 1 {
+		t.Fatalf("expected the recovered row to stay visible, got %d methods", len(methods))
+	}
+	if methods[0].ID != recoveredID || methods[0].ProviderToken != "rebill_recovered_only" {
+		t.Errorf("expected recovered row in the list, got %+v", methods[0])
+	}
+	if _, ok := d.paymentMethods.methods[recoveredID]; !ok {
+		t.Error("expected the recovered row to be kept")
+	}
+}
+
+// A pending card-binding placeholder is internal sync state: activating it
+// must behave as if the row did not exist.
+func TestBilling_SetActivePaymentMethod_PendingBindingPlaceholderNotFound(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777797")
+	methodID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb97")
+
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:            methodID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: domain.PendingCardBindingToken("req_activate_1"),
+		CreatedAt:     fixedNow.Add(-time.Hour),
+		UpdatedAt:     fixedNow.Add(-time.Hour),
+	}
+
+	err := d.service.PaymentMethods.SetActivePaymentMethod(context.Background(), userID, methodID)
+	if !errors.Is(err, ErrPaymentMethodNotFound) {
+		t.Fatalf("expected ErrPaymentMethodNotFound, got %v", err)
+	}
+	if d.paymentMethods.methods[methodID].IsActive {
+		t.Error("expected placeholder to stay inactive")
+	}
+}
+
+// The AddCard bank form expires after 2 days: an older placeholder can never
+// complete and is dropped without polling the provider, while a fresh one is
+// still polled and kept pending.
+func TestBilling_SyncPaymentMethods_ExpiredPlaceholderDroppedFreshKept(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777798")
+
+	expiredID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb98")
+	d.paymentMethods.methods[expiredID] = domain.PaymentMethod{
+		ID:            expiredID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: domain.PendingCardBindingToken("req_expired_1"),
+		CreatedAt:     fixedNow.Add(-49 * time.Hour),
+		UpdatedAt:     fixedNow.Add(-49 * time.Hour),
+	}
+	freshID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb99")
+	d.paymentMethods.methods[freshID] = domain.PaymentMethod{
+		ID:            freshID,
+		UserID:        userID,
+		Provider:      domain.ProviderTkassa,
+		ProviderToken: domain.PendingCardBindingToken("req_fresh_1"),
+		CreatedAt:     fixedNow.Add(-time.Hour),
+		UpdatedAt:     fixedNow.Add(-time.Hour),
+	}
+
+	d.provider.getAddCardStateRes = CardBindingState{Status: CardBindingStatusAuthorizing}
+
+	methods, err := d.service.PaymentMethods.SyncPaymentMethods(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods error: %v", err)
+	}
+	if _, ok := d.paymentMethods.methods[expiredID]; ok {
+		t.Error("expected expired placeholder to be dropped")
+	}
+	if _, ok := d.paymentMethods.methods[freshID]; !ok {
+		t.Error("expected fresh placeholder to be kept")
+	}
+	if !d.provider.getAddCardStateCalled || d.provider.getAddCardStateRequestKey != "req_fresh_1" {
+		t.Errorf("expected only the fresh placeholder to be polled with req_fresh_1, got called=%v key=%q",
+			d.provider.getAddCardStateCalled, d.provider.getAddCardStateRequestKey)
+	}
+	if len(methods) != 0 {
+		t.Fatalf("expected placeholders to stay hidden, got %d methods", len(methods))
+	}
+}
+
+func TestBilling_SyncPendingPayment_RecoversRebillIDFromProviderStatus(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("11111111-1111-1111-1111-1111111111a1")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-2222222222a2")
+	proID := uuid.MustParse("33333333-3333-3333-3333-3333333333a3")
+	paymentID := uuid.MustParse("55555555-5555-5555-5555-5555555555a5")
+	subscriptionID := uuid.MustParse("66666666-6666-6666-6666-6666666666a6")
+	providerPaymentID := "sync_rebill_1"
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         basicID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: false,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderTkassa,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusPending,
+		CreatedAt:         fixedNow.Add(-10 * time.Minute),
+		UpdatedAt:         fixedNow.Add(-10 * time.Minute),
+	}
+	d.provider.statusRes = domain.PaymentStatusSucceeded
+	d.provider.statusRebillID = "rebill_recovered_1"
+
+	if err := d.service.Payments.SyncPendingPayment(context.Background(), paymentID); err != nil {
+		t.Fatalf("SyncPendingPayment error: %v", err)
+	}
+
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusSucceeded {
+		t.Fatalf("expected payment succeeded, got %s", payment.Status)
+	}
+	if payment.PaymentMethodID == nil {
+		t.Fatal("expected payment to be linked to the recovered payment method")
+	}
+	pm, ok := d.paymentMethods.methods[*payment.PaymentMethodID]
+	if !ok {
+		t.Fatalf("expected recovered payment method %s to exist", payment.PaymentMethodID)
+	}
+	if pm.ProviderToken != "rebill_recovered_1" {
+		t.Errorf("expected recovered token rebill_recovered_1, got %q", pm.ProviderToken)
+	}
+	if !pm.IsActive {
+		t.Error("expected recovered payment method to be active")
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.ActivePaymentMethodID == nil || *sub.ActivePaymentMethodID != pm.ID {
+		t.Errorf("expected subscription active payment method %s, got %v", pm.ID, sub.ActivePaymentMethodID)
+	}
+}
+
+func TestBilling_ProcessPendingUpgradePayments_RecoversRebillIDFromProviderStatus(t *testing.T) {
+	d := newTestDeps(t)
+	d.provider.name = domain.ProviderTkassa
+	userID := uuid.MustParse("11111111-1111-1111-1111-1111111111b1")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-2222222222b2")
+	proID := uuid.MustParse("33333333-3333-3333-3333-3333333333b3")
+	paymentID := uuid.MustParse("55555555-5555-5555-5555-5555555555b5")
+	subscriptionID := uuid.MustParse("66666666-6666-6666-6666-6666666666b6")
+	providerPaymentID := "upgrade_rebill_1"
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+	d.addSubscription(domain.Subscription{
+		ID:               subscriptionID,
+		UserID:           userID,
+		TariffID:         basicID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: false,
+	})
+	d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+		ID:                paymentID,
+		UserID:            userID,
+		SubscriptionID:    subscriptionID,
+		TariffID:          proID,
+		Period:            domain.PeriodMonth,
+		AmountKopecks:     5000,
+		Provider:          domain.ProviderTkassa,
+		ProviderPaymentID: &providerPaymentID,
+		Status:            domain.PaymentStatusPending,
+		CreatedAt:         fixedNow.Add(-10 * time.Minute),
+		UpdatedAt:         fixedNow.Add(-10 * time.Minute),
+	}
+	d.subscriptionPayments.pendingUpgradePaymentIDs[paymentID] = true
+	d.provider.statusRes = domain.PaymentStatusSucceeded
+	d.provider.statusRebillID = "rebill_recovered_2"
+
+	count, err := d.service.Renewals.ProcessPendingUpgradePayments(context.Background(), fixedNow)
+	if err != nil {
+		t.Fatalf("ProcessPendingUpgradePayments error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 upgrade processed, got %d", count)
+	}
+
+	payment := d.subscriptionPayments.payments[paymentID]
+	if payment.Status != domain.PaymentStatusSucceeded {
+		t.Fatalf("expected payment succeeded, got %s", payment.Status)
+	}
+	if payment.PaymentMethodID == nil {
+		t.Fatal("expected payment to be linked to the recovered payment method")
+	}
+	pm, ok := d.paymentMethods.methods[*payment.PaymentMethodID]
+	if !ok {
+		t.Fatalf("expected recovered payment method %s to exist", payment.PaymentMethodID)
+	}
+	if pm.ProviderToken != "rebill_recovered_2" {
+		t.Errorf("expected recovered token rebill_recovered_2, got %q", pm.ProviderToken)
+	}
+	if !pm.IsActive {
+		t.Error("expected recovered payment method to be active")
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.ActivePaymentMethodID == nil || *sub.ActivePaymentMethodID != pm.ID {
+		t.Errorf("expected subscription active payment method %s, got %v", pm.ID, sub.ActivePaymentMethodID)
+	}
+}
+
+func TestBilling_ProcessRenewals_TypedProviderErrorsKeepGraceAndErrorCode(t *testing.T) {
+	cases := []struct {
+		name    string
+		cause   error
+		wantErr string
+	}{
+		{
+			name:    "charge blocked",
+			cause:   fmt.Errorf("%w: %w", ErrProviderChargeBlocked, stubProviderError{code: "10"}),
+			wantErr: "10",
+		},
+		{
+			name:    "invalid operation",
+			cause:   fmt.Errorf("%w: %w", ErrProviderInvalidOperation, stubProviderError{code: "1126"}),
+			wantErr: "1126",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := newTestDeps(t)
+			d.provider.name = domain.ProviderTkassa
+			userID := uuid.MustParse("11111111-1111-1111-1111-1111111111c1")
+			basicID := uuid.MustParse("22222222-2222-2222-2222-2222222222c2")
+			proID := uuid.MustParse("33333333-3333-3333-3333-3333333333c3")
+			methodID := uuid.MustParse("44444444-4444-4444-4444-4444444444c4")
+			validUntil := fixedNow
+
+			d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+			d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+			d.addSubscription(domain.Subscription{
+				ID:                    uuid.MustParse("55555555-5555-5555-5555-5555555555c5"),
+				UserID:                userID,
+				TariffID:              proID,
+				Source:                domain.SubscriptionSourcePaid,
+				Status:                domain.SubscriptionStatusActive,
+				ValidUntil:            &validUntil,
+				AutoRenewEnabled:      true,
+				ActivePaymentMethodID: &methodID,
+			})
+			//nolint:gosec // test token, not a real credential
+			d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+				ID:            methodID,
+				UserID:        userID,
+				Provider:      domain.ProviderTkassa,
+				ProviderToken: "rebill_valid_1",
+				DisplayMask:   "****0777",
+				IsActive:      true,
+			}
+			d.provider.chargeErr = tc.cause
+			// The provider keeps reporting the charge as pending, so each tick
+			// counts a charge attempt until the attempt cap fails the payment.
+			d.provider.statusRes = domain.PaymentStatusPending
+
+			for range maxRenewalChargeAttempts {
+				if _, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow); err != nil {
+					t.Fatalf("ProcessRenewals error: %v", err)
+				}
+			}
+
+			sub := d.subscriptions.subs[userID]
+			if sub.Status != domain.SubscriptionStatusGrace {
+				t.Errorf("expected status grace after attempt cap, got %s", sub.Status)
+			}
+
+			var failed *domain.SubscriptionPayment
+			for _, p := range d.subscriptionPayments.payments {
+				if p.UserID == userID && p.Status == domain.PaymentStatusFailed {
+					payment := p
+					failed = &payment
+					break
+				}
+			}
+			if failed == nil {
+				t.Fatal("expected the renewal payment to be marked failed after the attempt cap")
+			}
+			if failed.ErrorCode == nil || *failed.ErrorCode != tc.wantErr {
+				t.Errorf("expected persisted provider error code %q, got %v", tc.wantErr, failed.ErrorCode)
+			}
+		})
 	}
 }

@@ -14,7 +14,6 @@ import {
   useOperation,
 } from '@/features/operations/api/hooks';
 import { useProperty } from '@/features/properties/api';
-import { getCategoryLabel } from '@/entities/operation/lib/categories';
 import {
   getOperationStatusLabel,
   operationStatusOptions,
@@ -156,7 +155,7 @@ function OperationDetailCard({
         <div className={styles.detailRow}>
           <dt className={styles.detailLabel}>Категория</dt>
           <dd className={styles.detailValue}>
-            {getCategoryLabel(operation.category)}
+            {operation.category_name}
           </dd>
         </div>
         <div className={styles.detailRow}>

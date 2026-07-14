@@ -504,6 +504,7 @@ func subscriptionPaymentResponse(view billingapp.SubscriptionPaymentView) openap
 		AmountKopecks: int(p.AmountKopecks),
 		Status:        openapi.SubscriptionPaymentStatus(p.Status),
 		Provider:      string(p.Provider),
+		PaymentUrl:    p.PaymentURL,
 		CreatedAt:     p.CreatedAt,
 	}
 }

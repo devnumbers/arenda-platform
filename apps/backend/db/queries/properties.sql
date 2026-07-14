@@ -6,11 +6,12 @@ RETURNING *;
 -- name: GetPropertyByIDAndOwner :one
 SELECT properties.*,
        (SELECT COUNT(*) FROM operations o
+         JOIN operation_categories cat ON cat.id = o.category_id
          WHERE o.property_id = properties.id
            AND o.owner_id = properties.owner_id
            AND o.status = 'overdue'
            AND o.type = 'income'
-           AND o.category = 'rent'
+           AND cat.code = 'rent'
            AND o.deleted_at IS NULL) AS overdue_rent_count
 FROM properties
 WHERE properties.id = $1 AND properties.owner_id = $2;
@@ -26,11 +27,12 @@ WHERE id = $1 AND owner_id = $2;
 -- name: ListActivePropertiesByOwner :many
 SELECT properties.*,
        (SELECT COUNT(*) FROM operations o
+         JOIN operation_categories cat ON cat.id = o.category_id
          WHERE o.property_id = properties.id
            AND o.owner_id = properties.owner_id
            AND o.status = 'overdue'
            AND o.type = 'income'
-           AND o.category = 'rent'
+           AND cat.code = 'rent'
            AND o.deleted_at IS NULL) AS overdue_rent_count
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status IN ('active', 'maintenance')
@@ -39,11 +41,12 @@ ORDER BY properties.updated_at DESC;
 -- name: ListArchivedPropertiesByOwner :many
 SELECT properties.*,
        (SELECT COUNT(*) FROM operations o
+         JOIN operation_categories cat ON cat.id = o.category_id
          WHERE o.property_id = properties.id
            AND o.owner_id = properties.owner_id
            AND o.status = 'overdue'
            AND o.type = 'income'
-           AND o.category = 'rent'
+           AND cat.code = 'rent'
            AND o.deleted_at IS NULL) AS overdue_rent_count
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status = 'archived'

@@ -92,6 +92,13 @@ function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
 function validateDraft(parsed: unknown, defaultDraft: OperationCreateDraft): OperationCreateDraft {
   if (!isObject(parsed)) return defaultDraft;
 
@@ -130,6 +137,16 @@ function validateDraft(parsed: unknown, defaultDraft: OperationCreateDraft): Ope
     !REMINDER_OFFSETS.includes(reminder.offsetDays as 1 | 3 | 7)
   ) {
     return defaultDraft;
+  }
+
+  // Categories are per-user entities identified by uuid; discard stale enum
+  // values (e.g. 'rent') persisted by older drafts.
+  const category = basicInfo.category;
+  if (category !== undefined && !isUuid(category)) {
+    return {
+      ...(parsed as unknown as OperationCreateDraft),
+      basicInfo: { ...(basicInfo as unknown as BasicInfoData), category: undefined },
+    };
   }
 
   return parsed as unknown as OperationCreateDraft;

@@ -189,7 +189,6 @@ type Operation struct {
 	LeaseID              pgtype.UUID        `json:"lease_id"`
 	RecurringOperationID pgtype.UUID        `json:"recurring_operation_id"`
 	Type                 string             `json:"type"`
-	Category             string             `json:"category"`
 	AmountKopecks        int64              `json:"amount_kopecks"`
 	OperationDate        pgtype.Date        `json:"operation_date"`
 	Comment              pgtype.Text        `json:"comment"`
@@ -201,6 +200,17 @@ type Operation struct {
 	Name                 string             `json:"name"`
 	ReminderOffsetDays   pgtype.Int4        `json:"reminder_offset_days"`
 	SourceOperationDate  pgtype.Date        `json:"source_operation_date"`
+	CategoryID           pgtype.UUID        `json:"category_id"`
+}
+
+type OperationCategory struct {
+	ID        pgtype.UUID        `json:"id"`
+	OwnerID   pgtype.UUID        `json:"owner_id"`
+	Type      string             `json:"type"`
+	Name      string             `json:"name"`
+	Code      pgtype.Text        `json:"code"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type PaymentMethod struct {
@@ -242,7 +252,6 @@ type RecurringOperation struct {
 	PropertyID         pgtype.UUID        `json:"property_id"`
 	LeaseID            pgtype.UUID        `json:"lease_id"`
 	Type               string             `json:"type"`
-	Category           string             `json:"category"`
 	AmountKopecks      int64              `json:"amount_kopecks"`
 	StartDate          pgtype.Date        `json:"start_date"`
 	PaymentDay         int32              `json:"payment_day"`
@@ -255,6 +264,7 @@ type RecurringOperation struct {
 	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
 	Name               string             `json:"name"`
 	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CategoryID         pgtype.UUID        `json:"category_id"`
 }
 
 type Reminder struct {

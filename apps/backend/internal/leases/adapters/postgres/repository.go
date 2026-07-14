@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -425,6 +426,14 @@ func isOpenLeaseUniqueViolation(err error) bool {
 	return false
 }
 
+func isDuplicateCategoryNameError(err error) bool {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		return pgErr.Code == pgerrcode.UniqueViolation &&
+			strings.Contains(pgErr.ConstraintName, "idx_operation_categories_owner_type_lower_name")
+	}
+	return false
+}
+
 func tenantContactFromRow(row postgres.TenantContact) domain.TenantContact {
 	return domain.TenantContact{
 		ID:         pgconv.UUIDFromPgtype(row.ID),
@@ -487,7 +496,7 @@ func (r *RecurringOperationRepository) Create(ctx context.Context, op domain.Rec
 		PropertyID:    pgconv.UUIDToPgtype(op.PropertyID),
 		LeaseID:       pgconv.UUIDToPgtype(op.LeaseID),
 		Type:          string(op.Type),
-		Category:      string(op.Category),
+		CategoryID:    pgconv.UUIDToPgtype(op.CategoryID),
 		Name:          op.Name,
 		AmountKopecks: op.AmountKopecks,
 		StartDate:     pgconv.DateToPgtype(op.StartDate),
@@ -582,7 +591,7 @@ func (r *RecurringOperationRepository) Update(ctx context.Context, op domain.Rec
 	params := postgres.UpdateRecurringOperationParams{
 		ID:            pgconv.UUIDToPgtype(op.ID),
 		Type:          string(op.Type),
-		Category:      string(op.Category),
+		CategoryID:    pgconv.UUIDToPgtype(op.CategoryID),
 		Name:          op.Name,
 		AmountKopecks: op.AmountKopecks,
 		StartDate:     pgconv.DateToPgtype(op.StartDate),
@@ -715,7 +724,7 @@ func recurringOperationFromRow(row postgres.RecurringOperation) domain.Recurring
 		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
 		LeaseID:       pgconv.UUIDFromPgtype(row.LeaseID),
 		Type:          domain.OperationType(row.Type),
-		Category:      domain.OperationCategory(row.Category),
+		CategoryID:    pgconv.UUIDFromPgtype(row.CategoryID),
 		Name:          row.Name,
 		AmountKopecks: row.AmountKopecks,
 		StartDate:     row.StartDate.Time,
@@ -762,7 +771,7 @@ func (r *OperationRepository) Create(ctx context.Context, op domain.Operation) (
 		LeaseID:              pgconv.UUIDToPgtype(op.LeaseID),
 		RecurringOperationID: pgconv.UUIDToPgtype(op.RecurringOperationID),
 		Type:                 string(op.Type),
-		Category:             string(op.Category),
+		CategoryID:           pgconv.UUIDToPgtype(op.CategoryID),
 		Name:                 op.Name,
 		AmountKopecks:        op.AmountKopecks,
 		OperationDate:        pgconv.DateToPgtype(op.OperationDate),
@@ -800,7 +809,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 			pgconv.UUIDToPgtype(op.LeaseID),
 			pgconv.UUIDToPgtype(op.RecurringOperationID),
 			string(op.Type),
-			string(op.Category),
+			pgconv.UUIDToPgtype(op.CategoryID),
 			op.Name,
 			op.AmountKopecks,
 			pgconv.DateToPgtype(op.OperationDate),
@@ -819,7 +828,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 
 	_, err := copier.CopyFrom(ctx, pgx.Identifier{"operations"}, []string{
 		"owner_id", "property_id", "lease_id", "recurring_operation_id",
-		"type", "category", "name", "amount_kopecks", "operation_date", "source_operation_date", "comment", "is_exception", "status",
+		"type", "category_id", "name", "amount_kopecks", "operation_date", "source_operation_date", "comment", "is_exception", "status",
 		"reminder_offset_days",
 	}, pgx.CopyFromRows(rows))
 	if err != nil {
@@ -841,9 +850,9 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID
 	for _, s := range filter.Statuses {
 		statuses = append(statuses, string(s))
 	}
-	categories := make([]string, 0, len(filter.Categories))
-	for _, c := range filter.Categories {
-		categories = append(categories, string(c))
+	categoryIDs := make([]pgtype.UUID, 0, len(filter.CategoryIDs))
+	for _, c := range filter.CategoryIDs {
+		categoryIDs = append(categoryIDs, pgconv.UUIDToPgtype(c))
 	}
 
 	fromDate := pgconv.DatePtrToPgtype(filter.FromDate)
@@ -859,14 +868,13 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID
 	}
 
 	sort := application.NormalizeOperationSort(filter.Sort)
-	var rows []postgres.Operation
-	var err error
+	var rows []any
 	if sort == application.OperationSortOperationDateAsc {
-		rows, err = r.q().ListOperationsByOwnerAsc(ctx, postgres.ListOperationsByOwnerAscParams{
+		ascRows, err := r.q().ListOperationsByOwnerAsc(ctx, postgres.ListOperationsByOwnerAscParams{
 			OwnerID:              pgconv.UUIDToPgtype(ownerID),
 			Types:                types,
 			Statuses:             statuses,
-			Categories:           categories,
+			CategoryIds:          categoryIDs,
 			PropertyID:           pgconv.UUIDToPgtype(filter.PropertyID),
 			LeaseID:              pgconv.UUIDToPgtype(filter.LeaseID),
 			FromDate:             fromDate,
@@ -876,12 +884,16 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID
 			//nolint:gosec // Pagination offset is bounded by the API layer.
 			Offset: int32(filter.Offset),
 		})
+		if err != nil {
+			return nil, err
+		}
+		rows = toAnySlice(ascRows)
 	} else {
-		rows, err = r.q().ListOperationsByOwner(ctx, postgres.ListOperationsByOwnerParams{
+		descRows, err := r.q().ListOperationsByOwner(ctx, postgres.ListOperationsByOwnerParams{
 			OwnerID:              pgconv.UUIDToPgtype(ownerID),
 			Types:                types,
 			Statuses:             statuses,
-			Categories:           categories,
+			CategoryIds:          categoryIDs,
 			PropertyID:           pgconv.UUIDToPgtype(filter.PropertyID),
 			LeaseID:              pgconv.UUIDToPgtype(filter.LeaseID),
 			FromDate:             fromDate,
@@ -891,14 +903,15 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID
 			//nolint:gosec // Pagination offset is bounded by the API layer.
 			Offset: int32(filter.Offset),
 		})
-	}
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
+		rows = toAnySlice(descRows)
 	}
 
 	ops := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		op, err := operationFromRow(row)
+		op, err := operationFromAnyRow(row)
 		if err != nil {
 			return nil, err
 		}
@@ -914,7 +927,7 @@ func (r *OperationRepository) ListByLease(ctx context.Context, leaseID uuid.UUID
 	}
 	ops := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		op, err := operationFromRow(row)
+		op, err := operationFromAnyRow(row)
 		if err != nil {
 			return nil, err
 		}
@@ -930,7 +943,7 @@ func (r *OperationRepository) ListByRecurringOperation(ctx context.Context, recu
 	}
 	ops := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		op, err := operationFromRow(row)
+		op, err := operationFromAnyRow(row)
 		if err != nil {
 			return nil, err
 		}
@@ -1045,21 +1058,13 @@ func (r *OperationRepository) ListByProperty(ctx context.Context, ownerID, prope
 	}
 	ops := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		op, err := operationFromRow(row)
+		op, err := operationFromAnyRow(row)
 		if err != nil {
 			return nil, err
 		}
 		ops = append(ops, op)
 	}
 	return ops, nil
-}
-
-func (r *OperationRepository) HasDepositReturnForLease(ctx context.Context, leaseID uuid.UUID) (bool, error) {
-	found, err := r.q().HasDepositReturnForLease(ctx, pgconv.UUIDToPgtype(leaseID))
-	if err != nil {
-		return false, err
-	}
-	return found, nil
 }
 
 func (r *OperationRepository) GetPropertyOperationsSummary(ctx context.Context, ownerID, propertyID uuid.UUID, asOf time.Time) (application.OperationsSummary, error) {
@@ -1127,7 +1132,7 @@ func (r *OperationRepository) GetByIDAndOwner(ctx context.Context, id, ownerID u
 		}
 		return domain.Operation{}, err
 	}
-	return operationFromRow(row)
+	return operationFromAnyRow(row)
 }
 
 func (r *OperationRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Operation, error) {
@@ -1141,7 +1146,7 @@ func (r *OperationRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, 
 		}
 		return domain.Operation{}, err
 	}
-	return operationFromRow(row)
+	return operationFromAnyRow(row)
 }
 
 func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (domain.Operation, error) {
@@ -1149,7 +1154,7 @@ func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (
 		ID:            pgconv.UUIDToPgtype(op.ID),
 		OwnerID:       pgconv.UUIDToPgtype(op.OwnerID),
 		Type:          string(op.Type),
-		Category:      string(op.Category),
+		CategoryID:    pgconv.UUIDToPgtype(op.CategoryID),
 		Name:          op.Name,
 		AmountKopecks: op.AmountKopecks,
 		OperationDate: pgconv.DateToPgtype(op.OperationDate),
@@ -1192,7 +1197,7 @@ func (r *OperationRepository) ListByPropertyWithStatuses(ctx context.Context, ow
 
 	ops := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		op, err := operationFromRow(row)
+		op, err := operationFromAnyRow(row)
 		if err != nil {
 			return nil, err
 		}
@@ -1274,7 +1279,7 @@ func (r *OperationRepository) MarkOverdue(ctx context.Context, ownerID, id uuid.
 		}
 		return domain.Operation{}, false, err
 	}
-	op, err := operationFromRow(existing)
+	op, err := operationFromAnyRow(existing)
 	return op, false, err
 }
 
@@ -1340,17 +1345,10 @@ func (r *OperationRepository) GetFinanceReportByCategory(ctx context.Context, ow
 
 	result := make([]application.FinanceReportCategoryRow, 0, len(rows))
 	for _, row := range rows {
-		opType, err := domain.ParseOperationType(row.Type)
-		if err != nil {
-			return nil, fmt.Errorf("invalid operation type in database: %w", err)
-		}
-		category, err := domain.ParseOperationCategory(row.Category)
-		if err != nil {
-			return nil, fmt.Errorf("invalid operation category in database: %w", err)
-		}
 		result = append(result, application.FinanceReportCategoryRow{
-			Type:         opType,
-			Category:     category,
+			Type:         domain.OperationType(row.Type),
+			CategoryID:   pgconv.UUIDFromPgtype(row.CategoryID),
+			CategoryName: row.CategoryName,
 			TotalKopecks: row.TotalKopecks,
 		})
 	}
@@ -1390,7 +1388,7 @@ func operationFromRow(row postgres.Operation) (domain.Operation, error) {
 		LeaseID:              pgconv.UUIDFromPgtype(row.LeaseID),
 		RecurringOperationID: pgconv.UUIDFromPgtype(row.RecurringOperationID),
 		Type:                 domain.OperationType(row.Type),
-		Category:             domain.OperationCategory(row.Category),
+		CategoryID:           pgconv.UUIDFromPgtype(row.CategoryID),
 		Status:               status,
 		Name:                 row.Name,
 		AmountKopecks:        row.AmountKopecks,
@@ -1409,6 +1407,165 @@ func operationFromRow(row postgres.Operation) (domain.Operation, error) {
 		op.DeletedAt = pgconv.TimestamptzToPtrTime(row.DeletedAt)
 	}
 	return op, nil
+}
+
+// toOperation copies any generated operation row struct to postgres.Operation
+// by copying fields with matching names and types. The row type must have the
+// same fields as postgres.Operation.
+func toOperation(row any) postgres.Operation {
+	if op, ok := row.(postgres.Operation); ok {
+		return op
+	}
+	var op postgres.Operation
+	rv := reflect.ValueOf(row)
+	ov := reflect.ValueOf(&op).Elem()
+	rt := rv.Type()
+	for i := 0; i < rt.NumField(); i++ {
+		fieldName := rt.Field(i).Name
+		src := rv.Field(i)
+		dst := ov.FieldByName(fieldName)
+		if dst.IsValid() && dst.Type() == src.Type() {
+			dst.Set(src)
+		}
+	}
+	return op
+}
+
+// operationFromAnyRow maps any generated operation row struct to a domain.Operation.
+func operationFromAnyRow(row any) (domain.Operation, error) {
+	return operationFromRow(toOperation(row))
+}
+
+// toAnySlice converts a typed slice to a slice of any values.
+func toAnySlice[T any](s []T) []any {
+	out := make([]any, len(s))
+	for i, v := range s {
+		out[i] = v
+	}
+	return out
+}
+
+func operationCategoryFromRow(row postgres.OperationCategory) domain.OperationCategory {
+	var code *string
+	if row.Code.Valid {
+		code = &row.Code.String
+	}
+	return domain.OperationCategory{
+		ID:        pgconv.UUIDFromPgtype(row.ID),
+		OwnerID:   pgconv.UUIDFromPgtype(row.OwnerID),
+		Type:      domain.OperationType(row.Type),
+		Name:      row.Name,
+		Code:      code,
+		CreatedAt: pgconv.TimestamptzToTime(row.CreatedAt),
+		UpdatedAt: pgconv.TimestamptzToTime(row.UpdatedAt),
+	}
+}
+
+// OperationCategoryRepository persists operation categories.
+type OperationCategoryRepository struct {
+	db postgres.DBTX
+}
+
+// NewOperationCategoryRepository creates a new operation category repository.
+func NewOperationCategoryRepository(db postgres.DBTX) *OperationCategoryRepository {
+	return &OperationCategoryRepository{db: db}
+}
+
+func (r *OperationCategoryRepository) q() *postgres.Queries {
+	return postgres.New(r.db)
+}
+
+// WithTx returns a repository instance bound to the provided transaction.
+func (r *OperationCategoryRepository) WithTx(tx transaction.Tx) application.OperationCategoryRepository {
+	return NewOperationCategoryRepository(tx.(postgres.DBTX))
+}
+
+func (r *OperationCategoryRepository) Create(ctx context.Context, ownerID uuid.UUID, categoryType domain.OperationType, name string) (domain.OperationCategory, error) {
+	row, err := r.q().CreateOperationCategory(ctx, postgres.CreateOperationCategoryParams{
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		Type:    string(categoryType),
+		Name:    name,
+	})
+	if err != nil {
+		if isDuplicateCategoryNameError(err) {
+			return domain.OperationCategory{}, application.ErrDuplicateCategoryName
+		}
+		return domain.OperationCategory{}, err
+	}
+	return operationCategoryFromRow(row), nil
+}
+
+func (r *OperationCategoryRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID, categoryType *domain.OperationType) ([]domain.OperationCategory, error) {
+	var t string
+	if categoryType != nil {
+		t = string(*categoryType)
+	}
+	rows, err := r.q().ListOperationCategoriesByOwner(ctx, postgres.ListOperationCategoriesByOwnerParams{
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		Type:    t,
+	})
+	if err != nil {
+		return nil, err
+	}
+	categories := make([]domain.OperationCategory, 0, len(rows))
+	for _, row := range rows {
+		categories = append(categories, operationCategoryFromRow(row))
+	}
+	return categories, nil
+}
+
+func (r *OperationCategoryRepository) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.OperationCategory, error) {
+	row, err := r.q().GetOperationCategoryByIDAndOwner(ctx, postgres.GetOperationCategoryByIDAndOwnerParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.OperationCategory{}, application.ErrNotFound
+		}
+		return domain.OperationCategory{}, err
+	}
+	return operationCategoryFromRow(row), nil
+}
+
+func (r *OperationCategoryRepository) GetByOwnerAndCode(ctx context.Context, ownerID uuid.UUID, code domain.OperationCategoryDefaultCode) (domain.OperationCategory, error) {
+	row, err := r.q().GetOperationCategoryByOwnerAndCode(ctx, postgres.GetOperationCategoryByOwnerAndCodeParams{
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		Code:    pgtype.Text{String: string(code), Valid: true},
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.OperationCategory{}, application.ErrNotFound
+		}
+		return domain.OperationCategory{}, err
+	}
+	return operationCategoryFromRow(row), nil
+}
+
+func (r *OperationCategoryRepository) CreateDefaultCategories(ctx context.Context, ownerID uuid.UUID) error {
+	ownerPgID := pgconv.UUIDToPgtype(ownerID)
+	defaults := []struct {
+		code          string
+		operationType string
+		name          string
+	}{
+		{code: string(domain.OperationCategoryCodeRent), operationType: string(domain.OperationTypeIncome), name: "Аренда"},
+		{code: string(domain.OperationCategoryCodeUtilities), operationType: string(domain.OperationTypeExpense), name: "Коммунальные услуги"},
+		{code: string(domain.OperationCategoryCodeRepair), operationType: string(domain.OperationTypeExpense), name: "Ремонт"},
+		{code: string(domain.OperationCategoryCodeTax), operationType: string(domain.OperationTypeExpense), name: "Налог"},
+	}
+	for _, cat := range defaults {
+		err := r.q().CreateOperationCategoryIgnoreConflict(ctx, postgres.CreateOperationCategoryIgnoreConflictParams{
+			OwnerID: ownerPgID,
+			Type:    cat.operationType,
+			Name:    cat.name,
+			Code:    pgtype.Text{String: cat.code, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("create default operation category %q: %w", cat.code, err)
+		}
+	}
+	return nil
 }
 
 // PropertyRepository provides property information needed by the lease bounded context.
