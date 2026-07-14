@@ -25,7 +25,7 @@ import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
 import { useSubscription } from '@/features/subscription/api/hooks';
 import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
-import { OperationActionMenu } from './OperationActionMenu';
+import { OperationActionButtons } from './OperationActionButtons';
 import styles from './OperationDetailPage.module.css';
 
 type OperationResponse = components['schemas']['OperationResponse'];
@@ -230,21 +230,18 @@ export function OperationDetailPage(): JSX.Element {
     );
   };
 
-  const actionMenu = (
-    <OperationActionMenu
-      type={data?.type}
-      status={data?.status}
-      disabled={isLoading || isError || !data || viewOnly}
-      onComplete={handleComplete}
-      onMarkIncomplete={handleMarkIncomplete}
-      onEdit={handleEdit}
-      onDelete={handleDelete}
-    />
-  );
+  const pendingAction = completeMutation.isPending
+    ? 'complete'
+    : markIncompleteMutation.isPending
+      ? 'markIncomplete'
+      : deleteMutation.isPending
+        ? 'delete'
+        : null;
+  const actionsDisabled = isFetching || pendingAction !== null;
 
   return (
     <div className={styles.root}>
-      <PageHeader title="Операция" backHref={ROUTES.financeOperations} actions={actionMenu} />
+      <PageHeader title="Операция" backHref={ROUTES.financeOperations} />
       <SubscriptionReadonlyBanner />
       {!id && (
         <FinanceErrorState onRetry={() => router.push(ROUTES.financeOperations)} isLoading={false} />
@@ -254,7 +251,21 @@ export function OperationDetailPage(): JSX.Element {
         <FinanceErrorState onRetry={refetch} isLoading={isFetching} />
       )}
       {id && !isLoading && !isError && data && (
-        <OperationDetailCard operation={data} propertyName={propertyName} isArchived={isArchived} />
+        <>
+          <OperationDetailCard operation={data} propertyName={propertyName} isArchived={isArchived} />
+          {!viewOnly && (
+            <OperationActionButtons
+              type={data.type}
+              status={data.status}
+              disabled={actionsDisabled}
+              loadingAction={pendingAction}
+              onComplete={handleComplete}
+              onMarkIncomplete={handleMarkIncomplete}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          )}
+        </>
       )}
       <DeleteOperationModal
         isOpen={isDeleteModalOpen}
