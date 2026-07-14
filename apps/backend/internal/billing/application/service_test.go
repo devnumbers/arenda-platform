@@ -4125,6 +4125,9 @@ func TestBilling_ChangeTariff_UpgradeRecoversProviderReferenceAfterCrash(t *test
 	if !d.provider.initCalled {
 		t.Error("expected provider.Init to be called to recover provider reference")
 	}
+	if !d.provider.initReq.RedirectDueDate.Equal(fixedNow.Add(15 * time.Minute)) {
+		t.Errorf("expected redirect due date %v, got %v", fixedNow.Add(15*time.Minute), d.provider.initReq.RedirectDueDate)
+	}
 
 	payment := d.subscriptionPayments.payments[existingPaymentID]
 	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
@@ -4807,6 +4810,9 @@ func TestBilling_ChangeTariff_TkassaFirstPaymentInitFields(t *testing.T) {
 	if !strings.Contains(req.SuccessURL, resp.PaymentID.String()) {
 		t.Errorf("expected success url to contain payment id, got %q", req.SuccessURL)
 	}
+	if !req.RedirectDueDate.Equal(fixedNow.Add(15 * time.Minute)) {
+		t.Errorf("expected redirect due date %v, got %v", fixedNow.Add(15*time.Minute), req.RedirectDueDate)
+	}
 
 	payment := d.subscriptionPayments.payments[resp.PaymentID]
 	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID != "tkassa_payment_1" {
@@ -4929,6 +4935,9 @@ func TestBilling_ProcessRenewals_TkassaInitChargeFlow(t *testing.T) {
 	}
 	if initReq.Recurrent {
 		t.Errorf("expected Recurrent false for renewal, got true")
+	}
+	if !initReq.RedirectDueDate.IsZero() {
+		t.Errorf("expected no redirect due date for renewal, got %v", initReq.RedirectDueDate)
 	}
 
 	if d.provider.chargeReq.ProviderPaymentID != "tkassa_renewal_1" {
