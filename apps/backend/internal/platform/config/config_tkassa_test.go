@@ -176,7 +176,7 @@ func TestTKassaBaseURLRequiredOutsideLocalDev(t *testing.T) {
 	}
 }
 
-func TestTKassaBaseURLRejectsSandboxInProduction(t *testing.T) {
+func TestTKassaBaseURLAcceptsSandboxInProduction(t *testing.T) {
 	setRequiredLocalEnv(t)
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
@@ -186,11 +186,30 @@ func TestTKassaBaseURLRejectsSandboxInProduction(t *testing.T) {
 	t.Setenv("APP_BASE_URL", "https://example.com")
 	t.Setenv("T_KASSA_BASE_URL", "https://rest-api-test.tinkoff.ru/v2/")
 
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if cfg.TKassaBaseURL != "https://rest-api-test.tinkoff.ru/v2/" {
+		t.Fatalf("expected sandbox T_KASSA_BASE_URL, got %q", cfg.TKassaBaseURL)
+	}
+}
+
+func TestTKassaBaseURLRejectsUnknownHostInProduction(t *testing.T) {
+	setRequiredLocalEnv(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
+	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
+	t.Setenv("T_KASSA_PASSWORD", "pass")
+	t.Setenv("APP_BASE_URL", "https://example.com")
+	t.Setenv("T_KASSA_BASE_URL", "https://evil.example.com/v2/")
+
 	_, err := Load()
 	if err == nil {
-		t.Fatal("expected error for sandbox T_KASSA_BASE_URL in production")
+		t.Fatal("expected error for unknown T_KASSA_BASE_URL host in production")
 	}
-	if !strings.Contains(err.Error(), "securepay.tinkoff.ru") {
+	if !strings.Contains(err.Error(), "securepay.tinkoff.ru") && !strings.Contains(err.Error(), "rest-api-test.tinkoff.ru") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
