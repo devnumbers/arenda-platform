@@ -1,5 +1,4 @@
 import type {
-  OperationCategory,
   OperationFrequency,
   OperationType,
 } from '@/entities/operation/model/types';
@@ -7,7 +6,8 @@ import type {
 export type BasicInfoData = {
   amount: string;
   name: string;
-  category?: OperationCategory;
+  /** Category id (uuid). */
+  category?: string;
   propertyId?: string;
   comment?: string;
   type?: OperationType;

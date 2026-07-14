@@ -29,6 +29,7 @@ type SelectBaseProps<Value extends string = string> = {
     readonly disabled?: boolean;
     readonly loading?: boolean;
     readonly emptyMessage?: ReactNode;
+    readonly footerRow?: ReactNode;
     readonly searchable?: boolean;
     readonly inputValue?: string;
     readonly onInputChange?: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -75,6 +76,7 @@ export function Select<Value extends string = string>({
     disabled,
     loading,
     emptyMessage,
+    footerRow,
     searchable,
     inputValue,
     onInputChange,
@@ -233,6 +235,7 @@ export function Select<Value extends string = string>({
                                     {option.label}
                                 </li>
                             ))}
+                            {footerRow}
                         </ul>
                     )}
                 </div>

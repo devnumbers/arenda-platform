@@ -17,9 +17,11 @@ import { ApiError } from '@/shared/api/errors';
 import { operationKeys } from './keys';
 import { financeKeys } from '@/features/finance/api/keys';
 import { leaseKeys } from '@/features/leases/api/keys';
+import { categoryKeys } from '@/features/operation-categories/api/keys';
 import type { components } from '@/shared/api/generated';
 
 type OperationResponse = components['schemas']['OperationResponse'];
+type OperationCategory = components['schemas']['OperationCategory'];
 type OperationCreateRequest = components['schemas']['OperationCreateRequest'];
 type OperationUpdateRequest = components['schemas']['OperationUpdateRequest'];
 type OperationListSort = components['schemas']['OperationListSort'];
@@ -30,7 +32,7 @@ type PropertyOperationsSummaryResponse =
 export type OperationsFilters = {
   type?: 'income' | 'expense' | ('income' | 'expense')[];
   status?: string | string[];
-  category?: string | string[];
+  category_id?: string | string[];
   property_id?: string;
   lease_id?: string;
   from?: string;
@@ -40,6 +42,29 @@ export type OperationsFilters = {
   limit?: number;
   offset?: number;
 };
+
+// Rent operations affect lease state, so lease keys must be invalidated when a
+// lease-linked rent operation changes. The rent category id lives in the
+// categories cache; if it is not loaded yet, fall back to invalidating lease
+// keys for any lease-linked operation change (safe over-invalidation).
+function shouldInvalidateLeaseKeys(
+  queryClient: QueryClient,
+  operation: OperationResponse,
+): boolean {
+  if (!operation.lease_id) {
+    return false;
+  }
+  const incomeCategories = queryClient.getQueryData<OperationCategory[]>(
+    categoryKeys.list('income'),
+  );
+  if (!incomeCategories) {
+    return true;
+  }
+  const rentCategoryId = incomeCategories.find(
+    (category) => category.code === 'rent',
+  )?.id;
+  return rentCategoryId !== undefined && operation.category_id === rentCategoryId;
+}
 
 function normalizeOperationsFilters(
   filters: OperationsFilters,
@@ -192,7 +217,7 @@ export function useCompleteOperation(): UseMutationResult<
         queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(propertyId) });
         queryClient.invalidateQueries({ queryKey: operationKeys.summary(propertyId) });
       }
-      if (operation.lease_id && operation.category === 'rent') {
+      if (shouldInvalidateLeaseKeys(queryClient, operation)) {
         queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       }
     },
@@ -218,7 +243,7 @@ export function useMarkOperationIncomplete(): UseMutationResult<
         queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(propertyId) });
         queryClient.invalidateQueries({ queryKey: operationKeys.summary(propertyId) });
       }
-      if (operation.lease_id && operation.category === 'rent') {
+      if (shouldInvalidateLeaseKeys(queryClient, operation)) {
         queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       }
     },
@@ -271,7 +296,7 @@ export function useUpdateOperation(): UseMutationResult<
       queryClient.invalidateQueries({
         queryKey: operationKeys.summary(propertyId),
       });
-      if (operation.lease_id && operation.category === 'rent') {
+      if (shouldInvalidateLeaseKeys(queryClient, operation)) {
         queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       }
     },

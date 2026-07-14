@@ -356,6 +356,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operation-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listOperationCategories"];
+        put?: never;
+        post: operations["createOperationCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finance/report": {
         parameters: {
             query?: never;
@@ -494,22 +510,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["completeLease"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/leases/{id}/deposit-return": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["returnLeaseDeposit"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1267,7 +1267,9 @@ export interface components {
             /** Format: uuid */
             recurringOperationId?: string | null;
             type: components["schemas"]["OperationType"];
-            category: components["schemas"]["OperationCategory"];
+            /** Format: uuid */
+            categoryId: string;
+            categoryName: string;
             name: string;
             amountKopecks: number;
             /** Format: date */
@@ -1489,8 +1491,19 @@ export interface components {
         TariffName: "basic" | "pro" | "business";
         /** @enum {string} */
         OperationType: "income" | "expense";
-        /** @enum {string} */
-        OperationCategory: "rent" | "other_income" | "utilities" | "repair" | "tax" | "other_expense" | "deposit_return";
+        OperationCategory: {
+            /** Format: uuid */
+            id: string;
+            type: components["schemas"]["OperationType"];
+            name: string;
+            code?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        OperationCategoryCreateRequest: {
+            type: components["schemas"]["OperationType"];
+            name: string;
+        };
         /** @enum {string} */
         OperationStatus: "pending" | "overdue" | "paid" | "received";
         /**
@@ -1500,7 +1513,8 @@ export interface components {
         OperationListSort: "operation_date_desc" | "operation_date_asc";
         OperationCreateRequest: {
             type: components["schemas"]["OperationType"];
-            category: components["schemas"]["OperationCategory"];
+            /** Format: uuid */
+            category_id: string;
             name: string;
             amount_kopecks: number;
             /** Format: date */
@@ -1516,7 +1530,8 @@ export interface components {
         };
         OperationUpdateRequest: {
             type?: components["schemas"]["OperationType"];
-            category?: components["schemas"]["OperationCategory"];
+            /** Format: uuid */
+            category_id?: string;
             name?: string;
             amount_kopecks?: number;
             /** Format: date */
@@ -1542,7 +1557,9 @@ export interface components {
             /** Format: uuid */
             recurring_operation_id?: string | null;
             type: components["schemas"]["OperationType"];
-            category: components["schemas"]["OperationCategory"];
+            /** Format: uuid */
+            category_id: string;
+            category_name: string;
             name: string;
             amount_kopecks: number;
             /** Format: date */
@@ -1566,7 +1583,8 @@ export interface components {
         };
         RecurringOperationCreateRequest: {
             type: components["schemas"]["OperationType"];
-            category: components["schemas"]["OperationCategory"];
+            /** Format: uuid */
+            category_id: string;
             name: string;
             amount_kopecks: number;
             /** Format: date */
@@ -1585,7 +1603,8 @@ export interface components {
         };
         RecurringOperationUpdateRequest: {
             type?: components["schemas"]["OperationType"];
-            category?: components["schemas"]["OperationCategory"];
+            /** Format: uuid */
+            category_id?: string;
             name?: string;
             amount_kopecks?: number;
             /** Format: date */
@@ -1614,7 +1633,9 @@ export interface components {
             /** Format: uuid */
             lease_id?: string | null;
             type: components["schemas"]["OperationType"];
-            category: components["schemas"]["OperationCategory"];
+            /** Format: uuid */
+            category_id: string;
+            category_name: string;
             name: string;
             amount_kopecks: number;
             /** Format: date */
@@ -1708,7 +1729,9 @@ export interface components {
         };
         FinanceReportCategoryRow: {
             type: components["schemas"]["OperationType"];
-            category: components["schemas"]["OperationCategory"];
+            /** Format: uuid */
+            category_id: string;
+            category_name: string;
             total_kopecks: number;
         };
         FinanceReportMonthRow: {
@@ -2324,7 +2347,7 @@ export interface operations {
             query?: {
                 status?: components["schemas"]["OperationStatus"][];
                 type?: components["schemas"]["OperationType"][];
-                category?: components["schemas"]["OperationCategory"][];
+                category_id?: string[];
                 from?: string;
                 to?: string;
                 sort?: components["schemas"]["OperationListSort"];
@@ -2387,7 +2410,7 @@ export interface operations {
             query?: {
                 type?: components["schemas"]["OperationType"][];
                 status?: components["schemas"]["OperationStatus"][];
-                category?: components["schemas"]["OperationCategory"][];
+                category_id?: string[];
                 property_id?: string;
                 from?: string;
                 to?: string;
@@ -2549,6 +2572,56 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listOperationCategories: {
+        parameters: {
+            query?: {
+                type?: components["schemas"]["OperationType"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationCategory"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createOperationCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperationCategoryCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationCategory"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
         };
     };
     getFinanceReport: {
@@ -2899,32 +2972,6 @@ export interface operations {
                     "application/json": components["schemas"]["LeaseResponse"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    returnLeaseDeposit: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deposit returned */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LeaseResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];

@@ -18,6 +18,7 @@ import {
     useOperationsByProperty,
     usePropertyOperationsSummary,
 } from '@/features/operations/api/hooks';
+import {useOperationCategories} from '@/features/operation-categories/api';
 import {ApiError} from '@/shared/api/errors';
 import {findCurrentLease, getPropertyPageStatus,} from '../lib/get-property-page-status';
 import {PropertyDetailHeader} from './PropertyDetailHeader';
@@ -69,18 +70,22 @@ export function PropertyDetailPage(): JSX.Element {
         [property, leases],
     );
     const currentLease = useMemo(() => findCurrentLease(leases), [leases]);
+    const categoriesQuery = useOperationCategories('income');
+    const rentCategoryId = categoriesQuery.data?.find(
+        (category) => category.code === 'rent',
+    )?.id;
     const payableRentFilters = useMemo<OperationsFilters>(
         () => ({
             lease_id: currentLease?.id,
-            category: ['rent'],
+            category_id: rentCategoryId ? [rentCategoryId] : undefined,
             status: ['pending', 'overdue'],
             sort: 'operation_date_asc',
             limit: 1,
         }),
-        [currentLease?.id],
+        [currentLease?.id, rentCategoryId],
     );
     const payableRentQuery = useOperations(payableRentFilters, {
-        enabled: Boolean(currentLease?.id),
+        enabled: Boolean(currentLease?.id) && Boolean(rentCategoryId),
     });
     const isPayRentLoading = Boolean(currentLease) && payableRentQuery.isFetching;
 

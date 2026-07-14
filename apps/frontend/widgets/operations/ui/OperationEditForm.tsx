@@ -16,11 +16,8 @@ import { IconButton } from '@/shared/ui/icon-button';
 import { Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { ApiError } from '@/shared/api/errors';
-import {
-  type OperationCategory,
-  type OperationType,
-} from '@/entities/operation/model/types';
-import { getCategoriesByType } from '@/entities/operation/lib/categories';
+import type { components } from '@/shared/api/generated';
+import { type OperationType } from '@/entities/operation/model/types';
 import {
   useOperation,
   useUpdateOperation,
@@ -35,10 +32,12 @@ import { TypeSelect } from './TypeSelect';
 import { ReminderSection } from './ReminderSection';
 import styles from './OperationEditForm.module.css';
 
+type OperationResponse = components['schemas']['OperationResponse'];
+
 type FormData = {
   name: string;
   type: OperationType;
-  category: OperationCategory | undefined;
+  category: string | undefined;
   amount: string;
   operation_date: string;
   comment: string;
@@ -51,18 +50,6 @@ type FormErrors = {
   amount?: string;
   category?: string;
   operation_date?: string;
-};
-
-type Operation = {
-  readonly id: string;
-  readonly property_id: string;
-  readonly name: string;
-  readonly type: OperationType;
-  readonly category: OperationCategory;
-  readonly amount_kopecks: number;
-  readonly operation_date: string;
-  readonly comment?: string | null;
-  readonly reminder_offset_days?: 1 | 3 | 7 | null;
 };
 
 function formatAmountFromKopecks(kopecks: number): string {
@@ -102,7 +89,7 @@ function OperationEditFormContent({
   readonly,
 }: {
   readonly id: string;
-  readonly operation: Operation;
+  readonly operation: OperationResponse;
   readonly readonly: boolean;
 }): JSX.Element {
   const router = useRouter();
@@ -111,7 +98,7 @@ function OperationEditFormContent({
   const [form, setForm] = useState<FormData>({
     name: operation.name,
     type: operation.type,
-    category: operation.category,
+    category: operation.category_id,
     amount: formatAmountFromKopecks(operation.amount_kopecks),
     operation_date: operation.operation_date,
     comment: operation.comment ?? '',
@@ -128,7 +115,7 @@ function OperationEditFormContent({
     return (
       form.name.trim() !== operation.name ||
       form.type !== operation.type ||
-      form.category !== operation.category ||
+      form.category !== operation.category_id ||
       amountKopecks !== operation.amount_kopecks ||
       form.operation_date !== operation.operation_date ||
       (form.comment.trim() || undefined) !== (operation.comment ?? undefined) ||
@@ -147,13 +134,7 @@ function OperationEditFormContent({
   ]);
 
   const handleTypeChange = (type: OperationType) => {
-    setForm((prev) => {
-      const validCategories = getCategoriesByType(type);
-      const category = validCategories.some((option) => option.value === prev.category)
-        ? prev.category
-        : undefined;
-      return { ...prev, type, category };
-    });
+    setForm((prev) => ({ ...prev, type, category: undefined }));
   };
 
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -225,7 +206,7 @@ function OperationEditFormContent({
         data: {
           name: form.name.trim(),
           type: form.type,
-          category: form.category,
+          category_id: form.category,
           amount_kopecks: amountKopecks,
           operation_date: form.operation_date,
           comment: form.comment.trim() || undefined,
@@ -364,7 +345,7 @@ export function OperationEditForm(): JSX.Element {
       {id && !isLoading && !isError && data && (
         <OperationEditFormContent
           id={id}
-          operation={{...data, category: data.category as OperationCategory}}
+          operation={data}
           readonly={readonly}
         />
       )}

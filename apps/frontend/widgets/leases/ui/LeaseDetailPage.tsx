@@ -6,6 +6,7 @@ import {notify} from '@/shared/lib/toast';
 import NextLink from 'next/link';
 import {ROUTES} from '@/shared/config/routes';
 import {useCompleteLease, useLease,} from '@/features/leases/api/hooks';
+import {useOperationCategories} from '@/features/operation-categories/api';
 import {useOperations} from '@/features/operations/api/hooks';
 import {useProperty} from '@/features/properties/api/hooks';
 import {useSubscription} from '@/features/subscription/api/hooks';
@@ -203,7 +204,18 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
     const router = useRouter();
 
     const leaseQuery = useLease(id);
-    const rentOperationsQuery = useOperations({lease_id: id, category: 'rent', sort: 'operation_date_asc'});
+    const categoriesQuery = useOperationCategories('income');
+    const rentCategoryId = categoriesQuery.data?.find(
+        (category) => category.code === 'rent',
+    )?.id;
+    const rentOperationsQuery = useOperations(
+        {
+            lease_id: id,
+            category_id: rentCategoryId ? [rentCategoryId] : undefined,
+            sort: 'operation_date_asc',
+        },
+        {enabled: Boolean(rentCategoryId)},
+    );
     const {data: subscription, isPending: isSubscriptionPending} = useSubscription();
     const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
@@ -233,8 +245,12 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
     }, [leaseQuery]);
 
     const handleOperationsRetry = useCallback(() => {
+        if (!rentCategoryId) {
+            categoriesQuery.refetch();
+            return;
+        }
         rentOperationsQuery.refetch();
-    }, [rentOperationsQuery]);
+    }, [rentCategoryId, categoriesQuery, rentOperationsQuery]);
 
     const confirmComplete = useCallback(() => {
         void notify.promise(completeLease.mutateAsync(id), {
@@ -296,9 +312,18 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
 
                     <OperationsSection
                         operations={rentOperations}
-                        isLoading={rentOperationsQuery.isPending}
-                        isError={rentOperationsQuery.isError}
-                        isFetching={rentOperationsQuery.isFetching}
+                        isLoading={
+                            rentOperationsQuery.isPending &&
+                            !(!rentCategoryId && categoriesQuery.isError)
+                        }
+                        isError={
+                            rentOperationsQuery.isError ||
+                            (!rentCategoryId && categoriesQuery.isError)
+                        }
+                        isFetching={
+                            rentOperationsQuery.isFetching ||
+                            categoriesQuery.isFetching
+                        }
                         onRetry={handleOperationsRetry}
                     />
                 </>

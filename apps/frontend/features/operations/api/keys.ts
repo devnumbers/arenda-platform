@@ -1,7 +1,7 @@
 export type OperationKeyFilters = {
   type?: string | string[];
   status?: string | string[];
-  category?: string | string[];
+  category_id?: string | string[];
   property_id?: string;
   from?: string;
   to?: string;
