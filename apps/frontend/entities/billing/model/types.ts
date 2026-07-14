@@ -60,6 +60,7 @@ export type SubscriptionPayment = {
   amountKopecks: number;
   status: PaymentStatus;
   provider: string;
+  paymentUrl: string | null;
   createdAt: string;
 };
 

@@ -131,6 +131,10 @@
   text-decoration: underline;
 }
 
+.bannerLink + .bannerLink {
+  margin-left: 16px;
+}
+
 .actions {
   display: flex;
   flex-direction: column;

@@ -2445,6 +2445,9 @@ components:
           $ref: '#/components/schemas/SubscriptionPaymentStatus'
         provider:
           type: string
+        paymentUrl:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time

@@ -15,6 +15,7 @@ import { notify } from '@/shared/lib/toast';
 import { Button } from '@/shared/ui/button';
 import { PageHeader } from '@/shared/ui/page-header';
 import {
+  PAYMENT_STALE_MS,
   useTariffs,
   useSubscription,
   useChangeTariff,
@@ -33,6 +34,10 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: 'month', label: 'Месяц' },
   { value: 'year', label: 'Год' },
 ];
+
+function isPaymentFresh(createdAt: string): boolean {
+  return Date.now() - new Date(createdAt).getTime() < PAYMENT_STALE_MS;
+}
 
 type PeriodSelectorProps = {
   readonly value: Period;
@@ -191,6 +196,17 @@ export function TariffChangeForm(): JSX.Element {
               >
                 Детали платежа
               </NextLink>
+              {pendingPayment.paymentUrl &&
+                isPaymentFresh(pendingPayment.createdAt) && (
+                  <a
+                    href={pendingPayment.paymentUrl}
+                    className={styles.bannerLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Вернуться к оплате
+                  </a>
+                )}
             </div>
           )}
 

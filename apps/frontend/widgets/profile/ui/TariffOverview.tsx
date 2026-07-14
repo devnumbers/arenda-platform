@@ -218,6 +218,16 @@ export function TariffOverview(): JSX.Element {
                     >
                         Детали платежа
                     </NextLink>
+                    {!isPendingPaymentStale && pendingPayment.paymentUrl && (
+                        <a
+                            href={pendingPayment.paymentUrl}
+                            className={styles.bannerLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            Вернуться к оплате
+                        </a>
+                    )}
                 </div>
             )}
 

@@ -1096,6 +1096,7 @@ export interface components {
             amountKopecks: number;
             status: components["schemas"]["SubscriptionPaymentStatus"];
             provider: string;
+            paymentUrl?: string | null;
             /** Format: date-time */
             createdAt: string;
         };

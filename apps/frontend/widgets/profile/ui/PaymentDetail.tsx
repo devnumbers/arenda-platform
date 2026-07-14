@@ -6,7 +6,10 @@ import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
 import { Button } from '@/shared/ui/button';
-import { useSubscriptionPayment } from '@/features/billing/api/hooks';
+import {
+  PAYMENT_STALE_MS,
+  useSubscriptionPayment,
+} from '@/features/billing/api/hooks';
 import {
   PAYMENT_PERIOD_LABELS,
   PAYMENT_STATUS_LABELS,
@@ -25,6 +28,10 @@ function PaymentDetailSkeleton(): JSX.Element {
       <Skeleton className={styles.rowSkeleton} />
     </Card>
   );
+}
+
+function isPaymentFresh(createdAt: string): boolean {
+  return Date.now() - new Date(createdAt).getTime() < PAYMENT_STALE_MS;
 }
 
 export type PaymentDetailProps = {
@@ -107,6 +114,19 @@ export function PaymentDetail({ id }: PaymentDetailProps): JSX.Element {
           <dd className={styles.value}>{payment.provider}</dd>
         </div>
       </dl>
+
+      {payment.status === 'pending' &&
+        payment.paymentUrl &&
+        isPaymentFresh(payment.createdAt) && (
+          <a
+            href={payment.paymentUrl}
+            className={styles.paymentLink}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Вернуться к оплате
+          </a>
+        )}
     </Card>
   );
 }

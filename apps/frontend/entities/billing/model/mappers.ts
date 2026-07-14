@@ -76,6 +76,7 @@ export function mapSubscriptionPaymentResponse(
     amountKopecks: response.amountKopecks,
     status: response.status as PaymentStatus,
     provider: response.provider,
+    paymentUrl: response.paymentUrl ?? null,
     createdAt: response.createdAt,
   };
 }

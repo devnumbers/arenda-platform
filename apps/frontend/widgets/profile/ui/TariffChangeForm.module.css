@@ -88,6 +88,10 @@
   text-decoration: underline;
 }
 
+.bannerLink + .bannerLink {
+  margin-left: 16px;
+}
+
 .list {
   display: flex;
   flex-direction: column;
