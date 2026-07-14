@@ -14,8 +14,9 @@ import (
 
 // OperationHandlers implements the generated operation endpoints.
 type OperationHandlers struct {
-	svc    *leasesapp.OperationService
-	logger *slog.Logger
+	svc        *leasesapp.OperationService
+	categories *leasesapp.CategoryService
+	logger     *slog.Logger
 }
 
 const (
@@ -27,8 +28,8 @@ const (
 )
 
 // NewOperationHandlers creates HTTP handlers for the operations API.
-func NewOperationHandlers(svc *leasesapp.OperationService, logger *slog.Logger) *OperationHandlers {
-	return &OperationHandlers{svc: svc, logger: logger}
+func NewOperationHandlers(svc *leasesapp.OperationService, categories *leasesapp.CategoryService, logger *slog.Logger) *OperationHandlers {
+	return &OperationHandlers{svc: svc, categories: categories, logger: logger}
 }
 
 func (h *OperationHandlers) handleOperationError(w http.ResponseWriter, r *http.Request, err error) {
@@ -131,7 +132,13 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusCreated, operationResponse(op))
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusCreated, operationResponse(op, names))
 }
 
 // ListOperationsByProperty implements GET /properties/{propertyId}/operations.
@@ -176,7 +183,13 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, operationsResponse(ops, limit, offset))
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, operationsResponse(ops, names, limit, offset))
 }
 
 // ListOperations implements GET /operations.
@@ -230,7 +243,13 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, operationsResponse(ops, limit, offset))
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, operationsResponse(ops, names, limit, offset))
 }
 
 // GetOperation implements GET /operations/{id}.
@@ -247,7 +266,13 @@ func (h *OperationHandlers) GetOperation(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, operationResponse(op))
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, operationResponse(op, names))
 }
 
 // UpdateOperation implements PATCH /operations/{id}.
@@ -289,7 +314,13 @@ func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, operationResponse(op))
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, operationResponse(op, names))
 }
 
 // DeleteOperation implements DELETE /operations/{id}.
@@ -325,7 +356,13 @@ func (h *OperationHandlers) CompleteOperation(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, operationResponse(op))
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, operationResponse(op, names))
 }
 
 // MarkOperationIncomplete implements POST /operations/{id}/mark-incomplete.
@@ -345,16 +382,23 @@ func (h *OperationHandlers) MarkOperationIncomplete(w http.ResponseWriter, r *ht
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, operationResponse(op))
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, operationResponse(op, names))
 }
 
-func operationResponse(op domain.Operation) openapi.OperationResponse {
+func operationResponse(op domain.Operation, categoryNames map[uuid.UUID]string) openapi.OperationResponse {
 	resp := openapi.OperationResponse{
 		Id:            op.ID,
 		OwnerId:       op.OwnerID,
 		PropertyId:    op.PropertyID,
 		Type:          openapi.OperationType(op.Type),
 		CategoryId:    op.CategoryID,
+		CategoryName:  categoryNames[op.CategoryID],
 		Name:          op.Name,
 		AmountKopecks: int(op.AmountKopecks),
 		OperationDate: openapi_types.Date{Time: op.OperationDate},
@@ -379,7 +423,7 @@ func operationResponse(op domain.Operation) openapi.OperationResponse {
 	return resp
 }
 
-func operationsResponse(ops []domain.Operation, limit int, offset int) openapi.OperationsResponse {
+func operationsResponse(ops []domain.Operation, categoryNames map[uuid.UUID]string, limit int, offset int) openapi.OperationsResponse {
 	hasMore := len(ops) > limit
 	if hasMore {
 		ops = ops[:limit]
@@ -387,7 +431,7 @@ func operationsResponse(ops []domain.Operation, limit int, offset int) openapi.O
 
 	items := make([]openapi.OperationResponse, 0, len(ops))
 	for _, op := range ops {
-		items = append(items, operationResponse(op))
+		items = append(items, operationResponse(op, categoryNames))
 	}
 
 	resp := openapi.OperationsResponse{

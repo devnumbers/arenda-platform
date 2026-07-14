@@ -1,14 +1,30 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 
+	"github.com/google/uuid"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 )
+
+// categoryNamesByID loads all operation categories of the owner (any type) and
+// returns a map from category ID to category name for response enrichment.
+func categoryNamesByID(ctx context.Context, svc *leasesapp.CategoryService, ownerID uuid.UUID) (map[uuid.UUID]string, error) {
+	categories, err := svc.ListCategories(ctx, ownerID, leasesapp.ListOperationCategoriesQuery{})
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[uuid.UUID]string, len(categories))
+	for _, c := range categories {
+		names[c.ID] = c.Name
+	}
+	return names, nil
+}
 
 // CategoryHandlers implements the generated operation-category endpoints.
 type CategoryHandlers struct {
@@ -63,6 +79,7 @@ func (h *CategoryHandlers) ListOperationCategories(w http.ResponseWriter, r *htt
 		items = append(items, openapi.OperationCategory{
 			Id:        c.ID,
 			Name:      c.Name,
+			Code:      c.Code,
 			Type:      openapi.OperationType(c.Type),
 			CreatedAt: c.CreatedAt,
 		})
@@ -98,6 +115,7 @@ func (h *CategoryHandlers) CreateOperationCategory(w http.ResponseWriter, r *htt
 	writeJSON(r.Context(), w, http.StatusCreated, openapi.OperationCategory{
 		Id:        category.ID,
 		Name:      category.Name,
+		Code:      category.Code,
 		Type:      openapi.OperationType(category.Type),
 		CreatedAt: category.CreatedAt,
 	})

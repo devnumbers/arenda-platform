@@ -3298,6 +3298,9 @@ components:
           $ref: '#/components/schemas/OperationType'
         name:
           type: string
+        code:
+          type: string
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -3380,7 +3383,7 @@ components:
 
     OperationResponse:
       type: object
-      required: [id, owner_id, property_id, type, category_id, name, amount_kopecks, operation_date, status, is_exception, created_at, updated_at]
+      required: [id, owner_id, property_id, type, category_id, category_name, name, amount_kopecks, operation_date, status, is_exception, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3404,6 +3407,8 @@ components:
         category_id:
           type: string
           format: uuid
+        category_name:
+          type: string
         name:
           type: string
         amount_kopecks:
@@ -3528,7 +3533,7 @@ components:
 
     RecurringOperationResponse:
       type: object
-      required: [id, owner_id, property_id, type, category_id, name, amount_kopecks, start_date, payment_day, periodicity, status, created_at, updated_at]
+      required: [id, owner_id, property_id, type, category_id, category_name, name, amount_kopecks, start_date, payment_day, periodicity, status, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3548,6 +3553,8 @@ components:
         category_id:
           type: string
           format: uuid
+        category_name:
+          type: string
         name:
           type: string
         amount_kopecks:
