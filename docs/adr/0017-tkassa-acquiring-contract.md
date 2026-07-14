@@ -22,6 +22,7 @@ Accepted
 - **Родительский платёж** (первый платёж, получает `RebillId`): `Init` с `Amount`, `PayType="O"`, `Recurrent="Y"`, `DATA.OperationInitiatorType="1"` (CIT CC), `CustomerKey`, `NotificationURL`/`SuccessURL`/`FailURL`, `Description` ≤ 140 символов. `RebillId` приходит в `AUTHORIZED` webhook-уведомлении после родительского CC-платежа (не в ответе `Init`) и также доступен в ответе `GetState`; он сохраняется на способе оплаты.
 - **Дочерний платёж** (продление, MIT): `Init` с `Amount` и `DATA.OperationInitiatorType="R"`, поле `Recurrent` **не передаётся**; затем `Charge` с `PaymentId` + `RebillId`. `Charge` вызывается без `Amount` — сумма берётся из исходного `Init`.
 - **Обычный разовый платёж** без сохранения реквизитов: `OperationInitiatorType="0"`.
+- **Срок жизни платёжной формы**: пользовательский (родительский) платёж передаёт в `Init` поле `RedirectDueDate = now + 15 мин` в формате RFC3339 (UTC). Продление (MIT) и остальные сценарии поле **не передают** — действует умолчание банка 24 часа (через настроечный параметр терминала `REDIRECT_TIMEOUT`). Альтернативный параметр `ttl` (5–20 минут) не используется. По истечении срока платёж переходит в `DEADLINE_EXPIRED` (см. «Жизненный цикл платежа»), трактуется как failed, и пользователь повторяет оплату через существующий recovery flow.
 
 Матрица `OperationInitiatorType` из официальной документации:
 
