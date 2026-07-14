@@ -9,7 +9,7 @@ import {formatDateForApi} from '@/entities/operation/lib/dates';
 import {ROUTES} from '@/shared/config/routes';
 import {EmptyState} from '@/shared/ui/empty-state';
 import {SectionHeader} from './SectionHeader';
-import {UpcomingOperationRow} from './UpcomingOperationRow';
+import {OperationListItem} from '@/widgets/operations/ui/OperationListItem';
 import {FinanceErrorState} from '@/widgets/finance/ui/FinanceErrorState';
 import {useSubscription} from '@/features/subscription/api/hooks';
 import {isSubscriptionReadonly} from '@/features/subscription/lib/is-subscription-readonly';
@@ -94,7 +94,7 @@ export function UpcomingOperationsSection(): JSX.Element {
                 <ul className={styles.list}>
                     {operations.map((operation) => (
                         <li key={operation.id}>
-                            <UpcomingOperationRow operation={operation}/>
+                            <OperationListItem operation={operation}/>
                         </li>
                     ))}
                 </ul>

@@ -34,40 +34,10 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px 12px;
-  padding: 14px 0;
-  border-bottom: 1px solid rgba(30, 30, 30, 0.08);
-  text-decoration: none;
-}
-
-.category {
-  font-size: var(--font-size-text-m);
-  line-height: var(--line-height-text-m);
-  color: var(--color-text);
-}
-
-.amount {
-  font-size: var(--font-size-text-m);
-  line-height: var(--line-height-text-m);
-  font-weight: 500;
-  color: var(--color-text);
-  text-align: right;
-}
-
-.date {
-  grid-column: 1 / -1;
-  font-size: var(--font-size-text-s);
-  line-height: var(--line-height-text-s);
-  color: var(--color-text-muted);
 }
 
 .empty {

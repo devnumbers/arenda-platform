@@ -90,7 +90,7 @@ export function PropertyOverdueOperationsCard({
         <ul className={styles.list}>
           {operations.map((operation) => (
             <li key={operation.id}>
-              <OperationListItem operation={operation} variant="dashboard" />
+              <OperationListItem operation={operation} />
             </li>
           ))}
         </ul>

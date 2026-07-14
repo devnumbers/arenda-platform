@@ -358,8 +358,6 @@ export function OperationsPage({initial}: OperationsPageProps): JSX.Element {
                 <>
                     <OperationsList
                         operations={operations}
-                        showProperty
-                        propertyNameById={propertyNameById}
                         emptyState={
                             <FinanceEmptyState
                                 title={hasActiveFilters ? 'Нет совпадений' : 'Нет операций за период'}

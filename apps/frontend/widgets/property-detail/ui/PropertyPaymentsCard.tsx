@@ -6,10 +6,9 @@ import { Icon } from '@/shared/ui/icon';
 import { LinkButton } from '@/shared/ui/link-button';
 import { ArrowRight } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import { formatDate } from '@/shared/lib/format-date';
 import type { components } from '@/shared/api/generated';
 import type { Property } from '@/entities/property/model/types';
+import { OperationListItem } from '@/widgets/operations/ui/OperationListItem';
 import { formatOverdueCount } from '../lib/format-overdue-count';
 import { PropertyDetailSection } from './PropertyDetailSection';
 import styles from './PropertyPaymentsCard.module.css';
@@ -60,20 +59,7 @@ export function PropertyPaymentsCard({
         <ul className={styles.list}>
           {recent.map((operation) => (
             <li key={operation.id}>
-              <NextLink
-                href={ROUTES.financeOperation(operation.id)}
-                className={styles.row}
-              >
-                <span className={styles.category}>
-                  {operation.category_name}
-                </span>
-                <span className={styles.amount}>
-                  {formatMoneyKopecks(operation.amount_kopecks)}
-                </span>
-                <span className={styles.date}>
-                  {formatDate(operation.operation_date)}
-                </span>
-              </NextLink>
+              <OperationListItem operation={operation} />
             </li>
           ))}
         </ul>
