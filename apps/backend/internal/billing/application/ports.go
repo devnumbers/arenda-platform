@@ -320,6 +320,10 @@ type InitRequest struct {
 	FailURL                string
 	Recurrent              bool
 	OperationInitiatorType OperationInitiatorType
+	// RedirectDueDate is the absolute deadline of the payment form link
+	// (T-Kassa Init RedirectDueDate, RFC3339 on the wire). Zero value omits
+	// the field and the provider default (24h) applies.
+	RedirectDueDate time.Time
 }
 
 // OperationInitiatorType marks who initiated a payment operation. The values

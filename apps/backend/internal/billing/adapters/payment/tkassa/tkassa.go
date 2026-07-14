@@ -310,6 +310,9 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (res a
 		description := truncateDescription(req.Description, maxDescriptionLength)
 		initReq.Description = &description
 	}
+	if !req.RedirectDueDate.IsZero() {
+		initReq.RedirectDueDate = req.RedirectDueDate.UTC().Format(time.RFC3339)
+	}
 
 	body, err := bodyFromStruct(initReq)
 	if err != nil {

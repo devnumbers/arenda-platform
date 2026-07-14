@@ -382,6 +382,94 @@ func TestProviderInitRenewal(t *testing.T) {
 	}
 }
 
+func TestProviderInitRedirectDueDate(t *testing.T) {
+	newServer := func(captured *map[string]any) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			*captured = verifyRequestToken(t, r, testPassword)
+			_ = json.NewEncoder(w).Encode(initResponse{
+				baseResponse: baseResponse{Success: true, Status: "NEW"},
+				PaymentID:    "1",
+				PaymentURL:   "https://pay",
+			})
+		}))
+	}
+
+	t.Run("set", func(t *testing.T) {
+		var captured map[string]any
+		server := newServer(&captured)
+		defer server.Close()
+
+		p := newTestProvider(server.URL + "/v2/")
+		due := time.Date(2026, 7, 13, 15, 0, 0, 0, time.UTC)
+		_, err := p.Init(context.Background(), application.InitRequest{
+			PaymentID:       uuid.New(),
+			AmountKopecks:   100,
+			UserID:          uuid.New(),
+			CustomerKey:     "ck",
+			RedirectDueDate: due,
+		})
+		if err != nil {
+			t.Fatalf("Init failed: %v", err)
+		}
+
+		got, ok := captured["RedirectDueDate"].(string)
+		if !ok {
+			t.Fatalf("RedirectDueDate missing or not a string")
+		}
+		if want := "2026-07-13T15:00:00Z"; got != want {
+			t.Fatalf("RedirectDueDate: got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("non_utc_normalizes_to_utc", func(t *testing.T) {
+		var captured map[string]any
+		server := newServer(&captured)
+		defer server.Close()
+
+		p := newTestProvider(server.URL + "/v2/")
+		due := time.Date(2026, 7, 13, 15, 0, 0, 0, time.FixedZone("MSK", 3*60*60))
+		_, err := p.Init(context.Background(), application.InitRequest{
+			PaymentID:       uuid.New(),
+			AmountKopecks:   100,
+			UserID:          uuid.New(),
+			CustomerKey:     "ck",
+			RedirectDueDate: due,
+		})
+		if err != nil {
+			t.Fatalf("Init failed: %v", err)
+		}
+
+		got, ok := captured["RedirectDueDate"].(string)
+		if !ok {
+			t.Fatalf("RedirectDueDate missing or not a string")
+		}
+		if want := "2026-07-13T12:00:00Z"; got != want {
+			t.Fatalf("RedirectDueDate: got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("zero_omits_field", func(t *testing.T) {
+		var captured map[string]any
+		server := newServer(&captured)
+		defer server.Close()
+
+		p := newTestProvider(server.URL + "/v2/")
+		_, err := p.Init(context.Background(), application.InitRequest{
+			PaymentID:     uuid.New(),
+			AmountKopecks: 100,
+			UserID:        uuid.New(),
+			CustomerKey:   "ck",
+		})
+		if err != nil {
+			t.Fatalf("Init failed: %v", err)
+		}
+
+		if v, ok := captured["RedirectDueDate"]; ok {
+			t.Fatalf("RedirectDueDate must be omitted when zero, got %v", v)
+		}
+	})
+}
+
 func TestProviderInitError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = verifyRequestToken(t, r, testPassword)
@@ -1491,6 +1579,7 @@ func TestProviderInitContract(t *testing.T) {
 				SuccessURL:      "https://example.com/success",
 				FailURL:         "https://example.com/fail",
 				Recurrent:       true,
+				RedirectDueDate: time.Date(2026, 7, 13, 15, 0, 0, 0, time.UTC),
 			},
 			wantOperationInitiator: spec.CommonOperationInitiatorTypeN1, // CIT CC per the T-Kassa spec
 			wantRecurrent:          true,
@@ -1563,6 +1652,22 @@ func TestProviderInitContract(t *testing.T) {
 			} else if _, ok := capturedMap["Recurrent"]; ok {
 				t.Errorf("Recurrent must be omitted for renewal Init, got %v", capturedMap["Recurrent"])
 			}
+			// RedirectDueDate rides along only when set: the user-facing parent
+			// payment carries the payment-form deadline, renewals (MIT) must not.
+			if !tt.req.RedirectDueDate.IsZero() {
+				raw, ok := capturedMap["RedirectDueDate"].(string)
+				if !ok {
+					t.Fatalf("RedirectDueDate missing or not a string")
+				}
+				if _, err := time.Parse(time.RFC3339, raw); err != nil {
+					t.Errorf("RedirectDueDate is not RFC3339: %q: %v", raw, err)
+				}
+				if want := tt.req.RedirectDueDate.UTC().Format(time.RFC3339); raw != want {
+					t.Errorf("RedirectDueDate: got %q, want %q", raw, want)
+				}
+			} else if _, ok := capturedMap["RedirectDueDate"]; ok {
+				t.Errorf("RedirectDueDate must be omitted for renewal Init, got %v", capturedMap["RedirectDueDate"])
+			}
 			dataObj, ok := capturedMap["DATA"].(map[string]any)
 			if !ok {
 				t.Fatalf("DATA missing or not an object")
@@ -1600,6 +1705,11 @@ func TestProviderInitContract(t *testing.T) {
 			} else {
 				if reqBody.Recurrent != nil {
 					t.Errorf("Recurrent should be omitted, got %v", *reqBody.Recurrent)
+				}
+			}
+			if !tt.req.RedirectDueDate.IsZero() {
+				if want := tt.req.RedirectDueDate.UTC().Format(time.RFC3339); reqBody.RedirectDueDate != want {
+					t.Errorf("spec.Init.RedirectDueDate: got %v, want %q", reqBody.RedirectDueDate, want)
 				}
 			}
 
