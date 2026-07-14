@@ -1549,10 +1549,10 @@ func (r *OperationCategoryRepository) CreateDefaultCategories(ctx context.Contex
 		operationType string
 		name          string
 	}{
-		{code: string(domain.OperationCategoryCodeRent), operationType: string(domain.OperationTypeIncome), name: string(domain.OperationCategoryCodeRent)},
-		{code: string(domain.OperationCategoryCodeUtilities), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeUtilities)},
-		{code: string(domain.OperationCategoryCodeRepair), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeRepair)},
-		{code: string(domain.OperationCategoryCodeTax), operationType: string(domain.OperationTypeExpense), name: string(domain.OperationCategoryCodeTax)},
+		{code: string(domain.OperationCategoryCodeRent), operationType: string(domain.OperationTypeIncome), name: "Аренда"},
+		{code: string(domain.OperationCategoryCodeUtilities), operationType: string(domain.OperationTypeExpense), name: "Коммунальные услуги"},
+		{code: string(domain.OperationCategoryCodeRepair), operationType: string(domain.OperationTypeExpense), name: "Ремонт"},
+		{code: string(domain.OperationCategoryCodeTax), operationType: string(domain.OperationTypeExpense), name: "Налог"},
 	}
 	for _, cat := range defaults {
 		err := r.q().CreateOperationCategoryIgnoreConflict(ctx, postgres.CreateOperationCategoryIgnoreConflictParams{
