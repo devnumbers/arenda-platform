@@ -5,12 +5,12 @@ import "time"
 // GenerateDates returns the planned operation dates for a recurring rent
 // schedule. The first date is always the lease start date. Subsequent dates
 // fall on paymentDay of each month or year (depending on periodicity), clamped
-// to the last day of the month when necessary. Generation stops at 12 months
+// to the last day of the month when necessary. Generation stops at 100 years
 // from now or at endDate, whichever comes first.
 func GenerateDates(start time.Time, paymentDay int, endDate *time.Time, now time.Time, periodicity RecurringOperationPeriodicity) []time.Time {
 	var dates []time.Time
 
-	windowEnd := date(now).AddDate(0, 12, 0)
+	windowEnd := date(now).AddDate(100, 0, 0)
 	current := date(start)
 	first := true
 
@@ -35,7 +35,9 @@ func GenerateDates(start time.Time, paymentDay int, endDate *time.Time, now time
 		dates = append(dates, current)
 
 		// Guard against an unbounded loop if the schedule is misconfigured.
-		if len(dates) > 36 {
+		// 100 years of monthly payments is ~1201 dates; the extra headroom
+		// covers leases with a start date far in the past.
+		if len(dates) > 2500 {
 			break
 		}
 	}

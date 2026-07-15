@@ -106,7 +106,7 @@ func NewRecurringOperationService(
 }
 
 // CreateRecurringOperation creates a user-managed recurring operation for the
-// given owner and property and generates the initial 12-month operation horizon.
+// given owner and property and generates the initial 100-year operation horizon.
 func (s *RecurringOperationService) CreateRecurringOperation(
 	ctx context.Context,
 	ownerID uuid.UUID,
@@ -985,7 +985,7 @@ func (s *RecurringOperationService) CreateReminder(
 		return nil, fmt.Errorf("commit tx: %w", err)
 	}
 
-	reminders, err := s.reminders.ListByRecurringOperation(ctx, ownerID, recurringOperationID, notificationsapp.ListFilter{Limit: 1000})
+	reminders, err := s.reminders.ListByRecurringOperation(ctx, ownerID, recurringOperationID, notificationsapp.ListFilter{Limit: 3000})
 	if err != nil {
 		return nil, fmt.Errorf("list reminders: %w", err)
 	}

@@ -72,7 +72,7 @@ func (l *PropertyBillingLifecycle) Suspend(ctx context.Context, propertyID uuid.
 }
 
 // Resume activates all recurring operations for the property and generates
-// missing operation instances from asOf up to 12 months ahead (or end_date),
+// missing operation instances from asOf up to 100 years ahead (or end_date),
 // skipping dates that already have operations.
 func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.UUID, ownerID uuid.UUID, asOf time.Time) error {
 	recs, err := l.recurringOps.ListByProperty(ctx, ownerID, propertyID)
