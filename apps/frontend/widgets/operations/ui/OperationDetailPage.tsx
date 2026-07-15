@@ -5,7 +5,7 @@ import { useState, type ComponentType, type JSX } from 'react';
 import { Modal } from '@heroui/react';
 import type { components } from '@/shared/api/generated';
 import { ROUTES } from '@/shared/config/routes';
-import { BadgeDanger, BadgeGood, BadgeInfo } from '@/shared/assets/icons';
+import { ArchiveBold, BadgeDanger, BadgeGood, BadgeInfo } from '@/shared/assets/icons';
 import { Button } from '@/shared/ui/button';
 import { PageHeader } from '@/shared/ui/page-header';
 import {
@@ -139,10 +139,17 @@ function OperationDetailCard({
     <section className={styles.card}>
       <div className={styles.cardHeader}>
         <h2 className={styles.name}>{operation.name}</h2>
-        <span className={`${styles.status} ${statusClass}`}>
-          {StatusIcon && <StatusIcon aria-hidden="true" />}
-          {getOperationStatusLabel(operation.status)}
-        </span>
+        {isArchived ? (
+          <span className={`${styles.status} ${styles.statusArchived}`}>
+            <ArchiveBold aria-hidden="true" />
+            В архиве
+          </span>
+        ) : (
+          <span className={`${styles.status} ${statusClass}`}>
+            {StatusIcon && <StatusIcon aria-hidden="true" />}
+            {getOperationStatusLabel(operation.status)}
+          </span>
+        )}
       </div>
 
       <div className={styles.amountRow}>
@@ -151,12 +158,6 @@ function OperationDetailCard({
           {formatMoneyKopecks(operation.amount_kopecks, { round: true })}
         </span>
       </div>
-
-      {isArchived && (
-        <p className={styles.banner}>
-          Объект в архиве, операция только для просмотра.
-        </p>
-      )}
 
       <dl className={styles.details}>
         <div className={styles.detailRow}>

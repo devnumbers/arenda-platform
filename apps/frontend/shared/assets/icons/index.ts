@@ -48,3 +48,4 @@ export { default as StatusDoor } from './status-door.svg';
 export { default as BadgeDanger } from './badge-danger.svg';
 export { default as BadgeGood } from './badge-good.svg';
 export { default as BadgeInfo } from './badge-info.svg';
+export { default as ArchiveBold } from './archive-bold.svg';
