@@ -1080,7 +1080,7 @@ func (s *RecurringOperationService) buildOperations(
 			RecurringOperationID: rec.ID,
 			Type:                 rec.Type,
 			CategoryID:           rec.CategoryID,
-			Status:               domain.OperationStatusPending,
+			Status:               operationStatusForDate(rec.Type, d, now),
 			Name:                 rec.Name,
 			AmountKopecks:        rec.AmountKopecks,
 			OperationDate:        d,

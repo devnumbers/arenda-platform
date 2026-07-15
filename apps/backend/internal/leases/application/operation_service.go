@@ -156,7 +156,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		LeaseID:            leaseID,
 		Type:               opType,
 		CategoryID:         categoryID,
-		Status:             domain.OperationStatusPending,
+		Status:             operationStatusForDate(opType, cmd.OperationDate, now),
 		Name:               name,
 		AmountKopecks:      cmd.AmountKopecks,
 		OperationDate:      cmd.OperationDate,
@@ -698,6 +698,19 @@ func (s *OperationService) validateAmountAndDate(amount int64, operationDate tim
 		return fmt.Errorf("%w: operation_date is required", ErrInvalidInput)
 	}
 	return nil
+}
+
+// operationStatusForDate returns the initial status for a newly created operation:
+// past-dated operations are immediately completed (paid for expense, received
+// for income), operations dated today or later start as pending.
+func operationStatusForDate(opType domain.OperationType, operationDate, today time.Time) domain.OperationStatus {
+	if timeutil.Date(operationDate).Before(timeutil.Date(today)) {
+		if opType == domain.OperationTypeExpense {
+			return domain.OperationStatusPaid
+		}
+		return domain.OperationStatusReceived
+	}
+	return domain.OperationStatusPending
 }
 
 func validateReminderOffsetDays(v *int) error {
