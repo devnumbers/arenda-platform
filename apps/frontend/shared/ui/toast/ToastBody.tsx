@@ -4,6 +4,8 @@ import type {JSX, ReactNode} from 'react';
 import {Spinner} from '@heroui/react';
 import {BadgeDanger, BadgeGood, BadgeInfo, BadgeWarning} from '@/shared/assets/icons';
 import type {NotificationAction} from '@/shared/lib/notifications/types';
+import {Button} from '@/shared/ui/button';
+import {LinkButton} from '@/shared/ui/link-button';
 import styles from './ToastProvider.module.css';
 
 export type ToastVariant =
@@ -19,6 +21,7 @@ export type ToastBodyProps = {
     title: ReactNode;
     description?: ReactNode;
     action?: NotificationAction;
+    closeToast?: () => void;
 };
 
 function VariantIcon({
@@ -44,26 +47,38 @@ function VariantIcon({
 
 function ToastAction({
                          action,
+                         closeToast,
                      }: {
     action: NotificationAction;
+    closeToast?: () => void;
 }): JSX.Element | null {
     if (action.onPress) {
         return (
-            <button
-                type="button"
-                className={styles.actionButton}
-                onClick={action.onPress}
+            <Button
+                variant="clear"
+                size="small"
+                className={styles.action}
+                onClick={() => {
+                    action.onPress?.();
+                    closeToast?.();
+                }}
             >
                 {action.label}
-            </button>
+            </Button>
         );
     }
 
     if (action.href) {
         return (
-            <a className={styles.actionButton} href={action.href}>
+            <LinkButton
+                href={action.href}
+                variant='primary'
+                size="small"
+                className={styles.action}
+                onClick={() => closeToast?.()}
+            >
                 {action.label}
-            </a>
+            </LinkButton>
         );
     }
 
@@ -75,6 +90,7 @@ export function ToastBody({
                               title,
                               description,
                               action,
+                              closeToast,
                           }: ToastBodyProps): JSX.Element {
     return (
         <div className={styles.body} data-variant={variant}>
@@ -87,7 +103,7 @@ export function ToastBody({
                 {!!title && <div className={styles.title}>{title}</div>}
                 {!!description && <div className={styles.description}>{description}</div>}
             </div>
-            {action && <ToastAction action={action}/>}
+            {action && <ToastAction action={action} closeToast={closeToast}/>}
         </div>
     );
 }

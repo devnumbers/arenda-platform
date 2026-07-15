@@ -1,4 +1,5 @@
 import { ApiError } from '@/shared/api/errors';
+import { ROUTES } from '@/shared/config/routes';
 import { notify } from './base';
 import type {
   ErrorScenarioFn,
@@ -75,7 +76,10 @@ const property = {
   returnedFromArchive: ((options?) =>
     notify.success('Объект возвращён из архива', options)) satisfies ScenarioFn,
   movedToArchive: ((options?) =>
-    notify.success('Объект переведён в архив', options)) satisfies ScenarioFn,
+    notify.success('Объект переведён в архив', {
+      action: {label: 'В архив', href: ROUTES.propertyArchive},
+      ...options,
+    })) satisfies ScenarioFn,
   updated: ((options?) =>
     notify.success('Объект обновлён', options)) satisfies ScenarioFn,
   saveError: ((options?) =>

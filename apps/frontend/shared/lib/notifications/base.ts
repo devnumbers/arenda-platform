@@ -13,10 +13,10 @@ import type {
 } from './types';
 
 const DEFAULT_DURATIONS = {
-  success: 3000,
-  error: 3000,
-  info: 3000,
-  warning: 3000,
+  success: 4000,
+  error: 4000,
+  info: 4000,
+  warning: 4000,
 } as const;
 
 function normalizeError(error: unknown): string {
@@ -56,9 +56,16 @@ function error(
       ? titleOrError
       : normalizeError(titleOrError);
   return String(
-    toast.error(createElement(ToastBody, toastContent('error', title, options)), {
-      autoClose: options?.duration ?? DEFAULT_DURATIONS.error,
-    }),
+    toast.error(
+      ({ closeToast }) =>
+        createElement(ToastBody, {
+          ...toastContent('error', title, options),
+          closeToast,
+        }),
+      {
+        autoClose: options?.duration ?? DEFAULT_DURATIONS.error,
+      },
+    ),
   );
 }
 
@@ -86,7 +93,11 @@ export const notify: NotifyBase = {
   success: (title, options): NotificationKey =>
     String(
       toast.success(
-        createElement(ToastBody, toastContent('success', title, options)),
+        ({ closeToast }) =>
+          createElement(ToastBody, {
+            ...toastContent('success', title, options),
+            closeToast,
+          }),
         { autoClose: options?.duration ?? DEFAULT_DURATIONS.success },
       ),
     ),
@@ -95,15 +106,24 @@ export const notify: NotifyBase = {
 
   info: (title, options): NotificationKey =>
     String(
-      toast.info(createElement(ToastBody, toastContent('info', title, options)), {
-        autoClose: options?.duration ?? DEFAULT_DURATIONS.info,
-      }),
+      toast.info(
+        ({ closeToast }) =>
+          createElement(ToastBody, {
+            ...toastContent('info', title, options),
+            closeToast,
+          }),
+        { autoClose: options?.duration ?? DEFAULT_DURATIONS.info },
+      ),
     ),
 
   warning: (title, options): NotificationKey =>
     String(
       toast.warning(
-        createElement(ToastBody, toastContent('warning', title, options)),
+        ({ closeToast }) =>
+          createElement(ToastBody, {
+            ...toastContent('warning', title, options),
+            closeToast,
+          }),
         { autoClose: options?.duration ?? DEFAULT_DURATIONS.warning },
       ),
     ),
@@ -113,7 +133,11 @@ export const notify: NotifyBase = {
   loading: (title, options): NotificationKey =>
     String(
       toast.loading(
-        createElement(ToastBody, toastContent('loading', title, options)),
+        ({ closeToast }) =>
+          createElement(ToastBody, {
+            ...toastContent('loading', title, options),
+            closeToast,
+          }),
         {
           autoClose: false,
           closeButton: CloseToastButton,
@@ -141,33 +165,37 @@ export const notify: NotifyBase = {
       promise,
       {
         pending: {
-          render: createElement(ToastBody, {
-            variant: 'loading',
-            title: options.loading,
-          }),
+          render: ({ closeToast }) =>
+            createElement(ToastBody, {
+              variant: 'loading',
+              title: options.loading,
+              closeToast,
+            }),
           closeButton: CloseToastButton,
           draggable: true,
         },
         success: {
-          render: ({ data }) =>
+          render: ({ data, closeToast }) =>
             createElement(ToastBody, {
               variant: 'success',
               title:
                 typeof options.success === 'function'
                   ? options.success(data)
                   : options.success,
+              closeToast,
             }),
           autoClose: DEFAULT_DURATIONS.success,
           closeButton: CloseToastButton,
         },
         error: {
-          render: ({ data }) =>
+          render: ({ data, closeToast }) =>
             createElement(ToastBody, {
               variant: 'error',
               title:
                 typeof options.error === 'function'
                   ? options.error(data)
                   : options.error,
+              closeToast,
             }),
           autoClose: DEFAULT_DURATIONS.error,
           closeButton: CloseToastButton,
