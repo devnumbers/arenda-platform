@@ -156,6 +156,10 @@
   line-height: var(--line-height-text-l);
 }
 
+.btn{
+  width: 100%;
+}
+
 @media (max-width: 520px) {
   .cardHeader {
     flex-direction: column;
