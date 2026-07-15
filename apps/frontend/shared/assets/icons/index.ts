@@ -10,6 +10,7 @@ export { default as Support } from './support.svg';
 export { default as Objects } from './objects.svg';
 export { default as Arendators } from './arendators.svg';
 export { default as Arendator } from './arendator.svg';
+export { default as ArendatorAdd } from './arendator-add.svg';
 export { default as Home } from './home.svg';
 export { default as BoldKey } from './bold-key.svg';
 export { default as BoldUsers } from './bold-users.svg';
