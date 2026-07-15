@@ -2,11 +2,12 @@
 
 import type { JSX, ComponentType } from 'react';
 import {
-  StatusGood,
-  StatusWarning,
-  StatusDanger,
-  StatusInfo,
+  ArchiveBold,
+  BadgeDanger,
+  BadgeGood,
+  BadgeInfo,
   StatusDoor,
+  StatusWarning,
 } from '@/shared/assets/icons';
 import type { PropertyPageStatus } from '../lib/get-property-page-status';
 import styles from './PropertyDetailStatusBadge.module.css';
@@ -15,24 +16,28 @@ const config: Record<
   PropertyPageStatus,
   {
     label: string;
-    color: string;
+    className: string;
     icon: ComponentType<{ className?: string }>;
   }
 > = {
-  rented: { label: 'Арендована', color: '#34C771', icon: StatusGood },
+  rented: { label: 'Арендована', className: styles.rented, icon: BadgeGood },
   requires_action: {
     label: 'Требует действия',
-    color: '#FF4646',
-    icon: StatusDanger,
+    className: styles.requiresAction,
+    icon: BadgeDanger,
   },
   awaiting_start: {
     label: 'Аренда скоро начнётся',
-    color: '#2B7FFF',
-    icon: StatusInfo,
+    className: styles.awaitingStart,
+    icon: BadgeInfo,
   },
-  free: { label: 'Не арендована', color: '#A1A3A6', icon: StatusDoor },
-  maintenance: { label: 'На ремонте', color: '#EBB800', icon: StatusWarning },
-  archived: { label: 'В архиве', color: '#A1A3A6', icon: StatusDoor },
+  free: { label: 'Не арендована', className: styles.free, icon: StatusDoor },
+  maintenance: {
+    label: 'На ремонте',
+    className: styles.maintenance,
+    icon: StatusWarning,
+  },
+  archived: { label: 'В архиве', className: styles.archived, icon: ArchiveBold },
 };
 
 export function PropertyDetailStatusBadge({
@@ -45,7 +50,7 @@ export function PropertyDetailStatusBadge({
   const item = config[status];
   const Icon = item.icon;
   return (
-    <span className={styles.badge} style={{ color: item.color }}>
+    <span className={`${styles.badge} ${item.className}`}>
       <Icon className={styles.icon} aria-hidden="true" />
       {text ?? item.label}
     </span>

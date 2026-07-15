@@ -1,13 +1,45 @@
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px 6px 8px;
-  border-radius: 100px;
-  background: #ffffff;
-  font-size: 14px;
+  gap: 4px;
+  height: 26px;
+  width: fit-content;
+  padding: 0 12px 0 6px;
+  border-radius: 8px;
+  font-size: var(--font-size-text-s);
   font-weight: 500;
-  line-height: 18px;
+  line-height: var(--line-height-text-s);
+  white-space: nowrap;
+}
+
+.rented {
+  background: #dff9e9;
+  color: var(--color-success);
+}
+
+.requiresAction {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.awaitingStart {
+  background: #d9ebff;
+  color: #2b7fff;
+}
+
+.free {
+  background: #f1f3f6;
+  color: #a1a3a6;
+}
+
+.maintenance {
+  background: #fffdc1;
+  color: var(--color-warning);
+}
+
+.archived {
+  background: #1e1e1e;
+  color: var(--color-white);
 }
 
 .icon {
