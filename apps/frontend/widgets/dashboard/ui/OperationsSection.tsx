@@ -1,37 +1,21 @@
 'use client';
 
-import {type JSX, useMemo} from 'react';
+import {type JSX} from 'react';
 import {Card} from '@heroui/react/card';
 import {Skeleton} from '@heroui/react/skeleton';
-import {Clock} from '@/shared/assets/icons';
 import {type OperationsFilters, useOperations} from '@/features/operations/api/hooks';
-import {formatDateForApi} from '@/entities/operation/lib/dates';
-import {ROUTES} from '@/shared/config/routes';
-import {EmptyState} from '@/shared/ui/empty-state';
 import {SectionHeader} from './SectionHeader';
 import {OperationListItem} from '@/widgets/operations/ui/OperationListItem';
 import {FinanceErrorState} from '@/widgets/finance/ui/FinanceErrorState';
-import {useSubscription} from '@/features/subscription/api/hooks';
-import {isSubscriptionReadonly} from '@/features/subscription/lib/is-subscription-readonly';
-import styles from './UpcomingOperationsSection.module.css';
+import styles from './OperationsSection.module.css';
 
-export function UpcomingOperationsSection(): JSX.Element {
-    const filters: OperationsFilters = useMemo(
-        () => {
-            const today = new Date();
-            const until = new Date(today);
-            until.setDate(today.getDate() + 30);
+export type OperationsSectionProps = {
+    readonly title: string;
+    readonly href: string;
+    readonly filters: OperationsFilters;
+};
 
-            return {
-                status: ['pending'],
-                from: formatDateForApi(today),
-                to: formatDateForApi(until),
-                limit: 5,
-            };
-        },
-        [],
-    );
-
+export function OperationsSection({title, href, filters}: OperationsSectionProps): JSX.Element | null {
     const {
         data,
         isLoading,
@@ -39,16 +23,6 @@ export function UpcomingOperationsSection(): JSX.Element {
         isError,
         refetch,
     } = useOperations(filters);
-
-    const operations = useMemo(() => {
-        const items = data?.items ?? [];
-        return [...items].sort(
-            (a, b) => new Date(a.operation_date).getTime() - new Date(b.operation_date).getTime(),
-        );
-    }, [data]);
-
-    const {data: subscription, isPending: isSubscriptionPending} = useSubscription();
-    const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
     if (isLoading) {
         return (
@@ -66,30 +40,21 @@ export function UpcomingOperationsSection(): JSX.Element {
     if (isError) {
         return (
             <section className={styles.section}>
-                <SectionHeader title="Ближайшие операции" href={ROUTES.finance}/>
+                <SectionHeader title={title} href={href}/>
                 <FinanceErrorState onRetry={refetch} isLoading={isFetching}/>
             </section>
         );
     }
 
+    const operations = data?.items ?? [];
+
     if (operations.length === 0) {
-        return (
-            <section className={styles.section}>
-                <SectionHeader title="Ближайшие операции" href={ROUTES.finance}/>
-                <EmptyState
-                    icon={<Clock/>}
-                    title="Нет запланированных операций"
-                    subtitle="Добавьте операцию, чтобы видеть её здесь"
-                    actionHref={readonly ? undefined : ROUTES.financeCreateOperation}
-                    actionText={readonly ? undefined : 'Добавить операцию'}
-                />
-            </section>
-        );
+        return null;
     }
 
     return (
         <section className={styles.section}>
-            <SectionHeader title="Ближайшие операции" href={ROUTES.finance}/>
+            <SectionHeader title={title} href={href}/>
             <Card className={styles.card}>
                 <ul className={styles.list}>
                     {operations.map((operation) => (

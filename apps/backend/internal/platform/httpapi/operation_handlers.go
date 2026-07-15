@@ -251,6 +251,9 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 	if params.LeaseId != nil {
 		filter.LeaseID = *params.LeaseId
 	}
+	if params.ExcludeArchivedProperties != nil {
+		filter.ExcludeArchivedProperties = *params.ExcludeArchivedProperties
+	}
 
 	ops, err := h.svc.ListOperations(r.Context(), ownerID, filter)
 	if err != nil {

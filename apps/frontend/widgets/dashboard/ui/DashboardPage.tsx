@@ -30,6 +30,7 @@ export function DashboardPage(): JSX.Element {
             from: formatDateForApi(new Date()),
             sort: 'operation_date_asc',
             limit: 3,
+            exclude_archived_properties: true,
         }),
         [],
     );
@@ -39,6 +40,7 @@ export function DashboardPage(): JSX.Element {
             status: ['overdue'],
             sort: 'operation_date_asc',
             limit: 3,
+            exclude_archived_properties: true,
         }),
         [],
     );

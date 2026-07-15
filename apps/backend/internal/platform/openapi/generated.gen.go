@@ -1556,17 +1556,18 @@ type ListOperationCategoriesParams struct {
 
 // ListOperationsParams defines parameters for ListOperations.
 type ListOperationsParams struct {
-	Type                 *[]OperationType      `form:"type,omitempty" json:"type,omitempty"`
-	Status               *[]OperationStatus    `form:"status,omitempty" json:"status,omitempty"`
-	CategoryId           *[]openapi_types.UUID `form:"category_id,omitempty" json:"category_id,omitempty"`
-	PropertyId           *openapi_types.UUID   `form:"property_id,omitempty" json:"property_id,omitempty"`
-	From                 *openapi_types.Date   `form:"from,omitempty" json:"from,omitempty"`
-	To                   *openapi_types.Date   `form:"to,omitempty" json:"to,omitempty"`
-	RecurringOperationId *openapi_types.UUID   `form:"recurring_operation_id,omitempty" json:"recurring_operation_id,omitempty"`
-	LeaseId              *openapi_types.UUID   `form:"lease_id,omitempty" json:"lease_id,omitempty"`
-	Sort                 *OperationListSort    `form:"sort,omitempty" json:"sort,omitempty"`
-	Limit                *int                  `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset               *int                  `form:"offset,omitempty" json:"offset,omitempty"`
+	Type                      *[]OperationType      `form:"type,omitempty" json:"type,omitempty"`
+	Status                    *[]OperationStatus    `form:"status,omitempty" json:"status,omitempty"`
+	CategoryId                *[]openapi_types.UUID `form:"category_id,omitempty" json:"category_id,omitempty"`
+	PropertyId                *openapi_types.UUID   `form:"property_id,omitempty" json:"property_id,omitempty"`
+	From                      *openapi_types.Date   `form:"from,omitempty" json:"from,omitempty"`
+	To                        *openapi_types.Date   `form:"to,omitempty" json:"to,omitempty"`
+	RecurringOperationId      *openapi_types.UUID   `form:"recurring_operation_id,omitempty" json:"recurring_operation_id,omitempty"`
+	LeaseId                   *openapi_types.UUID   `form:"lease_id,omitempty" json:"lease_id,omitempty"`
+	ExcludeArchivedProperties *bool                 `form:"exclude_archived_properties,omitempty" json:"exclude_archived_properties,omitempty"`
+	Sort                      *OperationListSort    `form:"sort,omitempty" json:"sort,omitempty"`
+	Limit                     *int                  `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset                    *int                  `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
 // CompleteOperationJSONBody defines parameters for CompleteOperation.
@@ -3668,6 +3669,19 @@ func (siw *ServerInterfaceWrapper) ListOperations(w http.ResponseWriter, r *http
 		return
 	}
 
+	// ------------- Optional query parameter "exclude_archived_properties" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "exclude_archived_properties", r.URL.Query(), &params.ExcludeArchivedProperties, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "exclude_archived_properties"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "exclude_archived_properties", Err: err})
+		}
+		return
+	}
+
 	// ------------- Optional query parameter "sort" -------------
 
 	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
@@ -5558,28 +5572,29 @@ var swaggerSpec = []string{
 	"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",
-	"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",
+	"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",
+	"MFxRLs7/Pvv7zHv6+PT/AQAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

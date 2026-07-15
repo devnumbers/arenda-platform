@@ -241,7 +241,7 @@ GROUP BY op.lease_id;
 
 -- name: ListOperationsByOwner :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
-WHERE owner_id = $1
+WHERE operations.owner_id = $1
   AND deleted_at IS NULL
   AND (COALESCE(sqlc.arg('types')::text[], '{}') = '{}'::text[] OR type = ANY(COALESCE(sqlc.arg('types')::text[], '{}')))
   AND (COALESCE(sqlc.arg('statuses')::text[], '{}') = '{}'::text[] OR status = ANY(COALESCE(sqlc.arg('statuses')::text[], '{}')))
@@ -251,12 +251,13 @@ WHERE owner_id = $1
   AND (sqlc.arg('to_date')::date IS NULL OR operation_date <= sqlc.arg('to_date')::date)
   AND (sqlc.arg('recurring_operation_id')::uuid IS NULL OR recurring_operation_id = sqlc.arg('recurring_operation_id')::uuid)
   AND (sqlc.arg('lease_id')::uuid IS NULL OR lease_id = sqlc.arg('lease_id')::uuid)
+  AND (sqlc.arg('exclude_archived_properties')::bool = false OR NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = operations.property_id AND p.status = 'archived'))
 ORDER BY operation_date DESC, id DESC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
 -- name: ListOperationsByOwnerAsc :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
-WHERE owner_id = $1
+WHERE operations.owner_id = $1
   AND deleted_at IS NULL
   AND (COALESCE(sqlc.arg('types')::text[], '{}') = '{}'::text[] OR type = ANY(COALESCE(sqlc.arg('types')::text[], '{}')))
   AND (COALESCE(sqlc.arg('statuses')::text[], '{}') = '{}'::text[] OR status = ANY(COALESCE(sqlc.arg('statuses')::text[], '{}')))
@@ -266,6 +267,7 @@ WHERE owner_id = $1
   AND (sqlc.arg('to_date')::date IS NULL OR operation_date <= sqlc.arg('to_date')::date)
   AND (sqlc.arg('recurring_operation_id')::uuid IS NULL OR recurring_operation_id = sqlc.arg('recurring_operation_id')::uuid)
   AND (sqlc.arg('lease_id')::uuid IS NULL OR lease_id = sqlc.arg('lease_id')::uuid)
+  AND (sqlc.arg('exclude_archived_properties')::bool = false OR NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = operations.property_id AND p.status = 'archived'))
 ORDER BY operation_date ASC, id ASC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 

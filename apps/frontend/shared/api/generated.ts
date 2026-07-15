@@ -2418,6 +2418,7 @@ export interface operations {
                 to?: string;
                 recurring_operation_id?: string;
                 lease_id?: string;
+                exclude_archived_properties?: boolean;
                 sort?: components["schemas"]["OperationListSort"];
                 limit?: number;
                 offset?: number;
