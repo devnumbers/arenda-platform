@@ -1,6 +1,6 @@
 'use client';
 
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { Skeleton } from '@heroui/react/skeleton';
 import { Button } from '@/shared/ui/button';
 import { useOperationsByProperty } from '@/features/operations/api/hooks';
@@ -14,6 +14,7 @@ export type PropertyOperationsSectionProps = {
   readonly title: string;
   readonly emptyText: string;
   readonly filters: Omit<OperationsFilters, 'property_id'>;
+  readonly badge?: ReactNode;
 };
 
 export function PropertyOperationsSection({
@@ -21,6 +22,7 @@ export function PropertyOperationsSection({
   title,
   emptyText,
   filters,
+  badge,
 }: PropertyOperationsSectionProps): JSX.Element {
   const operationsQuery = useOperationsByProperty(propertyId, filters);
 
@@ -28,6 +30,7 @@ export function PropertyOperationsSection({
 
   return (
     <PropertyDetailSection>
+      {badge}
       <div className={styles.header}>
         <h2 className={styles.title}>{title}</h2>
       </div>

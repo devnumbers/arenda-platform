@@ -27,6 +27,7 @@ import {PropertyStatusSection} from './PropertyStatusSection';
 import {PropertyLeaseCard} from './PropertyLeaseCard';
 import {PropertyTenantCard} from './PropertyTenantCard';
 import {PropertyOperationsSection} from './PropertyOperationsSection';
+import {OverdueOperationsBadge} from './OverdueOperationsBadge';
 import {PropertyOperationsActions} from './PropertyOperationsActions';
 import {PropertyOperationsCard} from './PropertyOperationsCard';
 import {PropertyInfoCard} from './PropertyInfoCard';
@@ -105,6 +106,8 @@ export function PropertyDetailPage(): JSX.Element {
         }),
         [],
     );
+
+    const overdueCount = summaryQuery.data?.overdue_total_count ?? 0;
 
     const handleToggleMaintenance = useCallback(() => {
         if (!property) return;
@@ -257,6 +260,7 @@ export function PropertyDetailPage(): JSX.Element {
                         title="Просроченные операции"
                         emptyText="Просроченных операций нет"
                         filters={overdueFilters}
+                        badge={overdueCount > 0 ? <OverdueOperationsBadge count={overdueCount}/> : undefined}
                     />
 
                     <PropertyOperationsSection
