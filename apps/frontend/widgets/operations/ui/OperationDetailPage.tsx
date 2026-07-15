@@ -139,17 +139,18 @@ function OperationDetailCard({
     <section className={styles.card}>
       <div className={styles.cardHeader}>
         <h2 className={styles.name}>{operation.name}</h2>
-        {isArchived ? (
-          <span className={`${styles.status} ${styles.statusArchived}`}>
-            <ArchiveBold aria-hidden="true" />
-            В архиве
-          </span>
-        ) : (
+        <div className={styles.badgeStack}>
           <span className={`${styles.status} ${statusClass}`}>
             {StatusIcon && <StatusIcon aria-hidden="true" />}
             {getOperationStatusLabel(operation.status)}
           </span>
-        )}
+          {isArchived && (
+            <span className={`${styles.status} ${styles.statusArchived}`}>
+              <ArchiveBold aria-hidden="true" />
+              В архиве
+            </span>
+          )}
+        </div>
       </div>
 
       <div className={styles.amountRow}>
