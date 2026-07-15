@@ -15,10 +15,10 @@ import {useCompleteLease, usePropertyLeases,} from '@/features/leases/api/hooks'
 import {
     type OperationsFilters,
     useOperations,
-    useOperationsByProperty,
     usePropertyOperationsSummary,
 } from '@/features/operations/api/hooks';
 import {useOperationCategories} from '@/features/operation-categories/api';
+import {formatDateForApi} from '@/entities/operation/lib/dates';
 import {ApiError} from '@/shared/api/errors';
 import {findCurrentLease, getPropertyPageStatus,} from '../lib/get-property-page-status';
 import {PropertyDetailHeader} from './PropertyDetailHeader';
@@ -26,8 +26,8 @@ import {PropertyGallery} from './PropertyGallery';
 import {PropertyStatusSection} from './PropertyStatusSection';
 import {PropertyLeaseCard} from './PropertyLeaseCard';
 import {PropertyTenantCard} from './PropertyTenantCard';
-import {PropertyPaymentsCard} from './PropertyPaymentsCard';
-import {PropertyOverdueOperationsCard} from './PropertyOverdueOperationsCard';
+import {PropertyOperationsSection} from './PropertyOperationsSection';
+import {PropertyOperationsActions} from './PropertyOperationsActions';
 import {PropertyOperationsCard} from './PropertyOperationsCard';
 import {PropertyInfoCard} from './PropertyInfoCard';
 import {PropertyActionMenu} from './PropertyActionMenu';
@@ -50,7 +50,6 @@ export function PropertyDetailPage(): JSX.Element {
     const propertyQuery = useProperty(id);
     const leasesQuery = usePropertyLeases(id);
     const summaryQuery = usePropertyOperationsSummary(id);
-    const operationsQuery = useOperationsByProperty(id);
 
     const updateProperty = useUpdateProperty();
     const archiveProperty = useArchiveProperty();
@@ -88,6 +87,24 @@ export function PropertyDetailPage(): JSX.Element {
         enabled: Boolean(currentLease?.id) && Boolean(rentCategoryId),
     });
     const isPayRentLoading = Boolean(currentLease) && payableRentQuery.isFetching;
+
+    const overdueFilters = useMemo<Omit<OperationsFilters, 'property_id'>>(
+        () => ({
+            status: ['overdue'],
+            sort: 'operation_date_asc',
+            limit: 3,
+        }),
+        [],
+    );
+    const upcomingFilters = useMemo<Omit<OperationsFilters, 'property_id'>>(
+        () => ({
+            status: ['pending'],
+            from: formatDateForApi(new Date()),
+            sort: 'operation_date_asc',
+            limit: 3,
+        }),
+        [],
+    );
 
     const handleToggleMaintenance = useCallback(() => {
         if (!property) return;
@@ -178,8 +195,7 @@ export function PropertyDetailPage(): JSX.Element {
     const hasAnyError =
         propertyQuery.isError ||
         leasesQuery.isError ||
-        summaryQuery.isError ||
-        operationsQuery.isError;
+        summaryQuery.isError;
 
     const isLoading = propertyQuery.isPending || leasesQuery.isPending;
 
@@ -206,13 +222,11 @@ export function PropertyDetailPage(): JSX.Element {
                         propertyQuery.refetch();
                         leasesQuery.refetch();
                         summaryQuery.refetch();
-                        operationsQuery.refetch();
                     }}
                     isLoading={
                         propertyQuery.isFetching ||
                         leasesQuery.isFetching ||
-                        summaryQuery.isFetching ||
-                        operationsQuery.isFetching
+                        summaryQuery.isFetching
                     }
                 />
             )}
@@ -238,13 +252,24 @@ export function PropertyDetailPage(): JSX.Element {
 
                     <PropertyTenantCard lease={property.activeLease}/>
 
-                    <PropertyPaymentsCard
-                        property={property}
-                        operations={operationsQuery.data?.items ?? []}
-                        overdueCount={summaryQuery.data?.overdue_total_count ?? 0}
+                    <PropertyOperationsSection
+                        propertyId={id}
+                        title="Просроченные операции"
+                        emptyText="Просроченных операций нет"
+                        filters={overdueFilters}
                     />
 
-                    <PropertyOverdueOperationsCard propertyId={id}/>
+                    <PropertyOperationsSection
+                        propertyId={id}
+                        title="Запланированные операции"
+                        emptyText="Запланированных операций нет"
+                        filters={upcomingFilters}
+                    />
+
+                    <PropertyOperationsActions
+                        propertyId={id}
+                        isArchived={property.status === 'archived'}
+                    />
 
                     <PropertyOperationsCard
                         propertyName={property.name}

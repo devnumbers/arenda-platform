@@ -9,7 +9,6 @@ export { PropertyDetailSection } from './ui/PropertyDetailSection';
 export { PropertyDetailStatusBadge } from './ui/PropertyDetailStatusBadge';
 export { PropertyLeaseCard } from './ui/PropertyLeaseCard';
 export { PropertyTenantCard } from './ui/PropertyTenantCard';
-export { PropertyPaymentsCard } from './ui/PropertyPaymentsCard';
 export { PropertyOperationsCard } from './ui/PropertyOperationsCard';
 export { PropertyInfoCard } from './ui/PropertyInfoCard';
 export { PropertyBlockedModal } from './ui/PropertyBlockedModal';

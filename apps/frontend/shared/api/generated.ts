@@ -1362,6 +1362,8 @@ export interface components {
         PropertyOperationsSummaryResponse: {
             monthly_profit_kopecks: number;
             all_time_profit_kopecks: number;
+            all_time_income_kopecks: number;
+            all_time_expense_kopecks: number;
             overdue_rent_count: number;
             overdue_total_count: number;
             /** Format: date */
