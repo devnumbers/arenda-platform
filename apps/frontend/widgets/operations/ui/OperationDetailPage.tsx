@@ -21,7 +21,7 @@ import {
 } from '@/entities/operation/lib/statuses';
 import { formatOperationDate } from '@/entities/operation/lib/dates';
 import { formatMoneyKopecks } from '@/entities/operation/lib/formatMoney';
-import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
+import { OperationDetailLoading } from './OperationDetailLoading';
 import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
 import { useSubscription } from '@/features/subscription/api/hooks';
@@ -197,7 +197,7 @@ function OperationDetailCard({
 export function OperationDetailPage(): JSX.Element {
   const id = useOperationId();
   const router = useRouter();
-  const { data, isLoading, isError, refetch, isFetching } = useOperation(id ?? '');
+  const { data, isLoading: operationIsPending, isError, refetch, isFetching } = useOperation(id ?? '');
   const { data: subscription, isPending: isSubscriptionPending } = useSubscription();
   const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
@@ -205,7 +205,11 @@ export function OperationDetailPage(): JSX.Element {
   const markIncompleteMutation = useMarkOperationIncomplete();
   const deleteMutation = useDeleteOperation();
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const { data: property } = useProperty(data?.property_id ?? '');
+  const propertyQuery = useProperty(data?.property_id ?? '');
+  const property = propertyQuery.data;
+
+  const isLoading =
+    operationIsPending || (data !== undefined && propertyQuery.isPending) || isSubscriptionPending;
 
   const propertyName = property?.name;
   const isArchived = property?.status === 'archived';
@@ -261,7 +265,7 @@ export function OperationDetailPage(): JSX.Element {
       {!id && (
         <FinanceErrorState onRetry={() => router.push(ROUTES.financeOperations)} isLoading={false} />
       )}
-      {id && isLoading && <FinanceLoading />}
+      {id && isLoading && <OperationDetailLoading />}
       {id && !isLoading && isError && (
         <FinanceErrorState onRetry={refetch} isLoading={isFetching} />
       )}
