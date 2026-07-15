@@ -2,7 +2,7 @@
 
 import {type FormEvent, type JSX, useEffect, useRef, useState,} from 'react';
 import {useRouter} from 'next/navigation';
-import {notify} from '@/shared/lib/toast';
+import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
 import {useProperty, useUpdateProperty} from '@/features/properties/api';
 import {TextField} from '@/shared/ui/text-field';
@@ -108,10 +108,10 @@ export function PropertyEditForm({
                 },
             });
 
-            notify.success('Объект обновлён');
+            notify.scenarios.property.updated();
             router.push(ROUTES.property(propertyId));
         } catch {
-            notify.error('Не удалось сохранить изменения');
+            notify.scenarios.property.saveError();
         }
     };
 

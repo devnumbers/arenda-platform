@@ -11,7 +11,7 @@ import { type OperationType } from '@/entities/operation/model/types';
 import { useCreateOperation } from '@/features/operations/api';
 import { useProperties, useProperty } from '@/features/properties/api';
 import { useCreateRecurringOperation } from '@/features/recurring-operations/api/hooks';
-import { ApiError } from '@/shared/api/errors';
+import { notify } from '@/shared/lib/notifications';
 import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
 import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
 import { useSubscription } from '@/features/subscription/api/hooks';
@@ -48,16 +48,6 @@ export type OperationCreateWizardProps = {
   readonly type: OperationType;
   readonly propertyId?: string;
 };
-
-function formatErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.detail;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'Не удалось создать операцию. Попробуйте ещё раз.';
-}
 
 function validateBasicInfo(data: BasicInfoData): BasicInfoErrors {
   const errors: BasicInfoErrors = {};
@@ -136,7 +126,6 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
   const [basicErrors, setBasicErrors] = useState<BasicInfoErrors>({});
   const [scheduleErrors, setScheduleErrors] = useState<ScheduleErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | undefined>(undefined);
 
   const createOperation = useCreateOperation();
   const createRecurringOperation = useCreateRecurringOperation();
@@ -173,8 +162,6 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
   };
 
   const handleNext = () => {
-    setSubmitError(undefined);
-
     if (step === 'basic') {
       const errors = validateBasicInfo(basicInfo);
       setBasicErrors(errors);
@@ -194,8 +181,6 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
   };
 
   const handleSubmit = async () => {
-    setSubmitError(undefined);
-
     const basicValidation = validateBasicInfo(basicInfo);
     const scheduleValidation = validateSchedule(schedule);
     setBasicErrors(basicValidation);
@@ -258,7 +243,11 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
 
       setStep('success');
     } catch (error: unknown) {
-      setSubmitError(formatErrorMessage(error));
+      if (schedule.frequency === 'once') {
+        notify.scenarios.operations.operationCreateError(error);
+      } else {
+        notify.scenarios.operations.recurringOperationCreateError(error);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -377,7 +366,6 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
       </div>
 
       <div className={styles.footer}>
-        {submitError && <p className={styles.error}>{submitError}</p>}
         <Button
           variant="primary"
           size="large"

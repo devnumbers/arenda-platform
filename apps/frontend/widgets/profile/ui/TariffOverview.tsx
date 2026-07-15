@@ -6,7 +6,7 @@ import clsx from 'clsx';
 import {useQueryClient} from '@tanstack/react-query';
 import {Card} from '@heroui/react/card';
 import {Skeleton} from '@heroui/react/skeleton';
-import {notify} from '@/shared/lib/toast';
+import {notify} from '@/shared/lib/notifications';
 import {Button} from '@/shared/ui/button';
 import {LinkButton} from '@/shared/ui/link-button';
 import {
@@ -23,7 +23,6 @@ import {PAYMENT_PERIOD_LABELS} from '@/entities/billing/model/types';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {formatDate} from '@/shared/lib/format-date';
 import type {Subscription} from '@/entities/billing/model/types';
-import {ApiError} from '@/shared/api/errors';
 import styles from './TariffOverview.module.css';
 
 const STATUS_LABELS: Record<
@@ -92,12 +91,7 @@ export function TariffOverview(): JSX.Element {
     }, [pendingPayment, queryClient]);
 
     const handleCancel = useCallback(() => {
-        void notify.promise(cancel.mutateAsync(undefined), {
-            loading: 'Отменяем подписку...',
-            success: 'Подписка отменена',
-            error: (error) =>
-                (error as ApiError).detail ?? 'Не удалось отменить подписку',
-        });
+        void notify.scenarios.tariff.subscriptionCanceled(cancel.mutateAsync(undefined));
     }, [cancel]);
 
     if (isError) {

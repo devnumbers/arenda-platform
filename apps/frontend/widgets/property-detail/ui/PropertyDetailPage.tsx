@@ -3,7 +3,7 @@
 import {useParams, useRouter} from 'next/navigation';
 import type {JSX} from 'react';
 import {useCallback, useMemo, useState} from 'react';
-import {notify} from '@/shared/lib/toast';
+import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
 import {
     useArchiveProperty,
@@ -39,7 +39,7 @@ import {PropertyDetailError} from './PropertyDetailError';
 import styles from './PropertyDetailPage.module.css';
 
 function showMutationError(error: ApiError): void {
-    notify.error(error);
+    notify.scenarios.property.saveError({description: error.detail});
 }
 
 export function PropertyDetailPage(): JSX.Element {
@@ -99,7 +99,7 @@ export function PropertyDetailPage(): JSX.Element {
             updateProperty.mutate(
                 {id, data: {status: 'maintenance'}},
                 {
-                    onSuccess: () => notify.success('Объект переведён на ремонт'),
+                    onSuccess: () => notify.scenarios.property.movedToMaintenance(),
                     onError: showMutationError,
                 },
             );
@@ -107,7 +107,7 @@ export function PropertyDetailPage(): JSX.Element {
             updateProperty.mutate(
                 {id, data: {status: 'active'}},
                 {
-                    onSuccess: () => notify.success('Объект возвращён в работу'),
+                    onSuccess: () => notify.scenarios.property.returnedToWork(),
                     onError: showMutationError,
                 },
             );
@@ -118,7 +118,7 @@ export function PropertyDetailPage(): JSX.Element {
         if (!property) return;
         if (property.status === 'archived') {
             unarchiveProperty.mutate(id, {
-                onSuccess: () => notify.success('Объект возвращён из архива'),
+                onSuccess: () => notify.scenarios.property.returnedFromArchive(),
                 onError: showMutationError,
             });
         } else {
@@ -127,7 +127,7 @@ export function PropertyDetailPage(): JSX.Element {
                 return;
             }
             archiveProperty.mutate(id, {
-                onSuccess: () => notify.success('Объект переведён в архив'),
+                onSuccess: () => notify.scenarios.property.movedToArchive(),
                 onError: showMutationError,
             });
         }

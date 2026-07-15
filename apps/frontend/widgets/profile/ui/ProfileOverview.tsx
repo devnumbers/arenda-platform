@@ -4,7 +4,7 @@ import type {JSX} from 'react';
 import {useRouter} from 'next/navigation';
 import {Card} from '@heroui/react/card';
 import {Skeleton} from '@heroui/react/skeleton';
-import {notify} from '@/shared/lib/toast';
+import {notify} from '@/shared/lib/notifications';
 import {Button} from '@/shared/ui/button';
 import {Icon} from '@/shared/ui/icon';
 import {StarColored} from '@/shared/assets/icons';
@@ -41,7 +41,7 @@ export function ProfileOverview(): JSX.Element {
                 router.push(ROUTES.login);
             },
             onError: (error) => {
-                notify.error(error);
+                notify.scenarios.profile.logoutError(error);
             },
         });
     };

@@ -17,7 +17,6 @@ export type LeaseDatesStepProps = {
     readonly onEndDateChange: (date: string) => void;
     readonly onSubmit: () => void;
     readonly isLoading: boolean;
-    readonly error?: string;
 };
 
 export function LeaseDatesStep({
@@ -29,7 +28,6 @@ export function LeaseDatesStep({
                                    onEndDateChange,
                                    onSubmit,
                                    isLoading,
-                                   error,
                                }: LeaseDatesStepProps): JSX.Element {
     const handleStartDateChange = (date: string | undefined) => {
         if (!date) return;
@@ -77,7 +75,6 @@ export function LeaseDatesStep({
                 </div>
             </div>
             <div className={styles.submit}>
-                {error && <p className={styles.error}>{error}</p>}
                 <Button
                     type="button"
                     variant="primary"

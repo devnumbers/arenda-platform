@@ -11,7 +11,7 @@ import NextLink from 'next/link';
 import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
-import { notify } from '@/shared/lib/toast';
+import { notify } from '@/shared/lib/notifications';
 import { Button } from '@/shared/ui/button';
 import { PageHeader } from '@/shared/ui/page-header';
 import {
@@ -138,7 +138,7 @@ export function TariffChangeForm(): JSX.Element {
     (tariffName: TariffName) => {
       setSelectedTariff(tariffName);
 
-      const loadingToastId = notify.loading('Меняем тариф...');
+      const loadingToastId = notify.scenarios.tariff.changeLoading();
 
       changeTariff
         .mutateAsync({ tariffName, period })
@@ -152,14 +152,12 @@ export function TariffChangeForm(): JSX.Element {
             return;
           }
 
-          notify.success('Изменение тарифа запланировано');
+          notify.scenarios.tariff.changed();
           void router.push(ROUTES.profileTariffChangeSuccess);
         })
         .catch((error: unknown) => {
           notify.close(loadingToastId);
-          notify.error(
-            (error as ApiError).detail ?? 'Не удалось сменить тариф',
-          );
+          notify.scenarios.tariff.changeError({description: (error as ApiError).detail});
         })
         .finally(() => {
           setSelectedTariff(null);

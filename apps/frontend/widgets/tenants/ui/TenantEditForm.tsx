@@ -1,14 +1,13 @@
 'use client';
 
-import { useCallback, useMemo, useState, type JSX } from 'react';
+import { useCallback, useMemo, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { notify } from '@/shared/lib/toast';
+import { notify } from '@/shared/lib/notifications';
 import {
   useTenantContact,
   useUpdateTenantContact,
 } from '@/features/tenant-contacts/api';
 import { Skeleton } from '@heroui/react/skeleton';
-import { ApiError } from '@/shared/api/errors';
 import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
@@ -84,19 +83,8 @@ function getOptionalFieldChange(
   return normalized;
 }
 
-function mapErrorMessage(error: ApiError): string {
-  if (error.status === 409) {
-    return 'Арендатор с таким телефоном уже существует';
-  }
-  if (error.status === 404) {
-    return 'Арендатор не найден';
-  }
-  return error.detail ?? error.message;
-}
-
 export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
   const router = useRouter();
-  const [submitError, setSubmitError] = useState<string | undefined>(undefined);
 
   const isValidTenantId = useMemo(
     () => UUID_REGEX.test(tenantId),
@@ -112,10 +100,6 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
   } = useTenantContact(isValidTenantId ? tenantId : '');
 
   const updateTenantContact = useUpdateTenantContact();
-
-  const handleChange = useCallback(() => {
-    setSubmitError(undefined);
-  }, []);
 
   const initialData: Partial<TenantContactFormData> | undefined = useMemo(() => {
     if (!tenant) {
@@ -136,8 +120,6 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
       if (!tenant) {
         return;
       }
-
-      setSubmitError(undefined);
 
       const payload: TenantContactUpdateRequest = {};
 
@@ -178,17 +160,10 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
           id: tenantId,
           data: payload,
         });
-        notify.success('Арендатор обновлён');
+        notify.scenarios.tenants.tenantUpdated();
         router.push(ROUTES.tenant(tenantId));
       } catch (error: unknown) {
-        const message =
-          error instanceof ApiError
-            ? mapErrorMessage(error)
-            : error instanceof Error
-              ? error.message
-              : 'Не удалось сохранить изменения. Попробуйте ещё раз.';
-        setSubmitError(message);
-        notify.error(message);
+        notify.scenarios.tenants.tenantUpdateError(error);
       }
     },
     [router, tenant, tenantId, updateTenantContact],
@@ -218,9 +193,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
           initialData={initialData}
           submitLabel="Сохранить изменения"
           isLoading={updateTenantContact.isPending}
-          error={submitError}
           onSubmit={handleSubmit}
-          onChange={handleChange}
           backHref={ROUTES.tenant(tenantId)}
         />
       )}

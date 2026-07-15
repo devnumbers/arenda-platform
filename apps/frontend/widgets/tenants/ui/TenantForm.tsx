@@ -31,7 +31,6 @@ export interface TenantFormProps {
     submitLabel: string;
     isLoading: boolean;
     disabled?: boolean;
-    error?: string;
     onSubmit: (data: TenantContactFormData) => void;
     onChange?: (data: TenantContactFormData) => void;
     onCancel?: () => void;
@@ -47,7 +46,6 @@ export function TenantForm({
                                submitLabel,
                                isLoading,
                                disabled = false,
-                               error,
                                onSubmit,
                                onChange,
                                onCancel,
@@ -198,12 +196,6 @@ export function TenantForm({
                     fullWidth
                 />
             </div>
-
-            {error && (
-                <p className={styles.error} role="alert">
-                    {error}
-                </p>
-            )}
 
             <div className={styles.actions}>
                 <Button

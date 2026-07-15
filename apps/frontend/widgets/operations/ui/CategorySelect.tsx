@@ -12,7 +12,7 @@ import { Icon } from '@/shared/ui/icon';
 import { Select } from '@/shared/ui/select';
 import { Loading } from '@/shared/assets/icons';
 import { ApiError } from '@/shared/api/errors';
-import { notify } from '@/shared/lib/toast';
+import { notify } from '@/shared/lib/notifications';
 import {
     useCreateOperationCategory,
     useOperationCategories,
@@ -92,15 +92,13 @@ export function CategorySelect({
                             cancelCreating();
                             onChange(existing.id);
                             setIsOpen(false);
-                            notify.success(
-                                'Категория уже существует — выбрана существующая',
-                            );
+                            notify.scenarios.operations.categoryAlreadyExists();
                             return;
                         }
                         // Stale cache: revalidate and report the failure.
                         void categoriesQuery.refetch();
                     }
-                    notify.error('Не удалось создать категорию');
+                    notify.scenarios.operations.categoryCreateError();
                 },
             },
         );

@@ -7,7 +7,7 @@ import {propertyKeys, useProperty} from '@/features/properties/api';
 
 import {useCreateLease, usePropertyLeases} from '@/features/leases/api';
 import {isOpenLeaseStatus} from '@/entities/lease/lib/status';
-import {ApiError} from '@/shared/api/errors';
+import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
 import {goBack} from '@/shared/lib/navigation';
 import {Button} from '@/shared/ui/button';
@@ -21,19 +21,6 @@ import styles from './LeaseCreateWizard.module.css';
 
 const UUID_REGEX = /^[0-9a-fA-F-]{36}$/;
 
-function formatErrorMessage(error: unknown): string {
-    if (error instanceof ApiError) {
-        if (error.code === 'ErrOpenLeaseExists') {
-            return 'У этого объекта уже есть активная аренда. Завершите текущую аренду перед созданием новой.';
-        }
-        return error.detail;
-    }
-    if (error instanceof Error) {
-        return error.message;
-    }
-    return 'Не удалось создать аренду. Попробуйте ещё раз.';
-}
-
 export type LeaseCreateWizardProps = {
     readonly propertyId?: string;
 };
@@ -43,7 +30,6 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
     const queryClient = useQueryClient();
     const {draft, setDraft} = useLeaseCreateDraft();
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [submitError, setSubmitError] = useState<string | undefined>(undefined);
     const [createdLeaseId, setCreatedLeaseId] = useState<string | undefined>(undefined);
 
     const propertyQuery = useProperty(propertyId ?? '');
@@ -69,7 +55,6 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
     };
 
     const handleBack = () => {
-        setSubmitError(undefined);
         if (draft.step === 1) {
             goBack(router, ROUTES.properties);
             return;
@@ -78,7 +63,6 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
     };
 
     const handleNext = () => {
-        setSubmitError(undefined);
         setDraft((prev) => ({...prev, step: ((prev.step + 1) as LeaseCreateStep)}));
     };
 
@@ -87,7 +71,6 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
         if (!propertyId) return;
 
         setIsSubmitting(true);
-        setSubmitError(undefined);
 
         try {
             const lease = await createLease.mutateAsync({
@@ -109,7 +92,7 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
             handleNext();
         } catch (error: unknown) {
             console.error('Failed to create lease', error);
-            setSubmitError(formatErrorMessage(error));
+            notify.scenarios.leases.leaseCreateError(error);
         } finally {
             setIsSubmitting(false);
         }
@@ -234,7 +217,6 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
                         onEndDateChange={(endDate) => setDraft((prev) => ({...prev, endDate}))}
                         onSubmit={handleSubmit}
                         isLoading={isSubmitting}
-                        error={submitError}
                     />
                 )}
             </div>

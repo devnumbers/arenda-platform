@@ -2,11 +2,10 @@
 
 import {type ChangeEvent, type FormEvent, type JSX, useEffect, useMemo, useRef, useState,} from 'react';
 import {useRouter} from 'next/navigation';
-import {notify} from '@/shared/lib/toast';
+import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
 import {useLease, useUpdateLease} from '@/features/leases/api/hooks';
 import {useTenantContacts} from '@/features/tenant-contacts/api/hooks';
-import {ApiError} from '@/shared/api/errors';
 import {TextField} from '@/shared/ui/text-field';
 import {Select} from '@/shared/ui/select';
 import {Button} from '@/shared/ui/button';
@@ -42,16 +41,6 @@ type FormErrors = {
     startDate?: string;
     endDate?: string;
 };
-
-function formatErrorMessage(error: unknown): string {
-    if (error instanceof ApiError) {
-        return error.detail;
-    }
-    if (error instanceof Error) {
-        return error.message;
-    }
-    return 'Не удалось сохранить изменения. Попробуйте ещё раз.';
-}
 
 function kopecksToRubles(kopecks: number): string {
     return (kopecks / 100).toFixed(2);
@@ -275,10 +264,10 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
 
         try {
             await updateLease.mutateAsync({id: leaseId, data});
-            notify.success('Аренда обновлена');
+            notify.scenarios.leases.updated();
             router.push(ROUTES.lease(leaseId));
-        } catch {
-            notify.error('Не удалось сохранить изменения');
+        } catch (error: unknown) {
+            notify.scenarios.leases.leaseSaveError(error);
         }
     };
 
@@ -384,12 +373,6 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
                             />
                         </div>
                     </PropertyDetailSection>
-
-                    {updateLease.error && (
-                        <p className={styles.error} role="alert">
-                            {formatErrorMessage(updateLease.error)}
-                        </p>
-                    )}
 
                     <div className={styles.actions}>
                         <Button

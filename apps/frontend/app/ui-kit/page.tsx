@@ -6,7 +6,7 @@ import {Button} from '@/shared/ui/button';
 import {IconButton} from '@/shared/ui/icon-button';
 import {IconLink} from '@/shared/ui/icon-link';
 import {LinkButton} from '@/shared/ui/link-button';
-import {notify} from '@/shared/lib/toast';
+import {notify} from '@/shared/lib/notifications';
 import {TextField} from '@/shared/ui/text-field';
 import {ArrowRight, Home, Loading, Search, Settings, Support,} from '@/shared/assets/icons';
 import styles from './page.module.css';
@@ -186,31 +186,30 @@ export default function UiKitPage(): JSX.Element {
             <section className={styles.section}>
                 <h2 className={styles.sectionTitle}>Toast</h2>
                 <div className={styles.grid}>
-                    <Button onClick={() => notify.success('Успех', {description: 'Данные сохранены'})}>
+                    <Button onClick={() => notify.scenarios.demo.success({description: 'Изменения успешно сохранены'})}>
                         Success
                     </Button>
-                    <Button onClick={() => notify.error('Ошибка', {description: 'Что-то пошло не так'})}>
+                    <Button onClick={() => notify.scenarios.demo.error({description: 'Не удалось сохранить изменения. Попробуйте ещё раз'})}>
                         Error
                     </Button>
-                    <Button onClick={() => notify.info('Инфо', {description: 'Полезная информация'})}>
+                    <Button onClick={() => notify.scenarios.demo.info({description: 'Арендатор внёс оплату за июль'})}>
                         Info
                     </Button>
-                    <Button onClick={() => notify.warning('Внимание', {description: 'Проверьте данные'})}>
+                    <Button onClick={() => notify.scenarios.demo.warning({description: 'Срок действия договора истекает через 7 дней'})}>
                         Warning
                     </Button>
                     <Button
                         onClick={() =>
-                            notify.promise(
-                                new Promise((resolve) => setTimeout(resolve, 2000)),
-                                {
-                                    loading: 'Загрузка...',
-                                    success: 'Готово',
-                                    error: 'Ошибка',
+                            notify.scenarios.paymentMethods.cardAdded({
+                                description: 'Visa •• 4242',
+                                action: {
+                                    label: 'Открыть',
+                                    onPress: () => console.log('action'),
                                 },
-                            )
+                            })
                         }
                     >
-                        Promise
+                        With action
                     </Button>
                 </div>
             </section>

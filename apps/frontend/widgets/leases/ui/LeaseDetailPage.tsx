@@ -2,7 +2,7 @@
 
 import {type JSX, useCallback, useMemo, useState,} from 'react';
 import {useRouter} from 'next/navigation';
-import {notify} from '@/shared/lib/toast';
+import {notify} from '@/shared/lib/notifications';
 import NextLink from 'next/link';
 import {ROUTES} from '@/shared/config/routes';
 import {useCompleteLease, useLease,} from '@/features/leases/api/hooks';
@@ -11,7 +11,6 @@ import {useOperations} from '@/features/operations/api/hooks';
 import {useProperty} from '@/features/properties/api/hooks';
 import {useSubscription} from '@/features/subscription/api/hooks';
 import {isSubscriptionReadonly} from '@/features/subscription/lib/is-subscription-readonly';
-import {ApiError} from '@/shared/api/errors';
 import {Button} from '@/shared/ui/button';
 import {ConfirmModal} from '@/shared/ui/confirm-modal';
 import {PageHeader} from '@/shared/ui/page-header';
@@ -253,12 +252,7 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
     }, [rentCategoryId, categoriesQuery, rentOperationsQuery]);
 
     const confirmComplete = useCallback(() => {
-        void notify.promise(completeLease.mutateAsync(id), {
-            loading: 'Завершаем аренду...',
-            success: 'Аренда завершена',
-            error: (error) =>
-                (error as ApiError).detail ?? 'Не удалось завершить аренду',
-        });
+        void notify.scenarios.leases.completed(completeLease.mutateAsync(id));
     }, [completeLease, id]);
 
     if (!id) {

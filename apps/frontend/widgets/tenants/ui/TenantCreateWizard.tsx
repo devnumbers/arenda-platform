@@ -3,7 +3,7 @@
 import {type JSX, useCallback, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {useCreateTenantContact} from '@/features/tenant-contacts/api';
-import {ApiError} from '@/shared/api/errors';
+import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
 import {goBack} from '@/shared/lib/navigation';
 import {WizardHeader} from '@/shared/ui/wizard-header';
@@ -14,21 +14,10 @@ import {TenantCreateWizardLoading} from './TenantCreateWizardLoading';
 import styles from './TenantCreateWizard.module.css';
 import type {TenantContactFormData} from './TenantForm';
 
-function formatErrorMessage(error: unknown): string {
-    if (error instanceof ApiError) {
-        return error.detail;
-    }
-    if (error instanceof Error) {
-        return error.message;
-    }
-    return 'Не удалось добавить арендатора. Попробуйте ещё раз.';
-}
-
 export function TenantCreateWizard(): JSX.Element {
     const router = useRouter();
     const {draft, isLoaded, setDraft, clearDraft} = useTenantCreateDraft();
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [submitError, setSubmitError] = useState<string | undefined>(undefined);
 
     const createTenantContact = useCreateTenantContact();
 
@@ -56,7 +45,6 @@ export function TenantCreateWizard(): JSX.Element {
         if (data.name.trim() === '') return;
 
         setIsSubmitting(true);
-        setSubmitError(undefined);
 
         try {
             await createTenantContact.mutateAsync({
@@ -71,7 +59,7 @@ export function TenantCreateWizard(): JSX.Element {
             setDraft((prev) => ({...prev, step: 'success'}));
         } catch (error: unknown) {
             console.error('Failed to create tenant contact', error);
-            setSubmitError(formatErrorMessage(error));
+            notify.scenarios.tenants.tenantCreateError(error);
         } finally {
             setIsSubmitting(false);
         }
@@ -129,7 +117,6 @@ export function TenantCreateWizard(): JSX.Element {
                         comment: draft.comment,
                     }}
                     isLoading={isSubmitting}
-                    error={submitError}
                     onSubmit={handleSubmit}
                     onChange={handleChange}
                 />

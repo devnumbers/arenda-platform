@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState, type ChangeEvent, type FormEvent, type JSX } from 'react';
-import { notify } from '@/shared/lib/toast';
+import { notify } from '@/shared/lib/notifications';
 import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
@@ -26,25 +26,18 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
   const [email, setEmail] = useState(me.email ?? '');
   const [isEmailTouched, setIsEmailTouched] = useState(false);
   const [isSubmitAttempted, setIsSubmitAttempted] = useState(false);
-  const [submitError, setSubmitError] = useState<string | undefined>(undefined);
 
   const isEmailValid = email === '' || EMAIL_REGEX.test(email);
 
   const canSubmit = isEmailValid && !updateMe.isPending;
 
-  const duplicateEmailError =
-    submitError === 'duplicate_email'
-      ? 'Этот email уже используется другим пользователем'
-      : undefined;
-
   const emailError = (isSubmitAttempted || isEmailTouched) && !isEmailValid
     ? 'Введите корректный email'
-    : duplicateEmailError;
+    : undefined;
 
   const handleEmailChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setIsEmailTouched(true);
     setEmail(event.currentTarget.value);
-    setSubmitError(undefined);
   }, []);
 
   const handleSubmit = useCallback(
@@ -82,15 +75,10 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
 
       updateMe.mutate(payload, {
         onSuccess: () => {
-          setSubmitError(undefined);
-          notify.success('Данные сохранены');
+          notify.scenarios.profile.personalDataSaved();
         },
         onError: (error) => {
-          if (error.status === 409 && /почта уже используется/i.test(error.detail ?? '')) {
-            setSubmitError('duplicate_email');
-          } else {
-            setSubmitError(error.detail);
-          }
+          notify.scenarios.profile.personalDataSaveError(error);
         },
       });
     },
@@ -130,12 +118,6 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
           fullWidth
         />
       </div>
-
-      {submitError && submitError !== 'duplicate_email' && (
-        <p className={styles.errorMessage} role="alert">
-          {submitError}
-        </p>
-      )}
 
       <div className={styles.actions}>
         <Button

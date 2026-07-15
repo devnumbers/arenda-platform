@@ -10,13 +10,12 @@ import {
 import { useParams, useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import { Modal } from '@heroui/react';
-import { notify } from '@/shared/lib/toast';
+import { notify } from '@/shared/lib/notifications';
 import { PageHeader } from '@/shared/ui/page-header';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import { DatePickerField } from '@/shared/ui/date-picker-field';
 import { ROUTES } from '@/shared/config/routes';
-import { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/generated';
 import { type OperationType } from '@/entities/operation/model/types';
 import {
@@ -136,16 +135,6 @@ function parseAmountToKopecks(amount: string): number | undefined {
     return undefined;
   }
   return Math.round(value * 100);
-}
-
-function formatErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.detail;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'Не удалось сохранить изменения. Попробуйте ещё раз.';
 }
 
 function useRecurringOperationId(): string | undefined {
@@ -333,6 +322,9 @@ function RecurringOperationEditPageContent({
         onSuccess: () => {
           router.push(ROUTES.financeOperations);
         },
+        onError: (error) => {
+          notify.scenarios.operations.recurringOperationSaveError(error);
+        },
       },
     );
   };
@@ -355,12 +347,7 @@ function RecurringOperationEditPageContent({
       propertyId: operation.property_id,
     });
 
-    void notify.promise(promise, {
-      loading: 'Удаляем серию...',
-      success: 'Серия удалена',
-      error: (error) =>
-        (error as ApiError).detail ?? 'Не удалось удалить серию',
-    });
+    void notify.scenarios.operations.recurringOperationDeleted(promise);
 
     promise
       .then(() => {
@@ -442,12 +429,6 @@ function RecurringOperationEditPageContent({
           disabled={readonly}
         />
       </div>
-
-      {updateOperation.error && (
-        <p className={styles.error} role="alert">
-          {formatErrorMessage(updateOperation.error)}
-        </p>
-      )}
 
       <div className={styles.actions}>
         <Button

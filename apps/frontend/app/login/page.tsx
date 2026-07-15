@@ -2,7 +2,7 @@
 
 import {type JSX} from "react";
 import {useRouter} from "next/navigation";
-import {notify} from "@/shared/lib/toast";
+import {notify} from "@/shared/lib/notifications";
 import {type ApiError} from "@/shared/api/errors";
 import {AuthForm} from "@/features/auth/ui/auth-form";
 import {useSendCode, useVerifyCode} from "@/features/auth/api/hooks";
@@ -24,7 +24,7 @@ export default function LoginPage(): JSX.Element {
         if (error.status === 429 && typeof error.retryAfter === 'number') {
             recordSendWithRemainingSeconds(error.retryAfter);
         }
-        notify.error(error);
+        notify.scenarios.auth.loginError({description: error.detail});
     };
 
     const handleSendPhone = (formattedPhone: string) => {
@@ -86,7 +86,7 @@ export default function LoginPage(): JSX.Element {
                     clearDraft();
                 },
                 onError: (error) => {
-                    notify.error(error);
+                    notify.scenarios.auth.loginError({description: error.detail});
                 },
             },
         );
