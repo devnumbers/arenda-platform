@@ -51,8 +51,14 @@ export function useOperationCreateDraft(
 
   useEffect(() => {
     // Load persisted draft after hydration; reading sessionStorage during render would cause an SSR/hydration mismatch.
+    const loaded = loadDraft(defaultDraft);
+    // An explicit propertyId (from the URL) wins over the persisted draft; all
+    // other persisted fields are kept as-is.
+    const next = propertyId
+      ? { ...loaded, basicInfo: { ...loaded.basicInfo, propertyId } }
+      : loaded;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDraft(loadDraft(defaultDraft));
+    setDraft(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

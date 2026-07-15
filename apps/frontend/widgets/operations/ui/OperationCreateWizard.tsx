@@ -6,7 +6,7 @@ import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import { WizardHeader } from '@/shared/ui/wizard-header';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, RETURN_TO_PARAM } from '@/shared/lib/navigation';
 import { type OperationType } from '@/entities/operation/model/types';
 import { useCreateOperation } from '@/features/operations/api';
 import { useProperties, useProperty } from '@/features/properties/api';
@@ -135,6 +135,11 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     isPropertiesLoading ||
     isSubscriptionPending ||
     (Boolean(propertyId) && preselectedPropertyQuery.isPending);
+
+  const currentUrl = type
+    ? `${ROUTES.financeCreateOperation}?type=${type}`
+    : ROUTES.financeCreateOperation;
+  const createPropertyHref = `${ROUTES.propertyNew}?${RETURN_TO_PARAM}=${encodeURIComponent(currentUrl)}`;
 
   const handleTypeChange = (nextType: OperationType) => {
     setDraft((prev) => ({
@@ -346,6 +351,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
             errors={basicErrors}
             readonly={readonly}
             isEmpty={isEmpty}
+            createPropertyHref={createPropertyHref}
           />
         )}
         {step === 'schedule' && (

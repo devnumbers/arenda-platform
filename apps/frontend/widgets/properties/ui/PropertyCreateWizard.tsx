@@ -3,9 +3,13 @@
 import {type JSX, useEffect, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {ROUTES} from '@/shared/config/routes';
-import {goBack} from '@/shared/lib/navigation';
+import {buildReturnUrl, goBack} from '@/shared/lib/navigation';
 import {useCreateProperty} from '@/features/properties/api';
-import {type CreateStep, usePropertyCreateDraft,} from '@/widgets/properties/lib/use-property-create-draft';
+import {
+    clearPropertyCreateDraft,
+    type CreateStep,
+    usePropertyCreateDraft,
+} from '@/widgets/properties/lib/use-property-create-draft';
 import {WizardHeader} from '@/shared/ui/wizard-header';
 import {PropertyAddressStep} from './PropertyAddressStep';
 import {PropertyInfoStep} from './PropertyInfoStep';
@@ -13,7 +17,11 @@ import {PropertySuccessStep} from './PropertySuccessStep';
 import {PropertyTypeStep} from './PropertyTypeStep';
 import styles from './PropertyCreateWizard.module.css';
 
-export function PropertyCreateWizard(): JSX.Element {
+export type PropertyCreateWizardProps = {
+    readonly returnTo?: string;
+};
+
+export function PropertyCreateWizard({returnTo}: PropertyCreateWizardProps): JSX.Element {
     const router = useRouter();
     const {draft, setDraft} = usePropertyCreateDraft();
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,12 +64,18 @@ export function PropertyCreateWizard(): JSX.Element {
 
         setIsSubmitting(true);
         try {
-            await createProperty.mutateAsync({
+            const created = await createProperty.mutateAsync({
                 name: name ?? '',
                 type,
                 address,
                 description,
             });
+
+            if (returnTo) {
+                clearPropertyCreateDraft();
+                router.replace(buildReturnUrl(returnTo, {propertyId: String(created.id)}));
+                return;
+            }
 
             handleNext();
         } catch (error: unknown) {

@@ -3,7 +3,6 @@
 import { type ChangeEvent, type JSX } from 'react';
 import { TextField } from '@/shared/ui/text-field';
 import { LinkButton } from '@/shared/ui/link-button';
-import { ROUTES } from '@/shared/config/routes';
 import { type OperationType } from '@/entities/operation/model/types';
 import { type BasicInfoData, type BasicInfoErrors } from '../model/types';
 import { CategorySelect } from './CategorySelect';
@@ -19,6 +18,7 @@ export type OperationBasicInfoStepProps = {
   readonly errors?: BasicInfoErrors;
   readonly readonly?: boolean;
   readonly isEmpty?: boolean;
+  readonly createPropertyHref: string;
 };
 
 export function OperationBasicInfoStep({
@@ -29,6 +29,7 @@ export function OperationBasicInfoStep({
   errors,
   readonly,
   isEmpty,
+  createPropertyHref,
 }: OperationBasicInfoStepProps): JSX.Element {
   const handleAmountChange = (event: ChangeEvent<HTMLInputElement>) => {
     onChange({ ...data, amount: event.currentTarget.value });
@@ -87,7 +88,7 @@ export function OperationBasicInfoStep({
         />
         {isEmpty && (
           <LinkButton
-            href={ROUTES.propertyNew}
+            href={createPropertyHref}
             variant="secondary"
             size="medium"
             className={styles.emptyLink}

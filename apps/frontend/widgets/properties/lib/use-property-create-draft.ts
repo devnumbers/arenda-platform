@@ -19,6 +19,14 @@ const STORAGE_KEY = 'property-create-draft';
 
 const DEFAULT_DRAFT: CreateDraft = { step: 1 };
 
+export function clearPropertyCreateDraft(): void {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore storage quota / privacy mode errors.
+  }
+}
+
 export function usePropertyCreateDraft(): {
   draft: CreateDraft;
   setDraft: Dispatch<SetStateAction<CreateDraft>>;
@@ -33,11 +41,11 @@ export function usePropertyCreateDraft(): {
   }, []);
 
   useEffect(() => {
+    if (draft.step === 4) {
+      clearPropertyCreateDraft();
+      return;
+    }
     try {
-      if (draft.step === 4) {
-        sessionStorage.removeItem(STORAGE_KEY);
-        return;
-      }
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
     } catch {
       // Ignore storage quota / privacy mode errors.
