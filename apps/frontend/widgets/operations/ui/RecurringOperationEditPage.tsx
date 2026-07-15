@@ -4,6 +4,7 @@ import {
   type ChangeEvent,
   type FormEvent,
   useId,
+  useMemo,
   useState,
   type JSX,
 } from 'react';
@@ -137,6 +138,32 @@ function parseAmountToKopecks(amount: string): number | undefined {
   return Math.round(value * 100);
 }
 
+function validateForm(form: FormData): FormErrors {
+  const next: FormErrors = {};
+
+  if (form.name.trim() === '') {
+    next.name = 'Введите название операции';
+  }
+
+  if (parseAmountToKopecks(form.amount) === undefined) {
+    next.amount = 'Введите сумму больше 0';
+  }
+
+  if (!form.category) {
+    next.category = 'Выберите категорию';
+  }
+
+  if (form.endDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (new Date(form.endDate) < today) {
+      next.endDate = 'Дата окончания не может быть в прошлом';
+    }
+  }
+
+  return next;
+}
+
 function useRecurringOperationId(): string | undefined {
   const params = useParams<{ readonly id: string }>();
   return params?.id;
@@ -256,29 +283,41 @@ function RecurringOperationEditPageContent({
     setForm((prev) => ({ ...prev, reminderOffsetDays: offsetDays }));
   };
 
+  const isFormValid = useMemo(
+    () => Object.keys(validateForm(form)).length === 0,
+    [form],
+  );
+
+  const hasChanges = useMemo(() => {
+    const amountKopecks = parseAmountToKopecks(form.amount);
+    const currentReminder = form.reminderEnabled ? form.reminderOffsetDays : null;
+    const originalReminder = operation.reminder_offset_days ?? null;
+
+    return (
+      form.name.trim() !== operation.name ||
+      form.type !== operation.type ||
+      form.category !== operation.category_id ||
+      amountKopecks !== operation.amount_kopecks ||
+      form.periodicity !== operation.periodicity ||
+      (form.endDate || undefined) !== (operation.end_date ?? undefined) ||
+      (form.comment.trim() || undefined) !== (operation.comment ?? undefined) ||
+      currentReminder !== originalReminder
+    );
+  }, [
+    form.name,
+    form.type,
+    form.category,
+    form.amount,
+    form.periodicity,
+    form.endDate,
+    form.comment,
+    form.reminderEnabled,
+    form.reminderOffsetDays,
+    operation,
+  ]);
+
   const validate = (): boolean => {
-    const next: FormErrors = {};
-
-    if (form.name.trim() === '') {
-      next.name = 'Введите название операции';
-    }
-
-    if (parseAmountToKopecks(form.amount) === undefined) {
-      next.amount = 'Введите сумму больше 0';
-    }
-
-    if (!form.category) {
-      next.category = 'Выберите категорию';
-    }
-
-    if (form.endDate) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (new Date(form.endDate) < today) {
-        next.endDate = 'Дата окончания не может быть в прошлом';
-      }
-    }
-
+    const next = validateForm(form);
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -437,7 +476,7 @@ function RecurringOperationEditPageContent({
           size="large"
           fullWidth
           loading={updateOperation.isPending}
-          disabled={readonly}
+          disabled={readonly || updateOperation.isPending || !isFormValid || !hasChanges}
         >
           Сохранить
         </Button>

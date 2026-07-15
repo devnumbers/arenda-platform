@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, type ChangeEvent, type FormEvent, type JSX } from 'react';
+import { useCallback, useMemo, useState, type ChangeEvent, type FormEvent, type JSX } from 'react';
 import { notify } from '@/shared/lib/notifications';
 import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
@@ -29,7 +29,16 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
 
   const isEmailValid = email === '' || EMAIL_REGEX.test(email);
 
-  const canSubmit = isEmailValid && !updateMe.isPending;
+  const hasChanges = useMemo(
+    () =>
+      surname.trim() !== (me.surname ?? '') ||
+      name.trim() !== (me.name ?? '') ||
+      patronymic.trim() !== (me.patronymic ?? '') ||
+      email.trim() !== (me.email ?? ''),
+    [surname, name, patronymic, email, me],
+  );
+
+  const canSubmit = isEmailValid && !updateMe.isPending && hasChanges;
 
   const emailError = (isSubmitAttempted || isEmailTouched) && !isEmailValid
     ? 'Введите корректный email'
