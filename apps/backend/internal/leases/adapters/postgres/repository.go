@@ -1079,11 +1079,13 @@ func (r *OperationRepository) GetPropertyOperationsSummary(ctx context.Context, 
 		return application.OperationsSummary{}, err
 	}
 	return application.OperationsSummary{
-		MonthlyProfitKopecks: row.MonthlyProfitKopecks,
-		AllTimeProfitKopecks: row.AllTimeProfitKopecks,
-		OverdueRentCount:     int(row.OverdueRentCount),
-		OverdueTotalCount:    int(row.OverdueTotalCount),
-		NextPaymentDate:      pgconv.DatePtrFromPgtype(row.NextPaymentDate),
+		MonthlyProfitKopecks:  row.MonthlyProfitKopecks,
+		AllTimeProfitKopecks:  row.AllTimeProfitKopecks,
+		AllTimeIncomeKopecks:  row.AllTimeIncomeKopecks,
+		AllTimeExpenseKopecks: row.AllTimeExpenseKopecks,
+		OverdueRentCount:      int(row.OverdueRentCount),
+		OverdueTotalCount:     int(row.OverdueTotalCount),
+		NextPaymentDate:       pgconv.DatePtrFromPgtype(row.NextPaymentDate),
 	}, nil
 }
 

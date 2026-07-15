@@ -195,6 +195,8 @@ SELECT
         COALESCE(SUM(CASE WHEN op.type = 'income' AND op.status = 'received' THEN op.amount_kopecks ELSE 0 END), 0) -
         COALESCE(SUM(CASE WHEN op.type = 'expense' AND op.status = 'paid' THEN op.amount_kopecks ELSE 0 END), 0)
     )::bigint AS all_time_profit_kopecks,
+    COALESCE(SUM(CASE WHEN op.type = 'income' AND op.status = 'received' THEN op.amount_kopecks ELSE 0 END), 0)::bigint AS all_time_income_kopecks,
+    COALESCE(SUM(CASE WHEN op.type = 'expense' AND op.status = 'paid' THEN op.amount_kopecks ELSE 0 END), 0)::bigint AS all_time_expense_kopecks,
     (
         COALESCE(SUM(CASE
             WHEN op.type = 'income' AND op.status = 'received'

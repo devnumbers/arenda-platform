@@ -441,6 +441,8 @@ SELECT
         COALESCE(SUM(CASE WHEN op.type = 'income' AND op.status = 'received' THEN op.amount_kopecks ELSE 0 END), 0) -
         COALESCE(SUM(CASE WHEN op.type = 'expense' AND op.status = 'paid' THEN op.amount_kopecks ELSE 0 END), 0)
     )::bigint AS all_time_profit_kopecks,
+    COALESCE(SUM(CASE WHEN op.type = 'income' AND op.status = 'received' THEN op.amount_kopecks ELSE 0 END), 0)::bigint AS all_time_income_kopecks,
+    COALESCE(SUM(CASE WHEN op.type = 'expense' AND op.status = 'paid' THEN op.amount_kopecks ELSE 0 END), 0)::bigint AS all_time_expense_kopecks,
     (
         COALESCE(SUM(CASE
             WHEN op.type = 'income' AND op.status = 'received'
@@ -468,11 +470,13 @@ type GetPropertyOperationsSummaryParams struct {
 }
 
 type GetPropertyOperationsSummaryRow struct {
-	AllTimeProfitKopecks int64       `json:"all_time_profit_kopecks"`
-	MonthlyProfitKopecks int64       `json:"monthly_profit_kopecks"`
-	OverdueRentCount     int64       `json:"overdue_rent_count"`
-	OverdueTotalCount    int64       `json:"overdue_total_count"`
-	NextPaymentDate      pgtype.Date `json:"next_payment_date"`
+	AllTimeProfitKopecks  int64       `json:"all_time_profit_kopecks"`
+	AllTimeIncomeKopecks  int64       `json:"all_time_income_kopecks"`
+	AllTimeExpenseKopecks int64       `json:"all_time_expense_kopecks"`
+	MonthlyProfitKopecks  int64       `json:"monthly_profit_kopecks"`
+	OverdueRentCount      int64       `json:"overdue_rent_count"`
+	OverdueTotalCount     int64       `json:"overdue_total_count"`
+	NextPaymentDate       pgtype.Date `json:"next_payment_date"`
 }
 
 func (q *Queries) GetPropertyOperationsSummary(ctx context.Context, arg GetPropertyOperationsSummaryParams) (GetPropertyOperationsSummaryRow, error) {
@@ -480,6 +484,8 @@ func (q *Queries) GetPropertyOperationsSummary(ctx context.Context, arg GetPrope
 	var i GetPropertyOperationsSummaryRow
 	err := row.Scan(
 		&i.AllTimeProfitKopecks,
+		&i.AllTimeIncomeKopecks,
+		&i.AllTimeExpenseKopecks,
 		&i.MonthlyProfitKopecks,
 		&i.OverdueRentCount,
 		&i.OverdueTotalCount,
