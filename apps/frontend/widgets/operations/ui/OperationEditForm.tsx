@@ -15,7 +15,7 @@ import { DateSelect } from '@/shared/ui/date-select';
 import { IconButton } from '@/shared/ui/icon-button';
 import { Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { ApiError } from '@/shared/api/errors';
+import { notify } from '@/shared/lib/notifications';
 import type { components } from '@/shared/api/generated';
 import { type OperationType } from '@/entities/operation/model/types';
 import {
@@ -66,16 +66,6 @@ function parseAmountToKopecks(amount: string): number | undefined {
     return undefined;
   }
   return Math.round(value * 100);
-}
-
-function formatErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.detail;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'Не удалось сохранить изменения. Попробуйте ещё раз.';
 }
 
 function useOperationId(): string | undefined {
@@ -217,6 +207,9 @@ function OperationEditFormContent({
         onSuccess: () => {
           router.push(ROUTES.financeOperation(id));
         },
+        onError: (error) => {
+          notify.scenarios.operations.operationSaveError(error);
+        },
       },
     );
   };
@@ -279,12 +272,6 @@ function OperationEditFormContent({
           disabled={readonly}
         />
       </div>
-
-      {updateOperation.error && (
-        <p className={styles.error} role="alert">
-          {formatErrorMessage(updateOperation.error)}
-        </p>
-      )}
 
       <div className={styles.actions}>
         <Button

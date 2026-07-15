@@ -63,20 +63,21 @@ export function Button({
             )}
             {...rest}
         >
-            {loading ? (
-                <Icon size={spinnerSizeMap[size]} className={styles.spinner}>
-                    <Loading/>
-                </Icon>
-            ) : (
-                <>
-                    {leftIcon && <span className={styles.leftIcon}>{leftIcon}</span>}
-                    <span className={styles.content}>
-            <span className={styles.label}>{children}</span>
-                        {subtitle && <span className={styles.subtitle}>{subtitle}</span>}
-          </span>
-                    {rightIcon && <span className={styles.rightIcon}>{rightIcon}</span>}
-                </>
+            {loading && (
+                <span className={styles.spinnerOverlay}>
+                    <Icon size={spinnerSizeMap[size]} className={styles.spinner}>
+                        <Loading/>
+                    </Icon>
+                </span>
             )}
+            <span className={clsx(styles.contentWrap, loading && styles.contentHidden)}>
+                {leftIcon && <span className={styles.leftIcon}>{leftIcon}</span>}
+                <span className={styles.content}>
+                    <span className={styles.label}>{children}</span>
+                    {subtitle && <span className={styles.subtitle}>{subtitle}</span>}
+                </span>
+                {rightIcon && <span className={styles.rightIcon}>{rightIcon}</span>}
+            </span>
         </button>
     );
 }

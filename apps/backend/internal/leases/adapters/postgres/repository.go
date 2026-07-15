@@ -871,16 +871,17 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID
 	var rows []any
 	if sort == application.OperationSortOperationDateAsc {
 		ascRows, err := r.q().ListOperationsByOwnerAsc(ctx, postgres.ListOperationsByOwnerAscParams{
-			OwnerID:              pgconv.UUIDToPgtype(ownerID),
-			Types:                types,
-			Statuses:             statuses,
-			CategoryIds:          categoryIDs,
-			PropertyID:           pgconv.UUIDToPgtype(filter.PropertyID),
-			LeaseID:              pgconv.UUIDToPgtype(filter.LeaseID),
-			FromDate:             fromDate,
-			ToDate:               toDate,
-			RecurringOperationID: pgconv.UUIDToPgtype(filter.RecurringOperationID),
-			Limit:                limit,
+			OwnerID:                   pgconv.UUIDToPgtype(ownerID),
+			Types:                     types,
+			Statuses:                  statuses,
+			CategoryIds:               categoryIDs,
+			PropertyID:                pgconv.UUIDToPgtype(filter.PropertyID),
+			LeaseID:                   pgconv.UUIDToPgtype(filter.LeaseID),
+			FromDate:                  fromDate,
+			ToDate:                    toDate,
+			RecurringOperationID:      pgconv.UUIDToPgtype(filter.RecurringOperationID),
+			ExcludeArchivedProperties: filter.ExcludeArchivedProperties,
+			Limit:                     limit,
 			//nolint:gosec // Pagination offset is bounded by the API layer.
 			Offset: int32(filter.Offset),
 		})
@@ -890,16 +891,17 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID
 		rows = toAnySlice(ascRows)
 	} else {
 		descRows, err := r.q().ListOperationsByOwner(ctx, postgres.ListOperationsByOwnerParams{
-			OwnerID:              pgconv.UUIDToPgtype(ownerID),
-			Types:                types,
-			Statuses:             statuses,
-			CategoryIds:          categoryIDs,
-			PropertyID:           pgconv.UUIDToPgtype(filter.PropertyID),
-			LeaseID:              pgconv.UUIDToPgtype(filter.LeaseID),
-			FromDate:             fromDate,
-			ToDate:               toDate,
-			RecurringOperationID: pgconv.UUIDToPgtype(filter.RecurringOperationID),
-			Limit:                limit,
+			OwnerID:                   pgconv.UUIDToPgtype(ownerID),
+			Types:                     types,
+			Statuses:                  statuses,
+			CategoryIds:               categoryIDs,
+			PropertyID:                pgconv.UUIDToPgtype(filter.PropertyID),
+			LeaseID:                   pgconv.UUIDToPgtype(filter.LeaseID),
+			FromDate:                  fromDate,
+			ToDate:                    toDate,
+			RecurringOperationID:      pgconv.UUIDToPgtype(filter.RecurringOperationID),
+			ExcludeArchivedProperties: filter.ExcludeArchivedProperties,
+			Limit:                     limit,
 			//nolint:gosec // Pagination offset is bounded by the API layer.
 			Offset: int32(filter.Offset),
 		})
@@ -1077,11 +1079,13 @@ func (r *OperationRepository) GetPropertyOperationsSummary(ctx context.Context, 
 		return application.OperationsSummary{}, err
 	}
 	return application.OperationsSummary{
-		MonthlyProfitKopecks: row.MonthlyProfitKopecks,
-		AllTimeProfitKopecks: row.AllTimeProfitKopecks,
-		OverdueRentCount:     int(row.OverdueRentCount),
-		OverdueTotalCount:    int(row.OverdueTotalCount),
-		NextPaymentDate:      pgconv.DatePtrFromPgtype(row.NextPaymentDate),
+		MonthlyProfitKopecks:  row.MonthlyProfitKopecks,
+		AllTimeProfitKopecks:  row.AllTimeProfitKopecks,
+		AllTimeIncomeKopecks:  row.AllTimeIncomeKopecks,
+		AllTimeExpenseKopecks: row.AllTimeExpenseKopecks,
+		OverdueRentCount:      int(row.OverdueRentCount),
+		OverdueTotalCount:     int(row.OverdueTotalCount),
+		NextPaymentDate:       pgconv.DatePtrFromPgtype(row.NextPaymentDate),
 	}, nil
 }
 

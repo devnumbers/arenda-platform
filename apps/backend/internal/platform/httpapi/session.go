@@ -37,12 +37,8 @@ func UserFromContext(ctx context.Context) (domain.User, bool) {
 }
 
 func setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time, secure bool) {
-	sameSite := http.SameSiteLaxMode
-	if secure {
-		sameSite = http.SameSiteStrictMode
-	}
 	maxAge := max(1, int(time.Until(expiresAt).Seconds()))
-	//nolint:gosec // Secure/HttpOnly/SameSite are configured dynamically based on APP_ENV.
+	//nolint:gosec // Secure is configured dynamically based on APP_ENV; SameSite is fixed to Lax (ADR 0018).
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName(secure),
 		Value:    token,
@@ -51,16 +47,12 @@ func setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time, 
 		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   secure,
-		SameSite: sameSite,
+		SameSite: http.SameSiteLaxMode,
 	})
 }
 
 func clearSessionCookie(w http.ResponseWriter, secure bool) {
-	sameSite := http.SameSiteLaxMode
-	if secure {
-		sameSite = http.SameSiteStrictMode
-	}
-	//nolint:gosec // Secure/HttpOnly/SameSite are configured dynamically based on APP_ENV.
+	//nolint:gosec // Secure is configured dynamically based on APP_ENV; SameSite is fixed to Lax (ADR 0018).
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName(secure),
 		Value:    "",
@@ -68,7 +60,7 @@ func clearSessionCookie(w http.ResponseWriter, secure bool) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   secure,
-		SameSite: sameSite,
+		SameSite: http.SameSiteLaxMode,
 	})
 }
 

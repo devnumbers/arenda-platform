@@ -8,7 +8,7 @@ import {
   type JSX,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { notify } from '@/shared/lib/toast';
+import { notify } from '@/shared/lib/notifications';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import { PageHeader } from '@/shared/ui/page-header';
@@ -18,18 +18,10 @@ import {
   useChangePhoneSendCode,
 } from '@/features/profile/api/hooks';
 import { formatPhoneInput, normalizePhone } from '@/shared/lib/phone';
-import { ApiError } from '@/shared/api/errors';
 import { ROUTES } from '@/shared/config/routes';
 import styles from './PhoneChangeForm.module.css';
 
 const CODE_LENGTH = 6;
-
-function getErrorMessage(error: ApiError | null): string | undefined {
-  if (!error) {
-    return undefined;
-  }
-  return error.detail || 'Произошла ошибка. Попробуйте ещё раз.';
-}
 
 function isValidPhone(formatted: string): boolean {
   return normalizePhone(formatted).length === 12;
@@ -86,6 +78,9 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
             setStep('code');
             setIsSubmitAttempted(false);
           },
+          onError: (error) => {
+            notify.scenarios.profile.phoneSendCodeError(error);
+          },
         },
       );
     },
@@ -105,8 +100,11 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
         { phone: normalizedPhone, code },
         {
           onSuccess: () => {
-            notify.success('Номер телефона изменён');
+            notify.scenarios.profile.phoneChanged();
             router.push(ROUTES.profileAccount);
+          },
+          onError: (error) => {
+            notify.scenarios.profile.phoneChangeError(error);
           },
         },
       );
@@ -130,12 +128,6 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
             autoFocus
           />
         </div>
-
-        {sendCode.error && (
-          <p className={styles.errorMessage} role="alert">
-            {getErrorMessage(sendCode.error)}
-          </p>
-        )}
 
         <div className={styles.actions}>
           <Button
@@ -163,7 +155,7 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
           placeholder="000000"
           value={code}
           onChange={handleCodeChange}
-          error={codeError || getErrorMessage(changePhone.error)}
+          error={codeError}
           maxLength={CODE_LENGTH}
           fullWidth
           autoFocus

@@ -41,6 +41,7 @@ export type OperationsFilters = {
   sort?: OperationListSort;
   limit?: number;
   offset?: number;
+  exclude_archived_properties?: boolean;
 };
 
 // Rent operations affect lease state, so lease keys must be invalidated when a
@@ -74,7 +75,7 @@ function normalizeOperationsFilters(
     if (value === undefined || value === '') {
       return;
     }
-    if (typeof value === 'number') {
+    if (typeof value === 'number' || typeof value === 'boolean') {
       result[key] = String(value);
       return;
     }

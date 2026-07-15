@@ -13,13 +13,6 @@
   color: var(--color-text);
 }
 
-.headerLink {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text);
-}
-
 .list {
   display: flex;
   flex-direction: column;

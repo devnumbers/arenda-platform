@@ -5,7 +5,7 @@ import NextLink from 'next/link';
 import {useTenantContacts} from '@/features/tenant-contacts/api';
 import {PageHeader} from '@/shared/ui/page-header';
 import {Icon} from '@/shared/ui/icon';
-import {Plus} from '@/shared/assets/icons';
+import {ArendatorAdd} from '@/shared/assets/icons';
 import {ROUTES} from '@/shared/config/routes';
 import {TenantSection} from './TenantSection';
 import {TenantsLoading} from './TenantsLoading';
@@ -33,8 +33,8 @@ export function TenantsPage(): JSX.Element {
                         className={styles.addButton}
                         aria-label="Добавить арендатора"
                     >
-                        <Icon size="s">
-                            <Plus/>
+                        <Icon size="l">
+                            <ArendatorAdd/>
                         </Icon>
                     </NextLink>
                 }
@@ -53,7 +53,7 @@ export function TenantsPage(): JSX.Element {
             {!query.isPending && !query.isError && (query.data?.length ?? 0) > 0 && (
                 <>
                     <TenantSection title="Текущие арендаторы" tenants={active}/>
-                    <TenantSection title="Прошлые арендаторы" tenants={past}/>
+                    <TenantSection title="Остальные" tenants={past}/>
                 </>
             )}
         </div>

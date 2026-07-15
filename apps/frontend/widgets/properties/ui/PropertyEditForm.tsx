@@ -1,8 +1,8 @@
 'use client';
 
-import {type FormEvent, type JSX, useEffect, useRef, useState,} from 'react';
+import {type FormEvent, type JSX, useEffect, useMemo, useRef, useState,} from 'react';
 import {useRouter} from 'next/navigation';
-import {notify} from '@/shared/lib/toast';
+import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
 import {useProperty, useUpdateProperty} from '@/features/properties/api';
 import {TextField} from '@/shared/ui/text-field';
@@ -83,8 +83,20 @@ export function PropertyEditForm({
     const isAddressValid = address.trim().length > 0;
     const isTypeValid = type !== undefined;
 
+    const hasChanges = useMemo(() => {
+        const property = propertyQuery.data;
+        if (!property) return false;
+
+        return (
+            type !== property.type ||
+            name.trim() !== property.name ||
+            address.trim() !== property.address ||
+            (description.trim() || undefined) !== (property.description ?? undefined)
+        );
+    }, [type, name, address, description, propertyQuery.data]);
+
     const canSubmit =
-        isNameValid && isAddressValid && isTypeValid && !isSubmitting;
+        isNameValid && isAddressValid && isTypeValid && !isSubmitting && hasChanges;
 
     const typeError = submitAttempted && !isTypeValid ? 'Выберите тип объекта' : undefined;
     const addressError = submitAttempted && !isAddressValid ? 'Укажите адрес' : undefined;
@@ -108,10 +120,10 @@ export function PropertyEditForm({
                 },
             });
 
-            notify.success('Объект обновлён');
+            notify.scenarios.property.updated();
             router.push(ROUTES.property(propertyId));
         } catch {
-            notify.error('Не удалось сохранить изменения');
+            notify.scenarios.property.saveError();
         }
     };
 

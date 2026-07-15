@@ -258,7 +258,7 @@ export function OperationsPage({initial}: OperationsPageProps): JSX.Element {
                             className={styles.addButton}
                             aria-label="Добавить операцию"
                         >
-                            <Icon size="s">
+                            <Icon size="l">
                                 <Plus/>
                             </Icon>
                         </NextLink>
@@ -358,8 +358,6 @@ export function OperationsPage({initial}: OperationsPageProps): JSX.Element {
                 <>
                     <OperationsList
                         operations={operations}
-                        showProperty
-                        propertyNameById={propertyNameById}
                         emptyState={
                             <FinanceEmptyState
                                 title={hasActiveFilters ? 'Нет совпадений' : 'Нет операций за период'}

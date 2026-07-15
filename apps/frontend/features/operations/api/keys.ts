@@ -10,6 +10,7 @@ export type OperationKeyFilters = {
   sort?: string;
   limit?: string;
   offset?: string;
+  exclude_archived_properties?: string;
 };
 
 export const operationKeys = {

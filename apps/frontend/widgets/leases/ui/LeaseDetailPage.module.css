@@ -84,6 +84,20 @@
   list-style: none;
 }
 
+.loadMore {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.loadMoreError {
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+  color: var(--color-danger);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

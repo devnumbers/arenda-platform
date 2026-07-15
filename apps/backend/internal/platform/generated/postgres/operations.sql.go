@@ -441,6 +441,8 @@ SELECT
         COALESCE(SUM(CASE WHEN op.type = 'income' AND op.status = 'received' THEN op.amount_kopecks ELSE 0 END), 0) -
         COALESCE(SUM(CASE WHEN op.type = 'expense' AND op.status = 'paid' THEN op.amount_kopecks ELSE 0 END), 0)
     )::bigint AS all_time_profit_kopecks,
+    COALESCE(SUM(CASE WHEN op.type = 'income' AND op.status = 'received' THEN op.amount_kopecks ELSE 0 END), 0)::bigint AS all_time_income_kopecks,
+    COALESCE(SUM(CASE WHEN op.type = 'expense' AND op.status = 'paid' THEN op.amount_kopecks ELSE 0 END), 0)::bigint AS all_time_expense_kopecks,
     (
         COALESCE(SUM(CASE
             WHEN op.type = 'income' AND op.status = 'received'
@@ -468,11 +470,13 @@ type GetPropertyOperationsSummaryParams struct {
 }
 
 type GetPropertyOperationsSummaryRow struct {
-	AllTimeProfitKopecks int64       `json:"all_time_profit_kopecks"`
-	MonthlyProfitKopecks int64       `json:"monthly_profit_kopecks"`
-	OverdueRentCount     int64       `json:"overdue_rent_count"`
-	OverdueTotalCount    int64       `json:"overdue_total_count"`
-	NextPaymentDate      pgtype.Date `json:"next_payment_date"`
+	AllTimeProfitKopecks  int64       `json:"all_time_profit_kopecks"`
+	AllTimeIncomeKopecks  int64       `json:"all_time_income_kopecks"`
+	AllTimeExpenseKopecks int64       `json:"all_time_expense_kopecks"`
+	MonthlyProfitKopecks  int64       `json:"monthly_profit_kopecks"`
+	OverdueRentCount      int64       `json:"overdue_rent_count"`
+	OverdueTotalCount     int64       `json:"overdue_total_count"`
+	NextPaymentDate       pgtype.Date `json:"next_payment_date"`
 }
 
 func (q *Queries) GetPropertyOperationsSummary(ctx context.Context, arg GetPropertyOperationsSummaryParams) (GetPropertyOperationsSummaryRow, error) {
@@ -480,6 +484,8 @@ func (q *Queries) GetPropertyOperationsSummary(ctx context.Context, arg GetPrope
 	var i GetPropertyOperationsSummaryRow
 	err := row.Scan(
 		&i.AllTimeProfitKopecks,
+		&i.AllTimeIncomeKopecks,
+		&i.AllTimeExpenseKopecks,
 		&i.MonthlyProfitKopecks,
 		&i.OverdueRentCount,
 		&i.OverdueTotalCount,
@@ -780,7 +786,7 @@ func (q *Queries) ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID
 
 const listOperationsByOwner = `-- name: ListOperationsByOwner :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
-WHERE owner_id = $1
+WHERE operations.owner_id = $1
   AND deleted_at IS NULL
   AND (COALESCE($2::text[], '{}') = '{}'::text[] OR type = ANY(COALESCE($2::text[], '{}')))
   AND (COALESCE($3::text[], '{}') = '{}'::text[] OR status = ANY(COALESCE($3::text[], '{}')))
@@ -790,22 +796,24 @@ WHERE owner_id = $1
   AND ($7::date IS NULL OR operation_date <= $7::date)
   AND ($8::uuid IS NULL OR recurring_operation_id = $8::uuid)
   AND ($9::uuid IS NULL OR lease_id = $9::uuid)
+  AND ($10::bool = false OR NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = operations.property_id AND p.status = 'archived'))
 ORDER BY operation_date DESC, id DESC
-LIMIT $11::int OFFSET $10::int
+LIMIT $12::int OFFSET $11::int
 `
 
 type ListOperationsByOwnerParams struct {
-	OwnerID              pgtype.UUID   `json:"owner_id"`
-	Types                []string      `json:"types"`
-	Statuses             []string      `json:"statuses"`
-	CategoryIds          []pgtype.UUID `json:"category_ids"`
-	PropertyID           pgtype.UUID   `json:"property_id"`
-	FromDate             pgtype.Date   `json:"from_date"`
-	ToDate               pgtype.Date   `json:"to_date"`
-	RecurringOperationID pgtype.UUID   `json:"recurring_operation_id"`
-	LeaseID              pgtype.UUID   `json:"lease_id"`
-	Offset               int32         `json:"offset"`
-	Limit                int32         `json:"limit"`
+	OwnerID                   pgtype.UUID   `json:"owner_id"`
+	Types                     []string      `json:"types"`
+	Statuses                  []string      `json:"statuses"`
+	CategoryIds               []pgtype.UUID `json:"category_ids"`
+	PropertyID                pgtype.UUID   `json:"property_id"`
+	FromDate                  pgtype.Date   `json:"from_date"`
+	ToDate                    pgtype.Date   `json:"to_date"`
+	RecurringOperationID      pgtype.UUID   `json:"recurring_operation_id"`
+	LeaseID                   pgtype.UUID   `json:"lease_id"`
+	ExcludeArchivedProperties bool          `json:"exclude_archived_properties"`
+	Offset                    int32         `json:"offset"`
+	Limit                     int32         `json:"limit"`
 }
 
 type ListOperationsByOwnerRow struct {
@@ -840,6 +848,7 @@ func (q *Queries) ListOperationsByOwner(ctx context.Context, arg ListOperationsB
 		arg.ToDate,
 		arg.RecurringOperationID,
 		arg.LeaseID,
+		arg.ExcludeArchivedProperties,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -976,7 +985,7 @@ func (q *Queries) ListOperationsByOwnerAdmin(ctx context.Context, arg ListOperat
 
 const listOperationsByOwnerAsc = `-- name: ListOperationsByOwnerAsc :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
-WHERE owner_id = $1
+WHERE operations.owner_id = $1
   AND deleted_at IS NULL
   AND (COALESCE($2::text[], '{}') = '{}'::text[] OR type = ANY(COALESCE($2::text[], '{}')))
   AND (COALESCE($3::text[], '{}') = '{}'::text[] OR status = ANY(COALESCE($3::text[], '{}')))
@@ -986,22 +995,24 @@ WHERE owner_id = $1
   AND ($7::date IS NULL OR operation_date <= $7::date)
   AND ($8::uuid IS NULL OR recurring_operation_id = $8::uuid)
   AND ($9::uuid IS NULL OR lease_id = $9::uuid)
+  AND ($10::bool = false OR NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = operations.property_id AND p.status = 'archived'))
 ORDER BY operation_date ASC, id ASC
-LIMIT $11::int OFFSET $10::int
+LIMIT $12::int OFFSET $11::int
 `
 
 type ListOperationsByOwnerAscParams struct {
-	OwnerID              pgtype.UUID   `json:"owner_id"`
-	Types                []string      `json:"types"`
-	Statuses             []string      `json:"statuses"`
-	CategoryIds          []pgtype.UUID `json:"category_ids"`
-	PropertyID           pgtype.UUID   `json:"property_id"`
-	FromDate             pgtype.Date   `json:"from_date"`
-	ToDate               pgtype.Date   `json:"to_date"`
-	RecurringOperationID pgtype.UUID   `json:"recurring_operation_id"`
-	LeaseID              pgtype.UUID   `json:"lease_id"`
-	Offset               int32         `json:"offset"`
-	Limit                int32         `json:"limit"`
+	OwnerID                   pgtype.UUID   `json:"owner_id"`
+	Types                     []string      `json:"types"`
+	Statuses                  []string      `json:"statuses"`
+	CategoryIds               []pgtype.UUID `json:"category_ids"`
+	PropertyID                pgtype.UUID   `json:"property_id"`
+	FromDate                  pgtype.Date   `json:"from_date"`
+	ToDate                    pgtype.Date   `json:"to_date"`
+	RecurringOperationID      pgtype.UUID   `json:"recurring_operation_id"`
+	LeaseID                   pgtype.UUID   `json:"lease_id"`
+	ExcludeArchivedProperties bool          `json:"exclude_archived_properties"`
+	Offset                    int32         `json:"offset"`
+	Limit                     int32         `json:"limit"`
 }
 
 type ListOperationsByOwnerAscRow struct {
@@ -1036,6 +1047,7 @@ func (q *Queries) ListOperationsByOwnerAsc(ctx context.Context, arg ListOperatio
 		arg.ToDate,
 		arg.RecurringOperationID,
 		arg.LeaseID,
+		arg.ExcludeArchivedProperties,
 		arg.Offset,
 		arg.Limit,
 	)

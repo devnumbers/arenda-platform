@@ -94,6 +94,8 @@ type OperationFilter struct {
 	Limit                int
 	Offset               int
 	Sort                 OperationSort
+	// ExcludeArchivedProperties filters out operations of properties with status 'archived'.
+	ExcludeArchivedProperties bool
 }
 
 type FinanceReportTotals struct {

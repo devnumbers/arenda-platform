@@ -1362,6 +1362,8 @@ export interface components {
         PropertyOperationsSummaryResponse: {
             monthly_profit_kopecks: number;
             all_time_profit_kopecks: number;
+            all_time_income_kopecks: number;
+            all_time_expense_kopecks: number;
             overdue_rent_count: number;
             overdue_total_count: number;
             /** Format: date */
@@ -1553,6 +1555,7 @@ export interface components {
             owner_id: string;
             /** Format: uuid */
             property_id: string;
+            property_status?: components["schemas"]["PropertyStatus"];
             /** Format: uuid */
             lease_id?: string | null;
             /** Format: uuid */
@@ -2417,6 +2420,7 @@ export interface operations {
                 to?: string;
                 recurring_operation_id?: string;
                 lease_id?: string;
+                exclude_archived_properties?: boolean;
                 sort?: components["schemas"]["OperationListSort"];
                 limit?: number;
                 offset?: number;

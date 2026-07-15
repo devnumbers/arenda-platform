@@ -4,19 +4,19 @@ import {
   type ChangeEvent,
   type FormEvent,
   useId,
+  useMemo,
   useState,
   type JSX,
 } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import { Modal } from '@heroui/react';
-import { notify } from '@/shared/lib/toast';
+import { notify } from '@/shared/lib/notifications';
 import { PageHeader } from '@/shared/ui/page-header';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import { DatePickerField } from '@/shared/ui/date-picker-field';
 import { ROUTES } from '@/shared/config/routes';
-import { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/generated';
 import { type OperationType } from '@/entities/operation/model/types';
 import {
@@ -138,14 +138,30 @@ function parseAmountToKopecks(amount: string): number | undefined {
   return Math.round(value * 100);
 }
 
-function formatErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.detail;
+function validateForm(form: FormData): FormErrors {
+  const next: FormErrors = {};
+
+  if (form.name.trim() === '') {
+    next.name = 'Введите название операции';
   }
-  if (error instanceof Error) {
-    return error.message;
+
+  if (parseAmountToKopecks(form.amount) === undefined) {
+    next.amount = 'Введите сумму больше 0';
   }
-  return 'Не удалось сохранить изменения. Попробуйте ещё раз.';
+
+  if (!form.category) {
+    next.category = 'Выберите категорию';
+  }
+
+  if (form.endDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (new Date(form.endDate) < today) {
+      next.endDate = 'Дата окончания не может быть в прошлом';
+    }
+  }
+
+  return next;
 }
 
 function useRecurringOperationId(): string | undefined {
@@ -267,29 +283,41 @@ function RecurringOperationEditPageContent({
     setForm((prev) => ({ ...prev, reminderOffsetDays: offsetDays }));
   };
 
+  const isFormValid = useMemo(
+    () => Object.keys(validateForm(form)).length === 0,
+    [form],
+  );
+
+  const hasChanges = useMemo(() => {
+    const amountKopecks = parseAmountToKopecks(form.amount);
+    const currentReminder = form.reminderEnabled ? form.reminderOffsetDays : null;
+    const originalReminder = operation.reminder_offset_days ?? null;
+
+    return (
+      form.name.trim() !== operation.name ||
+      form.type !== operation.type ||
+      form.category !== operation.category_id ||
+      amountKopecks !== operation.amount_kopecks ||
+      form.periodicity !== operation.periodicity ||
+      (form.endDate || undefined) !== (operation.end_date ?? undefined) ||
+      (form.comment.trim() || undefined) !== (operation.comment ?? undefined) ||
+      currentReminder !== originalReminder
+    );
+  }, [
+    form.name,
+    form.type,
+    form.category,
+    form.amount,
+    form.periodicity,
+    form.endDate,
+    form.comment,
+    form.reminderEnabled,
+    form.reminderOffsetDays,
+    operation,
+  ]);
+
   const validate = (): boolean => {
-    const next: FormErrors = {};
-
-    if (form.name.trim() === '') {
-      next.name = 'Введите название операции';
-    }
-
-    if (parseAmountToKopecks(form.amount) === undefined) {
-      next.amount = 'Введите сумму больше 0';
-    }
-
-    if (!form.category) {
-      next.category = 'Выберите категорию';
-    }
-
-    if (form.endDate) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (new Date(form.endDate) < today) {
-        next.endDate = 'Дата окончания не может быть в прошлом';
-      }
-    }
-
+    const next = validateForm(form);
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -333,6 +361,9 @@ function RecurringOperationEditPageContent({
         onSuccess: () => {
           router.push(ROUTES.financeOperations);
         },
+        onError: (error) => {
+          notify.scenarios.operations.recurringOperationSaveError(error);
+        },
       },
     );
   };
@@ -355,12 +386,7 @@ function RecurringOperationEditPageContent({
       propertyId: operation.property_id,
     });
 
-    void notify.promise(promise, {
-      loading: 'Удаляем серию...',
-      success: 'Серия удалена',
-      error: (error) =>
-        (error as ApiError).detail ?? 'Не удалось удалить серию',
-    });
+    void notify.scenarios.operations.recurringOperationDeleted(promise);
 
     promise
       .then(() => {
@@ -443,12 +469,6 @@ function RecurringOperationEditPageContent({
         />
       </div>
 
-      {updateOperation.error && (
-        <p className={styles.error} role="alert">
-          {formatErrorMessage(updateOperation.error)}
-        </p>
-      )}
-
       <div className={styles.actions}>
         <Button
           type="submit"
@@ -456,7 +476,7 @@ function RecurringOperationEditPageContent({
           size="large"
           fullWidth
           loading={updateOperation.isPending}
-          disabled={readonly}
+          disabled={readonly || updateOperation.isPending || !isFormValid || !hasChanges}
         >
           Сохранить
         </Button>

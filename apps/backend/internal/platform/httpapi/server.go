@@ -111,7 +111,7 @@ func New(deps Deps) http.Handler {
 	)
 	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Logger, deps.Clock)
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock)
-	operationHandlers := NewOperationHandlers(deps.Operations, deps.Categories, deps.Logger)
+	operationHandlers := NewOperationHandlers(deps.Operations, deps.Categories, deps.Properties, deps.Logger)
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Categories, deps.Logger)
 	categoryHandlers := NewCategoryHandlers(deps.Categories, deps.Logger)
 	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)

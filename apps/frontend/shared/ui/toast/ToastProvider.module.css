@@ -1,101 +1,357 @@
-.region {
-  padding: 16px;
+.container {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 460px;
+    pointer-events: none;
 }
 
 .toast {
-  --toast-radius: var(--radius-button);
-  --toast-shadow: 0 12px 32px rgba(30, 30, 30, 0.16);
+    --y: 0px;
+    --s: 1;
 
-  border-radius: var(--toast-radius);
-  box-shadow: var(--toast-shadow);
-  font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: var(--radius-button);
+    background: var(--color-white);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06),
+    0 -6px 12px rgba(0, 0, 0, 0.03),
+    0 14px 28px rgba(0, 0, 0, 0.08);
+    font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
-.wrapper {
-  display: flex;
-  align-items: flex-start;
-  padding: 12px 16px;
-  gap: 12px;
+/* Auto-close countdown runs on the progress bar animation (react-toastify
+   closes the toast on its animationend). Keep it invisible but animating. */
+.toast > [class*='Toastify__progress-bar--wrp'] {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 5px;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.toast > [class*='Toastify__progress-bar--wrp'] > [class*='Toastify__progress-bar'] {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transform-origin: left;
+}
+
+.toast > [class*='Toastify__progress-bar--wrp'] > [class*='Toastify__progress-bar--animated'] {
+    animation: toast-progress linear 1 forwards;
+}
+
+@keyframes toast-progress {
+    from {
+        transform: scaleX(1);
+    }
+
+    to {
+        transform: scaleX(0);
+    }
+}
+
+.body {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
 }
 
 .icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+/* Badge SVGs carry hardcoded 16x16 width/height attributes (SVGR default);
+   make the glyph follow the container size. */
+.icon > svg {
+    width: 100%;
+    height: 100%;
 }
 
 .content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
 }
 
 .title {
-  font-size: var(--font-size-text-m);
-  line-height: var(--line-height-text-m);
-  font-weight: 500;
-  color: var(--color-text);
+    font-size: var(--font-size-text-m);
+    line-height: var(--line-height-text-m);
+    font-weight: 500;
+    color: var(--color-text);
 }
 
 .description {
-  font-size: var(--font-size-text-s);
-  line-height: var(--line-height-text-s);
-  color: var(--color-text-muted);
+    font-size: var(--font-size-text-s);
+    line-height: var(--line-height-text-s);
+    color: var(--color-text-muted);
 }
 
-.toast .closeButton {
-  color: var(--color-text-muted);
+.action {
+    flex-shrink: 0;
+    align-self: center;
 }
 
-.toast .closeButton:hover,
-.toast .closeButton:focus-visible {
-  color: var(--color-text);
+.closeButton {
+    flex-shrink: 0;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-round);
+    background-color: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.toast .closeButton:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
+.closeButton:hover {
+    color: var(--color-text);
 }
 
-.toast .actionButton {
-  display: inline-flex;
-  align-items: center;
-  padding: 0;
-  border: none;
-  background-color: transparent;
-  color: var(--color-primary);
-  font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: var(--font-size-text-s);
-  line-height: var(--line-height-text-s);
-  font-weight: 500;
-  text-decoration: none;
-  cursor: pointer;
-  transition: opacity 0.15s ease;
+.closeButton:active {
+    color: var(--color-text);
 }
 
-.toast .actionButton:hover {
-  opacity: 0.8;
-  text-decoration: underline;
+.closeButton:focus-visible {
+    outline: none;
 }
 
-.toast .actionButton:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
+/* Variant color applies to the title instead of an accent border.
+   Badge icons are self-colored (gradient), so the icon is not tinted. */
+.body[data-variant='success'] .title {
+    color: var(--color-success);
 }
 
-/* Hero UI uses `accent` for info toasts; the provider normalizes it to `info`. */
-.toast[data-variant='success'] {
-  border-left: 4px solid var(--color-success);
+.body[data-variant='error'] .title {
+    color: var(--color-error);
 }
 
-.toast[data-variant='danger'] {
-  border-left: 4px solid var(--color-error);
+.body[data-variant='warning'] .title {
+    color: var(--color-warning);
 }
 
-.toast[data-variant='warning'] {
-  border-left: 4px solid var(--color-warning);
+.body[data-variant='info'] .title {
+    color: var(--color-primary);
 }
 
-.toast[data-variant='info'] {
-  border-left: 4px solid var(--color-primary);
+.toastEnter {
+    animation-duration: 0.2s;
+    animation-fill-mode: both;
+    animation-name: toast-enter-right;
+    animation-timing-function: cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+.toastExit {
+    animation-duration: 0.25s;
+    animation-fill-mode: both;
+    animation-name: toast-exit-right;
+    animation-timing-function: cubic-bezier(0.55, 0.06, 0.68, 0.19);
+}
+
+/* Apple-style banner motion (HIG: brief, precise, exit mirrors enter):
+   short travel, single soft deceleration, ~6px overshoot, fade-in early. */
+@keyframes toast-enter-right {
+    from {
+        opacity: 0;
+        transform: translate3d(120%, var(--y), 0) scale(var(--s));
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    75% {
+        transform: translate3d(-6px, var(--y), 0) scale(var(--s));
+    }
+
+    to {
+        opacity: 1;
+        transform: translate3d(0, var(--y), 0) scale(var(--s));
+    }
+}
+
+@keyframes toast-exit-right {
+    from {
+        opacity: 1;
+        transform: translate3d(0, var(--y), 0) scale(var(--s));
+    }
+
+    to {
+        opacity: 0;
+        transform: translate3d(120%, var(--y), 0) scale(var(--s));
+    }
+}
+
+@keyframes toast-enter-down {
+    from {
+        opacity: 0;
+        transform: translate3d(0, calc(-100% - 32px), 0) scale(var(--s));
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    75% {
+        transform: translate3d(0, calc(var(--y) + 6px), 0) scale(var(--s));
+    }
+
+    to {
+        opacity: 1;
+        transform: translate3d(0, var(--y), 0) scale(var(--s));
+    }
+}
+
+@keyframes toast-exit-up {
+    from {
+        opacity: 1;
+        transform: translate3d(0, var(--y), 0) scale(var(--s));
+    }
+
+    to {
+        opacity: 0;
+        transform: translate3d(0, calc(-100% - 32px), 0) scale(var(--s));
+    }
+}
+
+@keyframes toast-fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes toast-fade-out {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toastEnter {
+        animation-duration: 0.2s;
+        animation-name: toast-fade-in;
+        animation-timing-function: ease-out;
+    }
+
+    .toastExit {
+        animation-duration: 0.2s;
+        animation-name: toast-fade-out;
+        animation-timing-function: ease-out;
+    }
+}
+
+/* Stacked mode: library JS sets the class, data attributes and --y/--s/--g
+   variables; visuals below replicate ReactToastify.css lines 155-207. */
+.toast[class*='--stacked'] {
+    position: absolute;
+    width: 100%;
+    transform: translate3d(0, var(--y), 0) scale(var(--s));
+    transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.toast[data-collapsed] .body,
+.toast[data-collapsed] .closeButton {
+    transition: opacity 0.1s;
+}
+
+.toast[data-collapsed='false'] {
+    overflow: visible;
+}
+
+/* Only the front card shows its content while collapsed. */
+.toast[data-collapsed='true']:not(:last-child) > * {
+    opacity: 0;
+}
+
+/* Gap filler: keeps the hover area continuous between stacked cards. */
+.toast[class*='--stacked']::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: calc(var(--g, 0) * 1px);
+    bottom: 100%;
+}
+
+/* Extended hit area behind the card. */
+.toast[class*='--stacked']::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 100%;
+    transform: scaleY(3);
+    z-index: -1;
+}
+
+.toast[data-pos='bot'][class*='--stacked']::before {
+    transform-origin: top;
+}
+
+.toast[data-pos='top'][class*='--stacked']::before {
+    transform-origin: bottom;
+}
+
+.toast[data-pos='top'] {
+    top: 0;
+}
+
+.toast[data-pos='bot'] {
+    bottom: 0;
+}
+
+@media (max-width: 767px) {
+    .container {
+        left: 12px;
+        right: 12px;
+        width: auto;
+    }
+
+    .toastEnter {
+        animation-name: toast-enter-down;
+    }
+
+    .toastExit {
+        animation-name: toast-exit-up;
+    }
 }

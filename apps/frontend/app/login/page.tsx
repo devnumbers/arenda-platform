@@ -2,11 +2,12 @@
 
 import {type JSX} from "react";
 import {useRouter} from "next/navigation";
-import {notify} from "@/shared/lib/toast";
+import {notify} from "@/shared/lib/notifications";
 import {type ApiError} from "@/shared/api/errors";
 import {AuthForm} from "@/features/auth/ui/auth-form";
 import {useSendCode, useVerifyCode} from "@/features/auth/api/hooks";
 import {normalizePhone, isPhoneValid} from "@/shared/lib/phone";
+import {safeInternalPath} from "@/shared/lib/safe-internal-path";
 import {useSendCooldown} from "@/features/auth/lib/use-send-cooldown";
 import {useLoginDraft} from "@/features/auth/lib/use-login-draft";
 import {RESEND_TIMEOUT} from "@/features/auth/lib/constants";
@@ -14,7 +15,7 @@ import styles from "./LoginPage.module.css";
 
 export default function LoginPage(): JSX.Element {
     const router = useRouter();
-    const {draft, setDraft, clearDraft, isLoaded} = useLoginDraft();
+    const {draft, setDraft, clearDraft} = useLoginDraft();
     const {remainingSeconds: resendTimer, recordSendWithRemainingSeconds} = useSendCooldown();
 
     const sendCode = useSendCode();
@@ -24,7 +25,7 @@ export default function LoginPage(): JSX.Element {
         if (error.status === 429 && typeof error.retryAfter === 'number') {
             recordSendWithRemainingSeconds(error.retryAfter);
         }
-        notify.error(error);
+        notify.scenarios.auth.loginError({description: error.detail});
     };
 
     const handleSendPhone = (formattedPhone: string) => {
@@ -82,11 +83,12 @@ export default function LoginPage(): JSX.Element {
                 : {phone: normalizePhone(draft.phone), code},
             {
                 onSuccess: () => {
-                    router.push("/dashboard");
+                    const target = safeInternalPath(new URLSearchParams(window.location.search).get("from")) ?? "/dashboard";
+                    router.push(target);
                     clearDraft();
                 },
                 onError: (error) => {
-                    notify.error(error);
+                    notify.scenarios.auth.loginError({description: error.detail});
                 },
             },
         );
@@ -134,10 +136,7 @@ export default function LoginPage(): JSX.Element {
             </section>
             <section className={styles.right}>
                 <div className={styles.formWrapper}>
-                    {!isLoaded ? (
-                        <div>Загрузка…</div>
-                    ) : (
-                        <AuthForm
+                    <AuthForm
                         step={draft.step}
                         onStepChange={(step) => setDraft((prev) => ({...prev, step}))}
                         onSendPhone={handleSendPhone}
@@ -157,7 +156,6 @@ export default function LoginPage(): JSX.Element {
                         isResending={sendCode.isPending}
                         resendTimer={resendTimer}
                     />
-                    )}
                 </div>
             </section>
             <div className={styles.bgLogo} aria-hidden="true"/>

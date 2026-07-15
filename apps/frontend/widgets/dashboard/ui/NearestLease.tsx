@@ -60,9 +60,7 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
     const availableProperty = properties?.find(
         (property) => property.status === 'active' && property.occupancy === 'free',
     );
-    const emptyActionHref = availableProperty
-        ? `${ROUTES.leaseNew}?propertyId=${availableProperty.id}`
-        : ROUTES.properties;
+    const emptyActionHref = ROUTES.properties;
     const emptyActionText = availableProperty ? 'Создать аренду' : 'К объектам';
 
     if (isLoading) {

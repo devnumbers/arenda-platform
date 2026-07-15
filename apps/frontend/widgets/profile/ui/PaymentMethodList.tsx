@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
 import { Modal } from '@heroui/react';
-import { notify } from '@/shared/lib/toast';
+import { notify } from '@/shared/lib/notifications';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import {
@@ -109,10 +109,10 @@ export function PaymentMethodList({
 
   useEffect(() => {
     if (addCardResult === 'success') {
-      notify.success('Карта успешно добавлена');
+      notify.scenarios.paymentMethods.cardAdded();
       void refetch();
     } else if (addCardResult === 'fail') {
-      notify.error('Не удалось добавить карту. Попробуйте снова.');
+      notify.scenarios.paymentMethods.cardAddError();
     }
 
     if (addCardResult === 'success' || addCardResult === 'fail') {
@@ -123,7 +123,7 @@ export function PaymentMethodList({
   }, [addCardResult, refetch]);
 
   const notifySyncError = useCallback((error: ApiError) => {
-    notify.warning(error.detail ?? 'Не удалось обновить список карт');
+    notify.scenarios.paymentMethods.listUpdateWarning({description: error.detail});
   }, []);
 
   const handleSync = useCallback(() => {
@@ -141,12 +141,7 @@ export function PaymentMethodList({
 
   const handleActivate = useCallback(
     (id: string) => {
-      void notify.promise(activate.mutateAsync(id), {
-        loading: 'Делаем карту основной...',
-        success: 'Карта стала основной',
-        error: (error) =>
-          (error as ApiError).detail ?? 'Не удалось сделать карту основной',
-      });
+      void notify.scenarios.paymentMethods.activated(activate.mutateAsync(id));
     },
     [activate],
   );
@@ -158,12 +153,7 @@ export function PaymentMethodList({
 
     const promise = remove.mutateAsync(deletingId);
 
-    void notify.promise(promise, {
-      loading: 'Удаляем карту...',
-      success: 'Карта удалена',
-      error: (error) =>
-        (error as ApiError).detail ?? 'Не удалось удалить карту',
-    });
+    void notify.scenarios.paymentMethods.removed(promise);
 
     promise
       .finally(() => {

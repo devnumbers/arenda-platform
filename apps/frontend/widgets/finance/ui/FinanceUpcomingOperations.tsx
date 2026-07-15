@@ -76,7 +76,7 @@ export function FinanceOperationsPreview({
                 <ul className={sectionStyles.operationsList}>
                     {operations.map((operation) => (
                         <li key={operation.id}>
-                            <OperationListItem operation={operation} variant="dashboard"/>
+                            <OperationListItem operation={operation}/>
                         </li>
                     ))}
                 </ul>

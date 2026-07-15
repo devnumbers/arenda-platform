@@ -3,7 +3,7 @@
 import {useParams, useRouter} from 'next/navigation';
 import type {JSX} from 'react';
 import {useCallback, useMemo, useState} from 'react';
-import {notify} from '@/shared/lib/toast';
+import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
 import {
     useArchiveProperty,
@@ -15,10 +15,10 @@ import {useCompleteLease, usePropertyLeases,} from '@/features/leases/api/hooks'
 import {
     type OperationsFilters,
     useOperations,
-    useOperationsByProperty,
     usePropertyOperationsSummary,
 } from '@/features/operations/api/hooks';
 import {useOperationCategories} from '@/features/operation-categories/api';
+import {formatDateForApi} from '@/entities/operation/lib/dates';
 import {ApiError} from '@/shared/api/errors';
 import {findCurrentLease, getPropertyPageStatus,} from '../lib/get-property-page-status';
 import {PropertyDetailHeader} from './PropertyDetailHeader';
@@ -26,8 +26,9 @@ import {PropertyGallery} from './PropertyGallery';
 import {PropertyStatusSection} from './PropertyStatusSection';
 import {PropertyLeaseCard} from './PropertyLeaseCard';
 import {PropertyTenantCard} from './PropertyTenantCard';
-import {PropertyPaymentsCard} from './PropertyPaymentsCard';
-import {PropertyOverdueOperationsCard} from './PropertyOverdueOperationsCard';
+import {PropertyOperationsSection} from './PropertyOperationsSection';
+import {OverdueOperationsBadge} from './OverdueOperationsBadge';
+import {PropertyOperationsActions} from './PropertyOperationsActions';
 import {PropertyOperationsCard} from './PropertyOperationsCard';
 import {PropertyInfoCard} from './PropertyInfoCard';
 import {PropertyActionMenu} from './PropertyActionMenu';
@@ -39,7 +40,7 @@ import {PropertyDetailError} from './PropertyDetailError';
 import styles from './PropertyDetailPage.module.css';
 
 function showMutationError(error: ApiError): void {
-    notify.error(error);
+    notify.scenarios.property.saveError({description: error.detail});
 }
 
 export function PropertyDetailPage(): JSX.Element {
@@ -50,7 +51,6 @@ export function PropertyDetailPage(): JSX.Element {
     const propertyQuery = useProperty(id);
     const leasesQuery = usePropertyLeases(id);
     const summaryQuery = usePropertyOperationsSummary(id);
-    const operationsQuery = useOperationsByProperty(id);
 
     const updateProperty = useUpdateProperty();
     const archiveProperty = useArchiveProperty();
@@ -89,6 +89,26 @@ export function PropertyDetailPage(): JSX.Element {
     });
     const isPayRentLoading = Boolean(currentLease) && payableRentQuery.isFetching;
 
+    const overdueFilters = useMemo<Omit<OperationsFilters, 'property_id'>>(
+        () => ({
+            status: ['overdue'],
+            sort: 'operation_date_asc',
+            limit: 3,
+        }),
+        [],
+    );
+    const upcomingFilters = useMemo<Omit<OperationsFilters, 'property_id'>>(
+        () => ({
+            status: ['pending'],
+            from: formatDateForApi(new Date()),
+            sort: 'operation_date_asc',
+            limit: 3,
+        }),
+        [],
+    );
+
+    const overdueCount = summaryQuery.data?.overdue_total_count ?? 0;
+
     const handleToggleMaintenance = useCallback(() => {
         if (!property) return;
         if (property.status === 'active') {
@@ -99,7 +119,7 @@ export function PropertyDetailPage(): JSX.Element {
             updateProperty.mutate(
                 {id, data: {status: 'maintenance'}},
                 {
-                    onSuccess: () => notify.success('Объект переведён на ремонт'),
+                    onSuccess: () => notify.scenarios.property.movedToMaintenance(),
                     onError: showMutationError,
                 },
             );
@@ -107,7 +127,7 @@ export function PropertyDetailPage(): JSX.Element {
             updateProperty.mutate(
                 {id, data: {status: 'active'}},
                 {
-                    onSuccess: () => notify.success('Объект возвращён в работу'),
+                    onSuccess: () => notify.scenarios.property.returnedToWork(),
                     onError: showMutationError,
                 },
             );
@@ -118,7 +138,7 @@ export function PropertyDetailPage(): JSX.Element {
         if (!property) return;
         if (property.status === 'archived') {
             unarchiveProperty.mutate(id, {
-                onSuccess: () => notify.success('Объект возвращён из архива'),
+                onSuccess: () => notify.scenarios.property.returnedFromArchive(),
                 onError: showMutationError,
             });
         } else {
@@ -127,7 +147,7 @@ export function PropertyDetailPage(): JSX.Element {
                 return;
             }
             archiveProperty.mutate(id, {
-                onSuccess: () => notify.success('Объект переведён в архив'),
+                onSuccess: () => notify.scenarios.property.movedToArchive(),
                 onError: showMutationError,
             });
         }
@@ -178,8 +198,7 @@ export function PropertyDetailPage(): JSX.Element {
     const hasAnyError =
         propertyQuery.isError ||
         leasesQuery.isError ||
-        summaryQuery.isError ||
-        operationsQuery.isError;
+        summaryQuery.isError;
 
     const isLoading = propertyQuery.isPending || leasesQuery.isPending;
 
@@ -206,13 +225,11 @@ export function PropertyDetailPage(): JSX.Element {
                         propertyQuery.refetch();
                         leasesQuery.refetch();
                         summaryQuery.refetch();
-                        operationsQuery.refetch();
                     }}
                     isLoading={
                         propertyQuery.isFetching ||
                         leasesQuery.isFetching ||
-                        summaryQuery.isFetching ||
-                        operationsQuery.isFetching
+                        summaryQuery.isFetching
                     }
                 />
             )}
@@ -238,13 +255,25 @@ export function PropertyDetailPage(): JSX.Element {
 
                     <PropertyTenantCard lease={property.activeLease}/>
 
-                    <PropertyPaymentsCard
-                        property={property}
-                        operations={operationsQuery.data?.items ?? []}
-                        overdueCount={summaryQuery.data?.overdue_total_count ?? 0}
+                    <PropertyOperationsSection
+                        propertyId={id}
+                        title="Просроченные операции"
+                        emptyText="Просроченных операций нет"
+                        filters={overdueFilters}
+                        badge={overdueCount > 0 ? <OverdueOperationsBadge count={overdueCount}/> : undefined}
                     />
 
-                    <PropertyOverdueOperationsCard propertyId={id}/>
+                    <PropertyOperationsSection
+                        propertyId={id}
+                        title="Запланированные операции"
+                        emptyText="Запланированных операций нет"
+                        filters={upcomingFilters}
+                    />
+
+                    <PropertyOperationsActions
+                        propertyId={id}
+                        isArchived={property.status === 'archived'}
+                    />
 
                     <PropertyOperationsCard
                         propertyName={property.name}

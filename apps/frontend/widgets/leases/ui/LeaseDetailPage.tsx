@@ -2,16 +2,15 @@
 
 import {type JSX, useCallback, useMemo, useState,} from 'react';
 import {useRouter} from 'next/navigation';
-import {notify} from '@/shared/lib/toast';
+import {notify} from '@/shared/lib/notifications';
 import NextLink from 'next/link';
 import {ROUTES} from '@/shared/config/routes';
 import {useCompleteLease, useLease,} from '@/features/leases/api/hooks';
 import {useOperationCategories} from '@/features/operation-categories/api';
-import {useOperations} from '@/features/operations/api/hooks';
+import {useInfiniteOperations} from '@/features/operations/api/hooks';
 import {useProperty} from '@/features/properties/api/hooks';
 import {useSubscription} from '@/features/subscription/api/hooks';
 import {isSubscriptionReadonly} from '@/features/subscription/lib/is-subscription-readonly';
-import {ApiError} from '@/shared/api/errors';
 import {Button} from '@/shared/ui/button';
 import {ConfirmModal} from '@/shared/ui/confirm-modal';
 import {PageHeader} from '@/shared/ui/page-header';
@@ -134,13 +133,21 @@ function OperationsSection({
                                isLoading,
                                isError,
                                isFetching,
+                               hasNextPage,
+                               isFetchNextPageError,
+                               isFetchingNextPage,
                                onRetry,
+                               onLoadMore,
                            }: {
     readonly operations: ReadonlyArray<OperationResponse>;
     readonly isLoading: boolean;
     readonly isError: boolean;
     readonly isFetching: boolean;
+    readonly hasNextPage: boolean;
+    readonly isFetchNextPageError: boolean;
+    readonly isFetchingNextPage: boolean;
     readonly onRetry: () => void;
+    readonly onLoadMore: () => void;
 }): JSX.Element {
     if (isLoading) {
         return (
@@ -196,6 +203,23 @@ function OperationsSection({
                     </li>
                 ))}
             </ul>
+            {(hasNextPage || isFetchNextPageError) && (
+                <div className={styles.loadMore}>
+                    <Button
+                        variant="secondary"
+                        size="medium"
+                        loading={isFetchingNextPage}
+                        onClick={onLoadMore}
+                    >
+                        {isFetchNextPageError ? 'Повторить' : 'Показать ещё'}
+                    </Button>
+                    {isFetchNextPageError && (
+                        <span className={styles.loadMoreError} role="alert">
+                            Не удалось загрузить следующие операции
+                        </span>
+                    )}
+                </div>
+            )}
         </PropertyDetailSection>
     );
 }
@@ -208,7 +232,7 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
     const rentCategoryId = categoriesQuery.data?.find(
         (category) => category.code === 'rent',
     )?.id;
-    const rentOperationsQuery = useOperations(
+    const rentOperationsQuery = useInfiniteOperations(
         {
             lease_id: id,
             category_id: rentCategoryId ? [rentCategoryId] : undefined,
@@ -227,7 +251,7 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
     const propertyQuery = useProperty(lease?.property_id ?? '');
     const propertyName = propertyQuery.data?.name ?? 'Объект';
     const rentOperations = useMemo(
-        () => rentOperationsQuery.data?.items ?? [],
+        () => rentOperationsQuery.data?.pages.flatMap((page) => page.items) ?? [],
         [rentOperationsQuery.data],
     );
 
@@ -252,13 +276,12 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
         rentOperationsQuery.refetch();
     }, [rentCategoryId, categoriesQuery, rentOperationsQuery]);
 
+    const handleLoadMoreOperations = useCallback(() => {
+        void rentOperationsQuery.fetchNextPage();
+    }, [rentOperationsQuery]);
+
     const confirmComplete = useCallback(() => {
-        void notify.promise(completeLease.mutateAsync(id), {
-            loading: 'Завершаем аренду...',
-            success: 'Аренда завершена',
-            error: (error) =>
-                (error as ApiError).detail ?? 'Не удалось завершить аренду',
-        });
+        void notify.scenarios.leases.completed(completeLease.mutateAsync(id));
     }, [completeLease, id]);
 
     if (!id) {
@@ -317,14 +340,18 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
                             !(!rentCategoryId && categoriesQuery.isError)
                         }
                         isError={
-                            rentOperationsQuery.isError ||
+                            (rentOperationsQuery.isError && !rentOperationsQuery.data) ||
                             (!rentCategoryId && categoriesQuery.isError)
                         }
                         isFetching={
                             rentOperationsQuery.isFetching ||
                             categoriesQuery.isFetching
                         }
+                        hasNextPage={rentOperationsQuery.hasNextPage}
+                        isFetchNextPageError={rentOperationsQuery.isFetchNextPageError}
+                        isFetchingNextPage={rentOperationsQuery.isFetchingNextPage}
                         onRetry={handleOperationsRetry}
+                        onLoadMore={handleLoadMoreOperations}
                     />
                 </>
             )}

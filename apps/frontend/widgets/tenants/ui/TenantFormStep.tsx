@@ -10,7 +10,6 @@ export interface TenantFormStepProps {
     readonly onSubmit: (data: TenantContactFormData) => void;
     readonly onChange?: (data: TenantContactFormData) => void;
     readonly isLoading: boolean;
-    readonly error?: string;
 }
 
 export function TenantFormStep({
@@ -18,7 +17,6 @@ export function TenantFormStep({
                                    onSubmit,
                                    onChange,
                                    isLoading,
-                                   error,
                                }: TenantFormStepProps): JSX.Element {
     return (
         <div>
@@ -26,7 +24,6 @@ export function TenantFormStep({
                 initialData={initialData}
                 submitLabel="Добавить арендатора"
                 isLoading={isLoading}
-                error={error}
                 onSubmit={onSubmit}
                 onChange={onChange}
                 backHref={ROUTES.tenants}

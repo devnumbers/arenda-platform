@@ -656,6 +656,12 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: exclude_archived_properties
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
         - name: sort
           in: query
           required: false
@@ -3020,11 +3026,15 @@ components:
 
     PropertyOperationsSummaryResponse:
       type: object
-      required: [monthly_profit_kopecks, all_time_profit_kopecks, overdue_rent_count, overdue_total_count]
+      required: [monthly_profit_kopecks, all_time_profit_kopecks, all_time_income_kopecks, all_time_expense_kopecks, overdue_rent_count, overdue_total_count]
       properties:
         monthly_profit_kopecks:
           type: integer
         all_time_profit_kopecks:
+          type: integer
+        all_time_income_kopecks:
+          type: integer
+        all_time_expense_kopecks:
           type: integer
         overdue_rent_count:
           type: integer
@@ -3397,6 +3407,8 @@ components:
         property_id:
           type: string
           format: uuid
+        property_status:
+          $ref: '#/components/schemas/PropertyStatus'
         lease_id:
           type: string
           format: uuid

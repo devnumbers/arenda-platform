@@ -12,6 +12,7 @@ import { ApiError } from '@/shared/api/errors';
 import { mapPropertyResponse } from '@/entities/property/model/mappers';
 import type { Property } from '@/entities/property/model/types';
 import { propertyKeys } from './keys';
+import { operationKeys } from '@/features/operations/api/keys';
 import type { components } from '@/shared/api/generated';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
@@ -113,6 +114,10 @@ export function useArchiveProperty(): UseMutationResult<
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+      queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
+      queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
     },
   });
 }
@@ -131,6 +136,10 @@ export function useUnarchiveProperty(): UseMutationResult<
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+      queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
+      queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
     },
   });
 }
