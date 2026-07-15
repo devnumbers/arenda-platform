@@ -14,7 +14,7 @@ export function FinanceCreateOperationButton(): JSX.Element {
             className={styles.addButton}
             aria-label="Добавить операцию"
         >
-            <Icon size="s">
+            <Icon size="l">
                 <Plus/>
             </Icon>
         </NextLink>

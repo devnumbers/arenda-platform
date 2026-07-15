@@ -184,3 +184,4 @@ export function FinancePage(): JSX.Element {
         </div>
     );
 }
+
