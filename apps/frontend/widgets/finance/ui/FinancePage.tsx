@@ -57,6 +57,7 @@ export function FinancePage(): JSX.Element {
         status: ['overdue'],
         sort: 'operation_date_asc',
         limit: 5,
+        exclude_archived_properties: true,
     });
 
     const {
@@ -71,6 +72,7 @@ export function FinancePage(): JSX.Element {
         to: upcomingRange.to,
         sort: 'operation_date_asc',
         limit: 5,
+        exclude_archived_properties: true,
     });
 
     const isLoading = isReportLoading || isOperationsLoading;
