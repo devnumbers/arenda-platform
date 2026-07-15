@@ -24,16 +24,13 @@ export function useLoginDraft(): {
   draft: LoginDraft;
   setDraft: Dispatch<SetStateAction<LoginDraft>>;
   clearDraft: () => void;
-  isLoaded: boolean;
 } {
   const [draft, setDraft] = useState<LoginDraft>(DEFAULT_DRAFT);
-  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     // Load persisted draft after hydration to avoid SSR/hydration mismatch.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraft(loadDraft());
-    setIsLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -53,7 +50,7 @@ export function useLoginDraft(): {
     }
   }, []);
 
-  return { draft, setDraft, clearDraft, isLoaded };
+  return { draft, setDraft, clearDraft };
 }
 
 function loadDraft(): LoginDraft {

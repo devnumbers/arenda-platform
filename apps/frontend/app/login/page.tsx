@@ -14,7 +14,7 @@ import styles from "./LoginPage.module.css";
 
 export default function LoginPage(): JSX.Element {
     const router = useRouter();
-    const {draft, setDraft, clearDraft, isLoaded} = useLoginDraft();
+    const {draft, setDraft, clearDraft} = useLoginDraft();
     const {remainingSeconds: resendTimer, recordSendWithRemainingSeconds} = useSendCooldown();
 
     const sendCode = useSendCode();
@@ -134,10 +134,7 @@ export default function LoginPage(): JSX.Element {
             </section>
             <section className={styles.right}>
                 <div className={styles.formWrapper}>
-                    {!isLoaded ? (
-                        <div>Загрузка…</div>
-                    ) : (
-                        <AuthForm
+                    <AuthForm
                         step={draft.step}
                         onStepChange={(step) => setDraft((prev) => ({...prev, step}))}
                         onSendPhone={handleSendPhone}
@@ -157,7 +154,6 @@ export default function LoginPage(): JSX.Element {
                         isResending={sendCode.isPending}
                         resendTimer={resendTimer}
                     />
-                    )}
                 </div>
             </section>
             <div className={styles.bgLogo} aria-hidden="true"/>
