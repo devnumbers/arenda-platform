@@ -62,44 +62,77 @@ export function parseDateForApi(dateString: string | null | undefined): Date | u
   return date;
 }
 
-export type OperationDueInfo = {
-  readonly subtitle: string | null;
-  readonly trailing: string;
-};
-
-/** '1 день', '2 дня', '5 дней'. */
-export function formatDaysCount(n: number): string {
+function pluralizeRu(n: number, one: string, few: string, many: string): string {
   const abs = Math.abs(n);
   const mod10 = abs % 10;
   const mod100 = abs % 100;
 
   let word: string;
   if (mod10 === 1 && mod100 !== 11) {
-    word = 'день';
+    word = one;
   } else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
-    word = 'дня';
+    word = few;
   } else {
-    word = 'дней';
+    word = many;
   }
 
   return `${n} ${word}`;
 }
 
-export function getOperationDueInfo(
+/** Календарная длительность интервала [from, to]: '29 дней', '2 месяца, 4 дня'. */
+export function formatCalendarDuration(from: Date, to: Date): string {
+  let years = to.getFullYear() - from.getFullYear();
+  let months = to.getMonth() - from.getMonth();
+  let days = to.getDate() - from.getDate();
+
+  if (days < 0) {
+    months -= 1;
+    days += new Date(to.getFullYear(), to.getMonth(), 0).getDate();
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  const parts: string[] = [];
+  if (years > 0) parts.push(pluralizeRu(years, 'год', 'года', 'лет'));
+  if (months > 0) parts.push(pluralizeRu(months, 'месяц', 'месяца', 'месяцев'));
+  if (days > 0) parts.push(pluralizeRu(days, 'день', 'дня', 'дней'));
+
+  return parts.length > 0 ? parts.join(', ') : '0 дней';
+}
+
+/** '5 июля'; если год даты не текущий — '5 июля 2025'. */
+export function formatOperationDateShort(dateString: string): string {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return dateString;
+
+  const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' };
+  if (date.getFullYear() !== new Date().getFullYear()) {
+    options.year = 'numeric';
+  }
+  return date.toLocaleDateString('ru-RU', options);
+}
+
+export function getOperationTrailing(
   operation: Pick<OperationResponse, 'status' | 'operation_date'>,
-): OperationDueInfo {
+): string {
   if (operation.status === 'overdue') {
-    const diff = diffDays(parseLocalDate(operation.operation_date), new Date());
-    return { subtitle: 'Просрочен', trailing: formatDaysCount(Math.max(diff, 0)) };
+    const dueDate = parseLocalDate(operation.operation_date);
+    const today = new Date();
+    if (dueDate > today) return 'Сегодня';
+    return `на ${formatCalendarDuration(dueDate, today)}`;
   }
 
   if (operation.status === 'pending') {
-    const diff = diffDays(new Date(), parseLocalDate(operation.operation_date));
-    if (diff === 0) return { subtitle: null, trailing: 'Сегодня' };
-    if (diff === 1) return { subtitle: null, trailing: 'Завтра' };
-    if (diff > 1) return { subtitle: null, trailing: formatDaysCount(diff) };
-    return { subtitle: null, trailing: formatOperationDate(operation.operation_date) };
+    const dueDate = parseLocalDate(operation.operation_date);
+    const today = new Date();
+    const diff = diffDays(today, dueDate);
+    if (diff === 0) return 'Сегодня';
+    if (diff === 1) return 'Завтра';
+    if (diff > 1) return `через ${formatCalendarDuration(today, dueDate)}`;
+    return formatOperationDateShort(operation.operation_date);
   }
 
-  return { subtitle: null, trailing: formatOperationDate(operation.operation_date) };
+  return formatOperationDateShort(operation.operation_date);
 }

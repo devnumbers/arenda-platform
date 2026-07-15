@@ -18,6 +18,27 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 )
 
+// propertyStatusesByID maps every owner property, including archived ones, to
+// its status so operation responses can expose the property status.
+func propertyStatusesByID(ctx context.Context, svc *propertiesapp.PropertyService, ownerID uuid.UUID) (map[uuid.UUID]domain.PropertyStatus, error) {
+	active, err := svc.ListProperties(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	archived, err := svc.ListArchivedProperties(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	statuses := make(map[uuid.UUID]domain.PropertyStatus, len(active)+len(archived))
+	for _, p := range active {
+		statuses[p.ID] = p.Status
+	}
+	for _, p := range archived {
+		statuses[p.ID] = p.Status
+	}
+	return statuses, nil
+}
+
 // PropertyHandlers implements the generated property endpoints.
 type PropertyHandlers struct {
 	svc              *propertiesapp.PropertyService

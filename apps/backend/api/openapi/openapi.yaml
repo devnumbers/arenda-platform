@@ -3397,6 +3397,8 @@ components:
         property_id:
           type: string
           format: uuid
+        property_status:
+          $ref: '#/components/schemas/PropertyStatus'
         lease_id:
           type: string
           format: uuid

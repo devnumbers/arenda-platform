@@ -1553,6 +1553,7 @@ export interface components {
             owner_id: string;
             /** Format: uuid */
             property_id: string;
+            property_status?: components["schemas"]["PropertyStatus"];
             /** Format: uuid */
             lease_id?: string | null;
             /** Format: uuid */
