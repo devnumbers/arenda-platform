@@ -18,7 +18,7 @@ Use a sliding session expiration:
 - Every authenticated request refreshes the session expiration to `now + base lifetime`, up to a hard maximum of 30 days since the session was created.
 - A dedicated endpoint allows the user to revoke all of their sessions at once.
 
-The session token itself, the hashing scheme, and the cookie attributes (`HttpOnly`, `Secure`, `SameSite=Strict`, `__Host-` prefix in production) remain unchanged.
+The session token itself, the hashing scheme, and the cookie attributes (`HttpOnly`, `Secure`, `__Host-` prefix in production) remain unchanged. The cookie was originally kept at `SameSite=Strict`; this was later changed to `SameSite=Lax` — see ADR 0018.
 
 ## Consequences
 

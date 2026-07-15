@@ -7,6 +7,7 @@ import {type ApiError} from "@/shared/api/errors";
 import {AuthForm} from "@/features/auth/ui/auth-form";
 import {useSendCode, useVerifyCode} from "@/features/auth/api/hooks";
 import {normalizePhone, isPhoneValid} from "@/shared/lib/phone";
+import {safeInternalPath} from "@/shared/lib/safe-internal-path";
 import {useSendCooldown} from "@/features/auth/lib/use-send-cooldown";
 import {useLoginDraft} from "@/features/auth/lib/use-login-draft";
 import {RESEND_TIMEOUT} from "@/features/auth/lib/constants";
@@ -82,7 +83,8 @@ export default function LoginPage(): JSX.Element {
                 : {phone: normalizePhone(draft.phone), code},
             {
                 onSuccess: () => {
-                    router.push("/dashboard");
+                    const target = safeInternalPath(new URLSearchParams(window.location.search).get("from")) ?? "/dashboard";
+                    router.push(target);
                     clearDraft();
                 },
                 onError: (error) => {
