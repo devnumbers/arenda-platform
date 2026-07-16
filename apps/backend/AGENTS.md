@@ -9,11 +9,11 @@ Rules for the Go backend in `apps/backend`. Also follow the root `AGENTS.md`, `C
 The following skill and MCP server are mandatory for every backend task. The Orchestrator must verify them before dispatching implementation subagents.
 
 - **`use-modern-go` skill** — must be invoked through the Kimi `Skill` tool before any backend planning or implementation. It detects the project's Go version from `go.mod` and instructs subagents to use modern Go idioms up to and including that version. Do not write Go code without first invoking this skill.
-- **`gopls` MCP server** — must be active and reachable via Kimi `/mcp` before any backend implementation or verification. It provides semantic navigation, diagnostics, definitions, references, and workspace analysis.
+- **`gopls` MCP server** — must be active, with its `mcp__gopls__*` tools present in the agent tool set, before any backend implementation or verification. It provides semantic navigation, diagnostics, definitions, references, and workspace analysis.
 
-If `gopls` is not active:
+If the `mcp__gopls__*` tools are not available:
 - Stop backend work immediately.
-- Tell the user that `gopls` is required and unavailable.
+- Tell the user that `gopls` is required and unavailable (the user can check server status with `/mcp`).
 - Do not continue with implementation, lint, or test commands until `gopls` is running.
 
 ## Stack & References
@@ -38,8 +38,8 @@ Invoke skills through the Kimi `Skill` tool using the exact skill name.
 ## MCP Servers
 
 - `gopls` — **mandatory** for every backend task. Use it for Go semantic navigation, definitions, references, diagnostics, package APIs, and impact checks. Treat `gopls` as a navigation and diagnostics tool, not as the source of truth. The source of truth is the repository code plus `go test`, `go vet`, `make backend-lint`, generated code checks, and relevant official docs.
-  - Before starting backend implementation, check `/mcp` status for `gopls`.
-  - If `gopls` is not active, stop and tell the user. Do not continue implementation, lint, or tests until `gopls` is running.
+  - Before starting backend implementation, verify the `mcp__gopls__*` tools are available in the agent tool set.
+  - If the `mcp__gopls__*` tools are not available, stop and tell the user. Do not continue implementation, lint, or tests until `gopls` is running.
   - Use `gopls` diagnostics as a required quality gate before claiming backend work complete.
 - `lean-ctx` — use for broad package exploration, generated code maps, large SQL/OpenAPI files, and noisy command output. Before editing exact Go code, migrations, SQL, or OpenAPI, read the target ranges in raw/full form.
 - `context7` — use for current official docs on third-party libraries when needed.
@@ -51,7 +51,7 @@ Before adding new interfaces, repositories, DTO mappings, application services, 
 Follow the Orchestrator Mode from the root `AGENTS.md`. For backend tasks, the Orchestrator additionally:
 
 1. **Before exploration** — invoke `use-modern-go` so the target Go version and modern idioms are known to all subagents.
-2. **Before implementation** — check `/mcp` status for `gopls`. If it is not active, stop and report to the user.
+2. **Before implementation** — verify the `mcp__gopls__*` tools are available. If they are not, stop and report to the user.
 3. **During implementation** — ensure the coder subagent applies modern idioms from `use-modern-go` to every new or changed Go file.
 4. **Before final verification** — run `gopls` diagnostics on changed packages and fix reported issues before running `make backend-lint`, `go test`, or `go vet`.
 

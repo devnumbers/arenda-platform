@@ -1,0 +1,62 @@
+# apps/admin/AGENTS.md
+
+## Scope
+
+Rules for the react-admin back-office SPA in `apps/admin`. Also follow the root `AGENTS.md`, `CONTEXT.md`, relevant product docs, and ADRs.
+
+## Stack & References
+
+- Vite 6, React 19, TypeScript `^5.7`, react-admin 5 (`react-admin`, `ra-i18n-polyglot`, `ra-language-russian`), MUI 7 with Emotion.
+- Entry point `src/main.tsx`; root component `src/App.tsx`; backend integration lives in `src/dataProvider.ts`; authentication in `src/authProvider.ts`; login UI in `src/LoginPage.tsx`; resources are declared per domain (for example `src/leases.tsx`, `src/operations.tsx`).
+- Russian UI localization via `ra-i18n-polyglot` + `ra-language-russian`; keep new user-facing strings localized.
+- Official react-admin docs (https://marmelab.com/react-admin/documentation.html) and MUI docs (https://mui.com/material-ui/) take precedence over training data.
+- For non-obvious third-party behavior, use `context7` for current docs.
+
+## Required Skills
+
+Invoke skills through the Kimi `Skill` tool using the exact skill name.
+
+- For all admin UI work, invoke `vercel-react-best-practices`.
+- For TypeScript questions and type design, invoke `typescript`.
+- For current library docs before relying on non-obvious APIs, use `context7`.
+
+## MCP Servers
+
+- `playwright` — use for browser automation and UI verification when the `mcp__playwright__*` tools are available. Check desktop and mobile layouts, visible interaction states, loading/error states, and that text does not overlap or overflow. If unavailable, fall back to manual inspection and build logs.
+- `lean-ctx` — use for broad exploration, large generated files, repeated reads, and noisy build or typecheck output. Before editing exact TypeScript, component, or config code, read the target source in raw/full form.
+- `context7` — use for current official docs on third-party libraries when needed.
+
+Before adding resources, fields, inputs, helpers, or API wrappers, search existing resources and call sites with `Grep`/`lean-ctx` to avoid duplicate patterns.
+
+## Architecture
+
+- This is a standalone Vite SPA, not Next.js: no App Router, no Server Components, no file-based routing. Do not apply the Next.js rules from `apps/frontend/AGENTS.md` here.
+- Follow react-admin conventions: declare resources on the `<Admin>` component, keep list/edit/create/show views colocated per resource, and route all backend calls through `dataProvider` and all auth state through `authProvider`.
+- Keep components small and explicit; prefer react-admin and MUI building blocks over custom widgets.
+- Map backend DTOs at the `dataProvider` boundary; do not leak API response shapes into resource components.
+- Runtime configuration comes from Vite env vars (see `.env.example`); never hardcode backend URLs or secrets.
+
+## TypeScript
+
+- Keep `strict: true` and the existing strict compiler options in `tsconfig.json`; `npm run typecheck` (`tsc --noEmit`) must stay clean.
+- Avoid `any`; prefer `unknown` with narrowing.
+
+## Quality Gates
+
+- Do not write new tests unless the user explicitly asks for them.
+- Run before claiming admin work complete:
+
+```bash
+make admin-typecheck
+make admin-build
+```
+
+## Commands
+
+```bash
+# from the repository root
+make admin-install
+make admin-dev
+make admin-build
+make admin-typecheck
+```
