@@ -487,6 +487,7 @@ func (r *SubscriptionPaymentRepository) IncrementChargeAttempts(ctx context.Cont
 
 func mapCreateSubscriptionPaymentParams(payment domain.SubscriptionPayment) postgres.CreateSubscriptionPaymentParams {
 	return postgres.CreateSubscriptionPaymentParams{
+		ID:                pgtype.UUID{Bytes: payment.ID, Valid: true},
 		UserID:            pgtype.UUID{Bytes: payment.UserID, Valid: true},
 		SubscriptionID:    pgtype.UUID{Bytes: payment.SubscriptionID, Valid: true},
 		TariffID:          pgtype.UUID{Bytes: payment.TariffID, Valid: true},

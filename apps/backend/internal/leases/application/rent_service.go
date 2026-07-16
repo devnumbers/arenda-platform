@@ -38,10 +38,10 @@ func (r *RentService) GenerateRentOperations(
 	recurringOpID uuid.UUID,
 	ownerID uuid.UUID,
 	rentCategoryID uuid.UUID,
-) []domain.Operation {
+) ([]domain.Operation, error) {
 	dates := domain.GenerateDates(lease.StartDate, lease.PaymentDay, lease.EndDate, r.clock.Now(), domain.RecurringOperationPeriodicityMonthly)
 	if len(dates) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	now := r.clock.Now()
@@ -49,8 +49,13 @@ func (r *RentService) GenerateRentOperations(
 	ops := make([]domain.Operation, 0, len(dates))
 
 	for _, d := range dates {
+		opID, err := uuid.NewV7()
+		if err != nil {
+			return nil, fmt.Errorf("generate operation id: %w", err)
+		}
 		sourceDate := d
 		ops = append(ops, domain.Operation{
+			ID:                   opID,
 			OwnerID:              ownerID,
 			PropertyID:           lease.PropertyID,
 			LeaseID:              lease.ID,
@@ -68,7 +73,7 @@ func (r *RentService) GenerateRentOperations(
 		})
 	}
 
-	return ops
+	return ops, nil
 }
 
 func rentOperationStatus(operationDate, today time.Time) domain.OperationStatus {
@@ -116,7 +121,10 @@ func (r *RentService) RegenerateFutureOperations(
 		return fmt.Errorf("list existing operations: %w", err)
 	}
 
-	ops := r.GenerateRentOperations(ctx, lease, rec.ID, lease.OwnerID, rentCategoryID)
+	ops, err := r.GenerateRentOperations(ctx, lease, rec.ID, lease.OwnerID, rentCategoryID)
+	if err != nil {
+		return fmt.Errorf("generate rent operations: %w", err)
+	}
 	futureOps := filterFutureOperations(ops, fromDate)
 	futureOps = excludeExistingDates(futureOps, existingDates)
 	if len(futureOps) == 0 {
@@ -181,7 +189,10 @@ func (r *RentService) RebuildSchedule(
 		return fmt.Errorf("list existing operations: %w", err)
 	}
 
-	ops := r.GenerateRentOperations(ctx, lease, rec.ID, lease.OwnerID, rentCategoryID)
+	ops, err := r.GenerateRentOperations(ctx, lease, rec.ID, lease.OwnerID, rentCategoryID)
+	if err != nil {
+		return fmt.Errorf("generate rent operations: %w", err)
+	}
 	ops = excludeExistingDates(ops, existingDates)
 	if len(ops) == 0 {
 		return nil

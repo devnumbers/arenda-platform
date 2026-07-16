@@ -1,6 +1,6 @@
 -- name: CreateTenantContact :one
-INSERT INTO tenant_contacts (owner_id, name, surname, patronymic, phone, email, comment)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO tenant_contacts (id, owner_id, name, surname, patronymic, phone, email, comment)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetTenantContactByIDAndOwner :one

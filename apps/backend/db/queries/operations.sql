@@ -1,13 +1,13 @@
 -- name: CreateOperation :one
 INSERT INTO operations (
-    owner_id, property_id, lease_id, recurring_operation_id,
+    id, owner_id, property_id, lease_id, recurring_operation_id,
     type, category_id, name, amount_kopecks, operation_date, source_operation_date, comment, is_exception, status,
     reminder_offset_days
 )
 VALUES (
-    $1, $2, $3, $4,
-    $5, $6, $7, $8, $9, $10, $11, $12, $13,
-    $14
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10, $11, $12, $13, $14,
+    $15
 )
 RETURNING *;
 

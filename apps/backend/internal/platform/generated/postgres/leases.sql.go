@@ -71,19 +71,20 @@ func (q *Queries) CountOpenLeasesByProperty(ctx context.Context, propertyID pgty
 
 const createLease = `-- name: CreateLease :one
 INSERT INTO leases (
-    owner_id, property_id, tenant_contact_id, status,
+    id, owner_id, property_id, tenant_contact_id, status,
     start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks,
     payment_day, comment
 )
 VALUES (
-    $1, $2, $3, $4,
-    $5, $6, $7, $8,
-    $9, $10
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9,
+    $10, $11
 )
 RETURNING id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at
 `
 
 type CreateLeaseParams struct {
+	ID                   pgtype.UUID `json:"id"`
 	OwnerID              pgtype.UUID `json:"owner_id"`
 	PropertyID           pgtype.UUID `json:"property_id"`
 	TenantContactID      pgtype.UUID `json:"tenant_contact_id"`
@@ -98,6 +99,7 @@ type CreateLeaseParams struct {
 
 func (q *Queries) CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease, error) {
 	row := q.db.QueryRow(ctx, createLease,
+		arg.ID,
 		arg.OwnerID,
 		arg.PropertyID,
 		arg.TenantContactID,

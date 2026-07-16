@@ -1,6 +1,6 @@
 -- name: CreatePropertyPhoto :one
-INSERT INTO property_photos (property_id, url)
-VALUES ($1, $2)
+INSERT INTO property_photos (id, property_id, url)
+VALUES ($1, $2, $3)
 RETURNING *;
 
 -- name: ListPropertyPhotosByPropertyID :many

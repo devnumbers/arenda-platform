@@ -41,6 +41,7 @@ func (r *LeaseRepository) WithTx(tx transaction.Tx) application.LeaseRepository 
 
 func (r *LeaseRepository) Create(ctx context.Context, ownerID uuid.UUID, lease domain.Lease) (domain.Lease, error) {
 	row, err := r.q().CreateLease(ctx, postgres.CreateLeaseParams{
+		ID:                   pgconv.UUIDToPgtype(lease.ID),
 		OwnerID:              pgconv.UUIDToPgtype(ownerID),
 		PropertyID:           pgconv.UUIDToPgtype(lease.PropertyID),
 		TenantContactID:      pgconv.UUIDToPgtypePtr(lease.TenantContactID),
@@ -270,6 +271,7 @@ func (r *TenantContactRepository) WithTx(tx transaction.Tx) application.TenantCo
 
 func (r *TenantContactRepository) Create(ctx context.Context, ownerID uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error) {
 	row, err := r.q().CreateTenantContact(ctx, postgres.CreateTenantContactParams{
+		ID:         pgconv.UUIDToPgtype(contact.ID),
 		OwnerID:    pgconv.UUIDToPgtype(ownerID),
 		Name:       contact.Name,
 		Surname:    pgconv.StringPtrToPgtype(contact.Surname),
@@ -492,6 +494,7 @@ func (r *RecurringOperationRepository) WithTx(tx transaction.Tx) application.Rec
 
 func (r *RecurringOperationRepository) Create(ctx context.Context, op domain.RecurringOperation) (domain.RecurringOperation, error) {
 	params := postgres.CreateRecurringOperationParams{
+		ID:            pgconv.UUIDToPgtype(op.ID),
 		OwnerID:       pgconv.UUIDToPgtype(op.OwnerID),
 		PropertyID:    pgconv.UUIDToPgtype(op.PropertyID),
 		LeaseID:       pgconv.UUIDToPgtype(op.LeaseID),
@@ -766,6 +769,7 @@ func (r *OperationRepository) WithTx(tx transaction.Tx) application.OperationRep
 
 func (r *OperationRepository) Create(ctx context.Context, op domain.Operation) (domain.Operation, error) {
 	params := postgres.CreateOperationParams{
+		ID:                   pgconv.UUIDToPgtype(op.ID),
 		OwnerID:              pgconv.UUIDToPgtype(op.OwnerID),
 		PropertyID:           pgconv.UUIDToPgtype(op.PropertyID),
 		LeaseID:              pgconv.UUIDToPgtype(op.LeaseID),
@@ -804,6 +808,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 			reminderOffsetDays = pgtype.Int4{Int32: int32(*op.ReminderOffsetDays), Valid: true}
 		}
 		rows[i] = []any{
+			pgconv.UUIDToPgtype(op.ID),
 			pgconv.UUIDToPgtype(op.OwnerID),
 			pgconv.UUIDToPgtype(op.PropertyID),
 			pgconv.UUIDToPgtype(op.LeaseID),
@@ -827,7 +832,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 	}
 
 	_, err := copier.CopyFrom(ctx, pgx.Identifier{"operations"}, []string{
-		"owner_id", "property_id", "lease_id", "recurring_operation_id",
+		"id", "owner_id", "property_id", "lease_id", "recurring_operation_id",
 		"type", "category_id", "name", "amount_kopecks", "operation_date", "source_operation_date", "comment", "is_exception", "status",
 		"reminder_offset_days",
 	}, pgx.CopyFromRows(rows))
@@ -1485,7 +1490,12 @@ func (r *OperationCategoryRepository) WithTx(tx transaction.Tx) application.Oper
 }
 
 func (r *OperationCategoryRepository) Create(ctx context.Context, ownerID uuid.UUID, categoryType domain.OperationType, name string) (domain.OperationCategory, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return domain.OperationCategory{}, fmt.Errorf("generate operation category id: %w", err)
+	}
 	row, err := r.q().CreateOperationCategory(ctx, postgres.CreateOperationCategoryParams{
+		ID:      pgconv.UUIDToPgtype(id),
 		OwnerID: pgconv.UUIDToPgtype(ownerID),
 		Type:    string(categoryType),
 		Name:    name,
@@ -1559,13 +1569,17 @@ func (r *OperationCategoryRepository) CreateDefaultCategories(ctx context.Contex
 		{code: string(domain.OperationCategoryCodeTax), operationType: string(domain.OperationTypeExpense), name: "Налог"},
 	}
 	for _, cat := range defaults {
-		err := r.q().CreateOperationCategoryIgnoreConflict(ctx, postgres.CreateOperationCategoryIgnoreConflictParams{
+		id, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generate operation category id: %w", err)
+		}
+		if err := r.q().CreateOperationCategoryIgnoreConflict(ctx, postgres.CreateOperationCategoryIgnoreConflictParams{
+			ID:      pgconv.UUIDToPgtype(id),
 			OwnerID: ownerPgID,
 			Type:    cat.operationType,
 			Name:    cat.name,
 			Code:    pgtype.Text{String: cat.code, Valid: true},
-		})
-		if err != nil {
+		}); err != nil {
 			return fmt.Errorf("create default operation category %q: %w", cat.code, err)
 		}
 	}

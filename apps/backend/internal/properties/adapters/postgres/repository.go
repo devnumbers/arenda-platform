@@ -35,6 +35,7 @@ func (r *PropertyRepository) WithTx(tx transaction.Tx) application.PropertyRepos
 
 func (r *PropertyRepository) Create(ctx context.Context, ownerID uuid.UUID, property domain.Property) (domain.Property, error) {
 	row, err := r.q().CreateProperty(ctx, postgres.CreatePropertyParams{
+		ID:          pgconv.UUIDToPgtype(property.ID),
 		OwnerID:     pgconv.UUIDToPgtype(ownerID),
 		Name:        property.Name,
 		Type:        string(property.Type),

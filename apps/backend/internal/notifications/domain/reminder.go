@@ -115,7 +115,7 @@ func newOperationEventReminder(ownerID, operationID, propertyID uuid.UUID, event
 	if err := ValidateReminderDate(reminderDate, now); err != nil {
 		return Reminder{}, err
 	}
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return Reminder{}, fmt.Errorf("generate reminder id: %w", err)
 	}
@@ -140,7 +140,7 @@ func NewLeaseReminder(ownerID, leaseID, propertyID uuid.UUID, reminderDate time.
 	if err := ValidateReminderDate(reminderDate, now); err != nil {
 		return Reminder{}, err
 	}
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return Reminder{}, fmt.Errorf("generate reminder id: %w", err)
 	}

@@ -71,6 +71,7 @@ func (r *PaymentMethodRepository) Create(ctx context.Context, pm domain.PaymentM
 	}
 
 	row, err := r.q().CreatePaymentMethod(ctx, postgres.CreatePaymentMethodParams{
+		ID:             pgtype.UUID{Bytes: pm.ID, Valid: true},
 		UserID:         pgtype.UUID{Bytes: pm.UserID, Valid: true},
 		Provider:       string(pm.Provider),
 		ProviderToken:  encryptedToken,
@@ -103,6 +104,7 @@ func (r *PaymentMethodRepository) UpsertByTokenHash(ctx context.Context, pm doma
 	}
 
 	row, err := r.q().UpsertPaymentMethodByTokenHash(ctx, postgres.UpsertPaymentMethodByTokenHashParams{
+		ID:             pgtype.UUID{Bytes: pm.ID, Valid: true},
 		UserID:         pgtype.UUID{Bytes: pm.UserID, Valid: true},
 		Provider:       string(pm.Provider),
 		ProviderToken:  encryptedToken,

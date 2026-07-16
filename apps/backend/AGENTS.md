@@ -82,6 +82,7 @@ go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1 -config a
 - Schema changes require versioned migrations in `db/migrations` and matching queries in `db/queries`.
 - Keep database invariants in PostgreSQL with `NOT NULL`, foreign keys, `CHECK` constraints, indexes, and triggers where they protect durable rules.
 - Use `date` for domain dates, `timestamptz` for system timestamps, and `BIGINT` (kopecks) for money.
+- Identifiers are UUIDv7, generated in the application via `uuid.NewV7()`; `id` columns have no `DEFAULT` in the database. Set `id` explicitly in new migrations and seeds (in SQL, use PostgreSQL 18 `uuidv7()`). See `docs/adr/0019-uuid-v7-app-generated-ids.md`.
 - Browser auth uses opaque server-side sessions with `HttpOnly` cookies. Do not replace this with browser-readable JWT/session storage without a new ADR.
 - Store property photos through a storage port backed by REG.RU S3-compatible storage. Do not add MinIO as a local dependency.
 

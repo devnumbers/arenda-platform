@@ -115,8 +115,13 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.U
 			if _, ok := existingDates[d]; ok {
 				continue
 			}
+			opID, err := uuid.NewV7()
+			if err != nil {
+				return fmt.Errorf("generate operation id: %w", err)
+			}
 			sourceDate := d
 			ops = append(ops, leasesdomain.Operation{
+				ID:                   opID,
 				OwnerID:              rec.OwnerID,
 				PropertyID:           rec.PropertyID,
 				LeaseID:              rec.LeaseID,

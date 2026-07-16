@@ -79,11 +79,12 @@ func (q *Queries) CreateLoginCode(ctx context.Context, arg CreateLoginCodeParams
 }
 
 const createSession = `-- name: CreateSession :one
-INSERT INTO sessions (user_id, token_hash, expires_at, last_used_at)
-VALUES ($1, $2, $3, $4) RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at
+INSERT INTO sessions (id, user_id, token_hash, expires_at, last_used_at)
+VALUES ($1, $2, $3, $4, $5) RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at
 `
 
 type CreateSessionParams struct {
+	ID         pgtype.UUID        `json:"id"`
 	UserID     pgtype.UUID        `json:"user_id"`
 	TokenHash  string             `json:"token_hash"`
 	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
@@ -92,6 +93,7 @@ type CreateSessionParams struct {
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
 	row := q.db.QueryRow(ctx, createSession,
+		arg.ID,
 		arg.UserID,
 		arg.TokenHash,
 		arg.ExpiresAt,
@@ -827,8 +829,8 @@ func (q *Queries) UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams
 }
 
 const upsertLoginAttempt = `-- name: UpsertLoginAttempt :exec
-INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO login_attempts (id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (phone) DO UPDATE SET
     failures = EXCLUDED.failures,
     first_failure_at = EXCLUDED.first_failure_at,
@@ -838,6 +840,7 @@ ON CONFLICT (phone) DO UPDATE SET
 `
 
 type UpsertLoginAttemptParams struct {
+	ID             pgtype.UUID        `json:"id"`
 	Phone          string             `json:"phone"`
 	Failures       int32              `json:"failures"`
 	FirstFailureAt pgtype.Timestamptz `json:"first_failure_at"`
@@ -848,6 +851,7 @@ type UpsertLoginAttemptParams struct {
 
 func (q *Queries) UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error {
 	_, err := q.db.Exec(ctx, upsertLoginAttempt,
+		arg.ID,
 		arg.Phone,
 		arg.Failures,
 		arg.FirstFailureAt,

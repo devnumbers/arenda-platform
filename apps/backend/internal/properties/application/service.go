@@ -565,7 +565,7 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, ownerID, propert
 		return domain.Property{}, ErrPhotoLimitReached
 	}
 
-	photoID, err := uuid.NewRandom()
+	photoID, err := uuid.NewV7()
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("generate photo id: %w", err)
 	}
@@ -578,7 +578,7 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, ownerID, propert
 		return domain.Property{}, fmt.Errorf("upload photo: %w", err)
 	}
 
-	if _, err := txPhotoRepo.Create(ctx, propertyID, url); err != nil {
+	if _, err := txPhotoRepo.Create(ctx, photoID, propertyID, url); err != nil {
 		return domain.Property{}, fmt.Errorf("create photo record: %w", err)
 	}
 

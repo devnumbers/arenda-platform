@@ -43,6 +43,7 @@ func (r *SessionRepository) WithTx(tx transaction.Tx) (application.SessionReposi
 
 func (r *SessionRepository) Create(ctx context.Context, session domain.Session) error {
 	_, err := r.q().CreateSession(ctx, pgen.CreateSessionParams{
+		ID:         pgconv.UUIDToPgtype(session.ID),
 		UserID:     pgconv.UUIDToPgtype(session.UserID),
 		TokenHash:  session.TokenHash,
 		ExpiresAt:  pgtype.Timestamptz{Time: session.ExpiresAt, Valid: true},
@@ -118,6 +119,7 @@ func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string
 	}
 
 	session := domain.Session{
+		ID:         pgconv.UUIDFromPgtype(row.ID),
 		UserID:     pgconv.UUIDFromPgtype(row.UserID),
 		TokenHash:  row.TokenHash,
 		ExpiresAt:  row.ExpiresAt.Time,

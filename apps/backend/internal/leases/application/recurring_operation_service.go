@@ -147,7 +147,7 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		return domain.RecurringOperation{}, err
 	}
 
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("generate recurring operation id: %w", err)
 	}
@@ -522,7 +522,7 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 		return domain.RecurringOperation{}, newInvalidInputError("apply_from_date must be on or before the series end date")
 	}
 
-	newID, err := uuid.NewRandom()
+	newID, err := uuid.NewV7()
 	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("generate recurring operation id: %w", err)
 	}
@@ -1072,8 +1072,14 @@ func (s *RecurringOperationService) buildOperations(
 			continue
 		}
 
+		opID, err := uuid.NewV7()
+		if err != nil {
+			return nil, fmt.Errorf("generate operation id: %w", err)
+		}
+
 		sourceDate := d
 		ops = append(ops, domain.Operation{
+			ID:                   opID,
 			OwnerID:              rec.OwnerID,
 			PropertyID:           rec.PropertyID,
 			LeaseID:              rec.LeaseID,

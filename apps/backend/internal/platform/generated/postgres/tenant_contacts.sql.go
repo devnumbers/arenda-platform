@@ -24,12 +24,13 @@ func (q *Queries) CountTenantContactsByOwnerAdmin(ctx context.Context, ownerID p
 }
 
 const createTenantContact = `-- name: CreateTenantContact :one
-INSERT INTO tenant_contacts (owner_id, name, surname, patronymic, phone, email, comment)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO tenant_contacts (id, owner_id, name, surname, patronymic, phone, email, comment)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id, owner_id, name, surname, patronymic, phone, email, comment, created_at, updated_at
 `
 
 type CreateTenantContactParams struct {
+	ID         pgtype.UUID `json:"id"`
 	OwnerID    pgtype.UUID `json:"owner_id"`
 	Name       string      `json:"name"`
 	Surname    pgtype.Text `json:"surname"`
@@ -41,6 +42,7 @@ type CreateTenantContactParams struct {
 
 func (q *Queries) CreateTenantContact(ctx context.Context, arg CreateTenantContactParams) (TenantContact, error) {
 	row := q.db.QueryRow(ctx, createTenantContact,
+		arg.ID,
 		arg.OwnerID,
 		arg.Name,
 		arg.Surname,

@@ -13,19 +13,20 @@ import (
 
 const createRecurringOperation = `-- name: CreateRecurringOperation :one
 INSERT INTO recurring_operations (
-    owner_id, property_id, lease_id, type, category_id, name,
+    id, owner_id, property_id, lease_id, type, category_id, name,
     amount_kopecks, start_date, payment_day, end_date,
     periodicity, status, comment, reminder_offset_days
 )
 VALUES (
-    $1, $2, $3, $4, $5, $6,
-    $7, $8, $9, $10,
-    $11, $12, $13, $14
+    $1, $2, $3, $4, $5, $6, $7,
+    $8, $9, $10, $11,
+    $12, $13, $14, $15
 )
 RETURNING id, owner_id, property_id, lease_id, type, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name, deleted_at, category_id
 `
 
 type CreateRecurringOperationParams struct {
+	ID                 pgtype.UUID `json:"id"`
 	OwnerID            pgtype.UUID `json:"owner_id"`
 	PropertyID         pgtype.UUID `json:"property_id"`
 	LeaseID            pgtype.UUID `json:"lease_id"`
@@ -44,6 +45,7 @@ type CreateRecurringOperationParams struct {
 
 func (q *Queries) CreateRecurringOperation(ctx context.Context, arg CreateRecurringOperationParams) (RecurringOperation, error) {
 	row := q.db.QueryRow(ctx, createRecurringOperation,
+		arg.ID,
 		arg.OwnerID,
 		arg.PropertyID,
 		arg.LeaseID,

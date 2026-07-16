@@ -23,18 +23,19 @@ func (q *Queries) CountPropertyPhotosByPropertyID(ctx context.Context, propertyI
 }
 
 const createPropertyPhoto = `-- name: CreatePropertyPhoto :one
-INSERT INTO property_photos (property_id, url)
-VALUES ($1, $2)
+INSERT INTO property_photos (id, property_id, url)
+VALUES ($1, $2, $3)
 RETURNING id, property_id, url, created_at
 `
 
 type CreatePropertyPhotoParams struct {
+	ID         pgtype.UUID `json:"id"`
 	PropertyID pgtype.UUID `json:"property_id"`
 	Url        string      `json:"url"`
 }
 
 func (q *Queries) CreatePropertyPhoto(ctx context.Context, arg CreatePropertyPhotoParams) (PropertyPhoto, error) {
-	row := q.db.QueryRow(ctx, createPropertyPhoto, arg.PropertyID, arg.Url)
+	row := q.db.QueryRow(ctx, createPropertyPhoto, arg.ID, arg.PropertyID, arg.Url)
 	var i PropertyPhoto
 	err := row.Scan(
 		&i.ID,

@@ -138,7 +138,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		return domain.Operation{}, err
 	}
 
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return domain.Operation{}, fmt.Errorf("generate operation id: %w", err)
 	}

@@ -1,6 +1,6 @@
 -- name: CreateProperty :one
-INSERT INTO properties (owner_id, name, type, address, description, status)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO properties (id, owner_id, name, type, address, description, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: GetPropertyByIDAndOwner :one

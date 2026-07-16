@@ -86,7 +86,12 @@ func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, userID
 		return err
 	}
 	failures := min(window.Failures, math.MaxInt32)
+	id, err := uuid.NewV7()
+	if err != nil {
+		return fmt.Errorf("generate login attempt id: %w", err)
+	}
 	if err := r.q().UpsertLoginAttempt(ctx, pgen.UpsertLoginAttemptParams{
+		ID:             pgconv.UUIDToPgtype(id),
 		Phone:          encryptedPhone,
 		Failures:       int32(failures), //nolint:gosec // clamped to math.MaxInt32 by min above
 		FirstFailureAt: pgtype.Timestamptz{Time: window.FirstFailureAt, Valid: true},

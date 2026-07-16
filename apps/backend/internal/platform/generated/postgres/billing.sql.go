@@ -57,6 +57,7 @@ func (q *Queries) CountSubscriptionsByActivePaymentMethodID(ctx context.Context,
 
 const createPaymentMethod = `-- name: CreatePaymentMethod :one
 INSERT INTO payment_methods (
+    id,
     user_id,
     provider,
     provider_token,
@@ -66,11 +67,12 @@ INSERT INTO payment_methods (
     exp_date,
     is_active
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING id, user_id, provider, provider_token, token_hash, display_mask, is_active, created_at, updated_at, provider_card_id, exp_date
 `
 
 type CreatePaymentMethodParams struct {
+	ID             pgtype.UUID `json:"id"`
 	UserID         pgtype.UUID `json:"user_id"`
 	Provider       string      `json:"provider"`
 	ProviderToken  string      `json:"provider_token"`
@@ -83,6 +85,7 @@ type CreatePaymentMethodParams struct {
 
 func (q *Queries) CreatePaymentMethod(ctx context.Context, arg CreatePaymentMethodParams) (PaymentMethod, error) {
 	row := q.db.QueryRow(ctx, createPaymentMethod,
+		arg.ID,
 		arg.UserID,
 		arg.Provider,
 		arg.ProviderToken,
@@ -111,6 +114,7 @@ func (q *Queries) CreatePaymentMethod(ctx context.Context, arg CreatePaymentMeth
 
 const createSubscription = `-- name: CreateSubscription :one
 INSERT INTO user_subscriptions (
+    id,
     user_id,
     tariff_id,
     source,
@@ -123,12 +127,13 @@ INSERT INTO user_subscriptions (
     active_payment_method_id,
     last_applied_payment_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (user_id) DO NOTHING
 RETURNING id, user_id, tariff_id, source, status, valid_until, created_at, updated_at, auto_renew_enabled, pending_tariff_id, pending_change_at, active_payment_method_id, pending_period, last_applied_payment_id
 `
 
 type CreateSubscriptionParams struct {
+	ID                    pgtype.UUID        `json:"id"`
 	UserID                pgtype.UUID        `json:"user_id"`
 	TariffID              pgtype.UUID        `json:"tariff_id"`
 	Source                string             `json:"source"`
@@ -144,6 +149,7 @@ type CreateSubscriptionParams struct {
 
 func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (UserSubscription, error) {
 	row := q.db.QueryRow(ctx, createSubscription,
+		arg.ID,
 		arg.UserID,
 		arg.TariffID,
 		arg.Source,
@@ -178,6 +184,7 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 
 const createSubscriptionPayment = `-- name: CreateSubscriptionPayment :one
 INSERT INTO subscription_payments (
+    id,
     user_id,
     subscription_id,
     tariff_id,
@@ -190,11 +197,12 @@ INSERT INTO subscription_payments (
     status,
     error_code
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks, charge_attempts
 `
 
 type CreateSubscriptionPaymentParams struct {
+	ID                pgtype.UUID `json:"id"`
 	UserID            pgtype.UUID `json:"user_id"`
 	SubscriptionID    pgtype.UUID `json:"subscription_id"`
 	TariffID          pgtype.UUID `json:"tariff_id"`
@@ -210,6 +218,7 @@ type CreateSubscriptionPaymentParams struct {
 
 func (q *Queries) CreateSubscriptionPayment(ctx context.Context, arg CreateSubscriptionPaymentParams) (SubscriptionPayment, error) {
 	row := q.db.QueryRow(ctx, createSubscriptionPayment,
+		arg.ID,
 		arg.UserID,
 		arg.SubscriptionID,
 		arg.TariffID,
@@ -1749,6 +1758,7 @@ func (q *Queries) UpdateSubscriptionPaymentProviderPaymentID(ctx context.Context
 
 const upsertPaymentMethodByTokenHash = `-- name: UpsertPaymentMethodByTokenHash :one
 INSERT INTO payment_methods (
+    id,
     user_id,
     provider,
     provider_token,
@@ -1758,7 +1768,7 @@ INSERT INTO payment_methods (
     exp_date,
     is_active
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (user_id, token_hash)
 DO UPDATE SET
     provider_token = EXCLUDED.provider_token,
@@ -1770,6 +1780,7 @@ RETURNING id, user_id, provider, provider_token, token_hash, display_mask, is_ac
 `
 
 type UpsertPaymentMethodByTokenHashParams struct {
+	ID             pgtype.UUID `json:"id"`
 	UserID         pgtype.UUID `json:"user_id"`
 	Provider       string      `json:"provider"`
 	ProviderToken  string      `json:"provider_token"`
@@ -1782,6 +1793,7 @@ type UpsertPaymentMethodByTokenHashParams struct {
 
 func (q *Queries) UpsertPaymentMethodByTokenHash(ctx context.Context, arg UpsertPaymentMethodByTokenHashParams) (PaymentMethod, error) {
 	row := q.db.QueryRow(ctx, upsertPaymentMethodByTokenHash,
+		arg.ID,
 		arg.UserID,
 		arg.Provider,
 		arg.ProviderToken,

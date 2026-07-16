@@ -441,7 +441,7 @@ var _ LeaseRepository = stubLeaseRepo{}
 
 type fakePropertyPhotoRepo struct{}
 
-func (fakePropertyPhotoRepo) Create(_ context.Context, _ uuid.UUID, _ string) (domain.Photo, error) {
+func (fakePropertyPhotoRepo) Create(_ context.Context, _, _ uuid.UUID, _ string) (domain.Photo, error) {
 	return domain.Photo{}, nil
 }
 

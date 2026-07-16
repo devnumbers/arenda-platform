@@ -14,6 +14,7 @@ FROM tariffs ORDER BY monthly_price_kopecks, id;
 
 -- name: CreateSubscription :one
 INSERT INTO user_subscriptions (
+    id,
     user_id,
     tariff_id,
     source,
@@ -26,7 +27,7 @@ INSERT INTO user_subscriptions (
     active_payment_method_id,
     last_applied_payment_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (user_id) DO NOTHING
 RETURNING *;
 
@@ -60,6 +61,7 @@ RETURNING *;
 
 -- name: CreatePaymentMethod :one
 INSERT INTO payment_methods (
+    id,
     user_id,
     provider,
     provider_token,
@@ -69,11 +71,12 @@ INSERT INTO payment_methods (
     exp_date,
     is_active
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
 -- name: UpsertPaymentMethodByTokenHash :one
 INSERT INTO payment_methods (
+    id,
     user_id,
     provider,
     provider_token,
@@ -83,7 +86,7 @@ INSERT INTO payment_methods (
     exp_date,
     is_active
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (user_id, token_hash)
 DO UPDATE SET
     provider_token = EXCLUDED.provider_token,
@@ -124,6 +127,7 @@ DELETE FROM payment_methods WHERE id = $1;
 
 -- name: CreateSubscriptionPayment :one
 INSERT INTO subscription_payments (
+    id,
     user_id,
     subscription_id,
     tariff_id,
@@ -136,7 +140,7 @@ INSERT INTO subscription_payments (
     status,
     error_code
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING *;
 
 -- name: GetSubscriptionPaymentByID :one

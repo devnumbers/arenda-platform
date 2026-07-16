@@ -67,8 +67,8 @@ SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_en
 SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted FROM login_attempts WHERE phone = $1 FOR UPDATE;
 
 -- name: UpsertLoginAttempt :exec
-INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO login_attempts (id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (phone) DO UPDATE SET
     failures = EXCLUDED.failures,
     first_failure_at = EXCLUDED.first_failure_at,
@@ -88,8 +88,8 @@ DELETE FROM login_attempts t WHERE t.ctid IN (
 );
 
 -- name: CreateSession :one
-INSERT INTO sessions (user_id, token_hash, expires_at, last_used_at)
-VALUES ($1, $2, $3, $4) RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at;
+INSERT INTO sessions (id, user_id, token_hash, expires_at, last_used_at)
+VALUES ($1, $2, $3, $4, $5) RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at;
 
 -- name: UpdateSession :exec
 UPDATE sessions SET expires_at = $1, last_used_at = $2 WHERE token_hash = $3;

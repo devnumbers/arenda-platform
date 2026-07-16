@@ -94,12 +94,13 @@ func (q *Queries) CountPropertiesByOwnerAdmin(ctx context.Context, arg CountProp
 }
 
 const createProperty = `-- name: CreateProperty :one
-INSERT INTO properties (owner_id, name, type, address, description, status)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO properties (id, owner_id, name, type, address, description, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at
 `
 
 type CreatePropertyParams struct {
+	ID          pgtype.UUID `json:"id"`
 	OwnerID     pgtype.UUID `json:"owner_id"`
 	Name        string      `json:"name"`
 	Type        string      `json:"type"`
@@ -110,6 +111,7 @@ type CreatePropertyParams struct {
 
 func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error) {
 	row := q.db.QueryRow(ctx, createProperty,
+		arg.ID,
 		arg.OwnerID,
 		arg.Name,
 		arg.Type,

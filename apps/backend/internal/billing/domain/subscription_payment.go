@@ -63,7 +63,7 @@ func NewSubscriptionPayment(userID, subscriptionID, tariffID uuid.UUID, paymentM
 	if period != PeriodMonth && period != PeriodYear {
 		return SubscriptionPayment{}, ErrInvalidPeriod
 	}
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return SubscriptionPayment{}, err
 	}

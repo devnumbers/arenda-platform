@@ -71,7 +71,7 @@ type PhotoStorage interface {
 
 // PropertyPhotoRepository persists photo metadata for properties.
 type PropertyPhotoRepository interface {
-	Create(ctx context.Context, propertyID uuid.UUID, url string) (domain.Photo, error)
+	Create(ctx context.Context, photoID, propertyID uuid.UUID, url string) (domain.Photo, error)
 	GetByID(ctx context.Context, photoID uuid.UUID) (domain.Photo, error)
 	GetByIDAndPropertyID(ctx context.Context, photoID, propertyID uuid.UUID) (domain.Photo, error)
 	GetByPropertyID(ctx context.Context, propertyID uuid.UUID) ([]domain.Photo, error)

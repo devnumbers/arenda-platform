@@ -45,19 +45,20 @@ func (q *Queries) CountOperationsByOwnerAdmin(ctx context.Context, arg CountOper
 
 const createOperation = `-- name: CreateOperation :one
 INSERT INTO operations (
-    owner_id, property_id, lease_id, recurring_operation_id,
+    id, owner_id, property_id, lease_id, recurring_operation_id,
     type, category_id, name, amount_kopecks, operation_date, source_operation_date, comment, is_exception, status,
     reminder_offset_days
 )
 VALUES (
-    $1, $2, $3, $4,
-    $5, $6, $7, $8, $9, $10, $11, $12, $13,
-    $14
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10, $11, $12, $13, $14,
+    $15
 )
 RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date, category_id
 `
 
 type CreateOperationParams struct {
+	ID                   pgtype.UUID `json:"id"`
 	OwnerID              pgtype.UUID `json:"owner_id"`
 	PropertyID           pgtype.UUID `json:"property_id"`
 	LeaseID              pgtype.UUID `json:"lease_id"`
@@ -76,6 +77,7 @@ type CreateOperationParams struct {
 
 func (q *Queries) CreateOperation(ctx context.Context, arg CreateOperationParams) (Operation, error) {
 	row := q.db.QueryRow(ctx, createOperation,
+		arg.ID,
 		arg.OwnerID,
 		arg.PropertyID,
 		arg.LeaseID,

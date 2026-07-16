@@ -158,7 +158,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		return domain.Lease{}, fmt.Errorf("create lease: %w", err)
 	}
 
-	recurringOpID, err := uuid.NewRandom()
+	recurringOpID, err := uuid.NewV7()
 	if err != nil {
 		return domain.Lease{}, fmt.Errorf("generate recurring operation id: %w", err)
 	}
@@ -186,7 +186,10 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		return domain.Lease{}, fmt.Errorf("create recurring operation: %w", err)
 	}
 
-	ops := txRentService.GenerateRentOperations(ctx, created, createdRecurring.ID, ownerID, rentCategoryID)
+	ops, err := txRentService.GenerateRentOperations(ctx, created, createdRecurring.ID, ownerID, rentCategoryID)
+	if err != nil {
+		return domain.Lease{}, fmt.Errorf("generate rent operations: %w", err)
+	}
 	if len(ops) > 0 {
 		if err := txOps.BulkCreate(ctx, ops); err != nil {
 			return domain.Lease{}, fmt.Errorf("bulk create operations: %w", err)

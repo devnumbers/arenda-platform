@@ -66,7 +66,7 @@ func (s *TenantContactService) CreateTenantContact(ctx context.Context, ownerID 
 		}
 	}
 
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return domain.TenantContact{}, fmt.Errorf("generate tenant contact id: %w", err)
 	}
