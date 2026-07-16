@@ -10,6 +10,8 @@ import {
   DateField,
   FilterButton,
   List,
+  SelectField,
+  SelectInput,
   Show,
   SimpleShowLayout,
   TextField as RaTextField,
@@ -20,28 +22,31 @@ import {
   useRecordContext,
   useRefresh,
 } from 'react-admin';
+import { ChoiceChipField, MoneyField, UserLinkField, UserReferenceField, subscriptionPaymentPeriodChoices, subscriptionPaymentStatusChoices } from './fields';
 
 const filters = [
-  <TextInput key="user_id" source="user_id" label="ID пользователя" alwaysOn />,
-  <TextInput key="status" source="status" label="Статус" alwaysOn />,
+  <TextInput key="user_phone" source="user_phone" label="Телефон пользователя" alwaysOn />,
+  <SelectInput key="status" source="status" label="Статус" choices={subscriptionPaymentStatusChoices} alwaysOn />,
 ];
 
+// sortable={false} проставлен колонкам вне whitelist сортировки бэкенда
+// (payments: createdAt, amountKopecks, status) — иначе бэкенд отвечает 400.
 export const SubscriptionPaymentList = () => (
   <List
     filters={filters}
+    sort={{ field: 'createdAt', order: 'DESC' }}
     actions={
       <TopToolbar>
         <FilterButton />
       </TopToolbar>
     }
   >
-    <Datagrid rowClick="show">
-      <RaTextField source="id" />
-      <RaTextField source="userId" />
-      <RaTextField source="status" />
-      <RaTextField source="amountKopecks" />
-      <RaTextField source="period" />
-      <DateField source="createdAt" />
+    <Datagrid rowClick="show" bulkActionButtons={false}>
+      <UserLinkField source="userId" sortable={false} />
+      <ChoiceChipField source="status" choices={subscriptionPaymentStatusChoices} />
+      <MoneyField source="amountKopecks" />
+      <SelectField source="period" choices={subscriptionPaymentPeriodChoices} sortable={false} />
+      <DateField source="createdAt" showTime />
     </Datagrid>
   </List>
 );
@@ -153,17 +158,17 @@ const SubscriptionPaymentActions = () => (
 export const SubscriptionPaymentShow = () => (
   <Show actions={<SubscriptionPaymentActions />}>
     <SimpleShowLayout>
-      <RaTextField source="id" />
-      <RaTextField source="userId" />
-      <RaTextField source="status" />
-      <RaTextField source="amountKopecks" />
-      <RaTextField source="refundedAmountKopecks" />
-      <DateField source="createdAt" />
-      <DateField source="updatedAt" />
-      <DateField source="succeededAt" />
-      <RaTextField source="paymentMethodId" />
+      <UserReferenceField source="userId" />
+      <SelectField source="status" choices={subscriptionPaymentStatusChoices} />
+      <MoneyField source="amountKopecks" />
+      <MoneyField source="refundedAmountKopecks" />
       <RaTextField source="tariff.name" />
-      <RaTextField source="period" />
+      <SelectField source="period" choices={subscriptionPaymentPeriodChoices} />
+      <DateField source="succeededAt" showTime />
+      <DateField source="createdAt" showTime />
+      <DateField source="updatedAt" showTime />
+      <RaTextField source="paymentMethodId" />
+      <RaTextField source="id" />
     </SimpleShowLayout>
   </Show>
 );
