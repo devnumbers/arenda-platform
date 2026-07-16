@@ -160,7 +160,7 @@ func run(fallback *slog.Logger) error {
 	onboardingService := billingpg.NewOnboardingService(tariffRepo, subscriptionRepo, platformpostgres.NewBeginner(pool, appLogger))
 	paymentMethodRepo := billingpg.NewPaymentMethodRepository(db, encryptor)
 	paymentMethodInUseChecker := billingpg.NewPaymentMethodInUseChecker(db)
-	subscriptionPaymentRepo := billingpg.NewSubscriptionPaymentRepository(db)
+	subscriptionPaymentRepo := billingpg.NewSubscriptionPaymentRepository(db, encryptor)
 	appLogger.InfoContext(ctx, "billing repositories initialized",
 		"payment_methods", paymentMethodRepo != nil,
 		"subscription_payments", subscriptionPaymentRepo != nil)
@@ -352,7 +352,7 @@ func run(fallback *slog.Logger) error {
 	})
 
 	adminRepo := adminpg.NewAdminRepository(db, encryptor, clock.Real{}, occupancyProvider)
-	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billing.Subscriptions, clock.Real{})
+	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billing.Subscriptions, clock.Real{})
 
 	leasePropertyRepo := leasespg.NewPropertyRepository(db)
 	tenantContactRepo := leasespg.NewTenantContactRepository(db)

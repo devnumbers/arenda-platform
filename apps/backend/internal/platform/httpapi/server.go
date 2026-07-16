@@ -156,10 +156,15 @@ func New(deps Deps) http.Handler {
 	r.With(AdminOnlyMiddleware).Get("/admin/users/{id}/leases", wrapper.ListAdminUserLeases)
 	r.With(AdminOnlyMiddleware).Get("/admin/users/{id}/tenant-contacts", wrapper.ListAdminUserTenantContacts)
 	r.With(AdminOnlyMiddleware).Get("/admin/users/{id}/operations", wrapper.ListAdminUserOperations)
+	r.With(AdminOnlyMiddleware).Get("/admin/properties", wrapper.ListAdminProperties)
 	r.With(AdminOnlyMiddleware).Get("/admin/properties/{id}", wrapper.GetAdminProperty)
+	r.With(AdminOnlyMiddleware).Get("/admin/leases", wrapper.ListAdminLeases)
 	r.With(AdminOnlyMiddleware).Get("/admin/leases/{id}", wrapper.GetAdminLease)
+	r.With(AdminOnlyMiddleware).Get("/admin/tenant-contacts", wrapper.ListAdminTenantContacts)
 	r.With(AdminOnlyMiddleware).Get("/admin/tenant-contacts/{id}", wrapper.GetAdminTenantContact)
+	r.With(AdminOnlyMiddleware).Get("/admin/operations", wrapper.ListAdminOperations)
 	r.With(AdminOnlyMiddleware).Get("/admin/operations/{id}", wrapper.GetAdminOperation)
+	r.With(AdminOnlyMiddleware).Get("/admin/stats", wrapper.GetAdminStats)
 
 	// T-Kassa redirects the user here after the add-card bank form. Redirect them
 	// back to the frontend payment-methods page with a query flag so the UI can

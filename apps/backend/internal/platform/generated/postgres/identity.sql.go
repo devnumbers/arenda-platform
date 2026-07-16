@@ -11,18 +11,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countNewUsersLast30dAdmin = `-- name: CountNewUsersLast30dAdmin :one
+SELECT COUNT(*) FROM users
+WHERE created_at >= now() - interval '30 days'
+`
+
+func (q *Queries) CountNewUsersLast30dAdmin(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countNewUsersLast30dAdmin)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUsersAdmin = `-- name: CountUsersAdmin :one
 SELECT COUNT(*)
 FROM users u
 LEFT JOIN user_subscriptions us ON us.user_id = u.id
-WHERE ($1::text = '' OR u.phone = $1::text)
-  AND ($2::text = '' OR LOWER(u.email) LIKE LOWER('%' || $2 || '%'))
-  AND ($3::text = '' OR u.role = $3::text)
-  AND ($4::text = '' OR us.status = $4::text)
+WHERE ($1::text = '' OR u.phone = $2::text OR (u.phone = $1::text AND u.phone_encrypted = false))
+  AND ($3::text = '' OR LOWER(u.email) LIKE LOWER('%' || $3 || '%'))
+  AND ($4::text = '' OR u.role = $4::text)
+  AND ($5::text = '' OR us.status = $5::text)
 `
 
 type CountUsersAdminParams struct {
 	Phone              string `json:"phone"`
+	PhoneEnc           string `json:"phone_enc"`
 	Email              string `json:"email"`
 	Role               string `json:"role"`
 	SubscriptionStatus string `json:"subscription_status"`
@@ -31,10 +44,24 @@ type CountUsersAdminParams struct {
 func (q *Queries) CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countUsersAdmin,
 		arg.Phone,
+		arg.PhoneEnc,
 		arg.Email,
 		arg.Role,
 		arg.SubscriptionStatus,
 	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countUsersTotalAdmin = `-- name: CountUsersTotalAdmin :one
+
+SELECT COUNT(*) FROM users
+`
+
+// GetUserByIDAdmin is implemented by the existing GetUserByID query (no owner filter).
+func (q *Queries) CountUsersTotalAdmin(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsersTotalAdmin)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -599,23 +626,75 @@ func (q *Queries) GetVerifiedEmailByUserID(ctx context.Context, id pgtype.UUID) 
 	return email, err
 }
 
+const listRecentUsersAdmin = `-- name: ListRecentUsersAdmin :many
+SELECT id, phone, phone_encrypted, name, surname, created_at
+FROM users
+ORDER BY created_at DESC, id DESC
+LIMIT 5
+`
+
+type ListRecentUsersAdminRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Phone          string             `json:"phone"`
+	PhoneEncrypted bool               `json:"phone_encrypted"`
+	Name           pgtype.Text        `json:"name"`
+	Surname        pgtype.Text        `json:"surname"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListRecentUsersAdmin(ctx context.Context) ([]ListRecentUsersAdminRow, error) {
+	rows, err := q.db.Query(ctx, listRecentUsersAdmin)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRecentUsersAdminRow{}
+	for rows.Next() {
+		var i ListRecentUsersAdminRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Phone,
+			&i.PhoneEncrypted,
+			&i.Name,
+			&i.Surname,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsersAdmin = `-- name: ListUsersAdmin :many
 SELECT u.id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.created_at, u.updated_at, u.phone_encrypted, u.email_verified_at, us.status AS subscription_status
 FROM users u
 LEFT JOIN user_subscriptions us ON us.user_id = u.id
-WHERE ($1::text = '' OR u.phone = $1::text)
-  AND ($2::text = '' OR LOWER(u.email) LIKE LOWER('%' || $2 || '%'))
-  AND ($3::text = '' OR u.role = $3::text)
-  AND ($4::text = '' OR us.status = $4::text)
-ORDER BY u.created_at DESC
-LIMIT $6::int OFFSET $5::int
+WHERE ($1::text = '' OR u.phone = $2::text OR (u.phone = $1::text AND u.phone_encrypted = false))
+  AND ($3::text = '' OR LOWER(u.email) LIKE LOWER('%' || $3 || '%'))
+  AND ($4::text = '' OR u.role = $4::text)
+  AND ($5::text = '' OR us.status = $5::text)
+ORDER BY
+  CASE WHEN $6::text = 'createdAt' AND $7::text = 'asc' THEN u.created_at END ASC,
+  CASE WHEN $6::text = 'createdAt' AND $7::text = 'desc' THEN u.created_at END DESC,
+  CASE WHEN $6::text = 'updatedAt' AND $7::text = 'asc' THEN u.updated_at END ASC,
+  CASE WHEN $6::text = 'updatedAt' AND $7::text = 'desc' THEN u.updated_at END DESC,
+  CASE WHEN $6::text = '' THEN u.created_at END DESC,
+  u.id DESC
+LIMIT $9::int OFFSET $8::int
 `
 
 type ListUsersAdminParams struct {
 	Phone              string `json:"phone"`
+	PhoneEnc           string `json:"phone_enc"`
 	Email              string `json:"email"`
 	Role               string `json:"role"`
 	SubscriptionStatus string `json:"subscription_status"`
+	Sort               string `json:"sort"`
+	Order              string `json:"order"`
 	Offset             int32  `json:"offset"`
 	Limit              int32  `json:"limit"`
 }
@@ -638,9 +717,12 @@ type ListUsersAdminRow struct {
 func (q *Queries) ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error) {
 	rows, err := q.db.Query(ctx, listUsersAdmin,
 		arg.Phone,
+		arg.PhoneEnc,
 		arg.Email,
 		arg.Role,
 		arg.SubscriptionStatus,
+		arg.Sort,
+		arg.Order,
 		arg.Offset,
 		arg.Limit,
 	)

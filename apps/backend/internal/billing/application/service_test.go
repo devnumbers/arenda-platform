@@ -446,7 +446,7 @@ func (r *fakeSubscriptionPaymentRepo) ListStaleRefundingPayments(_ context.Conte
 	return out, nil
 }
 
-func (r *fakeSubscriptionPaymentRepo) ListAll(_ context.Context, _ string, _ uuid.UUID, _, _ int) ([]SubscriptionPaymentWithUser, int64, error) {
+func (r *fakeSubscriptionPaymentRepo) ListAll(_ context.Context, _ ListAllPaymentsFilters) ([]SubscriptionPaymentWithUser, int64, error) {
 	return nil, 0, nil
 }
 

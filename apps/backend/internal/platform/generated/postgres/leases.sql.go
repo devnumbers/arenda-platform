@@ -44,13 +44,32 @@ func (q *Queries) CompleteLease(ctx context.Context, arg CompleteLeaseParams) (L
 	return i, err
 }
 
-const countLeasesByOwnerAdmin = `-- name: CountLeasesByOwnerAdmin :one
-SELECT COUNT(*) FROM leases
-WHERE owner_id = $1
+const countLeasesAdmin = `-- name: CountLeasesAdmin :one
+SELECT COUNT(*) FROM leases l
+WHERE ($1::uuid IS NULL OR l.owner_id = $1::uuid)
+  AND ($2::uuid IS NULL OR l.property_id = $2::uuid)
+  AND ($3::text = '' OR l.status = $3::text)
 `
 
-func (q *Queries) CountLeasesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countLeasesByOwnerAdmin, ownerID)
+type CountLeasesAdminParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+	Status     string      `json:"status"`
+}
+
+func (q *Queries) CountLeasesAdmin(ctx context.Context, arg CountLeasesAdminParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLeasesAdmin, arg.OwnerID, arg.PropertyID, arg.Status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countLeasesTotalAdmin = `-- name: CountLeasesTotalAdmin :one
+SELECT COUNT(*) FROM leases
+`
+
+func (q *Queries) CountLeasesTotalAdmin(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countLeasesTotalAdmin)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -152,6 +171,77 @@ func (q *Queries) GetLeaseByID(ctx context.Context, id pgtype.UUID) (Lease, erro
 		&i.Comment,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getLeaseByIDAdmin = `-- name: GetLeaseByIDAdmin :one
+SELECT l.id, l.owner_id, l.property_id, l.tenant_contact_id, l.status, l.start_date, l.end_date, l.rent_amount_kopecks, l.deposit_amount_kopecks, l.payment_day, l.comment, l.created_at, l.updated_at, p.name AS property_name,
+       tc.id AS tc_id, tc.owner_id AS tc_owner_id, tc.name AS tc_name,
+       tc.surname AS tc_surname, tc.patronymic AS tc_patronymic,
+       tc.phone AS tc_phone, tc.email AS tc_email, tc.comment AS tc_comment,
+       tc.created_at AS tc_created_at, tc.updated_at AS tc_updated_at
+FROM leases l
+JOIN properties p ON p.id = l.property_id
+LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
+WHERE l.id = $1
+`
+
+type GetLeaseByIDAdminRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	OwnerID              pgtype.UUID        `json:"owner_id"`
+	PropertyID           pgtype.UUID        `json:"property_id"`
+	TenantContactID      pgtype.UUID        `json:"tenant_contact_id"`
+	Status               string             `json:"status"`
+	StartDate            pgtype.Date        `json:"start_date"`
+	EndDate              pgtype.Date        `json:"end_date"`
+	RentAmountKopecks    int64              `json:"rent_amount_kopecks"`
+	DepositAmountKopecks int64              `json:"deposit_amount_kopecks"`
+	PaymentDay           int32              `json:"payment_day"`
+	Comment              pgtype.Text        `json:"comment"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	PropertyName         string             `json:"property_name"`
+	TcID                 pgtype.UUID        `json:"tc_id"`
+	TcOwnerID            pgtype.UUID        `json:"tc_owner_id"`
+	TcName               pgtype.Text        `json:"tc_name"`
+	TcSurname            pgtype.Text        `json:"tc_surname"`
+	TcPatronymic         pgtype.Text        `json:"tc_patronymic"`
+	TcPhone              pgtype.Text        `json:"tc_phone"`
+	TcEmail              pgtype.Text        `json:"tc_email"`
+	TcComment            pgtype.Text        `json:"tc_comment"`
+	TcCreatedAt          pgtype.Timestamptz `json:"tc_created_at"`
+	TcUpdatedAt          pgtype.Timestamptz `json:"tc_updated_at"`
+}
+
+func (q *Queries) GetLeaseByIDAdmin(ctx context.Context, id pgtype.UUID) (GetLeaseByIDAdminRow, error) {
+	row := q.db.QueryRow(ctx, getLeaseByIDAdmin, id)
+	var i GetLeaseByIDAdminRow
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.TenantContactID,
+		&i.Status,
+		&i.StartDate,
+		&i.EndDate,
+		&i.RentAmountKopecks,
+		&i.DepositAmountKopecks,
+		&i.PaymentDay,
+		&i.Comment,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PropertyName,
+		&i.TcID,
+		&i.TcOwnerID,
+		&i.TcName,
+		&i.TcSurname,
+		&i.TcPatronymic,
+		&i.TcPhone,
+		&i.TcEmail,
+		&i.TcComment,
+		&i.TcCreatedAt,
+		&i.TcUpdatedAt,
 	)
 	return i, err
 }
@@ -279,21 +369,86 @@ func (q *Queries) GetOpenLeaseByProperty(ctx context.Context, arg GetOpenLeaseBy
 	return i, err
 }
 
-const listLeasesByOwner = `-- name: ListLeasesByOwner :many
-SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
-WHERE owner_id = $1
-ORDER BY updated_at DESC
+const listLeasesAdmin = `-- name: ListLeasesAdmin :many
+SELECT l.id, l.owner_id, l.property_id, l.tenant_contact_id, l.status, l.start_date, l.end_date, l.rent_amount_kopecks, l.deposit_amount_kopecks, l.payment_day, l.comment, l.created_at, l.updated_at, p.name AS property_name,
+       tc.id AS tc_id, tc.owner_id AS tc_owner_id, tc.name AS tc_name,
+       tc.surname AS tc_surname, tc.patronymic AS tc_patronymic,
+       tc.phone AS tc_phone, tc.email AS tc_email, tc.comment AS tc_comment,
+       tc.created_at AS tc_created_at, tc.updated_at AS tc_updated_at
+FROM leases l
+JOIN properties p ON p.id = l.property_id
+LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
+WHERE ($1::uuid IS NULL OR l.owner_id = $1::uuid)
+  AND ($2::uuid IS NULL OR l.property_id = $2::uuid)
+  AND ($3::text = '' OR l.status = $3::text)
+ORDER BY
+  CASE WHEN $4::text = 'startDate' AND $5::text = 'asc' THEN l.start_date END ASC,
+  CASE WHEN $4::text = 'startDate' AND $5::text = 'desc' THEN l.start_date END DESC,
+  CASE WHEN $4::text = 'updatedAt' AND $5::text = 'asc' THEN l.updated_at END ASC,
+  CASE WHEN $4::text = 'updatedAt' AND $5::text = 'desc' THEN l.updated_at END DESC,
+  CASE WHEN $4::text = 'status' AND $5::text = 'asc' THEN l.status END ASC,
+  CASE WHEN $4::text = 'status' AND $5::text = 'desc' THEN l.status END DESC,
+  CASE WHEN $4::text = 'rentAmountKopecks' AND $5::text = 'asc' THEN l.rent_amount_kopecks END ASC,
+  CASE WHEN $4::text = 'rentAmountKopecks' AND $5::text = 'desc' THEN l.rent_amount_kopecks END DESC,
+  CASE WHEN $4::text = '' THEN l.updated_at END DESC,
+  l.id DESC
+LIMIT $7::int OFFSET $6::int
 `
 
-func (q *Queries) ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Lease, error) {
-	rows, err := q.db.Query(ctx, listLeasesByOwner, ownerID)
+type ListLeasesAdminParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+	Status     string      `json:"status"`
+	Sort       string      `json:"sort"`
+	Order      string      `json:"order"`
+	Offset     int32       `json:"offset"`
+	Limit      int32       `json:"limit"`
+}
+
+type ListLeasesAdminRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	OwnerID              pgtype.UUID        `json:"owner_id"`
+	PropertyID           pgtype.UUID        `json:"property_id"`
+	TenantContactID      pgtype.UUID        `json:"tenant_contact_id"`
+	Status               string             `json:"status"`
+	StartDate            pgtype.Date        `json:"start_date"`
+	EndDate              pgtype.Date        `json:"end_date"`
+	RentAmountKopecks    int64              `json:"rent_amount_kopecks"`
+	DepositAmountKopecks int64              `json:"deposit_amount_kopecks"`
+	PaymentDay           int32              `json:"payment_day"`
+	Comment              pgtype.Text        `json:"comment"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	PropertyName         string             `json:"property_name"`
+	TcID                 pgtype.UUID        `json:"tc_id"`
+	TcOwnerID            pgtype.UUID        `json:"tc_owner_id"`
+	TcName               pgtype.Text        `json:"tc_name"`
+	TcSurname            pgtype.Text        `json:"tc_surname"`
+	TcPatronymic         pgtype.Text        `json:"tc_patronymic"`
+	TcPhone              pgtype.Text        `json:"tc_phone"`
+	TcEmail              pgtype.Text        `json:"tc_email"`
+	TcComment            pgtype.Text        `json:"tc_comment"`
+	TcCreatedAt          pgtype.Timestamptz `json:"tc_created_at"`
+	TcUpdatedAt          pgtype.Timestamptz `json:"tc_updated_at"`
+}
+
+func (q *Queries) ListLeasesAdmin(ctx context.Context, arg ListLeasesAdminParams) ([]ListLeasesAdminRow, error) {
+	rows, err := q.db.Query(ctx, listLeasesAdmin,
+		arg.OwnerID,
+		arg.PropertyID,
+		arg.Status,
+		arg.Sort,
+		arg.Order,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Lease{}
+	items := []ListLeasesAdminRow{}
 	for rows.Next() {
-		var i Lease
+		var i ListLeasesAdminRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OwnerID,
@@ -308,6 +463,17 @@ func (q *Queries) ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([
 			&i.Comment,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PropertyName,
+			&i.TcID,
+			&i.TcOwnerID,
+			&i.TcName,
+			&i.TcSurname,
+			&i.TcPatronymic,
+			&i.TcPhone,
+			&i.TcEmail,
+			&i.TcComment,
+			&i.TcCreatedAt,
+			&i.TcUpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -319,21 +485,14 @@ func (q *Queries) ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([
 	return items, nil
 }
 
-const listLeasesByOwnerAdmin = `-- name: ListLeasesByOwnerAdmin :many
+const listLeasesByOwner = `-- name: ListLeasesByOwner :many
 SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
 WHERE owner_id = $1
 ORDER BY updated_at DESC
-LIMIT $3::int OFFSET $2::int
 `
 
-type ListLeasesByOwnerAdminParams struct {
-	OwnerID pgtype.UUID `json:"owner_id"`
-	Offset  int32       `json:"offset"`
-	Limit   int32       `json:"limit"`
-}
-
-func (q *Queries) ListLeasesByOwnerAdmin(ctx context.Context, arg ListLeasesByOwnerAdminParams) ([]Lease, error) {
-	rows, err := q.db.Query(ctx, listLeasesByOwnerAdmin, arg.OwnerID, arg.Offset, arg.Limit)
+func (q *Queries) ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Lease, error) {
+	rows, err := q.db.Query(ctx, listLeasesByOwner, ownerID)
 	if err != nil {
 		return nil, err
 	}

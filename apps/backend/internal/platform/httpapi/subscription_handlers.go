@@ -560,6 +560,15 @@ func (h *SubscriptionHandlers) ListAdminSubscriptionPayments(w http.ResponseWrit
 	if params.UserId != nil {
 		filters.UserID = *params.UserId
 	}
+	if params.UserPhone != nil {
+		filters.UserPhone = *params.UserPhone
+	}
+	if params.Sort != nil {
+		filters.Sort = *params.Sort
+	}
+	if params.Order != nil {
+		filters.Order = string(*params.Order)
+	}
 
 	views, total, err := h.payments.ListAllPayments(r.Context(), filters)
 	if err != nil {

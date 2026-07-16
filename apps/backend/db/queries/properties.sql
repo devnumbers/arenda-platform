@@ -72,20 +72,37 @@ RETURNING *;
 SELECT COUNT(*) FROM properties
 WHERE owner_id = $1 AND status IN ('active', 'maintenance');
 
--- name: ListPropertiesByOwnerAdmin :many
-SELECT * FROM properties
-WHERE owner_id = $1
-  AND (sqlc.arg('status')::text = '' OR status = sqlc.arg('status')::text)
-ORDER BY updated_at DESC
+-- name: ListPropertiesAdmin :many
+SELECT p.*, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
+FROM properties p
+JOIN users u ON p.owner_id = u.id
+WHERE (sqlc.arg('owner_id')::uuid IS NULL OR p.owner_id = sqlc.arg('owner_id')::uuid)
+  AND (sqlc.arg('status')::text = '' OR p.status = sqlc.arg('status')::text)
+  AND (sqlc.arg('q')::text = '' OR p.name ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\' OR p.address ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\')
+ORDER BY
+  CASE WHEN sqlc.arg('sort')::text = 'name' AND sqlc.arg('order')::text = 'asc' THEN p.name END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'name' AND sqlc.arg('order')::text = 'desc' THEN p.name END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'createdAt' AND sqlc.arg('order')::text = 'asc' THEN p.created_at END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'createdAt' AND sqlc.arg('order')::text = 'desc' THEN p.created_at END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'updatedAt' AND sqlc.arg('order')::text = 'asc' THEN p.updated_at END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'updatedAt' AND sqlc.arg('order')::text = 'desc' THEN p.updated_at END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'status' AND sqlc.arg('order')::text = 'asc' THEN p.status END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'status' AND sqlc.arg('order')::text = 'desc' THEN p.status END DESC,
+  CASE WHEN sqlc.arg('sort')::text = '' THEN p.updated_at END DESC,
+  p.id DESC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
--- name: CountPropertiesByOwnerAdmin :one
+-- name: CountPropertiesAdmin :one
 SELECT COUNT(*) FROM properties
-WHERE owner_id = $1
-  AND (sqlc.arg('status')::text = '' OR status = sqlc.arg('status')::text);
+WHERE (sqlc.arg('owner_id')::uuid IS NULL OR owner_id = sqlc.arg('owner_id')::uuid)
+  AND (sqlc.arg('status')::text = '' OR status = sqlc.arg('status')::text)
+  AND (sqlc.arg('q')::text = '' OR name ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\' OR address ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\');
 
 -- name: GetPropertyByIDAdmin :one
-SELECT * FROM properties WHERE id = $1;
+SELECT p.*, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
+FROM properties p
+JOIN users u ON p.owner_id = u.id
+WHERE p.id = $1;
 
 -- name: CountActivePropertiesByOwnerAdmin :one
 SELECT COUNT(*) FROM properties
@@ -94,3 +111,10 @@ WHERE owner_id = $1 AND status IN ('active', 'maintenance');
 -- name: CountArchivedPropertiesByOwnerAdmin :one
 SELECT COUNT(*) FROM properties
 WHERE owner_id = $1 AND status = 'archived';
+
+-- name: GetPropertiesStatsAdmin :one
+-- "active" mirrors CountActivePropertiesByOwnerAdmin: active plus maintenance.
+SELECT
+  COUNT(*) FILTER (WHERE status IN ('active', 'maintenance')) AS active_count,
+  COUNT(*) FILTER (WHERE status = 'archived') AS archived_count
+FROM properties;

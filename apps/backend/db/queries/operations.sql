@@ -273,31 +273,46 @@ WHERE operations.owner_id = $1
 ORDER BY operation_date ASC, id ASC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
--- name: ListOperationsByOwnerAdmin :many
-SELECT op.*, cat.name AS category_name
+-- name: ListOperationsAdmin :many
+SELECT op.*, cat.name AS category_name, p.name AS property_name
 FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
-WHERE op.owner_id = $1
+JOIN properties p ON p.id = op.property_id
+WHERE (sqlc.arg('owner_id')::uuid IS NULL OR op.owner_id = sqlc.arg('owner_id')::uuid)
   AND op.deleted_at IS NULL
   AND (sqlc.arg('status')::text = '' OR op.status = sqlc.arg('status')::text)
   AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
   AND (sqlc.arg('property_id')::uuid IS NULL OR op.property_id = sqlc.arg('property_id')::uuid)
   AND (sqlc.arg('lease_id')::uuid IS NULL OR op.lease_id = sqlc.arg('lease_id')::uuid)
-ORDER BY op.operation_date DESC, op.id DESC
+  AND (sqlc.arg('q')::text = '' OR op.name ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\' OR op.comment ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\')
+ORDER BY
+  CASE WHEN sqlc.arg('sort')::text = 'operationDate' AND sqlc.arg('order')::text = 'asc' THEN op.operation_date END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'operationDate' AND sqlc.arg('order')::text = 'desc' THEN op.operation_date END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'amountKopecks' AND sqlc.arg('order')::text = 'asc' THEN op.amount_kopecks END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'amountKopecks' AND sqlc.arg('order')::text = 'desc' THEN op.amount_kopecks END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'status' AND sqlc.arg('order')::text = 'asc' THEN op.status END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'status' AND sqlc.arg('order')::text = 'desc' THEN op.status END DESC,
+  CASE WHEN sqlc.arg('sort')::text = '' THEN op.operation_date END DESC,
+  op.id DESC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
--- name: CountOperationsByOwnerAdmin :one
+-- name: CountOperationsAdmin :one
 SELECT COUNT(*) FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
-WHERE op.owner_id = $1
+WHERE (sqlc.arg('owner_id')::uuid IS NULL OR op.owner_id = sqlc.arg('owner_id')::uuid)
   AND op.deleted_at IS NULL
   AND (sqlc.arg('status')::text = '' OR op.status = sqlc.arg('status')::text)
   AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
   AND (sqlc.arg('property_id')::uuid IS NULL OR op.property_id = sqlc.arg('property_id')::uuid)
-  AND (sqlc.arg('lease_id')::uuid IS NULL OR op.lease_id = sqlc.arg('lease_id')::uuid);
+  AND (sqlc.arg('lease_id')::uuid IS NULL OR op.lease_id = sqlc.arg('lease_id')::uuid)
+  AND (sqlc.arg('q')::text = '' OR op.name ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\' OR op.comment ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\');
 
 -- name: GetOperationByIDAdmin :one
-SELECT op.*, cat.name AS category_name
+SELECT op.*, cat.name AS category_name, p.name AS property_name
 FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
+JOIN properties p ON p.id = op.property_id
 WHERE op.id = $1;
+
+-- name: CountOperationsTotalAdmin :one
+SELECT COUNT(*) FROM operations WHERE deleted_at IS NULL;

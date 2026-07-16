@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,18 +15,20 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // SubscriptionPaymentRepository persists subscription payments.
 type SubscriptionPaymentRepository struct {
-	db postgres.DBTX
+	db  postgres.DBTX
+	enc encryption.Encryptor
 }
 
 // NewSubscriptionPaymentRepository creates a new subscription payment repository.
-func NewSubscriptionPaymentRepository(db postgres.DBTX) *SubscriptionPaymentRepository {
-	return &SubscriptionPaymentRepository{db: db}
+func NewSubscriptionPaymentRepository(db postgres.DBTX, enc encryption.Encryptor) *SubscriptionPaymentRepository {
+	return &SubscriptionPaymentRepository{db: db, enc: enc}
 }
 
 func (r *SubscriptionPaymentRepository) q() *postgres.Queries {
@@ -38,7 +41,7 @@ func (r *SubscriptionPaymentRepository) WithTx(tx transaction.Tx) (application.S
 	if !ok {
 		return nil, fmt.Errorf("billing.SubscriptionPaymentRepository.WithTx: %T is not a postgres.DBTX", tx)
 	}
-	return NewSubscriptionPaymentRepository(dbtx), nil
+	return NewSubscriptionPaymentRepository(dbtx, r.enc), nil
 }
 
 // Create inserts a new subscription payment.
@@ -75,6 +78,10 @@ func (r *SubscriptionPaymentRepository) GetByIDAdmin(ctx context.Context, id uui
 		}
 		return application.SubscriptionPaymentWithUser{}, fmt.Errorf("get subscription payment by id admin: %w", err)
 	}
+	phone, err := r.decryptPhone(ctx, row.UserPhone, row.UserPhoneEncrypted)
+	if err != nil {
+		return application.SubscriptionPaymentWithUser{}, err
+	}
 	return mapSubscriptionPaymentWithUser(postgres.SubscriptionPayment{
 		ID:                    row.ID,
 		UserID:                row.UserID,
@@ -93,7 +100,7 @@ func (r *SubscriptionPaymentRepository) GetByIDAdmin(ctx context.Context, id uui
 		CreatedAt:             row.CreatedAt,
 		UpdatedAt:             row.UpdatedAt,
 		SucceededAt:           row.SucceededAt,
-	}, row.UserPhone), nil
+	}, phone), nil
 }
 
 // GetByIDForUpdate returns a subscription payment by ID, locking the row for update.
@@ -173,15 +180,30 @@ func (r *SubscriptionPaymentRepository) ListStaleRefundingPayments(ctx context.C
 }
 
 // ListAll returns all subscription payments for admin view.
-func (r *SubscriptionPaymentRepository) ListAll(ctx context.Context, status string, userID uuid.UUID, limit, offset int) ([]application.SubscriptionPaymentWithUser, int64, error) {
-	pgUserID := pgtype.UUID{Bytes: userID, Valid: userID != uuid.Nil}
+func (r *SubscriptionPaymentRepository) ListAll(ctx context.Context, filters application.ListAllPaymentsFilters) ([]application.SubscriptionPaymentWithUser, int64, error) {
+	pgUserID := pgtype.UUID{Bytes: filters.UserID, Valid: filters.UserID != uuid.Nil}
+	// Trim so that whitespace-only input disables the filter instead of
+	// encrypting a value that can never match a stored phone.
+	userPhone := strings.TrimSpace(filters.UserPhone)
+	userPhoneEnc := ""
+	if userPhone != "" {
+		encrypted, err := r.enc.DeterministicEncrypt(ctx, userPhone)
+		if err != nil {
+			return nil, 0, fmt.Errorf("encrypt user phone filter: %w", err)
+		}
+		userPhoneEnc = encrypted
+	}
 	rows, err := r.q().ListSubscriptionPaymentsAdmin(ctx, postgres.ListSubscriptionPaymentsAdminParams{
-		Status: status,
-		UserID: pgUserID,
+		Status:       filters.Status,
+		UserID:       pgUserID,
+		UserPhone:    userPhone,
+		UserPhoneEnc: userPhoneEnc,
+		Sort:         filters.Sort,
+		Order:        filters.Order,
 		//nolint:gosec // Limit and offset are validated by the HTTP layer.
-		Limit: int32(limit),
+		Limit: int32(filters.Limit),
 		//nolint:gosec // Limit and offset are validated by the HTTP layer.
-		Offset: int32(offset),
+		Offset: int32(filters.Offset),
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("list subscription payments admin: %w", err)
@@ -189,6 +211,10 @@ func (r *SubscriptionPaymentRepository) ListAll(ctx context.Context, status stri
 
 	items := make([]application.SubscriptionPaymentWithUser, 0, len(rows))
 	for _, row := range rows {
+		phone, err := r.decryptPhone(ctx, row.UserPhone, row.UserPhoneEncrypted)
+		if err != nil {
+			return nil, 0, err
+		}
 		items = append(items, mapSubscriptionPaymentWithUser(postgres.SubscriptionPayment{
 			ID:                    row.ID,
 			UserID:                row.UserID,
@@ -207,12 +233,14 @@ func (r *SubscriptionPaymentRepository) ListAll(ctx context.Context, status stri
 			CreatedAt:             row.CreatedAt,
 			UpdatedAt:             row.UpdatedAt,
 			SucceededAt:           row.SucceededAt,
-		}, row.UserPhone))
+		}, phone))
 	}
 
 	total, err := r.q().CountSubscriptionPaymentsAdmin(ctx, postgres.CountSubscriptionPaymentsAdminParams{
-		Status: status,
-		UserID: pgUserID,
+		Status:       filters.Status,
+		UserID:       pgUserID,
+		UserPhone:    userPhone,
+		UserPhoneEnc: userPhoneEnc,
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("count subscription payments admin: %w", err)
@@ -540,4 +568,19 @@ func mapSubscriptionPaymentWithUser(payment postgres.SubscriptionPayment, phone 
 		Payment:   mapSubscriptionPayment(payment),
 		UserPhone: phone,
 	}
+}
+
+// decryptPhone returns the plaintext user phone for admin views. Rows written
+// before phone encryption was introduced (or with a noop encryptor) are stored
+// in plaintext and flagged with phone_encrypted = false; only flagged rows are
+// decrypted.
+func (r *SubscriptionPaymentRepository) decryptPhone(ctx context.Context, phone string, encrypted bool) (string, error) {
+	if !encrypted {
+		return phone, nil
+	}
+	decrypted, err := r.enc.Decrypt(ctx, phone)
+	if err != nil {
+		return "", fmt.Errorf("decrypt phone: %w", err)
+	}
+	return decrypted, nil
 }

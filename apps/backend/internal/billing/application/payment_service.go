@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -94,7 +95,24 @@ func (s *PaymentService) ListAllPayments(ctx context.Context, filters ListAllPay
 		return nil, 0, fmt.Errorf("%w: invalid status filter", ErrInvalidFilter)
 	}
 
-	payments, total, err := s.deps.subscriptionPayments.ListAll(ctx, filters.Status, filters.UserID, filters.Limit, filters.Offset)
+	// Sort field whitelist (API camelCase names). The SQL layer maps these
+	// fixed values to columns via CASE expressions; user input is never
+	// interpolated into SQL.
+	filters.Sort = strings.TrimSpace(filters.Sort)
+	if filters.Sort != "" {
+		if !slices.Contains([]string{"createdAt", "amountKopecks", "status"}, filters.Sort) {
+			return nil, 0, fmt.Errorf("%w: unsupported sort field %q", ErrInvalidFilter, filters.Sort)
+		}
+		filters.Order = strings.TrimSpace(filters.Order)
+		if filters.Order == "" {
+			filters.Order = "desc"
+		}
+		if filters.Order != "asc" && filters.Order != "desc" {
+			return nil, 0, fmt.Errorf("%w: unsupported sort order %q", ErrInvalidFilter, filters.Order)
+		}
+	}
+
+	payments, total, err := s.deps.subscriptionPayments.ListAll(ctx, filters)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list all payments: %w", err)
 	}

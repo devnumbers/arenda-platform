@@ -24,21 +24,40 @@ func (q *Queries) BeginSubscriptionPaymentRefund(ctx context.Context, id pgtype.
 	return q.db.Exec(ctx, beginSubscriptionPaymentRefund, id)
 }
 
+const countActiveSubscriptionsAdmin = `-- name: CountActiveSubscriptionsAdmin :one
+SELECT COUNT(*) FROM user_subscriptions WHERE status = 'active'
+`
+
+func (q *Queries) CountActiveSubscriptionsAdmin(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveSubscriptionsAdmin)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSubscriptionPaymentsAdmin = `-- name: CountSubscriptionPaymentsAdmin :one
 SELECT COUNT(*)
 FROM subscription_payments sp
 JOIN users u ON sp.user_id = u.id
 WHERE ($1::text = '' OR sp.status = $1::text)
   AND ($2::uuid IS NULL OR sp.user_id = $2::uuid)
+  AND ($3::text = '' OR u.phone = $4::text OR (u.phone = $3::text AND u.phone_encrypted = false))
 `
 
 type CountSubscriptionPaymentsAdminParams struct {
-	Status string      `json:"status"`
-	UserID pgtype.UUID `json:"user_id"`
+	Status       string      `json:"status"`
+	UserID       pgtype.UUID `json:"user_id"`
+	UserPhone    string      `json:"user_phone"`
+	UserPhoneEnc string      `json:"user_phone_enc"`
 }
 
 func (q *Queries) CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countSubscriptionPaymentsAdmin, arg.Status, arg.UserID)
+	row := q.db.QueryRow(ctx, countSubscriptionPaymentsAdmin,
+		arg.Status,
+		arg.UserID,
+		arg.UserPhone,
+		arg.UserPhoneEnc,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -486,7 +505,7 @@ func (q *Queries) GetSubscriptionPaymentByID(ctx context.Context, id pgtype.UUID
 }
 
 const getSubscriptionPaymentByIDAdmin = `-- name: GetSubscriptionPaymentByIDAdmin :one
-SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id, sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.status, sp.error_code, sp.created_at, sp.updated_at, sp.payment_url, sp.succeeded_at, sp.refunded_amount_kopecks, sp.charge_attempts, u.phone AS user_phone
+SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id, sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.status, sp.error_code, sp.created_at, sp.updated_at, sp.payment_url, sp.succeeded_at, sp.refunded_amount_kopecks, sp.charge_attempts, u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
 FROM subscription_payments sp
 JOIN users u ON sp.user_id = u.id
 WHERE sp.id = $1
@@ -511,6 +530,7 @@ type GetSubscriptionPaymentByIDAdminRow struct {
 	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
 	ChargeAttempts        int32              `json:"charge_attempts"`
 	UserPhone             string             `json:"user_phone"`
+	UserPhoneEncrypted    bool               `json:"user_phone_encrypted"`
 }
 
 func (q *Queries) GetSubscriptionPaymentByIDAdmin(ctx context.Context, id pgtype.UUID) (GetSubscriptionPaymentByIDAdminRow, error) {
@@ -535,6 +555,7 @@ func (q *Queries) GetSubscriptionPaymentByIDAdmin(ctx context.Context, id pgtype
 		&i.RefundedAmountKopecks,
 		&i.ChargeAttempts,
 		&i.UserPhone,
+		&i.UserPhoneEncrypted,
 	)
 	return i, err
 }
@@ -565,6 +586,30 @@ func (q *Queries) GetSubscriptionPaymentByIDForUpdate(ctx context.Context, id pg
 		&i.RefundedAmountKopecks,
 		&i.ChargeAttempts,
 	)
+	return i, err
+}
+
+const getSubscriptionPaymentsStatsLast30dAdmin = `-- name: GetSubscriptionPaymentsStatsLast30dAdmin :one
+SELECT
+  COALESCE(SUM(amount_kopecks) FILTER (WHERE status = 'succeeded'), 0)::bigint AS succeeded_total_kopecks,
+  COUNT(*) FILTER (WHERE status = 'failed') AS failed_count,
+  COUNT(*) FILTER (WHERE status IN ('refunded', 'partial_refunded')) AS refunded_count
+FROM subscription_payments
+WHERE created_at >= now() - interval '30 days'
+`
+
+type GetSubscriptionPaymentsStatsLast30dAdminRow struct {
+	SucceededTotalKopecks int64 `json:"succeeded_total_kopecks"`
+	FailedCount           int64 `json:"failed_count"`
+	RefundedCount         int64 `json:"refunded_count"`
+}
+
+// Aggregates over payments created in the last 30 days. "refunded" covers both
+// full and partial refunds.
+func (q *Queries) GetSubscriptionPaymentsStatsLast30dAdmin(ctx context.Context) (GetSubscriptionPaymentsStatsLast30dAdminRow, error) {
+	row := q.db.QueryRow(ctx, getSubscriptionPaymentsStatsLast30dAdmin)
+	var i GetSubscriptionPaymentsStatsLast30dAdminRow
+	err := row.Scan(&i.SucceededTotalKopecks, &i.FailedCount, &i.RefundedCount)
 	return i, err
 }
 
@@ -914,6 +959,53 @@ func (q *Queries) ListPendingUpgradePayments(ctx context.Context, arg ListPendin
 	return items, nil
 }
 
+const listRecentSubscriptionPaymentsAdmin = `-- name: ListRecentSubscriptionPaymentsAdmin :many
+SELECT sp.id, sp.user_id, sp.amount_kopecks, sp.status, sp.created_at,
+       u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
+FROM subscription_payments sp
+JOIN users u ON u.id = sp.user_id
+ORDER BY sp.created_at DESC, sp.id DESC
+LIMIT 5
+`
+
+type ListRecentSubscriptionPaymentsAdminRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	UserID             pgtype.UUID        `json:"user_id"`
+	AmountKopecks      int64              `json:"amount_kopecks"`
+	Status             string             `json:"status"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UserPhone          string             `json:"user_phone"`
+	UserPhoneEncrypted bool               `json:"user_phone_encrypted"`
+}
+
+func (q *Queries) ListRecentSubscriptionPaymentsAdmin(ctx context.Context) ([]ListRecentSubscriptionPaymentsAdminRow, error) {
+	rows, err := q.db.Query(ctx, listRecentSubscriptionPaymentsAdmin)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRecentSubscriptionPaymentsAdminRow{}
+	for rows.Next() {
+		var i ListRecentSubscriptionPaymentsAdminRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.AmountKopecks,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UserPhone,
+			&i.UserPhoneEncrypted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStaleRefundingPayments = `-- name: ListStaleRefundingPayments :many
 SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, status, error_code, created_at, updated_at, payment_url, succeeded_at, refunded_amount_kopecks, charge_attempts
 FROM subscription_payments
@@ -971,20 +1063,33 @@ func (q *Queries) ListStaleRefundingPayments(ctx context.Context, arg ListStaleR
 }
 
 const listSubscriptionPaymentsAdmin = `-- name: ListSubscriptionPaymentsAdmin :many
-SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id, sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.status, sp.error_code, sp.created_at, sp.updated_at, sp.payment_url, sp.succeeded_at, sp.refunded_amount_kopecks, sp.charge_attempts, u.phone AS user_phone
+SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id, sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.status, sp.error_code, sp.created_at, sp.updated_at, sp.payment_url, sp.succeeded_at, sp.refunded_amount_kopecks, sp.charge_attempts, u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
 FROM subscription_payments sp
 JOIN users u ON sp.user_id = u.id
 WHERE ($1::text = '' OR sp.status = $1::text)
   AND ($2::uuid IS NULL OR sp.user_id = $2::uuid)
-ORDER BY sp.created_at DESC
-LIMIT $4::int OFFSET $3::int
+  AND ($3::text = '' OR u.phone = $4::text OR (u.phone = $3::text AND u.phone_encrypted = false))
+ORDER BY
+  CASE WHEN $5::text = 'createdAt' AND $6::text = 'asc' THEN sp.created_at END ASC,
+  CASE WHEN $5::text = 'createdAt' AND $6::text = 'desc' THEN sp.created_at END DESC,
+  CASE WHEN $5::text = 'amountKopecks' AND $6::text = 'asc' THEN sp.amount_kopecks END ASC,
+  CASE WHEN $5::text = 'amountKopecks' AND $6::text = 'desc' THEN sp.amount_kopecks END DESC,
+  CASE WHEN $5::text = 'status' AND $6::text = 'asc' THEN sp.status END ASC,
+  CASE WHEN $5::text = 'status' AND $6::text = 'desc' THEN sp.status END DESC,
+  CASE WHEN $5::text = '' THEN sp.created_at END DESC,
+  sp.id DESC
+LIMIT $8::int OFFSET $7::int
 `
 
 type ListSubscriptionPaymentsAdminParams struct {
-	Status string      `json:"status"`
-	UserID pgtype.UUID `json:"user_id"`
-	Offset int32       `json:"offset"`
-	Limit  int32       `json:"limit"`
+	Status       string      `json:"status"`
+	UserID       pgtype.UUID `json:"user_id"`
+	UserPhone    string      `json:"user_phone"`
+	UserPhoneEnc string      `json:"user_phone_enc"`
+	Sort         string      `json:"sort"`
+	Order        string      `json:"order"`
+	Offset       int32       `json:"offset"`
+	Limit        int32       `json:"limit"`
 }
 
 type ListSubscriptionPaymentsAdminRow struct {
@@ -1006,12 +1111,17 @@ type ListSubscriptionPaymentsAdminRow struct {
 	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
 	ChargeAttempts        int32              `json:"charge_attempts"`
 	UserPhone             string             `json:"user_phone"`
+	UserPhoneEncrypted    bool               `json:"user_phone_encrypted"`
 }
 
 func (q *Queries) ListSubscriptionPaymentsAdmin(ctx context.Context, arg ListSubscriptionPaymentsAdminParams) ([]ListSubscriptionPaymentsAdminRow, error) {
 	rows, err := q.db.Query(ctx, listSubscriptionPaymentsAdmin,
 		arg.Status,
 		arg.UserID,
+		arg.UserPhone,
+		arg.UserPhoneEnc,
+		arg.Sort,
+		arg.Order,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -1041,6 +1151,7 @@ func (q *Queries) ListSubscriptionPaymentsAdmin(ctx context.Context, arg ListSub
 			&i.RefundedAmountKopecks,
 			&i.ChargeAttempts,
 			&i.UserPhone,
+			&i.UserPhoneEncrypted,
 		); err != nil {
 			return nil, err
 		}

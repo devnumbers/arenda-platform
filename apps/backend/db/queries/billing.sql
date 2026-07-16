@@ -147,7 +147,7 @@ RETURNING *;
 SELECT * FROM subscription_payments WHERE id = $1;
 
 -- name: GetSubscriptionPaymentByIDAdmin :one
-SELECT sp.*, u.phone AS user_phone
+SELECT sp.*, u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
 FROM subscription_payments sp
 JOIN users u ON sp.user_id = u.id
 WHERE sp.id = $1;
@@ -333,12 +333,21 @@ ORDER BY updated_at ASC
 LIMIT $2;
 
 -- name: ListSubscriptionPaymentsAdmin :many
-SELECT sp.*, u.phone AS user_phone
+SELECT sp.*, u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
 FROM subscription_payments sp
 JOIN users u ON sp.user_id = u.id
 WHERE (sqlc.arg('status')::text = '' OR sp.status = sqlc.arg('status')::text)
   AND (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id')::uuid)
-ORDER BY sp.created_at DESC
+  AND (sqlc.arg('user_phone')::text = '' OR u.phone = sqlc.arg('user_phone_enc')::text OR (u.phone = sqlc.arg('user_phone')::text AND u.phone_encrypted = false))
+ORDER BY
+  CASE WHEN sqlc.arg('sort')::text = 'createdAt' AND sqlc.arg('order')::text = 'asc' THEN sp.created_at END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'createdAt' AND sqlc.arg('order')::text = 'desc' THEN sp.created_at END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'amountKopecks' AND sqlc.arg('order')::text = 'asc' THEN sp.amount_kopecks END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'amountKopecks' AND sqlc.arg('order')::text = 'desc' THEN sp.amount_kopecks END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'status' AND sqlc.arg('order')::text = 'asc' THEN sp.status END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'status' AND sqlc.arg('order')::text = 'desc' THEN sp.status END DESC,
+  CASE WHEN sqlc.arg('sort')::text = '' THEN sp.created_at END DESC,
+  sp.id DESC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
 -- name: CountSubscriptionPaymentsAdmin :one
@@ -346,4 +355,26 @@ SELECT COUNT(*)
 FROM subscription_payments sp
 JOIN users u ON sp.user_id = u.id
 WHERE (sqlc.arg('status')::text = '' OR sp.status = sqlc.arg('status')::text)
-  AND (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id')::uuid);
+  AND (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id')::uuid)
+  AND (sqlc.arg('user_phone')::text = '' OR u.phone = sqlc.arg('user_phone_enc')::text OR (u.phone = sqlc.arg('user_phone')::text AND u.phone_encrypted = false));
+
+-- name: CountActiveSubscriptionsAdmin :one
+SELECT COUNT(*) FROM user_subscriptions WHERE status = 'active';
+
+-- name: GetSubscriptionPaymentsStatsLast30dAdmin :one
+-- Aggregates over payments created in the last 30 days. "refunded" covers both
+-- full and partial refunds.
+SELECT
+  COALESCE(SUM(amount_kopecks) FILTER (WHERE status = 'succeeded'), 0)::bigint AS succeeded_total_kopecks,
+  COUNT(*) FILTER (WHERE status = 'failed') AS failed_count,
+  COUNT(*) FILTER (WHERE status IN ('refunded', 'partial_refunded')) AS refunded_count
+FROM subscription_payments
+WHERE created_at >= now() - interval '30 days';
+
+-- name: ListRecentSubscriptionPaymentsAdmin :many
+SELECT sp.id, sp.user_id, sp.amount_kopecks, sp.status, sp.created_at,
+       u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
+FROM subscription_payments sp
+JOIN users u ON u.id = sp.user_id
+ORDER BY sp.created_at DESC, sp.id DESC
+LIMIT 5;
