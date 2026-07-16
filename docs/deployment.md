@@ -222,6 +222,15 @@ esac
 
 - Stage/prod compose ограничивает CPU/RAM на уровне сервисов и включает
   ротацию Docker JSON-логов: `max-size=10m`, `max-file=5`.
+- PostgreSQL в stage/prod явно настроен под `mem_limit` контейнера через
+  аргументы `command` в compose: `shared_buffers` = 25% лимита (prod 192MB /
+  stage 96MB), `effective_cache_size` ≈ 2/3 лимита (prod 512MB / stage 256MB),
+  `jit=off`, `max_parallel_workers_per_gather=0` (контейнер ограничен 1 CPU).
+  PostgreSQL не масштабируется автоматически ни под RAM хоста, ни под лимит
+  cgroup: при изменении `mem_limit` или апгрейде сервера параметры
+  пересчитываются по этой формуле и правятся в compose вручную. Лимиты не
+  убирать: хост общий (5.8GB RAM, swap=0, ~30 контейнеров), лимиты изолируют
+  OOM внутри cgroup вместо kernel OOM killer по всему хосту.
 - Все runtime images имеют Dockerfile `HEALTHCHECK`; compose healthchecks
   остаются как orchestration checks для `depends_on`.
 - Runtime base images закреплены по digest (build-стадии `node:24-alpine`

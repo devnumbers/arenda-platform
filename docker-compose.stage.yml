@@ -16,6 +16,16 @@ services:
     restart: unless-stopped
     mem_limit: 384m
     cpus: 0.50
+    command:
+      - postgres
+      - -c
+      - shared_buffers=96MB
+      - -c
+      - effective_cache_size=256MB
+      - -c
+      - jit=off
+      - -c
+      - max_parallel_workers_per_gather=0
     logging: *default-logging
     env_file: *stage-env-file
     volumes:
