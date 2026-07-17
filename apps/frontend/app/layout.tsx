@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import type { JSX, ReactNode } from 'react';
 import { Inter, Manrope } from 'next/font/google';
+import { ErrorReporter } from '@/shared/lib/error-reporting/ErrorReporter';
 import { ScrollToTop } from '@/shared/lib/scroll/ScrollToTop';
 import { I18nProvider } from '@/shared/providers/i18n-provider';
 import { QueryProvider } from '@/shared/providers/query-provider';
@@ -40,6 +41,7 @@ export default function RootLayout({
     return (
         <html lang="ru" className={`${inter.variable} ${manrope.variable}`}>
             <body>
+                <ErrorReporter />
                 <ScrollToTop />
                 <I18nProvider locale="ru-RU">
                     <QueryProvider>
