@@ -75,7 +75,7 @@ func dbPoolStats(pool *pgxpool.Pool) func() httpapi.DBPoolSnapshot {
 func main() {
 	fallback := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	if err := run(); err != nil {
-		fallback.Error("backend stopped", "error", err)
+		fallback.Error("backend stopped", "error", err) //nolint:sloglint // fallback logger before any context exists in main
 		os.Exit(1)
 	}
 }
@@ -493,7 +493,7 @@ func run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		appLogger.Info("backend listening", "addr", cfg.HTTPAddr, "env", cfg.AppEnv)
+		appLogger.InfoContext(ctx, "backend listening", "addr", cfg.HTTPAddr, "env", cfg.AppEnv)
 		errCh <- server.ListenAndServe()
 	}()
 

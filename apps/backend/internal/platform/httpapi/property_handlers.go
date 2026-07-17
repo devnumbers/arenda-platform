@@ -368,7 +368,7 @@ func (h *PropertyHandlers) GetPropertyOperationsSummary(w http.ResponseWriter, r
 }
 
 // UploadPropertyPhoto implements POST /properties/{propertyId}/photos.
-func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
+func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
 		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
@@ -391,7 +391,7 @@ func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Re
 	}
 	defer func() { _ = file.Close() }()
 
-	property, err := h.svc.AddPropertyPhoto(r.Context(), ownerID, propertyId, file, header.Filename, header.Header.Get("Content-Type"), header.Size)
+	property, err := h.svc.AddPropertyPhoto(r.Context(), ownerID, propertyID, file, header.Filename, header.Header.Get("Content-Type"), header.Size)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
@@ -407,14 +407,14 @@ func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Re
 }
 
 // DeletePropertyPhoto implements DELETE /properties/{propertyId}/photos/{photoId}.
-func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId, photoId uuid.UUID) {
+func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID, photoID uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
 		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	if err := h.svc.DeletePropertyPhoto(r.Context(), ownerID, propertyId, photoId); err != nil {
+	if err := h.svc.DeletePropertyPhoto(r.Context(), ownerID, propertyID, photoID); err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}

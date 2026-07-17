@@ -25,16 +25,16 @@ const (
 )
 
 type queryExecutor interface {
-	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
-	Query(context.Context, string, ...any) (pgx.Rows, error)
-	QueryRow(context.Context, string, ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 type transactionExecutor interface {
 	queryExecutor
 	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
-	Commit(context.Context) error
-	Rollback(context.Context) error
+	Commit(ctx context.Context) error
+	Rollback(ctx context.Context) error
 }
 
 type dbInstrumenter struct {

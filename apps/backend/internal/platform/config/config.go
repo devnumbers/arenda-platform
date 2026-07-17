@@ -379,11 +379,10 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("invalid EMAIL_SENDER %q: must be empty, fake, or smtp", cfg.EmailSender)
 	}
 	if cfg.EmailSender == "" {
-		if cfg.AppEnv == "local" || cfg.AppEnv == "dev" {
-			cfg.EmailSender = "fake"
-		} else {
+		if cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
 			return Config{}, fmt.Errorf("EMAIL_SENDER is required for APP_ENV=%s", cfg.AppEnv)
 		}
+		cfg.EmailSender = "fake"
 	}
 	if cfg.EmailSender == "fake" && cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
 		return Config{}, fmt.Errorf("EMAIL_SENDER=fake is not allowed for APP_ENV=%s", cfg.AppEnv)
@@ -419,11 +418,10 @@ func Load() (Config, error) {
 	}
 
 	if cfg.PaymentProvider == "" {
-		if cfg.AppEnv == "local" {
-			cfg.PaymentProvider = "fake"
-		} else {
+		if cfg.AppEnv != "local" {
 			return Config{}, fmt.Errorf("PAYMENT_PROVIDER is required for APP_ENV=%s", cfg.AppEnv)
 		}
+		cfg.PaymentProvider = "fake"
 	}
 	allowedPaymentProviders := map[string]bool{"fake": true, "tkassa": true}
 	if !allowedPaymentProviders[cfg.PaymentProvider] {

@@ -562,16 +562,15 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 	var customerResp addCustomerResponse
 	if err := p.post(ctx, "AddCustomer", customerBody, &customerResp); err != nil {
 		var providerErr *ProviderError
-		if errors.As(err, &providerErr) && providerErr.ErrorCode == "7" {
-			log.InfoContext(ctx, "tkassa customer already exists, proceeding to add card",
-				"customer_key", req.CustomerKey,
-			)
-		} else {
+		if !errors.As(err, &providerErr) || providerErr.ErrorCode != "7" {
 			wrappedErr := fmt.Errorf("tkassa: add customer failed: %w", classifyProviderError(err))
 			span.RecordError(wrappedErr)
 			span.SetStatus(codes.Error, wrappedErr.Error())
 			return application.InitAddCardResult{}, wrappedErr
 		}
+		log.InfoContext(ctx, "tkassa customer already exists, proceeding to add card",
+			"customer_key", req.CustomerKey,
+		)
 	}
 
 	checkType := spec.AddCardCheckType(req.CheckType)

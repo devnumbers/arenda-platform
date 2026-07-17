@@ -96,13 +96,12 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 		// failing here would make T-Kassa retry the webhook indefinitely.
 		sub, err := txSubscriptions.GetByUserIDForUpdate(ctx, userID)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				s.deps.log.WarnContext(ctx, "add card webhook: subscription not found; skipping active method link",
-					slog.String("user_id", userID.String()),
-					slog.String("payment_method_id", pm.ID.String()))
-			} else {
+			if !errors.Is(err, ErrNotFound) {
 				return fmt.Errorf("get subscription for add card: %w", err)
 			}
+			s.deps.log.WarnContext(ctx, "add card webhook: subscription not found; skipping active method link",
+				slog.String("user_id", userID.String()),
+				slog.String("payment_method_id", pm.ID.String()))
 		} else {
 			sub.SetActivePaymentMethod(pm.ID)
 			if err := txSubscriptions.Update(ctx, sub); err != nil {

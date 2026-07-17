@@ -22,7 +22,7 @@ func TestWithCorrelation_AddsIDs(t *testing.T) {
 		t.Fatal("expected non-nil logger")
 	}
 
-	log.Info("hello")
+	log.Info("hello") //nolint:sloglint // intentionally exercises the wrapper without context
 
 	var record map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
@@ -68,7 +68,7 @@ func TestWithCorrelation_PrefersOTelSpanTraceID(t *testing.T) {
 	if log == nil {
 		t.Fatal("expected non-nil logger")
 	}
-	log.Info("hello")
+	log.Info("hello") //nolint:sloglint // intentionally exercises the wrapper without context
 
 	var record map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
@@ -92,7 +92,7 @@ func TestWithCorrelation_FallsBackToLocalTraceIDWithoutSpan(t *testing.T) {
 	if log == nil {
 		t.Fatal("expected non-nil logger")
 	}
-	log.Info("hello")
+	log.Info("hello") //nolint:sloglint // intentionally exercises the wrapper without context
 
 	var record map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {

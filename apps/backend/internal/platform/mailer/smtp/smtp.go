@@ -145,9 +145,7 @@ func quoteDisplayName(s string) string {
 	if strings.HasPrefix(s, "=?") {
 		return s
 	}
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	return fmt.Sprintf("\"%s\"", s)
+	return fmt.Sprintf("%q", s)
 }
 
 // messageIDDomain returns the domain part of the From address to use in the

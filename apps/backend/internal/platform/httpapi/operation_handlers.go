@@ -36,6 +36,13 @@ func NewOperationHandlers(svc *leasesapp.OperationService, categories *leasesapp
 }
 
 func (h *OperationHandlers) handleOperationError(w http.ResponseWriter, r *http.Request, err error) {
+	handleLeaseOperationError(w, r, err, leasesapp.ErrOperationAlreadyCompleted, "Операция не найдена")
+}
+
+// handleLeaseOperationError maps the leases domain errors shared by the
+// operation and recurring operation endpoints to problem details. conflictErr
+// is the endpoint-specific conflict sentinel, notFoundDetail the 404 detail.
+func handleLeaseOperationError(w http.ResponseWriter, r *http.Request, err error, conflictErr error, notFoundDetail string) {
 	switch {
 	case errors.Is(err, leasesapp.ErrInvalidInput), errors.Is(err, domain.ErrInvalidOperationType):
 		detail, ok := UserFacingDetail(err)
@@ -45,15 +52,8 @@ func (h *OperationHandlers) handleOperationError(w http.ResponseWriter, r *http.
 		}
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
-		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "Операция не найдена"))
-	case errors.Is(err, leasesapp.ErrOperationAlreadyCompleted):
-		detail, ok := UserFacingDetail(err)
-		if !ok {
-			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-			return
-		}
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
-	case errors.Is(err, leasesapp.ErrArchivedProperty):
+		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", notFoundDetail))
+	case errors.Is(err, conflictErr), errors.Is(err, leasesapp.ErrArchivedProperty):
 		detail, ok := UserFacingDetail(err)
 		if !ok {
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
@@ -98,7 +98,7 @@ func operationSortFromQuery(sort *openapi.OperationListSort) leasesapp.Operation
 }
 
 // CreateOperation implements POST /properties/{propertyId}/operations.
-func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
+func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
 		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
@@ -113,7 +113,7 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 	}
 
 	cmd := leasesapp.CreateOperationCommand{
-		PropertyID:    propertyId,
+		PropertyID:    propertyID,
 		Type:          string(body.Type),
 		CategoryID:    body.CategoryId,
 		Name:          body.Name,
@@ -151,7 +151,7 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 }
 
 // ListOperationsByProperty implements GET /properties/{propertyId}/operations.
-func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID, params openapi.ListOperationsByPropertyParams) {
+func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID, params openapi.ListOperationsByPropertyParams) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
 		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
@@ -186,7 +186,7 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 		filter.ToDate = &params.To.Time
 	}
 
-	ops, err := h.svc.ListOperationsByProperty(r.Context(), ownerID, propertyId, filter)
+	ops, err := h.svc.ListOperationsByProperty(r.Context(), ownerID, propertyID, filter)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
