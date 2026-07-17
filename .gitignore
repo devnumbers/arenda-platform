@@ -1,4 +1,7 @@
-.idea
+.idea/*
+!.idea/inspectionProfiles/
+!.idea/sqldialects.xml
+!.idea/dataSources.xml
 .DS_Store
 .env
 .env.*
