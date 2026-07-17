@@ -9,7 +9,7 @@
 
 | Сервис      | Образ                                        | Назначение                          | Лимиты        |
 |-------------|----------------------------------------------|-------------------------------------|---------------|
-| `clickhouse`| clickhouse/clickhouse-server:25.8.28.1       | телеметрия (спаны, логи, метрики)   | 1g / 1.0 cpu  |
+| `clickhouse`| clickhouse/clickhouse-server:25.8.28.1       | телеметрия (спаны, логи, метрики)   | 1536m / 1.0 cpu |
 | `uptrace-pg`| postgres:18                                  | метаданные Uptrace                  | 256m / 0.5    |
 | `redis`     | redis:8.2.7-alpine                           | кэш Uptrace (обязателен для 2.0.3)  | 96m / 0.25    |
 | `uptrace`   | uptrace/uptrace:2.0.3                        | UI :14318 + OTLP :14317             | 384m / 0.5    |
@@ -45,7 +45,7 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
 
 - Тот же VPS, где развёрнуты stage и prod (`/opt/arenda/stage`,
   `/opt/arenda/prod`).
-- +2 ГБ свободной RAM под стек (лимиты суммарно ~2.1 ГБ).
+- +3 ГБ свободной RAM под стек (лимиты суммарно ~2.6 ГБ; хост после апгрейда ~7.9 ГБ).
 - Docker + Docker Compose v2.
 - DNS A-запись `logs.rentlee.ru` → IP сервера (добавляет владелец).
 
@@ -175,14 +175,17 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
    ```
 
    ```yaml
-   # Паника backend (recovery-middleware пишет level=error со словом panic)
+   # Паника backend (recovery-middleware пишет level=error со словом panic).
+   # NB: в error-мониторах 2.0.3 атрибут пишется как display_name (вариант с
+   # подчёркиванием _display_name движок отвергает: "unsupported attr") —
+   # синтаксис проверен на 2.0.3 на боевом сервере.
    monitors:
      - name: PanicDetected
        type: error
        query:
          - group by _group_id
          - where _system in ("log:error", "log:fatal")
-         - where _display_name contains "panic"
+         - where display_name contains "panic"
    ```
 
    ```yaml
@@ -193,7 +196,7 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
        query:
          - group by _group_id
          - where _system = "log:error"
-         - where _display_name contains "healthcheck failed"
+         - where display_name contains "healthcheck failed"
    ```
 
    ```yaml
@@ -304,6 +307,10 @@ logs.rentlee.ru {
 и заменить в `observability/vector.yaml` include источника `caddy_access` на
 glob `"/var/log/caddy/*.log"`.
 
+Про атрибуты: в Uptrace 2.0.3 поле `request.host` из JSON Caddy в attrs
+записи не сохраняется — на разметку окружений это не влияет: Vector
+вычисляет `.env` из хоста до отправки (см. `caddy_parsed` в `vector.yaml`).
+
 Проверка и применение:
 
 ```bash
@@ -377,7 +384,7 @@ cd /opt/arenda/prod  && docker compose -f docker-compose.prod.yml up -d
 
 - **`clickhouse` не стартует / падает:** смотреть
   `docker compose ... logs clickhouse`. Частые причины: нехватка RAM
-  (лимит 1g, хосту нужен запас), повреждённый volume после жёсткого ребута.
+  (лимит 1536m, хосту нужен запас), повреждённый volume после жёсткого ребута.
 - **`uptrace` в restart-loop:** `logs uptrace`. Ошибки YAML в
   `observability/uptrace.yml` (отступы!), пустые `${...}` — не заполнен
   `.env.obs` или стек запущен без `--env-file .env.obs`. Ошибки auth к БД —

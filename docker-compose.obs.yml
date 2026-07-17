@@ -14,7 +14,7 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:25.8.28.1
     restart: unless-stopped
-    mem_limit: 1g
+    mem_limit: 1536m
     cpus: 1.00
     logging: *default-logging
     environment:

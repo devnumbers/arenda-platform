@@ -252,7 +252,7 @@ esac
   + каталог `observability/` в репо) и разворачивается из `/opt/arenda/obs` —
   вне stage/prod checkout'ов, которые чистятся `git clean -ffdx`. Сервисы:
   ClickHouse, PostgreSQL, Uptrace, Redis, Vector, OTel Collector; суммарный
-  лимит RAM ~2.1 ГБ, все порты привязаны к `127.0.0.1`.
+  лимит RAM ~2.6 ГБ, все порты привязаны к `127.0.0.1`.
 - Что собирается: stdout всех контейнеров (структурированные slog-логи backend
   остаются logging source of truth, локальный json-file driver и `docker logs`
   сохраняются), access-логи Caddy (`/var/log/caddy/access.log`), лог сбоев
