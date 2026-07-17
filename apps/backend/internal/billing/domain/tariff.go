@@ -46,10 +46,10 @@ type Tariff struct {
 // direction of the change.
 //
 // Rules (in order):
-//   1. Higher active property limit is better. Unlimited (-1) beats any finite limit.
-//   2. If limits are equal, higher monthly price is better.
-//   3. If monthly prices are also equal, higher yearly price is the tie-breaker.
-//   4. If all compared fields are equal, the tariffs are considered the same.
+//  1. Higher active property limit is better. Unlimited (-1) beats any finite limit.
+//  2. If limits are equal, higher monthly price is better.
+//  3. If monthly prices are also equal, higher yearly price is the tie-breaker.
+//  4. If all compared fields are equal, the tariffs are considered the same.
 func ClassifyTariffChange(current, next Tariff) TariffChangeType {
 	nextBetter := isTariffBetter(next, current)
 	currentBetter := isTariffBetter(current, next)

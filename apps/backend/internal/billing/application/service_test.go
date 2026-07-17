@@ -653,12 +653,14 @@ func (a *fakePropertyArchiver) ArchiveExcessProperties(_ context.Context, _ tran
 
 // --- provider fake ---
 
-var _ RenewalProvider = (*stubProvider)(nil)
-var _ WebhookProvider = (*stubProvider)(nil)
-var _ PaymentManager = (*stubProvider)(nil)
-var _ CardProvider = (*stubProvider)(nil)
-var _ SubscriptionPaymentProvider = (*stubProvider)(nil)
-var _ ProviderNamer = (*stubProvider)(nil)
+var (
+	_ RenewalProvider             = (*stubProvider)(nil)
+	_ WebhookProvider             = (*stubProvider)(nil)
+	_ PaymentManager              = (*stubProvider)(nil)
+	_ CardProvider                = (*stubProvider)(nil)
+	_ SubscriptionPaymentProvider = (*stubProvider)(nil)
+	_ ProviderNamer               = (*stubProvider)(nil)
+)
 
 type stubProvider struct {
 	name       domain.PaymentProvider
@@ -6217,6 +6219,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				providerStatus:     domain.PaymentStatusSucceeded,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusSucceeded {
 						t.Errorf("expected payment succeeded, got %s", payment.Status)
@@ -6276,6 +6279,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				providerStatus:     domain.PaymentStatusSucceeded,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusSucceeded {
 						t.Errorf("expected payment succeeded, got %s", payment.Status)
@@ -6333,6 +6337,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				providerStatus:     domain.PaymentStatusFailed,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusFailed {
 						t.Errorf("expected payment failed, got %s", payment.Status)
@@ -6386,6 +6391,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				providerStatus:     domain.PaymentStatusFailed,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusFailed {
 						t.Errorf("expected payment failed, got %s", payment.Status)
@@ -6445,6 +6451,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				providerStatus:     domain.PaymentStatusRefunded,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusRefunded {
 						t.Errorf("expected payment refunded, got %s", payment.Status)
@@ -6513,6 +6520,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				providerStatus:     domain.PaymentStatusPartialRefunded,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					// Partial refunds are impossible in this product: the external
 					// notification is an anomaly that is logged and ignored.
@@ -6581,6 +6589,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				providerStatus:     domain.PaymentStatusPending,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusPending {
 						t.Errorf("expected payment still pending, got %s", payment.Status)
@@ -6623,6 +6632,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				wantProviderCalled: false,
 				wantErr:            func(err error) bool { return errors.Is(err, domain.ErrInvalidPaymentStatus) },
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusSucceeded {
 						t.Errorf("expected payment status unchanged, got %s", payment.Status)

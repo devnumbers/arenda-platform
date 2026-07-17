@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -30,7 +31,11 @@ func (r *PropertyPhotoRepository) q() *postgres.Queries {
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *PropertyPhotoRepository) WithTx(tx transaction.Tx) application.PropertyPhotoRepository {
-	return NewPropertyPhotoRepository(tx.(postgres.DBTX))
+	dbtx, ok := tx.(postgres.DBTX)
+	if !ok {
+		panic(fmt.Sprintf("properties.PropertyPhotoRepository.WithTx: expected postgres.DBTX, got %T", tx))
+	}
+	return NewPropertyPhotoRepository(dbtx)
 }
 
 // Create inserts a photo record and returns the created photo.

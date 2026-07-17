@@ -574,6 +574,9 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, actorID uuid
 		}, tx, payment.SubscriptionID); err != nil {
 			return err
 		}
+	default:
+		// Succeeded, pending and partial-refunded statuses need no
+		// subscription-side effects: applyPaymentResult already handled them.
 	}
 
 	actor, actorRole := paymentAuditActor(actorID)

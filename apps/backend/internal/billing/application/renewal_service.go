@@ -87,7 +87,7 @@ func (r *RenewalService) processSubscriptionBatch(
 		batchProcessed := 0
 		for _, sub := range subs {
 			if err := process(ctx, sub, now.UTC()); err != nil {
-				r.deps.log.ErrorContext(ctx, fmt.Sprintf("%s subscription failed", op),
+				r.deps.log.ErrorContext(ctx, op+" subscription failed",
 					slog.String("subscription_id", sub.ID.String()),
 					slog.String("user_id", sub.UserID.String()),
 					slog.String("error", sanitize.Error(err)))
@@ -305,11 +305,11 @@ func (r *RenewalService) finalizeRenewalCharge(
 	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
 		notification, successURL, failURL := tkassaCallbackURLs(r.deps.callbackBaseURL, payment.ID)
 		initRes, err := r.provider.Init(ctx, InitRequest{
-			PaymentID:              payment.ID,
-			AmountKopecks:          amount,
-			Period:                 period,
-			UserID:                 sub.UserID,
-			CustomerKey:            sub.UserID.String(),
+			PaymentID:     payment.ID,
+			AmountKopecks: amount,
+			Period:        period,
+			UserID:        sub.UserID,
+			CustomerKey:   sub.UserID.String(),
 			// Child MIT payment: Recurrent=Y marks only the parent payment and
 			// must be omitted here — combined with a child
 			// OperationInitiatorType it is rejected by T-Kassa (error 1126).
@@ -367,6 +367,9 @@ func (r *RenewalService) finalizeRenewalCharge(
 			return r.markRenewalSucceededAndApply(ctx, payment, sub.ID, now)
 		case domain.PaymentStatusFailed:
 			return r.markRenewalFailedAndGrace(ctx, payment.ID, sub.ID, nil, now)
+		default:
+			// Any other provider status (still pending, refunded) leaves the
+			// payment unresolved, so fall through to a fresh charge attempt.
 		}
 	}
 

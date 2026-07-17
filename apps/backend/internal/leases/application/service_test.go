@@ -157,5 +157,7 @@ func TestOperationService_GetPropertyOperationsSummary(t *testing.T) {
 	}
 }
 
-var _ PropertyRepository = (*fakePropertyRepo)(nil)
-var _ LeaseRepository = (*fakeLeaseRepo)(nil)
+var (
+	_ PropertyRepository = (*fakePropertyRepo)(nil)
+	_ LeaseRepository    = (*fakeLeaseRepo)(nil)
+)

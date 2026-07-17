@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,7 +94,7 @@ func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 		"+79991234567",
 	}
 	for _, s := range forbidden {
-		if bytes.Contains([]byte(logs), []byte(s)) {
+		if strings.Contains(logs, s) {
 			t.Errorf("log contains sensitive substring %q:\n%s", s, logs)
 		}
 	}
@@ -102,7 +103,7 @@ func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 		"billing worker renewal processing failed",
 		"billing worker expired grace processing failed",
 	} {
-		if !bytes.Contains([]byte(logs), []byte(msg)) {
+		if !strings.Contains(logs, msg) {
 			t.Errorf("expected log message %q, got:\n%s", msg, logs)
 		}
 	}
@@ -136,10 +137,10 @@ func TestBillingWorkerTick_CallsProcessPendingUpgradePayments(t *testing.T) {
 	}
 
 	logs := logBuf.String()
-	if !bytes.Contains([]byte(logs), []byte("billing worker finalized pending upgrade payments")) {
+	if !strings.Contains(logs, "billing worker finalized pending upgrade payments") {
 		t.Errorf("expected pending upgrade processing log, got:\n%s", logs)
 	}
-	if !bytes.Contains([]byte(logs), []byte("count=3")) {
+	if !strings.Contains(logs, "count=3") {
 		t.Errorf("expected count=3 in logs, got:\n%s", logs)
 	}
 }

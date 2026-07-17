@@ -21,8 +21,10 @@ func sessionCookieName(secure bool) string {
 	return "session_id"
 }
 
-type userIDKey struct{}
-type userKey struct{}
+type (
+	userIDKey struct{}
+	userKey   struct{}
+)
 
 // UserIDFromContext returns the authenticated user ID from the request context.
 func UserIDFromContext(ctx context.Context) (uuid.UUID, bool) {

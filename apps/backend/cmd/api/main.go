@@ -74,13 +74,13 @@ func dbPoolStats(pool *pgxpool.Pool) func() httpapi.DBPoolSnapshot {
 
 func main() {
 	fallback := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	if err := run(fallback); err != nil {
+	if err := run(); err != nil {
 		fallback.Error("backend stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(fallback *slog.Logger) error {
+func run() error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -124,7 +124,7 @@ func run(fallback *slog.Logger) error {
 	}
 	if cfg.EncryptionKey == "" {
 		if cfg.PaymentProvider != "fake" {
-			return fmt.Errorf("ENCRYPTION_KEY is required when using a real payment provider")
+			return errors.New("ENCRYPTION_KEY is required when using a real payment provider")
 		}
 		appLogger.WarnContext(ctx, "ENCRYPTION_KEY is empty; provider tokens will be stored without encryption (local dev only)")
 	}

@@ -381,15 +381,19 @@ func (b *bodyCapturingRoundTripper) RoundTrip(req *http.Request) (*http.Response
 }
 
 // Ensure fakeRoundTripper satisfies the interface at compile time.
-var _ http.RoundTripper = (*fakeRoundTripper)(nil)
-var _ http.RoundTripper = (*countingRoundTripper)(nil)
-var _ http.RoundTripper = (*wroteRequestRoundTripper)(nil)
-var _ http.RoundTripper = (*signalingRoundTripper)(nil)
+var (
+	_ http.RoundTripper = (*fakeRoundTripper)(nil)
+	_ http.RoundTripper = (*countingRoundTripper)(nil)
+	_ http.RoundTripper = (*wroteRequestRoundTripper)(nil)
+	_ http.RoundTripper = (*signalingRoundTripper)(nil)
+)
 
 // Ensure net.Error implementations satisfy the interface at compile time.
-var _ net.Error = (*timeoutNetError)(nil)
-var _ net.Error = (*nonTimeoutNetError)(nil)
-var _ net.Error = (*permanentNetError)(nil)
+var (
+	_ net.Error = (*timeoutNetError)(nil)
+	_ net.Error = (*nonTimeoutNetError)(nil)
+	_ net.Error = (*permanentNetError)(nil)
+)
 
 // hangingServer reads the request body and then blocks until the client
 // gives up, producing a real ResponseHeaderTimeout after WroteRequest.

@@ -89,7 +89,7 @@ func (s *PhoneChangeService) SendChangeCode(ctx context.Context, userID uuid.UUI
 // currentToken is the raw session token of the current session; it is used to
 // keep the current session alive when deleting all other sessions.
 func (s *PhoneChangeService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhone domain.Phone, code, currentToken string) (domain.User, error) {
-	if _, err := checkNotBlocked(ctx, s.attempts, s.clock, newPhone); err != nil {
+	if err := checkNotBlocked(ctx, s.attempts, s.clock, newPhone); err != nil {
 		return domain.User{}, err
 	}
 
@@ -103,7 +103,7 @@ func (s *PhoneChangeService) ChangePhone(ctx context.Context, userID uuid.UUID, 
 	if err != nil {
 		return domain.User{}, fmt.Errorf("bind attempt repository to tx: %w", err)
 	}
-	if _, err := checkNotBlocked(ctx, txAttempts, s.clock, newPhone); err != nil {
+	if err := checkNotBlocked(ctx, txAttempts, s.clock, newPhone); err != nil {
 		return domain.User{}, err
 	}
 

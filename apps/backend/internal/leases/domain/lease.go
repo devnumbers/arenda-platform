@@ -46,6 +46,9 @@ func (s LeaseStatus) IsOpen() bool {
 		LeaseStatusActive,
 		LeaseStatusRequiresAction:
 		return true
+	case LeaseStatusCompleted,
+		LeaseStatusArchived:
+		return false
 	}
 	return false
 }

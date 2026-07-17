@@ -36,8 +36,10 @@ const (
 	ReminderCancelled ReminderStatus = "cancelled"
 )
 
-const fixedDispatchHour = 10
-const fixedDispatchTZ = "Europe/Moscow"
+const (
+	fixedDispatchHour = 10
+	fixedDispatchTZ   = "Europe/Moscow"
+)
 
 var ErrInvalidReminderDate = errors.New("reminder date must be today or in the future")
 

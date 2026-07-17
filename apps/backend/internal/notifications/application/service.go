@@ -246,7 +246,7 @@ func buildLeaseReminders(lease LeaseInfo, now time.Time) ([]domain.Reminder, err
 	expiringDate := endDate.AddDate(0, 0, -leaseExpiringOffsetDays)
 	if !timeutil.Date(expiringDate).Before(timeutil.Date(now)) {
 		expiringTitle := "Аренда скоро заканчивается"
-		expiringBody := fmt.Sprintf("Аренда по объекту заканчивается %s", endDate.Format("02.01.2006"))
+		expiringBody := "Аренда по объекту заканчивается " + endDate.Format("02.01.2006")
 		expiring, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, expiringDate, expiringTitle, expiringBody, domain.EventLeaseExpiring, now)
 		if err != nil {
 			return nil, fmt.Errorf("create lease expiring reminder: %w", err)

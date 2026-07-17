@@ -749,7 +749,7 @@ func photoStorageKey(propertyID, photoID uuid.UUID, photoURL string) (string, er
 	}
 	ext := path.Ext(parsed.Path)
 	if ext == "" {
-		return "", fmt.Errorf("could not determine extension from photo url path")
+		return "", errors.New("could not determine extension from photo url path")
 	}
 	return fmt.Sprintf("%s/%s/%s%s", photoKeyPrefix, propertyID.String(), photoID.String(), ext), nil
 }
@@ -785,6 +785,9 @@ func isUpdatableStatusTransition(from, to domain.PropertyStatus) bool {
 		return to == domain.PropertyStatusMaintenance
 	case domain.PropertyStatusMaintenance:
 		return to == domain.PropertyStatusActive
+	case domain.PropertyStatusArchived:
+		// Archived properties are terminal and cannot transition anywhere.
+		return false
 	}
 	return false
 }

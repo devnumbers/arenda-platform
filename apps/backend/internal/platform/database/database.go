@@ -83,10 +83,10 @@ func MigrateUp(databaseURL, migrationsDir string) error {
 	// pgx/v5 driver registers itself as "pgx5", so we rewrite the scheme
 	// while keeping the rest of the URL intact.
 	migrateURL := databaseURL
-	if strings.HasPrefix(migrateURL, "postgres://") {
-		migrateURL = "pgx5://" + strings.TrimPrefix(migrateURL, "postgres://")
-	} else if strings.HasPrefix(migrateURL, "postgresql://") {
-		migrateURL = "pgx5://" + strings.TrimPrefix(migrateURL, "postgresql://")
+	if after, ok := strings.CutPrefix(migrateURL, "postgres://"); ok {
+		migrateURL = "pgx5://" + after
+	} else if after, ok := strings.CutPrefix(migrateURL, "postgresql://"); ok {
+		migrateURL = "pgx5://" + after
 	}
 	m, err := migrate.New(
 		"file://"+absDir,

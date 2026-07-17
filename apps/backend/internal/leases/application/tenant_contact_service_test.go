@@ -127,7 +127,7 @@ func TestListTenantContactsByIDsRepositoryError(t *testing.T) {
 	}
 }
 
-func setupUpdateTenantContactService(ownerID, contactID uuid.UUID) (*fakeTenantContactRepo, *TenantContactService) {
+func setupUpdateTenantContactService(ownerID, contactID uuid.UUID) *TenantContactService {
 	surname := "Ivanov"
 	patronymic := "Ivanovich"
 	phone := "+79161234567"
@@ -148,13 +148,13 @@ func setupUpdateTenantContactService(ownerID, contactID uuid.UUID) (*fakeTenantC
 		},
 	}
 	svc := NewTenantContactService(repo, nil, nil)
-	return repo, svc
+	return svc
 }
 
 func TestUpdateTenantContactClearsSurname(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
-	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	empty := ""
 	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
@@ -171,7 +171,7 @@ func TestUpdateTenantContactClearsSurname(t *testing.T) {
 func TestUpdateTenantContactClearsPatronymic(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
-	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	empty := ""
 	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
@@ -188,7 +188,7 @@ func TestUpdateTenantContactClearsPatronymic(t *testing.T) {
 func TestUpdateTenantContactClearsPhone(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
-	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	empty := ""
 	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
@@ -205,7 +205,7 @@ func TestUpdateTenantContactClearsPhone(t *testing.T) {
 func TestUpdateTenantContactClearsEmail(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
-	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	empty := ""
 	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
@@ -222,7 +222,7 @@ func TestUpdateTenantContactClearsEmail(t *testing.T) {
 func TestUpdateTenantContactClearsComment(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
-	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	empty := ""
 	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
@@ -239,7 +239,7 @@ func TestUpdateTenantContactClearsComment(t *testing.T) {
 func TestUpdateTenantContactNormalizesPhone(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
-	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	phone := "89161234567"
 	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
@@ -259,7 +259,7 @@ func TestUpdateTenantContactNormalizesPhone(t *testing.T) {
 func TestUpdateTenantContactPreservesEmail(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
-	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	email := "new.email+tag@example.ru"
 	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
@@ -279,7 +279,7 @@ func TestUpdateTenantContactPreservesEmail(t *testing.T) {
 func TestUpdateTenantContactRejectsInvalidPhone(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
-	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	phone := "not-a-phone"
 	_, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
@@ -293,7 +293,7 @@ func TestUpdateTenantContactRejectsInvalidPhone(t *testing.T) {
 func TestUpdateTenantContactRejectsInvalidEmail(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
-	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	email := "not-an-email"
 	_, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
@@ -307,7 +307,7 @@ func TestUpdateTenantContactRejectsInvalidEmail(t *testing.T) {
 func TestUpdateTenantContactUpdatesName(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
-	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	newName := "Petr"
 	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
@@ -324,7 +324,7 @@ func TestUpdateTenantContactUpdatesName(t *testing.T) {
 func TestUpdateTenantContactRejectsEmptyName(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
-	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	empty := "   "
 	_, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
@@ -338,7 +338,7 @@ func TestUpdateTenantContactRejectsEmptyName(t *testing.T) {
 func TestUpdateTenantContactNoOpPreservesValues(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
-	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{})
 	if err != nil {
@@ -367,7 +367,7 @@ func TestUpdateTenantContactNoOpPreservesValues(t *testing.T) {
 func TestUpdateTenantContactNotFound(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
-	_, svc := setupUpdateTenantContactService(ownerID, contactID)
+	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	otherID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a99")
 	newName := "Petr"

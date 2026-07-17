@@ -932,7 +932,7 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 		errorCodePtr = &errorCode
 	}
 
-	amount, err := getInt64(data, "Amount")
+	amount, err := getAmount(data)
 	if err != nil {
 		return application.WebhookPayload{}, err
 	}
@@ -1161,8 +1161,8 @@ func getString(data map[string]any, key string) string {
 	return stringifyValue(v)
 }
 
-func getInt64(data map[string]any, key string) (int64, error) {
-	v, ok := data[key]
+func getAmount(data map[string]any) (int64, error) {
+	v, ok := data["Amount"]
 	if !ok {
 		return 0, nil
 	}
@@ -1172,7 +1172,7 @@ func getInt64(data map[string]any, key string) (int64, error) {
 	}
 	n, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("tkassa: parse %s=%q: %w", key, s, err)
+		return 0, fmt.Errorf("tkassa: parse Amount=%q: %w", s, err)
 	}
 	return n, nil
 }

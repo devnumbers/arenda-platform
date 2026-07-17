@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,33 +31,43 @@ func (r *fakeReminderRepoForWorker) Save(context.Context, domain.Reminder) error
 func (r *fakeReminderRepoForWorker) SaveOrReplaceOperationReminder(context.Context, domain.Reminder) error {
 	return nil
 }
+
 func (r *fakeReminderRepoForWorker) UpdateScheduledAt(context.Context, uuid.UUID, uuid.UUID, time.Time) error {
 	return nil
 }
+
 func (r *fakeReminderRepoForWorker) GetByID(context.Context, uuid.UUID, uuid.UUID) (domain.Reminder, error) {
 	return domain.Reminder{}, nil
 }
+
 func (r *fakeReminderRepoForWorker) GetByIDUnscoped(context.Context, uuid.UUID) (domain.Reminder, error) {
 	return r.getByIDUnscoped, nil
 }
+
 func (r *fakeReminderRepoForWorker) ListByOwner(context.Context, uuid.UUID, application.ListFilter) ([]domain.Reminder, error) {
 	return nil, nil
 }
+
 func (r *fakeReminderRepoForWorker) ListByOperation(context.Context, uuid.UUID, uuid.UUID, application.ListFilter) ([]domain.Reminder, error) {
 	return nil, nil
 }
+
 func (r *fakeReminderRepoForWorker) ListByLease(context.Context, uuid.UUID, uuid.UUID, application.ListFilter) ([]domain.Reminder, error) {
 	return nil, nil
 }
+
 func (r *fakeReminderRepoForWorker) ListByRecurringOperation(context.Context, uuid.UUID, uuid.UUID, application.ListFilter) ([]domain.Reminder, error) {
 	return nil, nil
 }
+
 func (r *fakeReminderRepoForWorker) ListDue(context.Context, time.Time, int) ([]domain.Reminder, error) {
 	return r.reminders, nil
 }
+
 func (r *fakeReminderRepoForWorker) ListStaleSendingReminders(context.Context, time.Time, int) ([]domain.Reminder, error) {
 	return nil, nil
 }
+
 func (r *fakeReminderRepoForWorker) MarkReminderSending(context.Context, uuid.UUID) (domain.Reminder, error) {
 	return domain.Reminder{}, nil
 }
@@ -64,45 +75,59 @@ func (r *fakeReminderRepoForWorker) MarkSent(context.Context, uuid.UUID, time.Ti
 func (r *fakeReminderRepoForWorker) MarkReminderSent(context.Context, uuid.UUID, time.Time) error {
 	return nil
 }
+
 func (r *fakeReminderRepoForWorker) MarkFailed(context.Context, uuid.UUID, *time.Time, bool) error {
 	return r.markFailedErr
 }
+
 func (r *fakeReminderRepoForWorker) SaveSentSMSReminder(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string, string, string, time.Time) error {
 	return r.saveSentSMSErr
 }
+
 func (r *fakeReminderRepoForWorker) UpdateSMSProviderResponse(context.Context, uuid.UUID, string) error {
 	return nil
 }
+
 func (r *fakeReminderRepoForWorker) IsSMSReminderSent(context.Context, uuid.UUID) (bool, error) {
 	return r.isSMSReminderSent, nil
 }
+
 func (r *fakeReminderRepoForWorker) SaveSentEmailReminder(context.Context, application.SaveSentEmailReminderParams) error {
 	return r.saveSentEmailErr
 }
+
 func (r *fakeReminderRepoForWorker) IsEmailReminderSent(context.Context, uuid.UUID) (bool, error) {
 	return r.isEmailReminderSent, nil
 }
+
 func (r *fakeReminderRepoForWorker) DeleteSentEmailReminder(context.Context, uuid.UUID) error {
 	return nil
 }
+
 func (r *fakeReminderRepoForWorker) ResetReminderSending(context.Context, uuid.UUID) error {
 	return nil
 }
+
 func (r *fakeReminderRepoForWorker) MarkSendingReminderPending(context.Context, uuid.UUID, time.Time) error {
 	return r.markSendingPending
 }
+
 func (r *fakeReminderRepoForWorker) CancelByIDAndOwner(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return false, nil
 }
+
 func (r *fakeReminderRepoForWorker) CancelByTarget(context.Context, uuid.UUID, domain.TargetType, uuid.UUID, domain.EventType) error {
 	return nil
 }
+
 func (r *fakeReminderRepoForWorker) CancelByRecurringOperationID(context.Context, uuid.UUID, uuid.UUID) error {
 	return nil
 }
+
 func (r *fakeReminderRepoForWorker) HasReminderForLeaseEvent(context.Context, uuid.UUID, uuid.UUID, domain.EventType) (bool, error) {
 	return false, nil
 }
+
 func (r *fakeReminderRepoForWorker) HasReminderForOperationEvent(context.Context, uuid.UUID, uuid.UUID, domain.EventType) (bool, error) {
 	return false, nil
 }
@@ -200,11 +225,11 @@ func TestReminderWorker_DispatchReminder_SanitizesProviderError(t *testing.T) {
 		"owner@example.com",
 	}
 	for _, s := range forbidden {
-		if bytes.Contains([]byte(logs), []byte(s)) {
+		if strings.Contains(logs, s) {
 			t.Errorf("log contains sensitive substring %q:\n%s", s, logs)
 		}
 	}
-	if !bytes.Contains([]byte(logs), []byte("notify reminder failed")) {
+	if !strings.Contains(logs, "notify reminder failed") {
 		t.Errorf("expected notify reminder failed log, got:\n%s", logs)
 	}
 }

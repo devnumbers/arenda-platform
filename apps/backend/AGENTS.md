@@ -106,6 +106,7 @@ go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1 -config a
 ## Quality Gates
 
 - Do not write new tests or use TDD unless the user explicitly asks for them.
+- Code must be gofumpt-clean with gci import order (enforced by `make backend-lint`); autofix with `cd apps/backend && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 fmt --config ../../.golangci.yml`.
 - Before claiming backend work is complete, run `gopls` diagnostics on changed packages and resolve reported issues.
 - Then run the relevant checks, including existing tests:
 

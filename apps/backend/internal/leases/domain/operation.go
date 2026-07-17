@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,7 +15,7 @@ const (
 	OperationTypeExpense OperationType = "expense"
 )
 
-var ErrInvalidOperationType = fmt.Errorf("invalid operation type")
+var ErrInvalidOperationType = errors.New("invalid operation type")
 
 func ParseOperationType(s string) (OperationType, error) {
 	t := OperationType(s)
@@ -54,7 +55,7 @@ const (
 	OperationStatusReceived OperationStatus = "received"
 )
 
-var ErrInvalidOperationStatus = fmt.Errorf("invalid operation status")
+var ErrInvalidOperationStatus = errors.New("invalid operation status")
 
 func ParseOperationStatus(s string) (OperationStatus, error) {
 	st := OperationStatus(s)
@@ -80,6 +81,8 @@ func (s OperationStatus) IsCompleted() bool {
 	switch s {
 	case OperationStatusPaid, OperationStatusReceived:
 		return true
+	case OperationStatusPending, OperationStatusOverdue:
+		return false
 	}
 	return false
 }
@@ -89,6 +92,8 @@ func (s OperationStatus) CanComplete() bool {
 	switch s {
 	case OperationStatusPending, OperationStatusOverdue:
 		return true
+	case OperationStatusPaid, OperationStatusReceived:
+		return false
 	}
 	return false
 }
@@ -99,8 +104,8 @@ func (s OperationStatus) CanBecomeOverdue() bool {
 }
 
 var (
-	ErrStatusPaidRequiresExpense    = fmt.Errorf("status paid is only valid for expense operations")
-	ErrStatusReceivedRequiresIncome = fmt.Errorf("status received is only valid for income operations")
+	ErrStatusPaidRequiresExpense    = errors.New("status paid is only valid for expense operations")
+	ErrStatusReceivedRequiresIncome = errors.New("status received is only valid for income operations")
 )
 
 // ValidateStatusForType checks that the status is valid and compatible with the operation type.
@@ -117,6 +122,8 @@ func (o Operation) ValidateStatusForType() error {
 		if o.Type != OperationTypeIncome {
 			return ErrStatusReceivedRequiresIncome
 		}
+	case OperationStatusPending, OperationStatusOverdue:
+		// Pending and overdue statuses carry no operation-type constraint.
 	}
 	return nil
 }
@@ -156,7 +163,7 @@ const (
 	RecurringOperationPeriodicityYearly  RecurringOperationPeriodicity = "yearly"
 )
 
-var ErrInvalidRecurringOperationPeriodicity = fmt.Errorf("invalid recurring operation periodicity")
+var ErrInvalidRecurringOperationPeriodicity = errors.New("invalid recurring operation periodicity")
 
 func ParseRecurringOperationPeriodicity(s string) (RecurringOperationPeriodicity, error) {
 	p := RecurringOperationPeriodicity(s)

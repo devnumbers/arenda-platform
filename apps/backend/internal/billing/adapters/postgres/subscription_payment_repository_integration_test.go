@@ -7,13 +7,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 )
 
-func setupSubscriptionPaymentTest(t *testing.T) (context.Context, pgx.Tx, func(), *SubscriptionPaymentRepository, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) {
+func setupSubscriptionPaymentTest(t *testing.T) (context.Context, func(), *SubscriptionPaymentRepository, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) {
 	t.Helper()
 	pool := setupIntegrationDB(t)
 	ctx, tx, cleanup := beginTx(t, pool)
@@ -38,11 +37,11 @@ func setupSubscriptionPaymentTest(t *testing.T) (context.Context, pgx.Tx, func()
 	pm, _ = pmRepo.Create(ctx, pm)
 
 	repo := NewSubscriptionPaymentRepository(tx, noopEncryptor(t))
-	return ctx, tx, cleanup, repo, userID, tariffID, createdSub.ID, pm.ID
+	return ctx, cleanup, repo, userID, tariffID, createdSub.ID, pm.ID
 }
 
 func TestSubscriptionPaymentRepositoryIntegration_CreateAndMarkSucceeded(t *testing.T) {
-	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	ctx, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
@@ -68,7 +67,7 @@ func TestSubscriptionPaymentRepositoryIntegration_CreateAndMarkSucceeded(t *test
 }
 
 func TestSubscriptionPaymentRepositoryIntegration_CreateAndMarkFailed(t *testing.T) {
-	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	ctx, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
@@ -98,7 +97,7 @@ func TestSubscriptionPaymentRepositoryIntegration_CreateAndMarkFailed(t *testing
 }
 
 func TestSubscriptionPaymentRepositoryIntegration_MarkFailed_NilErrorCode(t *testing.T) {
-	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	ctx, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
@@ -127,7 +126,7 @@ func TestSubscriptionPaymentRepositoryIntegration_MarkFailed_NilErrorCode(t *tes
 }
 
 func TestSubscriptionPaymentRepositoryIntegration_MarkSucceeded_GuardAlreadySucceeded(t *testing.T) {
-	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	ctx, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
@@ -150,7 +149,7 @@ func TestSubscriptionPaymentRepositoryIntegration_MarkSucceeded_GuardAlreadySucc
 }
 
 func TestSubscriptionPaymentRepositoryIntegration_ListByUserID(t *testing.T) {
-	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	ctx, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
@@ -175,7 +174,7 @@ func TestSubscriptionPaymentRepositoryIntegration_ListByUserID(t *testing.T) {
 }
 
 func TestSubscriptionPaymentRepositoryIntegration_UpdateProviderPaymentID(t *testing.T) {
-	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	ctx, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	payment, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
@@ -197,7 +196,7 @@ func TestSubscriptionPaymentRepositoryIntegration_UpdateProviderPaymentID(t *tes
 }
 
 func TestSubscriptionPaymentRepositoryIntegration_GetByID_NotFound(t *testing.T) {
-	ctx, _, cleanup, repo, _, _, _, _ := setupSubscriptionPaymentTest(t)
+	ctx, cleanup, repo, _, _, _, _ := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	id := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
@@ -208,7 +207,7 @@ func TestSubscriptionPaymentRepositoryIntegration_GetByID_NotFound(t *testing.T)
 }
 
 func TestSubscriptionPaymentRepositoryIntegration_ListPendingSubscriptionPaymentsByUserID(t *testing.T) {
-	ctx, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	ctx, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	pending, err := domain.NewSubscriptionPayment(userID, subID, tariffID, &pmID, domain.PeriodMonth, 49000, domain.ProviderFake, time.Now().UTC())
@@ -245,7 +244,7 @@ func TestSubscriptionPaymentRepositoryIntegration_ListPendingSubscriptionPayment
 }
 
 func TestSubscriptionPaymentRepository_MarkRefunded_PendingPayment(t *testing.T) {
-	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	_, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	ctx := t.Context()
@@ -279,7 +278,7 @@ func TestSubscriptionPaymentRepository_MarkRefunded_PendingPayment(t *testing.T)
 }
 
 func TestSubscriptionPaymentRepository_BeginRefund_Guard(t *testing.T) {
-	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	_, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	ctx := t.Context()
@@ -353,7 +352,7 @@ func TestSubscriptionPaymentRepository_BeginRefund_Guard(t *testing.T) {
 }
 
 func TestSubscriptionPaymentRepository_MarkRefunded_GuardAlreadyRefunded(t *testing.T) {
-	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	_, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	ctx := t.Context()
@@ -381,7 +380,7 @@ func TestSubscriptionPaymentRepository_MarkRefunded_GuardAlreadyRefunded(t *test
 }
 
 func TestSubscriptionPaymentRepository_Create_DuplicateProviderPaymentID(t *testing.T) {
-	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	_, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	ctx := t.Context()
@@ -412,7 +411,7 @@ func TestSubscriptionPaymentRepository_Create_DuplicateProviderPaymentID(t *test
 }
 
 func TestSubscriptionPaymentRepository_MarkFailed_GuardAlreadySucceeded(t *testing.T) {
-	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	_, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	ctx := t.Context()
@@ -437,7 +436,7 @@ func TestSubscriptionPaymentRepository_MarkFailed_GuardAlreadySucceeded(t *testi
 }
 
 func TestSubscriptionPaymentRepository_MarkFailed_GuardAlreadyRefunded(t *testing.T) {
-	_, _, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
+	_, cleanup, repo, userID, tariffID, subID, pmID := setupSubscriptionPaymentTest(t)
 	defer cleanup()
 
 	ctx := t.Context()

@@ -246,6 +246,9 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 					return err
 				}
 			}
+		default:
+			// Succeeded payments and partial-refund anomalies need no
+			// subscription-side effects beyond what applyPaymentResult did.
 		}
 
 		// Audit the final state transition applied by this transaction. A
@@ -262,6 +265,9 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 			if !alreadyRefunded {
 				auditAction = auditdomain.ActionSubscriptionPaymentRefunded
 			}
+		default:
+			// Partial-refund anomalies and duplicate refund notifications are
+			// no-ops, so they get no audit entry.
 		}
 		if auditAction != "" {
 			if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
@@ -366,10 +372,9 @@ func (s *WebhookService) reconcileFailedPayment(ctx context.Context, payment dom
 		return err
 	}
 
-	switch status {
-	case domain.PaymentStatusRefunded:
-		// A partial-refund provider status is an anomaly that applyPaymentResult
-		// logs and ignores, so only a full refund downgrades the subscription.
+	// A partial-refund provider status is an anomaly that applyPaymentResult
+	// logs and ignores, so only a full refund downgrades the subscription.
+	if status == domain.PaymentStatusRefunded {
 		if err := applyRefundToSubscription(ctx, refundDeps{
 			subscriptions:    s.deps.subscriptions,
 			tariffs:          s.deps.tariffs,
@@ -387,6 +392,9 @@ func (s *WebhookService) reconcileFailedPayment(ctx context.Context, payment dom
 		auditAction = auditdomain.ActionSubscriptionPaymentSucceeded
 	case domain.PaymentStatusRefunded:
 		auditAction = auditdomain.ActionSubscriptionPaymentRefunded
+	default:
+		// Other reconciled statuses (e.g. partial refund) change nothing and
+		// get no audit entry.
 	}
 	if auditAction != "" {
 		if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
