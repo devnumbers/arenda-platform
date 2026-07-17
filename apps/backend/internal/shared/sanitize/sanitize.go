@@ -37,7 +37,22 @@ func Error(err error) string {
 	if err == nil {
 		return ""
 	}
-	s := err.Error()
+	s := redact(err.Error())
+	if len(s) > maxSanitizedErrorLength {
+		s = s[:maxSanitizedErrorLength] + " [truncated]"
+	}
+	return s
+}
+
+// String redacts likely secrets, PCI data, and PII from an arbitrary string
+// before logging. Unlike Error, it applies no length cap, so callers keep
+// control over truncation.
+func String(s string) string {
+	return redact(s)
+}
+
+// redact applies all sensitive-data patterns to s.
+func redact(s string) string {
 	s = tokenPattern.ReplaceAllString(s, "${1}=[REDACTED]")
 	s = hexTokenPattern.ReplaceAllString(s, "${1}=[REDACTED]")
 	s = b64TokenPattern.ReplaceAllString(s, "${1}=[REDACTED]")
@@ -45,9 +60,6 @@ func Error(err error) string {
 	s = phonePattern.ReplaceAllString(s, "[REDACTED]")
 	s = panPattern.ReplaceAllString(s, "[REDACTED]")
 	s = maskedPanPattern.ReplaceAllString(s, "[REDACTED]")
-	if len(s) > maxSanitizedErrorLength {
-		s = s[:maxSanitizedErrorLength] + " [truncated]"
-	}
 	return strings.TrimSpace(s)
 }
 

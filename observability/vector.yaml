@@ -1,0 +1,144 @@
+# Vector configuration — Arenda Platform observability stack.
+# Ships container stdout (slog JSON), Caddy access logs and healthcheck
+# failures to Uptrace over the official Vector HTTP intake.
+# Reference: https://uptrace.dev/ingest/logs/vector.html
+# ${UPTRACE_DSN} is interpolated from the container env (.env.obs).
+# Vector >= 0.57 disables config env interpolation by default — it is
+# re-enabled via --dangerously-allow-env-var-interpolation in the vector
+# service command in docker-compose.obs.yml.
+
+data_dir: /var/lib/vector
+
+# Exposes /health on :8686 for the in-container healthcheck; localhost only.
+api:
+  enabled: true
+  address: 127.0.0.1:8686
+
+sources:
+  docker:
+    type: docker_logs
+
+  caddy_access:
+    type: file
+    include:
+      - /var/log/caddy/access.log
+    ignore_older_secs: 86400
+
+  healthcheck:
+    type: file
+    include:
+      - /var/log/arenda/healthcheck.log
+    ignore_older_secs: 86400
+
+transforms:
+  docker_parsed:
+    type: remap
+    inputs:
+      - docker
+    source: |
+      # Backend logs are slog JSON; merge parsed fields, keep non-JSON as is.
+      parsed = parse_json(.message) ?? {}
+      if is_object(parsed) {
+        . = merge!(., parsed)
+      }
+
+      # Cheap OOM insurance: cap giant log lines (a single 219MB line once
+      # OOMed vector via the disk buffer). Done after parse_json+merge so
+      # JSON parsing is unaffected; limit is in characters (~16k).
+      if exists(.message) {
+        .message = truncate(string!(.message), 16384)
+      }
+
+      # Compose project -> env (lookup hash; missing/unknown -> "unknown").
+      env_by_project = {
+        "arenda-stage": "stage",
+        "arenda-prod": "prod",
+        "arenda-obs": "obs"
+      }
+      project = .label."com.docker.compose.project"
+      .env = get(env_by_project, path: [project]) ?? "unknown"
+
+      # Compose service name, fallback to the container name. NB: get()
+      # returns null (no error) for a missing label, so ?? alone won't do.
+      service = get(.label, path: ["com.docker.compose.service"]) ?? ""
+      if is_null(service) || service == "" {
+        service = .container_name
+      }
+      .service = service
+
+      # .level is kept as-is: Uptrace 2.0.3 natively classifies slog's uppercase levels and lowercase "error"; a lowercased "warn" would misclassify as error.
+
+  caddy_parsed:
+    type: remap
+    inputs:
+      - caddy_access
+    source: |
+      # Caddy access log lines are JSON.
+      parsed = parse_json(.message) ?? {}
+      if is_object(parsed) {
+        . = merge!(., parsed)
+      }
+
+      host = .request.host
+      .env = if includes(["dev.rentlee.ru", "admin.dev.rentlee.ru"], host) {
+        "stage"
+      } else if includes(["rentlee.ru", "admin.rentlee.ru", "logs.rentlee.ru"], host) {
+        "prod"
+      } else {
+        "unknown"
+      }
+
+      .service = "caddy"
+
+  healthcheck_parsed:
+    type: remap
+    inputs:
+      - healthcheck
+    source: |
+      # Lines are JSON written by observability/healthcheck.sh and already
+      # carry env (stage/prod) of the failed target.
+      parsed = parse_json(.message) ?? {}
+      if is_object(parsed) {
+        . = merge!(., parsed)
+      }
+
+      .service = "healthcheck"
+      if !exists(.env) {
+        .env = "host"
+      }
+
+sinks:
+  uptrace:
+    type: http
+    inputs:
+      - docker_parsed
+      - caddy_parsed
+      - healthcheck_parsed
+    uri: http://uptrace:14318/api/v1/vector/logs
+    method: post
+    encoding:
+      codec: json
+    framing:
+      # bytes: concatenated JSON objects; newline_delimited's trailing
+      # newline is rejected by /api/v1/vector/logs (400 "unexpected EOF").
+      method: bytes
+    compression: gzip
+    request:
+      headers:
+        # Required: with framing bytes Vector sends no Content-Type, and
+        # /api/v1/vector/logs rejects that with 400 (wants application/json).
+        content-type: application/json
+        uptrace-dsn: ${UPTRACE_DSN}
+      timeout_secs: 10
+    # Disabled: the intake answers HEAD with 405, so the probe always fails
+    # and only adds noise. Startup order comes from depends_on (service_healthy),
+    # outages are covered by retries + disk buffer.
+    healthcheck:
+      enabled: false
+    batch:
+      max_events: 1000
+      timeout_secs: 5
+    buffer:
+      type: disk
+      # Vector requires disk buffers to be >= 268435488 bytes.
+      max_size: 536870912

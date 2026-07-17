@@ -446,7 +446,7 @@ func (r *fakeSubscriptionPaymentRepo) ListStaleRefundingPayments(_ context.Conte
 	return out, nil
 }
 
-func (r *fakeSubscriptionPaymentRepo) ListAll(_ context.Context, _ string, _ uuid.UUID, _, _ int) ([]SubscriptionPaymentWithUser, int64, error) {
+func (r *fakeSubscriptionPaymentRepo) ListAll(_ context.Context, _ ListAllPaymentsFilters) ([]SubscriptionPaymentWithUser, int64, error) {
 	return nil, 0, nil
 }
 
@@ -866,6 +866,7 @@ func newTestDeps(t *testing.T) *testDeps {
 		d.subscriptionPayments,
 		d.provider,
 		d.beginner,
+		nil,
 		d.clock,
 		discardLogger(),
 		"http://localhost",
@@ -3467,6 +3468,7 @@ func newTestDepsWithLogger(t *testing.T, log *slog.Logger) *testDeps {
 		d.subscriptionPayments,
 		d.provider,
 		d.beginner,
+		nil,
 		d.clock,
 		log,
 		"http://localhost",
@@ -5587,7 +5589,7 @@ func TestBilling_RefundPayment_SucceedsAndDowngradesToBasic(t *testing.T) {
 		RefundedAmountKopecks: 5000,
 	}
 
-	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
+	if err := d.service.Payments.RefundPayment(t.Context(), uuid.Nil, paymentID); err != nil {
 		t.Fatalf("RefundPayment error: %v", err)
 	}
 
@@ -5666,7 +5668,7 @@ func TestBilling_RefundPayment_PendingPaymentSucceeds(t *testing.T) {
 		RefundedAmountKopecks: 5000,
 	}
 
-	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
+	if err := d.service.Payments.RefundPayment(t.Context(), uuid.Nil, paymentID); err != nil {
 		t.Fatalf("RefundPayment error: %v", err)
 	}
 
@@ -5727,7 +5729,7 @@ func TestBilling_RefundPayment_FullRefund(t *testing.T) {
 		RefundedAmountKopecks: 5000,
 	}
 
-	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
+	if err := d.service.Payments.RefundPayment(t.Context(), uuid.Nil, paymentID); err != nil {
 		t.Fatalf("RefundPayment error: %v", err)
 	}
 
@@ -5771,7 +5773,7 @@ func TestBilling_RefundPayment_RejectedForNonSucceededOrPendingPayment(t *testin
 		Status:            domain.PaymentStatusFailed,
 	}
 
-	err := d.service.Payments.RefundPayment(t.Context(), paymentID)
+	err := d.service.Payments.RefundPayment(t.Context(), uuid.Nil, paymentID)
 	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
 		t.Fatalf("expected ErrInvalidPaymentStatus, got %v", err)
 	}
@@ -5808,7 +5810,7 @@ func TestBilling_RefundPayment_ProviderCancelError(t *testing.T) {
 	}
 	d.provider.cancelErr = cancelErr
 
-	err := d.service.Payments.RefundPayment(t.Context(), paymentID)
+	err := d.service.Payments.RefundPayment(t.Context(), uuid.Nil, paymentID)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -5844,7 +5846,7 @@ func TestBilling_RefundPayment_RejectedWhenProviderPaymentIDMissing(t *testing.T
 		Status:         domain.PaymentStatusSucceeded,
 	}
 
-	err := d.service.Payments.RefundPayment(t.Context(), paymentID)
+	err := d.service.Payments.RefundPayment(t.Context(), uuid.Nil, paymentID)
 	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
 		t.Fatalf("expected ErrInvalidPaymentStatus, got %v", err)
 	}
@@ -5896,13 +5898,13 @@ func TestBilling_RefundPayment_DoubleRefundRejected(t *testing.T) {
 		RefundedAmountKopecks: 5000,
 	}
 
-	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
+	if err := d.service.Payments.RefundPayment(t.Context(), uuid.Nil, paymentID); err != nil {
 		t.Fatalf("first RefundPayment error: %v", err)
 	}
 
 	// A second refund on the same (now refunded) payment must be rejected and
 	// must NOT reach the provider or downgrade the subscription a second time.
-	err := d.service.Payments.RefundPayment(t.Context(), paymentID)
+	err := d.service.Payments.RefundPayment(t.Context(), uuid.Nil, paymentID)
 	if !errors.Is(err, domain.ErrInvalidPaymentStatus) {
 		t.Fatalf("second RefundPayment error = %v, want ErrInvalidPaymentStatus", err)
 	}
@@ -5961,7 +5963,7 @@ func TestBilling_RefundPayment_CancelFailureRevertsStatus(t *testing.T) {
 	}
 	d.provider.cancelErr = cancelErr
 
-	err := d.service.Payments.RefundPayment(t.Context(), paymentID)
+	err := d.service.Payments.RefundPayment(t.Context(), uuid.Nil, paymentID)
 	if !errors.Is(err, cancelErr) {
 		t.Fatalf("expected provider cancel error, got %v", err)
 	}
@@ -5988,7 +5990,7 @@ func TestBilling_RefundPayment_CancelFailureRevertsStatus(t *testing.T) {
 		Status:                domain.PaymentStatusRefunded,
 		RefundedAmountKopecks: 5000,
 	}
-	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
+	if err := d.service.Payments.RefundPayment(t.Context(), uuid.Nil, paymentID); err != nil {
 		t.Fatalf("retry RefundPayment error: %v", err)
 	}
 	if got := d.subscriptionPayments.payments[paymentID].Status; got != domain.PaymentStatusRefunded {
@@ -6044,7 +6046,7 @@ func TestBilling_RefundPayment_CancelRefundingKeepsReservation(t *testing.T) {
 		Status:            domain.PaymentStatusRefunding,
 	}
 
-	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
+	if err := d.service.Payments.RefundPayment(t.Context(), uuid.Nil, paymentID); err != nil {
 		t.Fatalf("RefundPayment error: %v", err)
 	}
 
@@ -6108,7 +6110,7 @@ func TestBilling_RefundPayment_CancelPartialRefundedStaysRefunding(t *testing.T)
 		RefundedAmountKopecks: 2500,
 	}
 
-	if err := d.service.Payments.RefundPayment(t.Context(), paymentID); err != nil {
+	if err := d.service.Payments.RefundPayment(t.Context(), uuid.Nil, paymentID); err != nil {
 		t.Fatalf("RefundPayment error: %v", err)
 	}
 
@@ -6153,7 +6155,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				d.provider.statusRes = tc.providerStatus
 				d.provider.statusErr = tc.providerErr
 
-				err := d.service.Payments.SyncPendingPayment(context.Background(), paymentID)
+				err := d.service.Payments.SyncPendingPayment(context.Background(), uuid.Nil, paymentID)
 
 				if tc.wantErr != nil {
 					if !tc.wantErr(err) {
@@ -6707,7 +6709,7 @@ func TestBilling_SyncPendingPayment_UnexpectedProviderStatus(t *testing.T) {
 	}
 	d.provider.statusRes = domain.PaymentStatus("unknown")
 
-	err := d.service.Payments.SyncPendingPayment(context.Background(), paymentID)
+	err := d.service.Payments.SyncPendingPayment(context.Background(), uuid.Nil, paymentID)
 	if err == nil {
 		t.Fatal("expected error for unexpected provider status")
 	}
@@ -6754,7 +6756,7 @@ func TestBilling_SyncPendingPayment_DoubleFinalizeGuard(t *testing.T) {
 	d.subscriptionPayments.forUpdateStatus = map[uuid.UUID]domain.PaymentStatus{paymentID: domain.PaymentStatusSucceeded}
 	d.provider.statusRes = domain.PaymentStatusSucceeded
 
-	if err := d.service.Payments.SyncPendingPayment(context.Background(), paymentID); err != nil {
+	if err := d.service.Payments.SyncPendingPayment(context.Background(), uuid.Nil, paymentID); err != nil {
 		t.Fatalf("SyncPendingPayment error: %v", err)
 	}
 	if !d.provider.statusCalled {
@@ -7917,7 +7919,7 @@ func TestBilling_SyncPendingPayment_RecoversRebillIDFromProviderStatus(t *testin
 	d.provider.statusRes = domain.PaymentStatusSucceeded
 	d.provider.statusRebillID = "rebill_recovered_1"
 
-	if err := d.service.Payments.SyncPendingPayment(context.Background(), paymentID); err != nil {
+	if err := d.service.Payments.SyncPendingPayment(context.Background(), uuid.Nil, paymentID); err != nil {
 		t.Fatalf("SyncPendingPayment error: %v", err)
 	}
 

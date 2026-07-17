@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -12,12 +14,16 @@ import (
 // ProfileService provides read and update operations for the user's own profile.
 type ProfileService struct {
 	users UserRepository
+	audit auditapp.Recorder
 	db    transaction.Beginner
 }
 
 // NewProfileService creates a ProfileService.
-func NewProfileService(users UserRepository, db transaction.Beginner) *ProfileService {
-	return &ProfileService{users: users, db: db}
+func NewProfileService(users UserRepository, audit auditapp.Recorder, db transaction.Beginner) *ProfileService {
+	if audit == nil {
+		audit = auditapp.Noop{}
+	}
+	return &ProfileService{users: users, audit: audit, db: db}
 }
 
 // Me returns the user profile.
@@ -63,9 +69,39 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cm
 	}
 	user = updated
 
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &userID,
+		ActorRole:  AuditActorRole(user.Role),
+		Action:     auditdomain.ActionProfileUpdated,
+		EntityType: auditdomain.EntityUser,
+		EntityID:   &userID,
+		Context:    map[string]any{"fields": updatedProfileFields(cmd)},
+	}); err != nil {
+		return domain.User{}, fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.User{}, fmt.Errorf("commit tx: %w", err)
 	}
 
 	return user, nil
+}
+
+// updatedProfileFields lists the names of the fields a command changes. Only
+// field names are audited, never their values.
+func updatedProfileFields(cmd UpdateProfileCommand) []string {
+	fields := make([]string, 0, 4)
+	if cmd.Name != nil {
+		fields = append(fields, "name")
+	}
+	if cmd.Surname != nil {
+		fields = append(fields, "surname")
+	}
+	if cmd.Patronymic != nil {
+		fields = append(fields, "patronymic")
+	}
+	if cmd.Email != nil {
+		fields = append(fields, "email")
+	}
+	return fields
 }

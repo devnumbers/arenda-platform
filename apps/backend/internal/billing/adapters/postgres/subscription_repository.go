@@ -228,6 +228,7 @@ func periodTextPtr(p *domain.SubscriptionPeriod) pgtype.Text {
 
 func mapCreateSubscriptionParams(sub domain.Subscription) postgres.CreateSubscriptionParams {
 	return postgres.CreateSubscriptionParams{
+		ID:                    pgtype.UUID{Bytes: sub.ID, Valid: true},
 		UserID:                pgtype.UUID{Bytes: sub.UserID, Valid: true},
 		TariffID:              pgtype.UUID{Bytes: sub.TariffID, Valid: true},
 		Source:                string(sub.Source),

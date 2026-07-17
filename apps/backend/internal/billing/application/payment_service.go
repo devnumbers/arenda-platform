@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
@@ -94,7 +96,24 @@ func (s *PaymentService) ListAllPayments(ctx context.Context, filters ListAllPay
 		return nil, 0, fmt.Errorf("%w: invalid status filter", ErrInvalidFilter)
 	}
 
-	payments, total, err := s.deps.subscriptionPayments.ListAll(ctx, filters.Status, filters.UserID, filters.Limit, filters.Offset)
+	// Sort field whitelist (API camelCase names). The SQL layer maps these
+	// fixed values to columns via CASE expressions; user input is never
+	// interpolated into SQL.
+	filters.Sort = strings.TrimSpace(filters.Sort)
+	if filters.Sort != "" {
+		if !slices.Contains([]string{"createdAt", "amountKopecks", "status"}, filters.Sort) {
+			return nil, 0, fmt.Errorf("%w: unsupported sort field %q", ErrInvalidFilter, filters.Sort)
+		}
+		filters.Order = strings.TrimSpace(filters.Order)
+		if filters.Order == "" {
+			filters.Order = "desc"
+		}
+		if filters.Order != "asc" && filters.Order != "desc" {
+			return nil, 0, fmt.Errorf("%w: unsupported sort order %q", ErrInvalidFilter, filters.Order)
+		}
+	}
+
+	payments, total, err := s.deps.subscriptionPayments.ListAll(ctx, filters)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list all payments: %w", err)
 	}
@@ -210,7 +229,10 @@ func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 // accepts the refund but has not settled it yet (refunding), the reservation is
 // kept: the ReconcileStaleRefunds watchdog finalizes or reverts it from the
 // provider state.
-func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID) error {
+//
+// actorID identifies the admin who triggered the refund for the audit trail;
+// uuid.Nil marks a system-initiated call.
+func (s *PaymentService) RefundPayment(ctx context.Context, actorID uuid.UUID, paymentID uuid.UUID) error {
 	// Phase 1 (tx, reserve): load the payment under a row lock, validate that it
 	// can be refunded, and atomically move it to the refunding status. A
 	// concurrent refund that already reserved or finalized the payment loses
@@ -359,6 +381,22 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID)
 		return err
 	}
 
+	// Audit only the finalize transaction (v1 decision): the reserve transaction
+	// and the compensation path do not represent a completed refund. If the
+	// REFUNDED webhook finalizes first, the entry is recorded as system instead
+	// of admin — inherent to recording in the finalizing transaction.
+	actor, actorRole := paymentAuditActor(actorID)
+	if err := s.deps.audit.WithTx(resultTx).Record(ctx, auditdomain.Entry{
+		ActorID:    actor,
+		ActorRole:  actorRole,
+		Action:     auditdomain.ActionSubscriptionPaymentRefunded,
+		EntityType: auditdomain.EntitySubscriptionPayment,
+		EntityID:   &paymentID,
+		Context:    map[string]any{"payment_id": paymentID, "amount_kopecks": payment.AmountKopecks},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := resultTx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit refund payment transaction: %w", err)
 	}
@@ -429,7 +467,10 @@ func (s *PaymentService) revertRefundBestEffort(ctx context.Context, paymentID u
 //
 // Payments that are not in pending status cannot be synced and return an
 // invalid-status error.
-func (s *PaymentService) SyncPendingPayment(ctx context.Context, paymentID uuid.UUID) error {
+//
+// actorID identifies the admin who triggered the sync for the audit trail;
+// uuid.Nil marks a system-initiated call (the reconciliation worker).
+func (s *PaymentService) SyncPendingPayment(ctx context.Context, actorID uuid.UUID, paymentID uuid.UUID) error {
 	payment, err := s.deps.subscriptionPayments.GetByID(ctx, paymentID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -457,13 +498,13 @@ func (s *PaymentService) SyncPendingPayment(ctx context.Context, paymentID uuid.
 		// status, so a missing provider payment id cannot be recovered here.
 		return nil
 	case domain.PaymentStatusSucceeded, domain.PaymentStatusFailed, domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
-		return s.finalizeSyncedPayment(ctx, payment, statusResult)
+		return s.finalizeSyncedPayment(ctx, actorID, payment, statusResult)
 	default:
 		return fmt.Errorf("unexpected provider status: %s", status)
 	}
 }
 
-func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment domain.SubscriptionPayment, statusResult PaymentStatusResult) error {
+func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, actorID uuid.UUID, payment domain.SubscriptionPayment, statusResult PaymentStatusResult) error {
 	tx, err := s.deps.beginner.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -535,6 +576,18 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, payment doma
 		}
 	}
 
+	actor, actorRole := paymentAuditActor(actorID)
+	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    actor,
+		ActorRole:  actorRole,
+		Action:     auditdomain.ActionSubscriptionPaymentSynced,
+		EntityType: auditdomain.EntitySubscriptionPayment,
+		EntityID:   &payment.ID,
+		Context:    map[string]any{"payment_id": payment.ID},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit sync payment transaction: %w", err)
 	}
@@ -578,7 +631,8 @@ func (s *PaymentService) ReconcilePendingPayments(ctx context.Context, now time.
 		}
 
 		for _, payment := range payments {
-			if err := s.SyncPendingPayment(ctx, payment.ID); err != nil {
+			// uuid.Nil marks the sync as system-initiated in the audit trail.
+			if err := s.SyncPendingPayment(ctx, uuid.Nil, payment.ID); err != nil {
 				s.deps.log.ErrorContext(ctx, "failed to sync pending payment",
 					slog.String("payment_id", payment.ID.String()),
 					slog.String("error", sanitize.Error(err)))
@@ -735,6 +789,21 @@ func (s *PaymentService) finalizeStuckRefund(ctx context.Context, payment domain
 		propertyArchiver: s.deps.propertyArchiver,
 	}, tx, payment.SubscriptionID); err != nil {
 		return err
+	}
+
+	// Audit the completed refund: this watchdog path finalizes refunds whose
+	// REFUNDED webhook was lost or whose synchronous finalize tx (including
+	// its audit insert) failed, so without this entry a completed refund
+	// leaves no trail. The original admin actor is unknowable here, so the
+	// entry is recorded as system.
+	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorRole:  auditdomain.ActorRoleSystem,
+		Action:     auditdomain.ActionSubscriptionPaymentRefunded,
+		EntityType: auditdomain.EntitySubscriptionPayment,
+		EntityID:   &payment.ID,
+		Context:    map[string]any{"payment_id": payment.ID, "provider": string(s.provider.Name())},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

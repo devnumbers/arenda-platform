@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
@@ -27,6 +27,7 @@ type Deps struct {
 	Profile                  identityapp.Profiler
 	Logout                   identityapp.Logout
 	Sessions                 identityapp.SessionService
+	Audit                    auditapp.Recorder
 	MeEnricher               MeEnricher
 	Tariffs                  billingapp.Tariffer
 	Subscriptions            billingapp.Subscriber
@@ -52,6 +53,7 @@ type Deps struct {
 	EmailVerifyLimiter       *RateLimiter
 	PhoneChangeSendLimiter   *RateLimiter
 	PhoneChangeVerifyLimiter *RateLimiter
+	ClientErrorsLimiter      *RateLimiter
 	DBPoolStats              func() DBPoolSnapshot
 	DevMode                  bool
 	TrustedProxies           []string
@@ -84,8 +86,9 @@ func New(deps Deps) http.Handler {
 		LogSuccessfulRequests: deps.LogSuccessfulRequests,
 		SlowRequestThreshold:  slowRequestThreshold,
 	}))
-	r.Use(middleware.Recoverer)
+	r.Use(recoveryMiddleware)
 	r.Use(rateLimitMiddleware(deps.IPRateLimiter))
+	r.Use(clientErrorsBodyLimitMiddleware)
 	r.Use(securityHeaders(deps.CookieSecure))
 	r.Use(SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
 	r.Use(readonlyMiddleware(deps.Subscriptions, deps.Logger, deps.Clock))
@@ -108,6 +111,7 @@ func New(deps Deps) http.Handler {
 		deps.PhoneChangeSendLimiter,
 		deps.PhoneChangeVerifyLimiter,
 		deps.MeEnricher,
+		deps.Audit,
 	)
 	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Logger, deps.Clock)
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock)
@@ -118,6 +122,7 @@ func New(deps Deps) http.Handler {
 	subscriptionHandlers := NewSubscriptionHandlers(deps.Tariffs, deps.Subscriptions, deps.PaymentMethods, deps.Payments, deps.Webhooks, deps.Logger, deps.DevMode)
 	financeHandlers := NewFinanceHandlers(deps.Operations)
 	adminHandlers := NewAdminHandlers(deps.Admin, deps.Logger)
+	clientErrorsHandlers := NewClientErrorsHandlers(deps.ClientErrorsLimiter)
 
 	handler := &composedHandler{
 		AuthHandlers:               authHandlers,
@@ -130,6 +135,7 @@ func New(deps Deps) http.Handler {
 		FinanceHandlers:            financeHandlers,
 		AdminHandlers:              adminHandlers,
 		CategoryHandlers:           categoryHandlers,
+		ClientErrorsHandlers:       clientErrorsHandlers,
 	}
 
 	// The generated OpenAPI router has no per-route middleware support, so we
@@ -156,10 +162,18 @@ func New(deps Deps) http.Handler {
 	r.With(AdminOnlyMiddleware).Get("/admin/users/{id}/leases", wrapper.ListAdminUserLeases)
 	r.With(AdminOnlyMiddleware).Get("/admin/users/{id}/tenant-contacts", wrapper.ListAdminUserTenantContacts)
 	r.With(AdminOnlyMiddleware).Get("/admin/users/{id}/operations", wrapper.ListAdminUserOperations)
+	r.With(AdminOnlyMiddleware).Get("/admin/properties", wrapper.ListAdminProperties)
 	r.With(AdminOnlyMiddleware).Get("/admin/properties/{id}", wrapper.GetAdminProperty)
+	r.With(AdminOnlyMiddleware).Get("/admin/leases", wrapper.ListAdminLeases)
 	r.With(AdminOnlyMiddleware).Get("/admin/leases/{id}", wrapper.GetAdminLease)
+	r.With(AdminOnlyMiddleware).Get("/admin/tenant-contacts", wrapper.ListAdminTenantContacts)
 	r.With(AdminOnlyMiddleware).Get("/admin/tenant-contacts/{id}", wrapper.GetAdminTenantContact)
+	r.With(AdminOnlyMiddleware).Get("/admin/operations", wrapper.ListAdminOperations)
 	r.With(AdminOnlyMiddleware).Get("/admin/operations/{id}", wrapper.GetAdminOperation)
+	r.With(AdminOnlyMiddleware).Get("/admin/stats", wrapper.GetAdminStats)
+	r.With(AdminOnlyMiddleware).Get("/admin/audit-logs", wrapper.ListAdminAuditLogs)
+	r.With(AdminOnlyMiddleware).Get("/admin/audit-logs/{id}", wrapper.GetAdminAuditLog)
+	r.With(AdminOnlyMiddleware).Get("/admin/users/{id}/audit-logs", wrapper.ListAdminUserAuditLogs)
 
 	// T-Kassa redirects the user here after the add-card bank form. Redirect them
 	// back to the frontend payment-methods page with a query flag so the UI can
@@ -207,6 +221,17 @@ func rateLimitMiddleware(limiter *RateLimiter) func(http.Handler) http.Handler {
 	}
 }
 
+// clientErrorsBodyLimitMiddleware caps request bodies on the public client
+// error endpoint before routing, so oversized reports are rejected cheaply.
+func clientErrorsBodyLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/client-errors" {
+			r.Body = http.MaxBytesReader(w, r.Body, clientErrorBodyLimit)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // composedHandler groups the existing handler sets. Embedding provides the
 // generated ServerInterface implementation without forwarding methods.
 type composedHandler struct {
@@ -220,4 +245,5 @@ type composedHandler struct {
 	*FinanceHandlers
 	*AdminHandlers
 	*CategoryHandlers
+	*ClientErrorsHandlers
 }

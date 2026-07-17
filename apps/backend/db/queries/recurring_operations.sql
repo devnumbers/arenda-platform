@@ -1,13 +1,13 @@
 -- name: CreateRecurringOperation :one
 INSERT INTO recurring_operations (
-    owner_id, property_id, lease_id, type, category_id, name,
+    id, owner_id, property_id, lease_id, type, category_id, name,
     amount_kopecks, start_date, payment_day, end_date,
     periodicity, status, comment, reminder_offset_days
 )
 VALUES (
-    $1, $2, $3, $4, $5, $6,
-    $7, $8, $9, $10,
-    $11, $12, $13, $14
+    $1, $2, $3, $4, $5, $6, $7,
+    $8, $9, $10, $11,
+    $12, $13, $14, $15
 )
 RETURNING *;
 

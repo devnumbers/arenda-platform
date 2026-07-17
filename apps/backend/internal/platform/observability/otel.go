@@ -37,6 +37,9 @@ func NewSDK(ctx context.Context, cfg Config) (*SDK, error) {
 	}
 
 	res, err := sdkresource.New(ctx,
+		// WithFromEnv comes first so the configured service.name wins over
+		// OTEL_SERVICE_NAME while OTEL_RESOURCE_ATTRIBUTES still merge in.
+		sdkresource.WithFromEnv(),
 		sdkresource.WithAttributes(
 			semconv.ServiceName(cfg.ServiceName),
 		),

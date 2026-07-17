@@ -16,6 +16,16 @@ services:
     restart: unless-stopped
     mem_limit: 768m
     cpus: 1.00
+    command:
+      - postgres
+      - -c
+      - shared_buffers=192MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - jit=off
+      - -c
+      - max_parallel_workers_per_gather=0
     logging: *default-logging
     env_file: *prod-env-file
     volumes:
@@ -51,6 +61,8 @@ services:
       start_period: 20s
     networks:
       - arenda-prod
+      # Observability: reach uptrace:14317 (OTLP/gRPC) in docker-compose.obs.yml.
+      - arenda-obs
 
   frontend:
     build:
@@ -122,6 +134,10 @@ services:
 networks:
   arenda-prod:
     name: arenda-prod
+  # Created by docker-compose.obs.yml; start the obs stack first.
+  arenda-obs:
+    external: true
+    name: arenda-obs
 
 volumes:
   postgres-data:

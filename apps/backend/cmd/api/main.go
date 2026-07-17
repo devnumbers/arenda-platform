@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	adminpg "github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters/postgres"
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
+	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
 	paymentfake "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/fake"
 	paymenttkassa "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/tkassa"
@@ -89,6 +91,7 @@ func run(fallback *slog.Logger) error {
 		return err
 	}
 	appLogger := slog.New(logHandler)
+	slog.SetDefault(appLogger)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -145,6 +148,8 @@ func run(fallback *slog.Logger) error {
 	}
 	defer pool.Close()
 	db := database.NewInstrumentedPool(pool, appLogger)
+	auditWriter := auditpg.NewWriter(db)
+	auditRecorder := auditapp.NewService(auditWriter, clock.Real{})
 	appLogger.InfoContext(ctx, "database pool initialized",
 		"max_conns", poolConfig.MaxConns,
 		"min_conns", poolConfig.MinConns,
@@ -160,7 +165,7 @@ func run(fallback *slog.Logger) error {
 	onboardingService := billingpg.NewOnboardingService(tariffRepo, subscriptionRepo, platformpostgres.NewBeginner(pool, appLogger))
 	paymentMethodRepo := billingpg.NewPaymentMethodRepository(db, encryptor)
 	paymentMethodInUseChecker := billingpg.NewPaymentMethodInUseChecker(db)
-	subscriptionPaymentRepo := billingpg.NewSubscriptionPaymentRepository(db)
+	subscriptionPaymentRepo := billingpg.NewSubscriptionPaymentRepository(db, encryptor)
 	appLogger.InfoContext(ctx, "billing repositories initialized",
 		"payment_methods", paymentMethodRepo != nil,
 		"subscription_payments", subscriptionPaymentRepo != nil)
@@ -237,6 +242,7 @@ func run(fallback *slog.Logger) error {
 			DB:         platformpostgres.NewBeginner(pool, appLogger),
 			Logger:     appLogger,
 			Hasher:     encryptor,
+			Audit:      auditRecorder,
 		},
 	)
 
@@ -250,11 +256,13 @@ func run(fallback *slog.Logger) error {
 			Clock:  clock.Real{},
 			DB:     platformpostgres.NewBeginner(pool, appLogger),
 			Hasher: encryptor,
+			Audit:  auditRecorder,
 		},
 	)
 
 	profileService := identityapp.NewProfileService(
 		identityUserRepo,
+		auditRecorder,
 		platformpostgres.NewBeginner(pool, appLogger),
 	)
 
@@ -272,7 +280,7 @@ func run(fallback *slog.Logger) error {
 	recurringOpRepo := leasespg.NewRecurringOperationRepository(db)
 	leaseRepo := leasespg.NewLeaseRepository(db)
 	categoryRepo := leasespg.NewOperationCategoryRepository(db)
-	categoryService := leasesapp.NewCategoryService(categoryRepo)
+	categoryService := leasesapp.NewCategoryService(categoryRepo, auditRecorder)
 	reminderRepo := notificationspg.NewReminderRepository(db)
 	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, clock.Real{})
 	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, categoryRepo, reminderScheduler, clock.Real{})
@@ -310,6 +318,7 @@ func run(fallback *slog.Logger) error {
 		propertyBillingLifecycle,
 		leaseRepo,
 		platformpostgres.NewBeginner(pool, appLogger),
+		auditRecorder,
 		clock.Real{},
 		appLogger,
 	)
@@ -329,6 +338,7 @@ func run(fallback *slog.Logger) error {
 		subscriptionPaymentRepo,
 		paymentProvider,
 		platformpostgres.NewBeginner(pool, appLogger),
+		auditRecorder,
 		clock.Real{},
 		appLogger,
 		cfg.AppBaseURL,
@@ -352,7 +362,7 @@ func run(fallback *slog.Logger) error {
 	})
 
 	adminRepo := adminpg.NewAdminRepository(db, encryptor, clock.Real{}, occupancyProvider)
-	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billing.Subscriptions, clock.Real{})
+	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billing.Subscriptions, adminRepo, clock.Real{})
 
 	leasePropertyRepo := leasespg.NewPropertyRepository(db)
 	tenantContactRepo := leasespg.NewTenantContactRepository(db)
@@ -366,11 +376,12 @@ func run(fallback *slog.Logger) error {
 		categoryRepo,
 		reminderScheduler,
 		platformpostgres.NewBeginner(pool, appLogger),
+		auditRecorder,
 		clock.Real{},
 		appLogger,
 	)
-	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, appLogger)
-	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, categoryRepo, reminderScheduler, platformpostgres.NewBeginner(pool, appLogger), clock.Real{}, appLogger)
+	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, auditRecorder, appLogger)
+	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, categoryRepo, reminderScheduler, platformpostgres.NewBeginner(pool, appLogger), auditRecorder, clock.Real{}, appLogger)
 	reminderService := notificationsapp.NewReminderService(reminderRepo, clock.Real{})
 	recurringOperationService := leasesapp.NewRecurringOperationService(
 		recurringOpRepo,
@@ -380,6 +391,7 @@ func run(fallback *slog.Logger) error {
 		reminderScheduler,
 		reminderService,
 		platformpostgres.NewBeginner(pool, appLogger),
+		auditRecorder,
 		clock.Real{},
 		appLogger,
 	)
@@ -424,6 +436,9 @@ func run(fallback *slog.Logger) error {
 	phoneChangeVerifyLimiter := httpapi.NewRateLimiter(rate.Every(15*time.Minute/time.Duration(cfg.RateLimit.PhoneChangeVerifyPer15Min)), phoneChangeVerifyBurst, 1*time.Hour)
 	defer phoneChangeVerifyLimiter.Stop()
 
+	clientErrorsLimiter := httpapi.NewRateLimiter(rate.Every(2*time.Second), 10, time.Minute)
+	defer clientErrorsLimiter.Stop()
+
 	var poolStats func() httpapi.DBPoolSnapshot
 	if cfg.AppEnv == "local" {
 		poolStats = dbPoolStats(pool)
@@ -435,6 +450,7 @@ func run(fallback *slog.Logger) error {
 		Profile:                  profileService,
 		Logout:                   logoutService,
 		Sessions:                 identitySessionService,
+		Audit:                    auditRecorder,
 		MeEnricher:               httpapi.BillingMeEnricher(billing.Subscriptions),
 		Tariffs:                  billing.Tariffs,
 		Subscriptions:            billing.Subscriptions,
@@ -460,6 +476,7 @@ func run(fallback *slog.Logger) error {
 		EmailVerifyLimiter:       emailVerifyLimiter,
 		PhoneChangeSendLimiter:   phoneChangeSendLimiter,
 		PhoneChangeVerifyLimiter: phoneChangeVerifyLimiter,
+		ClientErrorsLimiter:      clientErrorsLimiter,
 		DBPoolStats:              poolStats,
 		DevMode:                  cfg.AppEnv == "local" && cfg.PaymentProvider == "fake",
 		TrustedProxies:           cfg.TrustedProxies,

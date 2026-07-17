@@ -26,6 +26,30 @@ const (
 	SessionCookieScopes sessionCookieContextKey = "sessionCookie.Scopes"
 )
 
+// Defines values for AdminAuditLogActorRole.
+const (
+	AdminAuditLogActorRoleAdmin     AdminAuditLogActorRole = "admin"
+	AdminAuditLogActorRoleAnonymous AdminAuditLogActorRole = "anonymous"
+	AdminAuditLogActorRoleOwner     AdminAuditLogActorRole = "owner"
+	AdminAuditLogActorRoleSystem    AdminAuditLogActorRole = "system"
+)
+
+// Valid indicates whether the value is a known member of the AdminAuditLogActorRole enum.
+func (e AdminAuditLogActorRole) Valid() bool {
+	switch e {
+	case AdminAuditLogActorRoleAdmin:
+		return true
+	case AdminAuditLogActorRoleAnonymous:
+		return true
+	case AdminAuditLogActorRoleOwner:
+		return true
+	case AdminAuditLogActorRoleSystem:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AdminOperationReminderOffsetDays.
 const (
 	AdminOperationReminderOffsetDaysN1 AdminOperationReminderOffsetDays = 1
@@ -95,6 +119,27 @@ func (e AdminUserRole) Valid() bool {
 	case AdminUserRoleAdmin:
 		return true
 	case AdminUserRoleOwner:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClientErrorReportApp.
+const (
+	ClientErrorReportAppAdmin    ClientErrorReportApp = "admin"
+	ClientErrorReportAppFrontend ClientErrorReportApp = "frontend"
+	ClientErrorReportAppLanding  ClientErrorReportApp = "landing"
+)
+
+// Valid indicates whether the value is a known member of the ClientErrorReportApp enum.
+func (e ClientErrorReportApp) Valid() bool {
+	switch e {
+	case ClientErrorReportAppAdmin:
+		return true
+	case ClientErrorReportAppFrontend:
+		return true
+	case ClientErrorReportAppLanding:
 		return true
 	default:
 		return false
@@ -572,6 +617,7 @@ const (
 	PartialRefunded SubscriptionPaymentStatus = "partial_refunded"
 	Pending         SubscriptionPaymentStatus = "pending"
 	Refunded        SubscriptionPaymentStatus = "refunded"
+	Refunding       SubscriptionPaymentStatus = "refunding"
 	Succeeded       SubscriptionPaymentStatus = "succeeded"
 )
 
@@ -585,6 +631,8 @@ func (e SubscriptionPaymentStatus) Valid() bool {
 	case Pending:
 		return true
 	case Refunded:
+		return true
+	case Refunding:
 		return true
 	case Succeeded:
 		return true
@@ -635,6 +683,135 @@ func (e TariffName) Valid() bool {
 	}
 }
 
+// Defines values for ListAdminAuditLogsParamsOrder.
+const (
+	ListAdminAuditLogsParamsOrderAsc  ListAdminAuditLogsParamsOrder = "asc"
+	ListAdminAuditLogsParamsOrderDesc ListAdminAuditLogsParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminAuditLogsParamsOrder enum.
+func (e ListAdminAuditLogsParamsOrder) Valid() bool {
+	switch e {
+	case ListAdminAuditLogsParamsOrderAsc:
+		return true
+	case ListAdminAuditLogsParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAdminLeasesParamsOrder.
+const (
+	ListAdminLeasesParamsOrderAsc  ListAdminLeasesParamsOrder = "asc"
+	ListAdminLeasesParamsOrderDesc ListAdminLeasesParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminLeasesParamsOrder enum.
+func (e ListAdminLeasesParamsOrder) Valid() bool {
+	switch e {
+	case ListAdminLeasesParamsOrderAsc:
+		return true
+	case ListAdminLeasesParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAdminOperationsParamsOrder.
+const (
+	ListAdminOperationsParamsOrderAsc  ListAdminOperationsParamsOrder = "asc"
+	ListAdminOperationsParamsOrderDesc ListAdminOperationsParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminOperationsParamsOrder enum.
+func (e ListAdminOperationsParamsOrder) Valid() bool {
+	switch e {
+	case ListAdminOperationsParamsOrderAsc:
+		return true
+	case ListAdminOperationsParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAdminPropertiesParamsStatus.
+const (
+	ListAdminPropertiesParamsStatusActive   ListAdminPropertiesParamsStatus = "active"
+	ListAdminPropertiesParamsStatusAll      ListAdminPropertiesParamsStatus = "all"
+	ListAdminPropertiesParamsStatusArchived ListAdminPropertiesParamsStatus = "archived"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminPropertiesParamsStatus enum.
+func (e ListAdminPropertiesParamsStatus) Valid() bool {
+	switch e {
+	case ListAdminPropertiesParamsStatusActive:
+		return true
+	case ListAdminPropertiesParamsStatusAll:
+		return true
+	case ListAdminPropertiesParamsStatusArchived:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAdminPropertiesParamsOrder.
+const (
+	ListAdminPropertiesParamsOrderAsc  ListAdminPropertiesParamsOrder = "asc"
+	ListAdminPropertiesParamsOrderDesc ListAdminPropertiesParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminPropertiesParamsOrder enum.
+func (e ListAdminPropertiesParamsOrder) Valid() bool {
+	switch e {
+	case ListAdminPropertiesParamsOrderAsc:
+		return true
+	case ListAdminPropertiesParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAdminSubscriptionPaymentsParamsOrder.
+const (
+	ListAdminSubscriptionPaymentsParamsOrderAsc  ListAdminSubscriptionPaymentsParamsOrder = "asc"
+	ListAdminSubscriptionPaymentsParamsOrderDesc ListAdminSubscriptionPaymentsParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminSubscriptionPaymentsParamsOrder enum.
+func (e ListAdminSubscriptionPaymentsParamsOrder) Valid() bool {
+	switch e {
+	case ListAdminSubscriptionPaymentsParamsOrderAsc:
+		return true
+	case ListAdminSubscriptionPaymentsParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAdminTenantContactsParamsOrder.
+const (
+	ListAdminTenantContactsParamsOrderAsc  ListAdminTenantContactsParamsOrder = "asc"
+	ListAdminTenantContactsParamsOrderDesc ListAdminTenantContactsParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminTenantContactsParamsOrder enum.
+func (e ListAdminTenantContactsParamsOrder) Valid() bool {
+	switch e {
+	case ListAdminTenantContactsParamsOrderAsc:
+		return true
+	case ListAdminTenantContactsParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListAdminUsersParamsRole.
 const (
 	Admin ListAdminUsersParamsRole = "admin"
@@ -653,21 +830,129 @@ func (e ListAdminUsersParamsRole) Valid() bool {
 	}
 }
 
+// Defines values for ListAdminUsersParamsOrder.
+const (
+	ListAdminUsersParamsOrderAsc  ListAdminUsersParamsOrder = "asc"
+	ListAdminUsersParamsOrderDesc ListAdminUsersParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminUsersParamsOrder enum.
+func (e ListAdminUsersParamsOrder) Valid() bool {
+	switch e {
+	case ListAdminUsersParamsOrderAsc:
+		return true
+	case ListAdminUsersParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAdminUserAuditLogsParamsOrder.
+const (
+	ListAdminUserAuditLogsParamsOrderAsc  ListAdminUserAuditLogsParamsOrder = "asc"
+	ListAdminUserAuditLogsParamsOrderDesc ListAdminUserAuditLogsParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminUserAuditLogsParamsOrder enum.
+func (e ListAdminUserAuditLogsParamsOrder) Valid() bool {
+	switch e {
+	case ListAdminUserAuditLogsParamsOrderAsc:
+		return true
+	case ListAdminUserAuditLogsParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAdminUserLeasesParamsOrder.
+const (
+	ListAdminUserLeasesParamsOrderAsc  ListAdminUserLeasesParamsOrder = "asc"
+	ListAdminUserLeasesParamsOrderDesc ListAdminUserLeasesParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminUserLeasesParamsOrder enum.
+func (e ListAdminUserLeasesParamsOrder) Valid() bool {
+	switch e {
+	case ListAdminUserLeasesParamsOrderAsc:
+		return true
+	case ListAdminUserLeasesParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAdminUserOperationsParamsOrder.
+const (
+	ListAdminUserOperationsParamsOrderAsc  ListAdminUserOperationsParamsOrder = "asc"
+	ListAdminUserOperationsParamsOrderDesc ListAdminUserOperationsParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminUserOperationsParamsOrder enum.
+func (e ListAdminUserOperationsParamsOrder) Valid() bool {
+	switch e {
+	case ListAdminUserOperationsParamsOrderAsc:
+		return true
+	case ListAdminUserOperationsParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListAdminUserPropertiesParamsStatus.
 const (
-	Active   ListAdminUserPropertiesParamsStatus = "active"
-	All      ListAdminUserPropertiesParamsStatus = "all"
-	Archived ListAdminUserPropertiesParamsStatus = "archived"
+	ListAdminUserPropertiesParamsStatusActive   ListAdminUserPropertiesParamsStatus = "active"
+	ListAdminUserPropertiesParamsStatusAll      ListAdminUserPropertiesParamsStatus = "all"
+	ListAdminUserPropertiesParamsStatusArchived ListAdminUserPropertiesParamsStatus = "archived"
 )
 
 // Valid indicates whether the value is a known member of the ListAdminUserPropertiesParamsStatus enum.
 func (e ListAdminUserPropertiesParamsStatus) Valid() bool {
 	switch e {
-	case Active:
+	case ListAdminUserPropertiesParamsStatusActive:
 		return true
-	case All:
+	case ListAdminUserPropertiesParamsStatusAll:
 		return true
-	case Archived:
+	case ListAdminUserPropertiesParamsStatusArchived:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAdminUserPropertiesParamsOrder.
+const (
+	ListAdminUserPropertiesParamsOrderAsc  ListAdminUserPropertiesParamsOrder = "asc"
+	ListAdminUserPropertiesParamsOrderDesc ListAdminUserPropertiesParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminUserPropertiesParamsOrder enum.
+func (e ListAdminUserPropertiesParamsOrder) Valid() bool {
+	switch e {
+	case ListAdminUserPropertiesParamsOrderAsc:
+		return true
+	case ListAdminUserPropertiesParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAdminUserTenantContactsParamsOrder.
+const (
+	ListAdminUserTenantContactsParamsOrderAsc  ListAdminUserTenantContactsParamsOrder = "asc"
+	ListAdminUserTenantContactsParamsOrderDesc ListAdminUserTenantContactsParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminUserTenantContactsParamsOrder enum.
+func (e ListAdminUserTenantContactsParamsOrder) Valid() bool {
+	switch e {
+	case ListAdminUserTenantContactsParamsOrderAsc:
+		return true
+	case ListAdminUserTenantContactsParamsOrderDesc:
 		return true
 	default:
 		return false
@@ -698,6 +983,34 @@ type AddressSuggestionsResponse struct {
 	Suggestions []AddressSuggestion `json:"suggestions"`
 }
 
+// AdminAuditLog defines model for AdminAuditLog.
+type AdminAuditLog struct {
+	Action     string                 `json:"action"`
+	ActorId    *openapi_types.UUID    `json:"actorId,omitempty"`
+	ActorRole  AdminAuditLogActorRole `json:"actorRole"`
+	Context    map[string]interface{} `json:"context"`
+	CreatedAt  time.Time              `json:"createdAt"`
+	EntityId   *openapi_types.UUID    `json:"entityId,omitempty"`
+	EntityType *string                `json:"entityType,omitempty"`
+	Id         openapi_types.UUID     `json:"id"`
+	Ip         *string                `json:"ip,omitempty"`
+	RequestId  *string                `json:"requestId,omitempty"`
+}
+
+// AdminAuditLogActorRole defines model for AdminAuditLog.ActorRole.
+type AdminAuditLogActorRole string
+
+// AdminAuditLogResponse defines model for AdminAuditLogResponse.
+type AdminAuditLogResponse struct {
+	AuditLog AdminAuditLog `json:"auditLog"`
+}
+
+// AdminAuditLogsResponse defines model for AdminAuditLogsResponse.
+type AdminAuditLogsResponse struct {
+	Items []AdminAuditLog `json:"items"`
+	Total int             `json:"total"`
+}
+
 // AdminLease defines model for AdminLease.
 type AdminLease struct {
 	Comment              *string             `json:"comment,omitempty"`
@@ -708,6 +1021,7 @@ type AdminLease struct {
 	OwnerId              openapi_types.UUID  `json:"ownerId"`
 	PaymentDay           int                 `json:"paymentDay"`
 	PropertyId           openapi_types.UUID  `json:"propertyId"`
+	PropertyName         string              `json:"propertyName"`
 	RentAmountKopecks    int                 `json:"rentAmountKopecks"`
 	StartDate            openapi_types.Date  `json:"startDate"`
 	Status               LeaseStatus         `json:"status"`
@@ -740,6 +1054,7 @@ type AdminOperation struct {
 	OperationDate        openapi_types.Date                `json:"operationDate"`
 	OwnerId              openapi_types.UUID                `json:"ownerId"`
 	PropertyId           openapi_types.UUID                `json:"propertyId"`
+	PropertyName         string                            `json:"propertyName"`
 	RecurringOperationId *openapi_types.UUID               `json:"recurringOperationId,omitempty"`
 	ReminderOffsetDays   *AdminOperationReminderOffsetDays `json:"reminderOffsetDays,omitempty"`
 	Status               OperationStatus                   `json:"status"`
@@ -776,6 +1091,7 @@ type AdminProperty struct {
 	Name        string                 `json:"name"`
 	Occupancy   AdminPropertyOccupancy `json:"occupancy"`
 	OwnerId     openapi_types.UUID     `json:"ownerId"`
+	OwnerPhone  string                 `json:"ownerPhone"`
 	Photos      *[]PropertyPhoto       `json:"photos,omitempty"`
 	Status      PropertyStatus         `json:"status"`
 	Type        PropertyType           `json:"type"`
@@ -788,6 +1104,41 @@ type AdminPropertyOccupancy string
 // AdminPropertyResponse defines model for AdminPropertyResponse.
 type AdminPropertyResponse struct {
 	Property AdminProperty `json:"property"`
+}
+
+// AdminStats defines model for AdminStats.
+type AdminStats struct {
+	LeasesTotal                          int                       `json:"leasesTotal"`
+	OperationsTotal                      int                       `json:"operationsTotal"`
+	PaymentsFailedCountLast30d           int                       `json:"paymentsFailedCountLast30d"`
+	PaymentsRefundedCountLast30d         int                       `json:"paymentsRefundedCountLast30d"`
+	PaymentsSucceededTotalKopecksLast30d int64                     `json:"paymentsSucceededTotalKopecksLast30d"`
+	PropertiesActive                     int                       `json:"propertiesActive"`
+	PropertiesArchived                   int                       `json:"propertiesArchived"`
+	RecentPayments                       []AdminStatsRecentPayment `json:"recentPayments"`
+	RecentUsers                          []AdminStatsRecentUser    `json:"recentUsers"`
+	SubscriptionsActive                  int                       `json:"subscriptionsActive"`
+	UsersNewLast30d                      int                       `json:"usersNewLast30d"`
+	UsersTotal                           int                       `json:"usersTotal"`
+}
+
+// AdminStatsRecentPayment defines model for AdminStatsRecentPayment.
+type AdminStatsRecentPayment struct {
+	AmountKopecks int64                     `json:"amountKopecks"`
+	CreatedAt     time.Time                 `json:"createdAt"`
+	Id            openapi_types.UUID        `json:"id"`
+	Status        SubscriptionPaymentStatus `json:"status"`
+	UserId        openapi_types.UUID        `json:"userId"`
+	UserPhone     string                    `json:"userPhone"`
+}
+
+// AdminStatsRecentUser defines model for AdminStatsRecentUser.
+type AdminStatsRecentUser struct {
+	CreatedAt time.Time          `json:"createdAt"`
+	Id        openapi_types.UUID `json:"id"`
+	Name      *string            `json:"name,omitempty"`
+	Phone     string             `json:"phone"`
+	Surname   *string            `json:"surname,omitempty"`
 }
 
 // AdminSubscriptionPayment defines model for AdminSubscriptionPayment.
@@ -824,6 +1175,7 @@ type AdminTenantContact struct {
 	Id         openapi_types.UUID `json:"id"`
 	Name       string             `json:"name"`
 	OwnerId    openapi_types.UUID `json:"ownerId"`
+	OwnerPhone string             `json:"ownerPhone"`
 	Patronymic *string            `json:"patronymic,omitempty"`
 	Phone      *string            `json:"phone,omitempty"`
 	Surname    *string            `json:"surname,omitempty"`
@@ -843,15 +1195,16 @@ type AdminTenantContactsResponse struct {
 
 // AdminUser defines model for AdminUser.
 type AdminUser struct {
-	CreatedAt  time.Time          `json:"createdAt"`
-	Email      *string            `json:"email,omitempty"`
-	Id         openapi_types.UUID `json:"id"`
-	Name       *string            `json:"name,omitempty"`
-	Patronymic *string            `json:"patronymic,omitempty"`
-	Phone      string             `json:"phone"`
-	Role       AdminUserRole      `json:"role"`
-	Surname    *string            `json:"surname,omitempty"`
-	UpdatedAt  time.Time          `json:"updatedAt"`
+	CreatedAt          time.Time           `json:"createdAt"`
+	Email              *string             `json:"email,omitempty"`
+	Id                 openapi_types.UUID  `json:"id"`
+	Name               *string             `json:"name,omitempty"`
+	Patronymic         *string             `json:"patronymic,omitempty"`
+	Phone              string              `json:"phone"`
+	Role               AdminUserRole       `json:"role"`
+	SubscriptionStatus *SubscriptionStatus `json:"subscriptionStatus,omitempty"`
+	Surname            *string             `json:"surname,omitempty"`
+	UpdatedAt          time.Time           `json:"updatedAt"`
 }
 
 // AdminUserRole defines model for AdminUser.Role.
@@ -901,6 +1254,24 @@ type ChangeTariffResponse struct {
 	ConfirmUrl *string             `json:"confirmUrl,omitempty"`
 	PaymentId  *openapi_types.UUID `json:"paymentId,omitempty"`
 }
+
+// ClientErrorReport defines model for ClientErrorReport.
+type ClientErrorReport struct {
+	// App Application that reported the error
+	App ClientErrorReportApp `json:"app"`
+
+	// Message Error message reported by the browser
+	Message string `json:"message"`
+
+	// Stack Optional stack trace
+	Stack *string `json:"stack,omitempty"`
+
+	// Url Page URL where the error occurred
+	Url *string `json:"url,omitempty"`
+}
+
+// ClientErrorReportApp Application that reported the error
+type ClientErrorReportApp string
 
 // FinanceReportCategoryRow defines model for FinanceReportCategoryRow.
 type FinanceReportCategoryRow struct {
@@ -1487,13 +1858,138 @@ type Unauthorized = Problem
 // sessionCookieContextKey is the context key for sessionCookie security scheme
 type sessionCookieContextKey string
 
+// ListAdminAuditLogsParams defines parameters for ListAdminAuditLogs.
+type ListAdminAuditLogsParams struct {
+	Limit   *int                `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset  *int                `form:"offset,omitempty" json:"offset,omitempty"`
+	ActorId *openapi_types.UUID `form:"actor_id,omitempty" json:"actor_id,omitempty"`
+
+	// Action Exact action filter, e.g. auth.login.
+	Action *string `form:"action,omitempty" json:"action,omitempty"`
+
+	// EntityType Exact entity type filter, e.g. property.
+	EntityType *string `form:"entity_type,omitempty" json:"entity_type,omitempty"`
+
+	// DateFrom Inclusive lower bound on createdAt (date at 00:00:00 UTC).
+	DateFrom *openapi_types.Date `form:"date_from,omitempty" json:"date_from,omitempty"`
+
+	// DateTo Inclusive upper bound on createdAt (matched as date + 24h, exclusive).
+	DateTo *openapi_types.Date `form:"date_to,omitempty" json:"date_to,omitempty"`
+
+	// Sort Sort field (camelCase). Allowed: createdAt. Defaults to createdAt descending.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction: asc or desc (default desc).
+	Order *ListAdminAuditLogsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+}
+
+// ListAdminAuditLogsParamsOrder defines parameters for ListAdminAuditLogs.
+type ListAdminAuditLogsParamsOrder string
+
+// ListAdminLeasesParams defines parameters for ListAdminLeases.
+type ListAdminLeasesParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Status Filter by the stored lease status.
+	Status     *LeaseStatus        `form:"status,omitempty" json:"status,omitempty"`
+	PropertyId *openapi_types.UUID `form:"property_id,omitempty" json:"property_id,omitempty"`
+	OwnerId    *openapi_types.UUID `form:"owner_id,omitempty" json:"owner_id,omitempty"`
+
+	// Sort Sort field (camelCase). Allowed: startDate, updatedAt, status, rentAmountKopecks. Defaults to updatedAt descending.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction: asc or desc (default desc).
+	Order *ListAdminLeasesParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+}
+
+// ListAdminLeasesParamsOrder defines parameters for ListAdminLeases.
+type ListAdminLeasesParamsOrder string
+
+// ListAdminOperationsParams defines parameters for ListAdminOperations.
+type ListAdminOperationsParams struct {
+	Limit      *int                `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset     *int                `form:"offset,omitempty" json:"offset,omitempty"`
+	Status     *OperationStatus    `form:"status,omitempty" json:"status,omitempty"`
+	Type       *OperationType      `form:"type,omitempty" json:"type,omitempty"`
+	PropertyId *openapi_types.UUID `form:"property_id,omitempty" json:"property_id,omitempty"`
+	LeaseId    *openapi_types.UUID `form:"lease_id,omitempty" json:"lease_id,omitempty"`
+	OwnerId    *openapi_types.UUID `form:"owner_id,omitempty" json:"owner_id,omitempty"`
+
+	// Q Case-insensitive substring search by operation name and comment.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Sort Sort field (camelCase). Allowed: operationDate, amountKopecks, status. Defaults to operationDate descending.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction: asc or desc (default desc).
+	Order *ListAdminOperationsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+}
+
+// ListAdminOperationsParamsOrder defines parameters for ListAdminOperations.
+type ListAdminOperationsParamsOrder string
+
+// ListAdminPropertiesParams defines parameters for ListAdminProperties.
+type ListAdminPropertiesParams struct {
+	Limit  *int                             `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int                             `form:"offset,omitempty" json:"offset,omitempty"`
+	Status *ListAdminPropertiesParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Q Case-insensitive substring search by name and address.
+	Q       *string             `form:"q,omitempty" json:"q,omitempty"`
+	OwnerId *openapi_types.UUID `form:"owner_id,omitempty" json:"owner_id,omitempty"`
+
+	// Sort Sort field (camelCase). Allowed: name, createdAt, updatedAt, status. Defaults to updatedAt descending.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction: asc or desc (default desc).
+	Order *ListAdminPropertiesParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+}
+
+// ListAdminPropertiesParamsStatus defines parameters for ListAdminProperties.
+type ListAdminPropertiesParamsStatus string
+
+// ListAdminPropertiesParamsOrder defines parameters for ListAdminProperties.
+type ListAdminPropertiesParamsOrder string
+
 // ListAdminSubscriptionPaymentsParams defines parameters for ListAdminSubscriptionPayments.
 type ListAdminSubscriptionPaymentsParams struct {
 	UserId *openapi_types.UUID        `form:"user_id,omitempty" json:"user_id,omitempty"`
 	Status *SubscriptionPaymentStatus `form:"status,omitempty" json:"status,omitempty"`
-	Limit  *int                       `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int                       `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// UserPhone Exact match on the user's phone number.
+	UserPhone *string `form:"user_phone,omitempty" json:"user_phone,omitempty"`
+
+	// Sort Sort field (camelCase). Allowed: createdAt, amountKopecks, status. Defaults to createdAt descending.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction: asc or desc (default desc).
+	Order  *ListAdminSubscriptionPaymentsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+	Limit  *int                                      `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int                                      `form:"offset,omitempty" json:"offset,omitempty"`
 }
+
+// ListAdminSubscriptionPaymentsParamsOrder defines parameters for ListAdminSubscriptionPayments.
+type ListAdminSubscriptionPaymentsParamsOrder string
+
+// ListAdminTenantContactsParams defines parameters for ListAdminTenantContacts.
+type ListAdminTenantContactsParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Q Case-insensitive substring search by name, surname and phone.
+	Q       *string             `form:"q,omitempty" json:"q,omitempty"`
+	OwnerId *openapi_types.UUID `form:"owner_id,omitempty" json:"owner_id,omitempty"`
+
+	// Sort Sort field (camelCase). Allowed: name, updatedAt. Defaults to updatedAt descending.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction: asc or desc (default desc).
+	Order *ListAdminTenantContactsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+}
+
+// ListAdminTenantContactsParamsOrder defines parameters for ListAdminTenantContacts.
+type ListAdminTenantContactsParamsOrder string
 
 // ListAdminUsersParams defines parameters for ListAdminUsers.
 type ListAdminUsersParams struct {
@@ -1503,16 +1999,61 @@ type ListAdminUsersParams struct {
 	Email              *string                   `form:"email,omitempty" json:"email,omitempty"`
 	Role               *ListAdminUsersParamsRole `form:"role,omitempty" json:"role,omitempty"`
 	SubscriptionStatus *SubscriptionStatus       `form:"subscription_status,omitempty" json:"subscription_status,omitempty"`
+
+	// Sort Sort field (camelCase). Allowed: createdAt, updatedAt. Defaults to createdAt descending.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction: asc or desc (default desc).
+	Order *ListAdminUsersParamsOrder `form:"order,omitempty" json:"order,omitempty"`
 }
 
 // ListAdminUsersParamsRole defines parameters for ListAdminUsers.
 type ListAdminUsersParamsRole string
 
+// ListAdminUsersParamsOrder defines parameters for ListAdminUsers.
+type ListAdminUsersParamsOrder string
+
+// ListAdminUserAuditLogsParams defines parameters for ListAdminUserAuditLogs.
+type ListAdminUserAuditLogsParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Action Exact action filter, e.g. auth.login.
+	Action *string `form:"action,omitempty" json:"action,omitempty"`
+
+	// EntityType Exact entity type filter, e.g. property.
+	EntityType *string `form:"entity_type,omitempty" json:"entity_type,omitempty"`
+
+	// DateFrom Inclusive lower bound on createdAt (date at 00:00:00 UTC).
+	DateFrom *openapi_types.Date `form:"date_from,omitempty" json:"date_from,omitempty"`
+
+	// DateTo Inclusive upper bound on createdAt (matched as date + 24h, exclusive).
+	DateTo *openapi_types.Date `form:"date_to,omitempty" json:"date_to,omitempty"`
+
+	// Sort Sort field (camelCase). Allowed: createdAt. Defaults to createdAt descending.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction: asc or desc (default desc).
+	Order *ListAdminUserAuditLogsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+}
+
+// ListAdminUserAuditLogsParamsOrder defines parameters for ListAdminUserAuditLogs.
+type ListAdminUserAuditLogsParamsOrder string
+
 // ListAdminUserLeasesParams defines parameters for ListAdminUserLeases.
 type ListAdminUserLeasesParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Sort Sort field (camelCase). Allowed: startDate, updatedAt, status, rentAmountKopecks. Defaults to updatedAt descending.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction: asc or desc (default desc).
+	Order *ListAdminUserLeasesParamsOrder `form:"order,omitempty" json:"order,omitempty"`
 }
+
+// ListAdminUserLeasesParamsOrder defines parameters for ListAdminUserLeases.
+type ListAdminUserLeasesParamsOrder string
 
 // ListAdminUserOperationsParams defines parameters for ListAdminUserOperations.
 type ListAdminUserOperationsParams struct {
@@ -1522,23 +2063,50 @@ type ListAdminUserOperationsParams struct {
 	Type       *OperationType      `form:"type,omitempty" json:"type,omitempty"`
 	PropertyId *openapi_types.UUID `form:"property_id,omitempty" json:"property_id,omitempty"`
 	LeaseId    *openapi_types.UUID `form:"lease_id,omitempty" json:"lease_id,omitempty"`
+
+	// Sort Sort field (camelCase). Allowed: operationDate, amountKopecks, status. Defaults to operationDate descending.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction: asc or desc (default desc).
+	Order *ListAdminUserOperationsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
 }
+
+// ListAdminUserOperationsParamsOrder defines parameters for ListAdminUserOperations.
+type ListAdminUserOperationsParamsOrder string
 
 // ListAdminUserPropertiesParams defines parameters for ListAdminUserProperties.
 type ListAdminUserPropertiesParams struct {
 	Limit  *int                                 `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset *int                                 `form:"offset,omitempty" json:"offset,omitempty"`
 	Status *ListAdminUserPropertiesParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Sort Sort field (camelCase). Allowed: name, createdAt, updatedAt, status. Defaults to updatedAt descending.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction: asc or desc (default desc).
+	Order *ListAdminUserPropertiesParamsOrder `form:"order,omitempty" json:"order,omitempty"`
 }
 
 // ListAdminUserPropertiesParamsStatus defines parameters for ListAdminUserProperties.
 type ListAdminUserPropertiesParamsStatus string
 
+// ListAdminUserPropertiesParamsOrder defines parameters for ListAdminUserProperties.
+type ListAdminUserPropertiesParamsOrder string
+
 // ListAdminUserTenantContactsParams defines parameters for ListAdminUserTenantContacts.
 type ListAdminUserTenantContactsParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Sort Sort field (camelCase). Allowed: name, updatedAt. Defaults to updatedAt descending.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction: asc or desc (default desc).
+	Order *ListAdminUserTenantContactsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
 }
+
+// ListAdminUserTenantContactsParamsOrder defines parameters for ListAdminUserTenantContacts.
+type ListAdminUserTenantContactsParamsOrder string
 
 // GetAddressSuggestionsParams defines parameters for GetAddressSuggestions.
 type GetAddressSuggestionsParams struct {
@@ -1610,6 +2178,9 @@ type SendCodeJSONRequestBody = SendCodeRequest
 // VerifyCodeJSONRequestBody defines body for VerifyCode for application/json ContentType.
 type VerifyCodeJSONRequestBody = VerifyCodeRequest
 
+// ReportClientErrorJSONRequestBody defines body for ReportClientError for application/json ContentType.
+type ReportClientErrorJSONRequestBody = ClientErrorReport
+
 // CreateLeaseJSONRequestBody defines body for CreateLease for application/json ContentType.
 type CreateLeaseJSONRequestBody = LeaseCreateRequest
 
@@ -1679,14 +2250,32 @@ type HandlePaymentWebhookJSONRequestBody HandlePaymentWebhookJSONBody
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
+	// (GET /admin/audit-logs)
+	ListAdminAuditLogs(w http.ResponseWriter, r *http.Request, params ListAdminAuditLogsParams)
+
+	// (GET /admin/audit-logs/{id})
+	GetAdminAuditLog(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /admin/leases)
+	ListAdminLeases(w http.ResponseWriter, r *http.Request, params ListAdminLeasesParams)
+
 	// (GET /admin/leases/{id})
 	GetAdminLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /admin/operations)
+	ListAdminOperations(w http.ResponseWriter, r *http.Request, params ListAdminOperationsParams)
 
 	// (GET /admin/operations/{id})
 	GetAdminOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
+	// (GET /admin/properties)
+	ListAdminProperties(w http.ResponseWriter, r *http.Request, params ListAdminPropertiesParams)
+
 	// (GET /admin/properties/{id})
 	GetAdminProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /admin/stats)
+	GetAdminStats(w http.ResponseWriter, r *http.Request)
 
 	// (GET /admin/subscription/payments)
 	ListAdminSubscriptionPayments(w http.ResponseWriter, r *http.Request, params ListAdminSubscriptionPaymentsParams)
@@ -1700,6 +2289,9 @@ type ServerInterface interface {
 	// (POST /admin/subscription/payments/{paymentId}/sync)
 	SyncSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId openapi_types.UUID)
 
+	// (GET /admin/tenant-contacts)
+	ListAdminTenantContacts(w http.ResponseWriter, r *http.Request, params ListAdminTenantContactsParams)
+
 	// (GET /admin/tenant-contacts/{id})
 	GetAdminTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
@@ -1708,6 +2300,9 @@ type ServerInterface interface {
 
 	// (GET /admin/users/{id})
 	GetAdminUser(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /admin/users/{id}/audit-logs)
+	ListAdminUserAuditLogs(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserAuditLogsParams)
 
 	// (GET /admin/users/{id}/leases)
 	ListAdminUserLeases(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserLeasesParams)
@@ -1732,6 +2327,9 @@ type ServerInterface interface {
 
 	// (POST /auth/verify)
 	VerifyCode(w http.ResponseWriter, r *http.Request)
+
+	// (POST /client-errors)
+	ReportClientError(w http.ResponseWriter, r *http.Request)
 
 	// (GET /dadata/suggestions/address)
 	GetAddressSuggestions(w http.ResponseWriter, r *http.Request, params GetAddressSuggestionsParams)
@@ -1921,8 +2519,28 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
+// (GET /admin/audit-logs)
+func (_ Unimplemented) ListAdminAuditLogs(w http.ResponseWriter, r *http.Request, params ListAdminAuditLogsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/audit-logs/{id})
+func (_ Unimplemented) GetAdminAuditLog(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/leases)
+func (_ Unimplemented) ListAdminLeases(w http.ResponseWriter, r *http.Request, params ListAdminLeasesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /admin/leases/{id})
 func (_ Unimplemented) GetAdminLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/operations)
+func (_ Unimplemented) ListAdminOperations(w http.ResponseWriter, r *http.Request, params ListAdminOperationsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1931,8 +2549,18 @@ func (_ Unimplemented) GetAdminOperation(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /admin/properties)
+func (_ Unimplemented) ListAdminProperties(w http.ResponseWriter, r *http.Request, params ListAdminPropertiesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /admin/properties/{id})
 func (_ Unimplemented) GetAdminProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/stats)
+func (_ Unimplemented) GetAdminStats(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1956,6 +2584,11 @@ func (_ Unimplemented) SyncSubscriptionPayment(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /admin/tenant-contacts)
+func (_ Unimplemented) ListAdminTenantContacts(w http.ResponseWriter, r *http.Request, params ListAdminTenantContactsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /admin/tenant-contacts/{id})
 func (_ Unimplemented) GetAdminTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -1968,6 +2601,11 @@ func (_ Unimplemented) ListAdminUsers(w http.ResponseWriter, r *http.Request, pa
 
 // (GET /admin/users/{id})
 func (_ Unimplemented) GetAdminUser(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/users/{id}/audit-logs)
+func (_ Unimplemented) ListAdminUserAuditLogs(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserAuditLogsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2008,6 +2646,11 @@ func (_ Unimplemented) SendCode(w http.ResponseWriter, r *http.Request) {
 
 // (POST /auth/verify)
 func (_ Unimplemented) VerifyCode(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /client-errors)
+func (_ Unimplemented) ReportClientError(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2325,6 +2968,298 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
+// ListAdminAuditLogs operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminAuditLogs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminAuditLogsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "actor_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "actor_id", r.URL.Query(), &params.ActorId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "actor_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actor_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "action" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "action", r.URL.Query(), &params.Action, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "action"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "entity_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "entity_type", r.URL.Query(), &params.EntityType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "entity_type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "date_from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_from", r.URL.Query(), &params.DateFrom, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "date_to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_to", r.URL.Query(), &params.DateTo, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminAuditLogs(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdminAuditLog operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminAuditLog(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminAuditLog(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAdminLeases operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminLeases(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminLeasesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "property_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "property_id", r.URL.Query(), &params.PropertyId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "property_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "property_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "owner_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner_id", r.URL.Query(), &params.OwnerId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminLeases(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetAdminLease operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminLease(w http.ResponseWriter, r *http.Request) {
 
@@ -2348,6 +3283,162 @@ func (siw *ServerInterfaceWrapper) GetAdminLease(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdminLease(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAdminOperations operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminOperations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminOperationsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "property_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "property_id", r.URL.Query(), &params.PropertyId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "property_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "property_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "lease_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "lease_id", r.URL.Query(), &params.LeaseId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lease_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lease_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "owner_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner_id", r.URL.Query(), &params.OwnerId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminOperations(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2389,6 +3480,123 @@ func (siw *ServerInterfaceWrapper) GetAdminOperation(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ListAdminProperties operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminProperties(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminPropertiesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "owner_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner_id", r.URL.Query(), &params.OwnerId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminProperties(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetAdminProperty operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminProperty(w http.ResponseWriter, r *http.Request) {
 
@@ -2412,6 +3620,26 @@ func (siw *ServerInterfaceWrapper) GetAdminProperty(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdminProperty(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdminStats operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminStats(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminStats(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2458,6 +3686,45 @@ func (siw *ServerInterfaceWrapper) ListAdminSubscriptionPayments(w http.Response
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "user_phone" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "user_phone", r.URL.Query(), &params.UserPhone, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "user_phone"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_phone", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
 		}
 		return
 	}
@@ -2595,6 +3862,110 @@ func (siw *ServerInterfaceWrapper) SyncSubscriptionPayment(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
+// ListAdminTenantContacts operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminTenantContacts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminTenantContactsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "owner_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner_id", r.URL.Query(), &params.OwnerId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminTenantContacts(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetAdminTenantContact operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminTenantContact(w http.ResponseWriter, r *http.Request) {
 
@@ -2720,6 +4091,32 @@ func (siw *ServerInterfaceWrapper) ListAdminUsers(w http.ResponseWriter, r *http
 		return
 	}
 
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAdminUsers(w, r, params)
 	}))
@@ -2754,6 +4151,145 @@ func (siw *ServerInterfaceWrapper) GetAdminUser(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdminUser(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAdminUserAuditLogs operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminUserAuditLogs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminUserAuditLogsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "action" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "action", r.URL.Query(), &params.Action, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "action"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "entity_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "entity_type", r.URL.Query(), &params.EntityType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "entity_type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "date_from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_from", r.URL.Query(), &params.DateFrom, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "date_to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_to", r.URL.Query(), &params.DateTo, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminUserAuditLogs(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2809,6 +4345,32 @@ func (siw *ServerInterfaceWrapper) ListAdminUserLeases(w http.ResponseWriter, r 
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
 		}
 		return
 	}
@@ -2926,6 +4488,32 @@ func (siw *ServerInterfaceWrapper) ListAdminUserOperations(w http.ResponseWriter
 		return
 	}
 
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAdminUserOperations(w, r, id, params)
 	}))
@@ -3000,6 +4588,32 @@ func (siw *ServerInterfaceWrapper) ListAdminUserProperties(w http.ResponseWriter
 		return
 	}
 
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAdminUserProperties(w, r, id, params)
 	}))
@@ -3057,6 +4671,32 @@ func (siw *ServerInterfaceWrapper) ListAdminUserTenantContacts(w http.ResponseWr
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
 		}
 		return
 	}
@@ -3131,6 +4771,20 @@ func (siw *ServerInterfaceWrapper) VerifyCode(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.VerifyCode(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReportClientError operation middleware
+func (siw *ServerInterfaceWrapper) ReportClientError(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReportClientError(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5238,13 +6892,31 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/audit-logs", wrapper.ListAdminAuditLogs)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/audit-logs/{id}", wrapper.GetAdminAuditLog)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/leases", wrapper.ListAdminLeases)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/leases/{id}", wrapper.GetAdminLease)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/operations", wrapper.ListAdminOperations)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/operations/{id}", wrapper.GetAdminOperation)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/properties", wrapper.ListAdminProperties)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/properties/{id}", wrapper.GetAdminProperty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/stats", wrapper.GetAdminStats)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/subscription/payments", wrapper.ListAdminSubscriptionPayments)
@@ -5259,6 +6931,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/admin/subscription/payments/{paymentId}/sync", wrapper.SyncSubscriptionPayment)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/tenant-contacts", wrapper.ListAdminTenantContacts)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/tenant-contacts/{id}", wrapper.GetAdminTenantContact)
 	})
 	r.Group(func(r chi.Router) {
@@ -5266,6 +6941,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/users/{id}", wrapper.GetAdminUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/users/{id}/audit-logs", wrapper.ListAdminUserAuditLogs)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/users/{id}/leases", wrapper.ListAdminUserLeases)
@@ -5290,6 +6968,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/verify", wrapper.VerifyCode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/client-errors", wrapper.ReportClientError)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/dadata/suggestions/address", wrapper.GetAddressSuggestions)
@@ -5483,120 +7164,141 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

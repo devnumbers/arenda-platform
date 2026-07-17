@@ -52,7 +52,7 @@ type Subscription struct {
 // Source is set to "paid" because the owner is on the paid-subscription track,
 // even though the initial basic tariff itself is free.
 func NewOwnerSubscription(userID, tariffID uuid.UUID) (Subscription, error) {
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return Subscription{}, err
 	}

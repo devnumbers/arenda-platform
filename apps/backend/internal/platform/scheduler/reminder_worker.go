@@ -198,7 +198,7 @@ func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Rem
 		return fmt.Errorf("render reminder email: %w", err)
 	}
 
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return fmt.Errorf("generate sent email id: %w", err)
 	}

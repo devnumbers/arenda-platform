@@ -117,8 +117,8 @@ func (p *Provider) Init(ctx context.Context, req application.InitRequest) (res a
 		}, nil
 	}
 
-	providerPaymentID := fakeProviderPaymentIDPrefix + uuid.NewString()
-	savedToken := "fake_token_" + uuid.NewString()
+	providerPaymentID := fakeProviderPaymentIDPrefix + uuid.Must(uuid.NewV7()).String()
+	savedToken := "fake_token_" + uuid.Must(uuid.NewV7()).String()
 
 	p.pending[req.PaymentID.String()] = pendingEntry{
 		payload: application.WebhookPayload{
@@ -201,7 +201,7 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (r
 
 	log := logger.WithCorrelation(ctx, p.log)
 
-	providerPaymentID := fakeProviderPaymentIDPrefix + uuid.NewString()
+	providerPaymentID := fakeProviderPaymentIDPrefix + uuid.Must(uuid.NewV7()).String()
 
 	if strings.HasPrefix(req.Token, fakeFailTokenPrefix) {
 		log.InfoContext(ctx, "fake charge failed",

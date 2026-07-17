@@ -161,8 +161,8 @@ func messageIDDomain(from, fallback string) string {
 }
 
 func (s *Sender) buildMessage(msg mailer.Message) []byte {
-	boundary := uuid.NewString()
-	messageID := fmt.Sprintf("<%s@%s>", uuid.NewString(), messageIDDomain(s.cfg.From, s.cfg.Host))
+	boundary := uuid.Must(uuid.NewV7()).String()
+	messageID := fmt.Sprintf("<%s@%s>", uuid.Must(uuid.NewV7()).String(), messageIDDomain(s.cfg.From, s.cfg.Host))
 	date := time.Now().UTC().Format(time.RFC1123Z)
 
 	fromName := s.cfg.FromName

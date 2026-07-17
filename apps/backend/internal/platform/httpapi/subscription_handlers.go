@@ -487,7 +487,14 @@ func (h *SubscriptionHandlers) GetAdminSubscriptionPayment(w http.ResponseWriter
 
 // RefundSubscriptionPayment implements POST /admin/subscription/payments/{paymentId}/refund.
 func (h *SubscriptionHandlers) RefundSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId uuid.UUID) {
-	if err := h.payments.RefundPayment(r.Context(), paymentId); err != nil {
+	actorID, ok := UserIDFromContext(r.Context())
+	if !ok {
+		// AdminOnlyMiddleware guarantees the identity; this is defensive.
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	if err := h.payments.RefundPayment(r.Context(), actorID, paymentId); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -534,7 +541,14 @@ func adminSubscriptionPaymentResponse(view billingapp.AdminSubscriptionPaymentVi
 
 // SyncSubscriptionPayment implements POST /admin/subscription/payments/{paymentId}/sync.
 func (h *SubscriptionHandlers) SyncSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId uuid.UUID) {
-	if err := h.payments.SyncPendingPayment(r.Context(), paymentId); err != nil {
+	actorID, ok := UserIDFromContext(r.Context())
+	if !ok {
+		// AdminOnlyMiddleware guarantees the identity; this is defensive.
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	if err := h.payments.SyncPendingPayment(r.Context(), actorID, paymentId); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -559,6 +573,15 @@ func (h *SubscriptionHandlers) ListAdminSubscriptionPayments(w http.ResponseWrit
 	}
 	if params.UserId != nil {
 		filters.UserID = *params.UserId
+	}
+	if params.UserPhone != nil {
+		filters.UserPhone = *params.UserPhone
+	}
+	if params.Sort != nil {
+		filters.Sort = *params.Sort
+	}
+	if params.Order != nil {
+		filters.Order = string(*params.Order)
 	}
 
 	views, total, err := h.payments.ListAllPayments(r.Context(), filters)

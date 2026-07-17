@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -200,6 +201,16 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return ChangeTariffResponse{}, fmt.Errorf("schedule downgrade: %w", err)
 	}
+	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &userID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionSubscriptionTariffChanged,
+		EntityType: auditdomain.EntitySubscription,
+		EntityID:   &sub.ID,
+		Context:    map[string]any{"from_tariff_id": currentTariff.ID, "to_tariff_id": newTariff.ID},
+	}); err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("record audit: %w", err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return ChangeTariffResponse{}, fmt.Errorf("commit schedule downgrade transaction: %w", err)
 	}
@@ -265,6 +276,19 @@ func (s *SubscriptionService) changeTariffUpgrade(
 			}
 		}
 		return ChangeTariffResponse{}, fmt.Errorf("save subscription payment: %w", err)
+	}
+	// The pending payment this transaction commits is the persisted form of the
+	// user's tariff-change decision, so the tariff change is audited here. The
+	// payment itself is audited by the webhook/sync paths that finalize it.
+	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &userID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionSubscriptionTariffChanged,
+		EntityType: auditdomain.EntitySubscription,
+		EntityID:   &sub.ID,
+		Context:    map[string]any{"from_tariff_id": sub.TariffID, "to_tariff_id": newTariff.ID},
+	}); err != nil {
+		return ChangeTariffResponse{}, fmt.Errorf("record audit: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return ChangeTariffResponse{}, fmt.Errorf("commit transaction: %w", err)
@@ -395,6 +419,16 @@ func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uui
 		return fmt.Errorf("update subscription: %w", err)
 	}
 
+	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &userID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionSubscriptionCancelled,
+		EntityType: auditdomain.EntitySubscription,
+		EntityID:   &sub.ID,
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit cancel subscription transaction: %w", err)
 	}
@@ -428,6 +462,17 @@ func (s *SubscriptionService) ToggleAutoRenew(ctx context.Context, userID uuid.U
 
 	if err := txSubscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("update subscription: %w", err)
+	}
+
+	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &userID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionSubscriptionAutoRenewToggled,
+		EntityType: auditdomain.EntitySubscription,
+		EntityID:   &sub.ID,
+		Context:    map[string]any{"enabled": enabled},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

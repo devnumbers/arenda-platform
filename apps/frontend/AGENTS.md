@@ -25,7 +25,8 @@ Invoke skills through the Kimi `Skill` tool using the exact skill name.
 
 ## MCP Servers
 
-- `playwright` — use for browser automation and UI verification when available. Check desktop and mobile layouts, visible interaction states, loading/error states, and that text does not overlap or overflow. If `/mcp` shows `playwright` is unavailable, fall back to manual inspection, build logs, and native browser tools.
+- `playwright` — use for browser automation and UI verification when the `mcp__playwright__*` tools are available. Check desktop and mobile layouts, visible interaction states, loading/error states, and that text does not overlap or overflow. If they are unavailable, fall back to manual inspection, build logs, and native browser tools.
+- `heroui-react` — mandatory documentation source for HeroUI v3: `@heroui/react` v3 is beta and not covered by model training data. Before writing HeroUI code, verify the component with `list_components`, then read `get_component_docs`; never mix v2 APIs or BEM classes from `@heroui/styles` into React components.
 - `lean-ctx` — use for broad exploration, large generated files, repeated reads, and noisy build or lint output. Before editing exact TypeScript, component, route, or config code, read the target source in raw/full form.
 - `context7` — use for current official docs on third-party libraries when needed.
 - If a TypeScript LSP or MCP server is added later, use it for semantic navigation, references, diagnostics, and impact checks. Do not use it as a replacement for `npm run lint`, `npm run build`, or direct code review.

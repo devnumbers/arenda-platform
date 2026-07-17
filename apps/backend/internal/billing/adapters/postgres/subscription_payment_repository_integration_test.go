@@ -37,7 +37,7 @@ func setupSubscriptionPaymentTest(t *testing.T) (context.Context, pgx.Tx, func()
 	pm, _ := domain.NewPaymentMethod(userID, domain.ProviderFake, "token", "*1", time.Now().UTC())
 	pm, _ = pmRepo.Create(ctx, pm)
 
-	repo := NewSubscriptionPaymentRepository(tx)
+	repo := NewSubscriptionPaymentRepository(tx, noopEncryptor(t))
 	return ctx, tx, cleanup, repo, userID, tariffID, createdSub.ID, pm.ID
 }
 

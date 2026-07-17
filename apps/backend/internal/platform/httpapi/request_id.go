@@ -46,7 +46,7 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get(RequestIDHeader)
 		if !isValidRequestID(id) {
-			uid, err := uuid.NewRandom()
+			uid, err := uuid.NewV7()
 			if err == nil {
 				id = uid.String()
 			} else {

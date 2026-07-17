@@ -74,7 +74,21 @@ const ensureId = <T extends RaRecord>(item: T): T => {
   return item;
 };
 
-const buildListQuery = (params: GetListParams): string => {
+// Sortable-поля по ресурсу. Источник истины — whitelist'ы сортировки бэкенда
+// (apps/backend/internal/admin/application/service.go,
+// apps/backend/internal/billing/application/payment_service.go);
+// при расширении бэкендных списков держать мапу синхронно.
+const sortableFieldsByResource: Record<string, readonly string[]> = {
+  users: ['createdAt', 'updatedAt'],
+  properties: ['name', 'createdAt', 'updatedAt', 'status'],
+  leases: ['startDate', 'updatedAt', 'status', 'rentAmountKopecks'],
+  operations: ['operationDate', 'amountKopecks', 'status'],
+  tenantContacts: ['name', 'updatedAt'],
+  subscriptionPayments: ['createdAt', 'amountKopecks', 'status'],
+  auditLogs: ['createdAt'],
+};
+
+const buildListQuery = (resource: string, params: GetListParams): string => {
   const { pagination, sort, filter } = params;
   const query = new URLSearchParams();
 
@@ -84,7 +98,10 @@ const buildListQuery = (params: GetListParams): string => {
   query.set('limit', String(perPage));
   query.set('offset', String((page - 1) * perPage));
 
-  if (sort?.field) {
+  // Отбрасываем sort/order вне whitelist'а ресурса: бэкенд валидирует sort
+  // и отвечает 400, а в URL списков у пользователей могли остаться старые
+  // значения (sort=id, sort=phone). Без sort бэкенд применит свой дефолт.
+  if (sort?.field && sortableFieldsByResource[resource]?.includes(sort.field)) {
     query.set('sort', sort.field);
     query.set('order', sort.order === 'ASC' ? 'asc' : 'desc');
   }
@@ -99,20 +116,25 @@ const buildListQuery = (params: GetListParams): string => {
   return qs ? `?${qs}` : '';
 };
 
+// Без ownerId используются плоские эндпоинты этапа 2, с ownerId — вложенные
+// (обратная совместимость с вкладками UserShow).
 const listUrl = (resource: string, ownerId?: string | number): string => {
+  const hasOwner = ownerId !== undefined && ownerId !== '';
   switch (resource) {
     case 'users':
       return `${API_PREFIX}/admin/users`;
     case 'properties':
-      return `${API_PREFIX}/admin/users/${ownerId}/properties`;
+      return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/properties` : `${API_PREFIX}/admin/properties`;
     case 'leases':
-      return `${API_PREFIX}/admin/users/${ownerId}/leases`;
+      return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/leases` : `${API_PREFIX}/admin/leases`;
     case 'tenantContacts':
-      return `${API_PREFIX}/admin/users/${ownerId}/tenant-contacts`;
+      return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/tenant-contacts` : `${API_PREFIX}/admin/tenant-contacts`;
     case 'operations':
-      return `${API_PREFIX}/admin/users/${ownerId}/operations`;
+      return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/operations` : `${API_PREFIX}/admin/operations`;
     case 'subscriptionPayments':
       return `${API_PREFIX}/admin/subscription/payments`;
+    case 'auditLogs':
+      return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/audit-logs` : `${API_PREFIX}/admin/audit-logs`;
     default:
       throw new Error(`Unknown resource: ${resource}`);
   }
@@ -132,6 +154,8 @@ const oneUrl = (resource: string, id: string | number): string => {
       return `${API_PREFIX}/admin/operations/${id}`;
     case 'subscriptionPayments':
       return `${API_PREFIX}/admin/subscription/payments/${id}`;
+    case 'auditLogs':
+      return `${API_PREFIX}/admin/audit-logs/${id}`;
     default:
       throw new Error(`Unknown resource: ${resource}`);
   }
@@ -161,11 +185,7 @@ const parseListResponse = <T extends RaRecord>(json: unknown, headers: Headers):
 
 export const dataProvider: AdminDataProvider = {
   getList: async <T extends RaRecord>(resource: string, params: GetListParams): Promise<GetListResult<T>> => {
-    if (['properties', 'leases', 'tenantContacts', 'operations'].includes(resource) && !params.filter?.owner_id) {
-      throw new HttpError(`Ресурс ${resource} требует фильтр owner_id`, 400);
-    }
-
-    const url = `${listUrl(resource, params.filter?.owner_id as string | number)}${buildListQuery(params)}`;
+    const url = `${listUrl(resource, params.filter?.owner_id as string | number | undefined)}${buildListQuery(resource, params)}`;
     const { json, headers } = await httpClient(url, { method: 'GET' });
     return parseListResponse<T>(json, headers);
   },
@@ -196,6 +216,9 @@ export const dataProvider: AdminDataProvider = {
         case 'operations':
           data = (obj.operation ?? json) as T;
           break;
+        case 'auditLogs':
+          data = (obj.auditLog ?? json) as T;
+          break;
         case 'subscriptionPayments':
         default:
           data = json as T;
@@ -217,13 +240,20 @@ export const dataProvider: AdminDataProvider = {
     resource: string,
     params: GetManyReferenceParams
   ): Promise<GetManyReferenceResult<T>> => {
-    if (params.target !== 'owner_id') {
-      throw new HttpError(`getManyReference для ${resource} поддерживает только target=owner_id`, 400);
+    // owner_id — вложенный эндпоинт; property_id/lease_id — плоский эндпоинт с фильтром.
+    if (params.target === 'owner_id') {
+      const url = `${listUrl(resource, params.id)}${buildListQuery(resource, { ...params, filter: { ...params.filter, owner_id: params.id } })}`;
+      const { json, headers } = await httpClient(url, { method: 'GET' });
+      return parseListResponse<T>(json, headers);
     }
 
-    const url = `${listUrl(resource, params.id)}${buildListQuery({ ...params, filter: { ...params.filter, owner_id: params.id } })}`;
-    const { json, headers } = await httpClient(url, { method: 'GET' });
-    return parseListResponse<T>(json, headers);
+    if (params.target === 'property_id' || params.target === 'lease_id') {
+      const url = `${listUrl(resource)}${buildListQuery(resource, { ...params, filter: { ...params.filter, [params.target]: params.id } })}`;
+      const { json, headers } = await httpClient(url, { method: 'GET' });
+      return parseListResponse<T>(json, headers);
+    }
+
+    throw new HttpError(`getManyReference для ${resource} не поддерживает target=${params.target}`, 400);
   },
 
   create: async <T extends RaRecord>(resource: string, _params: CreateParams<T>): Promise<CreateResult<T>> => {

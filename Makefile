@@ -1,10 +1,11 @@
 COMPOSE_LOCAL := docker compose -f docker-compose.local.yml
+COMPOSE_OBS := docker compose -f docker-compose.obs.yml --env-file .env.obs
 BACKEND_DIR := apps/backend
 ADMIN_DIR := apps/admin
 LANDING_DIR := apps/landing
 GOLANGCI_LINT_VERSION := v2.12.2
 
-.PHONY: local-infra-up local-infra-down local-infra-reset backend-run backend-lint backend-tkassa-spec-check check-bruno-coverage check-backend-env check-migrate-env migrate-up migrate-down \
+.PHONY: local-infra-up local-infra-down local-infra-reset obs-up obs-down obs-ps obs-logs backend-run backend-lint backend-tkassa-spec-check check-bruno-coverage check-backend-env check-migrate-env migrate-up migrate-down \
         perf-db-up perf-db-down perf-db-reset perf-backend-run perf-seed perf-sustainable perf-breakdown \
         admin-install admin-dev admin-build admin-typecheck \
         landing-install landing-dev landing-build
@@ -17,6 +18,21 @@ local-infra-down:
 
 local-infra-reset:
 	$(COMPOSE_LOCAL) down -v --remove-orphans
+
+# Observability stack (Uptrace). Runs on the stage/prod server, not locally.
+# Requires .env.obs (see .env.obs.example) and observability/uptrace.yml
+# (see observability/uptrace.yml.example). Setup: observability/README.md.
+obs-up:
+	$(COMPOSE_OBS) up -d
+
+obs-down:
+	$(COMPOSE_OBS) down
+
+obs-ps:
+	$(COMPOSE_OBS) ps
+
+obs-logs:
+	$(COMPOSE_OBS) logs -f
 
 backend-run:
 	@test -f .env || (echo "Missing .env" && exit 1)

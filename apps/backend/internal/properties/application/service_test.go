@@ -192,6 +192,7 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 		nil,
 		stubLeaseRepo{},
 		fakePropertyTxBeginner{},
+		nil,
 		fakePropertyClock{now: time.Now()},
 		nil,
 	)
@@ -293,6 +294,7 @@ func TestArchiveProperty_ConcurrentArchivesDoNotDoubleArchive(t *testing.T) {
 		fakePropertyBillingLifecycle{},
 		stubLeaseRepo{},
 		fakePropertyTxBeginner{},
+		nil,
 		fakePropertyClock{now: time.Now()},
 		nil,
 	)
@@ -371,6 +373,7 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 		fakePropertyBillingLifecycle{},
 		stubLeaseRepo{},
 		fakePropertyTxBeginner{},
+		nil,
 		fakePropertyClock{now: time.Now()},
 		nil,
 	)
@@ -441,7 +444,7 @@ var _ LeaseRepository = stubLeaseRepo{}
 
 type fakePropertyPhotoRepo struct{}
 
-func (fakePropertyPhotoRepo) Create(_ context.Context, _ uuid.UUID, _ string) (domain.Photo, error) {
+func (fakePropertyPhotoRepo) Create(_ context.Context, _, _ uuid.UUID, _ string) (domain.Photo, error) {
 	return domain.Photo{}, nil
 }
 
@@ -547,6 +550,7 @@ func TestPropertyService_ListPropertyLeases(t *testing.T) {
 		nil,
 		fakeLeaseRepoForProperties{leases: leases},
 		fakePropertyTxBeginner{},
+		nil,
 		fakePropertyClock{now: now},
 		nil,
 	)
@@ -582,6 +586,7 @@ func TestPropertyService_ListPropertyLeases_PropertyNotFound(t *testing.T) {
 		nil,
 		fakeLeaseRepoForProperties{},
 		fakePropertyTxBeginner{},
+		nil,
 		fakePropertyClock{now: now},
 		nil,
 	)
@@ -616,6 +621,7 @@ func TestPropertyService_ListArchivedProperties(t *testing.T) {
 		nil,
 		stubLeaseRepo{},
 		fakePropertyTxBeginner{},
+		nil,
 		fakePropertyClock{now: time.Now()},
 		nil,
 	)

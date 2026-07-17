@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	notificationsdomain "github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
@@ -58,6 +60,7 @@ type RecurringOperationService struct {
 	scheduler    ReminderScheduler
 	reminders    ReminderLister
 	db           txBeginner
+	audit        auditapp.Recorder
 	clock        clock.Clock
 	logger       *slog.Logger
 }
@@ -77,6 +80,7 @@ func NewRecurringOperationService(
 	scheduler ReminderScheduler,
 	reminders ReminderLister,
 	db txBeginner,
+	audit auditapp.Recorder,
 	clock clock.Clock,
 	logger *slog.Logger,
 ) *RecurringOperationService {
@@ -92,6 +96,9 @@ func NewRecurringOperationService(
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if audit == nil {
+		audit = auditapp.Noop{}
+	}
 	return &RecurringOperationService{
 		recurringOps: recurringOps,
 		operations:   operations,
@@ -100,6 +107,7 @@ func NewRecurringOperationService(
 		scheduler:    scheduler,
 		reminders:    reminders,
 		db:           db,
+		audit:        audit,
 		clock:        clock,
 		logger:       logger,
 	}
@@ -147,7 +155,7 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		return domain.RecurringOperation{}, err
 	}
 
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("generate recurring operation id: %w", err)
 	}
@@ -205,6 +213,21 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		if err := scheduleRemindersForOperations(ctx, txScheduler, created, persistedOps, categoryNames, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
+	}
+
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionRecurringOperationCreated,
+		EntityType: auditdomain.EntityRecurringOperation,
+		EntityID:   &created.ID,
+		Context: map[string]any{
+			"property_id":    created.PropertyID,
+			"type":           string(created.Type),
+			"amount_kopecks": created.AmountKopecks,
+		},
+	}); err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -313,6 +336,17 @@ func (s *RecurringOperationService) DeleteRecurringOperation(
 		return fmt.Errorf("soft delete recurring operation: %w", err)
 	}
 
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionRecurringOperationDeleted,
+		EntityType: auditdomain.EntityRecurringOperation,
+		EntityID:   &id,
+		Context:    map[string]any{"property_id": rec.PropertyID},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
 	}
@@ -362,6 +396,19 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		newRec, err := s.splitRecurringOperationSeries(ctx, tx, ownerID, rec, cmd, now)
 		if err != nil {
 			return domain.RecurringOperation{}, err
+		}
+		if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+			ActorID:    &ownerID,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionRecurringOperationUpdated,
+			EntityType: auditdomain.EntityRecurringOperation,
+			EntityID:   &id,
+			Context: map[string]any{
+				"fields":        updatedRecurringOperationFields(cmd),
+				"new_series_id": newRec.ID,
+			},
+		}); err != nil {
+			return domain.RecurringOperation{}, fmt.Errorf("record audit: %w", err)
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("commit tx: %w", err)
@@ -487,6 +534,17 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		}
 	}
 
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionRecurringOperationUpdated,
+		EntityType: auditdomain.EntityRecurringOperation,
+		EntityID:   &id,
+		Context:    map[string]any{"fields": updatedRecurringOperationFields(cmd)},
+	}); err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("commit tx: %w", err)
 	}
@@ -522,7 +580,7 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 		return domain.RecurringOperation{}, newInvalidInputError("apply_from_date must be on or before the series end date")
 	}
 
-	newID, err := uuid.NewRandom()
+	newID, err := uuid.NewV7()
 	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("generate recurring operation id: %w", err)
 	}
@@ -723,6 +781,17 @@ func (s *RecurringOperationService) PauseRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("pause recurring operation: %w", err)
 	}
 
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionRecurringOperationPaused,
+		EntityType: auditdomain.EntityRecurringOperation,
+		EntityID:   &id,
+		Context:    map[string]any{"property_id": rec.PropertyID},
+	}); err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("commit tx: %w", err)
 	}
@@ -794,6 +863,17 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, persistedOps, categoryNames, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
+	}
+
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionRecurringOperationResumed,
+		EntityType: auditdomain.EntityRecurringOperation,
+		EntityID:   &id,
+		Context:    map[string]any{"property_id": rec.PropertyID},
+	}); err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1072,8 +1152,14 @@ func (s *RecurringOperationService) buildOperations(
 			continue
 		}
 
+		opID, err := uuid.NewV7()
+		if err != nil {
+			return nil, fmt.Errorf("generate operation id: %w", err)
+		}
+
 		sourceDate := d
 		ops = append(ops, domain.Operation{
+			ID:                   opID,
 			OwnerID:              rec.OwnerID,
 			PropertyID:           rec.PropertyID,
 			LeaseID:              rec.LeaseID,
@@ -1101,6 +1187,46 @@ func stringOrEmpty(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// updatedRecurringOperationFields lists the names of the fields a command
+// changes. Only field names are audited, never their values.
+func updatedRecurringOperationFields(cmd UpdateRecurringOperationCommand) []string {
+	fields := make([]string, 0, 11)
+	if cmd.Type != nil {
+		fields = append(fields, "type")
+	}
+	if cmd.CategoryID != nil {
+		fields = append(fields, "category_id")
+	}
+	if cmd.Name != nil {
+		fields = append(fields, "name")
+	}
+	if cmd.AmountKopecks != nil {
+		fields = append(fields, "amount_kopecks")
+	}
+	if cmd.StartDate != nil {
+		fields = append(fields, "start_date")
+	}
+	if cmd.PaymentDay != nil {
+		fields = append(fields, "payment_day")
+	}
+	if cmd.EndDate != nil {
+		fields = append(fields, "end_date")
+	}
+	if cmd.Comment != nil {
+		fields = append(fields, "comment")
+	}
+	if cmd.Periodicity != nil {
+		fields = append(fields, "periodicity")
+	}
+	if cmd.ApplyFromDate != nil {
+		fields = append(fields, "apply_from_date")
+	}
+	if cmd.ReminderOffsetDays != nil {
+		fields = append(fields, "reminder_offset_days")
+	}
+	return fields
 }
 
 func buildCategoryNamesMap(ctx context.Context, categories OperationCategoryRepository, ownerID uuid.UUID) (map[uuid.UUID]string, error) {

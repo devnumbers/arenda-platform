@@ -34,8 +34,9 @@ func (r *PropertyPhotoRepository) WithTx(tx transaction.Tx) application.Property
 }
 
 // Create inserts a photo record and returns the created photo.
-func (r *PropertyPhotoRepository) Create(ctx context.Context, propertyID uuid.UUID, url string) (domain.Photo, error) {
+func (r *PropertyPhotoRepository) Create(ctx context.Context, photoID, propertyID uuid.UUID, url string) (domain.Photo, error) {
 	row, err := r.q().CreatePropertyPhoto(ctx, postgres.CreatePropertyPhotoParams{
+		ID:         pgconv.UUIDToPgtype(photoID),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
 		Url:        url,
 	})

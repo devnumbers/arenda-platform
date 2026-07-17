@@ -116,7 +116,7 @@ var (
 )
 
 func NewProperty(ownerID uuid.UUID, name, address, description string, propertyType PropertyType) (Property, error) {
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return Property{}, fmt.Errorf("generate property id: %w", err)
 	}

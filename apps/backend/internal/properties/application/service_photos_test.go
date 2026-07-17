@@ -44,7 +44,7 @@ type fakePhotoRepo struct {
 	getByIDsErr error
 }
 
-func (r *fakePhotoRepo) Create(_ context.Context, propertyID uuid.UUID, url string) (domain.Photo, error) {
+func (r *fakePhotoRepo) Create(_ context.Context, _ uuid.UUID, propertyID uuid.UUID, url string) (domain.Photo, error) {
 	if r.createErr != nil {
 		return domain.Photo{}, r.createErr
 	}
@@ -105,6 +105,7 @@ func newPhotoService(t *testing.T, repo PropertyRepository, photoRepo PropertyPh
 		fakePropertyBillingLifecycle{},
 		stubLeaseRepo{},
 		fakePropertyTxBeginner{},
+		nil,
 		fakePropertyClock{now: time.Now()},
 		nil,
 	)

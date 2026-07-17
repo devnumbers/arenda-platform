@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 )
 
@@ -35,15 +37,19 @@ type UpdateTenantContactCommand struct {
 // bounded context.
 type TenantContactService struct {
 	repo   TenantContactRepository
+	audit  auditapp.Recorder
 	logger *slog.Logger
 }
 
 // NewTenantContactService creates a new tenant contact service.
-func NewTenantContactService(repo TenantContactRepository, logger *slog.Logger) *TenantContactService {
+func NewTenantContactService(repo TenantContactRepository, audit auditapp.Recorder, logger *slog.Logger) *TenantContactService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &TenantContactService{repo: repo, logger: logger}
+	if audit == nil {
+		audit = auditapp.Noop{}
+	}
+	return &TenantContactService{repo: repo, audit: audit, logger: logger}
 }
 
 // CreateTenantContact creates a tenant contact for the given owner.
@@ -66,7 +72,7 @@ func (s *TenantContactService) CreateTenantContact(ctx context.Context, ownerID 
 		}
 	}
 
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return domain.TenantContact{}, fmt.Errorf("generate tenant contact id: %w", err)
 	}
@@ -85,6 +91,20 @@ func (s *TenantContactService) CreateTenantContact(ctx context.Context, ownerID 
 	created, err := s.repo.Create(ctx, ownerID, contact)
 	if err != nil {
 		return domain.TenantContact{}, fmt.Errorf("create tenant contact: %w", err)
+	}
+
+	// Post-commit, fail-loud: the create is already committed, so the audit
+	// error is returned deliberately to surface audit gaps. A retry may
+	// duplicate the contact — acceptable for this entity.
+	// Tenant PII (name, phone, email) is never written to the audit context.
+	if err := s.audit.Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionTenantContactCreated,
+		EntityType: auditdomain.EntityTenantContact,
+		EntityID:   &created.ID,
+	}); err != nil {
+		return domain.TenantContact{}, fmt.Errorf("record audit: %w", err)
 	}
 	return created, nil
 }
@@ -173,6 +193,19 @@ func (s *TenantContactService) UpdateTenantContact(ctx context.Context, ownerID,
 		}
 		return domain.TenantContact{}, fmt.Errorf("update tenant contact: %w", err)
 	}
+
+	// Post-commit, fail-loud: the update is already committed, so the audit
+	// error is returned deliberately to surface audit gaps. Retries are safe.
+	if err := s.audit.Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionTenantContactUpdated,
+		EntityType: auditdomain.EntityTenantContact,
+		EntityID:   &id,
+		Context:    map[string]any{"fields": updatedTenantContactFields(cmd)},
+	}); err != nil {
+		return domain.TenantContact{}, fmt.Errorf("record audit: %w", err)
+	}
 	return updated, nil
 }
 
@@ -209,4 +242,29 @@ func (s *TenantContactService) ListTenantContactsByIDs(ctx context.Context, owne
 		result[contact.ID] = contact
 	}
 	return result, nil
+}
+
+// updatedTenantContactFields lists the names of the fields a command changes.
+// Only field names are audited, never their values: tenant contact data is PII.
+func updatedTenantContactFields(cmd UpdateTenantContactCommand) []string {
+	fields := make([]string, 0, 6)
+	if cmd.Name != nil {
+		fields = append(fields, "name")
+	}
+	if cmd.Surname != nil {
+		fields = append(fields, "surname")
+	}
+	if cmd.Patronymic != nil {
+		fields = append(fields, "patronymic")
+	}
+	if cmd.Phone != nil {
+		fields = append(fields, "phone")
+	}
+	if cmd.Email != nil {
+		fields = append(fields, "email")
+	}
+	if cmd.Comment != nil {
+		fields = append(fields, "comment")
+	}
+	return fields
 }

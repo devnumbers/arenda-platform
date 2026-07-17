@@ -67,8 +67,8 @@ SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_en
 SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted FROM login_attempts WHERE phone = $1 FOR UPDATE;
 
 -- name: UpsertLoginAttempt :exec
-INSERT INTO login_attempts (phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO login_attempts (id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (phone) DO UPDATE SET
     failures = EXCLUDED.failures,
     first_failure_at = EXCLUDED.first_failure_at,
@@ -88,8 +88,8 @@ DELETE FROM login_attempts t WHERE t.ctid IN (
 );
 
 -- name: CreateSession :one
-INSERT INTO sessions (user_id, token_hash, expires_at, last_used_at)
-VALUES ($1, $2, $3, $4) RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at;
+INSERT INTO sessions (id, user_id, token_hash, expires_at, last_used_at)
+VALUES ($1, $2, $3, $4, $5) RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at;
 
 -- name: UpdateSession :exec
 UPDATE sessions SET expires_at = $1, last_used_at = $2 WHERE token_hash = $3;
@@ -151,20 +151,39 @@ RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, 
 SELECT u.*, us.status AS subscription_status
 FROM users u
 LEFT JOIN user_subscriptions us ON us.user_id = u.id
-WHERE (sqlc.arg('phone')::text = '' OR u.phone = sqlc.arg('phone')::text)
+WHERE (sqlc.arg('phone')::text = '' OR u.phone = sqlc.arg('phone_enc')::text OR (u.phone = sqlc.arg('phone')::text AND u.phone_encrypted = false))
   AND (sqlc.arg('email')::text = '' OR LOWER(u.email) LIKE LOWER('%' || sqlc.arg('email') || '%'))
   AND (sqlc.arg('role')::text = '' OR u.role = sqlc.arg('role')::text)
   AND (sqlc.arg('subscription_status')::text = '' OR us.status = sqlc.arg('subscription_status')::text)
-ORDER BY u.created_at DESC
+ORDER BY
+  CASE WHEN sqlc.arg('sort')::text = 'createdAt' AND sqlc.arg('order')::text = 'asc' THEN u.created_at END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'createdAt' AND sqlc.arg('order')::text = 'desc' THEN u.created_at END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'updatedAt' AND sqlc.arg('order')::text = 'asc' THEN u.updated_at END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'updatedAt' AND sqlc.arg('order')::text = 'desc' THEN u.updated_at END DESC,
+  CASE WHEN sqlc.arg('sort')::text = '' THEN u.created_at END DESC,
+  u.id DESC
 LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
 -- name: CountUsersAdmin :one
 SELECT COUNT(*)
 FROM users u
 LEFT JOIN user_subscriptions us ON us.user_id = u.id
-WHERE (sqlc.arg('phone')::text = '' OR u.phone = sqlc.arg('phone')::text)
+WHERE (sqlc.arg('phone')::text = '' OR u.phone = sqlc.arg('phone_enc')::text OR (u.phone = sqlc.arg('phone')::text AND u.phone_encrypted = false))
   AND (sqlc.arg('email')::text = '' OR LOWER(u.email) LIKE LOWER('%' || sqlc.arg('email') || '%'))
   AND (sqlc.arg('role')::text = '' OR u.role = sqlc.arg('role')::text)
   AND (sqlc.arg('subscription_status')::text = '' OR us.status = sqlc.arg('subscription_status')::text);
 
 -- GetUserByIDAdmin is implemented by the existing GetUserByID query (no owner filter).
+
+-- name: CountUsersTotalAdmin :one
+SELECT COUNT(*) FROM users;
+
+-- name: CountNewUsersLast30dAdmin :one
+SELECT COUNT(*) FROM users
+WHERE created_at >= now() - interval '30 days';
+
+-- name: ListRecentUsersAdmin :many
+SELECT id, phone, phone_encrypted, name, surname, created_at
+FROM users
+ORDER BY created_at DESC, id DESC
+LIMIT 5;

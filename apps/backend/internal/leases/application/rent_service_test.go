@@ -561,7 +561,10 @@ func TestGenerateRentOperations_BackdatedLeaseMarksPastPeriodsReceived(t *testin
 	}
 
 	svc := NewRentService(&fakeOperationRepo{}, &fakeRecurringOperationRepo{}, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: date(2024, 6, 30)})
-	ops := svc.GenerateRentOperations(ctx, lease, recID, ownerID, testRentCategoryID)
+	ops, err := svc.GenerateRentOperations(ctx, lease, recID, ownerID, testRentCategoryID)
+	if err != nil {
+		t.Fatalf("generate rent operations: %v", err)
+	}
 	if len(ops) == 0 {
 		t.Fatal("expected generated rent operations")
 	}

@@ -27,7 +27,7 @@ type LoginCode struct {
 }
 
 func NewLoginCode(phone Phone, email Email, codeHash string, purpose LoginCodePurpose, userID *uuid.UUID, now time.Time) (LoginCode, error) {
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return LoginCode{}, fmt.Errorf("generate login code id: %w", err)
 	}

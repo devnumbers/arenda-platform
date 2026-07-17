@@ -17,6 +17,7 @@ const (
 )
 
 type Session struct {
+	ID     uuid.UUID
 	UserID uuid.UUID
 	// TokenHash is intentionally left empty by NewSession. The caller must hash
 	// the raw token (RawSession.Token) and set this field before persisting.
@@ -65,10 +66,15 @@ func NewSession(userID uuid.UUID, now time.Time) (RawSession, error) {
 	if _, err := rand.Read(b); err != nil {
 		return RawSession{}, fmt.Errorf("generate token: %w", err)
 	}
+	id, err := uuid.NewV7()
+	if err != nil {
+		return RawSession{}, fmt.Errorf("generate session id: %w", err)
+	}
 	token := hex.EncodeToString(b)
 	return RawSession{
 		Token: token,
 		Session: Session{
+			ID:         id,
 			UserID:     userID,
 			TokenHash:  "",
 			ExpiresAt:  now.Add(SessionBaseTTL),

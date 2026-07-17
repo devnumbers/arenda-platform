@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
@@ -61,6 +63,7 @@ type OperationService struct {
 	categories   OperationCategoryRepository
 	scheduler    ReminderScheduler
 	db           txBeginner
+	audit        auditapp.Recorder
 	clock        clock.Clock
 	logger       *slog.Logger
 }
@@ -74,6 +77,7 @@ func NewOperationService(
 	categories OperationCategoryRepository,
 	scheduler ReminderScheduler,
 	db txBeginner,
+	audit auditapp.Recorder,
 	clock clock.Clock,
 	logger *slog.Logger,
 ) *OperationService {
@@ -89,6 +93,9 @@ func NewOperationService(
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if audit == nil {
+		audit = auditapp.Noop{}
+	}
 	return &OperationService{
 		operations:   operations,
 		properties:   properties,
@@ -97,6 +104,7 @@ func NewOperationService(
 		categories:   categories,
 		scheduler:    scheduler,
 		db:           db,
+		audit:        audit,
 		clock:        clock,
 		logger:       logger,
 	}
@@ -138,7 +146,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		return domain.Operation{}, err
 	}
 
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return domain.Operation{}, fmt.Errorf("generate operation id: %w", err)
 	}
@@ -195,6 +203,26 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 				return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
 			}
 		}
+	}
+
+	opCtx := map[string]any{
+		"property_id":    created.PropertyID,
+		"type":           string(created.Type),
+		"amount_kopecks": created.AmountKopecks,
+		"operation_date": created.OperationDate.Format(time.DateOnly),
+	}
+	if created.LeaseID != uuid.Nil {
+		opCtx["lease_id"] = created.LeaseID
+	}
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionOperationCreated,
+		EntityType: auditdomain.EntityOperation,
+		EntityID:   &created.ID,
+		Context:    opCtx,
+	}); err != nil {
+		return domain.Operation{}, fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -412,6 +440,17 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 		}
 	}
 
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionOperationUpdated,
+		EntityType: auditdomain.EntityOperation,
+		EntityID:   &id,
+		Context:    map[string]any{"fields": updatedOperationFields(cmd)},
+	}); err != nil {
+		return domain.Operation{}, fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Operation{}, fmt.Errorf("commit tx: %w", err)
 	}
@@ -474,6 +513,17 @@ func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOp
 		if err := txScheduler.CancelOverdueReminderByOperation(ctx, cmd.OwnerID, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel overdue reminders: %w", err)
 		}
+	}
+
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &cmd.OwnerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionOperationCompleted,
+		EntityType: auditdomain.EntityOperation,
+		EntityID:   &cmd.OperationID,
+		Context:    map[string]any{"property_id": op.PropertyID},
+	}); err != nil {
+		return domain.Operation{}, fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -560,6 +610,17 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 		}
 	}
 
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &cmd.OwnerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionOperationMarkedIncomplete,
+		EntityType: auditdomain.EntityOperation,
+		EntityID:   &cmd.OperationID,
+		Context:    map[string]any{"property_id": op.PropertyID},
+	}); err != nil {
+		return domain.Operation{}, fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Operation{}, fmt.Errorf("commit tx: %w", err)
 	}
@@ -637,6 +698,17 @@ func (s *OperationService) ProcessOverdueOperation(ctx context.Context, ownerID,
 		}
 	}
 
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionOperationUpdated,
+		EntityType: auditdomain.EntityOperation,
+		EntityID:   &operationID,
+		Context:    map[string]any{"trigger": "scheduler", "fields": []string{"status"}},
+	}); err != nil {
+		return false, fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit tx: %w", err)
 	}
@@ -681,6 +753,17 @@ func (s *OperationService) DeleteOperation(ctx context.Context, ownerID, id uuid
 		if err := txScheduler.CancelOverdueReminderByOperation(ctx, ownerID, id); err != nil {
 			return fmt.Errorf("cancel overdue reminders: %w", err)
 		}
+	}
+
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionOperationDeleted,
+		EntityType: auditdomain.EntityOperation,
+		EntityID:   &id,
+		Context:    map[string]any{"property_id": op.PropertyID},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -760,4 +843,35 @@ func (s *OperationService) resolveLeaseID(ctx context.Context, ownerID, property
 	}
 
 	return lease.ID, nil
+}
+
+// updatedOperationFields lists the names of the fields a command changes. Only
+// field names are audited, never their values.
+func updatedOperationFields(cmd UpdateOperationCommand) []string {
+	fields := make([]string, 0, 8)
+	if cmd.Type != nil {
+		fields = append(fields, "type")
+	}
+	if cmd.CategoryID != nil {
+		fields = append(fields, "category_id")
+	}
+	if cmd.Name != nil {
+		fields = append(fields, "name")
+	}
+	if cmd.AmountKopecks != nil {
+		fields = append(fields, "amount_kopecks")
+	}
+	if cmd.OperationDate != nil {
+		fields = append(fields, "operation_date")
+	}
+	if cmd.Comment != nil {
+		fields = append(fields, "comment")
+	}
+	if cmd.LeaseID != nil {
+		fields = append(fields, "lease_id")
+	}
+	if cmd.ReminderOffsetDays != nil {
+		fields = append(fields, "reminder_offset_days")
+	}
+	return fields
 }

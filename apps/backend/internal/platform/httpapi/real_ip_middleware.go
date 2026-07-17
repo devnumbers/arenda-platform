@@ -5,12 +5,15 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/requestctx"
 )
 
 // realIPMiddleware returns a middleware that extracts the client IP from
 // X-Forwarded-For or X-Real-IP headers when the immediate remote address is a
 // trusted proxy. It replaces chi's deprecated middleware.RealIP with an
-// explicit, proxy-aware strategy.
+// explicit, proxy-aware strategy. The plain host form of the extracted IP is
+// also stored in the request context for audit logging.
 func realIPMiddleware(trusted []string) func(http.Handler) http.Handler {
 	trustedNets := make([]*net.IPNet, 0, len(trusted))
 	for _, cidr := range trusted {
@@ -24,8 +27,15 @@ func realIPMiddleware(trusted []string) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.RemoteAddr = extractClientIP(r, trustedNets)
-			next.ServeHTTP(w, r)
+			ip := extractClientIP(r, trustedNets)
+			r.RemoteAddr = ip
+			// extractClientIP may keep the original host:port for direct
+			// connections; the context carries the plain host form.
+			ctxIP := ip
+			if host, _, err := net.SplitHostPort(ip); err == nil {
+				ctxIP = host
+			}
+			next.ServeHTTP(w, r.WithContext(requestctx.WithClientIP(r.Context(), ctxIP)))
 		})
 	}
 }

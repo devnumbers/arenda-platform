@@ -20,26 +20,37 @@ type UserRepository interface {
 
 // PropertyRepository provides cross-user property reads for the admin context.
 type PropertyRepository interface {
-	ListUserProperties(ctx context.Context, userID uuid.UUID, filters AdminPropertyFilters) ([]AdminPropertyView, int64, error)
+	ListProperties(ctx context.Context, filters AdminPropertyFilters) ([]AdminPropertyView, int64, error)
 	GetProperty(ctx context.Context, id uuid.UUID) (AdminPropertyView, error)
 }
 
 // LeaseRepository provides cross-user lease reads for the admin context.
 type LeaseRepository interface {
-	ListUserLeases(ctx context.Context, userID uuid.UUID, filters AdminListFilters) ([]AdminLeaseView, int64, error)
+	ListLeases(ctx context.Context, filters AdminLeaseFilters) ([]AdminLeaseView, int64, error)
 	GetLease(ctx context.Context, id uuid.UUID) (AdminLeaseView, error)
 }
 
 // TenantContactRepository provides cross-user tenant contact reads for the admin context.
 type TenantContactRepository interface {
-	ListUserTenantContacts(ctx context.Context, userID uuid.UUID, filters AdminListFilters) ([]AdminTenantContactView, int64, error)
+	ListTenantContacts(ctx context.Context, filters AdminTenantContactFilters) ([]AdminTenantContactView, int64, error)
 	GetTenantContact(ctx context.Context, id uuid.UUID) (AdminTenantContactView, error)
 }
 
 // OperationRepository provides cross-user operation reads for the admin context.
 type OperationRepository interface {
-	ListUserOperations(ctx context.Context, userID uuid.UUID, filters AdminOperationFilters) ([]AdminOperationView, int64, error)
+	ListOperations(ctx context.Context, filters AdminOperationFilters) ([]AdminOperationView, int64, error)
 	GetOperation(ctx context.Context, id uuid.UUID) (AdminOperationView, error)
+}
+
+// StatsRepository provides platform-wide aggregates for the admin dashboard.
+type StatsRepository interface {
+	GetStats(ctx context.Context) (AdminStatsView, error)
+}
+
+// AuditLogRepository provides cross-user audit log reads for the admin context.
+type AuditLogRepository interface {
+	ListAuditLogs(ctx context.Context, filters AdminAuditLogFilters) ([]AdminAuditLogView, int64, error)
+	GetAuditLog(ctx context.Context, id uuid.UUID) (AdminAuditLogView, error)
 }
 
 // SubscriptionProvider loads a user's subscription for the admin detail view.

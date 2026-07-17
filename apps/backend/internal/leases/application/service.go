@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
@@ -49,6 +51,7 @@ type LeaseService struct {
 	categories     OperationCategoryRepository
 	scheduler      notificationsapp.ReminderScheduler
 	db             txBeginner
+	audit          auditapp.Recorder
 	clock          clock.Clock
 	logger         *slog.Logger
 }
@@ -62,6 +65,7 @@ func NewLeaseService(
 	categories OperationCategoryRepository,
 	scheduler notificationsapp.ReminderScheduler,
 	db txBeginner,
+	audit auditapp.Recorder,
 	clock clock.Clock,
 	logger *slog.Logger,
 ) *LeaseService {
@@ -77,6 +81,9 @@ func NewLeaseService(
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if audit == nil {
+		audit = auditapp.Noop{}
+	}
 	return &LeaseService{
 		leases:         leases,
 		properties:     properties,
@@ -86,6 +93,7 @@ func NewLeaseService(
 		categories:     categories,
 		scheduler:      scheduler,
 		db:             db,
+		audit:          audit,
 		clock:          clock,
 		logger:         logger,
 	}
@@ -158,7 +166,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		return domain.Lease{}, fmt.Errorf("create lease: %w", err)
 	}
 
-	recurringOpID, err := uuid.NewRandom()
+	recurringOpID, err := uuid.NewV7()
 	if err != nil {
 		return domain.Lease{}, fmt.Errorf("generate recurring operation id: %w", err)
 	}
@@ -186,7 +194,10 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		return domain.Lease{}, fmt.Errorf("create recurring operation: %w", err)
 	}
 
-	ops := txRentService.GenerateRentOperations(ctx, created, createdRecurring.ID, ownerID, rentCategoryID)
+	ops, err := txRentService.GenerateRentOperations(ctx, created, createdRecurring.ID, ownerID, rentCategoryID)
+	if err != nil {
+		return domain.Lease{}, fmt.Errorf("generate rent operations: %w", err)
+	}
 	if len(ops) > 0 {
 		if err := txOps.BulkCreate(ctx, ops); err != nil {
 			return domain.Lease{}, fmt.Errorf("bulk create operations: %w", err)
@@ -203,6 +214,20 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		}); err != nil {
 			return domain.Lease{}, fmt.Errorf("schedule lease reminders: %w", err)
 		}
+	}
+
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionLeaseCreated,
+		EntityType: auditdomain.EntityLease,
+		EntityID:   &created.ID,
+		Context: map[string]any{
+			"property_id":         created.PropertyID,
+			"rent_amount_kopecks": created.RentAmountKopecks,
+		},
+	}); err != nil {
+		return domain.Lease{}, fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -392,6 +417,17 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 		}
 	}
 
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionLeaseUpdated,
+		EntityType: auditdomain.EntityLease,
+		EntityID:   &id,
+		Context:    map[string]any{"fields": updatedLeaseFields(cmd)},
+	}); err != nil {
+		return domain.Lease{}, fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Lease{}, fmt.Errorf("commit tx: %w", err)
 	}
@@ -407,6 +443,34 @@ func endDatesEqual(a, b *time.Time) bool {
 		return false
 	}
 	return a.Equal(*b)
+}
+
+// updatedLeaseFields lists the names of the fields a command changes. Only
+// field names are audited, never their values.
+func updatedLeaseFields(cmd UpdateLeaseCommand) []string {
+	fields := make([]string, 0, 7)
+	if cmd.TenantContactID != nil || (cmd.ClearTenantContact != nil && *cmd.ClearTenantContact) {
+		fields = append(fields, "tenant_contact_id")
+	}
+	if cmd.StartDate != nil {
+		fields = append(fields, "start_date")
+	}
+	if cmd.EndDate != nil {
+		fields = append(fields, "end_date")
+	}
+	if cmd.RentAmountKopecks != nil {
+		fields = append(fields, "rent_amount_kopecks")
+	}
+	if cmd.DepositAmountKopecks != nil {
+		fields = append(fields, "deposit_amount_kopecks")
+	}
+	if cmd.PaymentDay != nil {
+		fields = append(fields, "payment_day")
+	}
+	if cmd.Comment != nil {
+		fields = append(fields, "comment")
+	}
+	return fields
 }
 
 func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID) (domain.Lease, error) {
@@ -469,6 +533,17 @@ func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID)
 				return domain.Lease{}, fmt.Errorf("cancel recurring operation reminders: %w", err)
 			}
 		}
+	}
+
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionLeaseCompleted,
+		EntityType: auditdomain.EntityLease,
+		EntityID:   &id,
+		Context:    map[string]any{"property_id": lease.PropertyID},
+	}); err != nil {
+		return domain.Lease{}, fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

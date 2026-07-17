@@ -1671,6 +1671,25 @@ paths:
           required: false
           schema:
             $ref: '#/components/schemas/SubscriptionPaymentStatus'
+        - name: user_phone
+          in: query
+          required: false
+          description: Exact match on the user's phone number.
+          schema:
+            type: string
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: createdAt, amountKopecks, status. Defaults to createdAt descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
         - name: limit
           in: query
           required: false
@@ -1826,6 +1845,19 @@ paths:
           required: false
           schema:
             $ref: '#/components/schemas/SubscriptionStatus'
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: createdAt, updatedAt. Defaults to createdAt descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
       responses:
         '200':
           description: Admin users list
@@ -1906,6 +1938,19 @@ paths:
             type: string
             enum: [active, archived, all]
             default: all
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: name, createdAt, updatedAt, status. Defaults to updatedAt descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
       responses:
         '200':
           description: Admin user properties list
@@ -1951,6 +1996,19 @@ paths:
             type: integer
             default: 0
             minimum: 0
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: startDate, updatedAt, status, rentAmountKopecks. Defaults to updatedAt descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
       responses:
         '200':
           description: Admin user leases list
@@ -1996,6 +2054,19 @@ paths:
             type: integer
             default: 0
             minimum: 0
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: name, updatedAt. Defaults to updatedAt descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
       responses:
         '200':
           description: Admin user tenant contacts list
@@ -2063,6 +2134,19 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: operationDate, amountKopecks, status. Defaults to operationDate descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
       responses:
         '200':
           description: Admin user operations list
@@ -2078,6 +2162,75 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/properties:
+    get:
+      operationId: listAdminProperties
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, archived, all]
+            default: all
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive substring search by name and address.
+          schema:
+            type: string
+        - name: owner_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: name, createdAt, updatedAt, status. Defaults to updatedAt descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Admin properties list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPropertiesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -2111,6 +2264,74 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /admin/leases:
+    get:
+      operationId: listAdminLeases
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: status
+          in: query
+          required: false
+          description: Filter by the stored lease status.
+          schema:
+            $ref: '#/components/schemas/LeaseStatus'
+        - name: property_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: owner_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: startDate, updatedAt, status, rentAmountKopecks. Defaults to updatedAt descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Admin leases list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLeasesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /admin/leases/{id}:
     get:
       operationId: getAdminLease
@@ -2138,6 +2359,68 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/tenant-contacts:
+    get:
+      operationId: listAdminTenantContacts
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive substring search by name, surname and phone.
+          schema:
+            type: string
+        - name: owner_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: name, updatedAt. Defaults to updatedAt descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Admin tenant contacts list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTenantContactsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -2171,6 +2454,90 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /admin/operations:
+    get:
+      operationId: listAdminOperations
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OperationStatus'
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OperationType'
+        - name: property_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: lease_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: owner_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive substring search by operation name and comment.
+          schema:
+            type: string
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: operationDate, amountKopecks, status. Defaults to operationDate descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Admin operations list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOperationsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /admin/operations/{id}:
     get:
       operationId: getAdminOperation
@@ -2190,6 +2557,221 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdminOperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Platform-wide counters and recent activity for the admin dashboard
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/audit-logs:
+    get:
+      operationId: listAdminAuditLogs
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: actor_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          required: false
+          description: Exact action filter, e.g. auth.login.
+          schema:
+            type: string
+        - name: entity_type
+          in: query
+          required: false
+          description: Exact entity type filter, e.g. property.
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          required: false
+          description: Inclusive lower bound on createdAt (date at 00:00:00 UTC).
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          required: false
+          description: Inclusive upper bound on createdAt (matched as date + 24h, exclusive).
+          schema:
+            type: string
+            format: date
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: createdAt. Defaults to createdAt descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Admin audit log list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuditLogsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/audit-logs/{id}:
+    get:
+      operationId: getAdminAuditLog
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Admin audit log entry details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuditLogResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{id}/audit-logs:
+    get:
+      operationId: listAdminUserAuditLogs
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: action
+          in: query
+          required: false
+          description: Exact action filter, e.g. auth.login.
+          schema:
+            type: string
+        - name: entity_type
+          in: query
+          required: false
+          description: Exact entity type filter, e.g. property.
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          required: false
+          description: Inclusive lower bound on createdAt (date at 00:00:00 UTC).
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          required: false
+          description: Inclusive upper bound on createdAt (matched as date + 24h, exclusive).
+          schema:
+            type: string
+            format: date
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: createdAt. Defaults to createdAt descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Admin audit log list for one user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuditLogsResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2223,6 +2805,23 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /client-errors:
+    post:
+      operationId: reportClientError
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientErrorReport'
+      responses:
+        '204':
+          description: Error report accepted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
   /webhooks/payment/{provider}:
     post:
@@ -2606,6 +3205,10 @@ components:
         patronymic:
           type: string
           nullable: true
+        subscriptionStatus:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/SubscriptionStatus'
         createdAt:
           type: string
           format: date-time
@@ -2654,7 +3257,7 @@ components:
 
     AdminProperty:
       type: object
-      required: [id, ownerId, name, type, address, status, occupancy, createdAt, updatedAt]
+      required: [id, ownerId, ownerPhone, name, type, address, status, occupancy, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -2662,6 +3265,8 @@ components:
         ownerId:
           type: string
           format: uuid
+        ownerPhone:
+          type: string
         name:
           type: string
         type:
@@ -2701,7 +3306,7 @@ components:
 
     AdminLease:
       type: object
-      required: [id, ownerId, propertyId, status, startDate, rentAmountKopecks, depositAmountKopecks, paymentDay, createdAt, updatedAt]
+      required: [id, ownerId, propertyId, propertyName, status, startDate, rentAmountKopecks, depositAmountKopecks, paymentDay, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -2712,6 +3317,8 @@ components:
         propertyId:
           type: string
           format: uuid
+        propertyName:
+          type: string
         tenantContact:
           nullable: true
           allOf:
@@ -2754,7 +3361,7 @@ components:
 
     AdminTenantContact:
       type: object
-      required: [id, ownerId, name, createdAt, updatedAt]
+      required: [id, ownerId, ownerPhone, name, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -2762,6 +3369,8 @@ components:
         ownerId:
           type: string
           format: uuid
+        ownerPhone:
+          type: string
         name:
           type: string
         surname:
@@ -2799,7 +3408,7 @@ components:
 
     AdminOperation:
       type: object
-      required: [id, ownerId, propertyId, type, categoryId, categoryName, name, amountKopecks, operationDate, status, isException, createdAt, updatedAt]
+      required: [id, ownerId, propertyId, propertyName, type, categoryId, categoryName, name, amountKopecks, operationDate, status, isException, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -2810,6 +3419,8 @@ components:
         propertyId:
           type: string
           format: uuid
+        propertyName:
+          type: string
         leaseId:
           type: string
           format: uuid
@@ -2888,6 +3499,134 @@ components:
       properties:
         operation:
           $ref: '#/components/schemas/AdminOperation'
+
+    AdminAuditLog:
+      type: object
+      required: [id, actorRole, action, context, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        actorId:
+          type: string
+          format: uuid
+          nullable: true
+        actorRole:
+          type: string
+          enum: [owner, admin, system, anonymous]
+        action:
+          type: string
+        entityType:
+          type: string
+          nullable: true
+        entityId:
+          type: string
+          format: uuid
+          nullable: true
+        context:
+          type: object
+          additionalProperties: true
+        requestId:
+          type: string
+          nullable: true
+        ip:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminAuditLogsResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAuditLog'
+        total:
+          type: integer
+
+    AdminAuditLogResponse:
+      type: object
+      required: [auditLog]
+      properties:
+        auditLog:
+          $ref: '#/components/schemas/AdminAuditLog'
+
+    AdminStatsRecentUser:
+      type: object
+      required: [id, phone, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        phone:
+          type: string
+        name:
+          type: string
+          nullable: true
+        surname:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminStatsRecentPayment:
+      type: object
+      required: [id, userId, userPhone, amountKopecks, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        userPhone:
+          type: string
+        amountKopecks:
+          type: integer
+          format: int64
+        status:
+          $ref: '#/components/schemas/SubscriptionPaymentStatus'
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminStats:
+      type: object
+      required: [usersTotal, usersNewLast30d, subscriptionsActive, propertiesActive, propertiesArchived, leasesTotal, operationsTotal, paymentsSucceededTotalKopecksLast30d, paymentsFailedCountLast30d, paymentsRefundedCountLast30d, recentUsers, recentPayments]
+      properties:
+        usersTotal:
+          type: integer
+        usersNewLast30d:
+          type: integer
+        subscriptionsActive:
+          type: integer
+        propertiesActive:
+          type: integer
+        propertiesArchived:
+          type: integer
+        leasesTotal:
+          type: integer
+        operationsTotal:
+          type: integer
+        paymentsSucceededTotalKopecksLast30d:
+          type: integer
+          format: int64
+        paymentsFailedCountLast30d:
+          type: integer
+        paymentsRefundedCountLast30d:
+          type: integer
+        recentUsers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminStatsRecentUser'
+        recentPayments:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminStatsRecentPayment'
 
     Problem:
       type: object
@@ -3286,7 +4025,7 @@ components:
 
     SubscriptionPaymentStatus:
       type: string
-      enum: [pending, succeeded, failed, refunded, partial_refunded]
+      enum: [pending, succeeded, failed, refunded, partial_refunded, refunding]
 
     AdminSubscriptionPaymentPeriod:
       type: string
@@ -3776,6 +4515,27 @@ components:
           type: integer
         profit_kopecks:
           type: integer
+
+    ClientErrorReport:
+      type: object
+      required: [app, message]
+      properties:
+        app:
+          type: string
+          enum: [frontend, admin, landing]
+          description: Application that reported the error
+        message:
+          type: string
+          maxLength: 500
+          description: Error message reported by the browser
+        stack:
+          type: string
+          maxLength: 4000
+          description: Optional stack trace
+        url:
+          type: string
+          maxLength: 500
+          description: Page URL where the error occurred
 
   responses:
     BadRequest:

@@ -1,0 +1,64 @@
+# OpenTelemetry Collector configuration — Arenda Platform observability stack.
+# Collects host metrics and per-container docker stats, exports to Uptrace.
+# References:
+#   https://opentelemetry.io/docs/collector/configuration/
+#   https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/hostmetricsreceiver
+#   https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/dockerstatsreceiver
+#   https://uptrace.dev/ingest/collector.html
+# ${UPTRACE_DSN} is expanded by the collector from the container env (.env.obs).
+
+extensions:
+  health_check:
+
+receivers:
+  hostmetrics:
+    collection_interval: 30s
+    # / is bind-mounted at /hostfs (ro) so metrics describe the host,
+    # not the container.
+    root_path: /hostfs
+    scrapers:
+      cpu:
+      load:
+      memory:
+      disk:
+      filesystem:
+      network:
+      paging:
+
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 30s
+    timeout: 10s
+    container_labels_to_metric_labels:
+      com.docker.compose.project: docker_compose_project
+      com.docker.compose.service: docker_compose_service
+
+processors:
+  batch:
+    send_batch_size: 1000
+    timeout: 10s
+
+  resource:
+    attributes:
+      - key: env
+        value: host
+        action: upsert
+      - key: service.name
+        value: arenda-host
+        action: upsert
+
+exporters:
+  otlp/uptrace:
+    endpoint: uptrace:14317
+    tls:
+      insecure: true
+    headers:
+      uptrace-dsn: ${UPTRACE_DSN}
+
+service:
+  extensions: [health_check]
+  pipelines:
+    metrics:
+      receivers: [hostmetrics, docker_stats]
+      processors: [batch, resource]
+      exporters: [otlp/uptrace]

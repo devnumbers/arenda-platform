@@ -12,12 +12,13 @@ import (
 )
 
 const createOperationCategory = `-- name: CreateOperationCategory :one
-INSERT INTO operation_categories (owner_id, type, name, code)
-VALUES ($1, $2, $3, $4)
+INSERT INTO operation_categories (id, owner_id, type, name, code)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id, owner_id, type, name, code, created_at, updated_at
 `
 
 type CreateOperationCategoryParams struct {
+	ID      pgtype.UUID `json:"id"`
 	OwnerID pgtype.UUID `json:"owner_id"`
 	Type    string      `json:"type"`
 	Name    string      `json:"name"`
@@ -26,6 +27,7 @@ type CreateOperationCategoryParams struct {
 
 func (q *Queries) CreateOperationCategory(ctx context.Context, arg CreateOperationCategoryParams) (OperationCategory, error) {
 	row := q.db.QueryRow(ctx, createOperationCategory,
+		arg.ID,
 		arg.OwnerID,
 		arg.Type,
 		arg.Name,
@@ -45,12 +47,13 @@ func (q *Queries) CreateOperationCategory(ctx context.Context, arg CreateOperati
 }
 
 const createOperationCategoryIgnoreConflict = `-- name: CreateOperationCategoryIgnoreConflict :exec
-INSERT INTO operation_categories (owner_id, type, name, code)
-VALUES ($1, $2, $3, $4)
+INSERT INTO operation_categories (id, owner_id, type, name, code)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (owner_id, type, lower(name)) DO NOTHING
 `
 
 type CreateOperationCategoryIgnoreConflictParams struct {
+	ID      pgtype.UUID `json:"id"`
 	OwnerID pgtype.UUID `json:"owner_id"`
 	Type    string      `json:"type"`
 	Name    string      `json:"name"`
@@ -59,6 +62,7 @@ type CreateOperationCategoryIgnoreConflictParams struct {
 
 func (q *Queries) CreateOperationCategoryIgnoreConflict(ctx context.Context, arg CreateOperationCategoryIgnoreConflictParams) error {
 	_, err := q.db.Exec(ctx, createOperationCategoryIgnoreConflict,
+		arg.ID,
 		arg.OwnerID,
 		arg.Type,
 		arg.Name,

@@ -1,11 +1,11 @@
 -- name: CreateOperationCategory :one
-INSERT INTO operation_categories (owner_id, type, name, code)
-VALUES ($1, $2, $3, $4)
+INSERT INTO operation_categories (id, owner_id, type, name, code)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: CreateOperationCategoryIgnoreConflict :exec
-INSERT INTO operation_categories (owner_id, type, name, code)
-VALUES ($1, $2, $3, $4)
+INSERT INTO operation_categories (id, owner_id, type, name, code)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (owner_id, type, lower(name)) DO NOTHING;
 
 -- name: ListOperationCategoriesByOwner :many

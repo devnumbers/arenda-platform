@@ -74,7 +74,7 @@ var (
 )
 
 func NewLease(ownerID, propertyID uuid.UUID, startDate time.Time, rent int64, paymentDay int) (Lease, error) {
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return Lease{}, fmt.Errorf("generate lease id: %w", err)
 	}

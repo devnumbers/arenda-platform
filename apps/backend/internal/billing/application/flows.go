@@ -153,6 +153,9 @@ func recoverPaymentMethodRebillID(ctx context.Context, d recoverPaymentMethodDep
 			slog.String("error", sanitize.Error(err)))
 		return
 	}
+	// Deliberately not audited as payment_method.added: the idempotent upsert
+	// cannot distinguish an insert from an update, and the AddCard webhook
+	// flow already records the user-visible addition.
 	pm, err = txPaymentMethods.UpsertByTokenHash(ctx, pm)
 	if err != nil {
 		d.log.ErrorContext(ctx, "failed to upsert payment method for token recovery",

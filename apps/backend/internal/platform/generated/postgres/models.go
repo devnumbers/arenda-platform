@@ -7,6 +7,7 @@ package postgres
 import (
 	"database/sql/driver"
 	"fmt"
+	"net/netip"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -141,6 +142,19 @@ func (ns NullNotificationTargetType) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.NotificationTargetType), nil
+}
+
+type AuditLog struct {
+	ID         pgtype.UUID        `json:"id"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ActorID    pgtype.UUID        `json:"actor_id"`
+	ActorRole  string             `json:"actor_role"`
+	Action     string             `json:"action"`
+	EntityType pgtype.Text        `json:"entity_type"`
+	EntityID   pgtype.UUID        `json:"entity_id"`
+	Context    []byte             `json:"context"`
+	RequestID  pgtype.Text        `json:"request_id"`
+	Ip         *netip.Addr        `json:"ip"`
 }
 
 type Lease struct {

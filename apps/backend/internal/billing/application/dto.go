@@ -63,6 +63,12 @@ type AdminSubscriptionPaymentView struct {
 type ListAllPaymentsFilters struct {
 	Status string
 	UserID uuid.UUID
-	Limit  int
-	Offset int
+	// UserPhone filters by the exact user phone number. The repository
+	// deterministically encrypts it before matching, like the admin users
+	// phone filter.
+	UserPhone string
+	Limit     int
+	Offset    int
+	Sort      string
+	Order     string
 }

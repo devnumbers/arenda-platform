@@ -21,7 +21,8 @@ var mutatingMethods = map[string]struct{}{
 
 // readonlyExemptPrefixes are the path prefixes that remain writable even when
 // the subscription does not allow data mutations. These are the recovery paths
-// (auth, tariffs, subscription management, webhooks, internal dev tools).
+// (auth, tariffs, subscription management, webhooks, internal dev tools) and
+// public endpoints that must always stay available (/client-errors).
 var readonlyExemptPrefixes = []string{
 	"/auth",
 	"/tariffs",
@@ -33,6 +34,7 @@ var readonlyExemptPrefixes = []string{
 	"/internal",
 	"/me",
 	"/admin",
+	"/client-errors",
 }
 
 func isReadonlyExempt(path string) bool {

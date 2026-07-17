@@ -4,7 +4,7 @@
 
 Language of communication: Russian.
 
-Repository-level instructions only. Backend development rules live in `apps/backend/AGENTS.md`; frontend rules live in `apps/frontend/AGENTS.md`.
+Repository-level instructions only. Backend development rules live in `apps/backend/AGENTS.md`; frontend rules live in `apps/frontend/AGENTS.md`; admin rules live in `apps/admin/AGENTS.md`.
 
 ## Orchestrator Mode
 
@@ -20,16 +20,17 @@ The main Kimi Code agent is always an **Orchestrator**. It does not write, edit,
 - Arenda Platform is a rental property finance tracker for private owners and small rental businesses in Russia.
 - Backend: `apps/backend`, a separate Go module linked by root `go.work`.
 - Frontend: `apps/frontend`, a Next.js React application.
-- Admin: `apps/admin`, a Next.js React application.
+- Admin: `apps/admin`, a Vite + React SPA built on react-admin 5 and MUI 7 — a separate stack from the Next.js frontend; its rules live in `apps/admin/AGENTS.md`.
 - Landing: `apps/landing`, a standalone Vite + React SPA (export from Figma Make) served by nginx as the public site at `/`.
 - Product docs: `docs/`; domain glossary: `CONTEXT.md`; architecture decisions: `docs/adr/`.
 - Local infrastructure runs through `docker-compose.local.yml`; run the backend on the host with Go.
+- Observability: `docker-compose.obs.yml` + `observability/`, a self-hosted Uptrace stack (compose project `arenda-obs`) collecting stage/prod logs, traces, and metrics with Telegram alerts; see `docs/adr/0021-centralized-observability-uptrace.md` and `observability/README.md`.
 
 ## Work Rules
 
 - Before changing behavior, read `CONTEXT.md`, relevant docs under `docs/`, and relevant ADRs.
 - Check `git status` before edits and do not overwrite unrelated user changes.
-- For any work beyond a single factual answer or trivial lookup, use a multi-agent workflow: dispatch `explore` for read-only research, a `coder` worker for bounded implementation, and separate review passes for spec fit, code quality, and security-sensitive behavior.
+- For any work beyond a single factual answer or trivial lookup, use a multi-agent workflow: dispatch `explore` for read-only research, `plan` for read-only architecture and implementation design, a `coder` worker for bounded implementation, and separate review passes for spec fit, code quality, and security-sensitive behavior.
 - Subagents are mandatory. If they are unavailable, stop and tell the user instead of doing the work yourself.
 - The Orchestrator owns integration, verification, and the final answer.
 
@@ -37,10 +38,10 @@ The main Kimi Code agent is always an **Orchestrator**. It does not write, edit,
 
 - Follow the Orchestrator Mode rule: the main agent plans and coordinates; subagents execute.
 - For non-trivial work, follow the sequence: read-only exploration → short plan → bounded implementation → verification → review. Do not start implementation before the relevant code, docs, ADRs, and existing patterns are understood.
-- Dispatch subagents for each phase: `explore` for read-only repository research, a bounded worker for implementation, and separate review passes for spec fit, code quality, and security-sensitive behavior.
+- Dispatch subagents for each phase: `explore` for read-only repository research, `plan` for read-only architecture and implementation design, a `coder` worker for bounded implementation, and separate review passes for spec fit, code quality, and security-sensitive behavior.
 - Before adding new entities, helpers, use cases, interfaces, API contracts, or abstractions, search for existing equivalents and call sites with `Grep`, `lean-ctx`, and language-aware tools where available. Prefer existing project patterns over new conventions.
 - Use `lean-ctx` for broad repository exploration, large or generated files, noisy command output, and repeated reads. Before a subagent edits a file or relies on exact line-level behavior, read the relevant source in full or in precise raw ranges.
-- When a task depends on MCP tools, check Kimi `/mcp` status for the needed server. If a server is unavailable, state the fallback clearly and continue with standard repository tools where safe.
+- When a task depends on MCP tools, check that the server's `mcp__<name>__*` tools are present in the agent tool set before relying on them. If a server is unavailable, tell the user (they can inspect `/mcp` themselves), state the fallback clearly, and continue with standard repository tools where safe.
 - Do not grant broad wildcard trust such as `mcp__*` for high-risk tools. Destructive commands, credentials, migrations, external services, and dependency changes require explicit intent and normal repository safeguards.
 - Keep context small: summarize decisions, touched files, commands, and unresolved risks; clear unrelated context between separate tasks when working in Kimi.
 - Before claiming completion, run the relevant project checks and perform a fresh review of the diff for duplication, security regressions, and instruction conflicts.
@@ -66,6 +67,7 @@ The following MCP servers are configured in `~/.kimi-code/mcp.json`:
 - `context7` — official library and framework documentation. Fallback when unavailable: official docs via `FetchURL` or `WebSearch`.
 - `playwright` — browser automation and UI verification. Used by frontend work. Fallback when unavailable: manual inspection, build logs, or native browser tools.
 - `figma` — Figma design data and image exports. Fallback when unavailable: manual design references.
+- `heroui-react` — HeroUI v3 component docs, source, and theme tokens for the Next.js frontend. HeroUI v3 is beta and not covered by model training data, so verify components through this server before writing HeroUI code. Fallback when unavailable: official docs at https://v3.heroui.com via `FetchURL` or `WebSearch`.
 
 ## Commands
 
@@ -74,8 +76,18 @@ cp .env.example .env
 # Fill required local values in .env before backend-run.
 make local-infra-up
 make local-infra-down
+make obs-up
+make obs-down
+make obs-ps
+make obs-logs
 make backend-run
 make backend-lint
+make admin-install
+make admin-dev
+make admin-build
+make admin-typecheck
+make migrate-up
+make migrate-down
 make landing-install
 make landing-dev
 make landing-build

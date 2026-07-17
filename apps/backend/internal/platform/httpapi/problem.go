@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	billingdomain "github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
@@ -125,6 +126,10 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Способ оплаты уже добавлен", true
 	case errors.Is(err, billingapp.ErrInvalidFilter):
 		return "Некорректный фильтр", true
+
+	// Admin.
+	case errors.Is(err, adminapp.ErrInvalidFilter):
+		return "Некорректный параметр фильтра или сортировки", true
 
 	// Notifications / reminders.
 	case errors.Is(err, notificationsapp.ErrInvalidReminderDate):
