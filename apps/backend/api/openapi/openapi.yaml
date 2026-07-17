@@ -2587,6 +2587,202 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /admin/audit-logs:
+    get:
+      operationId: listAdminAuditLogs
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: actor_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          required: false
+          description: Exact action filter, e.g. auth.login.
+          schema:
+            type: string
+        - name: entity_type
+          in: query
+          required: false
+          description: Exact entity type filter, e.g. property.
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          required: false
+          description: Inclusive lower bound on createdAt (date at 00:00:00 UTC).
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          required: false
+          description: Inclusive upper bound on createdAt (matched as date + 24h, exclusive).
+          schema:
+            type: string
+            format: date
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: createdAt. Defaults to createdAt descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Admin audit log list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuditLogsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/audit-logs/{id}:
+    get:
+      operationId: getAdminAuditLog
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Admin audit log entry details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuditLogResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{id}/audit-logs:
+    get:
+      operationId: listAdminUserAuditLogs
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: action
+          in: query
+          required: false
+          description: Exact action filter, e.g. auth.login.
+          schema:
+            type: string
+        - name: entity_type
+          in: query
+          required: false
+          description: Exact entity type filter, e.g. property.
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          required: false
+          description: Inclusive lower bound on createdAt (date at 00:00:00 UTC).
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          required: false
+          description: Inclusive upper bound on createdAt (matched as date + 24h, exclusive).
+          schema:
+            type: string
+            format: date
+        - name: sort
+          in: query
+          required: false
+          description: 'Sort field (camelCase). Allowed: createdAt. Defaults to createdAt descending.'
+          schema:
+            type: string
+        - name: order
+          in: query
+          required: false
+          description: 'Sort direction: asc or desc (default desc).'
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Admin audit log list for one user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuditLogsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /internal/fake-subscription-payment/{id}/confirm:
     post:
       operationId: confirmFakeSubscriptionPayment
@@ -3286,6 +3482,60 @@ components:
       properties:
         operation:
           $ref: '#/components/schemas/AdminOperation'
+
+    AdminAuditLog:
+      type: object
+      required: [id, actorRole, action, context, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        actorId:
+          type: string
+          format: uuid
+          nullable: true
+        actorRole:
+          type: string
+          enum: [owner, admin, system, anonymous]
+        action:
+          type: string
+        entityType:
+          type: string
+          nullable: true
+        entityId:
+          type: string
+          format: uuid
+          nullable: true
+        context:
+          type: object
+          additionalProperties: true
+        requestId:
+          type: string
+          nullable: true
+        ip:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminAuditLogsResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAuditLog'
+        total:
+          type: integer
+
+    AdminAuditLogResponse:
+      type: object
+      required: [auditLog]
+      properties:
+        auditLog:
+          $ref: '#/components/schemas/AdminAuditLog'
 
     AdminStatsRecentUser:
       type: object

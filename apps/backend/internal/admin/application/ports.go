@@ -47,6 +47,12 @@ type StatsRepository interface {
 	GetStats(ctx context.Context) (AdminStatsView, error)
 }
 
+// AuditLogRepository provides cross-user audit log reads for the admin context.
+type AuditLogRepository interface {
+	ListAuditLogs(ctx context.Context, filters AdminAuditLogFilters) ([]AdminAuditLogView, int64, error)
+	GetAuditLog(ctx context.Context, id uuid.UUID) (AdminAuditLogView, error)
+}
+
 // SubscriptionProvider loads a user's subscription for the admin detail view.
 type SubscriptionProvider interface {
 	GetSubscription(ctx context.Context, userID uuid.UUID) (billingapp.SubscriptionView, error)

@@ -60,6 +60,7 @@ Follow the Orchestrator Mode from the root `AGENTS.md`. For backend tasks, the O
 - Use DDD, Clean Architecture, layered architecture, clean code, and idiomatic Go.
 - Keep the backend a DDD modular monolith until an ADR records a real reason to split services.
 - Current bounded contexts under `internal` include `identity`, `properties`, `leases`, `billing`, `notifications`, and `platform`. Add new contexts according to docs, glossary, and ADR boundaries.
+- `internal/audit` is the audit log module: `domain` holds the `Entry` model and the action registry, `application` exposes the `Recorder` port, `adapters/postgres` writes entries. Audit records go in the business operation's transaction (fail-safe: an insert error rolls the operation back); see `docs/adr/0020-audit-log.md`.
 - Layer direction is inward only: transport/adapters → application → domain.
 - Domain packages contain business language and rules only. They must not import HTTP, OpenAPI generated types, `pgx`, `sqlc`, `database/sql`, config, or adapters.
 - Application packages own use cases, ports, orchestration, transaction boundaries, and calls into domain code.
@@ -96,6 +97,7 @@ go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1 -config a
 - OpenTelemetry is the preferred tracing/metrics foundation. Start with HTTP, PostgreSQL/pgx, S3, and external API spans/metrics; keep exporters vendor-neutral through OTLP-compatible configuration. Do not add a concrete telemetry backend, Collector topology, production alerts, or SLO policy without a separate ADR.
 - Keep metric labels low-cardinality. Do not use user IDs, property IDs, phone numbers, addresses, object storage keys, or raw paths as labels.
 - OpenTelemetry Logs are not a required backend signal for now; structured `slog` stdout logs are the logging source of truth until an ADR changes that.
+- The audit log is not an observability log: business-audit records (who did what) persist to the `audit_log` table via `internal/audit` and are viewed in the admin panel, while structured `slog` stdout logs remain the source of truth for technical/operational logging. See `docs/adr/0020-audit-log.md`.
 
 ## Quality Gates
 

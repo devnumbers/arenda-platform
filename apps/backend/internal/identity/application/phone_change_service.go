@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -21,6 +23,7 @@ type PhoneChangeService struct {
 	clock    clock.Clock
 	db       transaction.Beginner
 	hasher   TokenHasher
+	audit    auditapp.Recorder
 }
 
 // PhoneChangeServiceConfig carries optional dependencies for PhoneChangeService.
@@ -29,12 +32,17 @@ type PhoneChangeServiceConfig struct {
 	Clock  clock.Clock
 	DB     transaction.Beginner
 	Hasher TokenHasher
+	Audit  auditapp.Recorder
 }
 
 // NewPhoneChangeService creates a PhoneChangeService.
 func NewPhoneChangeService(users UserRepository, codes LoginCodeRepository, attempts AttemptRepository, sessions SessionRepository, cfg PhoneChangeServiceConfig) *PhoneChangeService {
 	if cfg.Clock == nil {
 		cfg.Clock = clock.Real{}
+	}
+	audit := cfg.Audit
+	if audit == nil {
+		audit = auditapp.Noop{}
 	}
 	return &PhoneChangeService{
 		users:    users,
@@ -45,6 +53,7 @@ func NewPhoneChangeService(users UserRepository, codes LoginCodeRepository, atte
 		clock:    cfg.Clock,
 		db:       cfg.DB,
 		hasher:   cfg.Hasher,
+		audit:    audit,
 	}
 }
 
@@ -168,6 +177,16 @@ func (s *PhoneChangeService) ChangePhone(ctx context.Context, userID uuid.UUID, 
 	}
 	if err := txAttempts.DeleteByPhone(ctx, user.Phone); err != nil {
 		return domain.User{}, fmt.Errorf("reset old phone attempts: %w", err)
+	}
+
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &userID,
+		ActorRole:  AuditActorRole(user.Role),
+		Action:     auditdomain.ActionAuthPhoneChanged,
+		EntityType: auditdomain.EntityUser,
+		EntityID:   &userID,
+	}); err != nil {
+		return domain.User{}, fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

@@ -85,7 +85,7 @@ func TestListTenantContactsByIDs(t *testing.T) {
 			{ID: uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a05"), OwnerID: otherOwner, Name: "Other"},
 		},
 	}
-	svc := NewTenantContactService(repo, nil)
+	svc := NewTenantContactService(repo, nil, nil)
 
 	contacts, err := svc.ListTenantContactsByIDs(context.Background(), ownerID, []uuid.UUID{id1, id2})
 	if err != nil {
@@ -105,7 +105,7 @@ func TestListTenantContactsByIDs(t *testing.T) {
 func TestListTenantContactsByIDsEmpty(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	repo := &fakeTenantContactRepo{}
-	svc := NewTenantContactService(repo, nil)
+	svc := NewTenantContactService(repo, nil, nil)
 
 	contacts, err := svc.ListTenantContactsByIDs(context.Background(), ownerID, nil)
 	if err != nil {
@@ -119,7 +119,7 @@ func TestListTenantContactsByIDsEmpty(t *testing.T) {
 func TestListTenantContactsByIDsRepositoryError(t *testing.T) {
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	repo := &fakeTenantContactRepo{err: errors.New("boom")}
-	svc := NewTenantContactService(repo, nil)
+	svc := NewTenantContactService(repo, nil, nil)
 
 	_, err := svc.ListTenantContactsByIDs(context.Background(), ownerID, []uuid.UUID{uuid.New()})
 	if err == nil {
@@ -147,7 +147,7 @@ func setupUpdateTenantContactService(ownerID, contactID uuid.UUID) (*fakeTenantC
 			},
 		},
 	}
-	svc := NewTenantContactService(repo, nil)
+	svc := NewTenantContactService(repo, nil, nil)
 	return repo, svc
 }
 
@@ -413,7 +413,7 @@ func TestUpdateTenantContactDuplicatePhone(t *testing.T) {
 			},
 		},
 	}
-	svc := NewTenantContactService(repo, nil)
+	svc := NewTenantContactService(repo, nil, nil)
 
 	_, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID2, UpdateTenantContactCommand{
 		Phone: &phone1,

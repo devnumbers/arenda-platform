@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -41,6 +42,7 @@ type subscriptionServiceDeps struct {
 	subscriptionPayments SubscriptionPaymentRepository
 	paymentMethods       PaymentMethodRepository
 	beginner             transaction.Beginner
+	audit                auditapp.Recorder
 	clock                clock.Clock
 	log                  *slog.Logger
 	callbackBaseURL      string
@@ -51,6 +53,7 @@ type paymentMethodServiceDeps struct {
 	paymentMethods  PaymentMethodRepository
 	subscriptions   SubscriptionRepository
 	beginner        transaction.Beginner
+	audit           auditapp.Recorder
 	clock           clock.Clock
 	log             *slog.Logger
 	callbackBaseURL string
@@ -64,6 +67,7 @@ type paymentServiceDeps struct {
 	tariffs              TariffRepository
 	propertyArchiver     PropertyArchiver
 	beginner             transaction.Beginner
+	audit                auditapp.Recorder
 	clock                clock.Clock
 	log                  *slog.Logger
 }
@@ -88,6 +92,7 @@ type webhookServiceDeps struct {
 	tariffs              TariffRepository
 	propertyArchiver     PropertyArchiver
 	beginner             transaction.Beginner
+	audit                auditapp.Recorder
 	clock                clock.Clock
 	log                  *slog.Logger
 }
@@ -111,6 +116,7 @@ func NewServices(
 	subscriptionPayments SubscriptionPaymentRepository,
 	provider Provider,
 	beginner transaction.Beginner,
+	audit auditapp.Recorder,
 	clk clock.Clock,
 	log *slog.Logger,
 	callbackBaseURL string,
@@ -121,6 +127,9 @@ func NewServices(
 	if log == nil {
 		log = slog.Default()
 	}
+	if audit == nil {
+		audit = auditapp.Noop{}
+	}
 	return Services{
 		Tariffs: NewTariffService(tariffServiceDeps{tariffs: tariffs}),
 		Subscriptions: NewSubscriptionService(subscriptionServiceDeps{
@@ -129,6 +138,7 @@ func NewServices(
 			subscriptionPayments: subscriptionPayments,
 			paymentMethods:       paymentMethods,
 			beginner:             beginner,
+			audit:                audit,
 			clock:                clk,
 			log:                  log,
 			callbackBaseURL:      callbackBaseURL,
@@ -137,6 +147,7 @@ func NewServices(
 			paymentMethods:  paymentMethods,
 			subscriptions:   subscriptions,
 			beginner:        beginner,
+			audit:           audit,
 			clock:           clk,
 			log:             log,
 			callbackBaseURL: callbackBaseURL,
@@ -148,6 +159,7 @@ func NewServices(
 			tariffs:              tariffs,
 			propertyArchiver:     propertyArchiver,
 			beginner:             beginner,
+			audit:                audit,
 			clock:                clk,
 			log:                  log,
 		}, provider),
@@ -158,6 +170,7 @@ func NewServices(
 			tariffs:              tariffs,
 			propertyArchiver:     propertyArchiver,
 			beginner:             beginner,
+			audit:                audit,
 			clock:                clk,
 			log:                  log,
 		}, provider),

@@ -55,7 +55,7 @@ func (f *fakeCategoryRepo) WithTx(tx transaction.Tx) OperationCategoryRepository
 }
 
 func TestCreateOperationCategoryCommand_Validate(t *testing.T) {
-	svc := NewCategoryService(&fakeCategoryRepo{})
+	svc := NewCategoryService(&fakeCategoryRepo{}, nil)
 
 	_, err := svc.CreateCategory(context.Background(), uuid.New(), CreateOperationCategoryCommand{Type: "invalid", Name: "Foo"})
 	if err == nil {
@@ -72,7 +72,7 @@ func TestCategoryService_CreateCategory(t *testing.T) {
 	ctx := t.Context()
 	owner := uuid.New()
 	repo := &fakeCategoryRepo{}
-	svc := NewCategoryService(repo)
+	svc := NewCategoryService(repo, nil)
 
 	cat, err := svc.CreateCategory(ctx, owner, CreateOperationCategoryCommand{Type: "expense", Name: "Custom Expense"})
 	if err != nil {

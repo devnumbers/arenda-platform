@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
@@ -476,6 +477,143 @@ func (h *AdminHandlers) GetAdminStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, adminStatsResponse(view))
+}
+
+// ListAdminAuditLogs implements GET /admin/audit-logs.
+func (h *AdminHandlers) ListAdminAuditLogs(w http.ResponseWriter, r *http.Request, params openapi.ListAdminAuditLogsParams) {
+	filters := adminapp.AdminAuditLogFilters{Limit: 20, Offset: 0}
+	if params.Limit != nil {
+		filters.Limit = *params.Limit
+	}
+	if params.Offset != nil {
+		filters.Offset = *params.Offset
+	}
+	if params.ActorId != nil {
+		filters.ActorID = *params.ActorId
+	}
+	if params.Action != nil {
+		filters.Action = *params.Action
+	}
+	if params.EntityType != nil {
+		filters.EntityType = *params.EntityType
+	}
+	filters.DateFrom, filters.DateTo = auditLogDateRange(params.DateFrom, params.DateTo)
+	if params.Sort != nil {
+		filters.Sort = *params.Sort
+	}
+	if params.Order != nil {
+		filters.Order = string(*params.Order)
+	}
+
+	views, total, err := h.adminService.ListAuditLogs(r.Context(), filters)
+	if err != nil {
+		h.handleAdminError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.AdminAuditLog, 0, len(views))
+	for _, v := range views {
+		items = append(items, adminAuditLogResponse(v))
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, openapi.AdminAuditLogsResponse{
+		Items: items,
+		Total: int(total),
+	})
+}
+
+// GetAdminAuditLog implements GET /admin/audit-logs/{id}.
+func (h *AdminHandlers) GetAdminAuditLog(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	view, err := h.adminService.GetAuditLog(r.Context(), id)
+	if err != nil {
+		h.handleAdminError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, openapi.AdminAuditLogResponse{
+		AuditLog: adminAuditLogResponse(view),
+	})
+}
+
+// ListAdminUserAuditLogs implements GET /admin/users/{id}/audit-logs.
+func (h *AdminHandlers) ListAdminUserAuditLogs(w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserAuditLogsParams) {
+	filters := adminapp.AdminAuditLogFilters{Limit: 20, Offset: 0}
+	if params.Limit != nil {
+		filters.Limit = *params.Limit
+	}
+	if params.Offset != nil {
+		filters.Offset = *params.Offset
+	}
+	if params.Action != nil {
+		filters.Action = *params.Action
+	}
+	if params.EntityType != nil {
+		filters.EntityType = *params.EntityType
+	}
+	filters.DateFrom, filters.DateTo = auditLogDateRange(params.DateFrom, params.DateTo)
+	if params.Sort != nil {
+		filters.Sort = *params.Sort
+	}
+	if params.Order != nil {
+		filters.Order = string(*params.Order)
+	}
+
+	views, total, err := h.adminService.ListUserAuditLogs(r.Context(), id, filters)
+	if err != nil {
+		h.handleAdminError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.AdminAuditLog, 0, len(views))
+	for _, v := range views {
+		items = append(items, adminAuditLogResponse(v))
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, openapi.AdminAuditLogsResponse{
+		Items: items,
+		Total: int(total),
+	})
+}
+
+// auditLogDateRange converts the date_from/date_to query params to timestamptz
+// filter bounds. date_from is inclusive (00:00:00 UTC); date_to is converted
+// to an exclusive upper bound by adding 24 hours. Absent params yield zero
+// times, which disable the filter.
+func auditLogDateRange(from, to *openapi_types.Date) (time.Time, time.Time) {
+	var dateFrom, dateTo time.Time
+	if from != nil {
+		dateFrom = time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, time.UTC)
+	}
+	if to != nil {
+		dateTo = time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)
+	}
+	return dateFrom, dateTo
+}
+
+func adminAuditLogResponse(view adminapp.AdminAuditLogView) openapi.AdminAuditLog {
+	resp := openapi.AdminAuditLog{
+		Id:        view.ID,
+		ActorRole: openapi.AdminAuditLogActorRole(view.ActorRole),
+		Action:    view.Action,
+		Context:   view.Context,
+		CreatedAt: view.CreatedAt,
+	}
+	if view.ActorID != nil {
+		resp.ActorId = view.ActorID
+	}
+	if view.EntityType != nil {
+		resp.EntityType = view.EntityType
+	}
+	if view.EntityID != nil {
+		resp.EntityId = view.EntityID
+	}
+	if view.RequestID != nil {
+		resp.RequestId = view.RequestID
+	}
+	if view.IP != nil {
+		resp.Ip = view.IP
+	}
+	return resp
 }
 
 func adminUserResponse(view adminapp.AdminUserView) openapi.AdminUser {

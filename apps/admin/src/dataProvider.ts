@@ -85,6 +85,7 @@ const sortableFieldsByResource: Record<string, readonly string[]> = {
   operations: ['operationDate', 'amountKopecks', 'status'],
   tenantContacts: ['name', 'updatedAt'],
   subscriptionPayments: ['createdAt', 'amountKopecks', 'status'],
+  auditLogs: ['createdAt'],
 };
 
 const buildListQuery = (resource: string, params: GetListParams): string => {
@@ -132,6 +133,8 @@ const listUrl = (resource: string, ownerId?: string | number): string => {
       return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/operations` : `${API_PREFIX}/admin/operations`;
     case 'subscriptionPayments':
       return `${API_PREFIX}/admin/subscription/payments`;
+    case 'auditLogs':
+      return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/audit-logs` : `${API_PREFIX}/admin/audit-logs`;
     default:
       throw new Error(`Unknown resource: ${resource}`);
   }
@@ -151,6 +154,8 @@ const oneUrl = (resource: string, id: string | number): string => {
       return `${API_PREFIX}/admin/operations/${id}`;
     case 'subscriptionPayments':
       return `${API_PREFIX}/admin/subscription/payments/${id}`;
+    case 'auditLogs':
+      return `${API_PREFIX}/admin/audit-logs/${id}`;
     default:
       throw new Error(`Unknown resource: ${resource}`);
   }
@@ -210,6 +215,9 @@ export const dataProvider: AdminDataProvider = {
           break;
         case 'operations':
           data = (obj.operation ?? json) as T;
+          break;
+        case 'auditLogs':
+          data = (obj.auditLog ?? json) as T;
           break;
         case 'subscriptionPayments':
         default:

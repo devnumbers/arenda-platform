@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
@@ -33,6 +35,7 @@ type AuthenticationService struct {
 	db         transaction.Beginner
 	logger     *slog.Logger
 	hasher     TokenHasher
+	audit      auditapp.Recorder
 }
 
 // AuthenticationServiceConfig carries optional dependencies for AuthenticationService.
@@ -43,6 +46,7 @@ type AuthenticationServiceConfig struct {
 	DB         transaction.Beginner
 	Logger     *slog.Logger
 	Hasher     TokenHasher
+	Audit      auditapp.Recorder
 }
 
 // NewAuthenticationService creates an AuthenticationService.
@@ -53,6 +57,10 @@ func NewAuthenticationService(users UserRepository, codes LoginCodeRepository, a
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.Default()
+	}
+	audit := cfg.Audit
+	if audit == nil {
+		audit = auditapp.Noop{}
 	}
 	return &AuthenticationService{
 		users:      users,
@@ -65,6 +73,7 @@ func NewAuthenticationService(users UserRepository, codes LoginCodeRepository, a
 		db:         cfg.DB,
 		logger:     logger,
 		hasher:     cfg.Hasher,
+		audit:      audit,
 	}
 }
 
@@ -153,6 +162,17 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 	loginCode, err := flow.verifyCode(ctx, tx, phone, resolvedEmail, domain.LoginCodePurposeLogin, code, uuid.Nil)
 	if err != nil {
 		if errors.Is(err, domain.ErrLoginCodeInvalid) || errors.Is(err, domain.ErrTooManyAttempts) {
+			reason := "invalid_code"
+			if errors.Is(err, domain.ErrTooManyAttempts) {
+				reason = "too_many_attempts"
+			}
+			if auditErr := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+				ActorRole: auditdomain.ActorRoleAnonymous,
+				Action:    auditdomain.ActionAuthLoginFailed,
+				Context:   map[string]any{"reason": reason},
+			}); auditErr != nil {
+				return domain.RawSession{}, domain.User{}, errors.Join(err, fmt.Errorf("record audit: %w", auditErr))
+			}
 			if commitErr := tx.Commit(ctx); commitErr != nil {
 				return domain.RawSession{}, domain.User{}, fmt.Errorf("commit attempts: %w", commitErr)
 			}
@@ -175,6 +195,21 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 
 	if err := txAttempts.DeleteByPhone(ctx, phone); err != nil {
 		return domain.RawSession{}, domain.User{}, fmt.Errorf("reset login attempts: %w", err)
+	}
+
+	action := auditdomain.ActionAuthLogin
+	if isNewUser {
+		action = auditdomain.ActionAuthRegistered
+	}
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &user.ID,
+		ActorRole:  AuditActorRole(user.Role),
+		Action:     action,
+		EntityType: auditdomain.EntityUser,
+		EntityID:   &user.ID,
+		Context:    map[string]any{"method": "email_code"},
+	}); err != nil {
+		return domain.RawSession{}, domain.User{}, fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

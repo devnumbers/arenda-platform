@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
@@ -27,6 +28,7 @@ type Deps struct {
 	Profile                  identityapp.Profiler
 	Logout                   identityapp.Logout
 	Sessions                 identityapp.SessionService
+	Audit                    auditapp.Recorder
 	MeEnricher               MeEnricher
 	Tariffs                  billingapp.Tariffer
 	Subscriptions            billingapp.Subscriber
@@ -108,6 +110,7 @@ func New(deps Deps) http.Handler {
 		deps.PhoneChangeSendLimiter,
 		deps.PhoneChangeVerifyLimiter,
 		deps.MeEnricher,
+		deps.Audit,
 	)
 	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Logger, deps.Clock)
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock)
@@ -165,6 +168,9 @@ func New(deps Deps) http.Handler {
 	r.With(AdminOnlyMiddleware).Get("/admin/operations", wrapper.ListAdminOperations)
 	r.With(AdminOnlyMiddleware).Get("/admin/operations/{id}", wrapper.GetAdminOperation)
 	r.With(AdminOnlyMiddleware).Get("/admin/stats", wrapper.GetAdminStats)
+	r.With(AdminOnlyMiddleware).Get("/admin/audit-logs", wrapper.ListAdminAuditLogs)
+	r.With(AdminOnlyMiddleware).Get("/admin/audit-logs/{id}", wrapper.GetAdminAuditLog)
+	r.With(AdminOnlyMiddleware).Get("/admin/users/{id}/audit-logs", wrapper.ListAdminUserAuditLogs)
 
 	// T-Kassa redirects the user here after the add-card bank form. Redirect them
 	// back to the frontend payment-methods page with a query flag so the UI can

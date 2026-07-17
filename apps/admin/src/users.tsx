@@ -16,6 +16,7 @@ import {
 import {
   ChoiceChipField,
   FullNameField,
+  auditActionChoices,
   occupancyChoices,
   operationStatusChoices,
   operationTypeChoices,
@@ -25,6 +26,7 @@ import {
   roleChoices,
   subscriptionStatusChoices,
 } from './fields';
+import { AuditLogDatagrid } from './auditLogs';
 import { LeaseDatagrid } from './leases';
 import { OperationDatagrid } from './operations';
 
@@ -50,6 +52,12 @@ const userPropertyTabFilters = [
 const userOperationTabFilters = [
   <SelectInput key="status" source="status" label="Статус" choices={operationStatusChoices} alwaysOn />,
   <SelectInput key="type" source="type" label="Тип" choices={operationTypeChoices} alwaysOn />,
+];
+
+// Фильтры вкладки «Журнал действий»: nested-эндпоинт принимает
+// action/entity_type/date_from/date_to; на вкладке оставлен только action.
+const userAuditLogTabFilters = [
+  <SelectInput key="action" source="action" label="Действие" choices={auditActionChoices} alwaysOn />,
 ];
 
 // sortable={false} проставлен колонкам вне whitelist сортировки бэкенда
@@ -130,6 +138,17 @@ export const UserShow = () => (
         >
           <FilterForm filters={userOperationTabFilters} />
           <OperationDatagrid />
+        </ReferenceManyField>
+      </Tab>
+      <Tab label="Журнал действий">
+        <ReferenceManyField
+          reference="auditLogs"
+          target="owner_id"
+          label={false}
+          sort={{ field: 'createdAt', order: 'DESC' }}
+        >
+          <FilterForm filters={userAuditLogTabFilters} />
+          <AuditLogDatagrid />
         </ReferenceManyField>
       </Tab>
       <Tab label="Подписка">

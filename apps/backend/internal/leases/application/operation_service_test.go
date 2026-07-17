@@ -10,7 +10,7 @@ import (
 )
 
 func newOperationGuardService(ownerID uuid.UUID, opRepo *fakeOperationRepo, propertyRepo *fakePropertyRepo) *OperationService {
-	return NewOperationService(opRepo, propertyRepo, nil, nil, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, fakeClock{now: date(2026, 6, 15)}, nil)
+	return NewOperationService(opRepo, propertyRepo, nil, nil, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, nil, fakeClock{now: date(2026, 6, 15)}, nil)
 }
 
 func newGuardTestOperation(id, ownerID, propertyID uuid.UUID, status domain.OperationStatus) domain.Operation {

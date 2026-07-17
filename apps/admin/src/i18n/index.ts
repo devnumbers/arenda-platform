@@ -124,6 +124,23 @@ const customMessages = {
         updatedAt: 'Обновлён',
       },
     },
+    auditLogs: {
+      name: 'Запись журнала |||| Журнал действий',
+      fields: {
+        id: 'ID',
+        actorId: 'Пользователь',
+        actorRole: 'Роль',
+        action: 'Действие',
+        entityType: 'Сущность',
+        entityId: 'ID сущности',
+        context: 'Контекст',
+        requestId: 'ID запроса',
+        ip: 'IP',
+        createdAt: 'Дата и время',
+        date_from: 'С даты',
+        date_to: 'По дату',
+      },
+    },
   },
 };
 

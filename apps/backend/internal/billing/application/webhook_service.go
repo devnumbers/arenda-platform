@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
@@ -107,6 +108,17 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 			if err := txSubscriptions.Update(ctx, sub); err != nil {
 				return fmt.Errorf("update subscription active payment method: %w", err)
 			}
+		}
+
+		// The bound card belongs to the user carried in the customer key.
+		if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+			ActorID:    &userID,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionPaymentMethodAdded,
+			EntityType: auditdomain.EntityPaymentMethod,
+			EntityID:   &pm.ID,
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
 		}
 
 		return tx.Commit(ctx)
@@ -236,6 +248,33 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 			}
 		}
 
+		// Audit the final state transition applied by this transaction. A
+		// partial refund is an anomaly with no state change, and a duplicate
+		// refund notification for an already-refunded payment is a no-op, so
+		// neither gets an entry.
+		var auditAction auditdomain.Action
+		switch result.Status {
+		case domain.PaymentStatusSucceeded:
+			auditAction = auditdomain.ActionSubscriptionPaymentSucceeded
+		case domain.PaymentStatusFailed:
+			auditAction = auditdomain.ActionSubscriptionPaymentFailed
+		case domain.PaymentStatusRefunded:
+			if !alreadyRefunded {
+				auditAction = auditdomain.ActionSubscriptionPaymentRefunded
+			}
+		}
+		if auditAction != "" {
+			if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+				ActorRole:  auditdomain.ActorRoleSystem,
+				Action:     auditAction,
+				EntityType: auditdomain.EntitySubscriptionPayment,
+				EntityID:   &payment.ID,
+				Context:    map[string]any{"payment_id": payment.ID, "provider": providerName},
+			}); err != nil {
+				return fmt.Errorf("record audit: %w", err)
+			}
+		}
+
 		if err := tx.Commit(ctx); err != nil {
 			return fmt.Errorf("commit webhook transaction: %w", err)
 		}
@@ -337,6 +376,27 @@ func (s *WebhookService) reconcileFailedPayment(ctx context.Context, payment dom
 			propertyArchiver: s.deps.propertyArchiver,
 		}, tx, payment.SubscriptionID); err != nil {
 			return err
+		}
+	}
+
+	// Audit the reconciled final state so the payment trail shows one entry per
+	// final state. A partial refund changes nothing and gets no entry.
+	var auditAction auditdomain.Action
+	switch status {
+	case domain.PaymentStatusSucceeded:
+		auditAction = auditdomain.ActionSubscriptionPaymentSucceeded
+	case domain.PaymentStatusRefunded:
+		auditAction = auditdomain.ActionSubscriptionPaymentRefunded
+	}
+	if auditAction != "" {
+		if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+			ActorRole:  auditdomain.ActorRoleSystem,
+			Action:     auditAction,
+			EntityType: auditdomain.EntitySubscriptionPayment,
+			EntityID:   &payment.ID,
+			Context:    map[string]any{"payment_id": payment.ID, "provider": string(s.provider.Name())},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
 		}
 	}
 

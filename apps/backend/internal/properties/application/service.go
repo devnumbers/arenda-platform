@@ -11,6 +11,8 @@ import (
 	"sort"
 
 	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
@@ -59,6 +61,7 @@ type PropertyService struct {
 	billingLifecycle  PropertyBillingLifecycle
 	leaseRepo         LeaseRepository
 	db                txBeginner
+	audit             auditapp.Recorder
 	clock             clock.Clock
 	logger            *slog.Logger
 }
@@ -72,11 +75,15 @@ func NewPropertyService(
 	billingLifecycle PropertyBillingLifecycle,
 	leaseRepo LeaseRepository,
 	db txBeginner,
+	audit auditapp.Recorder,
 	clock clock.Clock,
 	logger *slog.Logger,
 ) *PropertyService {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if audit == nil {
+		audit = auditapp.Noop{}
 	}
 	return &PropertyService{
 		repo:              repo,
@@ -87,6 +94,7 @@ func NewPropertyService(
 		billingLifecycle:  billingLifecycle,
 		leaseRepo:         leaseRepo,
 		db:                db,
+		audit:             audit,
 		clock:             clock,
 		logger:            logger,
 	}
@@ -135,6 +143,17 @@ func (s *PropertyService) CreateProperty(ctx context.Context, ownerID uuid.UUID,
 	created, err := txRepo.Create(ctx, ownerID, property)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("create property: %w", err)
+	}
+
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionPropertyCreated,
+		EntityType: auditdomain.EntityProperty,
+		EntityID:   &created.ID,
+		Context:    map[string]any{"name": created.Name, "type": string(created.Type)},
+	}); err != nil {
+		return domain.Property{}, fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -324,6 +343,17 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 		return domain.Property{}, fmt.Errorf("update property: %w", err)
 	}
 
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionPropertyUpdated,
+		EntityType: auditdomain.EntityProperty,
+		EntityID:   &id,
+		Context:    map[string]any{"fields": updatedPropertyFields(cmd)},
+	}); err != nil {
+		return domain.Property{}, fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Property{}, fmt.Errorf("commit tx: %w", err)
 	}
@@ -352,6 +382,16 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 	)
 	if err != nil {
 		return domain.Property{}, err
+	}
+
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionPropertyArchived,
+		EntityType: auditdomain.EntityProperty,
+		EntityID:   &id,
+	}); err != nil {
+		return domain.Property{}, fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -438,6 +478,7 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 
 	txOccupancy := s.occupancyProvider.WithTx(tx)
 	txBillingLifecycle := s.billingLifecycle.WithTx(tx)
+	txAudit := s.audit.WithTx(tx)
 
 	for _, p := range properties[limit:] {
 		_, err := s.archivePropertyInTx(ctx, txRepo, txOccupancy, txBillingLifecycle, ownerID, p.ID)
@@ -450,6 +491,18 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 				continue
 			}
 			return fmt.Errorf("archive property %s: %w", p.ID, err)
+		}
+		// Fail-safe: an audit failure aborts the billing operation that
+		// triggered the auto-archive.
+		if err := txAudit.Record(ctx, auditdomain.Entry{
+			ActorID:    &ownerID,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionPropertyArchived,
+			EntityType: auditdomain.EntityProperty,
+			EntityID:   &p.ID,
+			Context:    map[string]any{"trigger": "billing_limit"},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
 		}
 	}
 	return nil
@@ -514,6 +567,16 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 		unarchived.Occupancy = domain.OccupancyOccupied
 	} else {
 		unarchived.Occupancy = domain.OccupancyFree
+	}
+
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionPropertyUnarchived,
+		EntityType: auditdomain.EntityProperty,
+		EntityID:   &id,
+	}); err != nil {
+		return domain.Property{}, fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -582,6 +645,17 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, ownerID, propert
 		return domain.Property{}, fmt.Errorf("create photo record: %w", err)
 	}
 
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionPropertyPhotoAdded,
+		EntityType: auditdomain.EntityPropertyPhoto,
+		EntityID:   &photoID,
+		Context:    map[string]any{"property_id": propertyID},
+	}); err != nil {
+		return domain.Property{}, fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Property{}, fmt.Errorf("commit tx: %w", err)
 	}
@@ -631,6 +705,17 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, ownerID, prop
 
 	if err := txPhotoRepo.Delete(ctx, photoID); err != nil {
 		return fmt.Errorf("delete photo record: %w", err)
+	}
+
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionPropertyPhotoDeleted,
+		EntityType: auditdomain.EntityPropertyPhoto,
+		EntityID:   &photoID,
+		Context:    map[string]any{"property_id": propertyID},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -702,4 +787,26 @@ func isUpdatableStatusTransition(from, to domain.PropertyStatus) bool {
 		return to == domain.PropertyStatusActive
 	}
 	return false
+}
+
+// updatedPropertyFields lists the names of the fields a command changes. Only
+// field names are audited, never their values.
+func updatedPropertyFields(cmd UpdatePropertyCommand) []string {
+	fields := make([]string, 0, 5)
+	if cmd.Name != nil {
+		fields = append(fields, "name")
+	}
+	if cmd.Type != nil {
+		fields = append(fields, "type")
+	}
+	if cmd.Address != nil {
+		fields = append(fields, "address")
+	}
+	if cmd.Description != nil {
+		fields = append(fields, "description")
+	}
+	if cmd.Status != nil {
+		fields = append(fields, "status")
+	}
+	return fields
 }

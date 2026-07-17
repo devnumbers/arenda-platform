@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
@@ -47,6 +49,7 @@ type AuthHandlers struct {
 	phoneChangeSend   *RateLimiter
 	phoneChangeVerify *RateLimiter
 	meEnricher        MeEnricher
+	audit             auditapp.Recorder
 }
 
 // NewAuthHandlers creates HTTP handlers for the auth API.
@@ -62,7 +65,11 @@ func NewAuthHandlers(
 	phoneChangeSend *RateLimiter,
 	phoneChangeVerify *RateLimiter,
 	meEnricher MeEnricher,
+	audit auditapp.Recorder,
 ) *AuthHandlers {
+	if audit == nil {
+		audit = auditapp.Noop{}
+	}
 	return &AuthHandlers{
 		auth:              auth,
 		phoneChange:       phoneChange,
@@ -75,6 +82,7 @@ func NewAuthHandlers(
 		phoneChangeSend:   phoneChangeSend,
 		phoneChangeVerify: phoneChangeVerify,
 		meEnricher:        meEnricher,
+		audit:             audit,
 	}
 }
 
@@ -225,6 +233,8 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	h.recordAuthAudit(r.Context(), auditdomain.ActionAuthLogout)
+
 	clearSessionCookie(w, h.cookieSecure)
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -244,8 +254,34 @@ func (h *AuthHandlers) LogoutAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.recordAuthAudit(r.Context(), auditdomain.ActionAuthLogoutAll)
+
 	clearSessionCookie(w, h.cookieSecure)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// recordAuthAudit writes an audit entry for a completed logout. Record errors
+// are logged but never fail the request: the session is already deleted, so
+// the response must not depend on the audit write (the documented fail-open
+// exception to the service-layer fail-safe rule).
+func (h *AuthHandlers) recordAuthAudit(ctx context.Context, action auditdomain.Action) {
+	userID, ok := UserIDFromContext(ctx)
+	if !ok {
+		return
+	}
+	actorRole := auditdomain.ActorRoleOwner
+	if user, ok := UserFromContext(ctx); ok {
+		actorRole = application.AuditActorRole(user.Role)
+	}
+	if err := h.audit.Record(ctx, auditdomain.Entry{
+		ActorID:    &userID,
+		ActorRole:  actorRole,
+		Action:     action,
+		EntityType: auditdomain.EntityUser,
+		EntityID:   &userID,
+	}); err != nil {
+		h.logger.ErrorContext(ctx, "failed to record audit entry", slog.String("error", sanitizeError(err)))
+	}
 }
 
 // GetMe implements GET /me.

@@ -95,6 +95,72 @@ export const operationStatusChoices: Choice[] = [
   { id: 'received', name: 'Получена' },
 ];
 
+// Choices аудита синхронизированы с реестром действий и типов сущностей
+// apps/backend/internal/audit/domain/entry.go (в OpenAPI action/entityType — свободные строки).
+
+export const auditActorRoleChoices: Choice[] = [
+  { id: 'owner', name: 'Владелец' },
+  { id: 'admin', name: 'Админ' },
+  { id: 'system', name: 'Система' },
+  { id: 'anonymous', name: 'Аноним' },
+];
+
+export const auditEntityTypeChoices: Choice[] = [
+  { id: 'user', name: 'Пользователь' },
+  { id: 'property', name: 'Объект' },
+  { id: 'property_photo', name: 'Фото объекта' },
+  { id: 'lease', name: 'Договор' },
+  { id: 'tenant_contact', name: 'Контакт арендатора' },
+  { id: 'operation', name: 'Операция' },
+  { id: 'recurring_operation', name: 'Повторяющаяся операция' },
+  { id: 'operation_category', name: 'Категория операций' },
+  { id: 'subscription', name: 'Подписка' },
+  { id: 'payment_method', name: 'Способ оплаты' },
+  { id: 'subscription_payment', name: 'Платёж подписки' },
+];
+
+export const auditActionChoices: Choice[] = [
+  { id: 'auth.registered', name: 'Регистрация' },
+  { id: 'auth.login', name: 'Вход' },
+  { id: 'auth.login_failed', name: 'Неудачный вход' },
+  { id: 'auth.logout', name: 'Выход' },
+  { id: 'auth.logout_all', name: 'Выход со всех устройств' },
+  { id: 'auth.phone_changed', name: 'Смена телефона' },
+  { id: 'profile.updated', name: 'Обновление профиля' },
+  { id: 'property.created', name: 'Создание объекта' },
+  { id: 'property.updated', name: 'Обновление объекта' },
+  { id: 'property.archived', name: 'Архивация объекта' },
+  { id: 'property.unarchived', name: 'Восстановление объекта' },
+  { id: 'property.photo_added', name: 'Добавление фото объекта' },
+  { id: 'property.photo_deleted', name: 'Удаление фото объекта' },
+  { id: 'lease.created', name: 'Создание договора' },
+  { id: 'lease.updated', name: 'Обновление договора' },
+  { id: 'lease.completed', name: 'Завершение договора' },
+  { id: 'tenant_contact.created', name: 'Создание контакта' },
+  { id: 'tenant_contact.updated', name: 'Обновление контакта' },
+  { id: 'operation.created', name: 'Создание операции' },
+  { id: 'operation.updated', name: 'Обновление операции' },
+  { id: 'operation.deleted', name: 'Удаление операции' },
+  { id: 'operation.completed', name: 'Завершение операции' },
+  { id: 'operation.marked_incomplete', name: 'Отметка «не выполнена»' },
+  { id: 'recurring_operation.created', name: 'Создание повторяющейся операции' },
+  { id: 'recurring_operation.updated', name: 'Обновление повторяющейся операции' },
+  { id: 'recurring_operation.deleted', name: 'Удаление повторяющейся операции' },
+  { id: 'recurring_operation.paused', name: 'Пауза повторяющейся операции' },
+  { id: 'recurring_operation.resumed', name: 'Возобновление повторяющейся операции' },
+  { id: 'operation_category.created', name: 'Создание категории' },
+  { id: 'subscription.tariff_changed', name: 'Смена тарифа' },
+  { id: 'subscription.cancelled', name: 'Отмена подписки' },
+  { id: 'subscription.auto_renew_toggled', name: 'Переключение автопродления' },
+  { id: 'payment_method.added', name: 'Добавление способа оплаты' },
+  { id: 'payment_method.activated', name: 'Активация способа оплаты' },
+  { id: 'payment_method.deleted', name: 'Удаление способа оплаты' },
+  { id: 'subscription_payment.succeeded', name: 'Платёж успешен' },
+  { id: 'subscription_payment.failed', name: 'Платёж не удался' },
+  { id: 'subscription_payment.refunded', name: 'Возврат платежа' },
+  { id: 'subscription_payment.synced', name: 'Синхронизация платежа' },
+];
+
 interface PersonName {
   name?: string | null;
   surname?: string | null;
@@ -239,6 +305,8 @@ export const PropertyLinkField = (props: FieldProps) => {
 };
 
 // Ссылочные поля — только для Show-страниц (1 запись = 1 запрос getOne).
+// Осознанное исключение: колонка «Пользователь» в AuditLogDatagrid (список аудита) —
+// RA батчит id в один getMany, а fan-out getMany→getOne приемлем для масштаба админки.
 
 const renderUser = (user: RaRecord) => {
   const phone = typeof user.phone === 'string' ? user.phone : '';

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
@@ -59,6 +60,16 @@ func (s *PaymentMethodService) AddPaymentMethod(ctx context.Context, userID uuid
 		pm, err = txPaymentMethods.Create(ctx, pm)
 		if err != nil {
 			return AddPaymentMethodResponse{}, fmt.Errorf("save payment method: %w", err)
+		}
+
+		if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+			ActorID:    &userID,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionPaymentMethodAdded,
+			EntityType: auditdomain.EntityPaymentMethod,
+			EntityID:   &pm.ID,
+		}); err != nil {
+			return AddPaymentMethodResponse{}, fmt.Errorf("record audit: %w", err)
 		}
 
 		if err := tx.Commit(ctx); err != nil {
@@ -158,6 +169,16 @@ func (s *PaymentMethodService) SetActivePaymentMethod(ctx context.Context, userI
 		return fmt.Errorf("update subscription active payment method: %w", err)
 	}
 
+	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &userID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionPaymentMethodActivated,
+		EntityType: auditdomain.EntityPaymentMethod,
+		EntityID:   &methodID,
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit set active payment method transaction: %w", err)
 	}
@@ -210,6 +231,16 @@ func (s *PaymentMethodService) DeletePaymentMethod(ctx context.Context, userID, 
 
 	if err := txPaymentMethods.Delete(ctx, userID, methodID); err != nil {
 		return fmt.Errorf("delete payment method: %w", err)
+	}
+
+	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &userID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionPaymentMethodDeleted,
+		EntityType: auditdomain.EntityPaymentMethod,
+		EntityID:   &methodID,
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -397,6 +428,10 @@ func (s *PaymentMethodService) SyncPaymentMethods(ctx context.Context, userID uu
 		return nil, fmt.Errorf("bind subscriptions transaction: %w", err)
 	}
 
+	// The import upserts are deliberately not audited as payment_method.added:
+	// the idempotent UpsertByTokenHash (ON CONFLICT) cannot distinguish an
+	// insert from an update, and the AddCard webhook flow already records the
+	// user-visible addition.
 	var freshest *domain.PaymentMethod
 	var boundMethod *domain.PaymentMethod
 	for _, card := range importable {

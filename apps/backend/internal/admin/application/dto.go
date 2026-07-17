@@ -166,6 +166,34 @@ type AdminOperationFilters struct {
 	Order      string
 }
 
+// AdminAuditLogView is the admin read model of one audit_log row.
+type AdminAuditLogView struct {
+	ID         uuid.UUID
+	CreatedAt  time.Time
+	ActorID    *uuid.UUID
+	ActorRole  string
+	Action     string
+	EntityType *string
+	EntityID   *uuid.UUID
+	Context    map[string]any
+	RequestID  *string
+	IP         *string
+}
+
+// AdminAuditLogFilters carries optional filters for the admin audit log list.
+// Zero values disable the filter.
+type AdminAuditLogFilters struct {
+	ActorID    uuid.UUID // uuid.Nil = off
+	Action     string
+	EntityType string
+	DateFrom   time.Time // zero = off
+	DateTo     time.Time // zero = off; EXCLUSIVE upper bound
+	Limit      int
+	Offset     int
+	Sort       string
+	Order      string
+}
+
 // AdminRecentUserView is a read-only view of a recently registered user for
 // the admin dashboard. Phone is stored decrypted.
 type AdminRecentUserView struct {

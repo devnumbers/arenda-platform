@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -47,6 +48,7 @@ var (
 	_ adminapp.TenantContactRepository = (*AdminRepository)(nil)
 	_ adminapp.OperationRepository     = (*AdminRepository)(nil)
 	_ adminapp.StatsRepository         = (*AdminRepository)(nil)
+	_ adminapp.AuditLogRepository      = (*AdminRepository)(nil)
 )
 
 // ListUsers implements UserRepository.ListUsers.
@@ -579,6 +581,99 @@ func (r *AdminRepository) operationViewFromRow(row postgres.ListOperationsAdminR
 // operation queries select operations columns plus category_name.
 func adminGetOperationRowToListRow(row postgres.GetOperationByIDAdminRow) postgres.ListOperationsAdminRow {
 	return postgres.ListOperationsAdminRow(row)
+}
+
+// ListAuditLogs implements AuditLogRepository.ListAuditLogs.
+func (r *AdminRepository) ListAuditLogs(ctx context.Context, filters adminapp.AdminAuditLogFilters) ([]adminapp.AdminAuditLogView, int64, error) {
+	params := postgres.ListAuditLogsAdminParams{
+		ActorID:    pgconv.UUIDToPgtype(filters.ActorID),
+		Action:     filters.Action,
+		EntityType: filters.EntityType,
+		DateFrom:   timestamptzFromTime(filters.DateFrom),
+		DateTo:     timestamptzFromTime(filters.DateTo),
+		Sort:       filters.Sort,
+		Order:      filters.Order,
+		Offset:     toInt32(filters.Offset),
+		Limit:      toInt32(filters.Limit),
+	}
+
+	total, err := r.q().CountAuditLogsAdmin(ctx, postgres.CountAuditLogsAdminParams{
+		ActorID:    params.ActorID,
+		Action:     params.Action,
+		EntityType: params.EntityType,
+		DateFrom:   params.DateFrom,
+		DateTo:     params.DateTo,
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("count audit logs: %w", err)
+	}
+
+	rows, err := r.q().ListAuditLogsAdmin(ctx, params)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list audit logs: %w", err)
+	}
+
+	views := make([]adminapp.AdminAuditLogView, 0, len(rows))
+	for _, row := range rows {
+		view, err := auditLogViewFromRow(row)
+		if err != nil {
+			return nil, 0, err
+		}
+		views = append(views, view)
+	}
+
+	return views, total, nil
+}
+
+// GetAuditLog implements AuditLogRepository.GetAuditLog.
+func (r *AdminRepository) GetAuditLog(ctx context.Context, id uuid.UUID) (adminapp.AdminAuditLogView, error) {
+	row, err := r.q().GetAuditLogByIDAdmin(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return adminapp.AdminAuditLogView{}, adminapp.ErrNotFound
+		}
+		return adminapp.AdminAuditLogView{}, fmt.Errorf("get audit log: %w", err)
+	}
+	return auditLogViewFromRow(row)
+}
+
+func auditLogViewFromRow(row postgres.AuditLog) (adminapp.AdminAuditLogView, error) {
+	ctxMap := map[string]any{}
+	if len(row.Context) > 0 {
+		if err := json.Unmarshal(row.Context, &ctxMap); err != nil {
+			return adminapp.AdminAuditLogView{}, fmt.Errorf("decode audit log context: %w", err)
+		}
+	}
+	// A jsonb 'null' unmarshals to a nil map; the API contract requires an object.
+	if ctxMap == nil {
+		ctxMap = map[string]any{}
+	}
+
+	view := adminapp.AdminAuditLogView{
+		ID:         pgconv.UUIDFromPgtype(row.ID),
+		CreatedAt:  row.CreatedAt.Time,
+		ActorID:    pgconv.UUIDFromPgtypePtr(row.ActorID),
+		ActorRole:  row.ActorRole,
+		Action:     row.Action,
+		EntityType: pgconv.TextToPtrString(row.EntityType),
+		EntityID:   pgconv.UUIDFromPgtypePtr(row.EntityID),
+		Context:    ctxMap,
+		RequestID:  pgconv.TextToPtrString(row.RequestID),
+	}
+	if row.Ip != nil {
+		ip := row.Ip.String()
+		view.IP = &ip
+	}
+	return view, nil
+}
+
+// timestamptzFromTime converts a filter time to its pgtype form; a zero time
+// becomes an invalid (NULL) value, which disables the filter on the SQL side.
+func timestamptzFromTime(t time.Time) pgtype.Timestamptz {
+	if t.IsZero() {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: t, Valid: true}
 }
 
 // GetStats implements StatsRepository.GetStats. It runs a fixed set of

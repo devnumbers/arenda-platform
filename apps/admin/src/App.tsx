@@ -1,6 +1,7 @@
 import { Admin, Resource, type RaRecord } from 'react-admin';
 import ContactPageIcon from '@mui/icons-material/ContactPage';
 import DescriptionIcon from '@mui/icons-material/Description';
+import HistoryIcon from '@mui/icons-material/History';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import PaymentIcon from '@mui/icons-material/Payment';
 import PeopleIcon from '@mui/icons-material/People';
@@ -17,6 +18,7 @@ import { PropertyList, PropertyShow } from './properties';
 import { LeaseList, LeaseShow } from './leases';
 import { TenantContactList, TenantContactShow } from './tenantContacts';
 import { OperationList, OperationShow } from './operations';
+import { AuditLogList, AuditLogShow, actionLabel } from './auditLogs';
 
 /** Контакт арендатора: ФИО из частей name/surname/patronymic, иначе #id. */
 const tenantContactRepresentation = (record: RaRecord) => fullName(asPersonName(record)) || `#${record.id}`;
@@ -28,6 +30,10 @@ const leaseRepresentation = (record: RaRecord) => {
   const label = tenantName ? `${propertyName} → ${tenantName}` : propertyName;
   return label || `#${record.id}`;
 };
+
+/** Запись журнала: русская подпись действия (неизвестное — как есть), иначе #id. */
+const auditLogRepresentation = (record: RaRecord) =>
+  (typeof record.action === 'string' && record.action !== '' ? actionLabel(record.action) : '') || `#${record.id}`;
 
 export default function App() {
   return (
@@ -44,6 +50,7 @@ export default function App() {
       <Resource name="leases" list={LeaseList} show={LeaseShow} icon={DescriptionIcon} recordRepresentation={leaseRepresentation} />
       <Resource name="tenantContacts" list={TenantContactList} show={TenantContactShow} icon={ContactPageIcon} recordRepresentation={tenantContactRepresentation} />
       <Resource name="operations" list={OperationList} show={OperationShow} icon={ReceiptLongIcon} recordRepresentation="name" />
+      <Resource name="auditLogs" list={AuditLogList} show={AuditLogShow} icon={HistoryIcon} recordRepresentation={auditLogRepresentation} />
     </Admin>
   );
 }

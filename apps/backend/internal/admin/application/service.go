@@ -27,6 +27,7 @@ type AdminService struct {
 	operations     OperationRepository
 	stats          StatsRepository
 	subscriptions  SubscriptionProvider
+	auditLogs      AuditLogRepository
 	clock          clock.Clock
 }
 
@@ -39,6 +40,7 @@ func NewAdminService(
 	operations OperationRepository,
 	stats StatsRepository,
 	subscriptions SubscriptionProvider,
+	auditLogs AuditLogRepository,
 	clock clock.Clock,
 ) *AdminService {
 	return &AdminService{
@@ -49,6 +51,7 @@ func NewAdminService(
 		operations:     operations,
 		stats:          stats,
 		subscriptions:  subscriptions,
+		auditLogs:      auditLogs,
 		clock:          clock,
 	}
 }
@@ -76,6 +79,7 @@ var (
 	adminLeaseSortFields         = []string{"startDate", "updatedAt", "status", "rentAmountKopecks"}
 	adminTenantContactSortFields = []string{"name", "updatedAt"}
 	adminOperationSortFields     = []string{"operationDate", "amountKopecks", "status"}
+	adminAuditLogSortFields      = []string{"createdAt"}
 )
 
 // normalizeSort validates the requested sort field and order against the
@@ -257,4 +261,25 @@ func (s *AdminService) GetOperation(ctx context.Context, id uuid.UUID) (AdminOpe
 // GetStats returns platform-wide counters and recent activity for the admin dashboard.
 func (s *AdminService) GetStats(ctx context.Context) (AdminStatsView, error) {
 	return s.stats.GetStats(ctx)
+}
+
+// ListUserAuditLogs returns a paginated list of a user's audit log entries.
+func (s *AdminService) ListUserAuditLogs(ctx context.Context, userID uuid.UUID, filters AdminAuditLogFilters) ([]AdminAuditLogView, int64, error) {
+	filters.ActorID = userID
+	return s.ListAuditLogs(ctx, filters)
+}
+
+// ListAuditLogs returns a paginated cross-user list of audit log entries.
+func (s *AdminService) ListAuditLogs(ctx context.Context, filters AdminAuditLogFilters) ([]AdminAuditLogView, int64, error) {
+	filters.Limit, filters.Offset = normalizePagination(filters.Limit, filters.Offset)
+	var err error
+	if filters.Sort, filters.Order, err = normalizeSort(filters.Sort, filters.Order, adminAuditLogSortFields); err != nil {
+		return nil, 0, err
+	}
+	return s.auditLogs.ListAuditLogs(ctx, filters)
+}
+
+// GetAuditLog returns a single audit log entry by ID.
+func (s *AdminService) GetAuditLog(ctx context.Context, id uuid.UUID) (AdminAuditLogView, error) {
+	return s.auditLogs.GetAuditLog(ctx, id)
 }

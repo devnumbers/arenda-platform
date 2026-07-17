@@ -62,6 +62,10 @@ linters:
           files:
             - "**/internal/**/application/*.go"
             - "!**/*_test.go"
+          allow:
+            # requestctx only carries request-scoped diagnostics (request ID, trace ID,
+            # client IP); it is not platform infrastructure.
+            - github.com/nambers/arenda-planform/apps/backend/internal/platform/requestctx
           deny:
             - pkg: database/sql
               desc: application layer must use ports instead of concrete persistence

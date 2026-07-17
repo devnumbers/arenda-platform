@@ -30,14 +30,16 @@ type PaymentMethodManager interface {
 	SyncPaymentMethods(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error)
 }
 
-// PaymentProcessor lists and acts on subscription payments.
+// PaymentProcessor lists and acts on subscription payments. Mutating admin
+// operations take the actor id for the audit trail; uuid.Nil marks a
+// system-initiated call (reconciliation workers).
 type PaymentProcessor interface {
 	ListPayments(ctx context.Context, userID uuid.UUID) ([]SubscriptionPaymentView, error)
 	GetPayment(ctx context.Context, paymentID uuid.UUID) (AdminSubscriptionPaymentView, error)
 	ListAllPayments(ctx context.Context, filters ListAllPaymentsFilters) ([]AdminSubscriptionPaymentView, int64, error)
 	ConfirmFakePayment(ctx context.Context, paymentID uuid.UUID) error
-	RefundPayment(ctx context.Context, paymentID uuid.UUID) error
-	SyncPendingPayment(ctx context.Context, paymentID uuid.UUID) error
+	RefundPayment(ctx context.Context, actorID uuid.UUID, paymentID uuid.UUID) error
+	SyncPendingPayment(ctx context.Context, actorID uuid.UUID, paymentID uuid.UUID) error
 	ReconcilePendingPayments(ctx context.Context, now time.Time) (int, error)
 	ReconcileStaleRefunds(ctx context.Context, now time.Time) (int, error)
 }

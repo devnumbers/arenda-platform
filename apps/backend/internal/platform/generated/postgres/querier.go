@@ -24,6 +24,7 @@ type Querier interface {
 	CountActivePropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	CountActiveSubscriptionsAdmin(ctx context.Context) (int64, error)
 	CountArchivedPropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error)
+	CountAuditLogsAdmin(ctx context.Context, arg CountAuditLogsAdminParams) (int64, error)
 	CountLeasesAdmin(ctx context.Context, arg CountLeasesAdminParams) (int64, error)
 	CountLeasesTotalAdmin(ctx context.Context) (int64, error)
 	CountNewUsersLast30dAdmin(ctx context.Context) (int64, error)
@@ -79,6 +80,7 @@ type Querier interface {
 	DeleteUneditedOperationsByLease(ctx context.Context, arg DeleteUneditedOperationsByLeaseParams) error
 	DeleteUneditedOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedOperationsByRecurringOperationParams) error
 	DeleteUnusedLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndEmailParams) error
+	GetAuditLogByIDAdmin(ctx context.Context, id pgtype.UUID) (AuditLog, error)
 	GetFinanceReportByCategory(ctx context.Context, arg GetFinanceReportByCategoryParams) ([]GetFinanceReportByCategoryRow, error)
 	GetFinanceReportByMonth(ctx context.Context, arg GetFinanceReportByMonthParams) ([]GetFinanceReportByMonthRow, error)
 	GetFinanceReportByProperty(ctx context.Context, arg GetFinanceReportByPropertyParams) ([]GetFinanceReportByPropertyRow, error)
@@ -142,11 +144,13 @@ type Querier interface {
 	// value so the renewal job can cap retries on persistent charge failures.
 	// updated_at is maintained by the trg_subscription_payments_updated_at trigger.
 	IncrementSubscriptionPaymentChargeAttempts(ctx context.Context, id pgtype.UUID) (int32, error)
+	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
 	IsEmailReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
 	IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
 	ListAllPendingOperationsWithPastDate(ctx context.Context, arg ListAllPendingOperationsWithPastDateParams) ([]Operation, error)
 	ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error)
+	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
 	ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error)
 	ListExpiredCancelledSubscriptions(ctx context.Context, arg ListExpiredCancelledSubscriptionsParams) ([]UserSubscription, error)
 	ListExpiredNonRenewingSubscriptions(ctx context.Context, arg ListExpiredNonRenewingSubscriptionsParams) ([]UserSubscription, error)
