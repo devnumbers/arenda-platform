@@ -107,11 +107,12 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
   `http://127.0.0.1:14318` на самом сервере.
 - Логин: `admin@rentlee.ru`, пароль: значение `UPTRACE_ADMIN_PASSWORD`.
   Пользователь и проекты создаются из `observability/uptrace.yml` при первом
-  старте (`projects`, `auth.users`). Смените пароль в UI после первого входа.
-- Проекты: `Arenda` (id 1, все данные платформы) и `Uptrace` (id 2,
-  самомониторинг) — id выдаются seed'ом в алфавитном порядке ключей, а не в
-  порядке списка из `uptrace.yml`; окружения в трейсах/метриках разделены
-  атрибутом `deployment_environment`.
+  старте (секция `seed_data`). Смените пароль в UI после первого входа.
+- Проекты: `Arenda` (все данные платформы) и `Uptrace` (самомониторинг).
+  Числовые id проектов в 2.0.3 не фиксированы и различаются между
+  инсталляциями — найдите id проекта Arenda в UI/API (Projects); мониторы
+  и дашборды создавайте в проекте **Arenda**, не Uptrace. Окружения в
+  трейсах/метриках разделены атрибутом `deployment_environment`.
 - DSN проекта «Arenda» уже определён конфигом:
   `http://<UPTRACE_PROJECT_TOKEN>@uptrace:14318?grpc=14317` (= `UPTRACE_DSN`
   из `.env.obs`). Его же видно в UI: проект Arenda → Settings → DSN.
@@ -131,10 +132,19 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
    (у групп — отрицательное число).
 4. В UI Uptrace: **Alerting → Channels → New channel → Telegram**, указать
    chat id. Документация: https://uptrace.dev/features/alerting/notifications.html
-5. Создать мониторы: **Alerting → Monitors → New monitor → From YAML**,
-   привязать канал. Стартовый набор (синтаксис:
-   https://uptrace.dev/features/alerting/metric-monitors.html,
-   https://uptrace.dev/features/alerting/error-monitors.html):
+   Если api.telegram.org недоступен с сервера (блокировки РФ) — мониторы
+   работают и без канала уведомлений: срабатывания видны в UI; канал можно
+   добавить позже (прокси/VPN).
+5. Создать мониторы **в проекте Arenda**: **Alerting → Monitors → New
+   monitor → From YAML**, привязать канал. ВАЖНО: YAML-схема мониторов
+   2.0.3 отличается от uptrace.dev — `detector: {type: manual, max_value}`
+   и `column: {name, unit}` не работают; ниже рабочий плоский формат,
+   проверенный на 2.0.3 на боевом сервере (`max_allowed_value:` /
+   `min_allowed_value:`, `column_unit:`, `check_num_point:`, опционально
+   `flapping:`, `detectors:`). API 2.0.3 для автоматизации: создание
+   `POST /internal/v1/projects/{pid}/monitors/yaml` (Content-Type:
+   application/yaml), список `GET .../monitors`, обновление `PUT
+   .../monitors/{id}` полным JSON (PUT /yaml → 405). Стартовый набор:
 
    ```yaml
    # Доля упавших HTTP-запросов (5xx/panic) по трейсам backend
@@ -144,12 +154,10 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
        metrics:
          - uptrace_tracing_spans as $spans
        query:
-         - perMin(count($spans{_status_code="error"})) as failed_requests
+         - perMin(count($spans{_status_code="error"}))
          - where _type = "httpserver"
-       detector:
-         type: manual
-         max_value: 5
-       num_eval_points: 3
+       max_allowed_value: 5
+       check_num_point: 3
    ```
 
    ```yaml
@@ -162,10 +170,8 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
        query:
          - perMin(sum($logs))
          - where _system in ("log:error", "log:fatal")
-       detector:
-         type: manual
-         max_value: 10
-       num_eval_points: 3
+       max_allowed_value: 10
+       check_num_point: 3
    ```
 
    ```yaml
@@ -191,23 +197,19 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
    ```
 
    ```yaml
-   # Диск хоста > 85%
+   # Диск хоста > 85%. Обёртки sum() обязательны — без агрегата запрос
+   # даёт no-data; host_name у метрик otelcol нет — группировка по mountpoint.
    monitors:
      - name: Filesystem usage
        type: metric
        metrics:
          - system_filesystem_usage as $fs_usage
        query:
-         - $fs_usage{state='used'} / $fs_usage as fs_util
-         - group by host_name, mountpoint
+         - sum($fs_usage{state="used"}) / sum($fs_usage)
+         - group by mountpoint
          - where mountpoint !~ "/snap"
-       column:
-         name: fs_util
-         unit: utilization
-       detector:
-         type: manual
-         max_value: 0.85
-       num_eval_points: 3
+       column_unit: utilization
+       max_allowed_value: 0.85
    ```
 
    ```yaml
@@ -218,15 +220,9 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
        metrics:
          - system_memory_usage as $mem
        query:
-         - $mem{state='used'} / $mem as mem_util
-         - group by host_name
-       column:
-         name: mem_util
-         unit: utilization
-       detector:
-         type: manual
-         max_value: 0.9
-       num_eval_points: 3
+         - sum($mem{state="used"}) / sum($mem)
+       column_unit: utilization
+       max_allowed_value: 0.9
    ```
 
    ```yaml
@@ -238,15 +234,10 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
          - system_cpu_load_average_15m as $load_avg_15m
          - system_cpu_time as $cpu_time
        query:
-         - $load_avg_15m / uniq($cpu_time.cpu) as cpu_util
-         - group by host_name
-       column:
-         name: cpu_util
-         unit: utilization
-       detector:
-         type: manual
-         max_value: 3
-       num_eval_points: 10
+         - avg($load_avg_15m) / uniq($cpu_time, cpu)
+       column_unit: utilization
+       max_allowed_value: 3
+       check_num_point: 10
    ```
 
    ```yaml
@@ -260,15 +251,10 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
          - container_memory_usage_total as $mem_used
          - container_memory_usage_limit as $mem_limit
        query:
-         - $mem_used / $mem_limit as container_mem_util
+         - sum($mem_used) / sum($mem_limit)
          - group by container_name
-       column:
-         name: container_mem_util
-         unit: utilization
-       detector:
-         type: manual
-         max_value: 0.9
-       num_eval_points: 5
+       column_unit: utilization
+       max_allowed_value: 0.9
    ```
 
 ## Caddy: сайт logs.rentlee.ru и access-логи
