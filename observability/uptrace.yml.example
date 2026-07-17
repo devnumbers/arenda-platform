@@ -1,0 +1,120 @@
+## Uptrace configuration — Arenda Platform observability stack.
+##
+## Schema of the published uptrace/uptrace:2.0.3 image ("new-gen":
+## service/seed_data/ch_cluster), based on the official example
+## https://github.com/uptrace/uptrace/blob/v2.0.3/example/docker/uptrace.yml
+## and verified against a live 2.0.3 deployment. The image entrypoint reads
+## /etc/uptrace/config.yml (see docker-compose.obs.yml).
+##
+## Secrets come from .env.obs via environment variables. Supported forms:
+##   $FOO, ${FOO}, ${FOO:default}; escape a literal '$' as '$$'.
+## Copy to uptrace.yml — no in-file edits are needed:
+##   cp observability/uptrace.yml.example observability/uptrace.yml
+
+service:
+  env: production
+  secret: ${UPTRACE_SECRET}
+
+site:
+  # Public UI URL (dashboard links in alert notifications).
+  url: https://logs.rentlee.ru
+
+listen:
+  # OTLP/HTTP API, REST API and the web UI.
+  http:
+    addr: ':14318'
+  # OTLP/gRPC API.
+  grpc:
+    addr: ':14317'
+
+## Initial users/org/projects, created on first startup and synced
+## (update: true) without deleting UI-created resources (delete: false).
+seed_data:
+  update: true
+  delete: false
+  users:
+    - key: user1
+      name: Admin
+      email: admin@rentlee.ru
+      password: ${UPTRACE_ADMIN_PASSWORD}
+      email_confirmed: true
+  orgs:
+    - key: org1
+      name: Arenda
+  org_users:
+    - key: org_user1
+      org_key: org1
+      user_key: user1
+      role: owner
+  projects:
+    # Conventionally, one project monitors Uptrace itself...
+    - key: uptrace
+      name: Uptrace
+      org_key: org1
+    # ...and one holds all Arenda telemetry (stage+prod, separated
+    # by the deployment_environment attribute).
+    - key: arenda
+      name: Arenda
+      org_key: org1
+  project_tokens:
+    - key: self_token
+      project_key: uptrace
+      token: ${UPTRACE_SELF_TOKEN}
+    - key: arenda_token
+      project_key: arenda
+      token: ${UPTRACE_PROJECT_TOKEN}
+  project_users:
+    - key: pu1
+      project_key: uptrace
+      org_user_key: org_user1
+      perm_level: admin
+    - key: pu2
+      project_key: arenda
+      org_user_key: org_user1
+      perm_level: admin
+
+## ClickHouse: telemetry data (spans, logs, metrics).
+ch_cluster:
+  cluster: uptrace1
+  replicated: false
+  distributed: false
+  shards:
+    - replicas:
+        - addr: clickhouse:9000
+          database: uptrace
+          user: uptrace
+          password: ${UPTRACE_CH_PASSWORD}
+
+## PostgreSQL: metadata (users, projects, dashboards, alerts).
+pg:
+  addr: uptrace-pg:5432
+  user: uptrace
+  password: ${UPTRACE_PG_PASSWORD}
+  database: uptrace
+
+## Redis cache — REQUIRED by uptrace:2.0.3 (UI login fails without it:
+## "redis: all ring shards are down").
+redis_cache:
+  addrs:
+    1: 'redis:6379'
+
+ch_schema:
+  compression: ZSTD(1)
+
+## Data retention defaults to 30 days. The official Docker guide documents
+## per-signal TTL overrides; enable only after verifying on your build:
+## ch:
+##   retention:
+##     ttl:
+##       traces: 30 DAY
+##       metrics: 30 DAY
+##       logs: 30 DAY
+
+## Telegram bot token from @BotFather; alert routing is done in the UI
+## (Alerting → Channels). Leave empty until the bot is created.
+telegram:
+  bot_token: ${UPTRACE_TELEGRAM_BOT_TOKEN:}
+
+logging:
+  # DEBUG, INFO, WARN, ERROR.
+  level: INFO

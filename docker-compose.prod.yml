@@ -61,6 +61,8 @@ services:
       start_period: 20s
     networks:
       - arenda-prod
+      # Observability: reach uptrace:14317 (OTLP/gRPC) in docker-compose.obs.yml.
+      - arenda-obs
 
   frontend:
     build:
@@ -132,6 +134,10 @@ services:
 networks:
   arenda-prod:
     name: arenda-prod
+  # Created by docker-compose.obs.yml; start the obs stack first.
+  arenda-obs:
+    external: true
+    name: arenda-obs
 
 volumes:
   postgres-data:
