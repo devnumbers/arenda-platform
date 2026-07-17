@@ -272,7 +272,12 @@ logs.rentlee.ru {
 	}
 	# HSTS: UI доступен только по HTTPS.
 	header Strict-Transport-Security "max-age=31536000"
-	reverse_proxy 127.0.0.1:14318
+	reverse_proxy 127.0.0.1:14318 {
+		# basic_auth проверяется на уровне Caddy; сам заголовок в Uptrace
+		# не проксируем: иначе project-scoped API (/internal/v1/projects/*)
+		# пробует его как DSN-auth и отвечает 401 (выброс на логин).
+		header_up -Authorization
+	}
 	log {
 		output file /var/log/caddy/access.log {
 			roll_size 100mb
