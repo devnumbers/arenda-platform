@@ -84,6 +84,7 @@ var publicSessionSkippedPaths = []string{
 	"/auth/verify",
 	"/webhooks/",
 	"/internal/perf/",
+	"/client-errors",
 }
 
 func isPublicSessionSkippedPath(path string) bool {

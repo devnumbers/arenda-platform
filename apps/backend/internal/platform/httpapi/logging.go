@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	platformlogger "github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // loggerCtxKey is the context key used to store the request-scoped logger.
@@ -94,12 +96,10 @@ func RequestLoggerWithOptions(logger *slog.Logger, opts RequestLoggerOptions) fu
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			ctx := r.Context()
-			requestID := RequestIDFromContext(ctx)
-			traceID := TraceIDFromContext(ctx)
-			requestLogger := logger.With(
-				slog.String("request_id", requestID),
-				slog.String("trace_id", traceID),
-			)
+			// WithCorrelation attaches request_id plus the OTel trace_id/span_id
+			// when a span context is present (otelhttp runs before this
+			// middleware), falling back to the lightweight local trace ID.
+			requestLogger := platformlogger.WithCorrelation(ctx, logger)
 			ctx = withLogger(ctx, requestLogger)
 			r = r.WithContext(ctx)
 
@@ -110,6 +110,13 @@ func RequestLoggerWithOptions(logger *slog.Logger, opts RequestLoggerOptions) fu
 			route := chi.RouteContext(ctx).RoutePattern()
 			if route == "" {
 				route = "unmatched"
+			}
+			// Rename the server span now that the route is known so span names
+			// stay low-cardinality: the route pattern for matched requests
+			// (e.g. "GET /properties/{id}") and "unmatched" for 404s from
+			// scanners and bots.
+			if span := trace.SpanFromContext(ctx); span.IsRecording() {
+				span.SetName(r.Method + " " + route)
 			}
 
 			if lw.status == 0 {

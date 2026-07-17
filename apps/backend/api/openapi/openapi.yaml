@@ -2806,6 +2806,23 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /client-errors:
+    post:
+      operationId: reportClientError
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientErrorReport'
+      responses:
+        '204':
+          description: Error report accepted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   /webhooks/payment/{provider}:
     post:
       operationId: handlePaymentWebhook
@@ -4498,6 +4515,27 @@ components:
           type: integer
         profit_kopecks:
           type: integer
+
+    ClientErrorReport:
+      type: object
+      required: [app, message]
+      properties:
+        app:
+          type: string
+          enum: [frontend, admin, landing]
+          description: Application that reported the error
+        message:
+          type: string
+          maxLength: 500
+          description: Error message reported by the browser
+        stack:
+          type: string
+          maxLength: 4000
+          description: Optional stack trace
+        url:
+          type: string
+          maxLength: 500
+          description: Page URL where the error occurred
 
   responses:
     BadRequest:

@@ -91,6 +91,7 @@ func run(fallback *slog.Logger) error {
 		return err
 	}
 	appLogger := slog.New(logHandler)
+	slog.SetDefault(appLogger)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -435,6 +436,9 @@ func run(fallback *slog.Logger) error {
 	phoneChangeVerifyLimiter := httpapi.NewRateLimiter(rate.Every(15*time.Minute/time.Duration(cfg.RateLimit.PhoneChangeVerifyPer15Min)), phoneChangeVerifyBurst, 1*time.Hour)
 	defer phoneChangeVerifyLimiter.Stop()
 
+	clientErrorsLimiter := httpapi.NewRateLimiter(rate.Every(2*time.Second), 10, time.Minute)
+	defer clientErrorsLimiter.Stop()
+
 	var poolStats func() httpapi.DBPoolSnapshot
 	if cfg.AppEnv == "local" {
 		poolStats = dbPoolStats(pool)
@@ -472,6 +476,7 @@ func run(fallback *slog.Logger) error {
 		EmailVerifyLimiter:       emailVerifyLimiter,
 		PhoneChangeSendLimiter:   phoneChangeSendLimiter,
 		PhoneChangeVerifyLimiter: phoneChangeVerifyLimiter,
+		ClientErrorsLimiter:      clientErrorsLimiter,
 		DBPoolStats:              poolStats,
 		DevMode:                  cfg.AppEnv == "local" && cfg.PaymentProvider == "fake",
 		TrustedProxies:           cfg.TrustedProxies,

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
@@ -54,6 +53,7 @@ type Deps struct {
 	EmailVerifyLimiter       *RateLimiter
 	PhoneChangeSendLimiter   *RateLimiter
 	PhoneChangeVerifyLimiter *RateLimiter
+	ClientErrorsLimiter      *RateLimiter
 	DBPoolStats              func() DBPoolSnapshot
 	DevMode                  bool
 	TrustedProxies           []string
@@ -86,8 +86,9 @@ func New(deps Deps) http.Handler {
 		LogSuccessfulRequests: deps.LogSuccessfulRequests,
 		SlowRequestThreshold:  slowRequestThreshold,
 	}))
-	r.Use(middleware.Recoverer)
+	r.Use(recoveryMiddleware)
 	r.Use(rateLimitMiddleware(deps.IPRateLimiter))
+	r.Use(clientErrorsBodyLimitMiddleware)
 	r.Use(securityHeaders(deps.CookieSecure))
 	r.Use(SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
 	r.Use(readonlyMiddleware(deps.Subscriptions, deps.Logger, deps.Clock))
@@ -121,6 +122,7 @@ func New(deps Deps) http.Handler {
 	subscriptionHandlers := NewSubscriptionHandlers(deps.Tariffs, deps.Subscriptions, deps.PaymentMethods, deps.Payments, deps.Webhooks, deps.Logger, deps.DevMode)
 	financeHandlers := NewFinanceHandlers(deps.Operations)
 	adminHandlers := NewAdminHandlers(deps.Admin, deps.Logger)
+	clientErrorsHandlers := NewClientErrorsHandlers(deps.ClientErrorsLimiter)
 
 	handler := &composedHandler{
 		AuthHandlers:               authHandlers,
@@ -133,6 +135,7 @@ func New(deps Deps) http.Handler {
 		FinanceHandlers:            financeHandlers,
 		AdminHandlers:              adminHandlers,
 		CategoryHandlers:           categoryHandlers,
+		ClientErrorsHandlers:       clientErrorsHandlers,
 	}
 
 	// The generated OpenAPI router has no per-route middleware support, so we
@@ -218,6 +221,17 @@ func rateLimitMiddleware(limiter *RateLimiter) func(http.Handler) http.Handler {
 	}
 }
 
+// clientErrorsBodyLimitMiddleware caps request bodies on the public client
+// error endpoint before routing, so oversized reports are rejected cheaply.
+func clientErrorsBodyLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/client-errors" {
+			r.Body = http.MaxBytesReader(w, r.Body, clientErrorBodyLimit)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // composedHandler groups the existing handler sets. Embedding provides the
 // generated ServerInterface implementation without forwarding methods.
 type composedHandler struct {
@@ -231,4 +245,5 @@ type composedHandler struct {
 	*FinanceHandlers
 	*AdminHandlers
 	*CategoryHandlers
+	*ClientErrorsHandlers
 }
