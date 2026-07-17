@@ -24,6 +24,7 @@ The main Kimi Code agent is always an **Orchestrator**. It does not write, edit,
 - Landing: `apps/landing`, a standalone Vite + React SPA (export from Figma Make) served by nginx as the public site at `/`.
 - Product docs: `docs/`; domain glossary: `CONTEXT.md`; architecture decisions: `docs/adr/`.
 - Local infrastructure runs through `docker-compose.local.yml`; run the backend on the host with Go.
+- Observability: `docker-compose.obs.yml` + `observability/`, a self-hosted Uptrace stack (compose project `arenda-obs`) collecting stage/prod logs, traces, and metrics with Telegram alerts; see `docs/adr/0021-centralized-observability-uptrace.md` and `observability/README.md`.
 
 ## Work Rules
 
@@ -75,6 +76,10 @@ cp .env.example .env
 # Fill required local values in .env before backend-run.
 make local-infra-up
 make local-infra-down
+make obs-up
+make obs-down
+make obs-ps
+make obs-logs
 make backend-run
 make backend-lint
 make admin-install

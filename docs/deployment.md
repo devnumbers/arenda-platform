@@ -22,6 +22,7 @@
 - `admin.rentlee.ru`
 - `dev.rentlee.ru`
 - `admin.dev.rentlee.ru`
+- `logs.rentlee.ru`
 
 ## Server Bootstrap
 
@@ -239,6 +240,66 @@ esac
   затем обновить Dockerfiles/compose и повторить полный build/test.
 - `git clean -ffdx` в deploy директории удаляет любой drift checkout-а. В этих
   директориях должны храниться только файлы репозитория и целевой `.env.*`.
+
+## Observability
+
+Централизованная наблюдаемость stage/prod (логи, трейсы, метрики, алерты)
+работает на Uptrace self-hosted на этом же сервере; решение зафиксировано в
+`docs/adr/0021-centralized-observability-uptrace.md`. Здесь — краткий обзор;
+полная инструкция по установке и настройке — `observability/README.md`.
+
+- Стек живёт в отдельном compose-проекте `arenda-obs` (`docker-compose.obs.yml`
+  + каталог `observability/` в репо) и разворачивается из `/opt/arenda/obs` —
+  вне stage/prod checkout'ов, которые чистятся `git clean -ffdx`. Сервисы:
+  ClickHouse, PostgreSQL, Uptrace, Redis, Vector, OTel Collector; суммарный
+  лимит RAM ~2.1 ГБ, все порты привязаны к `127.0.0.1`.
+- Что собирается: stdout всех контейнеров (структурированные slog-логи backend
+  остаются logging source of truth, локальный json-file driver и `docker logs`
+  сохраняются), access-логи Caddy (`/var/log/caddy/access.log`), лог сбоев
+  healthcheck-cron (`/var/log/arenda/healthcheck.log`), JS-ошибки браузера
+  (frontend/admin/landing шлют их в backend на публичный `POST /client-errors`,
+  backend логирует в stdout), OTel-трейсы и метрики backend обоих окружений,
+  метрики хоста и контейнеров (OTel Collector: hostmetrics + docker_stats).
+- Backend подключается к внешней docker-сети `arenda-obs` и отправляет
+  трейсы/метрики по OTLP на `http://uptrace:14317` (порт наружу не
+  публикуется). В `.env.stage`/`.env.prod` добавляется блок `OTEL_*`
+  (`OTEL_SERVICE_NAME`, `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`,
+  `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`,
+  `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_TRACES_SAMPLER_ARG`).
+- UI: `https://logs.rentlee.ru` — отдельный блок в серверном Caddyfile:
+  `basic_auth` (bcrypt-хэш, учётка хранится только в Caddyfile на сервере) +
+  `reverse_proxy 127.0.0.1:14318`. DNS A-запись добавляет владелец. Запасной
+  доступ — SSH-туннель `ssh -L 14318:127.0.0.1:14318 <server>`.
+- Алерты в Telegram настраиваются нативно в UI Uptrace; токен бота и chat id
+  в репо не хранятся.
+
+Команды на сервере в `/opt/arenda/obs` (Makefile туда не копируется — прямые
+вызовы compose, как в `observability/README.md`):
+
+```bash
+cd /opt/arenda/obs
+docker compose -f docker-compose.obs.yml --env-file .env.obs up -d    # поднять стек
+docker compose -f docker-compose.obs.yml --env-file .env.obs down     # остановить стек
+docker compose -f docker-compose.obs.yml --env-file .env.obs ps       # статус сервисов
+docker compose -f docker-compose.obs.yml --env-file .env.obs logs -f  # логи стека
+```
+
+Те же действия доступны как make-таргеты (`make obs-up`, `make obs-down`,
+`make obs-ps`, `make obs-logs`) из любого checkout'а репозитория, где рядом
+с `docker-compose.obs.yml` есть `.env.obs`.
+
+Smoke checks после выкатки стека (на сервере, из `/opt/arenda/obs`):
+
+```bash
+docker compose -f docker-compose.obs.yml --env-file .env.obs ps      # все сервисы healthy (otelcol — running, healthcheck у него нет)
+curl -fsS -o /dev/null http://127.0.0.1:14318                        # UI Uptrace отвечает локально
+test "$(curl -sS -o /dev/null -w '%{http_code}' https://logs.rentlee.ru)" = "401"  # basic_auth требует учётку
+```
+
+Дальше — визуально в UI: логи контейнеров смотрятся в разделе Traces
+(/spans; отдельного /logs в Uptrace 2.0.3 нет) и фильтруются по атрибутам
+`deployment_environment_name`/`service_name`, трейсы запросов появляются
+после вызовов API, графики метрик хоста и контейнеров наполняются.
 
 ## T-Bank TLS Certificates
 
