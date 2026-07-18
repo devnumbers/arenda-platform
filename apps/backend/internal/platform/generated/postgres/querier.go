@@ -146,6 +146,7 @@ type Querier interface {
 	IncrementSubscriptionPaymentChargeAttempts(ctx context.Context, id pgtype.UUID) (int32, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
 	IsEmailReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
+	IsNotificationEventAllowed(ctx context.Context, arg IsNotificationEventAllowedParams) (bool, error)
 	IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
 	ListAllPendingOperationsWithPastDate(ctx context.Context, arg ListAllPendingOperationsWithPastDateParams) ([]Operation, error)
@@ -159,6 +160,7 @@ type Querier interface {
 	ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Lease, error)
 	ListLeasesByProperty(ctx context.Context, arg ListLeasesByPropertyParams) ([]Lease, error)
 	ListNextRentPaymentsByOwner(ctx context.Context, arg ListNextRentPaymentsByOwnerParams) ([]ListNextRentPaymentsByOwnerRow, error)
+	ListNotificationPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationPreference, error)
 	ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
 	ListOpenLeasesWithPastEndDate(ctx context.Context, arg ListOpenLeasesWithPastEndDateParams) ([]Lease, error)
 	ListOperationCategoriesByOwner(ctx context.Context, arg ListOperationCategoriesByOwnerParams) ([]OperationCategory, error)
@@ -210,6 +212,7 @@ type Querier interface {
 	MarkReminderFailed(ctx context.Context, arg MarkReminderFailedParams) (int64, error)
 	MarkReminderSending(ctx context.Context, id pgtype.UUID) (Reminder, error)
 	MarkReminderSent(ctx context.Context, arg MarkReminderSentParams) (int64, error)
+	MarkReminderSkipped(ctx context.Context, id pgtype.UUID) (int64, error)
 	MarkSendingReminderPending(ctx context.Context, arg MarkSendingReminderPendingParams) (int64, error)
 	MarkSendingReminderSent(ctx context.Context, arg MarkSendingReminderSentParams) (int64, error)
 	MarkSubscriptionPaymentFailed(ctx context.Context, arg MarkSubscriptionPaymentFailedParams) (SubscriptionPayment, error)
@@ -256,6 +259,7 @@ type Querier interface {
 	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error)
 	UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error)
 	UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error
+	UpsertNotificationPreference(ctx context.Context, arg UpsertNotificationPreferenceParams) error
 	UpsertPaymentMethodByTokenHash(ctx context.Context, arg UpsertPaymentMethodByTokenHashParams) (PaymentMethod, error)
 }
 

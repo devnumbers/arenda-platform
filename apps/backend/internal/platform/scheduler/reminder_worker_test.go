@@ -112,6 +112,22 @@ func (r *fakeReminderRepoForWorker) MarkSendingReminderPending(context.Context, 
 	return r.markSendingPending
 }
 
+func (r *fakeReminderRepoForWorker) MarkReminderSkipped(context.Context, uuid.UUID) error {
+	return nil
+}
+
+func (r *fakeReminderRepoForWorker) ListPreferences(context.Context, uuid.UUID) ([]domain.NotificationPreference, error) {
+	return nil, nil
+}
+
+func (r *fakeReminderRepoForWorker) UpsertPreference(context.Context, uuid.UUID, domain.NotificationPreference) error {
+	return nil
+}
+
+func (r *fakeReminderRepoForWorker) IsEventAllowed(context.Context, uuid.UUID, domain.EventType) (bool, error) {
+	return true, nil
+}
+
 func (r *fakeReminderRepoForWorker) CancelByIDAndOwner(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return false, nil
 }

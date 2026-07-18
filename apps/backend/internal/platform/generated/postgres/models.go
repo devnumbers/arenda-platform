@@ -64,6 +64,7 @@ const (
 	NotificationStatusFailed    NotificationStatus = "failed"
 	NotificationStatusCancelled NotificationStatus = "cancelled"
 	NotificationStatusSending   NotificationStatus = "sending"
+	NotificationStatusSkipped   NotificationStatus = "skipped"
 )
 
 func (e *NotificationStatus) Scan(src interface{}) error {
@@ -384,6 +385,14 @@ type User struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	PhoneEncrypted  bool               `json:"phone_encrypted"`
 	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
+}
+
+type UserNotificationPreference struct {
+	UserID    pgtype.UUID           `json:"user_id"`
+	EventType NotificationEventType `json:"event_type"`
+	Allowed   bool                  `json:"allowed"`
+	CreatedAt pgtype.Timestamptz    `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz    `json:"updated_at"`
 }
 
 type UserSubscription struct {

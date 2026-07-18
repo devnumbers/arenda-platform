@@ -1,7 +1,9 @@
 import type { components } from '@/shared/api/generated';
-import type { User } from './types';
+import type { NotificationPreference, User } from './types';
 
 type MeResponse = components['schemas']['MeResponse'];
+type NotificationPreferencesResponse =
+  components['schemas']['NotificationPreferencesResponse'];
 
 export function mapMeResponse(response: MeResponse): User {
   return {
@@ -20,4 +22,13 @@ export function mapMeResponse(response: MeResponse): User {
         }
       : null,
   };
+}
+
+export function mapNotificationPreferencesResponse(
+  response: NotificationPreferencesResponse,
+): NotificationPreference[] {
+  return response.preferences.map((preference) => ({
+    eventType: preference.event_type,
+    allowed: preference.allowed,
+  }));
 }

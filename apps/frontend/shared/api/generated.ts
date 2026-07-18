@@ -596,6 +596,22 @@ export interface paths {
         patch: operations["updateReminder"];
         trace?: never;
     };
+    "/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getNotificationPreferences"];
+        put: operations["updateNotificationPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tariffs": {
         parameters: {
             query?: never;
@@ -916,6 +932,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/properties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminProperties"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/properties/{id}": {
         parameters: {
             query?: never;
@@ -924,6 +956,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getAdminProperty"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/leases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminLeases"];
         put?: never;
         post?: never;
         delete?: never;
@@ -948,6 +996,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tenant-contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminTenantContacts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tenant-contacts/{id}": {
         parameters: {
             query?: never;
@@ -956,6 +1020,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getAdminTenantContact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminOperations"];
         put?: never;
         post?: never;
         delete?: never;
@@ -980,6 +1060,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAdminStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/audit-logs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAdminAuditLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminUserAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/fake-subscription-payment/{id}/confirm": {
         parameters: {
             query?: never;
@@ -990,6 +1134,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["confirmFakeSubscriptionPayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/client-errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reportClientError"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1167,6 +1327,7 @@ export interface components {
             name?: string | null;
             surname?: string | null;
             patronymic?: string | null;
+            subscriptionStatus?: components["schemas"]["SubscriptionStatus"] | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1193,6 +1354,7 @@ export interface components {
             id: string;
             /** Format: uuid */
             ownerId: string;
+            ownerPhone: string;
             name: string;
             type: components["schemas"]["PropertyType"];
             address: string;
@@ -1217,6 +1379,7 @@ export interface components {
             ownerId: string;
             /** Format: uuid */
             propertyId: string;
+            propertyName: string;
             tenantContact?: components["schemas"]["AdminTenantContact"] | null;
             status: components["schemas"]["LeaseStatus"];
             /** Format: date */
@@ -1241,6 +1404,7 @@ export interface components {
             id: string;
             /** Format: uuid */
             ownerId: string;
+            ownerPhone: string;
             name: string;
             surname?: string | null;
             patronymic?: string | null;
@@ -1263,6 +1427,7 @@ export interface components {
             ownerId: string;
             /** Format: uuid */
             propertyId: string;
+            propertyName: string;
             /** Format: uuid */
             leaseId?: string | null;
             /** Format: uuid */
@@ -1300,6 +1465,68 @@ export interface components {
         };
         AdminOperationResponse: {
             operation: components["schemas"]["AdminOperation"];
+        };
+        AdminAuditLog: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            actorId?: string | null;
+            /** @enum {string} */
+            actorRole: "owner" | "admin" | "system" | "anonymous";
+            action: string;
+            entityType?: string | null;
+            /** Format: uuid */
+            entityId?: string | null;
+            context: {
+                [key: string]: unknown;
+            };
+            requestId?: string | null;
+            ip?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminAuditLogsResponse: {
+            items: components["schemas"]["AdminAuditLog"][];
+            total: number;
+        };
+        AdminAuditLogResponse: {
+            auditLog: components["schemas"]["AdminAuditLog"];
+        };
+        AdminStatsRecentUser: {
+            /** Format: uuid */
+            id: string;
+            phone: string;
+            name?: string | null;
+            surname?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminStatsRecentPayment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            userId: string;
+            userPhone: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            status: components["schemas"]["SubscriptionPaymentStatus"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminStats: {
+            usersTotal: number;
+            usersNewLast30d: number;
+            subscriptionsActive: number;
+            propertiesActive: number;
+            propertiesArchived: number;
+            leasesTotal: number;
+            operationsTotal: number;
+            /** Format: int64 */
+            paymentsSucceededTotalKopecksLast30d: number;
+            paymentsFailedCountLast30d: number;
+            paymentsRefundedCountLast30d: number;
+            recentUsers: components["schemas"]["AdminStatsRecentUser"][];
+            recentPayments: components["schemas"]["AdminStatsRecentPayment"][];
         };
         Problem: {
             type: string;
@@ -1487,7 +1714,7 @@ export interface components {
         /** @enum {string} */
         SubscriptionStatus: "active" | "grace" | "cancelled";
         /** @enum {string} */
-        SubscriptionPaymentStatus: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded";
+        SubscriptionPaymentStatus: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded" | "refunding";
         /** @enum {string} */
         AdminSubscriptionPaymentPeriod: "month" | "year";
         /** @enum {string} */
@@ -1680,7 +1907,7 @@ export interface components {
             /** @enum {string} */
             event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action";
             /** @enum {string} */
-            status: "pending" | "sent" | "failed" | "cancelled";
+            status: "pending" | "sent" | "failed" | "cancelled" | "skipped";
             /** Format: date-time */
             scheduled_at: string;
             /** Format: date-time */
@@ -1705,6 +1932,17 @@ export interface components {
         };
         RemindersResponse: {
             items: components["schemas"]["ReminderResponse"][];
+        };
+        NotificationPreference: {
+            /** @enum {string} */
+            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action";
+            allowed: boolean;
+        };
+        NotificationPreferencesResponse: {
+            preferences: components["schemas"]["NotificationPreference"][];
+        };
+        NotificationPreferencesUpdateRequest: {
+            preferences: components["schemas"]["NotificationPreference"][];
         };
         FinanceReportResponse: {
             period: components["schemas"]["FinanceReportPeriod"];
@@ -1744,6 +1982,19 @@ export interface components {
             income_kopecks: number;
             expense_kopecks: number;
             profit_kopecks: number;
+        };
+        ClientErrorReport: {
+            /**
+             * @description Application that reported the error
+             * @enum {string}
+             */
+            app: "frontend" | "admin" | "landing";
+            /** @description Error message reported by the browser */
+            message: string;
+            /** @description Optional stack trace */
+            stack?: string;
+            /** @description Page URL where the error occurred */
+            url?: string;
         };
     };
     responses: {
@@ -3188,6 +3439,53 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    getNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notification preferences for every reminder event type */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferencesResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    updateNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferencesUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Notification preferences updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferencesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     listTariffs: {
         parameters: {
             query?: never;
@@ -3457,6 +3755,12 @@ export interface operations {
             query?: {
                 user_id?: string;
                 status?: components["schemas"]["SubscriptionPaymentStatus"];
+                /** @description Exact match on the user's phone number. */
+                user_phone?: string;
+                /** @description Sort field (camelCase). Allowed: createdAt, amountKopecks, status. Defaults to createdAt descending. */
+                sort?: string;
+                /** @description Sort direction: asc or desc (default desc). */
+                order?: "asc" | "desc";
                 limit?: number;
                 offset?: number;
             };
@@ -3567,6 +3871,10 @@ export interface operations {
                 email?: string;
                 role?: "owner" | "admin";
                 subscription_status?: components["schemas"]["SubscriptionStatus"];
+                /** @description Sort field (camelCase). Allowed: createdAt, updatedAt. Defaults to createdAt descending. */
+                sort?: string;
+                /** @description Sort direction: asc or desc (default desc). */
+                order?: "asc" | "desc";
             };
             header?: never;
             path?: never;
@@ -3622,6 +3930,10 @@ export interface operations {
                 limit?: number;
                 offset?: number;
                 status?: "active" | "archived" | "all";
+                /** @description Sort field (camelCase). Allowed: name, createdAt, updatedAt, status. Defaults to updatedAt descending. */
+                sort?: string;
+                /** @description Sort direction: asc or desc (default desc). */
+                order?: "asc" | "desc";
             };
             header?: never;
             path: {
@@ -3652,6 +3964,10 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                /** @description Sort field (camelCase). Allowed: startDate, updatedAt, status, rentAmountKopecks. Defaults to updatedAt descending. */
+                sort?: string;
+                /** @description Sort direction: asc or desc (default desc). */
+                order?: "asc" | "desc";
             };
             header?: never;
             path: {
@@ -3682,6 +3998,10 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                /** @description Sort field (camelCase). Allowed: name, updatedAt. Defaults to updatedAt descending. */
+                sort?: string;
+                /** @description Sort direction: asc or desc (default desc). */
+                order?: "asc" | "desc";
             };
             header?: never;
             path: {
@@ -3716,6 +4036,10 @@ export interface operations {
                 type?: components["schemas"]["OperationType"];
                 property_id?: string;
                 lease_id?: string;
+                /** @description Sort field (camelCase). Allowed: operationDate, amountKopecks, status. Defaults to operationDate descending. */
+                sort?: string;
+                /** @description Sort direction: asc or desc (default desc). */
+                order?: "asc" | "desc";
             };
             header?: never;
             path: {
@@ -3738,6 +4062,41 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAdminProperties: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                status?: "active" | "archived" | "all";
+                /** @description Case-insensitive substring search by name and address. */
+                q?: string;
+                owner_id?: string;
+                /** @description Sort field (camelCase). Allowed: name, createdAt, updatedAt, status. Defaults to updatedAt descending. */
+                sort?: string;
+                /** @description Sort direction: asc or desc (default desc). */
+                order?: "asc" | "desc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin properties list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPropertiesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -3768,6 +4127,41 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    listAdminLeases: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                /** @description Filter by the stored lease status. */
+                status?: components["schemas"]["LeaseStatus"];
+                property_id?: string;
+                owner_id?: string;
+                /** @description Sort field (camelCase). Allowed: startDate, updatedAt, status, rentAmountKopecks. Defaults to updatedAt descending. */
+                sort?: string;
+                /** @description Sort direction: asc or desc (default desc). */
+                order?: "asc" | "desc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin leases list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminLeasesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     getAdminLease: {
         parameters: {
             query?: never;
@@ -3792,6 +4186,40 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAdminTenantContacts: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                /** @description Case-insensitive substring search by name, surname and phone. */
+                q?: string;
+                owner_id?: string;
+                /** @description Sort field (camelCase). Allowed: name, updatedAt. Defaults to updatedAt descending. */
+                sort?: string;
+                /** @description Sort direction: asc or desc (default desc). */
+                order?: "asc" | "desc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin tenant contacts list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTenantContactsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -3822,6 +4250,44 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    listAdminOperations: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                status?: components["schemas"]["OperationStatus"];
+                type?: components["schemas"]["OperationType"];
+                property_id?: string;
+                lease_id?: string;
+                owner_id?: string;
+                /** @description Case-insensitive substring search by operation name and comment. */
+                q?: string;
+                /** @description Sort field (camelCase). Allowed: operationDate, amountKopecks, status. Defaults to operationDate descending. */
+                sort?: string;
+                /** @description Sort direction: asc or desc (default desc). */
+                order?: "asc" | "desc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin operations list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOperationsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     getAdminOperation: {
         parameters: {
             query?: never;
@@ -3840,6 +4306,138 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminOperationResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getAdminStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Platform-wide counters and recent activity for the admin dashboard */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStats"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAdminAuditLogs: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                actor_id?: string;
+                /** @description Exact action filter, e.g. auth.login. */
+                action?: string;
+                /** @description Exact entity type filter, e.g. property. */
+                entity_type?: string;
+                /** @description Inclusive lower bound on createdAt (date at 00:00:00 UTC). */
+                date_from?: string;
+                /** @description Inclusive upper bound on createdAt (matched as date + 24h, exclusive). */
+                date_to?: string;
+                /** @description Sort field (camelCase). Allowed: createdAt. Defaults to createdAt descending. */
+                sort?: string;
+                /** @description Sort direction: asc or desc (default desc). */
+                order?: "asc" | "desc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin audit log list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAuditLogsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getAdminAuditLog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin audit log entry details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAuditLogResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAdminUserAuditLogs: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                /** @description Exact action filter, e.g. auth.login. */
+                action?: string;
+                /** @description Exact entity type filter, e.g. property. */
+                entity_type?: string;
+                /** @description Inclusive lower bound on createdAt (date at 00:00:00 UTC). */
+                date_from?: string;
+                /** @description Inclusive upper bound on createdAt (matched as date + 24h, exclusive). */
+                date_to?: string;
+                /** @description Sort field (camelCase). Allowed: createdAt. Defaults to createdAt descending. */
+                sort?: string;
+                /** @description Sort direction: asc or desc (default desc). */
+                order?: "asc" | "desc";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin audit log list for one user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAuditLogsResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -3873,6 +4471,30 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    reportClientError: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientErrorReport"];
+            };
+        };
+        responses: {
+            /** @description Error report accepted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     handlePaymentWebhook: {

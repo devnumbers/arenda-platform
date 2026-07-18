@@ -34,6 +34,9 @@ const (
 	ReminderSent      ReminderStatus = "sent"
 	ReminderFailed    ReminderStatus = "failed"
 	ReminderCancelled ReminderStatus = "cancelled"
+	// ReminderSkipped is terminal: the owner revoked permission for the
+	// reminder's event type, so it was not sent and must not be retried.
+	ReminderSkipped ReminderStatus = "skipped"
 )
 
 const (

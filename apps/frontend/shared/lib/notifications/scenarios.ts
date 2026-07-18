@@ -131,6 +131,9 @@ const profile = {
   phoneChanged: ((options?) =>
     notify.success('Номер телефона изменён', options)) satisfies ScenarioFn,
   personalDataSaveError: errorScenario('Не удалось сохранить данные'),
+  notificationPreferencesSaveError: errorScenario(
+    'Не удалось сохранить настройки уведомлений',
+  ),
   phoneSendCodeError: errorScenario('Не удалось отправить код'),
   phoneChangeError: errorScenario('Не удалось изменить номер телефона'),
   logoutError: errorScenario('Не удалось выйти'),

@@ -173,3 +173,25 @@ ON CONFLICT (reminder_id) DO NOTHING;
 
 -- name: DeleteSentEmailReminder :exec
 DELETE FROM sent_email_reminders WHERE reminder_id = $1;
+
+-- name: MarkReminderSkipped :execrows
+UPDATE reminders
+SET status = 'skipped'
+WHERE id = $1 AND status IN ('pending', 'sending');
+
+-- name: ListNotificationPreferences :many
+SELECT * FROM user_notification_preferences
+WHERE user_id = $1
+ORDER BY event_type ASC;
+
+-- name: UpsertNotificationPreference :exec
+INSERT INTO user_notification_preferences (user_id, event_type, allowed)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id, event_type)
+DO UPDATE SET allowed = EXCLUDED.allowed;
+
+-- name: IsNotificationEventAllowed :one
+SELECT COALESCE((
+    SELECT allowed FROM user_notification_preferences
+    WHERE user_id = $1 AND event_type = $2
+), true)::boolean AS allowed;

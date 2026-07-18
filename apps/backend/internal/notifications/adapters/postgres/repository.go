@@ -540,6 +540,60 @@ func (r *ReminderRepository) DeleteSentEmailReminder(ctx context.Context, remind
 	return nil
 }
 
+// MarkReminderSkipped marks a pending or sending reminder as skipped. It is
+// used by the worker when the owner revoked permission for the event type.
+func (r *ReminderRepository) MarkReminderSkipped(ctx context.Context, id uuid.UUID) error {
+	rows, err := r.q().MarkReminderSkipped(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		return fmt.Errorf("mark reminder skipped: %w", err)
+	}
+	if rows == 0 {
+		return application.ErrConcurrentUpdate
+	}
+	return nil
+}
+
+// ListPreferences returns the stored notification preference rows of a user.
+func (r *ReminderRepository) ListPreferences(ctx context.Context, userID uuid.UUID) ([]domain.NotificationPreference, error) {
+	rows, err := r.q().ListNotificationPreferences(ctx, pgconv.UUIDToPgtype(userID))
+	if err != nil {
+		return nil, fmt.Errorf("list notification preferences: %w", err)
+	}
+	out := make([]domain.NotificationPreference, len(rows))
+	for i, row := range rows {
+		out[i] = domain.NotificationPreference{
+			EventType: domain.EventType(row.EventType),
+			Allowed:   row.Allowed,
+		}
+	}
+	return out, nil
+}
+
+// UpsertPreference inserts or updates one notification preference row.
+func (r *ReminderRepository) UpsertPreference(ctx context.Context, userID uuid.UUID, pref domain.NotificationPreference) error {
+	if err := r.q().UpsertNotificationPreference(ctx, postgres.UpsertNotificationPreferenceParams{
+		UserID:    pgconv.UUIDToPgtype(userID),
+		EventType: postgres.NotificationEventType(pref.EventType),
+		Allowed:   pref.Allowed,
+	}); err != nil {
+		return fmt.Errorf("upsert notification preference: %w", err)
+	}
+	return nil
+}
+
+// IsEventAllowed reports whether the user permits sending reminders of the
+// given event type. A missing row means allowed (opt-out model).
+func (r *ReminderRepository) IsEventAllowed(ctx context.Context, userID uuid.UUID, eventType domain.EventType) (bool, error) {
+	allowed, err := r.q().IsNotificationEventAllowed(ctx, postgres.IsNotificationEventAllowedParams{
+		UserID:    pgconv.UUIDToPgtype(userID),
+		EventType: postgres.NotificationEventType(eventType),
+	})
+	if err != nil {
+		return false, fmt.Errorf("check notification event allowed: %w", err)
+	}
+	return allowed, nil
+}
+
 func toDomain(row postgres.Reminder) domain.Reminder {
 	return domain.Reminder{
 		ID:                   pgconv.UUIDFromPgtype(row.ID),

@@ -33,6 +33,7 @@ var readonlyExemptPrefixes = []string{
 	"/webhooks",
 	"/internal",
 	"/me",
+	"/notification-preferences",
 	"/admin",
 	"/client-errors",
 }

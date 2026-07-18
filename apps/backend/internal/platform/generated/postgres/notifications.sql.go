@@ -305,6 +305,25 @@ func (q *Queries) IsEmailReminderSent(ctx context.Context, reminderID pgtype.UUI
 	return exists, err
 }
 
+const isNotificationEventAllowed = `-- name: IsNotificationEventAllowed :one
+SELECT COALESCE((
+    SELECT allowed FROM user_notification_preferences
+    WHERE user_id = $1 AND event_type = $2
+), true)::boolean AS allowed
+`
+
+type IsNotificationEventAllowedParams struct {
+	UserID    pgtype.UUID           `json:"user_id"`
+	EventType NotificationEventType `json:"event_type"`
+}
+
+func (q *Queries) IsNotificationEventAllowed(ctx context.Context, arg IsNotificationEventAllowedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isNotificationEventAllowed, arg.UserID, arg.EventType)
+	var allowed bool
+	err := row.Scan(&allowed)
+	return allowed, err
+}
+
 const isSMSReminderSent = `-- name: IsSMSReminderSent :one
 SELECT EXISTS(SELECT 1 FROM sent_sms_reminders WHERE reminder_id = $1) AS exists
 `
@@ -356,6 +375,38 @@ func (q *Queries) ListDueReminders(ctx context.Context, arg ListDueRemindersPara
 			&i.NextAttemptAt,
 			&i.MessageTitle,
 			&i.MessageBody,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNotificationPreferences = `-- name: ListNotificationPreferences :many
+SELECT user_id, event_type, allowed, created_at, updated_at FROM user_notification_preferences
+WHERE user_id = $1
+ORDER BY event_type ASC
+`
+
+func (q *Queries) ListNotificationPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationPreference, error) {
+	rows, err := q.db.Query(ctx, listNotificationPreferences, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserNotificationPreference{}
+	for rows.Next() {
+		var i UserNotificationPreference
+		if err := rows.Scan(
+			&i.UserID,
+			&i.EventType,
+			&i.Allowed,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -728,6 +779,20 @@ func (q *Queries) MarkReminderSent(ctx context.Context, arg MarkReminderSentPara
 	return result.RowsAffected(), nil
 }
 
+const markReminderSkipped = `-- name: MarkReminderSkipped :execrows
+UPDATE reminders
+SET status = 'skipped'
+WHERE id = $1 AND status IN ('pending', 'sending')
+`
+
+func (q *Queries) MarkReminderSkipped(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markReminderSkipped, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const markSendingReminderPending = `-- name: MarkSendingReminderPending :execrows
 UPDATE reminders
 SET status = 'pending',
@@ -905,4 +970,22 @@ func (q *Queries) UpdateSentSMSReminderProviderResponse(ctx context.Context, arg
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertNotificationPreference = `-- name: UpsertNotificationPreference :exec
+INSERT INTO user_notification_preferences (user_id, event_type, allowed)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id, event_type)
+DO UPDATE SET allowed = EXCLUDED.allowed
+`
+
+type UpsertNotificationPreferenceParams struct {
+	UserID    pgtype.UUID           `json:"user_id"`
+	EventType NotificationEventType `json:"event_type"`
+	Allowed   bool                  `json:"allowed"`
+}
+
+func (q *Queries) UpsertNotificationPreference(ctx context.Context, arg UpsertNotificationPreferenceParams) error {
+	_, err := q.db.Exec(ctx, upsertNotificationPreference, arg.UserID, arg.EventType, arg.Allowed)
+	return err
 }

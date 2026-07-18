@@ -38,11 +38,22 @@ type ReminderRepository interface {
 	DeleteSentEmailReminder(ctx context.Context, reminderID uuid.UUID) error
 	ResetReminderSending(ctx context.Context, id uuid.UUID) error
 	MarkSendingReminderPending(ctx context.Context, id uuid.UUID, nextAttemptAt time.Time) error
+	// MarkReminderSkipped marks a pending or sending reminder as skipped. It is
+	// used by the worker when the owner revoked permission for the event type.
+	MarkReminderSkipped(ctx context.Context, id uuid.UUID) error
 	CancelByIDAndOwner(ctx context.Context, ownerID, reminderID uuid.UUID) (bool, error)
 	CancelByTarget(ctx context.Context, ownerID uuid.UUID, targetType domain.TargetType, targetID uuid.UUID, eventType domain.EventType) error
 	CancelByRecurringOperationID(ctx context.Context, ownerID, recID uuid.UUID) error
 	HasReminderForLeaseEvent(ctx context.Context, ownerID, leaseID uuid.UUID, eventType domain.EventType) (bool, error)
 	HasReminderForOperationEvent(ctx context.Context, ownerID, operationID uuid.UUID, eventType domain.EventType) (bool, error)
+	// ListPreferences returns the stored notification preference rows of a
+	// user. A missing row means the event type is allowed (opt-out model).
+	ListPreferences(ctx context.Context, userID uuid.UUID) ([]domain.NotificationPreference, error)
+	// UpsertPreference inserts or updates one notification preference row.
+	UpsertPreference(ctx context.Context, userID uuid.UUID, pref domain.NotificationPreference) error
+	// IsEventAllowed reports whether the user permits sending reminders of the
+	// given event type. A missing row means allowed.
+	IsEventAllowed(ctx context.Context, userID uuid.UUID, eventType domain.EventType) (bool, error)
 	WithTx(tx transaction.Tx) ReminderRepository
 }
 

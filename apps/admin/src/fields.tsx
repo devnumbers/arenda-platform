@@ -127,6 +127,7 @@ export const auditActionChoices: Choice[] = [
   { id: 'auth.logout_all', name: 'Выход со всех устройств' },
   { id: 'auth.phone_changed', name: 'Смена телефона' },
   { id: 'profile.updated', name: 'Обновление профиля' },
+  { id: 'notification_preferences.updated', name: 'Изменение настроек уведомлений' },
   { id: 'property.created', name: 'Создание объекта' },
   { id: 'property.updated', name: 'Обновление объекта' },
   { id: 'property.archived', name: 'Архивация объекта' },

@@ -383,6 +383,7 @@ func run() error {
 	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, auditRecorder, appLogger)
 	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, categoryRepo, reminderScheduler, platformpostgres.NewBeginner(pool, appLogger), auditRecorder, clock.Real{}, appLogger)
 	reminderService := notificationsapp.NewReminderService(reminderRepo, clock.Real{})
+	preferenceService := notificationsapp.NewPreferenceService(reminderRepo, platformpostgres.NewBeginner(pool, appLogger), auditRecorder)
 	recurringOperationService := leasesapp.NewRecurringOperationService(
 		recurringOpRepo,
 		operationRepo,
@@ -466,6 +467,7 @@ func run() error {
 		RecurringOperations:      recurringOperationService,
 		Categories:               categoryService,
 		Reminders:                reminderService,
+		NotificationPreferences:  preferenceService,
 		AppBaseURL:               cfg.AppBaseURL,
 		CookieSecure:             cfg.CookieSecure,
 		Logger:                   appLogger,
