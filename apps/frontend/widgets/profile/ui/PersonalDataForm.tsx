@@ -302,7 +302,7 @@ export function PersonalDataForm(): JSX.Element {
           <div className={styles.notifications}>
             <h2 className={styles.notificationsTitle}>Уведомления</h2>
             <p className={styles.notificationsHint}>
-              Напоминания приходят на подтверждённый email.
+              Напоминания приходят на вашу почту.
             </p>
             <div className={styles.notificationsList}>
               {NOTIFICATION_OPTIONS.map(({ eventType, label }) => (

@@ -72,6 +72,8 @@
 
 .checkbox {
   display: inline-flex;
+  /* HeroUI draws its focus ring in var(--accent); recolor it to the project primary */
+  --focus: var(--color-primary);
 }
 
 .checkboxContent {
@@ -95,6 +97,12 @@
   border-radius: 6px;
   background-color: var(--color-white);
   transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+/* HeroUI paints the selected fill via a ::before overlay in var(--accent),
+   which covers our background-color; disable it so fill and border match */
+.checkboxControl::before {
+  content: none;
 }
 
 .checkboxIndicator {
