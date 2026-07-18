@@ -191,6 +191,7 @@ type Querier interface {
 	ListRemindersByOperation(ctx context.Context, arg ListRemindersByOperationParams) ([]Reminder, error)
 	ListRemindersByOwner(ctx context.Context, arg ListRemindersByOwnerParams) ([]Reminder, error)
 	ListRemindersByRecurringOperation(ctx context.Context, arg ListRemindersByRecurringOperationParams) ([]Reminder, error)
+	ListSeenPopups(ctx context.Context, userID pgtype.UUID) ([]string, error)
 	// Payments stuck in the refunding state (refund reserved but never finalized or
 	// reverted). updated_at is trigger-maintained and marks entry into refunding.
 	ListStaleRefundingPayments(ctx context.Context, arg ListStaleRefundingPaymentsParams) ([]SubscriptionPayment, error)
@@ -209,6 +210,7 @@ type Querier interface {
 	LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
 	MarkLoginCodeUsed(ctx context.Context, id pgtype.UUID) error
 	MarkOperationOverdue(ctx context.Context, arg MarkOperationOverdueParams) (Operation, error)
+	MarkPopupSeen(ctx context.Context, arg MarkPopupSeenParams) error
 	MarkReminderFailed(ctx context.Context, arg MarkReminderFailedParams) (int64, error)
 	MarkReminderSending(ctx context.Context, id pgtype.UUID) (Reminder, error)
 	MarkReminderSent(ctx context.Context, arg MarkReminderSentParams) (int64, error)

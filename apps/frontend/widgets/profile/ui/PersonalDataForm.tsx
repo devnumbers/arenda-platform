@@ -1,18 +1,23 @@
 'use client';
 
 import { useCallback, useMemo, useState, type ChangeEvent, type FormEvent, type JSX } from 'react';
-import { Checkbox } from '@heroui/react';
 import { notify } from '@/shared/lib/notifications';
 import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import { PageHeader } from '@/shared/ui/page-header';
 import { useMe } from '@/features/auth/api/hooks';
+import { useUpdateMe } from '@/features/profile/api/hooks';
 import {
   useNotificationPreferences,
-  useUpdateMe,
   useUpdateNotificationPreferences,
-} from '@/features/profile/api/hooks';
+} from '@/features/notification-preferences/api/hooks';
+import {
+  buildInitialPreferences,
+  NOTIFICATION_OPTIONS,
+  type NotificationPreferencesState,
+} from '@/features/notification-preferences/lib/preferences';
+import { NotificationPreferencesFields } from '@/features/notification-preferences/ui/NotificationPreferencesFields';
 import type {
   NotificationEventType,
   NotificationPreference,
@@ -22,33 +27,6 @@ import type {
 import styles from './PersonalDataForm.module.css';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const NOTIFICATION_OPTIONS: {
-  readonly eventType: NotificationEventType;
-  readonly label: string;
-}[] = [
-  { eventType: 'operation_due', label: 'Напоминания об операциях' },
-  { eventType: 'operation_overdue', label: 'Просроченные операции' },
-  { eventType: 'lease_expiring', label: 'Окончание аренды' },
-  { eventType: 'lease_requires_action', label: 'Аренда требует действия' },
-];
-
-type NotificationPreferencesState = Record<NotificationEventType, boolean>;
-
-function buildInitialPreferences(
-  preferences: NotificationPreference[],
-): NotificationPreferencesState {
-  const state: NotificationPreferencesState = {
-    operation_due: true,
-    operation_overdue: true,
-    lease_expiring: true,
-    lease_requires_action: true,
-  };
-  for (const preference of preferences) {
-    state[preference.eventType] = preference.allowed;
-  }
-  return state;
-}
 
 type PersonalDataFormViewProps = {
   readonly me: User;
@@ -63,10 +41,15 @@ function PersonalDataFormView({ me, preferences }: PersonalDataFormViewProps): J
   const [name, setName] = useState(me.name ?? '');
   const [patronymic, setPatronymic] = useState(me.patronymic ?? '');
   const [email, setEmail] = useState(me.email ?? '');
-  const [notificationPrefs, setNotificationPrefs] =
-    useState<NotificationPreferencesState>(() =>
-      buildInitialPreferences(preferences),
-    );
+  // Checkbox edits live only as an override layer over the server state:
+  // while null, the form follows fresh query data (e.g. the onboarding modal
+  // saved over this open page); once the user touches a checkbox the override
+  // wins until their own save succeeds. Comparing against the fresh server
+  // `preferences` cannot tell "user edited" from "server changed", so an
+  // explicit override is the only reliable dirty tracking.
+  const [editedPrefs, setEditedPrefs] = useState<NotificationPreferencesState | null>(null);
+  const serverPrefs = useMemo(() => buildInitialPreferences(preferences), [preferences]);
+  const notificationPrefs = editedPrefs ?? serverPrefs;
   const [isEmailTouched, setIsEmailTouched] = useState(false);
   const [isSubmitAttempted, setIsSubmitAttempted] = useState(false);
 
@@ -81,12 +64,13 @@ function PersonalDataFormView({ me, preferences }: PersonalDataFormViewProps): J
     [surname, name, patronymic, email, me],
   );
 
-  const hasPreferencesChanges = useMemo(() => {
-    const initial = buildInitialPreferences(preferences);
-    return NOTIFICATION_OPTIONS.some(
-      ({ eventType }) => notificationPrefs[eventType] !== initial[eventType],
-    );
-  }, [notificationPrefs, preferences]);
+  const hasPreferencesChanges = useMemo(
+    () =>
+      NOTIFICATION_OPTIONS.some(
+        ({ eventType }) => notificationPrefs[eventType] !== serverPrefs[eventType],
+      ),
+    [notificationPrefs, serverPrefs],
+  );
 
   const isSubmitting =
     updateMe.isPending || updateNotificationPreferences.isPending;
@@ -105,9 +89,12 @@ function PersonalDataFormView({ me, preferences }: PersonalDataFormViewProps): J
 
   const handleNotificationChange = useCallback(
     (eventType: NotificationEventType, allowed: boolean) => {
-      setNotificationPrefs((previous) => ({ ...previous, [eventType]: allowed }));
+      setEditedPrefs((previous) => ({
+        ...(previous ?? serverPrefs),
+        [eventType]: allowed,
+      }));
     },
-    [],
+    [serverPrefs],
   );
 
   const handleSubmit = useCallback(
@@ -165,6 +152,11 @@ function PersonalDataFormView({ me, preferences }: PersonalDataFormViewProps): J
         notify.scenarios.profile.notificationPreferencesSaveError(
           preferencesResult.reason,
         );
+      }
+      if (preferencesResult.status === 'fulfilled') {
+        // The submitted values are now the server state; drop the override
+        // layer so the form follows fresh query data again.
+        setEditedPrefs(null);
       }
       if (
         personalResult.status === 'fulfilled' &&
@@ -226,24 +218,11 @@ function PersonalDataFormView({ me, preferences }: PersonalDataFormViewProps): J
         <p className={styles.notificationsHint}>
           Напоминания приходят на подтверждённый email.
         </p>
-        <div className={styles.notificationsList}>
-          {NOTIFICATION_OPTIONS.map(({ eventType, label }) => (
-            <Checkbox
-              key={eventType}
-              isSelected={notificationPrefs[eventType]}
-              onChange={(allowed) => handleNotificationChange(eventType, allowed)}
-              isDisabled={isSubmitting}
-              className={styles.checkbox}
-            >
-              <Checkbox.Content className={styles.checkboxContent}>
-                <Checkbox.Control className={styles.checkboxControl}>
-                  <Checkbox.Indicator className={styles.checkboxIndicator} />
-                </Checkbox.Control>
-                <span>{label}</span>
-              </Checkbox.Content>
-            </Checkbox>
-          ))}
-        </div>
+        <NotificationPreferencesFields
+          value={notificationPrefs}
+          onChange={handleNotificationChange}
+          disabled={isSubmitting}
+        />
       </div>
 
       <div className={styles.actions}>
@@ -304,18 +283,7 @@ export function PersonalDataForm(): JSX.Element {
             <p className={styles.notificationsHint}>
               Напоминания приходят на вашу почту.
             </p>
-            <div className={styles.notificationsList}>
-              {NOTIFICATION_OPTIONS.map(({ eventType, label }) => (
-                <Checkbox key={eventType} isDisabled className={styles.checkbox}>
-                  <Checkbox.Content className={styles.checkboxContent}>
-                    <Checkbox.Control className={styles.checkboxControl}>
-                      <Checkbox.Indicator className={styles.checkboxIndicator} />
-                    </Checkbox.Control>
-                    <span>{label}</span>
-                  </Checkbox.Content>
-                </Checkbox>
-              ))}
-            </div>
+            <NotificationPreferencesFields disabled />
           </div>
           <div className={styles.actions}>
             <Button type="submit" variant="primary" size="large" fullWidth disabled>

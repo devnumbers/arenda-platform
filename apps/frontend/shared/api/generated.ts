@@ -612,6 +612,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/popups/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPendingPopups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/popups/{popupKey}/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["markPopupSeen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tariffs": {
         parameters: {
             query?: never;
@@ -1943,6 +1975,9 @@ export interface components {
         };
         NotificationPreferencesUpdateRequest: {
             preferences: components["schemas"]["NotificationPreference"][];
+        };
+        PendingPopupsResponse: {
+            popups: string[];
         };
         FinanceReportResponse: {
             period: components["schemas"]["FinanceReportPeriod"];
@@ -3481,6 +3516,49 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["NotificationPreferencesResponse"];
                 };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getPendingPopups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active popups the user has not seen yet, in display order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingPopupsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    markPopupSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                popupKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Popup marked as seen (idempotent) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

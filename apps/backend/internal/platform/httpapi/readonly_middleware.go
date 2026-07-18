@@ -34,6 +34,7 @@ var readonlyExemptPrefixes = []string{
 	"/internal",
 	"/me",
 	"/notification-preferences",
+	"/popups",
 	"/admin",
 	"/client-errors",
 }

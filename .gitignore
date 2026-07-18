@@ -12,7 +12,7 @@
 !.env.obs.example
 *.exe
 api
-!apps/frontend/features/operation-categories/api/
+!apps/frontend/features/*/api/
 node_modules/
 apps/landing/dist
 *.log

@@ -1460,6 +1460,38 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /popups/pending:
+    get:
+      operationId: getPendingPopups
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Active popups the user has not seen yet, in display order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingPopupsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /popups/{popupKey}/seen:
+    post:
+      operationId: markPopupSeen
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: popupKey
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Popup marked as seen (idempotent)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /tariffs:
     get:
       operationId: listTariffs
@@ -4500,6 +4532,15 @@ components:
           maxItems: 4
           items:
             $ref: '#/components/schemas/NotificationPreference'
+
+    PendingPopupsResponse:
+      type: object
+      required: [popups]
+      properties:
+        popups:
+          type: array
+          items:
+            type: string
 
     FinanceReportResponse:
       type: object

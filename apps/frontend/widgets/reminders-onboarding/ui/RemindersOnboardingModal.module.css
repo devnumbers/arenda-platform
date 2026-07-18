@@ -1,0 +1,99 @@
+/* Desktop dialog: flat white card, 32px radius and padding per Figma */
+.dialog {
+  padding: 32px;
+  border-radius: 32px;
+  background-color: var(--color-white);
+}
+
+/* Mobile bottom sheet: top-rounded, compact padding, handle on top */
+.sheet {
+  padding: 4px 20px 20px;
+  border-radius: 32px 32px 0 0;
+  background-color: var(--color-white);
+  overflow-y: auto;
+}
+
+/* Drag handle bar: 67x4 pill, centered by the HeroUI handle container */
+.handle > div {
+  width: 67px;
+  height: 4px;
+  border-radius: 32px;
+  background-color: var(--color-secondary-hover);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Flat bell: no chip background, painted in the project primary */
+.bell {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--color-primary);
+}
+
+.bell > span {
+  width: 28px;
+  height: 28px;
+}
+
+.heading {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 36px;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.intro {
+  margin: 0;
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  color: var(--color-text);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+  color: var(--color-text-muted);
+}
+
+.footer {
+  margin-top: 24px;
+}
+
+@media (max-width: 767px) {
+  .header {
+    gap: 8px;
+  }
+
+  .bell > span {
+    width: 20px;
+    height: 20px;
+  }
+
+  .heading {
+    font-size: 20px;
+    line-height: 22px;
+    letter-spacing: 0;
+  }
+
+  .content {
+    margin-top: 12px;
+  }
+
+  .footer {
+    margin-top: 20px;
+  }
+}

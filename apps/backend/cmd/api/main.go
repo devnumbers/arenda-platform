@@ -45,6 +45,8 @@ import (
 	mailersmtp "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/smtp"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/observability"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
+	popupspg "github.com/nambers/arenda-planform/apps/backend/internal/popups/adapters/postgres"
+	popupsapp "github.com/nambers/arenda-planform/apps/backend/internal/popups/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/dadata"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/storage"
@@ -384,6 +386,7 @@ func run() error {
 	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, categoryRepo, reminderScheduler, platformpostgres.NewBeginner(pool, appLogger), auditRecorder, clock.Real{}, appLogger)
 	reminderService := notificationsapp.NewReminderService(reminderRepo, clock.Real{})
 	preferenceService := notificationsapp.NewPreferenceService(reminderRepo, platformpostgres.NewBeginner(pool, appLogger), auditRecorder)
+	popupService := popupsapp.NewPopupService(popupspg.NewPopupRepository(db))
 	recurringOperationService := leasesapp.NewRecurringOperationService(
 		recurringOpRepo,
 		operationRepo,
@@ -468,6 +471,7 @@ func run() error {
 		Categories:               categoryService,
 		Reminders:                reminderService,
 		NotificationPreferences:  preferenceService,
+		Popups:                   popupService,
 		AppBaseURL:               cfg.AppBaseURL,
 		CookieSecure:             cfg.CookieSecure,
 		Logger:                   appLogger,

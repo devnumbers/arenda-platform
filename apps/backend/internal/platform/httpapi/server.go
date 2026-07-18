@@ -15,6 +15,7 @@ import (
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	popupsapp "github.com/nambers/arenda-planform/apps/backend/internal/popups/application"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -44,6 +45,7 @@ type Deps struct {
 	Categories               *leasesapp.CategoryService
 	Reminders                *notificationsapp.ReminderService
 	NotificationPreferences  *notificationsapp.PreferenceService
+	Popups                   *popupsapp.PopupService
 	AppBaseURL               string
 	CookieSecure             bool
 	Logger                   *slog.Logger
@@ -121,6 +123,7 @@ func New(deps Deps) http.Handler {
 	categoryHandlers := NewCategoryHandlers(deps.Categories, deps.Logger)
 	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
 	notificationPreferenceHandlers := NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
+	popupHandlers := NewPopupHandlers(deps.Popups, deps.Logger)
 	subscriptionHandlers := NewSubscriptionHandlers(deps.Tariffs, deps.Subscriptions, deps.PaymentMethods, deps.Payments, deps.Webhooks, deps.Logger, deps.DevMode)
 	financeHandlers := NewFinanceHandlers(deps.Operations)
 	adminHandlers := NewAdminHandlers(deps.Admin, deps.Logger)
@@ -134,6 +137,7 @@ func New(deps Deps) http.Handler {
 		RecurringOperationHandlers:     recurringOperationHandlers,
 		ReminderHandlers:               reminderHandlers,
 		NotificationPreferenceHandlers: notificationPreferenceHandlers,
+		PopupHandlers:                  popupHandlers,
 		SubscriptionHandlers:           subscriptionHandlers,
 		FinanceHandlers:                financeHandlers,
 		AdminHandlers:                  adminHandlers,
@@ -245,6 +249,7 @@ type composedHandler struct {
 	*RecurringOperationHandlers
 	*ReminderHandlers
 	*NotificationPreferenceHandlers
+	*PopupHandlers
 	*SubscriptionHandlers
 	*FinanceHandlers
 	*AdminHandlers

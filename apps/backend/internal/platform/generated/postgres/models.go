@@ -395,6 +395,12 @@ type UserNotificationPreference struct {
 	UpdatedAt pgtype.Timestamptz    `json:"updated_at"`
 }
 
+type UserPopupView struct {
+	UserID   pgtype.UUID        `json:"user_id"`
+	PopupKey string             `json:"popup_key"`
+	SeenAt   pgtype.Timestamptz `json:"seen_at"`
+}
+
 type UserSubscription struct {
 	ID                    pgtype.UUID        `json:"id"`
 	UserID                pgtype.UUID        `json:"user_id"`
