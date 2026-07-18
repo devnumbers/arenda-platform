@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,10 +45,10 @@ func TestPaymentReconciliationWorker_Tick_LogsCount(t *testing.T) {
 	}
 
 	logs := logBuf.String()
-	if !bytes.Contains([]byte(logs), []byte("payment reconciliation processed pending payments")) {
+	if !strings.Contains(logs, "payment reconciliation processed pending payments") {
 		t.Errorf("expected processed log, got:\n%s", logs)
 	}
-	if !bytes.Contains([]byte(logs), []byte("count=7")) {
+	if !strings.Contains(logs, "count=7") {
 		t.Errorf("expected count=7 in logs, got:\n%s", logs)
 	}
 }
@@ -74,11 +75,11 @@ func TestPaymentReconciliationWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 		"+79991234567",
 	}
 	for _, s := range forbidden {
-		if bytes.Contains([]byte(logs), []byte(s)) {
+		if strings.Contains(logs, s) {
 			t.Errorf("log contains sensitive substring %q:\n%s", s, logs)
 		}
 	}
-	if !bytes.Contains([]byte(logs), []byte("payment reconciliation failed")) {
+	if !strings.Contains(logs, "payment reconciliation failed") {
 		t.Errorf("expected reconciliation failed log, got:\n%s", logs)
 	}
 }

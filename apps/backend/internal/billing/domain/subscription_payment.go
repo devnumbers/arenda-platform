@@ -185,6 +185,8 @@ func (p *SubscriptionPayment) IsFinalized() bool {
 	switch p.Status {
 	case PaymentStatusSucceeded, PaymentStatusFailed, PaymentStatusRefunded, PaymentStatusPartialRefunded:
 		return true
+	case PaymentStatusPending, PaymentStatusRefunding:
+		return false
 	}
 	return false
 }

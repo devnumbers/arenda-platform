@@ -194,7 +194,7 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("create recurring operation: %w", err)
 	}
 
-	_, err = s.generateOperations(ctx, txOps, created, now, nil)
+	err = s.generateOperations(ctx, txOps, created, now, nil)
 	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
 	}
@@ -511,7 +511,7 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("delete future operations: %w", err)
 	}
 
-	_, err = s.generateOperations(ctx, txOps, updated, now, func(d time.Time) bool {
+	err = s.generateOperations(ctx, txOps, updated, now, func(d time.Time) bool {
 		return !timeutil.Date(d).Before(timeutil.Date(now))
 	})
 	if err != nil {
@@ -702,7 +702,7 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 		return domain.RecurringOperation{}, fmt.Errorf("create new recurring operation: %w", err)
 	}
 
-	_, err = s.generateOperations(ctx, txOps, created, now, func(d time.Time) bool {
+	err = s.generateOperations(ctx, txOps, created, now, func(d time.Time) bool {
 		return !timeutil.Date(d).Before(applyFromDate)
 	})
 	if err != nil {
@@ -842,7 +842,7 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 	}
 
 	now := s.clock.Now()
-	_, err = s.generateOperations(ctx, txOps, rec, now, func(d time.Time) bool {
+	err = s.generateOperations(ctx, txOps, rec, now, func(d time.Time) bool {
 		return !timeutil.Date(d).Before(timeutil.Date(now))
 	})
 	if err != nil {
@@ -1006,7 +1006,7 @@ func (s *RecurringOperationService) CreateReminder(
 	reminderDate time.Time,
 ) ([]notificationsdomain.Reminder, error) {
 	if s.reminders == nil {
-		return nil, fmt.Errorf("reminder lister is required")
+		return nil, errors.New("reminder lister is required")
 	}
 
 	now := s.clock.Now()
@@ -1113,24 +1113,24 @@ func (s *RecurringOperationService) generateOperations(
 	rec domain.RecurringOperation,
 	now time.Time,
 	filter func(time.Time) bool,
-) ([]domain.Operation, error) {
+) error {
 	existing, err := s.existingOperationDates(ctx, ops, rec.ID)
 	if err != nil {
-		return nil, fmt.Errorf("list existing dates: %w", err)
+		return fmt.Errorf("list existing dates: %w", err)
 	}
 
 	toCreate, err := s.buildOperations(rec, now, existing, filter)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if len(toCreate) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	if err := ops.BulkCreate(ctx, toCreate); err != nil {
-		return nil, fmt.Errorf("bulk create operations: %w", err)
+		return fmt.Errorf("bulk create operations: %w", err)
 	}
-	return toCreate, nil
+	return nil
 }
 
 func (s *RecurringOperationService) buildOperations(

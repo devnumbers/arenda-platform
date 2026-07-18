@@ -1,7 +1,6 @@
 package database
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"os"
@@ -26,7 +25,6 @@ func TestInstrumentedRowScanReleasesConnection(t *testing.T) {
 	row := &instrumentedRow{
 		row:        &fakeRow{},
 		inst:       newDBInstrumenter(slog.New(slog.NewTextHandler(os.Stdout, nil))),
-		ctx:        context.Background(),
 		sql:        "SELECT 1",
 		queryStart: time.Now(),
 		release:    func() { releases.Add(1) },
@@ -54,7 +52,6 @@ func TestInstrumentedRowCloseReleasesConnection(t *testing.T) {
 	row := &instrumentedRow{
 		row:        &fakeRow{scanErr: errors.New("scan failed")},
 		inst:       newDBInstrumenter(slog.New(slog.NewTextHandler(os.Stdout, nil))),
-		ctx:        context.Background(),
 		sql:        "SELECT 1",
 		queryStart: time.Now(),
 		release:    func() { releases.Add(1) },
@@ -79,7 +76,6 @@ func TestInstrumentedRowFinalizerReleasesDiscardedRow(t *testing.T) {
 		return &instrumentedRow{
 			row:        &fakeRow{},
 			inst:       newDBInstrumenter(slog.New(slog.NewTextHandler(os.Stdout, nil))),
-			ctx:        context.Background(),
 			sql:        "SELECT 1",
 			queryStart: time.Now(),
 			release:    func() { releases.Add(1) },

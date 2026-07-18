@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -30,7 +31,11 @@ func (r *PropertyRepository) q() *postgres.Queries {
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *PropertyRepository) WithTx(tx transaction.Tx) application.PropertyRepository {
-	return NewPropertyRepository(tx.(postgres.DBTX))
+	dbtx, ok := tx.(postgres.DBTX)
+	if !ok {
+		panic(fmt.Sprintf("properties.PropertyRepository.WithTx: expected postgres.DBTX, got %T", tx))
+	}
+	return NewPropertyRepository(dbtx)
 }
 
 func (r *PropertyRepository) Create(ctx context.Context, ownerID uuid.UUID, property domain.Property) (domain.Property, error) {

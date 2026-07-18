@@ -80,7 +80,7 @@ func NewAuthenticationService(users UserRepository, codes LoginCodeRepository, a
 // SendCode generates a login code, persists it, and sends it by email after the
 // transaction commits.
 func (s *AuthenticationService) SendCode(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error {
-	if _, err := checkNotBlocked(ctx, s.attempts, s.clock, phone); err != nil {
+	if err := checkNotBlocked(ctx, s.attempts, s.clock, phone); err != nil {
 		return err
 	}
 
@@ -139,7 +139,7 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 		return domain.RawSession{}, domain.User{}, err
 	}
 
-	if _, err := checkNotBlocked(ctx, s.attempts, s.clock, phone); err != nil {
+	if err := checkNotBlocked(ctx, s.attempts, s.clock, phone); err != nil {
 		return domain.RawSession{}, domain.User{}, err
 	}
 
@@ -153,7 +153,7 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 	if err != nil {
 		return domain.RawSession{}, domain.User{}, fmt.Errorf("bind attempt repository to tx: %w", err)
 	}
-	if _, err := checkNotBlocked(ctx, txAttempts, s.clock, phone); err != nil {
+	if err := checkNotBlocked(ctx, txAttempts, s.clock, phone); err != nil {
 		return domain.RawSession{}, domain.User{}, err
 	}
 
@@ -271,14 +271,12 @@ func (s *AuthenticationService) authenticate(ctx context.Context, tx transaction
 		if user.ID != newUser.ID {
 			isNewUser = false
 		}
-	} else {
-		if user.Email == nil || *user.Email != email || user.EmailVerifiedAt == nil {
-			updated, updateErr := txUsers.UpdateEmailVerified(ctx, user.ID, &email, &now)
-			if updateErr != nil {
-				return domain.RawSession{}, domain.User{}, false, fmt.Errorf("verify user email: %w", updateErr)
-			}
-			user = updated
+	} else if user.Email == nil || *user.Email != email || user.EmailVerifiedAt == nil {
+		updated, updateErr := txUsers.UpdateEmailVerified(ctx, user.ID, &email, &now)
+		if updateErr != nil {
+			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("verify user email: %w", updateErr)
 		}
+		user = updated
 	}
 
 	raw, err := domain.NewSession(user.ID, now)
@@ -338,7 +336,7 @@ func (f *loginCodeFlow) sendCode(ctx context.Context, phone domain.Phone, email 
 	if err != nil {
 		return fmt.Errorf("bind attempt repository to tx: %w", err)
 	}
-	if _, err := checkNotBlocked(ctx, txAttempts, f.clock, phone); err != nil {
+	if err := checkNotBlocked(ctx, txAttempts, f.clock, phone); err != nil {
 		return err
 	}
 
@@ -438,17 +436,17 @@ func (f *loginCodeFlow) recordVerifyFailure(ctx context.Context, attempts Attemp
 	return domain.ErrLoginCodeInvalid
 }
 
-func checkNotBlocked(ctx context.Context, attempts AttemptRepository, clock clock.Clock, phone domain.Phone) (domain.AttemptWindow, error) {
+func checkNotBlocked(ctx context.Context, attempts AttemptRepository, clock clock.Clock, phone domain.Phone) error {
 	now := clock.Now()
 
 	window, err := attempts.GetByPhone(ctx, phone)
 	if err != nil && !errors.Is(err, ErrNotFound) {
-		return domain.AttemptWindow{}, fmt.Errorf("get attempts: %w", err)
+		return fmt.Errorf("get attempts: %w", err)
 	}
 	if window.Blocked(now) {
-		return domain.AttemptWindow{}, ErrUserBlocked
+		return ErrUserBlocked
 	}
-	return window, nil
+	return nil
 }
 
 func userEmail(user domain.User) (domain.Email, error) {

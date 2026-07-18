@@ -157,6 +157,16 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 	dispatchCtx, cancel := context.WithTimeout(ctx, w.dispatchTimeout)
 	defer cancel()
 
+	allowed, err := w.repo.IsEventAllowed(dispatchCtx, r.OwnerID, r.EventType)
+	if err != nil {
+		w.logger.ErrorContext(dispatchCtx, "check notification permission failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+		return w.finalizeFailure(dispatchCtx, r, now)
+	}
+	if !allowed {
+		w.logger.InfoContext(dispatchCtx, "reminder skipped: event type not allowed by user preferences", "reminder_id", r.ID, "event_type", r.EventType)
+		return w.finalizeSkipped(dispatchCtx, r)
+	}
+
 	contact, err := w.resolver.Resolve(dispatchCtx, r.OwnerID)
 	if err != nil {
 		w.logger.ErrorContext(dispatchCtx, "resolve contact failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
@@ -319,6 +329,26 @@ func (w *ReminderWorker) finalizeCancel(ctx context.Context, r domain.Reminder) 
 	txRepo := w.repo.WithTx(tx)
 	if _, err := txRepo.CancelByIDAndOwner(ctx, r.OwnerID, r.ID); err != nil {
 		return fmt.Errorf("cancel reminder: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit finalize transaction: %w", err)
+	}
+	return nil
+}
+
+// finalizeSkipped marks a reminder as skipped: the owner revoked permission
+// for its event type, so it must not be sent or retried.
+func (w *ReminderWorker) finalizeSkipped(ctx context.Context, r domain.Reminder) error {
+	tx, err := w.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin finalize transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := w.repo.WithTx(tx)
+	if err := txRepo.MarkReminderSkipped(ctx, r.ID); err != nil {
+		return fmt.Errorf("mark reminder skipped: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

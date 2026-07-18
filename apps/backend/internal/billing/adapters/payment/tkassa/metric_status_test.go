@@ -2,6 +2,7 @@ package tkassa
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"testing"
@@ -85,7 +86,7 @@ func TestMetricStatus(t *testing.T) {
 		},
 		{
 			name: "non-2xx HTTP error is error",
-			err:  fmt.Errorf("tkassa: Charge returned HTTP 503: unavailable"),
+			err:  errors.New("tkassa: Charge returned HTTP 503: unavailable"),
 			want: "error",
 		},
 		{

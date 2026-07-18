@@ -16,7 +16,7 @@ func TestS3Storage_Upload_RequestShape(t *testing.T) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotContentType = r.Header.Get("Content-Type")
-		gotACL = r.Header.Get("x-amz-acl")
+		gotACL = r.Header.Get("X-Amz-Acl")
 		gotBody, _ = io.ReadAll(r.Body)
 		w.WriteHeader(http.StatusOK)
 	}))

@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 
@@ -25,37 +24,11 @@ func NewRecurringOperationHandlers(svc *leasesapp.RecurringOperationService, cat
 }
 
 func (h *RecurringOperationHandlers) handleRecurringOperationError(w http.ResponseWriter, r *http.Request, err error) {
-	switch {
-	case errors.Is(err, leasesapp.ErrInvalidInput), errors.Is(err, domain.ErrInvalidOperationType):
-		detail, ok := UserFacingDetail(err)
-		if !ok {
-			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-			return
-		}
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
-	case errors.Is(err, leasesapp.ErrNotFound):
-		writeProblem(w, http.StatusNotFound, problem(r.Context(), "Not found", "Серийная операция не найдена"))
-	case errors.Is(err, leasesapp.ErrRecurringOperationLeaseCreated):
-		detail, ok := UserFacingDetail(err)
-		if !ok {
-			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-			return
-		}
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
-	case errors.Is(err, leasesapp.ErrArchivedProperty):
-		detail, ok := UserFacingDetail(err)
-		if !ok {
-			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-			return
-		}
-		writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", detail))
-	default:
-		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
-	}
+	handleLeaseOperationError(w, r, err, leasesapp.ErrRecurringOperationLeaseCreated, "Серийная операция не найдена")
 }
 
 // CreateRecurringOperation implements POST /properties/{propertyId}/recurring-operations.
-func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
+func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
 		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
@@ -70,7 +43,7 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 	}
 
 	cmd := leasesapp.CreateRecurringOperationCommand{
-		PropertyID:    propertyId,
+		PropertyID:    propertyID,
 		Type:          string(body.Type),
 		CategoryID:    body.CategoryId,
 		Name:          body.Name,
@@ -110,14 +83,14 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 }
 
 // ListRecurringOperationsByProperty implements GET /properties/{propertyId}/recurring-operations.
-func (h *RecurringOperationHandlers) ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId uuid.UUID) {
+func (h *RecurringOperationHandlers) ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
 		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	recs, err := h.svc.ListRecurringOperationsByProperty(r.Context(), ownerID, propertyId)
+	recs, err := h.svc.ListRecurringOperationsByProperty(r.Context(), ownerID, propertyID)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return

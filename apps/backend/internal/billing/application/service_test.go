@@ -653,12 +653,14 @@ func (a *fakePropertyArchiver) ArchiveExcessProperties(_ context.Context, _ tran
 
 // --- provider fake ---
 
-var _ RenewalProvider = (*stubProvider)(nil)
-var _ WebhookProvider = (*stubProvider)(nil)
-var _ PaymentManager = (*stubProvider)(nil)
-var _ CardProvider = (*stubProvider)(nil)
-var _ SubscriptionPaymentProvider = (*stubProvider)(nil)
-var _ ProviderNamer = (*stubProvider)(nil)
+var (
+	_ RenewalProvider             = (*stubProvider)(nil)
+	_ WebhookProvider             = (*stubProvider)(nil)
+	_ PaymentManager              = (*stubProvider)(nil)
+	_ CardProvider                = (*stubProvider)(nil)
+	_ SubscriptionPaymentProvider = (*stubProvider)(nil)
+	_ ProviderNamer               = (*stubProvider)(nil)
+)
 
 type stubProvider struct {
 	name       domain.PaymentProvider
@@ -6135,6 +6137,63 @@ func TestBilling_RefundPayment_CancelPartialRefundedStaysRefunding(t *testing.T)
 	}
 }
 
+// syncSeed describes the tariff/subscription/payment fixture shared by the
+// SyncPendingPayment table setups: basic and pro tariffs, an active paid
+// subscription on one of them, and a pending pro payment for it.
+type syncSeed struct {
+	userID            string
+	basicID           string
+	proID             string
+	paymentID         string
+	subscriptionID    string
+	providerPaymentID string
+	subOnPro          bool // subscription tariff: pro when true, basic when false
+	autoRenew         bool
+}
+
+// syncScenarioSetup returns a setup that seeds the fixture described by seed
+// and yields the ID of the pending payment.
+func syncScenarioSetup(seed syncSeed) func(*testDeps) uuid.UUID {
+	return func(d *testDeps) uuid.UUID {
+		userID := uuid.MustParse(seed.userID)
+		basicID := uuid.MustParse(seed.basicID)
+		proID := uuid.MustParse(seed.proID)
+		paymentID := uuid.MustParse(seed.paymentID)
+		subscriptionID := uuid.MustParse(seed.subscriptionID)
+		validUntil := fixedNow.AddDate(0, 1, 0)
+		subTariffID := basicID
+		if seed.subOnPro {
+			subTariffID = proID
+		}
+
+		d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000})
+		d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
+		d.addSubscription(domain.Subscription{
+			ID:               subscriptionID,
+			UserID:           userID,
+			TariffID:         subTariffID,
+			Source:           domain.SubscriptionSourcePaid,
+			Status:           domain.SubscriptionStatusActive,
+			ValidUntil:       &validUntil,
+			AutoRenewEnabled: seed.autoRenew,
+		})
+		d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
+			ID:                paymentID,
+			UserID:            userID,
+			SubscriptionID:    subscriptionID,
+			TariffID:          proID,
+			Period:            domain.PeriodMonth,
+			AmountKopecks:     5000,
+			Provider:          domain.ProviderFake,
+			ProviderPaymentID: &seed.providerPaymentID,
+			Status:            domain.PaymentStatusPending,
+			CreatedAt:         fixedNow.Add(-10 * time.Minute),
+			UpdatedAt:         fixedNow.Add(-10 * time.Minute),
+		}
+		return paymentID
+	}
+}
+
 func TestBilling_SyncPendingPayment(t *testing.T) {
 	type syncCase struct {
 		name               string
@@ -6217,6 +6276,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				providerStatus:     domain.PaymentStatusSucceeded,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusSucceeded {
 						t.Errorf("expected payment succeeded, got %s", payment.Status)
@@ -6276,6 +6336,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				providerStatus:     domain.PaymentStatusSucceeded,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusSucceeded {
 						t.Errorf("expected payment succeeded, got %s", payment.Status)
@@ -6333,6 +6394,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				providerStatus:     domain.PaymentStatusFailed,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusFailed {
 						t.Errorf("expected payment failed, got %s", payment.Status)
@@ -6348,44 +6410,20 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 			},
 			{
 				name: "leaves subscription unchanged for upgrade",
-				setup: func(d *testDeps) uuid.UUID {
-					userID := uuid.MustParse("11111111-1111-1111-1111-111111111114")
-					basicID := uuid.MustParse("22222222-2222-2222-2222-222222222225")
-					proID := uuid.MustParse("33333333-3333-3333-3333-333333333336")
-					paymentID := uuid.MustParse("44444444-4444-4444-4444-444444444447")
-					subscriptionID := uuid.MustParse("55555555-5555-5555-5555-555555555558")
-					providerPaymentID := "sync_upgrade_failed"
-					validUntil := fixedNow.AddDate(0, 1, 0)
-
-					d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000})
-					d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
-					d.addSubscription(domain.Subscription{
-						ID:               subscriptionID,
-						UserID:           userID,
-						TariffID:         basicID,
-						Source:           domain.SubscriptionSourcePaid,
-						Status:           domain.SubscriptionStatusActive,
-						ValidUntil:       &validUntil,
-						AutoRenewEnabled: false,
-					})
-					d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
-						ID:                paymentID,
-						UserID:            userID,
-						SubscriptionID:    subscriptionID,
-						TariffID:          proID,
-						Period:            domain.PeriodMonth,
-						AmountKopecks:     5000,
-						Provider:          domain.ProviderFake,
-						ProviderPaymentID: &providerPaymentID,
-						Status:            domain.PaymentStatusPending,
-						CreatedAt:         fixedNow.Add(-10 * time.Minute),
-						UpdatedAt:         fixedNow.Add(-10 * time.Minute),
-					}
-					return paymentID
-				},
+				setup: syncScenarioSetup(syncSeed{
+					userID:            "11111111-1111-1111-1111-111111111114",
+					basicID:           "22222222-2222-2222-2222-222222222225",
+					proID:             "33333333-3333-3333-3333-333333333336",
+					paymentID:         "44444444-4444-4444-4444-444444444447",
+					subscriptionID:    "55555555-5555-5555-5555-555555555558",
+					providerPaymentID: "sync_upgrade_failed",
+					subOnPro:          false,
+					autoRenew:         false,
+				}),
 				providerStatus:     domain.PaymentStatusFailed,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusFailed {
 						t.Errorf("expected payment failed, got %s", payment.Status)
@@ -6407,44 +6445,20 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 		runSyncCases(t, []syncCase{
 			{
 				name: "downgrades subscription to basic for full refund",
-				setup: func(d *testDeps) uuid.UUID {
-					userID := uuid.MustParse("11111111-1111-1111-1111-11111111111a")
-					basicID := uuid.MustParse("22222222-2222-2222-2222-22222222222c")
-					proID := uuid.MustParse("33333333-3333-3333-3333-33333333333d")
-					paymentID := uuid.MustParse("44444444-4444-4444-4444-44444444444e")
-					subscriptionID := uuid.MustParse("55555555-5555-5555-5555-55555555555f")
-					providerPaymentID := "sync_refunded"
-					validUntil := fixedNow.AddDate(0, 1, 0)
-
-					d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000})
-					d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
-					d.addSubscription(domain.Subscription{
-						ID:               subscriptionID,
-						UserID:           userID,
-						TariffID:         proID,
-						Source:           domain.SubscriptionSourcePaid,
-						Status:           domain.SubscriptionStatusActive,
-						ValidUntil:       &validUntil,
-						AutoRenewEnabled: true,
-					})
-					d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
-						ID:                paymentID,
-						UserID:            userID,
-						SubscriptionID:    subscriptionID,
-						TariffID:          proID,
-						Period:            domain.PeriodMonth,
-						AmountKopecks:     5000,
-						Provider:          domain.ProviderFake,
-						ProviderPaymentID: &providerPaymentID,
-						Status:            domain.PaymentStatusPending,
-						CreatedAt:         fixedNow.Add(-10 * time.Minute),
-						UpdatedAt:         fixedNow.Add(-10 * time.Minute),
-					}
-					return paymentID
-				},
+				setup: syncScenarioSetup(syncSeed{
+					userID:            "11111111-1111-1111-1111-11111111111a",
+					basicID:           "22222222-2222-2222-2222-22222222222c",
+					proID:             "33333333-3333-3333-3333-33333333333d",
+					paymentID:         "44444444-4444-4444-4444-44444444444e",
+					subscriptionID:    "55555555-5555-5555-5555-55555555555f",
+					providerPaymentID: "sync_refunded",
+					subOnPro:          true,
+					autoRenew:         true,
+				}),
 				providerStatus:     domain.PaymentStatusRefunded,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusRefunded {
 						t.Errorf("expected payment refunded, got %s", payment.Status)
@@ -6475,44 +6489,20 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 		runSyncCases(t, []syncCase{
 			{
 				name: "ignores external partial refund notification without state change",
-				setup: func(d *testDeps) uuid.UUID {
-					userID := uuid.MustParse("11111111-1111-1111-1111-11111111111b")
-					basicID := uuid.MustParse("22222222-2222-2222-2222-22222222222d")
-					proID := uuid.MustParse("33333333-3333-3333-3333-33333333333e")
-					paymentID := uuid.MustParse("44444444-4444-4444-4444-44444444444f")
-					subscriptionID := uuid.MustParse("55555555-5555-5555-5555-555555555550")
-					providerPaymentID := "sync_partial_refunded"
-					validUntil := fixedNow.AddDate(0, 1, 0)
-
-					d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000})
-					d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
-					d.addSubscription(domain.Subscription{
-						ID:               subscriptionID,
-						UserID:           userID,
-						TariffID:         proID,
-						Source:           domain.SubscriptionSourcePaid,
-						Status:           domain.SubscriptionStatusActive,
-						ValidUntil:       &validUntil,
-						AutoRenewEnabled: true,
-					})
-					d.subscriptionPayments.payments[paymentID] = domain.SubscriptionPayment{
-						ID:                paymentID,
-						UserID:            userID,
-						SubscriptionID:    subscriptionID,
-						TariffID:          proID,
-						Period:            domain.PeriodMonth,
-						AmountKopecks:     5000,
-						Provider:          domain.ProviderFake,
-						ProviderPaymentID: &providerPaymentID,
-						Status:            domain.PaymentStatusPending,
-						CreatedAt:         fixedNow.Add(-10 * time.Minute),
-						UpdatedAt:         fixedNow.Add(-10 * time.Minute),
-					}
-					return paymentID
-				},
+				setup: syncScenarioSetup(syncSeed{
+					userID:            "11111111-1111-1111-1111-11111111111b",
+					basicID:           "22222222-2222-2222-2222-22222222222d",
+					proID:             "33333333-3333-3333-3333-33333333333e",
+					paymentID:         "44444444-4444-4444-4444-44444444444f",
+					subscriptionID:    "55555555-5555-5555-5555-555555555550",
+					providerPaymentID: "sync_partial_refunded",
+					subOnPro:          true,
+					autoRenew:         true,
+				}),
 				providerStatus:     domain.PaymentStatusPartialRefunded,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					// Partial refunds are impossible in this product: the external
 					// notification is an anomaly that is logged and ignored.
@@ -6581,6 +6571,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				providerStatus:     domain.PaymentStatusPending,
 				wantProviderCalled: true,
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusPending {
 						t.Errorf("expected payment still pending, got %s", payment.Status)
@@ -6623,6 +6614,7 @@ func TestBilling_SyncPendingPayment(t *testing.T) {
 				wantProviderCalled: false,
 				wantErr:            func(err error) bool { return errors.Is(err, domain.ErrInvalidPaymentStatus) },
 				assert: func(t *testing.T, d *testDeps, paymentID uuid.UUID) {
+					t.Helper()
 					payment := d.subscriptionPayments.payments[paymentID]
 					if payment.Status != domain.PaymentStatusSucceeded {
 						t.Errorf("expected payment status unchanged, got %s", payment.Status)

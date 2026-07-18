@@ -157,7 +157,7 @@ func writeProblem(w http.ResponseWriter, status int, p openapi.Problem) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(p); err != nil {
-		slog.Error("failed to encode problem response", slog.String("error", sanitizeError(err)))
+		slog.Error("failed to encode problem response", slog.String("error", sanitizeError(err))) //nolint:sloglint // writeProblem has no request context in its signature; last-resort encoder fallback
 	}
 }
 

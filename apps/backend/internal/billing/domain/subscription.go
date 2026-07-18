@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -75,13 +76,13 @@ func NewOwnerSubscription(userID, tariffID uuid.UUID) (Subscription, error) {
 // aggregate.
 func ReconstituteSubscription(sub Subscription) (Subscription, error) {
 	if sub.ID == uuid.Nil {
-		return Subscription{}, fmt.Errorf("reconstitute subscription: missing id")
+		return Subscription{}, errors.New("reconstitute subscription: missing id")
 	}
 	if sub.UserID == uuid.Nil {
-		return Subscription{}, fmt.Errorf("reconstitute subscription: missing user id")
+		return Subscription{}, errors.New("reconstitute subscription: missing user id")
 	}
 	if sub.TariffID == uuid.Nil {
-		return Subscription{}, fmt.Errorf("reconstitute subscription: missing tariff id")
+		return Subscription{}, errors.New("reconstitute subscription: missing tariff id")
 	}
 	switch sub.Status {
 	case SubscriptionStatusActive, SubscriptionStatusGrace, SubscriptionStatusCancelled:

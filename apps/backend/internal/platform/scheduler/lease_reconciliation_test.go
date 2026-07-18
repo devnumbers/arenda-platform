@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,9 +14,9 @@ import (
 )
 
 type fakeLeaseService struct {
-	leases            []leasesdomain.Lease
-	listErr           error
-	reconcileErr      error
+	leases       []leasesdomain.Lease
+	listErr      error
+	reconcileErr error
 }
 
 func (s *fakeLeaseService) ListOpenLeasesWithPastEndDate(context.Context, time.Time, int) ([]leasesdomain.Lease, error) {
@@ -53,11 +54,11 @@ func TestLeaseReconciliationWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 		"+79991234567",
 	}
 	for _, s := range forbidden {
-		if bytes.Contains([]byte(logs), []byte(s)) {
+		if strings.Contains(logs, s) {
 			t.Errorf("log contains sensitive substring %q:\n%s", s, logs)
 		}
 	}
-	if !bytes.Contains([]byte(logs), []byte("reconcile lease failed")) {
+	if !strings.Contains(logs, "reconcile lease failed") {
 		t.Errorf("expected reconcile lease failed log, got:\n%s", logs)
 	}
 }

@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -139,10 +140,14 @@ func (r *lockingFakeRecurringOperationRepo) SoftDelete(_ context.Context, id, _ 
 }
 
 func (r *lockingFakeRecurringOperationRepo) WithTx(tx transaction.Tx) RecurringOperationRepository {
+	ftx, ok := tx.(*fakeTx)
+	if !ok {
+		panic(fmt.Sprintf("lockingFakeRecurringOperationRepo.WithTx: unexpected tx type %T", tx))
+	}
 	return &lockingFakeRecurringOperationRepo{
 		lock: r.lock,
 		recs: r.recs,
-		tx:   tx.(*fakeTx),
+		tx:   ftx,
 	}
 }
 
@@ -227,8 +232,10 @@ func TestUpdateRecurringOperation_ConcurrentUpdatesDoNotOverwrite(t *testing.T) 
 	}
 }
 
-var _ RecurringOperationRepository = (*lockingFakeRecurringOperationRepo)(nil)
-var _ transaction.Tx = (*fakeTx)(nil)
+var (
+	_ RecurringOperationRepository = (*lockingFakeRecurringOperationRepo)(nil)
+	_ transaction.Tx               = (*fakeTx)(nil)
+)
 
 type fakeReminderLister struct{}
 

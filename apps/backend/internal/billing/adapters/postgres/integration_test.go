@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
+	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 )
 
 var (

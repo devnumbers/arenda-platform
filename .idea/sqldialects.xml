@@ -1,0 +1,3 @@
+<component name="SqlDialectMappings">
+  <file url="file://$PROJECT_DIR$/apps/backend/db" dialect="PostgreSQL" />
+</component>

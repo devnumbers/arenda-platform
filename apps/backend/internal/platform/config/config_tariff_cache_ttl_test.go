@@ -65,4 +65,3 @@ func TestTariffCacheTTLNonPositive(t *testing.T) {
 		t.Fatal("expected error for non-positive TARIFF_CACHE_TTL")
 	}
 }
-

@@ -43,6 +43,27 @@
   gap: 12px;
 }
 
+.notifications {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.notificationsTitle {
+  margin: 0;
+  font-size: var(--font-size-text-l);
+  font-weight: 600;
+  line-height: var(--line-height-text-l);
+  color: var(--color-text);
+}
+
+.notificationsHint {
+  margin: 0;
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+  color: var(--color-text-muted);
+}
+
 @media (max-width: 767px) {
   .actions {
     position: sticky;

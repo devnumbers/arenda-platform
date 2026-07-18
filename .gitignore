@@ -1,4 +1,7 @@
-.idea
+.idea/*
+!.idea/inspectionProfiles/
+!.idea/sqldialects.xml
+!.idea/dataSources.xml
 .DS_Store
 .env
 .env.*
@@ -9,7 +12,7 @@
 !.env.obs.example
 *.exe
 api
-!apps/frontend/features/operation-categories/api/
+!apps/frontend/features/*/api/
 node_modules/
 apps/landing/dist
 *.log

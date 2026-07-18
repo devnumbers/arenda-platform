@@ -67,7 +67,9 @@ export function useLogout(): UseMutationResult<void, ApiError, void> {
   return useMutation({
     mutationFn: () => apiClient<void>('/auth/logout', { method: 'POST' }),
     onSuccess: () => {
-      queryClient.removeQueries({ queryKey: authKeys.me });
+      // Drop the whole cache so the next user in this browser session never
+      // sees the previous user's queries (popups, properties, etc.).
+      queryClient.clear();
     },
   });
 }

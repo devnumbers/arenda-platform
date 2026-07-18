@@ -1,37 +1,82 @@
+# Конфигурация golangci-lint v2. Версия линтера пинится в Makefile (GOLANGCI_LINT_VERSION).
+# Принцип: курируемый строгий набор — баг-класс + дешёвая гигиена под стек проекта
+# (Go 1.26, chi, sqlc/pgx, oapi-codegen, slog, OTel). Шумные/opinionated линтеры
+# осознанно не включены (список с причинами — в конце файла). Не добавляй линтеры
+# из «не включаем» без причины в комментарии.
 version: "2"
+
+run:
+  timeout: 5m
+  # Версия языка не задаётся: берётся из apps/backend/go.mod (go 1.26) — единый источник правды.
+
 linters:
+  # standard = errcheck, govet, ineffassign, staticcheck, unused; enable добавляет поверх.
+  default: standard
   enable:
+    # --- баги и корректность ---
+    - asasalint            # []any как any в variadic-вызовах
+    - bidichk              # trojan-source unicode-последовательности
     - bodyclose
     - contextcheck
     - copyloopvar
-    - depguard
     - dupword
     - durationcheck
-    - errcheck
+    - errchkjson           # json-функции с типами, не кодируемыми корректно
     - errname
     - errorlint
+    - exhaustive           # неисчерпывающие switch по enum-типам (settings ниже)
+    - fatcontext           # вложенные контексты в циклах/замыканиях
+    - forcetypeassert      # type assertion без comma-ok → паники
     - gocheckcompilerdirectives
+    - gocritic             # дефолтный stable-набор + курируемый enabled-checks (settings ниже); теги не включать
     - gosec
-    - govet
-    - ineffassign
     - loggercheck
     - makezero
-    - misspell
-    - modernize
+    - mirror               # зеркальные bytes/strings вызовы
+    - musttag              # (un)marshal структур без тегов
     - nilerr
     - nilnesserr
     - nilnil
     - noctx
-    - nolintlint
+    - nosprintfhostport    # host:port через Sprintf (IPv6-баги)
+    - reassign             # переприсваивание пакетных переменных
+    - rowserrcheck
+    - spancheck            # OTel: пропущенный span.End()
+    - sqlclosecheck
+    - tparallel            # misuse t.Parallel()
+    - unparam              # мёртвые параметры/неиспользуемые результаты
+    - wastedassign
+    # --- современный Go и гигиена (большинство с autofix) ---
+    - asciicheck           # не-ASCII в идентификаторах (защита от homoglyph)
+    - canonicalheader
+    - containedctx         # context.Context в полях структур
+    - godoclint            # гигиена godoc-комментариев
+    - godot
+    - gomoddirectives
+    - goprintffuncname
+    - gosmopolitan         # time.Local и i18n-ловушки (финансовый домен, UTC-конвенция)
+    - inamedparam          # имена параметров в сигнатурах интерфейсов
+    - iotamixing           # iota в смешанных const-блоках
+    - misspell
+    - modernize
+    - nakedret             # naked return в длинных функциях
+    - perfsprint
+    - prealloc
+    - thelper              # t.Helper() в тест-хелперах
+    - unconvert
+    - usetesting
+    - usestdlibvars
+    - whitespace
+    # --- архитектура и процесс ---
+    - depguard             # правила domain/application-clean, см. settings
+    - dupl                 # дубли кода; threshold под sqlc-boilerplate в settings
+    - forbidigo            # запрет fmt.Print*/stdlib log — см. settings
+    - gochecknoinits       # без init()-функций
+    - nolintlint           # строгий режим, см. settings
     - predeclared
     - recvcheck
     - revive
-    - rowserrcheck
     - sloglint
-    - sqlclosecheck
-    - staticcheck
-    - unconvert
-    - wastedassign
   settings:
     depguard:
       rules:
@@ -56,6 +101,14 @@ linters:
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters
               desc: domain must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters
               desc: domain must not depend on adapters
         application-clean:
           list-mode: lax
@@ -83,33 +136,118 @@ linters:
               desc: application layer must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters
               desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters
+              desc: application layer must not depend on adapters
+    govet:
+      enable:
+        - nilness          # SSA-анализ nil-дерефов; shadow НЕ включать (139 шумовых срабатываний)
+    exhaustive:
+      default-signifies-exhaustive: true
+    staticcheck:
+      checks: ["all", "-ST1000", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
+      # = прежний дефолт + ST1003 (initialisms: Id→ID)
+    spancheck:
+      # "all" парсером go-spancheck не принимается (тихо отключит все проверки) — перечисляем явно.
+      checks: ["end", "set-status", "record-error"]   # все три проверки; дефолт — только end
+    loggercheck:
+      require-string-key: true
+      no-printf-like: true
+    sloglint:
+      context: all           # кодирует правило AGENTS.md: InfoContext/WarnContext/ErrorContext
+    gocritic:
+      # Теги НЕ включать: прогоны style/performance/opinionated/experimental дали 50/367/48/18 шумовых.
+      enabled-checks:
+        - appendCombine        # цепочки append — маркер опечатки
+        - badLock              # непарные Lock/Unlock → дедлоки
+        - badRegexp
+        - badSorting           # misuse sort.Interface
+        - badSyncOnceFunc
+        - deferInLoop          # defer в цикле держит ресурсы/локи
+        - dupOption            # повтор variadic-опции
+        - dynamicFmtString     # Printf с непостоянным форматом
+        - emptyFallthrough
+        - evalOrder
+        - externalErrorReassign
+        - filepathJoin
+        - nilValReturn         # гарантированный nil как error
+        - regexpPattern
+        - returnAfterHttpError # http.Error без return — про chi-хендлеры
+        - sloppyReassign
+        - sortSlice            # нестрогий less → недетерминированная сортировка
+        - sqlQuery             # Query вместо Exec — про sqlc/pgx
+        - truncateCmp          # сравнение int разной ширины
+        - weakCond
+        - sprintfQuotedString
+    dupl:
+      threshold: 200         # дефолт 150 тонет в sqlc-boilerplate; 200 = единичные реальные кластеры
+    forbidigo:
+      analyze-types: true    # привязка паттерна к пакету (нужна для stdlib log)
+      forbid:
+        - pattern: ^(fmt\.Print(|f|ln)|print|println)$   # дефолтный паттерн, сохранён явно
+        - pattern: ^log\.                                 # логируем только через log/slog
+          msg: use log/slog instead of stdlib log
     modernize:
       disable:
-        - fmtappendf
-        - forvar
-        - omitzero
-        - plusbuild
-        - reflecttypefor
-        - slicessort
-        - stditerators
-        - stringscut
-        - stringscutprefix
-        - stringsseq
-        - stringsbuilder
-        - testingcontext
-        - unsafefuncs
-        - waitgroup
+        - forvar           # дублирует copyloopvar
+        - omitzero         # меняет JSON-контракт ответов (omitempty → omitzero для struct)
     revive:
       rules:
         - name: exported
           disabled: true
         - name: package-comments
           disabled: true
+        - name: error-strings   # покрывается staticcheck ST1005
+          disabled: true
+        - name: errorf          # покрывается staticcheck S1028
+          disabled: true
+        - name: use-any            # interface{} → any (код уже чист — профилактика)
+        - name: early-return       # guard clauses вместо вложенных if
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
   exclusions:
-    generated: strict
-    paths:
-      - internal/platform/database/db/.*
-      - internal/platform/openapi/generated.gen.go
-run:
-  go: "1.26.0"
-  timeout: 5m
+    generated: strict      # покрывает sqlc/oapi-codegen целиком (маркер DO NOT EDIT)
+    warn-unused: true      # страховка от гнилых паттернов исключений
+    # paths осознанно не задаём: прежние правила были мёртвыми/избыточными.
+
+formatters:
+  enable:
+    - gofumpt              # надмножество gofmt -s
+    - gci                  # секции по умолчанию (standard, default) = текущая конвенция импортов
+
+issues:
+  max-issues-per-linter: 0   # не обрезать отчёт
+  max-same-issues: 0
+
+# Осознанно НЕ включаем (проверено прогонами / нерелевантно стеку):
+# - goconst (140 шумовых: тест-фикстуры, config fake/dev), govet shadow (139, идиома if err :=),
+#   staticcheck ST1000 (package comments — 148 шумовых),
+#   intrange (дубль modernize.rangeint).
+# - wsl_v5, nlreturn, noinlineerr, lll, funlen, varnamelen, mnd, tagliatelle, ireturn,
+#   gochecknoglobals, exhaustruct, godox, testpackage, nonamedreturns,
+#   interfacebloat, wrapcheck, err113, paralleltest, grouper, decorder, goheader,
+#   nestif, tagalign, dogsled, funcorder — opinionated/стилевые, борются с идиомами проекта.
+# - cyclop, gocyclo, gocognit, maintidx — метрики сложности, шумны как CI-гейт.
+# - testifylint, ginkgolinter (нет testify/ginkgo), protogetter (нет .pb.go в модуле),
+#   promlinter (нет prometheus client), zerologlint (стек на slog), arangolint, clickhouselint,
+#   unqueryvet (нет SELECT * в Go-коде), importas (нет алиасов для enforce).
+# - exptostd: включить, если в go.mod появится golang.org/x/exp.
+
+# Раунд 2 (проверено прогонами v2.12.2):
+# - errcheck check-blank (212 шумовых на идиому `_ = tx.Rollback`), check-type-assertions (forcetypeassert покрывает),
+#   govet stdversion (0 сигнала при go 1.26), sloglint no-global (1 прагматичная находка) и static-msg (3, одна нефиксибельна).
+# - gocritic теги style/performance/opinionated/experimental (50/367/48/18 шумовых; hugeParam/rangeValCopy — sqlc-структуры).
+# - tagliatelle (36 — openapi-контракт смешанный snake/camel, внешний API T-Bank требует PascalCase),
+#   interfacebloat (7 — осознанные порты 12-31 метод), nonamedreturns (25 — ломает defer-идиому метрик tkassa),
+#   iface (13 false positive на DDD-портах), embeddedstructfieldcheck (14 — чистый стиль),
+#   testableexamples (в проекте нет Example-функций).
+# - cyclop/gocognit/nestif/funlen — 15-150 срабатываний на известном техдолге (Load, HandleWebhook, UpdateLease);
+#   это тема планового рефакторинга, не CI-гейта.
+# - perfsprint fiximports в v2.12.2 недоступен (захардкожен false): --fix не добавляет import "errors" — добавлять руками.

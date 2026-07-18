@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"mime"
 	"net"
@@ -50,15 +51,15 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
 	}
 
 	if len(msg.To) == 0 {
-		return fmt.Errorf("no recipients")
+		return errors.New("no recipients")
 	}
 
 	if msg.TextBody == "" && msg.HTMLBody == "" {
-		return fmt.Errorf("empty message body")
+		return errors.New("empty message body")
 	}
 
 	if msg.Subject == "" {
-		return fmt.Errorf("email subject is required")
+		return errors.New("email subject is required")
 	}
 
 	body := s.buildMessage(msg)
@@ -144,9 +145,7 @@ func quoteDisplayName(s string) string {
 	if strings.HasPrefix(s, "=?") {
 		return s
 	}
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	return fmt.Sprintf("\"%s\"", s)
+	return fmt.Sprintf("%q", s)
 }
 
 // messageIDDomain returns the domain part of the From address to use in the

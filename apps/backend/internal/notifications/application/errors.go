@@ -10,4 +10,5 @@ var (
 	ErrDuplicateSMSReminder   = errors.New("sms reminder already sent")
 	ErrDuplicateEmailReminder = errors.New("email reminder already sent")
 	ErrNoContact              = errors.New("no contact found")
+	ErrInvalidPreferences     = errors.New("invalid notification preferences")
 )

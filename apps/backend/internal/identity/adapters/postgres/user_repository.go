@@ -215,13 +215,13 @@ func (r *UserRepository) resolveConflictingUser(ctx context.Context, user domain
 	}
 
 	if user.Email == nil {
-		return domain.User{}, fmt.Errorf("resolve conflicting user: no user by phone and no email to look up")
+		return domain.User{}, errors.New("resolve conflicting user: no user by phone and no email to look up")
 	}
 
 	existing, err = r.GetByEmail(ctx, *user.Email)
 	if err != nil {
 		if errors.Is(err, application.ErrNotFound) {
-			return domain.User{}, fmt.Errorf("resolve conflicting user: conflict resolved without finding user")
+			return domain.User{}, errors.New("resolve conflicting user: conflict resolved without finding user")
 		}
 		return domain.User{}, fmt.Errorf("resolve conflicting user by email: %w", err)
 	}

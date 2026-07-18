@@ -36,7 +36,11 @@ func (r *LeaseRepository) q() *postgres.Queries {
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *LeaseRepository) WithTx(tx transaction.Tx) application.LeaseRepository {
-	return NewLeaseRepository(tx.(postgres.DBTX))
+	dbtx, ok := tx.(postgres.DBTX)
+	if !ok {
+		panic(fmt.Sprintf("leases.LeaseRepository.WithTx: expected postgres.DBTX, got %T", tx))
+	}
+	return NewLeaseRepository(dbtx)
 }
 
 func (r *LeaseRepository) Create(ctx context.Context, ownerID uuid.UUID, lease domain.Lease) (domain.Lease, error) {
@@ -266,7 +270,11 @@ func (r *TenantContactRepository) q() *postgres.Queries {
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *TenantContactRepository) WithTx(tx transaction.Tx) application.TenantContactRepository {
-	return NewTenantContactRepository(tx.(postgres.DBTX))
+	dbtx, ok := tx.(postgres.DBTX)
+	if !ok {
+		panic(fmt.Sprintf("leases.TenantContactRepository.WithTx: expected postgres.DBTX, got %T", tx))
+	}
+	return NewTenantContactRepository(dbtx)
 }
 
 func (r *TenantContactRepository) Create(ctx context.Context, ownerID uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error) {
@@ -489,7 +497,11 @@ func (r *RecurringOperationRepository) q() *postgres.Queries {
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *RecurringOperationRepository) WithTx(tx transaction.Tx) application.RecurringOperationRepository {
-	return NewRecurringOperationRepository(tx.(postgres.DBTX))
+	dbtx, ok := tx.(postgres.DBTX)
+	if !ok {
+		panic(fmt.Sprintf("leases.RecurringOperationRepository.WithTx: expected postgres.DBTX, got %T", tx))
+	}
+	return NewRecurringOperationRepository(dbtx)
 }
 
 func (r *RecurringOperationRepository) Create(ctx context.Context, op domain.RecurringOperation) (domain.RecurringOperation, error) {
@@ -764,7 +776,11 @@ func (r *OperationRepository) q() *postgres.Queries {
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *OperationRepository) WithTx(tx transaction.Tx) application.OperationRepository {
-	return NewOperationRepository(tx.(postgres.DBTX))
+	dbtx, ok := tx.(postgres.DBTX)
+	if !ok {
+		panic(fmt.Sprintf("leases.OperationRepository.WithTx: expected postgres.DBTX, got %T", tx))
+	}
+	return NewOperationRepository(dbtx)
 }
 
 func (r *OperationRepository) Create(ctx context.Context, op domain.Operation) (domain.Operation, error) {
@@ -1486,7 +1502,11 @@ func (r *OperationCategoryRepository) q() *postgres.Queries {
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *OperationCategoryRepository) WithTx(tx transaction.Tx) application.OperationCategoryRepository {
-	return NewOperationCategoryRepository(tx.(postgres.DBTX))
+	dbtx, ok := tx.(postgres.DBTX)
+	if !ok {
+		panic(fmt.Sprintf("leases.OperationCategoryRepository.WithTx: expected postgres.DBTX, got %T", tx))
+	}
+	return NewOperationCategoryRepository(dbtx)
 }
 
 func (r *OperationCategoryRepository) Create(ctx context.Context, ownerID uuid.UUID, categoryType domain.OperationType, name string) (domain.OperationCategory, error) {
@@ -1602,7 +1622,11 @@ func (r *PropertyRepository) q() *postgres.Queries {
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *PropertyRepository) WithTx(tx transaction.Tx) application.PropertyRepository {
-	return NewPropertyRepository(tx.(postgres.DBTX))
+	dbtx, ok := tx.(postgres.DBTX)
+	if !ok {
+		panic(fmt.Sprintf("leases.PropertyRepository.WithTx: expected postgres.DBTX, got %T", tx))
+	}
+	return NewPropertyRepository(dbtx)
 }
 
 // ExistsActiveByOwner reports whether an active property exists for the owner.

@@ -2,9 +2,11 @@ package requestctx
 
 import "context"
 
-type requestIDKey struct{}
-type traceIDKey struct{}
-type clientIPKey struct{}
+type (
+	requestIDKey struct{}
+	traceIDKey   struct{}
+	clientIPKey  struct{}
+)
 
 // WithRequestID stores the request ID in context for cross-cutting diagnostics.
 func WithRequestID(ctx context.Context, id string) context.Context {

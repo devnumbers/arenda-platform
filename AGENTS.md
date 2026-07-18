@@ -68,6 +68,7 @@ The following MCP servers are configured in `~/.kimi-code/mcp.json`:
 - `playwright` — browser automation and UI verification. Used by frontend work. Fallback when unavailable: manual inspection, build logs, or native browser tools.
 - `figma` — Figma design data and image exports. Fallback when unavailable: manual design references.
 - `heroui-react` — HeroUI v3 component docs, source, and theme tokens for the Next.js frontend. HeroUI v3 is beta and not covered by model training data, so verify components through this server before writing HeroUI code. Fallback when unavailable: official docs at https://v3.heroui.com via `FetchURL` or `WebSearch`.
+- `jetbrains` — GoLand's built-in MCP server (IDE 2025.2+). Runs IDE inspections (`get_file_problems`) on files as a quality gate for agent work. Requires GoLand running with this project open. Fallback when unavailable: note the skipped gate in the final report.
 
 ## Commands
 

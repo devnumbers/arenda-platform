@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -161,10 +162,14 @@ func (r *lockingFakePropertyRepo) CountActiveByOwner(_ context.Context, _ uuid.U
 }
 
 func (r *lockingFakePropertyRepo) WithTx(tx transaction.Tx) PropertyRepository {
+	ftx, ok := tx.(*fakePropertyTx)
+	if !ok {
+		panic(fmt.Sprintf("lockingFakePropertyRepo.WithTx: unexpected tx type %T", tx))
+	}
 	return &lockingFakePropertyRepo{
 		lock: r.lock,
 		data: r.data,
-		tx:   tx.(*fakePropertyTx),
+		tx:   ftx,
 	}
 }
 
@@ -241,8 +246,10 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 	}
 }
 
-var _ PropertyRepository = (*lockingFakePropertyRepo)(nil)
-var _ OccupancyProvider = fakeOccupancyProvider{}
+var (
+	_ PropertyRepository = (*lockingFakePropertyRepo)(nil)
+	_ OccupancyProvider  = fakeOccupancyProvider{}
+)
 
 type fakeSubscriptionLimiter struct {
 	limit int
@@ -427,8 +434,10 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 	}
 }
 
-var _ SubscriptionLimiter = fakeSubscriptionLimiter{}
-var _ PropertyBillingLifecycle = fakePropertyBillingLifecycle{}
+var (
+	_ SubscriptionLimiter      = fakeSubscriptionLimiter{}
+	_ PropertyBillingLifecycle = fakePropertyBillingLifecycle{}
+)
 
 type stubLeaseRepo struct{}
 
@@ -490,8 +499,10 @@ func (fakePropertyPhotoStorage) HeadBucket(_ context.Context) error {
 	return nil
 }
 
-var _ PropertyPhotoRepository = fakePropertyPhotoRepo{}
-var _ PhotoStorage = fakePropertyPhotoStorage{}
+var (
+	_ PropertyPhotoRepository = fakePropertyPhotoRepo{}
+	_ PhotoStorage            = fakePropertyPhotoStorage{}
+)
 
 type fakeLeaseRepoForProperties struct {
 	leases []leasesdomain.Lease

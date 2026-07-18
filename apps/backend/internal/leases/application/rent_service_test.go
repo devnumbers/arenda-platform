@@ -840,6 +840,8 @@ func date(year, month, day int) time.Time {
 }
 
 // Compile-time interface checks.
-var _ OperationRepository = (*fakeOperationRepo)(nil)
-var _ RecurringOperationRepository = (*fakeRecurringOperationRepo)(nil)
-var _ clock.Clock = fakeClock{}
+var (
+	_ OperationRepository          = (*fakeOperationRepo)(nil)
+	_ RecurringOperationRepository = (*fakeRecurringOperationRepo)(nil)
+	_ clock.Clock                  = fakeClock{}
+)

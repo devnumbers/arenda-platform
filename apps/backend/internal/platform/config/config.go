@@ -2,6 +2,7 @@ package config
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -129,11 +130,11 @@ func Load() (Config, error) {
 	cfg.OTelTraceSampler = sampler
 
 	if cfg.OTelEnabled && cfg.OTelOTLPEndpoint == "" {
-		return Config{}, fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL_TRACES_EXPORTER or OTEL_METRICS_EXPORTER is set to a value other than 'none'")
+		return Config{}, errors.New("OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL_TRACES_EXPORTER or OTEL_METRICS_EXPORTER is set to a value other than 'none'")
 	}
 
 	if cfg.AppEnv == "" {
-		return Config{}, fmt.Errorf("APP_ENV is required")
+		return Config{}, errors.New("APP_ENV is required")
 	}
 	allowedEnvs := map[string]bool{"local": true, "dev": true, "staging": true, "production": true}
 	if !allowedEnvs[cfg.AppEnv] {
@@ -156,13 +157,13 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("invalid DADATA_TIMEOUT %q: %w", v, err)
 		}
 		if d <= 0 {
-			return Config{}, fmt.Errorf("DADATA_TIMEOUT must be positive")
+			return Config{}, errors.New("DADATA_TIMEOUT must be positive")
 		}
 		cfg.DaDataTimeout = d
 	}
 
 	if cfg.DaDataAPIKey == "" {
-		return Config{}, fmt.Errorf("DADATA_API_KEY is required")
+		return Config{}, errors.New("DADATA_API_KEY is required")
 	}
 
 	if cfg.HTTPAddr == "" {
@@ -274,32 +275,32 @@ func Load() (Config, error) {
 		cfg.RateLimit.PhoneChangeVerifyPer15Min = 10
 	}
 	if cfg.RateLimit.IPRPS <= 0 {
-		return Config{}, fmt.Errorf("RATE_LIMIT_IP_RPS must be positive")
+		return Config{}, errors.New("RATE_LIMIT_IP_RPS must be positive")
 	}
 	if cfg.RateLimit.IPBurst <= 0 {
-		return Config{}, fmt.Errorf("RATE_LIMIT_IP_BURST must be positive")
+		return Config{}, errors.New("RATE_LIMIT_IP_BURST must be positive")
 	}
 	if cfg.RateLimit.EmailSendPerHour <= 0 {
-		return Config{}, fmt.Errorf("RATE_LIMIT_EMAIL_SEND_PER_HOUR must be positive")
+		return Config{}, errors.New("RATE_LIMIT_EMAIL_SEND_PER_HOUR must be positive")
 	}
 	if cfg.RateLimit.EmailVerifyPer15Min <= 0 {
-		return Config{}, fmt.Errorf("RATE_LIMIT_EMAIL_VERIFY_PER_15MIN must be positive")
+		return Config{}, errors.New("RATE_LIMIT_EMAIL_VERIFY_PER_15MIN must be positive")
 	}
 	if cfg.RateLimit.PhoneChangeSendPerHour <= 0 {
-		return Config{}, fmt.Errorf("RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR must be positive")
+		return Config{}, errors.New("RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR must be positive")
 	}
 	if cfg.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
-		return Config{}, fmt.Errorf("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN must be positive")
+		return Config{}, errors.New("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN must be positive")
 	}
 
 	if cfg.DatabaseURL == "" {
-		return Config{}, fmt.Errorf("DATABASE_URL is required")
+		return Config{}, errors.New("DATABASE_URL is required")
 	}
 	if !strings.HasPrefix(cfg.DatabaseURL, "postgres://") && !strings.HasPrefix(cfg.DatabaseURL, "postgresql://") {
-		return Config{}, fmt.Errorf("invalid DATABASE_URL: must start with postgres:// or postgresql://")
+		return Config{}, errors.New("invalid DATABASE_URL: must start with postgres:// or postgresql://")
 	}
 	if cfg.MigrationsDir == "" {
-		return Config{}, fmt.Errorf("MIGRATIONS_DIR is required")
+		return Config{}, errors.New("MIGRATIONS_DIR is required")
 	}
 
 	cfg.DBPool = DBPoolConfig{
@@ -359,18 +360,18 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("invalid DB_HEALTH_CHECK_PERIOD %q: %w", v, err)
 		}
 		if d <= 0 {
-			return Config{}, fmt.Errorf("DB_HEALTH_CHECK_PERIOD must be positive")
+			return Config{}, errors.New("DB_HEALTH_CHECK_PERIOD must be positive")
 		}
 		cfg.DBPool.HealthCheckPeriod = d
 	}
 	if cfg.DBPool.MaxConns <= 0 {
-		return Config{}, fmt.Errorf("DB_MAX_CONNS must be positive")
+		return Config{}, errors.New("DB_MAX_CONNS must be positive")
 	}
 	if cfg.DBPool.MinConns < 0 {
-		return Config{}, fmt.Errorf("DB_MIN_CONNS must be non-negative")
+		return Config{}, errors.New("DB_MIN_CONNS must be non-negative")
 	}
 	if cfg.DBPool.MinConns > cfg.DBPool.MaxConns {
-		return Config{}, fmt.Errorf("DB_MIN_CONNS must not exceed DB_MAX_CONNS")
+		return Config{}, errors.New("DB_MIN_CONNS must not exceed DB_MAX_CONNS")
 	}
 
 	allowedEmailSenders := map[string]bool{"": true, "fake": true, "smtp": true}
@@ -378,11 +379,10 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("invalid EMAIL_SENDER %q: must be empty, fake, or smtp", cfg.EmailSender)
 	}
 	if cfg.EmailSender == "" {
-		if cfg.AppEnv == "local" || cfg.AppEnv == "dev" {
-			cfg.EmailSender = "fake"
-		} else {
+		if cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
 			return Config{}, fmt.Errorf("EMAIL_SENDER is required for APP_ENV=%s", cfg.AppEnv)
 		}
+		cfg.EmailSender = "fake"
 	}
 	if cfg.EmailSender == "fake" && cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
 		return Config{}, fmt.Errorf("EMAIL_SENDER=fake is not allowed for APP_ENV=%s", cfg.AppEnv)
@@ -397,13 +397,13 @@ func Load() (Config, error) {
 	}
 	if cfg.EmailSender == "smtp" {
 		if cfg.SMTPHost == "" {
-			return Config{}, fmt.Errorf("SMTP_HOST is required when EMAIL_SENDER=smtp")
+			return Config{}, errors.New("SMTP_HOST is required when EMAIL_SENDER=smtp")
 		}
 		if cfg.SMTPPort == "" {
-			return Config{}, fmt.Errorf("SMTP_PORT is required when EMAIL_SENDER=smtp")
+			return Config{}, errors.New("SMTP_PORT is required when EMAIL_SENDER=smtp")
 		}
 		if cfg.SMTPFrom == "" {
-			return Config{}, fmt.Errorf("SMTP_FROM is required when EMAIL_SENDER=smtp")
+			return Config{}, errors.New("SMTP_FROM is required when EMAIL_SENDER=smtp")
 		}
 		if v := os.Getenv("SMTP_TIMEOUT"); v != "" {
 			d, err := time.ParseDuration(v)
@@ -411,18 +411,17 @@ func Load() (Config, error) {
 				return Config{}, fmt.Errorf("invalid SMTP_TIMEOUT %q: %w", v, err)
 			}
 			if d <= 0 {
-				return Config{}, fmt.Errorf("SMTP_TIMEOUT must be positive")
+				return Config{}, errors.New("SMTP_TIMEOUT must be positive")
 			}
 			cfg.SMTPTimeout = d
 		}
 	}
 
 	if cfg.PaymentProvider == "" {
-		if cfg.AppEnv == "local" {
-			cfg.PaymentProvider = "fake"
-		} else {
+		if cfg.AppEnv != "local" {
 			return Config{}, fmt.Errorf("PAYMENT_PROVIDER is required for APP_ENV=%s", cfg.AppEnv)
 		}
+		cfg.PaymentProvider = "fake"
 	}
 	allowedPaymentProviders := map[string]bool{"fake": true, "tkassa": true}
 	if !allowedPaymentProviders[cfg.PaymentProvider] {
@@ -433,7 +432,7 @@ func Load() (Config, error) {
 	}
 	if cfg.PaymentProvider == "fake" {
 		if cfg.AppBaseURL == "" {
-			return Config{}, fmt.Errorf("APP_BASE_URL is required when PAYMENT_PROVIDER=fake")
+			return Config{}, errors.New("APP_BASE_URL is required when PAYMENT_PROVIDER=fake")
 		}
 		u, err := url.Parse(cfg.AppBaseURL)
 		if err != nil {
@@ -445,13 +444,13 @@ func Load() (Config, error) {
 	}
 	if cfg.PaymentProvider == "tkassa" {
 		if cfg.TKassaTerminalKey == "" {
-			return Config{}, fmt.Errorf("T_KASSA_TERMINAL_KEY is required when PAYMENT_PROVIDER=tkassa")
+			return Config{}, errors.New("T_KASSA_TERMINAL_KEY is required when PAYMENT_PROVIDER=tkassa")
 		}
 		if cfg.TKassaPassword == "" {
-			return Config{}, fmt.Errorf("T_KASSA_PASSWORD is required when PAYMENT_PROVIDER=tkassa")
+			return Config{}, errors.New("T_KASSA_PASSWORD is required when PAYMENT_PROVIDER=tkassa")
 		}
 		if cfg.AppBaseURL == "" {
-			return Config{}, fmt.Errorf("APP_BASE_URL is required when PAYMENT_PROVIDER=tkassa")
+			return Config{}, errors.New("APP_BASE_URL is required when PAYMENT_PROVIDER=tkassa")
 		}
 		u, err := url.Parse(cfg.AppBaseURL)
 		if err != nil {
@@ -495,7 +494,7 @@ func Load() (Config, error) {
 				return Config{}, fmt.Errorf("invalid T_KASSA_TIMEOUT %q: %w", v, err)
 			}
 			if d <= 0 {
-				return Config{}, fmt.Errorf("T_KASSA_TIMEOUT must be positive")
+				return Config{}, errors.New("T_KASSA_TIMEOUT must be positive")
 			}
 			cfg.TKassaTimeout = d
 		}
@@ -507,7 +506,7 @@ func Load() (Config, error) {
 				return Config{}, fmt.Errorf("invalid T_KASSA_MAX_RETRIES %q: %w", v, err)
 			}
 			if n < 0 {
-				return Config{}, fmt.Errorf("T_KASSA_MAX_RETRIES must be non-negative")
+				return Config{}, errors.New("T_KASSA_MAX_RETRIES must be non-negative")
 			}
 			cfg.TKassaMaxRetries = n
 		}
@@ -519,7 +518,7 @@ func Load() (Config, error) {
 				return Config{}, fmt.Errorf("invalid T_KASSA_RETRY_BASE_DELAY %q: %w", v, err)
 			}
 			if d <= 0 {
-				return Config{}, fmt.Errorf("T_KASSA_RETRY_BASE_DELAY must be positive")
+				return Config{}, errors.New("T_KASSA_RETRY_BASE_DELAY must be positive")
 			}
 			cfg.TKassaRetryBaseDelay = d
 		}
@@ -531,7 +530,7 @@ func Load() (Config, error) {
 				return Config{}, fmt.Errorf("invalid T_KASSA_RETRY_MAX_DELAY %q: %w", v, err)
 			}
 			if d <= 0 {
-				return Config{}, fmt.Errorf("T_KASSA_RETRY_MAX_DELAY must be positive")
+				return Config{}, errors.New("T_KASSA_RETRY_MAX_DELAY must be positive")
 			}
 			cfg.TKassaRetryMaxDelay = d
 		}
@@ -593,7 +592,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("invalid BILLING_WORKER_INTERVAL %q: %w", v, err)
 		}
 		if d <= 0 {
-			return Config{}, fmt.Errorf("BILLING_WORKER_INTERVAL must be positive")
+			return Config{}, errors.New("BILLING_WORKER_INTERVAL must be positive")
 		}
 		cfg.BillingWorkerInterval = d
 	}
@@ -605,7 +604,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("invalid PAYMENT_RECONCILIATION_WORKER_INTERVAL %q: %w", v, err)
 		}
 		if d <= 0 {
-			return Config{}, fmt.Errorf("PAYMENT_RECONCILIATION_WORKER_INTERVAL must be positive")
+			return Config{}, errors.New("PAYMENT_RECONCILIATION_WORKER_INTERVAL must be positive")
 		}
 		cfg.PaymentReconciliationWorkerInterval = d
 	}
@@ -617,13 +616,13 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("invalid OVERDUE_OPERATION_WORKER_INTERVAL %q: %w", v, err)
 		}
 		if d <= 0 {
-			return Config{}, fmt.Errorf("OVERDUE_OPERATION_WORKER_INTERVAL must be positive")
+			return Config{}, errors.New("OVERDUE_OPERATION_WORKER_INTERVAL must be positive")
 		}
 		cfg.OverdueOperationWorkerInterval = d
 	}
 
 	if v := os.Getenv("TRUSTED_PROXIES"); v != "" {
-		for _, cidr := range strings.Split(v, ",") {
+		for cidr := range strings.SplitSeq(v, ",") {
 			cidr = strings.TrimSpace(cidr)
 			if cidr == "" {
 				continue
@@ -642,7 +641,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("invalid TARIFF_CACHE_TTL %q: %w", v, err)
 		}
 		if d <= 0 {
-			return Config{}, fmt.Errorf("TARIFF_CACHE_TTL must be positive")
+			return Config{}, errors.New("TARIFF_CACHE_TTL must be positive")
 		}
 		cfg.TariffCacheTTL = d
 	}

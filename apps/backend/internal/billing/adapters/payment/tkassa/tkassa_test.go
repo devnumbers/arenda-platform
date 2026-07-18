@@ -36,9 +36,9 @@ func newTestProvider(serverURL string) *Provider {
 	return NewProvider(serverURL, testTerminalKey, testPassword, 5*time.Second, 0, 0, 0, discardLogger(), nil)
 }
 
-func verifyRequestToken(t *testing.T, r *http.Request, password string) map[string]any {
+func verifyRequestToken(t *testing.T, r *http.Request) map[string]any {
 	t.Helper()
-	return verifyRequestTokenExcluding(t, r, password)
+	return verifyRequestTokenExcluding(t, r)
 }
 
 // verifyRequestTokenExcluding models the T-Kassa server token check: the token
@@ -46,7 +46,7 @@ func verifyRequestToken(t *testing.T, r *http.Request, password string) map[stri
 // ignores fields outside the method schema — e.g. RedirectUrl/FailRedirectUrl
 // for AddCard (prod incident, error 204) — so a server-faithful check must
 // exclude them instead of mirroring the client's sign over the whole body.
-func verifyRequestTokenExcluding(t *testing.T, r *http.Request, password string, exclude ...string) map[string]any {
+func verifyRequestTokenExcluding(t *testing.T, r *http.Request, exclude ...string) map[string]any {
 	t.Helper()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -65,7 +65,7 @@ func verifyRequestTokenExcluding(t *testing.T, r *http.Request, password string,
 	for _, k := range exclude {
 		delete(signData, k)
 	}
-	expected := sign(signData, password)
+	expected := sign(signData, testPassword)
 	if token != expected {
 		t.Fatalf("token mismatch: got %q, want %q", token, expected)
 	}
@@ -142,7 +142,10 @@ func TestVerifyWebhookToken(t *testing.T) {
 	}
 
 	payload["Token"] = "invalid"
-	body, _ = json.Marshal(payload)
+	body, err = json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal webhook: %v", err)
+	}
 	_, err = p.ParseWebhook(context.Background(), body)
 	if err == nil {
 		t.Fatalf("invalid webhook token accepted")
@@ -202,10 +205,13 @@ func TestVerifyWebhookTokenMissing(t *testing.T) {
 		"OrderId":     "order-123",
 		"Status":      "CONFIRMED",
 	}
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal webhook: %v", err)
+	}
 
 	p := newTestProvider("")
-	_, err := p.ParseWebhook(context.Background(), body)
+	_, err = p.ParseWebhook(context.Background(), body)
 	if err == nil {
 		t.Fatalf("expected error for missing token")
 	}
@@ -222,7 +228,7 @@ func TestProviderInit(t *testing.T) {
 		if r.URL.Path != "/v2/Init" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		data := verifyRequestToken(t, r, testPassword)
+		data := verifyRequestToken(t, r)
 
 		if got, want := data["TerminalKey"], testTerminalKey; got != want {
 			t.Fatalf("TerminalKey: got %v, want %v", got, want)
@@ -292,7 +298,7 @@ func TestProviderInit(t *testing.T) {
 func TestProviderInitDescriptionTruncated(t *testing.T) {
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		captured = verifyRequestToken(t, r, testPassword)
+		captured = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode(initResponse{
 			baseResponse: baseResponse{Success: true, Status: "NEW"},
 			PaymentID:    "1",
@@ -326,7 +332,7 @@ func TestProviderInitDescriptionTruncated(t *testing.T) {
 func TestProviderInitOperationInitiatorTypeDefault(t *testing.T) {
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		captured = verifyRequestToken(t, r, testPassword)
+		captured = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode(initResponse{
 			baseResponse: baseResponse{Success: true, Status: "NEW"},
 			PaymentID:    "1",
@@ -344,7 +350,10 @@ func TestProviderInitOperationInitiatorTypeDefault(t *testing.T) {
 		CustomerKey:   "ck",
 	})
 
-	dataObj := captured["DATA"].(map[string]any)
+	dataObj, ok := captured["DATA"].(map[string]any)
+	if !ok {
+		t.Fatalf("DATA missing or not an object")
+	}
 	if got, want := dataObj["OperationInitiatorType"], string(spec.CommonOperationInitiatorTypeN1); got != want {
 		t.Fatalf("default OperationInitiatorType: got %v, want %v", got, want)
 	}
@@ -353,7 +362,7 @@ func TestProviderInitOperationInitiatorTypeDefault(t *testing.T) {
 func TestProviderInitRenewal(t *testing.T) {
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		captured = verifyRequestToken(t, r, testPassword)
+		captured = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode(initResponse{
 			baseResponse: baseResponse{Success: true, Status: "NEW"},
 			PaymentID:    "123",
@@ -376,7 +385,10 @@ func TestProviderInitRenewal(t *testing.T) {
 	if _, ok := captured["Recurrent"]; ok {
 		t.Fatal("expected Recurrent field omitted for renewal")
 	}
-	dataObj := captured["DATA"].(map[string]any)
+	dataObj, ok := captured["DATA"].(map[string]any)
+	if !ok {
+		t.Fatalf("DATA missing or not an object")
+	}
 	if got, want := dataObj["OperationInitiatorType"], string(spec.CommonOperationInitiatorTypeR); got != want {
 		t.Fatalf("renewal OperationInitiatorType: got %v, want %v", got, want)
 	}
@@ -385,7 +397,7 @@ func TestProviderInitRenewal(t *testing.T) {
 func TestProviderInitRedirectDueDate(t *testing.T) {
 	newServer := func(captured *map[string]any) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			*captured = verifyRequestToken(t, r, testPassword)
+			*captured = verifyRequestToken(t, r)
 			_ = json.NewEncoder(w).Encode(initResponse{
 				baseResponse: baseResponse{Success: true, Status: "NEW"},
 				PaymentID:    "1",
@@ -472,7 +484,7 @@ func TestProviderInitRedirectDueDate(t *testing.T) {
 
 func TestProviderInitError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = verifyRequestToken(t, r, testPassword)
+		_ = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode(initResponse{
 			baseResponse: baseResponse{
 				Success:   false,
@@ -509,7 +521,7 @@ func TestProviderCharge(t *testing.T) {
 		if r.URL.Path != "/v2/Charge" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		data := verifyRequestToken(t, r, testPassword)
+		data := verifyRequestToken(t, r)
 		if got, want := data["PaymentId"], "123"; got != want {
 			t.Fatalf("PaymentId: got %v, want %v", got, want)
 		}
@@ -544,7 +556,7 @@ func TestProviderCharge(t *testing.T) {
 
 func TestProviderChargeFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = verifyRequestToken(t, r, testPassword)
+		_ = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode(chargeResponse{
 			baseResponse: baseResponse{
 				Success:   false,
@@ -579,7 +591,7 @@ func TestProviderStatus(t *testing.T) {
 		if r.URL.Path != "/v2/GetState" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		_ = verifyRequestToken(t, r, testPassword)
+		_ = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode(getStateResponse{
 			baseResponse: baseResponse{Success: true, Status: "AUTHORIZED"},
 			PaymentID:    "999",
@@ -602,7 +614,7 @@ func TestProviderStatusError(t *testing.T) {
 		if r.URL.Path != "/v2/GetState" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		_ = verifyRequestToken(t, r, testPassword)
+		_ = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode(getStateResponse{
 			baseResponse: baseResponse{
 				Success:   false,
@@ -644,7 +656,7 @@ func TestProviderInitAddCard(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v2/AddCustomer":
-			_ = verifyRequestToken(t, r, testPassword)
+			_ = verifyRequestToken(t, r)
 			_ = json.NewEncoder(w).Encode(addCustomerResponse{
 				baseResponse: baseResponse{Success: true},
 				CustomerKey:  "customer-1",
@@ -653,7 +665,7 @@ func TestProviderInitAddCard(t *testing.T) {
 			// The T-Kassa server verifies the AddCard token over the schema
 			// fields only; RedirectUrl/FailRedirectUrl are outside the schema
 			// and excluded from the check.
-			data := verifyRequestTokenExcluding(t, r, testPassword, "RedirectUrl", "FailRedirectUrl")
+			data := verifyRequestTokenExcluding(t, r, "RedirectUrl", "FailRedirectUrl")
 			if got, want := data["CheckType"], "3DSHOLD"; got != want {
 				t.Fatalf("CheckType: got %v, want %v", got, want)
 			}
@@ -699,7 +711,7 @@ func TestProviderInitAddCardCustomerAlreadyExistsProceeds(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v2/AddCustomer":
-			_ = verifyRequestToken(t, r, testPassword)
+			_ = verifyRequestToken(t, r)
 			_ = json.NewEncoder(w).Encode(addCustomerResponse{
 				baseResponse: baseResponse{
 					Success:   false,
@@ -740,7 +752,7 @@ func TestProviderInitAddCardOtherAPIErrorPropagated(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v2/AddCustomer":
-			_ = verifyRequestToken(t, r, testPassword)
+			_ = verifyRequestToken(t, r)
 			_ = json.NewEncoder(w).Encode(addCustomerResponse{
 				baseResponse: baseResponse{
 					Success:   false,
@@ -772,7 +784,7 @@ func TestProviderInitAddCardOtherAPIErrorPropagated(t *testing.T) {
 func TestProviderInitAddCardCustomerNetworkError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v2/AddCustomer" {
-			_ = verifyRequestToken(t, r, testPassword)
+			_ = verifyRequestToken(t, r)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -799,7 +811,7 @@ func TestProviderRemoveCard(t *testing.T) {
 		if r.URL.Path != "/v2/RemoveCard" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		data := verifyRequestToken(t, r, testPassword)
+		data := verifyRequestToken(t, r)
 		if got, want := data["CardId"], "card-1"; got != want {
 			t.Fatalf("CardId: got %v, want %v", got, want)
 		}
@@ -818,7 +830,7 @@ func TestProviderRemoveCard(t *testing.T) {
 
 func TestProviderRemoveCardError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = verifyRequestToken(t, r, testPassword)
+		_ = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode(removeCardResponse{
 			baseResponse: baseResponse{
 				Success:   false,
@@ -842,7 +854,7 @@ func TestProviderRemoveCardError(t *testing.T) {
 
 func TestProviderRemoveCardNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = verifyRequestToken(t, r, testPassword)
+		_ = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode(removeCardResponse{
 			baseResponse: baseResponse{
 				Success:   false,
@@ -865,7 +877,7 @@ func TestProviderGetCardList(t *testing.T) {
 		if r.URL.Path != "/v2/GetCardList" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		data := verifyRequestToken(t, r, testPassword)
+		data := verifyRequestToken(t, r)
 		if got, want := data["TerminalKey"], testTerminalKey; got != want {
 			t.Fatalf("TerminalKey: got %v, want %v", got, want)
 		}
@@ -908,7 +920,7 @@ func TestProviderGetCardList(t *testing.T) {
 
 func TestProviderGetCardListEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = verifyRequestToken(t, r, testPassword)
+		_ = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode([]cardListItem{})
 	}))
 	defer server.Close()
@@ -925,7 +937,7 @@ func TestProviderGetCardListEmpty(t *testing.T) {
 
 func TestProviderGetCardListError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = verifyRequestToken(t, r, testPassword)
+		_ = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode(baseResponse{
 			Success:   false,
 			ErrorCode: "503",
@@ -947,7 +959,7 @@ func TestProviderGetCardListError(t *testing.T) {
 
 func TestProviderGetCardListTerminalNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = verifyRequestToken(t, r, testPassword)
+		_ = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode(baseResponse{
 			Success:   false,
 			ErrorCode: "501",
@@ -990,7 +1002,10 @@ func TestParseWebhookPayment(t *testing.T) {
 		"CustomerKey": "customer-1",
 	}
 	payload["Token"] = sign(payload, testPassword)
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal webhook: %v", err)
+	}
 
 	p := newTestProvider("")
 	result, err := p.ParseWebhook(context.Background(), body)
@@ -1031,7 +1046,10 @@ func TestParseWebhookAddCard(t *testing.T) {
 		"Success":          true,
 	}
 	payload["Token"] = sign(payload, testPassword)
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal webhook: %v", err)
+	}
 
 	p := newTestProvider("")
 	result, err := p.ParseWebhook(context.Background(), body)
@@ -1063,10 +1081,13 @@ func TestParseWebhookAddCardRejectsNonSuccess(t *testing.T) {
 		"Success":          false,
 	}
 	payload["Token"] = sign(payload, testPassword)
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal webhook: %v", err)
+	}
 
 	p := newTestProvider("")
-	_, err := p.ParseWebhook(context.Background(), body)
+	_, err = p.ParseWebhook(context.Background(), body)
 	if err == nil {
 		t.Fatalf("expected error for non-success AddCard webhook")
 	}
@@ -1089,7 +1110,10 @@ func TestParseWebhookAddCardLegacyType(t *testing.T) {
 		"Success":          true,
 	}
 	payload["Token"] = sign(payload, testPassword)
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal webhook: %v", err)
+	}
 
 	p := newTestProvider("")
 	result, err := p.ParseWebhook(context.Background(), body)
@@ -1119,7 +1143,10 @@ func TestParseWebhookAddCardWithoutNotificationType(t *testing.T) {
 		"Success":     true,
 	}
 	payload["Token"] = sign(payload, testPassword)
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal webhook: %v", err)
+	}
 
 	p := newTestProvider("")
 	result, err := p.ParseWebhook(context.Background(), body)
@@ -1150,10 +1177,13 @@ func TestParseWebhookUnknownNotificationType(t *testing.T) {
 		"Success":          true,
 	}
 	payload["Token"] = sign(payload, testPassword)
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal webhook: %v", err)
+	}
 
 	p := newTestProvider("")
-	_, err := p.ParseWebhook(context.Background(), body)
+	_, err = p.ParseWebhook(context.Background(), body)
 	if err == nil {
 		t.Fatalf("expected error for unknown notification type")
 	}
@@ -1162,9 +1192,9 @@ func TestParseWebhookUnknownNotificationType(t *testing.T) {
 	}
 }
 
-func TestGetInt64(t *testing.T) {
+func TestGetAmount(t *testing.T) {
 	t.Run("missing key returns zero without error", func(t *testing.T) {
-		got, err := getInt64(map[string]any{}, "Amount")
+		got, err := getAmount(map[string]any{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1174,7 +1204,7 @@ func TestGetInt64(t *testing.T) {
 	})
 
 	t.Run("empty string returns zero without error", func(t *testing.T) {
-		got, err := getInt64(map[string]any{"Amount": ""}, "Amount")
+		got, err := getAmount(map[string]any{"Amount": ""})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1184,7 +1214,7 @@ func TestGetInt64(t *testing.T) {
 	})
 
 	t.Run("valid number returns value", func(t *testing.T) {
-		got, err := getInt64(map[string]any{"Amount": json.Number("99000")}, "Amount")
+		got, err := getAmount(map[string]any{"Amount": json.Number("99000")})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1194,7 +1224,7 @@ func TestGetInt64(t *testing.T) {
 	})
 
 	t.Run("non-numeric string returns error", func(t *testing.T) {
-		_, err := getInt64(map[string]any{"Amount": "not-a-number"}, "Amount")
+		_, err := getAmount(map[string]any{"Amount": "not-a-number"})
 		if err == nil {
 			t.Fatalf("expected error for non-numeric string")
 		}
@@ -1213,10 +1243,13 @@ func TestParseWebhookInvalidOrderID(t *testing.T) {
 		"Success":     true,
 	}
 	payload["Token"] = sign(payload, testPassword)
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal webhook: %v", err)
+	}
 
 	p := newTestProvider("")
-	_, err := p.ParseWebhook(context.Background(), body)
+	_, err = p.ParseWebhook(context.Background(), body)
 	if err == nil {
 		t.Fatalf("expected error for invalid OrderId")
 	}
@@ -1373,7 +1406,7 @@ func TestProviderCancel_FullRefund(t *testing.T) {
 		if r.URL.Path != "/v2/Cancel" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		data := verifyRequestToken(t, r, testPassword)
+		data := verifyRequestToken(t, r)
 		if got, want := data["PaymentId"], providerPaymentID; got != want {
 			t.Fatalf("PaymentId: got %v, want %v", got, want)
 		}
@@ -1416,7 +1449,7 @@ func TestProviderCancel_ReversedPending(t *testing.T) {
 		if r.URL.Path != "/v2/Cancel" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		_ = verifyRequestToken(t, r, testPassword)
+		_ = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode(cancelResponse{
 			baseResponse:   baseResponse{Success: true, Status: "REVERSED"},
 			PaymentID:      providerPaymentID,
@@ -1452,7 +1485,7 @@ func TestProviderCancel_Error(t *testing.T) {
 		if r.URL.Path != "/v2/Cancel" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		_ = verifyRequestToken(t, r, testPassword)
+		_ = verifyRequestToken(t, r)
 		_ = json.NewEncoder(w).Encode(cancelResponse{
 			baseResponse: baseResponse{
 				Success:   false,
@@ -2004,7 +2037,7 @@ func TestProviderAddCardContract(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v2/AddCustomer":
-			_ = verifyRequestToken(t, r, testPassword)
+			_ = verifyRequestToken(t, r)
 			_ = json.NewEncoder(w).Encode(spec.AddCustomerResponse{
 				TerminalKey: testTerminalKey,
 				CustomerKey: "customer-1",
@@ -2244,7 +2277,7 @@ func TestProviderGetAddCardStateContract(t *testing.T) {
 			if r.URL.Path != "/v2/GetAddCardState" {
 				t.Fatalf("unexpected path: %s", r.URL.Path)
 			}
-			_ = verifyRequestToken(t, r, testPassword)
+			_ = verifyRequestToken(t, r)
 			// Response fixture from the spec: a REJECTED binding reports the
 			// provider error code in the envelope, not as a request failure.
 			errorCode := "7"
@@ -2279,7 +2312,7 @@ func TestProviderGetAddCardStateContract(t *testing.T) {
 			if r.URL.Path != "/v2/GetAddCardState" {
 				t.Fatalf("unexpected path: %s", r.URL.Path)
 			}
-			_ = verifyRequestToken(t, r, testPassword)
+			_ = verifyRequestToken(t, r)
 			errorCode := "0"
 			_ = json.NewEncoder(w).Encode(spec.GetAddCardStateResponse{
 				TerminalKey: testTerminalKey,
@@ -2307,7 +2340,7 @@ func TestProviderGetAddCardStateContract(t *testing.T) {
 			if r.URL.Path != "/v2/GetAddCardState" {
 				t.Fatalf("unexpected path: %s", r.URL.Path)
 			}
-			_ = verifyRequestToken(t, r, testPassword)
+			_ = verifyRequestToken(t, r)
 			// T-Kassa error 502: no card found for the RequestKey — the binding
 			// session expired. It must surface with the provider error code so
 			// the sync can classify it.
@@ -2341,7 +2374,7 @@ func TestProviderStatusDecodesRebillID(t *testing.T) {
 		if r.URL.Path != "/v2/GetState" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		_ = verifyRequestToken(t, r, testPassword)
+		_ = verifyRequestToken(t, r)
 		// The inline GetState 200 schema in openapi.yaml carries RebillId for
 		// payments made with saved credentials; the adapter must surface it.
 		_ = json.NewEncoder(w).Encode(map[string]any{

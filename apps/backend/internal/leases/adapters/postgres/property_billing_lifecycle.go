@@ -36,9 +36,19 @@ func (l *PropertyBillingLifecycle) WithTx(tx transaction.Tx) propertiesapp.Prope
 	if l.scheduler != nil {
 		txScheduler = l.scheduler.WithTx(tx)
 	}
+	txOps := l.ops.WithTx(tx)
+	ops, ok := txOps.(*OperationRepository)
+	if !ok {
+		panic(fmt.Sprintf("leases.PropertyBillingLifecycle.WithTx: expected *OperationRepository, got %T", txOps))
+	}
+	txRecurringOps := l.recurringOps.WithTx(tx)
+	recurringOps, ok := txRecurringOps.(*RecurringOperationRepository)
+	if !ok {
+		panic(fmt.Sprintf("leases.PropertyBillingLifecycle.WithTx: expected *RecurringOperationRepository, got %T", txRecurringOps))
+	}
 	return NewPropertyBillingLifecycle(
-		l.ops.WithTx(tx).(*OperationRepository),
-		l.recurringOps.WithTx(tx).(*RecurringOperationRepository),
+		ops,
+		recurringOps,
 		l.categories.WithTx(tx),
 		txScheduler,
 		l.clock,

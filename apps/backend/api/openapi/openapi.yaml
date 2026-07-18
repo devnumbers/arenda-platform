@@ -1425,6 +1425,73 @@ paths:
           $ref: '#/components/responses/NotFound'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
+  /notification-preferences:
+    get:
+      operationId: getNotificationPreferences
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Notification preferences for every reminder event type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreferencesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      operationId: updateNotificationPreferences
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPreferencesUpdateRequest'
+      responses:
+        '200':
+          description: Notification preferences updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreferencesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /popups/pending:
+    get:
+      operationId: getPendingPopups
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Active popups the user has not seen yet, in display order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingPopupsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /popups/{popupKey}/seen:
+    post:
+      operationId: markPopupSeen
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: popupKey
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Popup marked as seen (idempotent)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /tariffs:
     get:
       operationId: listTariffs
@@ -4385,7 +4452,7 @@ components:
           enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action]
         status:
           type: string
-          enum: [pending, sent, failed, cancelled]
+          enum: [pending, sent, failed, cancelled, skipped]
         scheduled_at:
           type: string
           format: date-time
@@ -4435,6 +4502,45 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ReminderResponse'
+
+    NotificationPreference:
+      type: object
+      required: [event_type, allowed]
+      properties:
+        event_type:
+          type: string
+          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action]
+        allowed:
+          type: boolean
+
+    NotificationPreferencesResponse:
+      type: object
+      required: [preferences]
+      properties:
+        preferences:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationPreference'
+
+    NotificationPreferencesUpdateRequest:
+      type: object
+      required: [preferences]
+      properties:
+        preferences:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/NotificationPreference'
+
+    PendingPopupsResponse:
+      type: object
+      required: [popups]
+      properties:
+        popups:
+          type: array
+          items:
+            type: string
 
     FinanceReportResponse:
       type: object

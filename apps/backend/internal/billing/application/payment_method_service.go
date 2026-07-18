@@ -494,13 +494,12 @@ func (s *PaymentMethodService) SyncPaymentMethods(ctx context.Context, userID uu
 		// AddCard webhook flow.
 		sub, err := txSubscriptions.GetByUserIDForUpdate(ctx, userID)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				s.deps.log.WarnContext(ctx, "sync payment methods: subscription not found; skipping active method link",
-					slog.String("user_id", userID.String()),
-					slog.String("payment_method_id", activateTarget.ID.String()))
-			} else {
+			if !errors.Is(err, ErrNotFound) {
 				return nil, fmt.Errorf("get subscription for synced payment method: %w", err)
 			}
+			s.deps.log.WarnContext(ctx, "sync payment methods: subscription not found; skipping active method link",
+				slog.String("user_id", userID.String()),
+				slog.String("payment_method_id", activateTarget.ID.String()))
 		} else {
 			sub.SetActivePaymentMethod(activateTarget.ID)
 			if err := txSubscriptions.Update(ctx, sub); err != nil {

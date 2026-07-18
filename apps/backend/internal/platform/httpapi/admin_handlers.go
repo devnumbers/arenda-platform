@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -36,6 +37,38 @@ func (h *AdminHandlers) handleAdminError(w http.ResponseWriter, r *http.Request,
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", detail))
 	default:
 		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+	}
+}
+
+// listAdminItems runs a paginated admin list use case and maps the resulting
+// views to API items. On error it delegates to handleError and reports ok as
+// false.
+func listAdminItems[V, I any](w http.ResponseWriter, r *http.Request, list func(ctx context.Context) ([]V, int64, error), handleError func(w http.ResponseWriter, r *http.Request, err error), toItem func(V) I) ([]I, int, bool) {
+	views, total, err := list(r.Context())
+	if err != nil {
+		handleError(w, r, err)
+		return nil, 0, false
+	}
+
+	items := make([]I, 0, len(views))
+	for _, v := range views {
+		items = append(items, toItem(v))
+	}
+
+	return items, int(total), true
+}
+
+// optInt copies an optional integer query parameter into dst when set.
+func optInt(dst *int, src *int) {
+	if src != nil {
+		*dst = *src
+	}
+}
+
+// optString copies an optional string-ish query parameter into dst when set.
+func optString[T ~string](dst *string, src *T) {
+	if src != nil {
+		*dst = string(*src)
 	}
 }
 
@@ -134,42 +167,30 @@ func (h *AdminHandlers) ListAdminUserProperties(w http.ResponseWriter, r *http.R
 // ListAdminProperties implements GET /admin/properties.
 func (h *AdminHandlers) ListAdminProperties(w http.ResponseWriter, r *http.Request, params openapi.ListAdminPropertiesParams) {
 	filters := adminapp.AdminPropertyFilters{Limit: 20, Offset: 0}
-	if params.Limit != nil {
-		filters.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		filters.Offset = *params.Offset
-	}
-	if params.Status != nil {
-		filters.Status = string(*params.Status)
-	}
-	if params.Q != nil {
-		filters.Q = *params.Q
-	}
+	optInt(&filters.Limit, params.Limit)
+	optInt(&filters.Offset, params.Offset)
+	optString(&filters.Status, params.Status)
+	optString(&filters.Q, params.Q)
 	if params.OwnerId != nil {
 		filters.OwnerID = *params.OwnerId
 	}
-	if params.Sort != nil {
-		filters.Sort = *params.Sort
-	}
-	if params.Order != nil {
-		filters.Order = string(*params.Order)
-	}
+	optString(&filters.Sort, params.Sort)
+	optString(&filters.Order, params.Order)
 
-	views, total, err := h.adminService.ListProperties(r.Context(), filters)
-	if err != nil {
-		h.handleAdminError(w, r, err)
+	items, total, ok := listAdminItems(w, r,
+		func(ctx context.Context) ([]adminapp.AdminPropertyView, int64, error) {
+			return h.adminService.ListProperties(ctx, filters)
+		},
+		h.handleAdminError,
+		adminPropertyResponse,
+	)
+	if !ok {
 		return
-	}
-
-	items := make([]openapi.AdminProperty, 0, len(views))
-	for _, v := range views {
-		items = append(items, adminPropertyResponse(v))
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, openapi.AdminPropertiesResponse{
 		Items: items,
-		Total: int(total),
+		Total: total,
 	})
 }
 
@@ -222,42 +243,32 @@ func (h *AdminHandlers) ListAdminUserLeases(w http.ResponseWriter, r *http.Reque
 // ListAdminLeases implements GET /admin/leases.
 func (h *AdminHandlers) ListAdminLeases(w http.ResponseWriter, r *http.Request, params openapi.ListAdminLeasesParams) {
 	filters := adminapp.AdminLeaseFilters{Limit: 20, Offset: 0}
-	if params.Limit != nil {
-		filters.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		filters.Offset = *params.Offset
-	}
-	if params.Status != nil {
-		filters.Status = string(*params.Status)
-	}
+	optInt(&filters.Limit, params.Limit)
+	optInt(&filters.Offset, params.Offset)
+	optString(&filters.Status, params.Status)
 	if params.PropertyId != nil {
 		filters.PropertyID = *params.PropertyId
 	}
 	if params.OwnerId != nil {
 		filters.OwnerID = *params.OwnerId
 	}
-	if params.Sort != nil {
-		filters.Sort = *params.Sort
-	}
-	if params.Order != nil {
-		filters.Order = string(*params.Order)
-	}
+	optString(&filters.Sort, params.Sort)
+	optString(&filters.Order, params.Order)
 
-	views, total, err := h.adminService.ListLeases(r.Context(), filters)
-	if err != nil {
-		h.handleAdminError(w, r, err)
+	items, total, ok := listAdminItems(w, r,
+		func(ctx context.Context) ([]adminapp.AdminLeaseView, int64, error) {
+			return h.adminService.ListLeases(ctx, filters)
+		},
+		h.handleAdminError,
+		adminLeaseResponse,
+	)
+	if !ok {
 		return
-	}
-
-	items := make([]openapi.AdminLease, 0, len(views))
-	for _, v := range views {
-		items = append(items, adminLeaseResponse(v))
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, openapi.AdminLeasesResponse{
 		Items: items,
-		Total: int(total),
+		Total: total,
 	})
 }
 

@@ -45,6 +45,8 @@ import (
 	mailersmtp "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/smtp"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/observability"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
+	popupspg "github.com/nambers/arenda-planform/apps/backend/internal/popups/adapters/postgres"
+	popupsapp "github.com/nambers/arenda-planform/apps/backend/internal/popups/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/dadata"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/storage"
@@ -74,13 +76,13 @@ func dbPoolStats(pool *pgxpool.Pool) func() httpapi.DBPoolSnapshot {
 
 func main() {
 	fallback := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	if err := run(fallback); err != nil {
-		fallback.Error("backend stopped", "error", err)
+	if err := run(); err != nil {
+		fallback.Error("backend stopped", "error", err) //nolint:sloglint // fallback logger before any context exists in main
 		os.Exit(1)
 	}
 }
 
-func run(fallback *slog.Logger) error {
+func run() error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -124,7 +126,7 @@ func run(fallback *slog.Logger) error {
 	}
 	if cfg.EncryptionKey == "" {
 		if cfg.PaymentProvider != "fake" {
-			return fmt.Errorf("ENCRYPTION_KEY is required when using a real payment provider")
+			return errors.New("ENCRYPTION_KEY is required when using a real payment provider")
 		}
 		appLogger.WarnContext(ctx, "ENCRYPTION_KEY is empty; provider tokens will be stored without encryption (local dev only)")
 	}
@@ -383,6 +385,8 @@ func run(fallback *slog.Logger) error {
 	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, auditRecorder, appLogger)
 	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, categoryRepo, reminderScheduler, platformpostgres.NewBeginner(pool, appLogger), auditRecorder, clock.Real{}, appLogger)
 	reminderService := notificationsapp.NewReminderService(reminderRepo, clock.Real{})
+	preferenceService := notificationsapp.NewPreferenceService(reminderRepo, platformpostgres.NewBeginner(pool, appLogger), auditRecorder)
+	popupService := popupsapp.NewPopupService(popupspg.NewPopupRepository(db))
 	recurringOperationService := leasesapp.NewRecurringOperationService(
 		recurringOpRepo,
 		operationRepo,
@@ -466,6 +470,8 @@ func run(fallback *slog.Logger) error {
 		RecurringOperations:      recurringOperationService,
 		Categories:               categoryService,
 		Reminders:                reminderService,
+		NotificationPreferences:  preferenceService,
+		Popups:                   popupService,
 		AppBaseURL:               cfg.AppBaseURL,
 		CookieSecure:             cfg.CookieSecure,
 		Logger:                   appLogger,
@@ -493,7 +499,7 @@ func run(fallback *slog.Logger) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		appLogger.Info("backend listening", "addr", cfg.HTTPAddr, "env", cfg.AppEnv)
+		appLogger.InfoContext(ctx, "backend listening", "addr", cfg.HTTPAddr, "env", cfg.AppEnv)
 		errCh <- server.ListenAndServe()
 	}()
 

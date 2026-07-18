@@ -2,6 +2,7 @@ package mailer
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -9,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
 	texttemplate "text/template"
 )
 
@@ -118,7 +118,7 @@ func readRootFile(root *os.Root, name string) ([]byte, error) {
 // If only one variant exists, the missing one is returned as an empty string.
 func (r *Renderer) Render(name string, data any) (plain string, html string, err error) {
 	if r == nil {
-		return "", "", fmt.Errorf("nil renderer")
+		return "", "", errors.New("nil renderer")
 	}
 
 	if tmpl, ok := r.html[name]; ok {

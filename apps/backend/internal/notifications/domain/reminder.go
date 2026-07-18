@@ -34,10 +34,15 @@ const (
 	ReminderSent      ReminderStatus = "sent"
 	ReminderFailed    ReminderStatus = "failed"
 	ReminderCancelled ReminderStatus = "cancelled"
+	// ReminderSkipped is terminal: the owner revoked permission for the
+	// reminder's event type, so it was not sent and must not be retried.
+	ReminderSkipped ReminderStatus = "skipped"
 )
 
-const fixedDispatchHour = 10
-const fixedDispatchTZ = "Europe/Moscow"
+const (
+	fixedDispatchHour = 10
+	fixedDispatchTZ   = "Europe/Moscow"
+)
 
 var ErrInvalidReminderDate = errors.New("reminder date must be today or in the future")
 

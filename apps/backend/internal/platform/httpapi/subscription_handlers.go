@@ -475,8 +475,8 @@ func paymentMethodResponse(pm domain.PaymentMethod) *openapi.PaymentMethod {
 }
 
 // GetAdminSubscriptionPayment implements GET /admin/subscription/payments/{paymentId}.
-func (h *SubscriptionHandlers) GetAdminSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId uuid.UUID) {
-	view, err := h.payments.GetPayment(r.Context(), paymentId)
+func (h *SubscriptionHandlers) GetAdminSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentID uuid.UUID) {
+	view, err := h.payments.GetPayment(r.Context(), paymentID)
 	if err != nil {
 		h.handleBillingError(w, r, err)
 		return
@@ -486,7 +486,7 @@ func (h *SubscriptionHandlers) GetAdminSubscriptionPayment(w http.ResponseWriter
 }
 
 // RefundSubscriptionPayment implements POST /admin/subscription/payments/{paymentId}/refund.
-func (h *SubscriptionHandlers) RefundSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId uuid.UUID) {
+func (h *SubscriptionHandlers) RefundSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentID uuid.UUID) {
 	actorID, ok := UserIDFromContext(r.Context())
 	if !ok {
 		// AdminOnlyMiddleware guarantees the identity; this is defensive.
@@ -494,7 +494,7 @@ func (h *SubscriptionHandlers) RefundSubscriptionPayment(w http.ResponseWriter, 
 		return
 	}
 
-	if err := h.payments.RefundPayment(r.Context(), actorID, paymentId); err != nil {
+	if err := h.payments.RefundPayment(r.Context(), actorID, paymentID); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -540,7 +540,7 @@ func adminSubscriptionPaymentResponse(view billingapp.AdminSubscriptionPaymentVi
 }
 
 // SyncSubscriptionPayment implements POST /admin/subscription/payments/{paymentId}/sync.
-func (h *SubscriptionHandlers) SyncSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId uuid.UUID) {
+func (h *SubscriptionHandlers) SyncSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentID uuid.UUID) {
 	actorID, ok := UserIDFromContext(r.Context())
 	if !ok {
 		// AdminOnlyMiddleware guarantees the identity; this is defensive.
@@ -548,7 +548,7 @@ func (h *SubscriptionHandlers) SyncSubscriptionPayment(w http.ResponseWriter, r 
 		return
 	}
 
-	if err := h.payments.SyncPendingPayment(r.Context(), actorID, paymentId); err != nil {
+	if err := h.payments.SyncPendingPayment(r.Context(), actorID, paymentID); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -558,44 +558,30 @@ func (h *SubscriptionHandlers) SyncSubscriptionPayment(w http.ResponseWriter, r 
 
 // ListAdminSubscriptionPayments implements GET /admin/subscription/payments.
 func (h *SubscriptionHandlers) ListAdminSubscriptionPayments(w http.ResponseWriter, r *http.Request, params openapi.ListAdminSubscriptionPaymentsParams) {
-	filters := billingapp.ListAllPaymentsFilters{
-		Limit:  20,
-		Offset: 0,
-	}
-	if params.Limit != nil {
-		filters.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		filters.Offset = *params.Offset
-	}
-	if params.Status != nil {
-		filters.Status = string(*params.Status)
-	}
+	filters := billingapp.ListAllPaymentsFilters{Limit: 20, Offset: 0}
+	optInt(&filters.Limit, params.Limit)
+	optInt(&filters.Offset, params.Offset)
+	optString(&filters.Status, params.Status)
 	if params.UserId != nil {
 		filters.UserID = *params.UserId
 	}
-	if params.UserPhone != nil {
-		filters.UserPhone = *params.UserPhone
-	}
-	if params.Sort != nil {
-		filters.Sort = *params.Sort
-	}
-	if params.Order != nil {
-		filters.Order = string(*params.Order)
-	}
+	optString(&filters.UserPhone, params.UserPhone)
+	optString(&filters.Sort, params.Sort)
+	optString(&filters.Order, params.Order)
 
-	views, total, err := h.payments.ListAllPayments(r.Context(), filters)
-	if err != nil {
-		h.handleBillingError(w, r, err)
+	items, total, ok := listAdminItems(w, r,
+		func(ctx context.Context) ([]billingapp.AdminSubscriptionPaymentView, int64, error) {
+			return h.payments.ListAllPayments(ctx, filters)
+		},
+		h.handleBillingError,
+		adminSubscriptionPaymentResponse,
+	)
+	if !ok {
 		return
 	}
 
-	items := make([]openapi.AdminSubscriptionPayment, 0, len(views))
-	for _, v := range views {
-		items = append(items, adminSubscriptionPaymentResponse(v))
-	}
 	writeJSON(r.Context(), w, http.StatusOK, openapi.AdminSubscriptionPaymentsResponse{
 		Items: items,
-		Total: int(total),
+		Total: total,
 	})
 }

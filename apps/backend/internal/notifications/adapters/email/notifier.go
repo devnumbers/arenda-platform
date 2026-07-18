@@ -2,6 +2,7 @@ package email
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
@@ -26,7 +27,7 @@ func reminderSubject(title string) string {
 // Notify sends a reminder email.
 func (n *Notifier) Notify(ctx context.Context, notification application.Notification) (string, string, error) {
 	if notification.Contact == nil || notification.Contact.Email == "" {
-		return "", "", fmt.Errorf("notification contact missing email")
+		return "", "", errors.New("notification contact missing email")
 	}
 
 	plain, html, err := n.renderer.Render("reminder", map[string]any{

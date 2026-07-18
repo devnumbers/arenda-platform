@@ -35,7 +35,7 @@ func loggerFromContext(ctx context.Context) *slog.Logger {
 // problemTitleSetter lets handlers attach a problem title to the response writer
 // so the request logger can include an error code without logging the body.
 type problemTitleSetter interface {
-	SetProblemTitle(string)
+	SetProblemTitle(title string)
 }
 
 type loggingResponseWriter struct {

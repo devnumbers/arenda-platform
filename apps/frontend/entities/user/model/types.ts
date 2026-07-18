@@ -30,3 +30,14 @@ export type ChangePhoneCommand = {
 };
 
 export type TariffName = 'basic' | 'pro' | 'business';
+
+export type NotificationEventType =
+  | 'operation_due'
+  | 'operation_overdue'
+  | 'lease_expiring'
+  | 'lease_requires_action';
+
+export type NotificationPreference = {
+  readonly eventType: NotificationEventType;
+  readonly allowed: boolean;
+};

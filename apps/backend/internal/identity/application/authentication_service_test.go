@@ -404,8 +404,11 @@ func TestAuthenticationService_SendCodeByPhone(t *testing.T) {
 		wantCalls int
 	}{
 		{
-			name:      "user with stored email gets a code",
-			seed:      func(t *testing.T, h *authServiceHarness) { h.seedUser(t, phone, &email) },
+			name: "user with stored email gets a code",
+			seed: func(t *testing.T, h *authServiceHarness) {
+				t.Helper()
+				h.seedUser(t, phone, &email)
+			},
 			wantSent:  true,
 			wantCalls: 1,
 		},
@@ -416,8 +419,11 @@ func TestAuthenticationService_SendCodeByPhone(t *testing.T) {
 			wantCalls: 0,
 		},
 		{
-			name:      "user without email returns sent false without sending",
-			seed:      func(t *testing.T, h *authServiceHarness) { h.seedUser(t, phone, nil) },
+			name: "user without email returns sent false without sending",
+			seed: func(t *testing.T, h *authServiceHarness) {
+				t.Helper()
+				h.seedUser(t, phone, nil)
+			},
 			wantSent:  false,
 			wantCalls: 0,
 		},

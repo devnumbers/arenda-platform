@@ -25,16 +25,16 @@ const (
 )
 
 type queryExecutor interface {
-	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
-	Query(context.Context, string, ...any) (pgx.Rows, error)
-	QueryRow(context.Context, string, ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 type transactionExecutor interface {
 	queryExecutor
 	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
-	Commit(context.Context) error
-	Rollback(context.Context) error
+	Commit(ctx context.Context) error
+	Rollback(ctx context.Context) error
 }
 
 type dbInstrumenter struct {
@@ -135,7 +135,8 @@ func (db *InstrumentedPool) QueryRow(ctx context.Context, sql string, args ...an
 	ir := &instrumentedRow{
 		row:             row,
 		inst:            db.inst,
-		ctx:             ctx,
+		requestID:       requestctx.RequestIDFromContext(ctx),
+		traceID:         requestctx.TraceIDFromContext(ctx),
 		sql:             sql,
 		acquireDuration: acquireDuration,
 		queryStart:      queryStart,
@@ -182,7 +183,8 @@ func (tx *InstrumentedTx) QueryRow(ctx context.Context, sql string, args ...any)
 	return &instrumentedRow{
 		row:        row,
 		inst:       tx.inst,
-		ctx:        ctx,
+		requestID:  requestctx.RequestIDFromContext(ctx),
+		traceID:    requestctx.TraceIDFromContext(ctx),
 		sql:        sql,
 		queryStart: queryStart,
 	}
@@ -203,7 +205,8 @@ func (tx *InstrumentedTx) Rollback(ctx context.Context) error {
 type instrumentedRows struct {
 	rows            pgx.Rows
 	inst            dbInstrumenter
-	ctx             context.Context
+	requestID       string
+	traceID         string
 	sql             string
 	acquireDuration time.Duration
 	queryStart      time.Time
@@ -215,7 +218,8 @@ func newInstrumentedRows(rows pgx.Rows, inst dbInstrumenter, ctx context.Context
 	return &instrumentedRows{
 		rows:            rows,
 		inst:            inst,
-		ctx:             ctx,
+		requestID:       requestctx.RequestIDFromContext(ctx),
+		traceID:         requestctx.TraceIDFromContext(ctx),
 		sql:             sql,
 		acquireDuration: acquireDuration,
 		queryStart:      queryStart,
@@ -227,7 +231,7 @@ func (r *instrumentedRows) Close() {
 	r.closeOnce.Do(func() {
 		r.rows.Close()
 		err := r.rows.Err()
-		r.inst.log(r.ctx, r.sql, r.acquireDuration, time.Since(r.queryStart), err)
+		r.inst.logWithIDs(context.Background(), r.sql, r.acquireDuration, time.Since(r.queryStart), err, r.requestID, r.traceID)
 		if r.release != nil {
 			r.release()
 		}
@@ -281,7 +285,8 @@ func (r *instrumentedRows) Conn() *pgx.Conn {
 type instrumentedRow struct {
 	row             pgx.Row
 	inst            dbInstrumenter
-	ctx             context.Context
+	requestID       string
+	traceID         string
 	sql             string
 	acquireDuration time.Duration
 	queryStart      time.Time
@@ -294,7 +299,7 @@ type instrumentedRow struct {
 // first call.
 func (r *instrumentedRow) Scan(dest ...any) error {
 	err := r.row.Scan(dest...)
-	r.inst.log(r.ctx, r.sql, r.acquireDuration, time.Since(r.queryStart), err)
+	r.inst.logWithIDs(context.Background(), r.sql, r.acquireDuration, time.Since(r.queryStart), err, r.requestID, r.traceID)
 	r.Close()
 	return err
 }
@@ -320,6 +325,13 @@ func (r errRow) Scan(dest ...any) error {
 }
 
 func (i dbInstrumenter) log(ctx context.Context, sql string, acquireDuration, queryDuration time.Duration, err error) {
+	i.logWithIDs(ctx, sql, acquireDuration, queryDuration, err, requestctx.RequestIDFromContext(ctx), requestctx.TraceIDFromContext(ctx))
+}
+
+// logWithIDs is log with the request-scoped correlation IDs already extracted.
+// The rows wrappers use it because pgx.Rows/pgx.Row callbacks have no access to
+// the original query context; they capture the IDs at construction time.
+func (i dbInstrumenter) logWithIDs(ctx context.Context, sql string, acquireDuration, queryDuration time.Duration, err error, requestID, traceID string) {
 	if !i.shouldLog(acquireDuration, queryDuration, err) {
 		return
 	}
@@ -338,10 +350,10 @@ func (i dbInstrumenter) log(ctx context.Context, sql string, acquireDuration, qu
 		slog.Duration("pool_acquire_duration", acquireDuration),
 		slog.Duration("query_duration", queryDuration),
 	}
-	if requestID := requestctx.RequestIDFromContext(ctx); requestID != "" {
+	if requestID != "" {
 		attrs = append(attrs, slog.String("request_id", requestID))
 	}
-	if traceID := requestctx.TraceIDFromContext(ctx); traceID != "" {
+	if traceID != "" {
 		attrs = append(attrs, slog.String("trace_id", traceID))
 	}
 	if err != nil {
@@ -407,7 +419,7 @@ func wordAfter(fields []string, word string) string {
 }
 
 func sqlcQueryName(sql string) string {
-	for _, line := range strings.Split(sql, "\n") {
+	for line := range strings.SplitSeq(sql, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
