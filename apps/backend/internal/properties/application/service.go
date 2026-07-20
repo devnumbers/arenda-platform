@@ -379,6 +379,7 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 		s.billingLifecycle.WithTx(tx),
 		ownerID,
 		id,
+		false,
 	)
 	if err != nil {
 		return domain.Property{}, err
@@ -407,12 +408,17 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 
 // archivePropertyInTx performs the core archive logic inside an existing
 // transaction. The caller is responsible for committing or rolling back tx.
+// When forceCompleteLeases is false, a property with an open lease is rejected
+// with ErrPropertyHasOpenLease; when true, open leases are force-completed
+// with the same side effects as a user-initiated lease completion before the
+// property is archived.
 func (s *PropertyService) archivePropertyInTx(
 	ctx context.Context,
 	repo PropertyRepository,
 	occupancy OccupancyProvider,
 	billing PropertyBillingLifecycle,
 	ownerID, id uuid.UUID,
+	forceCompleteLeases bool,
 ) (domain.Property, error) {
 	property, err := repo.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
@@ -430,11 +436,16 @@ func (s *PropertyService) archivePropertyInTx(
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
 	}
-	if occupied {
+	if occupied && !forceCompleteLeases {
 		return domain.Property{}, ErrPropertyHasOpenLease
 	}
 
-	if err := billing.Suspend(ctx, id, timeutil.Date(s.clock.Now())); err != nil {
+	now := s.clock.Now()
+	if err := billing.CompleteOpenLeases(ctx, ownerID, id, now); err != nil {
+		return domain.Property{}, fmt.Errorf("complete open leases: %w", err)
+	}
+
+	if err := billing.Suspend(ctx, id, timeutil.Date(now)); err != nil {
 		return domain.Property{}, fmt.Errorf("suspend billing: %w", err)
 	}
 
@@ -454,8 +465,9 @@ func (s *PropertyService) archivePropertyInTx(
 }
 
 // ArchiveExcessProperties archives active properties beyond the given limit,
-// keeping the most recently updated properties. Properties that cannot be
-// archived because they have an open lease are logged and skipped.
+// keeping the most recently updated properties. Properties with an open lease
+// have that lease force-completed (same side effects as a user-initiated lease
+// completion) before archiving, so the tariff limit is always enforced.
 func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transaction.Tx, ownerID uuid.UUID, limit int) error {
 	if limit < 0 {
 		return nil
@@ -481,9 +493,9 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 	txAudit := s.audit.WithTx(tx)
 
 	for _, p := range properties[limit:] {
-		_, err := s.archivePropertyInTx(ctx, txRepo, txOccupancy, txBillingLifecycle, ownerID, p.ID)
+		_, err := s.archivePropertyInTx(ctx, txRepo, txOccupancy, txBillingLifecycle, ownerID, p.ID, true)
 		if err != nil {
-			if errors.Is(err, ErrPropertyHasOpenLease) || errors.Is(err, ErrAlreadyArchived) {
+			if errors.Is(err, ErrAlreadyArchived) {
 				s.logger.WarnContext(ctx, "skipping auto-archive of property",
 					"property_id", p.ID.String(),
 					"owner_id", ownerID.String(),
