@@ -155,7 +155,7 @@ func (s *Subscription) HasPendingChange() bool {
 // tariff keeps renewing on the normal cycle after it is applied. The new tariff
 // must be a downgrade from the current tariff.
 func (s *Subscription) ScheduleDowngrade(currentTariff, newTariff Tariff, period SubscriptionPeriod, changeAt time.Time) error {
-	if s.Status != SubscriptionStatusActive && s.Status != SubscriptionStatusGrace {
+	if s.Status != SubscriptionStatusActive {
 		return ErrInvalidSubscriptionState
 	}
 	if period != PeriodMonth && period != PeriodYear {
@@ -212,15 +212,17 @@ func (s *Subscription) ApplyTariffChange(paymentID uuid.UUID, currentTariff, new
 }
 
 // ApplyRenewal extends the subscription validity by one period and records the
-// applied payment. The extension is calculated from the current valid_until when
-// it exists and is in the future; otherwise it starts from now. A successful
-// renewal also clears any scheduled downgrade.
+// applied payment. For an active subscription the extension stacks on the
+// current valid_until when it exists and is in the future, so an early renewal
+// keeps the paid remainder. Renewals in grace or after expiry start from now:
+// grace is not paid time and must not be gifted. A successful renewal also
+// clears any scheduled downgrade.
 func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeriod, now time.Time) error {
 	if period != PeriodMonth && period != PeriodYear {
 		return ErrInvalidPeriod
 	}
 	base := now
-	if s.ValidUntil != nil && s.ValidUntil.After(base) {
+	if s.Status == SubscriptionStatusActive && s.ValidUntil != nil && s.ValidUntil.After(base) {
 		base = *s.ValidUntil
 	}
 	validUntil := addSubscriptionPeriod(base, period)

@@ -191,6 +191,11 @@ func TestSubscriptionScheduleDowngrade(t *testing.T) {
 	if err := subCancelled.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, validUntil); !errors.Is(err, ErrInvalidSubscriptionState) {
 		t.Errorf("ScheduleDowngrade cancelled status error = %v, want ErrInvalidSubscriptionState", err)
 	}
+
+	subGrace := Subscription{TariffID: currentTariffID, Status: SubscriptionStatusGrace, ValidUntil: &validUntil}
+	if err := subGrace.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, validUntil); !errors.Is(err, ErrInvalidSubscriptionState) {
+		t.Errorf("ScheduleDowngrade grace status error = %v, want ErrInvalidSubscriptionState", err)
+	}
 }
 
 func TestSubscriptionApplyTariffChange(t *testing.T) {
@@ -285,6 +290,17 @@ func TestSubscriptionApplyRenewal(t *testing.T) {
 	}
 	if sub2.LastAppliedPaymentID == nil || *sub2.LastAppliedPaymentID != paymentID {
 		t.Errorf("LastAppliedPaymentID = %v, want %v", sub2.LastAppliedPaymentID, paymentID)
+	}
+
+	// A renewal paid during grace starts from the payment moment, not from the
+	// grace end: grace is not paid time and must not stack onto the new period.
+	subGrace := Subscription{TariffID: tariffID, Status: SubscriptionStatusGrace, ValidUntil: &existingValidUntil}
+	if err := subGrace.ApplyRenewal(paymentID, PeriodMonth, now); err != nil {
+		t.Fatalf("ApplyRenewal() error = %v", err)
+	}
+	wantValidUntilGrace := now.AddDate(0, 1, 0)
+	if subGrace.ValidUntil == nil || !subGrace.ValidUntil.Equal(wantValidUntilGrace) {
+		t.Errorf("ValidUntil = %v, want %v", subGrace.ValidUntil, wantValidUntilGrace)
 	}
 
 	if err := sub.ApplyRenewal(paymentID, "invalid", now); !errors.Is(err, ErrInvalidPeriod) {
