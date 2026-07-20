@@ -61,10 +61,16 @@ func truncateTkassaDescription(s string) string {
 
 func tkassaCallbackURLs(baseURL string, paymentID uuid.UUID) (notification, success, fail string) {
 	baseURL = strings.TrimRight(baseURL, "/")
-	notification = baseURL + "/webhooks/payment/tkassa"
+	notification = tkassaNotificationURL(baseURL)
 	success = fmt.Sprintf("%s/subscription/payments/%s/success", baseURL, paymentID.String())
 	fail = fmt.Sprintf("%s/subscription/payments/%s/fail", baseURL, paymentID.String())
 	return
+}
+
+// tkassaNotificationURL builds the webhook URL T-Kassa calls with payment and
+// card-binding status notifications.
+func tkassaNotificationURL(baseURL string) string {
+	return strings.TrimRight(baseURL, "/") + "/webhooks/payment/tkassa"
 }
 
 // tkassaAddCardReturnURLs builds the return URLs passed per-request to T-Kassa

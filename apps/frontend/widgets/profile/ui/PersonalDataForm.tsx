@@ -216,7 +216,7 @@ function PersonalDataFormView({ me, preferences }: PersonalDataFormViewProps): J
       <div className={styles.notifications}>
         <h2 className={styles.notificationsTitle}>Уведомления</h2>
         <p className={styles.notificationsHint}>
-          Напоминания приходят на подтверждённый email.
+          Напоминания приходят на вашу почту.
         </p>
         <NotificationPreferencesFields
           value={notificationPrefs}
