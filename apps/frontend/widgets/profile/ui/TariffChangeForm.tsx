@@ -217,6 +217,8 @@ export function TariffChangeForm(): JSX.Element {
           <div className={styles.list}>
             {tariffs.map((tariff) => {
               const isCurrent = tariff.name === subscription.tariff.name;
+              // В grace период текущий тариф можно продлить повторной оплатой
+              const isRenewable = isCurrent && subscription.status === 'grace';
               const isLoading =
                 changeTariff.isPending && selectedTariff === tariff.name;
 
@@ -254,16 +256,18 @@ export function TariffChangeForm(): JSX.Element {
                   </p>
 
                   <Button
-                    variant={isCurrent ? 'secondary' : 'primary'}
+                    variant={isCurrent && !isRenewable ? 'secondary' : 'primary'}
                     size="large"
                     fullWidth
                     loading={isLoading}
                     disabled={
-                      isCurrent || changeTariff.isPending || hasPendingPayment
+                      (isCurrent && !isRenewable) ||
+                      changeTariff.isPending ||
+                      hasPendingPayment
                     }
                     onClick={() => handleSelect(tariff.name)}
                   >
-                    {isCurrent ? 'Текущий' : 'Выбрать'}
+                    {isCurrent ? (isRenewable ? 'Продлить' : 'Текущий') : 'Выбрать'}
                   </Button>
                 </Card>
               );
