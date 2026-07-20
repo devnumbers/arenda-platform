@@ -7,14 +7,12 @@ import { Skeleton } from '@heroui/react/skeleton';
 import { Modal } from '@heroui/react';
 import { notify } from '@/shared/lib/notifications';
 import { Button } from '@/shared/ui/button';
-import { LinkButton } from '@/shared/ui/link-button';
 import {
   usePaymentMethods,
   useActivatePaymentMethod,
   useDeletePaymentMethod,
   useSyncPaymentMethods,
 } from '@/features/billing/api/hooks';
-import { ROUTES } from '@/shared/config/routes';
 import { formatDate } from '@/shared/lib/format-date';
 import { ApiError } from '@/shared/api/errors';
 import styles from './PaymentMethodList.module.css';
@@ -186,14 +184,6 @@ export function PaymentMethodList({
     return (
       <div className={styles.empty}>
         <p className={styles.emptyText}>У вас пока нет сохранённых карт</p>
-        <LinkButton
-          href={ROUTES.profilePaymentMethodsAdd}
-          variant="primary"
-          size="large"
-          fullWidth
-        >
-          Добавить карту
-        </LinkButton>
         <Button
           variant="secondary"
           size="small"
@@ -269,15 +259,6 @@ export function PaymentMethodList({
           </Card>
         ))}
       </div>
-
-      <LinkButton
-        href={ROUTES.profilePaymentMethodsAdd}
-        variant="primary"
-        size="large"
-        fullWidth
-      >
-        Добавить карту
-      </LinkButton>
 
       <DeletePaymentMethodModal
         isOpen={Boolean(deletingId)}
