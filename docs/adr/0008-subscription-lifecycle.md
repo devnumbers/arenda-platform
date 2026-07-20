@@ -66,8 +66,10 @@ moment it is scheduled:
   `auto_renew_enabled = true`, `status = active`, and the `pending_*` fields are
   cleared.
 - If the number of active properties exceeds the new tariff's
-  `active_property_limit`, the system archives the excess properties, skipping
-  properties with open leases.
+  `active_property_limit`, the system archives the excess properties;
+  properties with open leases have those leases force-completed first (same
+  side effects as a user-initiated completion), so the limit is always
+  enforced. Manual archiving still rejects occupied properties.
 - There is **no paid scheduled change**: downgrades are never charged, neither
   at schedule time nor at apply time. Subsequent renewals charge the NEW tariff
   on the normal renewal cycle.
@@ -79,10 +81,17 @@ A background billing worker runs on a configurable interval:
 - Charges subscriptions whose `valid_until` has passed and have
   `auto_renew_enabled = true`.
 - On success: extends `valid_until` by one period and clears any scheduled
-  downgrade.
+  downgrade. For `active` subscriptions the extension stacks on the current
+  `valid_until`; a renewal from `grace` extends from the moment of payment —
+  grace time is not paid for and is not preserved.
 - On failure: moves the subscription to `grace` for 7 days.
-- When the grace period expires: forces a downgrade to basic and archives excess
-  properties.
+- While in grace the owner may renew the current tariff through the normal
+  `ChangeTariff` payment flow (a same-tariff change is rejected for `active`
+  subscriptions but allowed in grace). Scheduling a downgrade from grace is
+  rejected: grace is a transient state, so deferred changes cannot be planned
+  into it.
+- When the grace period expires: forces a downgrade to basic and archives
+  excess properties (force-completing open leases as described above).
 
 Turning off auto-renew keeps the current tariff until `valid_until`, after which
 the same forced-downgrade logic applies.
