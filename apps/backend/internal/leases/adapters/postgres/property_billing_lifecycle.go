@@ -2,10 +2,13 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
@@ -20,14 +23,19 @@ import (
 type PropertyBillingLifecycle struct {
 	ops          *OperationRepository
 	recurringOps *RecurringOperationRepository
+	leases       *LeaseRepository
 	categories   leasesapp.OperationCategoryRepository
 	scheduler    leasesapp.ReminderScheduler
+	audit        auditapp.Recorder
 	clock        clock.Clock
 }
 
 // NewPropertyBillingLifecycle creates a new property billing lifecycle adapter.
-func NewPropertyBillingLifecycle(ops *OperationRepository, recurringOps *RecurringOperationRepository, categories leasesapp.OperationCategoryRepository, scheduler leasesapp.ReminderScheduler, clock clock.Clock) *PropertyBillingLifecycle {
-	return &PropertyBillingLifecycle{ops: ops, recurringOps: recurringOps, categories: categories, scheduler: scheduler, clock: clock}
+func NewPropertyBillingLifecycle(ops *OperationRepository, recurringOps *RecurringOperationRepository, leases *LeaseRepository, categories leasesapp.OperationCategoryRepository, scheduler leasesapp.ReminderScheduler, audit auditapp.Recorder, clock clock.Clock) *PropertyBillingLifecycle {
+	if audit == nil {
+		audit = auditapp.Noop{}
+	}
+	return &PropertyBillingLifecycle{ops: ops, recurringOps: recurringOps, leases: leases, categories: categories, scheduler: scheduler, audit: audit, clock: clock}
 }
 
 // WithTx returns an instance bound to the provided transaction.
@@ -46,13 +54,79 @@ func (l *PropertyBillingLifecycle) WithTx(tx transaction.Tx) propertiesapp.Prope
 	if !ok {
 		panic(fmt.Sprintf("leases.PropertyBillingLifecycle.WithTx: expected *RecurringOperationRepository, got %T", txRecurringOps))
 	}
+	txLeases := l.leases.WithTx(tx)
+	leases, ok := txLeases.(*LeaseRepository)
+	if !ok {
+		panic(fmt.Sprintf("leases.PropertyBillingLifecycle.WithTx: expected *LeaseRepository, got %T", txLeases))
+	}
 	return NewPropertyBillingLifecycle(
 		ops,
 		recurringOps,
+		leases,
 		l.categories.WithTx(tx),
 		txScheduler,
+		l.audit.WithTx(tx),
 		l.clock,
 	)
+}
+
+// CompleteOpenLeases force-completes all open leases of the property, applying
+// the same side effects as a user-initiated lease completion: future unedited
+// operations are deleted, recurring operations are paused, and lease and
+// recurring-operation reminders are cancelled. Each completion is audited as
+// ActionLeaseCompleted with trigger "billing_limit".
+func (l *PropertyBillingLifecycle) CompleteOpenLeases(ctx context.Context, ownerID, propertyID uuid.UUID, asOf time.Time) error {
+	leases, err := l.leases.ListByProperty(ctx, ownerID, propertyID)
+	if err != nil {
+		return fmt.Errorf("list leases: %w", err)
+	}
+
+	for _, lease := range leases {
+		if !lease.IsOpen() {
+			continue
+		}
+		leaseID := lease.ID
+
+		if _, err := l.leases.Complete(ctx, leaseID, ownerID); err != nil {
+			return fmt.Errorf("complete lease %s: %w", leaseID, err)
+		}
+
+		if err := l.ops.DeleteUneditedFutureOperationsByLease(ctx, leaseID, asOf); err != nil {
+			return fmt.Errorf("delete future operations for lease %s: %w", leaseID, err)
+		}
+
+		if err := l.recurringOps.UpdateStatusByLeaseID(ctx, leaseID, ownerID, string(leasesdomain.RecurringOperationStatusPaused)); err != nil {
+			return fmt.Errorf("pause recurring operations for lease %s: %w", leaseID, err)
+		}
+
+		if l.scheduler != nil {
+			if err := l.scheduler.CancelByLease(ctx, ownerID, leaseID); err != nil {
+				return fmt.Errorf("cancel reminders for lease %s: %w", leaseID, err)
+			}
+			rec, err := l.recurringOps.GetByLeaseID(ctx, ownerID, leaseID)
+			if err != nil && !errors.Is(err, leasesapp.ErrNotFound) {
+				return fmt.Errorf("get recurring operation for lease %s: %w", leaseID, err)
+			}
+			if err == nil {
+				if err := l.scheduler.CancelByRecurringOperation(ctx, ownerID, rec.ID); err != nil {
+					return fmt.Errorf("cancel recurring operation reminders for lease %s: %w", leaseID, err)
+				}
+			}
+		}
+
+		if err := l.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &ownerID,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionLeaseCompleted,
+			EntityType: auditdomain.EntityLease,
+			EntityID:   &leaseID,
+			Context:    map[string]any{"property_id": propertyID, "trigger": "billing_limit"},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Suspend deletes future unedited operations for the property, pauses all

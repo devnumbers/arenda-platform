@@ -366,7 +366,7 @@ func (r *RenewalService) finalizeRenewalCharge(
 		case domain.PaymentStatusSucceeded:
 			return r.markRenewalSucceededAndApply(ctx, payment, sub.ID, now)
 		case domain.PaymentStatusFailed:
-			return r.markRenewalFailedAndGrace(ctx, payment.ID, sub.ID, nil, now)
+			return r.markRenewalFailedAndGrace(ctx, payment.ID, sub.ID, providerResultErrorCode(statusResult.ErrorCode, nil), now)
 		default:
 			// Any other provider status (still pending, refunded) leaves the
 			// payment unresolved, so fall through to a fresh charge attempt.
@@ -474,7 +474,7 @@ func (r *RenewalService) finalizeRenewalCharge(
 		}
 		return nil
 	case domain.PaymentStatusFailed:
-		if err := txResultSubscriptionPayments.MarkFailed(ctx, payment.ID, providerErrorCode(chargeErr), now); err != nil {
+		if err := txResultSubscriptionPayments.MarkFailed(ctx, payment.ID, providerResultErrorCode(chargeResult.ErrorCode, chargeErr), now); err != nil {
 			if recErr := recoverWithClosedTx(); recErr != nil {
 				return fmt.Errorf("mark renewal payment failed: %w; recovery failed: %w", err, recErr)
 			}
@@ -574,7 +574,7 @@ func (r *RenewalService) recoverRenewalFailure(ctx context.Context, paymentID, s
 	status := statusResult.Status
 
 	if status == domain.PaymentStatusFailed {
-		return r.markRenewalFailedAndGrace(ctx, paymentID, subscriptionID, errorCode, now)
+		return r.markRenewalFailedAndGrace(ctx, paymentID, subscriptionID, providerResultErrorCode(statusResult.ErrorCode, cause), now)
 	}
 
 	if status == domain.PaymentStatusSucceeded {

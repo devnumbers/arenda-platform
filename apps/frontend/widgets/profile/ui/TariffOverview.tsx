@@ -111,6 +111,7 @@ export function TariffOverview(): JSX.Element {
 
     const isPaid = isPaidTariff(subscription.tariff.name);
     const isCancelled = subscription.status === 'cancelled';
+    const isGrace = subscription.status === 'grace';
     const isPendingPaymentStale = pendingPayment
         ? isPaymentStale(pendingPayment.createdAt)
         : false;
@@ -229,6 +230,21 @@ export function TariffOverview(): JSX.Element {
                 <div className={styles.banner}>
                     С {formatDate(subscription.pendingChangeAt)} тариф изменится на{" "}
                     {getTariffLabel(subscription.pendingTariff.name)}.
+                </div>
+            )}
+
+            {isGrace && subscription.validUntil && (
+                <div className={clsx(styles.banner, styles.bannerWarning)}>
+                    <p className={styles.bannerText}>
+                        Автопродление не прошло. Продлите подписку — доступ
+                        сохранится до {formatDate(subscription.validUntil)}.
+                    </p>
+                    <NextLink
+                        href={ROUTES.profileTariffChange}
+                        className={styles.bannerLink}
+                    >
+                        Продлить
+                    </NextLink>
                 </div>
             )}
 

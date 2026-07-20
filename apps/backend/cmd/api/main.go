@@ -285,7 +285,7 @@ func run() error {
 	categoryService := leasesapp.NewCategoryService(categoryRepo, auditRecorder)
 	reminderRepo := notificationspg.NewReminderRepository(db)
 	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, clock.Real{})
-	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, categoryRepo, reminderScheduler, clock.Real{})
+	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, leaseRepo, categoryRepo, reminderScheduler, auditRecorder, clock.Real{})
 
 	var photoStorage propertiesapp.PhotoStorage
 	if cfg.PhotoStorageS3Enabled {

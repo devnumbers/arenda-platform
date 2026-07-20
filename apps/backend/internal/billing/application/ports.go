@@ -174,6 +174,9 @@ type PaymentStatusResult struct {
 	// RebillID is the saved-card token (T-Kassa RebillId) reported by the
 	// provider for this payment; empty when the provider does not report it.
 	RebillID string
+	// ErrorCode is the provider error code reported for a failed payment;
+	// empty on success or when the provider does not report one.
+	ErrorCode string
 }
 
 // WebhookParser parses and verifies an incoming provider webhook payload.
@@ -368,6 +371,9 @@ type ChargeRequest struct {
 type ChargeResult struct {
 	ProviderPaymentID string
 	Status            domain.PaymentStatus
+	// ErrorCode is the provider error code reported for a failed charge;
+	// empty on success or when the provider does not report one.
+	ErrorCode string
 }
 
 // CancelRequest asks the provider to cancel or refund a finalized payment.

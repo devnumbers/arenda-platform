@@ -273,6 +273,10 @@ func (fakePropertyBillingLifecycle) Resume(_ context.Context, _, _ uuid.UUID, _ 
 	return nil
 }
 
+func (fakePropertyBillingLifecycle) CompleteOpenLeases(_ context.Context, _, _ uuid.UUID, _ time.Time) error {
+	return nil
+}
+
 func (fakePropertyBillingLifecycle) WithTx(_ transaction.Tx) PropertyBillingLifecycle {
 	return fakePropertyBillingLifecycle{}
 }
@@ -649,5 +653,296 @@ func TestPropertyService_ListArchivedProperties(t *testing.T) {
 	}
 	if result[0].Status != domain.PropertyStatusArchived {
 		t.Errorf("expected archived status, got %q", result[0].Status)
+	}
+}
+
+// fakePropertyRepo is a simple map-based PropertyRepository for behavior tests
+// that do not exercise concurrency.
+type fakePropertyRepo struct {
+	data map[uuid.UUID]domain.Property
+}
+
+func newFakePropertyRepo(properties ...domain.Property) *fakePropertyRepo {
+	data := make(map[uuid.UUID]domain.Property, len(properties))
+	for _, p := range properties {
+		data[p.ID] = p
+	}
+	return &fakePropertyRepo{data: data}
+}
+
+func (r *fakePropertyRepo) Create(_ context.Context, _ uuid.UUID, property domain.Property) (domain.Property, error) {
+	r.data[property.ID] = property
+	return property, nil
+}
+
+func (r *fakePropertyRepo) GetByIDAndOwner(_ context.Context, id, _ uuid.UUID) (domain.Property, error) {
+	p, ok := r.data[id]
+	if !ok {
+		return domain.Property{}, ErrNotFound
+	}
+	return p, nil
+}
+
+func (r *fakePropertyRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Property, error) {
+	return r.GetByIDAndOwner(ctx, id, ownerID)
+}
+
+func (r *fakePropertyRepo) ListActiveByOwner(_ context.Context, _ uuid.UUID) ([]domain.Property, error) {
+	active := make([]domain.Property, 0, len(r.data))
+	for _, p := range r.data {
+		if p.Status != domain.PropertyStatusArchived {
+			active = append(active, p)
+		}
+	}
+	return active, nil
+}
+
+func (r *fakePropertyRepo) ListArchivedByOwner(_ context.Context, _ uuid.UUID) ([]domain.Property, error) {
+	archived := make([]domain.Property, 0)
+	for _, p := range r.data {
+		if p.Status == domain.PropertyStatusArchived {
+			archived = append(archived, p)
+		}
+	}
+	return archived, nil
+}
+
+func (r *fakePropertyRepo) Update(_ context.Context, _ uuid.UUID, property domain.Property) (domain.Property, error) {
+	if _, ok := r.data[property.ID]; !ok {
+		return domain.Property{}, ErrNotFound
+	}
+	r.data[property.ID] = property
+	return property, nil
+}
+
+func (r *fakePropertyRepo) Archive(_ context.Context, id, _ uuid.UUID) error {
+	p, ok := r.data[id]
+	if !ok {
+		return ErrNotFound
+	}
+	p.Status = domain.PropertyStatusArchived
+	r.data[id] = p
+	return nil
+}
+
+func (r *fakePropertyRepo) Unarchive(_ context.Context, id, _ uuid.UUID) error {
+	p, ok := r.data[id]
+	if !ok {
+		return ErrNotFound
+	}
+	p.Status = domain.PropertyStatusActive
+	r.data[id] = p
+	return nil
+}
+
+func (r *fakePropertyRepo) CountActiveByOwner(_ context.Context, _ uuid.UUID) (int, error) {
+	count := 0
+	for _, p := range r.data {
+		if p.Status != domain.PropertyStatusArchived {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (r *fakePropertyRepo) WithTx(_ transaction.Tx) PropertyRepository {
+	return r
+}
+
+var _ PropertyRepository = (*fakePropertyRepo)(nil)
+
+// occupiedSetOccupancyProvider reports occupancy from a fixed set of property IDs.
+type occupiedSetOccupancyProvider struct {
+	occupied map[uuid.UUID]bool
+}
+
+func (p occupiedSetOccupancyProvider) IsOccupied(_ context.Context, _, propertyID uuid.UUID) (bool, error) {
+	return p.occupied[propertyID], nil
+}
+
+func (p occupiedSetOccupancyProvider) OccupiedPropertyIDs(_ context.Context, _ uuid.UUID) (map[uuid.UUID]bool, error) {
+	return p.occupied, nil
+}
+
+func (p occupiedSetOccupancyProvider) WithTx(_ transaction.Tx) OccupancyProvider {
+	return p
+}
+
+var _ OccupancyProvider = occupiedSetOccupancyProvider{}
+
+// recordingBillingLifecycle records the order and arguments of lifecycle calls.
+type recordingBillingLifecycle struct {
+	calls                 []string
+	completeOpenLeasesIDs []uuid.UUID // property IDs passed to CompleteOpenLeases
+	suspendedIDs          []uuid.UUID
+}
+
+func (l *recordingBillingLifecycle) Suspend(_ context.Context, propertyID uuid.UUID, _ time.Time) error {
+	l.calls = append(l.calls, "suspend")
+	l.suspendedIDs = append(l.suspendedIDs, propertyID)
+	return nil
+}
+
+func (l *recordingBillingLifecycle) Resume(_ context.Context, _, _ uuid.UUID, _ time.Time) error {
+	return nil
+}
+
+func (l *recordingBillingLifecycle) CompleteOpenLeases(_ context.Context, _, propertyID uuid.UUID, _ time.Time) error {
+	l.calls = append(l.calls, "complete_open_leases")
+	l.completeOpenLeasesIDs = append(l.completeOpenLeasesIDs, propertyID)
+	return nil
+}
+
+func (l *recordingBillingLifecycle) WithTx(_ transaction.Tx) PropertyBillingLifecycle {
+	return l
+}
+
+var _ PropertyBillingLifecycle = (*recordingBillingLifecycle)(nil)
+
+func TestPropertyService_ArchiveExcessProperties_CompletesOpenLeaseAndArchives(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	keepAID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	keepBID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	excessID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+
+	repo := newFakePropertyRepo(
+		domain.Property{ID: keepAID, OwnerID: ownerID, Name: "Keep A", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)},
+		domain.Property{ID: keepBID, OwnerID: ownerID, Name: "Keep B", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC)},
+		domain.Property{ID: excessID, OwnerID: ownerID, Name: "Excess", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)},
+	)
+	billing := &recordingBillingLifecycle{}
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{excessID: true}},
+		nil,
+		billing,
+		stubLeaseRepo{},
+		fakePropertyTxBeginner{},
+		nil,
+		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
+		nil,
+	)
+
+	if err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2); err != nil {
+		t.Fatalf("ArchiveExcessProperties failed: %v", err)
+	}
+
+	excess, err := repo.GetByIDAndOwner(ctx, excessID, ownerID)
+	if err != nil {
+		t.Fatalf("get excess property: %v", err)
+	}
+	if excess.Status != domain.PropertyStatusArchived {
+		t.Errorf("expected excess property archived, got %q", excess.Status)
+	}
+	for _, id := range []uuid.UUID{keepAID, keepBID} {
+		kept, err := repo.GetByIDAndOwner(ctx, id, ownerID)
+		if err != nil {
+			t.Fatalf("get kept property %s: %v", id, err)
+		}
+		if kept.Status == domain.PropertyStatusArchived {
+			t.Errorf("property %s should stay active, got %q", id, kept.Status)
+		}
+	}
+
+	// The open lease must be force-completed before billing is suspended.
+	wantCalls := []string{"complete_open_leases", "suspend"}
+	if len(billing.calls) != len(wantCalls) {
+		t.Fatalf("expected lifecycle calls %v, got %v", wantCalls, billing.calls)
+	}
+	for i, want := range wantCalls {
+		if billing.calls[i] != want {
+			t.Errorf("lifecycle call %d: expected %q, got %q (all calls: %v)", i, want, billing.calls[i], billing.calls)
+		}
+	}
+	if len(billing.completeOpenLeasesIDs) != 1 || billing.completeOpenLeasesIDs[0] != excessID {
+		t.Errorf("expected CompleteOpenLeases for %s, got %v", excessID, billing.completeOpenLeasesIDs)
+	}
+	if len(billing.suspendedIDs) != 1 || billing.suspendedIDs[0] != excessID {
+		t.Errorf("expected Suspend for %s, got %v", excessID, billing.suspendedIDs)
+	}
+}
+
+func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyAID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	propertyBID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+
+	repo := newFakePropertyRepo(
+		domain.Property{ID: propertyAID, OwnerID: ownerID, Name: "A", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+		domain.Property{ID: propertyBID, OwnerID: ownerID, Name: "B", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+	)
+	billing := &recordingBillingLifecycle{}
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{propertyAID: true}},
+		nil,
+		billing,
+		stubLeaseRepo{},
+		fakePropertyTxBeginner{},
+		nil,
+		fakePropertyClock{now: time.Now()},
+		nil,
+	)
+
+	if err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2); err != nil {
+		t.Fatalf("ArchiveExcessProperties failed: %v", err)
+	}
+	if len(billing.calls) != 0 {
+		t.Errorf("expected no lifecycle calls, got %v", billing.calls)
+	}
+	for _, id := range []uuid.UUID{propertyAID, propertyBID} {
+		p, err := repo.GetByIDAndOwner(ctx, id, ownerID)
+		if err != nil {
+			t.Fatalf("get property %s: %v", id, err)
+		}
+		if p.Status != domain.PropertyStatusActive {
+			t.Errorf("property %s should stay active, got %q", id, p.Status)
+		}
+	}
+}
+
+func TestPropertyService_ArchiveProperty_OpenLeaseStillRejected(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	repo := newFakePropertyRepo(
+		domain.Property{ID: propertyID, OwnerID: ownerID, Name: "Occupied", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+	)
+	billing := &recordingBillingLifecycle{}
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{propertyID: true}},
+		nil,
+		billing,
+		stubLeaseRepo{},
+		fakePropertyTxBeginner{},
+		nil,
+		fakePropertyClock{now: time.Now()},
+		nil,
+	)
+
+	_, err := svc.ArchiveProperty(ctx, ownerID, propertyID)
+	if !errors.Is(err, ErrPropertyHasOpenLease) {
+		t.Fatalf("expected ErrPropertyHasOpenLease, got %v", err)
+	}
+
+	p, err := repo.GetByIDAndOwner(ctx, propertyID, ownerID)
+	if err != nil {
+		t.Fatalf("get property: %v", err)
+	}
+	if p.Status != domain.PropertyStatusActive {
+		t.Errorf("property should stay active, got %q", p.Status)
+	}
+	if len(billing.calls) != 0 {
+		t.Errorf("expected no lifecycle calls on rejected manual archive, got %v", billing.calls)
 	}
 }

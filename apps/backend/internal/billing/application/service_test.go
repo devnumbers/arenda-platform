@@ -678,12 +678,13 @@ type stubProvider struct {
 	chargeCalled bool
 	chargeCount  int
 
-	statusRes      domain.PaymentStatus
-	statusRebillID string
-	statusErr      error
-	statusFunc     func(uuid.UUID, string)
-	statusCalled   bool
-	statusCount    int
+	statusRes       domain.PaymentStatus
+	statusRebillID  string
+	statusErrorCode string
+	statusErr       error
+	statusFunc      func(uuid.UUID, string)
+	statusCalled    bool
+	statusCount     int
 
 	parseWebhook func([]byte) (WebhookPayload, error)
 
@@ -768,7 +769,7 @@ func (p *stubProvider) Status(_ context.Context, paymentID uuid.UUID, providerPa
 	if p.statusFunc != nil {
 		p.statusFunc(paymentID, providerPaymentID)
 	}
-	return PaymentStatusResult{Status: p.statusRes, RebillID: p.statusRebillID}, p.statusErr
+	return PaymentStatusResult{Status: p.statusRes, RebillID: p.statusRebillID, ErrorCode: p.statusErrorCode}, p.statusErr
 }
 
 func (p *stubProvider) ParseWebhook(_ context.Context, payload []byte) (WebhookPayload, error) {
@@ -1169,6 +1170,118 @@ func TestBilling_ChangeTariff_AlreadyOnTariff(t *testing.T) {
 	})
 	if !errors.Is(err, ErrAlreadyOnTariff) {
 		t.Fatalf("expected ErrAlreadyOnTariff, got %v", err)
+	}
+}
+
+func TestBilling_ChangeTariff_SameTariffInGraceStartsRenewalPayment(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("99999999-9999-9999-9999-999999999991")
+	proID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	validUntil := fixedNow.AddDate(0, 0, 3)
+
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               uuid.MustParse("11111111-1111-1111-1111-111111111113"),
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusGrace,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+
+	resp, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodMonth,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff error: %v", err)
+	}
+	if resp.PaymentID == uuid.Nil {
+		t.Fatal("expected payment id for same-tariff renewal in grace")
+	}
+	if resp.ConfirmURL == "" {
+		t.Error("expected confirm url for same-tariff renewal in grace")
+	}
+	if !d.provider.initCalled {
+		t.Error("expected provider.Init to be called")
+	}
+
+	payment, ok := d.subscriptionPayments.payments[resp.PaymentID]
+	if !ok {
+		t.Fatalf("expected pending payment %s to be persisted", resp.PaymentID)
+	}
+	if payment.Status != domain.PaymentStatusPending {
+		t.Errorf("expected payment pending, got %s", payment.Status)
+	}
+	if payment.TariffID != proID || payment.Period != domain.PeriodMonth {
+		t.Errorf("expected payment for pro/month, got tariff %s period %s", payment.TariffID, payment.Period)
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("expected subscription to stay in grace until the payment is applied, got %s", sub.Status)
+	}
+}
+
+func TestBilling_ChangeTariff_SameTariffActiveRejected(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("99999999-9999-9999-9999-999999999992")
+	proID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	validUntil := fixedNow.AddDate(0, 1, 0)
+
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               uuid.MustParse("11111111-1111-1111-1111-111111111114"),
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+
+	_, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodMonth,
+	})
+	if !errors.Is(err, ErrAlreadyOnTariff) {
+		t.Fatalf("expected ErrAlreadyOnTariff, got %v", err)
+	}
+}
+
+func TestBilling_ChangeTariff_SameTariffExpiredGraceRejected(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("99999999-9999-9999-9999-999999999993")
+	proID := uuid.MustParse("00000000-0000-0000-0000-000000000004")
+	validUntil := fixedNow.AddDate(0, 0, -1)
+
+	d.addTariff(domain.Tariff{
+		ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000,
+	})
+	d.addSubscription(domain.Subscription{
+		ID:               uuid.MustParse("11111111-1111-1111-1111-111111111115"),
+		UserID:           userID,
+		TariffID:         proID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusGrace,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+	})
+
+	_, err := d.service.Subscriptions.ChangeTariff(context.Background(), userID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodMonth,
+	})
+	if !errors.Is(err, domain.ErrInvalidSubscriptionState) {
+		t.Fatalf("expected ErrInvalidSubscriptionState, got %v", err)
+	}
+	if d.provider.initCalled {
+		t.Error("expected no provider call for expired grace")
 	}
 }
 
@@ -3124,7 +3237,7 @@ func TestBilling_ProcessRenewals_FailedChargeMovesToGrace(t *testing.T) {
 		ProviderToken: "fake_fail_test_token",
 		IsActive:      true,
 	}
-	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_1", Status: domain.PaymentStatusFailed}
+	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_1", Status: domain.PaymentStatusFailed, ErrorCode: "1051"}
 
 	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
@@ -3140,6 +3253,18 @@ func TestBilling_ProcessRenewals_FailedChargeMovesToGrace(t *testing.T) {
 	}
 	if sub.ValidUntil == nil || sub.ValidUntil.Equal(fixedNow) {
 		t.Errorf("expected grace valid_until set, got %v", sub.ValidUntil)
+	}
+
+	if len(d.subscriptionPayments.payments) != 1 {
+		t.Fatalf("expected 1 payment, got %d", len(d.subscriptionPayments.payments))
+	}
+	for _, payment := range d.subscriptionPayments.payments {
+		if payment.Status != domain.PaymentStatusFailed {
+			t.Errorf("expected payment failed, got %s", payment.Status)
+		}
+		if payment.ErrorCode == nil || *payment.ErrorCode != "1051" {
+			t.Errorf("expected payment error code 1051, got %v", payment.ErrorCode)
+		}
 	}
 }
 
@@ -3253,6 +3378,7 @@ func TestBilling_ProcessRenewals_FinalizesFailedPaymentWithoutCharge(t *testing.
 		Status:            domain.PaymentStatusPending,
 	}
 	d.provider.statusRes = domain.PaymentStatusFailed
+	d.provider.statusErrorCode = "1051"
 
 	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
@@ -3273,6 +3399,9 @@ func TestBilling_ProcessRenewals_FinalizesFailedPaymentWithoutCharge(t *testing.
 	payment := d.subscriptionPayments.payments[paymentID]
 	if payment.Status != domain.PaymentStatusFailed {
 		t.Errorf("expected payment failed, got %s", payment.Status)
+	}
+	if payment.ErrorCode == nil || *payment.ErrorCode != "1051" {
+		t.Errorf("expected payment error code 1051 from status poll, got %v", payment.ErrorCode)
 	}
 }
 
