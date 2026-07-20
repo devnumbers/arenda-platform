@@ -391,10 +391,14 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (r
 		return application.ChargeResult{}, err
 	}
 
-	return application.ChargeResult{
+	res = application.ChargeResult{
 		ProviderPaymentID: resp.PaymentID,
 		Status:            mapStatus(resp.Status),
-	}, nil
+	}
+	if res.Status == domain.PaymentStatusFailed && resp.ErrorCode != "0" {
+		res.ErrorCode = resp.ErrorCode
+	}
+	return res, nil
 }
 
 // Status queries the current status of a payment through T-Kassa.
@@ -439,10 +443,14 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 		return application.PaymentStatusResult{}, err
 	}
 
-	return application.PaymentStatusResult{
+	res = application.PaymentStatusResult{
 		Status:   mapStatus(resp.Status),
 		RebillID: resp.RebillID,
-	}, nil
+	}
+	if res.Status == domain.PaymentStatusFailed && resp.ErrorCode != "0" {
+		res.ErrorCode = resp.ErrorCode
+	}
+	return res, nil
 }
 
 // Cancel refunds or cancels a payment through T-Kassa.

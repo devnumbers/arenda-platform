@@ -52,6 +52,17 @@ func providerErrorCode(err error) *string {
 	return nil
 }
 
+// providerResultErrorCode converts the error code reported in a provider
+// result (ChargeResult/StatusResult) to the nullable form persisted on failed
+// payments, falling back to the code carried by the provider error cause when
+// the result does not carry one.
+func providerResultErrorCode(resultCode string, cause error) *string {
+	if resultCode != "" {
+		return &resultCode
+	}
+	return providerErrorCode(cause)
+}
+
 func truncateTkassaDescription(s string) string {
 	if len(s) <= tkassaDescriptionLimit {
 		return s

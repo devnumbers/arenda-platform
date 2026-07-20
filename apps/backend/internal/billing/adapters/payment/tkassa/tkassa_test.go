@@ -584,6 +584,39 @@ func TestProviderChargeFailure(t *testing.T) {
 	}
 }
 
+func TestProviderChargeRejectedCarriesErrorCode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = verifyRequestToken(t, r)
+		_ = json.NewEncoder(w).Encode(chargeResponse{
+			baseResponse: baseResponse{
+				Success:   true,
+				ErrorCode: "1051",
+				Message:   "Insufficient funds",
+				Status:    "REJECTED",
+			},
+			PaymentID: "123",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	result, err := p.Charge(context.Background(), application.ChargeRequest{
+		PaymentID:         uuid.New(),
+		ProviderPaymentID: "123",
+		AmountKopecks:     10000,
+		Token:             "rebill-token",
+	})
+	if err != nil {
+		t.Fatalf("Charge failed: %v", err)
+	}
+	if result.Status != domain.PaymentStatusFailed {
+		t.Fatalf("Status: got %v, want %v", result.Status, domain.PaymentStatusFailed)
+	}
+	if result.ErrorCode != "1051" {
+		t.Errorf("ErrorCode: got %q, want %q", result.ErrorCode, "1051")
+	}
+}
+
 func TestProviderStatus(t *testing.T) {
 	paymentID := uuid.New()
 
@@ -606,6 +639,39 @@ func TestProviderStatus(t *testing.T) {
 	}
 	if status.Status != domain.PaymentStatusPending {
 		t.Fatalf("Status: got %v, want %v", status.Status, domain.PaymentStatusPending)
+	}
+}
+
+func TestProviderStatusRejectedCarriesErrorCode(t *testing.T) {
+	paymentID := uuid.New()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/GetState" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		_ = verifyRequestToken(t, r)
+		_ = json.NewEncoder(w).Encode(getStateResponse{
+			baseResponse: baseResponse{
+				Success:   true,
+				ErrorCode: "1051",
+				Message:   "Insufficient funds",
+				Status:    "REJECTED",
+			},
+			PaymentID: "999",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL + "/v2/")
+	status, err := p.Status(context.Background(), paymentID, "999")
+	if err != nil {
+		t.Fatalf("Status failed: %v", err)
+	}
+	if status.Status != domain.PaymentStatusFailed {
+		t.Fatalf("Status: got %v, want %v", status.Status, domain.PaymentStatusFailed)
+	}
+	if status.ErrorCode != "1051" {
+		t.Errorf("ErrorCode: got %q, want %q", status.ErrorCode, "1051")
 	}
 }
 
@@ -1835,6 +1901,9 @@ func TestProviderChargeContract(t *testing.T) {
 	if result.Status != domain.PaymentStatusSucceeded {
 		t.Errorf("Status: got %v, want %v", result.Status, domain.PaymentStatusSucceeded)
 	}
+	if result.ErrorCode != "" {
+		t.Errorf("ErrorCode: got %q, want empty on success", result.ErrorCode)
+	}
 	if captured == nil {
 		t.Fatalf("request was not captured")
 	}
@@ -1896,6 +1965,9 @@ func TestProviderGetStateContract(t *testing.T) {
 	}
 	if status.Status != domain.PaymentStatusPending {
 		t.Errorf("Status: got %v, want %v", status.Status, domain.PaymentStatusPending)
+	}
+	if status.ErrorCode != "" {
+		t.Errorf("ErrorCode: got %q, want empty on success", status.ErrorCode)
 	}
 	if captured == nil {
 		t.Fatalf("request was not captured")

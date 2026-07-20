@@ -136,8 +136,24 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 		return ChangeTariffResponse{}, domain.ErrInvalidSubscriptionState
 	}
 
+	now := s.deps.clock.Now().UTC()
+
+	// A same-tariff change is normally rejected, but while the subscription is
+	// in grace a same-tariff payment acts as a manual renewal: it goes through
+	// the upgrade-style payment flow and the webhook path applies it via
+	// ApplyRenewal (see flows.go).
+	sameTariffGraceRenewal := false
 	if sub.TariffID == newTariff.ID {
-		return ChangeTariffResponse{}, ErrAlreadyOnTariff
+		switch {
+		case sub.IsInGrace(now):
+			sameTariffGraceRenewal = true
+		case sub.Status == domain.SubscriptionStatusGrace:
+			// The grace period has already expired; the subscription awaits the
+			// worker downgrade to basic and can no longer initiate payments.
+			return ChangeTariffResponse{}, domain.ErrInvalidSubscriptionState
+		default:
+			return ChangeTariffResponse{}, ErrAlreadyOnTariff
+		}
 	}
 
 	currentTariff, err := txTariffs.GetByID(ctx, sub.TariffID)
@@ -149,7 +165,7 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 	}
 
 	changeType := domain.ClassifyTariffChange(currentTariff, newTariff)
-	if changeType == domain.TariffChangeSame {
+	if changeType == domain.TariffChangeSame && !sameTariffGraceRenewal {
 		return ChangeTariffResponse{}, ErrInvalidTariffChange
 	}
 
@@ -158,7 +174,6 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 		amount = newTariff.YearlyPriceKopecks
 	}
 
-	now := s.deps.clock.Now().UTC()
 	canInitiate := sub.CanInitiatePayment(now)
 	isRecoveryUpgrade := changeType == domain.TariffChangeUpgrade &&
 		sub.Status == domain.SubscriptionStatusCancelled
@@ -166,7 +181,7 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 		return ChangeTariffResponse{}, domain.ErrInvalidSubscriptionState
 	}
 
-	if changeType == domain.TariffChangeUpgrade {
+	if changeType == domain.TariffChangeUpgrade || sameTariffGraceRenewal {
 		// Return an existing pending upgrade payment for the same tariff and
 		// period instead of creating a duplicate. The partial unique index on
 		// pending payments is the durable backstop for races.

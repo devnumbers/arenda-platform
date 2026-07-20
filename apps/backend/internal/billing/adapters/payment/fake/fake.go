@@ -176,7 +176,11 @@ func (p *Provider) Status(ctx context.Context, paymentID uuid.UUID, providerPaym
 	p.purgeLocked()
 
 	if entry, ok := p.pending[paymentID.String()]; ok {
-		return application.PaymentStatusResult{Status: entry.payload.Status}, nil
+		res := application.PaymentStatusResult{Status: entry.payload.Status}
+		if entry.payload.Status == domain.PaymentStatusFailed {
+			res.ErrorCode = defaultErrorCode
+		}
+		return res, nil
 	}
 	return application.PaymentStatusResult{Status: domain.PaymentStatusSucceeded}, nil
 }
@@ -211,6 +215,7 @@ func (p *Provider) Charge(ctx context.Context, req application.ChargeRequest) (r
 		return application.ChargeResult{
 			ProviderPaymentID: providerPaymentID,
 			Status:            domain.PaymentStatusFailed,
+			ErrorCode:         defaultErrorCode,
 		}, nil
 	}
 
