@@ -18,7 +18,7 @@ jobs:
 
   deploy:
     name: Deploy
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux, x64]
     needs: ci
     steps:
       - name: Load SSH key
