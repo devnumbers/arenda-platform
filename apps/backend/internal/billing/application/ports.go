@@ -402,11 +402,12 @@ type WebhookPayload struct {
 
 // InitAddCardRequest starts a T-Kassa "AddCard" initialization.
 type InitAddCardRequest struct {
-	UserID      uuid.UUID
-	CustomerKey string
-	CheckType   CardCheckType
-	SuccessURL  string
-	FailURL     string
+	UserID          uuid.UUID
+	CustomerKey     string
+	CheckType       CardCheckType
+	SuccessURL      string
+	FailURL         string
+	NotificationURL string
 }
 
 // InitAddCardResult carries the T-Kassa response for AddCard initialization.

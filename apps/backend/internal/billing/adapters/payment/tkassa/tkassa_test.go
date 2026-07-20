@@ -43,9 +43,9 @@ func verifyRequestToken(t *testing.T, r *http.Request) map[string]any {
 
 // verifyRequestTokenExcluding models the T-Kassa server token check: the token
 // is recomputed over the request body without the excluded keys. The server
-// ignores fields outside the method schema — e.g. RedirectUrl/FailRedirectUrl
-// for AddCard (prod incident, error 204) — so a server-faithful check must
-// exclude them instead of mirroring the client's sign over the whole body.
+// ignores fields outside the method schema — e.g. the AddCard URL extras
+// (prod incident, error 204) — so a server-faithful check must exclude them
+// instead of mirroring the client's sign over the whole body.
 func verifyRequestTokenExcluding(t *testing.T, r *http.Request, exclude ...string) map[string]any {
 	t.Helper()
 	body, err := io.ReadAll(r.Body)
@@ -663,9 +663,9 @@ func TestProviderInitAddCard(t *testing.T) {
 			})
 		case "/v2/AddCard":
 			// The T-Kassa server verifies the AddCard token over the schema
-			// fields only; RedirectUrl/FailRedirectUrl are outside the schema
-			// and excluded from the check.
-			data := verifyRequestTokenExcluding(t, r, "RedirectUrl", "FailRedirectUrl")
+			// fields only; the URL extras are outside the schema and excluded
+			// from the check.
+			data := verifyRequestTokenExcluding(t, r, "RedirectUrl", "FailRedirectUrl", "SuccessAddCardURL", "FailAddCardURL", "NotificationURL")
 			if got, want := data["CheckType"], "3DSHOLD"; got != want {
 				t.Fatalf("CheckType: got %v, want %v", got, want)
 			}
@@ -675,8 +675,14 @@ func TestProviderInitAddCard(t *testing.T) {
 			if got, want := data["FailRedirectUrl"], "https://app.example/api/subscription/payment-methods/add-card/fail"; got != want {
 				t.Fatalf("FailRedirectUrl: got %v, want %v", got, want)
 			}
-			if _, ok := data["NotificationURL"]; ok {
-				t.Fatalf("AddCard must not contain NotificationURL")
+			if got, want := data["SuccessAddCardURL"], "https://app.example/api/subscription/payment-methods/add-card/success"; got != want {
+				t.Fatalf("SuccessAddCardURL: got %v, want %v", got, want)
+			}
+			if got, want := data["FailAddCardURL"], "https://app.example/api/subscription/payment-methods/add-card/fail"; got != want {
+				t.Fatalf("FailAddCardURL: got %v, want %v", got, want)
+			}
+			if got, want := data["NotificationURL"], "https://app.example/webhooks/payment/tkassa"; got != want {
+				t.Fatalf("NotificationURL: got %v, want %v", got, want)
 			}
 			_ = json.NewEncoder(w).Encode(addCardResponse{
 				baseResponse: baseResponse{Success: true},
@@ -691,10 +697,11 @@ func TestProviderInitAddCard(t *testing.T) {
 
 	p := newTestProvider(server.URL + "/v2/")
 	result, err := p.InitAddCard(context.Background(), application.InitAddCardRequest{
-		UserID:      uuid.New(),
-		CustomerKey: "customer-1",
-		SuccessURL:  "https://app.example/api/subscription/payment-methods/add-card/success",
-		FailURL:     "https://app.example/api/subscription/payment-methods/add-card/fail",
+		UserID:          uuid.New(),
+		CustomerKey:     "customer-1",
+		SuccessURL:      "https://app.example/api/subscription/payment-methods/add-card/success",
+		FailURL:         "https://app.example/api/subscription/payment-methods/add-card/fail",
+		NotificationURL: "https://app.example/webhooks/payment/tkassa",
 	})
 	if err != nil {
 		t.Fatalf("InitAddCard failed: %v", err)
@@ -1513,8 +1520,8 @@ func TestProviderCancel_Error(t *testing.T) {
 
 // captureRequest reads the request body, verifies the T-Kassa token, and returns
 // both the raw JSON and the decoded map. Fields in exclude are removed before
-// token verification to match the server-side schema (e.g. AddCard ignores
-// RedirectUrl/FailRedirectUrl).
+// token verification to match the server-side schema (e.g. AddCard ignores the
+// URL extras the adapter appends outside the schema).
 func captureRequest(t *testing.T, r *http.Request, exclude ...string) ([]byte, map[string]any) {
 	t.Helper()
 	body, err := io.ReadAll(r.Body)
@@ -1562,16 +1569,22 @@ func strictDecodeSpecRequest(t *testing.T, body []byte, dst any) {
 // Provider.InitAddCard) does not contain them, and the server ignores them for
 // token verification. They are asserted at map level and stripped before the
 // strict spec-schema decode instead of weakening strictness for everything.
-var addCardExtraFieldsAllowlist = []string{"RedirectUrl", "FailRedirectUrl"}
+var addCardExtraFieldsAllowlist = []string{
+	"RedirectUrl", "FailRedirectUrl",
+	"SuccessAddCardURL", "FailAddCardURL", "NotificationURL",
+}
 
 // strictDecodeAddCardRequest verifies the allowlisted AddCard extras are
 // present in the captured body with the expected values, strips them, and
 // strict-decodes the remaining body into spec.AddCard.
-func strictDecodeAddCardRequest(t *testing.T, captured map[string]any, wantRedirectURL, wantFailRedirectURL string) spec.AddCard {
+func strictDecodeAddCardRequest(t *testing.T, captured map[string]any, wantSuccessURL, wantFailURL, wantNotificationURL string) spec.AddCard {
 	t.Helper()
 	wantExtras := map[string]string{
-		"RedirectUrl":     wantRedirectURL,
-		"FailRedirectUrl": wantFailRedirectURL,
+		"RedirectUrl":       wantSuccessURL,
+		"FailRedirectUrl":   wantFailURL,
+		"SuccessAddCardURL": wantSuccessURL,
+		"FailAddCardURL":    wantFailURL,
+		"NotificationURL":   wantNotificationURL,
 	}
 	stripped := maps.Clone(captured)
 	for _, key := range addCardExtraFieldsAllowlist {
@@ -2030,8 +2043,9 @@ func TestProviderAddCustomerContract(t *testing.T) {
 
 func TestProviderAddCardContract(t *testing.T) {
 	const (
-		successURL = "https://app.example/api/subscription/payment-methods/add-card/success"
-		failURL    = "https://app.example/api/subscription/payment-methods/add-card/fail"
+		successURL      = "https://app.example/api/subscription/payment-methods/add-card/success"
+		failURL         = "https://app.example/api/subscription/payment-methods/add-card/fail"
+		notificationURL = "https://app.example/webhooks/payment/tkassa"
 	)
 	var capturedMap map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2046,7 +2060,7 @@ func TestProviderAddCardContract(t *testing.T) {
 			})
 		case "/v2/AddCard":
 			// The server verifies the AddCard token over the schema fields only;
-			// RedirectUrl/FailRedirectUrl are outside the schema and excluded.
+			// the URL extras are outside the schema and excluded.
 			_, capturedMap = captureRequest(t, r, addCardExtraFieldsAllowlist...)
 			// Response fixture from the spec: generated spec.AddCardResponse,
 			// shaped after the /v2/AddCard example in openapi.yaml.
@@ -2066,10 +2080,11 @@ func TestProviderAddCardContract(t *testing.T) {
 
 	p := newTestProvider(server.URL + "/v2/")
 	result, err := p.InitAddCard(context.Background(), application.InitAddCardRequest{
-		UserID:      uuid.New(),
-		CustomerKey: "customer-1",
-		SuccessURL:  successURL,
-		FailURL:     failURL,
+		UserID:          uuid.New(),
+		CustomerKey:     "customer-1",
+		SuccessURL:      successURL,
+		FailURL:         failURL,
+		NotificationURL: notificationURL,
 	})
 	if err != nil {
 		t.Fatalf("InitAddCard failed: %v", err)
@@ -2084,9 +2099,9 @@ func TestProviderAddCardContract(t *testing.T) {
 		t.Fatalf("AddCard request was not captured")
 	}
 
-	// Strict schema decode with the documented allowlist: RedirectUrl and
-	// FailRedirectUrl are asserted for presence and value, then stripped.
-	reqBody := strictDecodeAddCardRequest(t, capturedMap, successURL, failURL)
+	// Strict schema decode with the documented allowlist: the URL extras are
+	// asserted for presence and value, then stripped.
+	reqBody := strictDecodeAddCardRequest(t, capturedMap, successURL, failURL, notificationURL)
 	if reqBody.TerminalKey != testTerminalKey {
 		t.Errorf("TerminalKey: got %q, want %q", reqBody.TerminalKey, testTerminalKey)
 	}
@@ -2098,10 +2113,6 @@ func TestProviderAddCardContract(t *testing.T) {
 	}
 	if reqBody.CheckType == nil || *reqBody.CheckType != spec.N3DSHOLD {
 		t.Errorf("CheckType: got %v, want %v", reqBody.CheckType, spec.N3DSHOLD)
-	}
-
-	if _, ok := capturedMap["NotificationURL"]; ok {
-		t.Errorf("AddCard must not contain NotificationURL")
 	}
 }
 

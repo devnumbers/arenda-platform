@@ -586,16 +586,18 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 
 	// The official AddCard schema (developer.tbank.ru/eacq/api/add-card) only
 	// contains TerminalKey, CustomerKey, Token, CheckType, IP and
-	// ResidentState. RedirectUrl/FailRedirectUrl are outside the schema: the
-	// T-Kassa server excludes them from token verification while sign() hashes
-	// the whole body, so including them in the signature produced error 204
-	// ("Неверный токен") in prod. The token is therefore computed over the
-	// schema fields only; the redirect URLs are appended to the request body
-	// afterwards so the bank-form redirect does not depend on the terminal's
-	// return URL settings (an unconfigured return URL fails the redirect with
-	// error 9, "Переадресовываемый url пуст"). AddCard does not support
-	// NotificationURL — add-card webhooks arrive on the terminal-level
-	// notification URL (ADR 0010).
+	// ResidentState — no URL fields at all. RedirectUrl/FailRedirectUrl are
+	// legacy undocumented names that the production gateway ignores: relying
+	// on them failed the bank-form redirect in prod with error 9
+	// ("Переадресовываемый url пуст"). We therefore additionally send the
+	// documented names SuccessAddCardURL/FailAddCardURL/NotificationURL. All
+	// of these extras sit outside the schema, so the T-Kassa server excludes
+	// them from token verification while sign() hashes the whole body —
+	// including them in the signature produced error 204 ("Неверный токен")
+	// in prod. The token is hence computed over the schema fields only and
+	// the extras are appended to the request body afterwards. If the
+	// per-request URLs turn out to be ignored too, the documented fallback
+	// is terminal-level URLs configured via acq_help@tbank.ru (ADR 0017).
 	cardBody, err := bodyFromStruct(spec.AddCard{
 		TerminalKey: p.terminalKey,
 		CustomerKey: req.CustomerKey,
@@ -609,6 +611,9 @@ func (p *Provider) InitAddCard(ctx context.Context, req application.InitAddCardR
 	token := sign(cardBody, p.password)
 	cardBody["RedirectUrl"] = req.SuccessURL
 	cardBody["FailRedirectUrl"] = req.FailURL
+	cardBody["SuccessAddCardURL"] = req.SuccessURL
+	cardBody["FailAddCardURL"] = req.FailURL
+	cardBody["NotificationURL"] = req.NotificationURL
 	cardBody["Token"] = token
 
 	log.InfoContext(ctx, "tkassa add card",

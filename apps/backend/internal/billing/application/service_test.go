@@ -4556,6 +4556,9 @@ func TestBilling_AddPaymentMethod_TkassaReturnsConfirmURL(t *testing.T) {
 	if want := "http://localhost/api/subscription/payment-methods/add-card/fail"; d.provider.initAddCardReq.FailURL != want {
 		t.Errorf("expected fail url %s, got %s", want, d.provider.initAddCardReq.FailURL)
 	}
+	if want := "http://localhost/webhooks/payment/tkassa"; d.provider.initAddCardReq.NotificationURL != want {
+		t.Errorf("expected notification url %s, got %s", want, d.provider.initAddCardReq.NotificationURL)
+	}
 }
 
 func TestBilling_SyncPaymentMethods_ImportsCardActivatesAndLinksSubscription(t *testing.T) {
