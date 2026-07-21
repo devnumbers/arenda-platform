@@ -21,9 +21,13 @@ func NewScheduledChangeService(deps scheduledChangeServiceDeps) *ScheduledChange
 	return &ScheduledChangeService{deps: deps}
 }
 
-// ProcessScheduledChanges applies scheduled tariff changes (usually downgrades to
-// the free basic tariff) whose pending_change_at has been reached. Returns the
-// number of subscriptions processed.
+// ProcessScheduledChanges applies due scheduled tariff changes whose target
+// period is free (price 0 — in practice downgrades to the free basic tariff).
+// Scheduled downgrades to a paid tariff are skipped: they stay due and are
+// charged at apply time by ProcessRenewals, which runs right after this job in
+// the billing worker tick. Returns the number of subscriptions processed;
+// skipped paid downgrades are not counted because they remain in the selection
+// until the renewal charge applies and clears them.
 func (c *ScheduledChangeService) ProcessScheduledChanges(ctx context.Context, now time.Time) (int, error) {
 	now = now.UTC()
 	processed := 0
@@ -36,12 +40,20 @@ func (c *ScheduledChangeService) ProcessScheduledChanges(ctx context.Context, no
 			break
 		}
 		batchProcessed := 0
+		batchSkipped := 0
 		for _, sub := range subs {
-			if err := c.applyScheduledChange(ctx, sub, now); err != nil {
+			applied, err := c.applyScheduledChange(ctx, sub, now)
+			if err != nil {
 				c.deps.log.ErrorContext(ctx, "apply scheduled change failed",
 					slog.String("subscription_id", sub.ID.String()),
 					slog.String("user_id", sub.UserID.String()),
 					slog.String("error", sanitize.Error(err)))
+				continue
+			}
+			if !applied {
+				// Paid downgrade left for the renewal charge; a skip is not
+				// an error and the row is not counted as processed.
+				batchSkipped++
 				continue
 			}
 			batchProcessed++
@@ -51,41 +63,54 @@ func (c *ScheduledChangeService) ProcessScheduledChanges(ctx context.Context, no
 			break
 		}
 		if batchProcessed == 0 {
-			// A full batch with zero progress means every item failed and
-			// stays in the selection; defer to the next tick instead of
-			// spinning in an infinite retry loop.
-			c.deps.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
-				slog.String("op", "apply scheduled changes"))
+			// A full batch with zero applies means every item stays in the
+			// selection: failed items retry on the next tick, while skipped
+			// paid downgrades wait for their renewal charge. Either way,
+			// re-reading the same rows would spin, so stop here. Warn only
+			// when nothing was skipped, i.e. the batch made no progress due
+			// to failures alone.
+			if batchSkipped == 0 {
+				c.deps.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+					slog.String("op", "apply scheduled changes"))
+			}
 			break
 		}
 	}
 	return processed, nil
 }
 
-// applyScheduledChange applies a deferred downgrade in a single short transaction
-// with no provider call. Per ADR 0008 §3 there is no charge at apply time: it
-// locks the subscription, resolves the pending tariff, applies the downgrade
-// (which extends valid_until from now, enables auto-renew and clears the pending
-// change), archives any properties that exceed the new limit, and commits.
-func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub domain.Subscription, now time.Time) error {
+// applyScheduledChange applies a deferred downgrade to a free target period in
+// a single short transaction with no provider call: it locks the subscription,
+// resolves the pending tariff, applies the downgrade (which extends valid_until
+// from now, enables auto-renew and clears the pending change), archives any
+// properties that exceed the new limit, and commits.
+//
+// A downgrade to a PAID target period is not applied here: it must be charged
+// at apply time, and charging belongs to the renewal path, where
+// resolveRenewalTariffAndAmount resolves the pending tariff/period/price and a
+// successful charge applies the change (a failed charge moves the subscription
+// to grace). The subscription is left untouched — it stays in the
+// pending-change selection until the renewal clears it — and the skip is
+// reported as applied=false so the caller does not count it as processed.
+func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub domain.Subscription, now time.Time) (bool, error) {
 	tx, err := c.deps.beginner.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
+		return false, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txSubscriptions, err := c.deps.subscriptions.WithTx(tx)
 	if err != nil {
-		return fmt.Errorf("bind subscriptions transaction: %w", err)
+		return false, fmt.Errorf("bind subscriptions transaction: %w", err)
 	}
 	txTariffs, err := c.deps.tariffs.WithTx(tx)
 	if err != nil {
-		return fmt.Errorf("bind tariffs transaction: %w", err)
+		return false, fmt.Errorf("bind tariffs transaction: %w", err)
 	}
 
 	sub, err = txSubscriptions.GetByIDForUpdate(ctx, sub.ID)
 	if err != nil {
-		return fmt.Errorf("get subscription for update: %w", err)
+		return false, fmt.Errorf("get subscription for update: %w", err)
 	}
 	// The scheduled-change preconditions (active status, matching pending
 	// tariff/period, change due) are enforced by ApplyScheduledDowngrade. The
@@ -96,9 +121,9 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 		pendingTariff, err = txTariffs.GetByID(ctx, *sub.PendingTariffID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
-				return ErrTariffNotFound
+				return false, ErrTariffNotFound
 			}
-			return fmt.Errorf("get pending tariff: %w", err)
+			return false, fmt.Errorf("get pending tariff: %w", err)
 		}
 	}
 
@@ -107,17 +132,33 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 		period = *sub.PendingPeriod
 	}
 
+	// A paid target period must be charged at apply time; charging is the
+	// renewal path's job. Leave the pending change in place and skip.
+	price := pendingTariff.MonthlyPriceKopecks
+	if period == domain.PeriodYear {
+		price = pendingTariff.YearlyPriceKopecks
+	}
+	if price > 0 {
+		c.deps.log.InfoContext(ctx, "paid scheduled downgrade left for renewal charge",
+			slog.String("subscription_id", sub.ID.String()),
+			slog.String("user_id", sub.UserID.String()))
+		return false, nil
+	}
+
 	oldTariffID := sub.TariffID
 	if err := sub.ApplyScheduledDowngrade(pendingTariff, period, now); err != nil {
-		return fmt.Errorf("apply scheduled downgrade: %w", err)
+		return false, fmt.Errorf("apply scheduled downgrade: %w", err)
 	}
 	if err := txSubscriptions.Update(ctx, sub); err != nil {
-		return fmt.Errorf("update subscription after scheduled downgrade: %w", err)
+		return false, fmt.Errorf("update subscription after scheduled downgrade: %w", err)
 	}
 	if c.deps.propertyArchiver != nil && oldTariffID != pendingTariff.ID {
 		if err := c.deps.propertyArchiver.ArchiveExcessProperties(ctx, tx, sub.UserID, pendingTariff.ActivePropertyLimit); err != nil {
-			return fmt.Errorf("archive excess properties after scheduled downgrade: %w", err)
+			return false, fmt.Errorf("archive excess properties after scheduled downgrade: %w", err)
 		}
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit scheduled downgrade transaction: %w", err)
+	}
+	return true, nil
 }

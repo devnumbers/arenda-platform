@@ -253,10 +253,13 @@ func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeri
 // period. It requires the subscription to be active with a matching pending
 // change that is already due: the pending tariff and period must equal the
 // requested ones and pending_change_at must be set at or before now.
-// Per ADR 0008 §3 there is no charge at apply time: it switches the tariff,
-// extends valid_until by the chosen period from now, enables auto-renew, sets
-// status to active, and clears the pending change. LastAppliedPaymentID is
-// intentionally left untouched because no payment is involved.
+// Per ADR 0008 §3 this is the free path: a scheduled downgrade to a free
+// target period applies with no charge — it switches the tariff, extends
+// valid_until by the chosen period from now, enables auto-renew, sets status
+// to active, and clears the pending change. A scheduled downgrade to a paid
+// target period is charged at apply time via the renewal path and never
+// reaches this method. LastAppliedPaymentID is intentionally left untouched
+// because no payment is involved here.
 func (s *Subscription) ApplyScheduledDowngrade(newTariff Tariff, period SubscriptionPeriod, now time.Time) error {
 	if period != PeriodMonth && period != PeriodYear {
 		return ErrInvalidPeriod
@@ -345,13 +348,19 @@ func (s *Subscription) DowngradeToBasic(basicTariffID uuid.UUID) {
 
 // EnterGrace moves the subscription into the grace period. The validity date is
 // extended to now+gracePeriod unless the subscription is already paid up beyond
-// that point, so an already-paid period is never shortened.
+// that point, so an already-paid period is never shortened. Any pending
+// scheduled tariff change is dropped: it is considered consumed by the failed
+// charge that triggered grace, and re-scheduling after renewal is a fresh user
+// action. Clearing pending_change_at also keeps the
+// user_subscriptions_pending_change_at_check constraint satisfied
+// (pending_change_at must be NULL or not earlier than valid_until).
 func (s *Subscription) EnterGrace(now time.Time) {
 	s.Status = SubscriptionStatusGrace
 	graceUntil := now.Add(gracePeriod)
 	if s.ValidUntil == nil || graceUntil.After(*s.ValidUntil) {
 		s.ValidUntil = &graceUntil
 	}
+	s.ClearPendingChange()
 }
 
 // addSubscriptionPeriod returns the time one subscription period after start.
