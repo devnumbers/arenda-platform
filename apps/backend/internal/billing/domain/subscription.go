@@ -47,6 +47,11 @@ type Subscription struct {
 	PendingPeriod         *SubscriptionPeriod
 	ActivePaymentMethodID *uuid.UUID
 	LastAppliedPaymentID  *uuid.UUID
+	// CurrentPeriod is the billing period the subscription is currently paid up
+	// for. It is set when a tariff change, renewal or scheduled downgrade is
+	// applied and cleared on downgrade to basic, so renewal resolution does not
+	// depend on the last succeeded payment.
+	CurrentPeriod *SubscriptionPeriod
 }
 
 // NewOwnerSubscription creates a free basic subscription for a newly-registered owner.
@@ -71,7 +76,7 @@ func NewOwnerSubscription(userID, tariffID uuid.UUID) (Subscription, error) {
 // ReconstituteSubscription validates a Subscription assembled from persisted
 // state and returns it. Persistence adapters build the aggregate from raw
 // storage values (including unchecked enum casts) and pass it here so that
-// unknown statuses/sources/pending periods or missing identity fields are
+// unknown statuses/sources/periods or missing identity fields are
 // rejected with a descriptive error instead of silently producing an invalid
 // aggregate.
 func ReconstituteSubscription(sub Subscription) (Subscription, error) {
@@ -99,6 +104,13 @@ func ReconstituteSubscription(sub Subscription) (Subscription, error) {
 		case PeriodMonth, PeriodYear:
 		default:
 			return Subscription{}, fmt.Errorf("reconstitute subscription: unknown pending period %q", *sub.PendingPeriod)
+		}
+	}
+	if sub.CurrentPeriod != nil {
+		switch *sub.CurrentPeriod {
+		case PeriodMonth, PeriodYear:
+		default:
+			return Subscription{}, fmt.Errorf("reconstitute subscription: unknown current period %q", *sub.CurrentPeriod)
 		}
 	}
 	return sub, nil
@@ -204,6 +216,7 @@ func (s *Subscription) ApplyTariffChange(paymentID uuid.UUID, currentTariff, new
 	s.ValidUntil = &validUntil
 	s.AutoRenewEnabled = true
 	s.LastAppliedPaymentID = &paymentID
+	s.CurrentPeriod = &period
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
@@ -228,6 +241,7 @@ func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeri
 	validUntil := addSubscriptionPeriod(base, period)
 	s.ValidUntil = &validUntil
 	s.LastAppliedPaymentID = &paymentID
+	s.CurrentPeriod = &period
 	s.Status = SubscriptionStatusActive
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
@@ -267,6 +281,7 @@ func (s *Subscription) ApplyScheduledDowngrade(newTariff Tariff, period Subscrip
 	s.ValidUntil = &validUntil
 	s.AutoRenewEnabled = true
 	s.Status = SubscriptionStatusActive
+	s.CurrentPeriod = &period
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
@@ -316,7 +331,7 @@ func (s *Subscription) Cancel() error {
 }
 
 // DowngradeToBasic resets the subscription to the free basic tariff. It clears
-// any validity period, pending change and auto-renewal state.
+// any validity period, current period, pending change and auto-renewal state.
 func (s *Subscription) DowngradeToBasic(basicTariffID uuid.UUID) {
 	s.TariffID = basicTariffID
 	s.Status = SubscriptionStatusActive
@@ -325,6 +340,7 @@ func (s *Subscription) DowngradeToBasic(basicTariffID uuid.UUID) {
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
+	s.CurrentPeriod = nil
 }
 
 // EnterGrace moves the subscription into the grace period. The validity date is

@@ -749,10 +749,6 @@ func (r *RenewalService) resolveRenewalTariffAndAmount(ctx context.Context, tx t
 	if err != nil {
 		return domain.Tariff{}, "", 0, fmt.Errorf("bind tariffs transaction: %w", err)
 	}
-	txSubscriptionPayments, err := r.deps.subscriptionPayments.WithTx(tx)
-	if err != nil {
-		return domain.Tariff{}, "", 0, fmt.Errorf("bind subscription payments transaction: %w", err)
-	}
 
 	if sub.PendingTariffID != nil && sub.PendingPeriod != nil {
 		pendingTariff, err := txTariffs.GetByID(ctx, *sub.PendingTariffID)
@@ -777,13 +773,12 @@ func (r *RenewalService) resolveRenewalTariffAndAmount(ctx context.Context, tx t
 		return domain.Tariff{}, "", 0, fmt.Errorf("get current tariff: %w", err)
 	}
 
+	// The renewal period is subscription state, not payment history: right
+	// after a scheduled downgrade the last succeeded payment still references
+	// the old tariff's period, so it cannot be used here.
 	period := domain.PeriodMonth
-	lastPayment, err := txSubscriptionPayments.GetLastSucceededBySubscriptionID(ctx, sub.ID)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return domain.Tariff{}, "", 0, fmt.Errorf("get last succeeded payment: %w", err)
-	}
-	if err == nil {
-		period = lastPayment.Period
+	if sub.CurrentPeriod != nil {
+		period = *sub.CurrentPeriod
 	}
 
 	amount := currentTariff.MonthlyPriceKopecks
