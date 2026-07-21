@@ -96,6 +96,15 @@ A background billing worker runs on a configurable interval:
 Turning off auto-renew keeps the current tariff until `valid_until`, after which
 the same forced-downgrade logic applies.
 
+The billing period is stored subscription state (`user_subscriptions.current_period`,
+nullable `'month'|'year'`): it is set whenever a tariff transition is applied
+(`ApplyTariffChange`, `ApplyRenewal`, `ApplyScheduledDowngrade`) and cleared when
+the subscription is downgraded to basic via the grace-expiry/cancellation path
+(`DowngradeToBasic`). Renewal resolution and the subscription API read this
+column — they no longer derive the period from the last succeeded payment, which
+was wrong right after a scheduled downgrade (the payment still referenced the
+old tariff's period, so a `pro/year` target renewed as `pro/month`).
+
 ### 5. Readonly mode and recovery paths
 
 When a subscription cannot mutate data (grace after the grace period, or `cancelled` with an expired
