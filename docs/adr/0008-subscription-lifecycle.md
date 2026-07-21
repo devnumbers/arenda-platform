@@ -61,18 +61,28 @@ moment it is scheduled:
 - The billing worker applies the downgrade when `pending_change_at <= now`
   (`pending_change_at` equals the current `valid_until`, i.e. the end of the
   already paid period).
-- Application performs **no charge**: `tariff_id` switches to the new tariff,
-  `valid_until` is extended by the new tariff's chosen period from `now`,
-  `auto_renew_enabled = true`, `status = active`, and the `pending_*` fields are
-  cleared.
+- Application depends on the target period's price:
+  - A **free** target period (in practice the basic tariff) applies with **no
+    charge**: `tariff_id` switches to the new tariff, `valid_until` is
+    extended by the new tariff's chosen period from `now`,
+    `auto_renew_enabled = true`, `status = active`, and the `pending_*` fields
+    are cleared.
+  - A **paid** target period is charged **at apply time** via the normal
+    renewal path: the scheduled-change job leaves the row due, and the renewal
+    worker charges the pending tariff/period price by the active payment
+    method. On success the change is applied (the same field updates as above,
+    plus the recorded payment); on failure the subscription enters grace and
+    the pending change is cleared on grace entry — the scheduled change is
+    considered consumed by the failed charge, and re-scheduling after renewal
+    is a fresh user action.
 - If the number of active properties exceeds the new tariff's
   `active_property_limit`, the system archives the excess properties;
   properties with open leases have those leases force-completed first (same
   side effects as a user-initiated completion), so the limit is always
   enforced. Manual archiving still rejects occupied properties.
-- There is **no paid scheduled change**: downgrades are never charged, neither
-  at schedule time nor at apply time. Subsequent renewals charge the NEW tariff
-  on the normal renewal cycle.
+- Scheduling itself is never charged: for a paid target the charge happens
+  only at apply time. Subsequent renewals charge the NEW tariff on the normal
+  renewal cycle.
 
 ### 4. Renewal, grace and forced downgrade
 
