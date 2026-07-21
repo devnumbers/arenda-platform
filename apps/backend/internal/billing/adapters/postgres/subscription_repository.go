@@ -240,6 +240,7 @@ func mapCreateSubscriptionParams(sub domain.Subscription) postgres.CreateSubscri
 		PendingPeriod:         periodTextPtr(sub.PendingPeriod),
 		ActivePaymentMethodID: pgconv.UUIDToPgtypePtr(sub.ActivePaymentMethodID),
 		LastAppliedPaymentID:  pgconv.UUIDToPgtypePtr(sub.LastAppliedPaymentID),
+		CurrentPeriod:         periodTextPtr(sub.CurrentPeriod),
 	}
 }
 
@@ -256,6 +257,7 @@ func mapUpdateSubscriptionParams(sub domain.Subscription) postgres.UpdateSubscri
 		PendingPeriod:         periodTextPtr(sub.PendingPeriod),
 		ActivePaymentMethodID: pgconv.UUIDToPgtypePtr(sub.ActivePaymentMethodID),
 		LastAppliedPaymentID:  pgconv.UUIDToPgtypePtr(sub.LastAppliedPaymentID),
+		CurrentPeriod:         periodTextPtr(sub.CurrentPeriod),
 	}
 }
 
@@ -264,6 +266,11 @@ func mapSubscription(row postgres.UserSubscription) (domain.Subscription, error)
 	if row.PendingPeriod.Valid {
 		p := domain.SubscriptionPeriod(row.PendingPeriod.String)
 		pendingPeriod = &p
+	}
+	var currentPeriod *domain.SubscriptionPeriod
+	if row.CurrentPeriod.Valid {
+		p := domain.SubscriptionPeriod(row.CurrentPeriod.String)
+		currentPeriod = &p
 	}
 	return domain.ReconstituteSubscription(domain.Subscription{
 		ID:                    pgconv.UUIDFromPgtype(row.ID),
@@ -278,5 +285,6 @@ func mapSubscription(row postgres.UserSubscription) (domain.Subscription, error)
 		PendingPeriod:         pendingPeriod,
 		ActivePaymentMethodID: pgconv.UUIDFromPgtypePtr(row.ActivePaymentMethodID),
 		LastAppliedPaymentID:  pgconv.UUIDFromPgtypePtr(row.LastAppliedPaymentID),
+		CurrentPeriod:         currentPeriod,
 	})
 }

@@ -236,6 +236,9 @@ func TestSubscriptionApplyTariffChange(t *testing.T) {
 	if sub.LastAppliedPaymentID == nil || *sub.LastAppliedPaymentID != paymentID {
 		t.Errorf("LastAppliedPaymentID = %v, want %v", sub.LastAppliedPaymentID, paymentID)
 	}
+	if sub.CurrentPeriod == nil || *sub.CurrentPeriod != PeriodMonth {
+		t.Errorf("CurrentPeriod = %v, want %s", sub.CurrentPeriod, PeriodMonth)
+	}
 	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
 		t.Error("expected pending change cleared")
 	}
@@ -274,6 +277,9 @@ func TestSubscriptionApplyRenewal(t *testing.T) {
 	if sub.LastAppliedPaymentID == nil || *sub.LastAppliedPaymentID != paymentID {
 		t.Errorf("LastAppliedPaymentID = %v, want %v", sub.LastAppliedPaymentID, paymentID)
 	}
+	if sub.CurrentPeriod == nil || *sub.CurrentPeriod != PeriodMonth {
+		t.Errorf("CurrentPeriod = %v, want %s", sub.CurrentPeriod, PeriodMonth)
+	}
 	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
 		t.Error("expected pending downgrade cleared after renewal")
 	}
@@ -291,6 +297,9 @@ func TestSubscriptionApplyRenewal(t *testing.T) {
 	if sub2.LastAppliedPaymentID == nil || *sub2.LastAppliedPaymentID != paymentID {
 		t.Errorf("LastAppliedPaymentID = %v, want %v", sub2.LastAppliedPaymentID, paymentID)
 	}
+	if sub2.CurrentPeriod == nil || *sub2.CurrentPeriod != PeriodYear {
+		t.Errorf("CurrentPeriod = %v, want %s", sub2.CurrentPeriod, PeriodYear)
+	}
 
 	// A renewal paid during grace starts from the payment moment, not from the
 	// grace end: grace is not paid time and must not stack onto the new period.
@@ -301,6 +310,9 @@ func TestSubscriptionApplyRenewal(t *testing.T) {
 	wantValidUntilGrace := now.AddDate(0, 1, 0)
 	if subGrace.ValidUntil == nil || !subGrace.ValidUntil.Equal(wantValidUntilGrace) {
 		t.Errorf("ValidUntil = %v, want %v", subGrace.ValidUntil, wantValidUntilGrace)
+	}
+	if subGrace.CurrentPeriod == nil || *subGrace.CurrentPeriod != PeriodMonth {
+		t.Errorf("CurrentPeriod = %v, want %s", subGrace.CurrentPeriod, PeriodMonth)
 	}
 
 	if err := sub.ApplyRenewal(paymentID, "invalid", now); !errors.Is(err, ErrInvalidPeriod) {
@@ -349,6 +361,7 @@ func TestSubscriptionDowngradeToBasic(t *testing.T) {
 		PendingTariffID:  &pendingID,
 		PendingChangeAt:  &pendingAt,
 		PendingPeriod:    &period,
+		CurrentPeriod:    &period,
 	}
 
 	sub.DowngradeToBasic(basicID)
@@ -367,6 +380,9 @@ func TestSubscriptionDowngradeToBasic(t *testing.T) {
 	}
 	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
 		t.Error("expected pending change fields cleared")
+	}
+	if sub.CurrentPeriod != nil {
+		t.Errorf("CurrentPeriod = %v, want nil", sub.CurrentPeriod)
 	}
 }
 
@@ -477,6 +493,9 @@ func TestSubscriptionApplyScheduledDowngrade(t *testing.T) {
 			}
 			if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
 				t.Error("expected pending change fields cleared")
+			}
+			if sub.CurrentPeriod == nil || *sub.CurrentPeriod != tt.period {
+				t.Errorf("CurrentPeriod = %v, want %s", sub.CurrentPeriod, tt.period)
 			}
 			if sub.LastAppliedPaymentID != baseLastPayment {
 				t.Errorf("LastAppliedPaymentID mutated = %v, want %v", sub.LastAppliedPaymentID, baseLastPayment)
@@ -647,6 +666,19 @@ func TestReconstituteSubscription(t *testing.T) {
 		}
 	})
 
+	t.Run("accepts valid current period", func(t *testing.T) {
+		sub := validSub()
+		period := PeriodYear
+		sub.CurrentPeriod = &period
+		got, err := ReconstituteSubscription(sub)
+		if err != nil {
+			t.Fatalf("ReconstituteSubscription() error = %v", err)
+		}
+		if got.CurrentPeriod == nil || *got.CurrentPeriod != PeriodYear {
+			t.Errorf("ReconstituteSubscription() CurrentPeriod = %v, want %v", got.CurrentPeriod, PeriodYear)
+		}
+	})
+
 	tests := []struct {
 		name   string
 		mutate func(*Subscription)
@@ -657,6 +689,10 @@ func TestReconstituteSubscription(t *testing.T) {
 		{"unknown pending period", func(s *Subscription) {
 			period := SubscriptionPeriod("quarter")
 			s.PendingPeriod = &period
+		}},
+		{"unknown current period", func(s *Subscription) {
+			period := SubscriptionPeriod("quarter")
+			s.CurrentPeriod = &period
 		}},
 		{"missing id", func(s *Subscription) { s.ID = uuid.Nil }},
 		{"missing user id", func(s *Subscription) { s.UserID = uuid.Nil }},

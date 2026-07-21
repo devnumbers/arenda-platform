@@ -25,9 +25,10 @@ INSERT INTO user_subscriptions (
     pending_change_at,
     pending_period,
     active_payment_method_id,
-    last_applied_payment_id
+    last_applied_payment_id,
+    current_period
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (user_id) DO NOTHING
 RETURNING *;
 
@@ -55,7 +56,8 @@ SET
     pending_change_at = $8,
     pending_period = $9,
     active_payment_method_id = $10,
-    last_applied_payment_id = $11
+    last_applied_payment_id = $11,
+    current_period = $12
 WHERE id = $1
 RETURNING *;
 
