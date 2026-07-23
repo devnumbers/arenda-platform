@@ -60,7 +60,6 @@ export function TenantForm({
     const [email, setEmail] = useState(initialData?.email?.trim() ?? '');
     const [comment, setComment] = useState(initialData?.comment?.trim() ?? '');
 
-    const [isPhoneTouched, setIsPhoneTouched] = useState(false);
     const [isEmailTouched, setIsEmailTouched] = useState(false);
     const [isSubmitAttempted, setIsSubmitAttempted] = useState(false);
 
@@ -95,7 +94,7 @@ export function TenantForm({
     const canSubmit = isNameValid && isPhoneValid && isEmailValid && isCommentValid && !isLoading && !disabled && hasChanges;
 
     const nameError = (isSubmitAttempted || name !== '') && !isNameValid ? 'Введите имя' : undefined;
-    const phoneError = (isSubmitAttempted || isPhoneTouched) && !isPhoneValid
+    const phoneError = isSubmitAttempted && !isPhoneValid
         ? 'Введите корректный номер телефона'
         : undefined;
     const emailError = (isSubmitAttempted || isEmailTouched) && !isEmailValid
@@ -103,7 +102,6 @@ export function TenantForm({
         : undefined;
 
     const handlePhoneChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-        setIsPhoneTouched(true);
         setPhone(formatPhoneInput(event.currentTarget.value));
     }, []);
 
