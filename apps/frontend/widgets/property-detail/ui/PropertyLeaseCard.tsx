@@ -2,16 +2,15 @@
 
 import type {JSX} from 'react';
 import NextLink from 'next/link';
-import {Icon} from '@/shared/ui/icon';
 import {Button} from '@/shared/ui/button';
 import {LinkButton} from '@/shared/ui/link-button';
-import {ArrowRight} from '@/shared/assets/icons';
 import {ROUTES} from '@/shared/config/routes';
 import {LeaseInfo} from '@/widgets/lease-card/ui/LeaseInfo';
 import type {components} from '@/shared/api/generated';
 import type {PropertyPageStatus} from '../lib/get-property-page-status';
 import {PropertyDetailSection} from './PropertyDetailSection';
 import styles from './PropertyLeaseCard.module.css';
+import {SectionHeader} from "@/widgets/dashboard/ui/SectionHeader";
 
 type LeaseResponse = components['schemas']['LeaseResponse'];
 
@@ -49,18 +48,7 @@ export function PropertyLeaseCard({
 
     return (
         <PropertyDetailSection>
-            <div className={styles.header}>
-                <h2 className={styles.title}>Аренда</h2>
-                <NextLink
-                    href={ROUTES.propertyLeases(propertyId)}
-                    className={styles.headerLink}
-                    aria-label="Все аренды"
-                >
-                    <Icon size="s">
-                        <ArrowRight/>
-                    </Icon>
-                </NextLink>
-            </div>
+            <SectionHeader title="Аренда" href={ROUTES.propertyLeases(propertyId)}/>
 
             {lease ? (
                 <NextLink href={ROUTES.lease(lease.id)} className={styles.card}>

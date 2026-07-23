@@ -1,72 +1,62 @@
 'use client';
 
-import type { JSX } from 'react';
+import type {JSX} from 'react';
 import NextLink from 'next/link';
-import { Icon } from '@/shared/ui/icon';
-import { ArrowRight, UserSmall } from '@/shared/assets/icons';
-import { ROUTES } from '@/shared/config/routes';
-import type { Lease } from '@/entities/lease/model/types';
-import { PropertyDetailSection } from './PropertyDetailSection';
+import {Icon} from '@/shared/ui/icon';
+import {ArrowRight, UserSmall} from '@/shared/assets/icons';
+import {ROUTES} from '@/shared/config/routes';
+import type {Lease} from '@/entities/lease/model/types';
+import {PropertyDetailSection} from './PropertyDetailSection';
 import styles from './PropertyTenantCard.module.css';
+import {SectionHeader} from "@/widgets/dashboard/ui/SectionHeader";
 
 export type PropertyTenantCardProps = {
-  readonly lease: Lease | null | undefined;
+    readonly lease: Lease | null | undefined;
 };
 
 export function PropertyTenantCard({
-  lease,
-}: PropertyTenantCardProps): JSX.Element | null {
-  if (!lease) {
-    return null;
-  }
+                                       lease,
+                                   }: PropertyTenantCardProps): JSX.Element | null {
+    if (!lease) {
+        return null;
+    }
 
-  const tenant = lease.tenantContact;
-  const leaseHref = ROUTES.lease(lease.id);
+    const tenant = lease.tenantContact;
+    const leaseHref = ROUTES.lease(lease.id);
 
-  return (
-    <PropertyDetailSection>
-      <div className={styles.header}>
-        <h2 className={styles.title}>Арендатор</h2>
-        <NextLink
-          href={leaseHref}
-          className={styles.headerLink}
-          aria-label="Перейти к аренде"
-        >
-          <Icon size="s">
-            <ArrowRight />
-          </Icon>
-        </NextLink>
-      </div>
+    return (
+        <PropertyDetailSection>
+            <SectionHeader title="Арендатор" href={leaseHref}/>
 
-      {tenant ? (
-        <div className={styles.card}>
-          <div className={styles.profile}>
+            {tenant ? (
+                <div className={styles.card}>
+                    <div className={styles.profile}>
             <span className={styles.avatar}>
               <Icon size="m">
-                <UserSmall />
+                <UserSmall/>
               </Icon>
             </span>
-            <span className={styles.name}>
+                        <span className={styles.name}>
               {[tenant.name, tenant.surname, tenant.patronymic]
-                .filter(Boolean)
-                .join(' ')}
+                  .filter(Boolean)
+                  .join(' ')}
             </span>
-          </div>
-          {tenant.phone && (
-            <p className={styles.field}>{tenant.phone}</p>
-          )}
-          {tenant.email && (
-            <p className={styles.field}>{tenant.email}</p>
-          )}
-        </div>
-      ) : (
-        <div className={styles.empty}>
-          <p className={styles.emptyText}>Арендатор не указан</p>
-          <NextLink href={leaseHref} className={styles.emptyLink}>
-            Указать арендатора в аренде
-          </NextLink>
-        </div>
-      )}
-    </PropertyDetailSection>
-  );
+                    </div>
+                    {tenant.phone && (
+                        <p className={styles.field}>{tenant.phone}</p>
+                    )}
+                    {tenant.email && (
+                        <p className={styles.field}>{tenant.email}</p>
+                    )}
+                </div>
+            ) : (
+                <div className={styles.empty}>
+                    <p className={styles.emptyText}>Арендатор не указан</p>
+                    <NextLink href={leaseHref} className={styles.emptyLink}>
+                        Указать арендатора в аренде
+                    </NextLink>
+                </div>
+            )}
+        </PropertyDetailSection>
+    );
 }
