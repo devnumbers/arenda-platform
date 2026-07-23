@@ -1,5 +1,6 @@
 export { ProfileOverview } from './ui/ProfileOverview';
 export { ProfileMenu } from './ui/ProfileMenu';
+export { NotificationSettings } from './ui/NotificationSettings';
 export { AccountOverview } from './ui/AccountOverview';
 export { PhoneChangeForm } from './ui/PhoneChangeForm';
 export { TariffOverview } from './ui/TariffOverview';

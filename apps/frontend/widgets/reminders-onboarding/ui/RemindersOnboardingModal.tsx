@@ -77,7 +77,7 @@ function OnboardingContent({
                     disabled={isSubmitting}
                 />
                 <p className={styles.hint}>
-                    Изменить выбор можно в любой момент: Профиль → Мои данные
+                    Изменить выбор можно в любой момент: Профиль → Уведомления
                 </p>
             </div>
             <div className={styles.footer}>
