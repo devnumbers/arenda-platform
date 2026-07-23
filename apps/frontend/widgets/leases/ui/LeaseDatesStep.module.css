@@ -24,6 +24,11 @@
     gap: 12px;
 }
 
+.emptyLink {
+    align-self: flex-start;
+    margin-top: -12px;
+}
+
 .submit {
     display: flex;
     flex-direction: column;

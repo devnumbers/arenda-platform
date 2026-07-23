@@ -6,10 +6,11 @@ import {useQueryClient} from '@tanstack/react-query';
 import {propertyKeys, useProperty} from '@/features/properties/api';
 
 import {useCreateLease, usePropertyLeases} from '@/features/leases/api';
+import {useTenantContacts} from '@/features/tenant-contacts/api/hooks';
 import {isOpenLeaseStatus} from '@/entities/lease/lib/status';
 import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
-import {goBack} from '@/shared/lib/navigation';
+import {goBack, RETURN_TO_PARAM} from '@/shared/lib/navigation';
 import {Button} from '@/shared/ui/button';
 import {LinkButton} from '@/shared/ui/link-button';
 import {type LeaseCreateStep, useLeaseCreateDraft} from '../lib/use-lease-create-draft';
@@ -23,9 +24,10 @@ const UUID_REGEX = /^[0-9a-fA-F-]{36}$/;
 
 export type LeaseCreateWizardProps = {
     readonly propertyId?: string;
+    readonly preselectedTenantContactId?: string;
 };
 
-export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Element {
+export function LeaseCreateWizard({propertyId, preselectedTenantContactId}: LeaseCreateWizardProps): JSX.Element {
     const router = useRouter();
     const queryClient = useQueryClient();
     const {draft, setDraft} = useLeaseCreateDraft();
@@ -42,6 +44,21 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
             return;
         }
     }, [propertyId, router]);
+
+    useEffect(() => {
+        if (!preselectedTenantContactId) return;
+        // An explicit tenantContactId from the URL wins over the persisted draft.
+        // Declared after useLeaseCreateDraft so it applies on top of the loaded draft.
+        setDraft((prev) => ({...prev, tenantContactId: preselectedTenantContactId}));
+    }, [preselectedTenantContactId, setDraft]);
+
+    const {data: tenantContacts, isLoading: isTenantContactsLoading} = useTenantContacts();
+    const isTenantListEmpty = !isTenantContactsLoading && tenantContacts?.length === 0;
+
+    const currentUrl = propertyId
+        ? `${ROUTES.leaseNew}?propertyId=${propertyId}`
+        : ROUTES.leaseNew;
+    const createTenantHref = `${ROUTES.tenantNew}?${RETURN_TO_PARAM}=${encodeURIComponent(currentUrl)}`;
 
     const openLease = propertyLeasesQuery.data?.items.find((lease) =>
         isOpenLeaseStatus(lease.status),
@@ -80,7 +97,7 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
                 payment_day: draft.paymentDay,
                 start_date: draft.startDate,
                 end_date: draft.endDate || undefined,
-                tenant_contact_id: undefined,
+                tenant_contact_id: draft.tenantContactId || undefined,
             });
 
             setCreatedLeaseId(lease.id);
@@ -102,7 +119,7 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
         return (
             <div className={styles.root}>
                 <LeaseSuccessStep
-                    onAddLater={() => router.push(ROUTES.properties)}
+                    onAddLater={() => goBack(router, ROUTES.properties)}
                     leaseId={createdLeaseId ?? ''}
                 />
             </div>
@@ -207,6 +224,14 @@ export function LeaseCreateWizard({propertyId}: LeaseCreateWizardProps): JSX.Ele
                 )}
                 {draft.step === 2 && (
                     <LeaseDatesStep
+                        tenantContactId={draft.tenantContactId ?? ''}
+                        onTenantChange={(tenantContactId) =>
+                            setDraft((prev) => ({...prev, tenantContactId}))
+                        }
+                        tenantContacts={tenantContacts}
+                        isTenantListEmpty={isTenantListEmpty}
+                        isTenantContactsLoading={isTenantContactsLoading}
+                        createTenantHref={createTenantHref}
                         paymentDay={draft.paymentDay}
                         startDate={draft.startDate}
                         endDate={draft.endDate}

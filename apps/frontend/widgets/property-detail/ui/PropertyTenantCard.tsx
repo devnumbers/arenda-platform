@@ -5,6 +5,7 @@ import NextLink from 'next/link';
 import {Icon} from '@/shared/ui/icon';
 import {ArrowRight, UserSmall} from '@/shared/assets/icons';
 import {ROUTES} from '@/shared/config/routes';
+import {RETURN_TO_PARAM} from '@/shared/lib/navigation';
 import type {Lease} from '@/entities/lease/model/types';
 import {PropertyDetailSection} from './PropertyDetailSection';
 import styles from './PropertyTenantCard.module.css';
@@ -23,6 +24,7 @@ export function PropertyTenantCard({
 
     const tenant = lease.tenantContact;
     const leaseHref = ROUTES.lease(lease.id);
+    const leaseEditHref = `${ROUTES.leaseEdit(lease.id)}?${RETURN_TO_PARAM}=${encodeURIComponent(ROUTES.property(lease.propertyId))}`;
 
     return (
         <PropertyDetailSection>
@@ -52,7 +54,7 @@ export function PropertyTenantCard({
             ) : (
                 <div className={styles.empty}>
                     <p className={styles.emptyText}>Арендатор не указан</p>
-                    <NextLink href={leaseHref} className={styles.emptyLink}>
+                    <NextLink href={leaseEditHref} className={styles.emptyLink}>
                         Указать арендатора в аренде
                     </NextLink>
                 </div>
