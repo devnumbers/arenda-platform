@@ -15,6 +15,7 @@ type MenuItem = {
 
 const menuItems: MenuItem[] = [
     {title: 'Мои данные', href: ROUTES.profilePersonal},
+    {title: 'Уведомления', href: ROUTES.profileNotifications},
     {title: 'Аккаунт', href: '/profile/account'},
     {title: 'Тариф', href: '/profile/tariff'},
     {title: 'Поддержка', href: '/support'},

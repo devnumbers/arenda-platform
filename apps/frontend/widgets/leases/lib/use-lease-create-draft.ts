@@ -12,6 +12,7 @@ export type LeaseCreateDraft = {
   paymentDay?: number;
   startDate?: string;
   endDate?: string;
+  tenantContactId?: string;
 };
 
 const STORAGE_KEY = 'lease-create-draft';
@@ -83,6 +84,7 @@ function validateDraft(parsed: unknown): LeaseCreateDraft {
   if (!isOptionalPaymentDay(record.paymentDay)) return DEFAULT_DRAFT;
   if (!isOptionalString(record.startDate)) return DEFAULT_DRAFT;
   if (!isOptionalString(record.endDate)) return DEFAULT_DRAFT;
+  if (!isOptionalString(record.tenantContactId)) return DEFAULT_DRAFT;
 
   return {
     step: step as LeaseCreateStep,
@@ -91,5 +93,6 @@ function validateDraft(parsed: unknown): LeaseCreateDraft {
     ...(record.paymentDay !== undefined && { paymentDay: record.paymentDay }),
     ...(record.startDate !== undefined && { startDate: record.startDate }),
     ...(record.endDate !== undefined && { endDate: record.endDate }),
+    ...(record.tenantContactId !== undefined && { tenantContactId: record.tenantContactId }),
   };
 }

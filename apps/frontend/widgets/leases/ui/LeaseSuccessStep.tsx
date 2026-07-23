@@ -48,7 +48,7 @@ export function LeaseSuccessStep({
             variant="primary"
             size="large"
             fullWidth
-            onClick={() => router.push(ROUTES.lease(leaseId))}
+            onClick={() => router.replace(ROUTES.lease(leaseId))}
           >
             Перейти к аренде
           </Button>

@@ -17,6 +17,7 @@ import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import { DatePickerField } from '@/shared/ui/date-picker-field';
 import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
 import type { components } from '@/shared/api/generated';
 import { type OperationType } from '@/entities/operation/model/types';
 import {
@@ -359,7 +360,7 @@ function RecurringOperationEditPageContent({
       },
       {
         onSuccess: () => {
-          router.push(ROUTES.financeOperations);
+          goBack(router, ROUTES.financeOperations);
         },
         onError: (error) => {
           notify.scenarios.operations.recurringOperationSaveError(error);
@@ -369,7 +370,7 @@ function RecurringOperationEditPageContent({
   };
 
   const handleCancel = () => {
-    router.push(ROUTES.financeOperations);
+    goBack(router, ROUTES.financeOperations);
   };
 
   const handleDeleteClick = () => {
@@ -391,7 +392,7 @@ function RecurringOperationEditPageContent({
     promise
       .then(() => {
         setIsDeleteModalOpen(false);
-        router.push(ROUTES.financeOperations);
+        goBack(router, ROUTES.financeOperations);
       })
       .catch(() => {}); // error is already reported by notify.promise
   };

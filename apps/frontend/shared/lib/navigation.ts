@@ -12,7 +12,11 @@ export function sanitizeReturnTo(value: string | undefined): string | undefined 
     return value;
 }
 
-/** Merge params into the returnTo query string; existing query params are preserved. */
+/**
+ * Merge params into the returnTo query string; existing query params are preserved.
+ * Values in params and in the returnTo query must be percent-encoded by the caller:
+ * a literal `?` inside a value is not supported and would be silently truncated.
+ */
 export function buildReturnUrl(returnTo: string, params: Record<string, string>): string {
     const [path, query] = returnTo.split('?');
     const search = new URLSearchParams(query);
@@ -25,7 +29,10 @@ export function buildReturnUrl(returnTo: string, params: Record<string, string>)
 
 export function goBack(router: AppRouter, fallbackHref: string): void {
     if (typeof window !== 'undefined' && window.history.length > 1) {
-        router.back();
+        // Native history.back() instead of router.back(): Next App Router's router.back()
+        // can be a no-op right after router.replace(). The router listens to popstate,
+        // so the rendered result is equivalent.
+        window.history.back();
     } else {
         router.replace(fallbackHref);
     }

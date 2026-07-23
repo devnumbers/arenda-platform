@@ -5,13 +5,18 @@ export function getActiveNavItem(
   items: ReadonlyArray<NavItemConfig>
 ): NavItemConfig | null {
   let active: NavItemConfig | null = null;
+  let activeLength = 0;
 
   for (const item of items) {
-    const { href } = item;
-    const isMatch = pathname === href || pathname.startsWith(`${href}/`);
+    const candidates = [item.href, ...(item.match ?? [])];
 
-    if (isMatch && (!active || href.length > active.href.length)) {
-      active = item;
+    for (const candidate of candidates) {
+      const isMatch = pathname === candidate || pathname.startsWith(`${candidate}/`);
+
+      if (isMatch && candidate.length > activeLength) {
+        active = item;
+        activeLength = candidate.length;
+      }
     }
   }
 

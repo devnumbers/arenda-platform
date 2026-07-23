@@ -14,6 +14,9 @@ func TestNormalizePhoneValid(t *testing.T) {
 		{"79001234567", "+79001234567"},
 		{"89001234567", "+79001234567"},
 		{"  +79001234567  ", "+79001234567"},
+		{"+71110001122", "+71110001122"},
+		{"84951234567", "+74951234567"},
+		{"+70000000000", "+70000000000"},
 	}
 
 	for _, tc := range cases {
@@ -48,6 +51,9 @@ func TestNormalizePhoneInvalid(t *testing.T) {
 
 func TestValidatePhone(t *testing.T) {
 	if err := ValidatePhone("+79001234567"); err != nil {
+		t.Fatalf("ValidatePhone valid phone error: %v", err)
+	}
+	if err := ValidatePhone("+74951234567"); err != nil {
 		t.Fatalf("ValidatePhone valid phone error: %v", err)
 	}
 	if err := ValidatePhone("invalid"); err == nil {

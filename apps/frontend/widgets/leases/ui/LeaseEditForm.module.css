@@ -25,6 +25,11 @@
   gap: 24px;
 }
 
+.emptyLink {
+  align-self: flex-start;
+  margin-top: -12px;
+}
+
 .dateRow {
   display: grid;
   grid-template-columns: 1fr 1fr;

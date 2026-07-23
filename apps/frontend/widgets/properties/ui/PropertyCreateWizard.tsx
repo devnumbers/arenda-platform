@@ -58,7 +58,7 @@ export function PropertyCreateWizard({returnTo}: PropertyCreateWizardProps): JSX
         const {name, type, address, description} = draft;
 
         if (!type || !address) {
-            router.push(ROUTES.properties);
+            router.replace(ROUTES.properties);
             return;
         }
 
@@ -89,8 +89,8 @@ export function PropertyCreateWizard({returnTo}: PropertyCreateWizardProps): JSX
         return (
             <div className={styles.root}>
                 <PropertySuccessStep
-                    onAddLater={() => router.push(ROUTES.properties)}
-                    onCreateLease={() => router.push(ROUTES.tenants)}
+                    onAddLater={() => goBack(router, ROUTES.properties)}
+                    onCreateLease={() => router.replace(ROUTES.tenants)}
                 />
             </div>
         );

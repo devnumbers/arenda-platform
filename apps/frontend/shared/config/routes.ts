@@ -24,6 +24,7 @@ export const ROUTES = {
   propertyOperations: (id: string) => `/properties/${id}/operations`,
   profile: '/profile',
   profilePersonal: '/profile/personal',
+  profileNotifications: '/profile/notifications',
   profileAccount: '/profile/account',
   profileChangePhone: '/profile/account/phone',
   profileTariff: '/profile/tariff',

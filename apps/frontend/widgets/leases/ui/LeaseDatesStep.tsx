@@ -5,10 +5,20 @@ import type {JSX} from 'react';
 import {parseDate} from '@internationalized/date';
 import {Button} from '@/shared/ui/button';
 import {DateSelect} from '@/shared/ui/date-select';
+import {LinkButton} from '@/shared/ui/link-button';
+import {Select} from '@/shared/ui/select';
+import type {TenantContact} from '@/entities/tenant-contact/model/types';
+import {getTenantContactFullName} from '@/entities/tenant-contact/lib/get-tenant-contact-full-name';
 import {PaymentDayPicker} from './PaymentDayPicker';
 import styles from './LeaseDatesStep.module.css';
 
 export type LeaseDatesStepProps = {
+    readonly tenantContactId: string;
+    readonly onTenantChange: (id: string) => void;
+    readonly tenantContacts?: TenantContact[];
+    readonly isTenantListEmpty?: boolean;
+    readonly isTenantContactsLoading?: boolean;
+    readonly createTenantHref: string;
     readonly paymentDay?: number;
     readonly startDate?: string;
     readonly endDate?: string;
@@ -20,6 +30,12 @@ export type LeaseDatesStepProps = {
 };
 
 export function LeaseDatesStep({
+                                   tenantContactId,
+                                   onTenantChange,
+                                   tenantContacts,
+                                   isTenantListEmpty,
+                                   isTenantContactsLoading,
+                                   createTenantHref,
                                    paymentDay,
                                    startDate,
                                    endDate,
@@ -56,6 +72,31 @@ export function LeaseDatesStep({
         <div className={styles.root}>
             <h2 className={styles.heading}>Даты аренды</h2>
             <div className={styles.fields}>
+                <Select
+                    label="Арендатор"
+                    placeholder="Не указан"
+                    value={tenantContactId}
+                    onChange={onTenantChange}
+                    disabled={isTenantListEmpty}
+                    loading={isTenantContactsLoading}
+                    options={[
+                        {value: '', label: 'Не указан'},
+                        ...(tenantContacts?.map((contact) => ({
+                            value: contact.id,
+                            label: getTenantContactFullName(contact) || contact.name,
+                        })) ?? []),
+                    ]}
+                />
+                {isTenantListEmpty && (
+                    <LinkButton
+                        href={createTenantHref}
+                        variant="secondary"
+                        size="medium"
+                        className={styles.emptyLink}
+                    >
+                        Добавить арендатора
+                    </LinkButton>
+                )}
                 <PaymentDayPicker value={paymentDay} onChange={onPaymentDayChange}/>
                 <div className={styles.dateRow}>
                     <DateSelect

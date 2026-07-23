@@ -4,11 +4,13 @@ import {type ChangeEvent, type FormEvent, type JSX, useEffect, useMemo, useRef, 
 import {useRouter} from 'next/navigation';
 import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
+import {goBack, RETURN_TO_PARAM} from '@/shared/lib/navigation';
 import {useLease, useUpdateLease} from '@/features/leases/api/hooks';
 import {useTenantContacts} from '@/features/tenant-contacts/api/hooks';
 import {TextField} from '@/shared/ui/text-field';
 import {Select} from '@/shared/ui/select';
 import {Button} from '@/shared/ui/button';
+import {LinkButton} from '@/shared/ui/link-button';
 import {PageHeader} from '@/shared/ui/page-header';
 import {IconButton} from '@/shared/ui/icon-button';
 import {Cancel} from '@/shared/assets/icons';
@@ -17,6 +19,7 @@ import type {components} from '@/shared/api/generated';
 import type {TenantContact} from '@/entities/tenant-contact/model/types';
 import {getTenantContactFullName} from '@/entities/tenant-contact/lib/get-tenant-contact-full-name';
 import {DateSelect} from '@/shared/ui/date-select';
+import {useLeaseEditDraft} from '../lib/use-lease-edit-draft';
 import {PaymentDayPicker} from './PaymentDayPicker';
 import {LeaseEditFormLoading} from './LeaseEditFormLoading';
 import styles from './LeaseEditForm.module.css';
@@ -101,14 +104,17 @@ function LeaseEditFormError({onRetry, isLoading = false}: LeaseEditFormErrorProp
 
 export type LeaseEditFormProps = {
     readonly leaseId: string;
+    readonly returnTo?: string;
+    readonly preselectedTenantContactId?: string;
 };
 
-export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
+export function LeaseEditForm({leaseId, returnTo, preselectedTenantContactId}: LeaseEditFormProps): JSX.Element {
     const router = useRouter();
 
     const leaseQuery = useLease(leaseId);
     const updateLease = useUpdateLease();
-    const {data: tenantContacts} = useTenantContacts();
+    const {data: tenantContacts, isLoading: isTenantContactsLoading} = useTenantContacts();
+    const {draft, isLoaded: isDraftLoaded, saveDraft, clearDraft} = useLeaseEditDraft(leaseId);
 
     const [form, setForm] = useState<FormData>({
         tenantContactId: '',
@@ -124,13 +130,26 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
 
     useEffect(() => {
         const lease = leaseQuery.data;
-        if (!lease || hasInitialized.current) return;
+        if (!lease || !isDraftLoaded || hasInitialized.current) return;
 
         // Initialize form state from loaded lease data once to avoid wiping
-        // user edits on background refetch.
-        setForm(initializeForm(lease));
+        // user edits on background refetch. A persisted draft wins over lease
+        // data; an explicit tenant preselection from the URL wins over both.
+        setForm({
+            ...initializeForm(lease),
+            ...draft,
+            ...(preselectedTenantContactId ? {tenantContactId: preselectedTenantContactId} : {}),
+        });
         hasInitialized.current = true;
-    }, [leaseQuery.data]);
+    }, [leaseQuery.data, draft, isDraftLoaded, preselectedTenantContactId]);
+
+    useEffect(() => {
+        if (!hasInitialized.current) return;
+
+        // Persist every form change so returning from the tenant-create flow
+        // restores the edits made before leaving the page.
+        saveDraft(form);
+    }, [form, saveDraft]);
 
     const handleTenantChange = (tenantContactId: string) => {
         setForm((prev) => ({...prev, tenantContactId}));
@@ -236,6 +255,13 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
 
     const canSubmit = isFormValid() && !updateLease.isPending && hasChanges;
 
+    const isTenantListEmpty = !isTenantContactsLoading && tenantContacts?.length === 0;
+
+    const currentUrl = returnTo
+        ? `${ROUTES.leaseEdit(leaseId)}?${RETURN_TO_PARAM}=${encodeURIComponent(returnTo)}`
+        : ROUTES.leaseEdit(leaseId);
+    const createTenantHref = `${ROUTES.tenantNew}?${RETURN_TO_PARAM}=${encodeURIComponent(currentUrl)}`;
+
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
 
@@ -265,7 +291,12 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
         try {
             await updateLease.mutateAsync({id: leaseId, data});
             notify.scenarios.leases.updated();
-            router.push(ROUTES.lease(leaseId));
+            clearDraft();
+            if (returnTo) {
+                router.replace(returnTo);
+            } else {
+                goBack(router, ROUTES.lease(leaseId));
+            }
         } catch (error: unknown) {
             notify.scenarios.leases.leaseSaveError(error);
         }
@@ -275,14 +306,17 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
         <div className={styles.root}>
             <PageHeader
                 title="Редактирование аренды"
-                backHref={ROUTES.lease(leaseId)}
+                backHref={returnTo ?? ROUTES.lease(leaseId)}
                 actions={
                     <IconButton
                         variant="secondary"
                         size="large"
                         icon={<Cancel />}
                         aria-label="Отменить"
-                        onClick={() => router.push(ROUTES.lease(leaseId))}
+                        onClick={() => {
+                            clearDraft();
+                            goBack(router, returnTo ?? ROUTES.lease(leaseId));
+                        }}
                     />
                 }
             />
@@ -306,6 +340,8 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
                                 placeholder="Не указан"
                                 value={form.tenantContactId}
                                 onChange={handleTenantChange}
+                                disabled={isTenantListEmpty}
+                                loading={isTenantContactsLoading}
                                 options={[
                                     {value: '', label: 'Не указан'},
                                     ...(tenantContacts?.map((contact) => ({
@@ -314,6 +350,16 @@ export function LeaseEditForm({leaseId}: LeaseEditFormProps): JSX.Element {
                                     })) ?? []),
                                 ]}
                             />
+                            {isTenantListEmpty && (
+                                <LinkButton
+                                    href={createTenantHref}
+                                    variant="secondary"
+                                    size="medium"
+                                    className={styles.emptyLink}
+                                >
+                                    Добавить арендатора
+                                </LinkButton>
+                            )}
 
                             <PaymentDayPicker
                                 value={form.paymentDay ? Number(form.paymentDay) : undefined}

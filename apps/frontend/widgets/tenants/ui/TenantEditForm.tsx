@@ -9,6 +9,7 @@ import {
 } from '@/features/tenant-contacts/api';
 import { Skeleton } from '@heroui/react/skeleton';
 import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import { PageHeader } from '@/shared/ui/page-header';
@@ -161,7 +162,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
           data: payload,
         });
         notify.scenarios.tenants.tenantUpdated();
-        router.push(ROUTES.tenant(tenantId));
+        goBack(router, ROUTES.tenant(tenantId));
       } catch (error: unknown) {
         notify.scenarios.tenants.tenantUpdateError(error);
       }

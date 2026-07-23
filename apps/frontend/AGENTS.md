@@ -68,6 +68,14 @@ Before adding components, hooks, helpers, entity types, feature state, or API wr
 - Do not use global state for local UI state. Use URL state for shareable page state.
 - Prefer explicit event handlers and reducers over implicit side effects.
 
+## Навигация и история браузера
+
+- Завершение или отмена флоу с возвратом на страницу-источник (сохранение формы редактирования, кнопка «Отмена», «Добавить позже» на success-шаге визарда, удаление сущности) — `goBack(router, fallbackHref)` из `shared/lib/navigation`: форма выталкивается из истории, открывается лежащая ниже страница-источник; при пустой истории выполняется `router.replace(fallbackHref)`.
+- Завершение флоу с переходом на новую страницу (созданная сущность, другой раздел) — `router.replace`: целевая страница подменяет транзиентную запись в истории.
+- `router.replace` на страницу-источник запрещён: он создаёт дубль этой страницы в истории, и первое нажатие «Назад» ведёт на тот же URL («мёртвый» назад).
+- Вход в флоу (кнопки «Создать», `handleEdit`) и обычная контентная навигация — `router.push`.
+- Кнопка «Назад» ходит по истории (`goBack` из `shared/lib/navigation`), поэтому завершённые страницы флоу не должны оставаться в истории: иначе «Назад» вернёт пользователя на уже завершённую форму.
+
 ## Quality Gates
 
 - Do not write new tests unless the user explicitly asks for them.

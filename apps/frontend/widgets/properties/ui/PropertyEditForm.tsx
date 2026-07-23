@@ -4,6 +4,7 @@ import {type FormEvent, type JSX, useEffect, useMemo, useRef, useState,} from 'r
 import {useRouter} from 'next/navigation';
 import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
+import {goBack} from '@/shared/lib/navigation';
 import {useProperty, useUpdateProperty} from '@/features/properties/api';
 import {TextField} from '@/shared/ui/text-field';
 import {Button} from '@/shared/ui/button';
@@ -121,7 +122,7 @@ export function PropertyEditForm({
             });
 
             notify.scenarios.property.updated();
-            router.push(ROUTES.property(propertyId));
+            goBack(router, ROUTES.property(propertyId));
         } catch {
             notify.scenarios.property.saveError();
         }

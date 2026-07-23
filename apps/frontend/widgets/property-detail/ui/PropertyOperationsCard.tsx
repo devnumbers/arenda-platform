@@ -1,66 +1,67 @@
 'use client';
 
-import type { JSX } from 'react';
-import { Card } from '@heroui/react/card';
-import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import type { components } from '@/shared/api/generated';
-import { PropertyDetailSection } from './PropertyDetailSection';
+import type {JSX} from 'react';
+import {Card} from '@heroui/react/card';
+import {formatMoneyKopecks} from '@/shared/lib/format-money';
+import type {components} from '@/shared/api/generated';
+import {PropertyDetailSection} from './PropertyDetailSection';
 import styles from './PropertyOperationsCard.module.css';
 
 type PropertyOperationsSummaryResponse =
-  components['schemas']['PropertyOperationsSummaryResponse'];
+    components['schemas']['PropertyOperationsSummaryResponse'];
 
 export type PropertyOperationsCardProps = {
-  readonly propertyName: string;
-  readonly summary: PropertyOperationsSummaryResponse | undefined;
+    readonly propertyName: string;
+    readonly summary: PropertyOperationsSummaryResponse | undefined;
 };
 
 export function PropertyOperationsCard({
-  propertyName,
-  summary,
-}: PropertyOperationsCardProps): JSX.Element {
-  const income = summary?.all_time_income_kopecks ?? 0;
-  const expense = summary?.all_time_expense_kopecks ?? 0;
-  const isEmpty = !summary || (income === 0 && expense === 0);
+                                           propertyName,
+                                           summary,
+                                       }: PropertyOperationsCardProps): JSX.Element {
+    const income = summary?.all_time_income_kopecks ?? 0;
+    const expense = summary?.all_time_expense_kopecks ?? 0;
+    const isEmpty = !summary || (income === 0 && expense === 0);
 
-  return (
-    <PropertyDetailSection>
-      <div className={styles.header}>
-        <h2 className={styles.title}>Операции объекта</h2>
-        <span className={styles.propertyName}>{propertyName}</span>
-      </div>
+    return (
+        <PropertyDetailSection>
+            <div className={styles.header}>
+                <h2 className={styles.title}>Операции объекта</h2>
+                <span className={styles.propertyName}>{propertyName}</span>
+            </div>
+            {/*<SectionHeader title={title}/>*/}
 
-      {isEmpty ? (
-        <p className={styles.emptyText}>
-          Операций ещё не было. Здесь будет отображаться прибыль по объекту.
-        </p>
-      ) : (
-        <Card className={styles.card}>
-          <span className={styles.logo3d} aria-hidden="true" />
-          <div className={styles.top}>
-            <div className={styles.profit}>
+            {isEmpty ? (
+                <p className={styles.emptyText}>
+                    Операций ещё не было. Здесь будет отображаться прибыль по объекту.
+                </p>
+            ) : (
+                <Card className={styles.card}>
+                    <span className={styles.logo3d} aria-hidden="true"/>
+                    <div className={styles.top}>
+                        <div className={styles.profit}>
               <span className={styles.profitValue}>
-                {formatMoneyKopecks(summary.all_time_profit_kopecks, { round: true })}
+                {formatMoneyKopecks(summary.all_time_profit_kopecks, {round: true})}
               </span>
-              <span className={styles.profitLabel}>Прибыль за всё время</span>
-            </div>
-          </div>
-          <div className={styles.bottom}>
-            <div className={styles.column}>
+                            <span className={styles.profitLabel}>Прибыль за всё время</span>
+                        </div>
+                    </div>
+                    <div className={styles.bottom}>
+                        <div className={styles.column}>
               <span className={styles.value}>
-                {formatMoneyKopecks(income, { round: true })}
+                {formatMoneyKopecks(income, {round: true})}
               </span>
-              <span className={styles.label}>Доходы за всё время</span>
-            </div>
-            <div className={styles.columnRight}>
+                            <span className={styles.label}>Доходы за всё время</span>
+                        </div>
+                        <div className={styles.columnRight}>
               <span className={styles.value}>
-                {formatMoneyKopecks(expense, { round: true })}
+                {formatMoneyKopecks(expense, {round: true})}
               </span>
-              <span className={styles.label}>Расходы за всё время</span>
-            </div>
-          </div>
-        </Card>
-      )}
-    </PropertyDetailSection>
-  );
+                            <span className={styles.label}>Расходы за всё время</span>
+                        </div>
+                    </div>
+                </Card>
+            )}
+        </PropertyDetailSection>
+    );
 }

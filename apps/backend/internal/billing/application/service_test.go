@@ -7518,37 +7518,114 @@ func TestBilling_ProcessScheduledChanges_AppliesOnceAndNotAgain(t *testing.T) {
 	}
 }
 
-// Regression: a scheduled downgrade applies without any payment, so the last
-// succeeded payment still references the old tariff's period. The renewal after
-// the downgrade must use the period stored on the subscription (current_period),
-// not the period of that stale payment.
-func TestBilling_ProcessRenewals_AfterScheduledDowngradeUsesCurrentPeriod(t *testing.T) {
+// A scheduled downgrade to a PAID tariff is not applied by the scheduled-change
+// job: it must be charged at apply time, which the renewal path does. The job
+// skips the row and leaves the pending change untouched; the row stays in the
+// selection until a renewal charge applies and clears it.
+func TestBilling_ProcessScheduledChanges_PaidDowngradeSkippedForRenewalCharge(t *testing.T) {
+	d := newTestDeps(t)
+	userA := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	userB := uuid.MustParse("11111111-1111-1111-1111-111111111112")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	businessID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	subA := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	subB := uuid.MustParse("55555555-5555-5555-5555-555555555556")
+
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000, YearlyPriceKopecks: 50000})
+	d.addTariff(domain.Tariff{ID: businessID, Name: domain.TariffBusiness, ActivePropertyLimit: 100, MonthlyPriceKopecks: 15000, YearlyPriceKopecks: 150000})
+
+	// (a) paid monthly pending period: skipped because the monthly price > 0.
+	d.addSubscription(scheduledChangeSubscription(userA, subA, businessID, proID, nil))
+
+	// (b) paid yearly pending period: skipped because the yearly price > 0.
+	yearSub := scheduledChangeSubscription(userB, subB, businessID, proID, nil)
+	yearPeriod := domain.PeriodYear
+	yearSub.PendingPeriod = &yearPeriod
+	d.addSubscription(yearSub)
+
+	count, err := d.service.ScheduledChanges.ProcessScheduledChanges(context.Background(), fixedNow)
+	if err != nil {
+		t.Fatalf("ProcessScheduledChanges error: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected 0 scheduled changes applied (paid downgrades left for renewal charge), got %d", count)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		userID uuid.UUID
+		period domain.SubscriptionPeriod
+	}{
+		{"monthly", userA, domain.PeriodMonth},
+		{"yearly", userB, domain.PeriodYear},
+	} {
+		sub := d.subscriptions.subs[tc.userID]
+		if sub.TariffID != businessID {
+			t.Errorf("%s: expected tariff unchanged (business), got %s", tc.name, sub.TariffID)
+		}
+		if sub.PendingTariffID == nil || *sub.PendingTariffID != proID {
+			t.Errorf("%s: expected pending tariff pro kept, got %v", tc.name, sub.PendingTariffID)
+		}
+		if sub.PendingPeriod == nil || *sub.PendingPeriod != tc.period {
+			t.Errorf("%s: expected pending period %s kept, got %v", tc.name, tc.period, sub.PendingPeriod)
+		}
+		if sub.PendingChangeAt == nil {
+			t.Errorf("%s: expected pending_change_at kept", tc.name)
+		}
+		wantValidUntil := fixedNow.AddDate(0, 1, 0)
+		if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+			t.Errorf("%s: expected valid_until unchanged %v, got %v", tc.name, wantValidUntil, sub.ValidUntil)
+		}
+	}
+	if d.provider.chargeCalled || d.provider.initCalled {
+		t.Error("expected no provider call from the scheduled-change job")
+	}
+	if len(d.subscriptionPayments.payments) != 0 {
+		t.Errorf("expected no payment created, got %d", len(d.subscriptionPayments.payments))
+	}
+	if len(d.propertyArchiver.calls) != 0 {
+		t.Errorf("expected property archiver not called, got %v", d.propertyArchiver.calls)
+	}
+}
+
+// A scheduled downgrade to a PAID tariff is charged at apply time through the
+// renewal path: the scheduled-change job skips it (no free apply), and
+// ProcessRenewals resolves the pending tariff/period/price — never the stale
+// last succeeded payment, which still references the old tariff's period —
+// charges it, and applies the change on success. The applied change records
+// current_period on the subscription, so subsequent renewals keep charging the
+// chosen period's price.
+func TestBilling_ProcessRenewals_PaidScheduledDowngradeChargedAtApply(t *testing.T) {
 	d := newTestDeps(t)
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	businessID := uuid.MustParse("77777777-7777-7777-7777-777777777777")
 	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 	subID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
 	oldPaymentID := uuid.MustParse("66666666-6666-6666-6666-666666666666")
 
-	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000, YearlyPriceKopecks: 10000})
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
 	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000, YearlyPriceKopecks: 50000})
+	d.addTariff(domain.Tariff{ID: businessID, Name: domain.TariffBusiness, ActivePropertyLimit: 100, MonthlyPriceKopecks: 15000, YearlyPriceKopecks: 150000})
 
-	// The subscription was paid monthly on pro, then scheduled a downgrade to
-	// basic with a yearly period.
+	// The subscription was paid monthly on business, then scheduled a downgrade
+	// to pro with a yearly period; the paid period has just ended.
 	validUntil := fixedNow
 	changeAt := fixedNow.Add(-time.Hour)
+	monthPeriod := domain.PeriodMonth
 	yearPeriod := domain.PeriodYear
 	d.addSubscription(domain.Subscription{
 		ID:                    subID,
 		UserID:                userID,
-		TariffID:              proID,
+		TariffID:              businessID,
 		Source:                domain.SubscriptionSourcePaid,
 		Status:                domain.SubscriptionStatusActive,
 		ValidUntil:            &validUntil,
 		AutoRenewEnabled:      true,
 		ActivePaymentMethodID: &methodID,
-		PendingTariffID:       &basicID,
+		CurrentPeriod:         &monthPeriod,
+		PendingTariffID:       &proID,
 		PendingChangeAt:       &changeAt,
 		PendingPeriod:         &yearPeriod,
 	})
@@ -7559,42 +7636,42 @@ func TestBilling_ProcessRenewals_AfterScheduledDowngradeUsesCurrentPeriod(t *tes
 		ProviderToken: "fake_token_1234",
 		IsActive:      true,
 	}
-	// The last succeeded payment still references the old monthly pro period.
+	// The last succeeded payment still references the old monthly business period.
 	succeededAt := fixedNow.AddDate(0, -1, 0)
 	d.subscriptionPayments.payments[oldPaymentID] = domain.SubscriptionPayment{
 		ID:              oldPaymentID,
 		UserID:          userID,
 		SubscriptionID:  subID,
-		TariffID:        proID,
+		TariffID:        businessID,
 		PaymentMethodID: &methodID,
 		Period:          domain.PeriodMonth,
-		AmountKopecks:   5000,
+		AmountKopecks:   15000,
 		Provider:        domain.ProviderFake,
 		Status:          domain.PaymentStatusSucceeded,
 		CreatedAt:       succeededAt,
 		SucceededAt:     &succeededAt,
 	}
 
-	// The scheduled downgrade applies without any payment.
+	// The scheduled-change job must not apply the paid downgrade for free.
 	count, err := d.service.ScheduledChanges.ProcessScheduledChanges(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessScheduledChanges error: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("expected 1 scheduled change applied, got %d", count)
+	if count != 0 {
+		t.Fatalf("expected 0 scheduled changes applied (paid downgrade left for renewal charge), got %d", count)
 	}
 	sub := d.subscriptions.subs[userID]
-	if sub.TariffID != basicID {
-		t.Fatalf("expected tariff basic after scheduled downgrade, got %s", sub.TariffID)
+	if sub.TariffID != businessID {
+		t.Fatalf("expected tariff business before the renewal charge, got %s", sub.TariffID)
 	}
-	if sub.CurrentPeriod == nil || *sub.CurrentPeriod != domain.PeriodYear {
-		t.Fatalf("expected current period year after scheduled downgrade, got %v", sub.CurrentPeriod)
+	if sub.PendingTariffID == nil || *sub.PendingTariffID != proID {
+		t.Fatalf("expected pending tariff pro kept, got %v", sub.PendingTariffID)
 	}
 
-	// One year later the downgraded subscription comes up for renewal.
+	// The renewal path charges the pending tariff's yearly price and applies
+	// the downgrade.
 	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_1", Status: domain.PaymentStatusSucceeded}
-	renewalAt := fixedNow.AddDate(1, 0, 0)
-	count, err = d.service.Renewals.ProcessRenewals(context.Background(), renewalAt)
+	count, err = d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
 	if err != nil {
 		t.Fatalf("ProcessRenewals error: %v", err)
 	}
@@ -7602,26 +7679,153 @@ func TestBilling_ProcessRenewals_AfterScheduledDowngradeUsesCurrentPeriod(t *tes
 		t.Fatalf("expected 1 renewal, got %d", count)
 	}
 
-	// The renewal must charge the yearly price of the new tariff, not the
-	// monthly period of the stale last succeeded payment.
 	var renewalPayment *domain.SubscriptionPayment
 	for _, p := range d.subscriptionPayments.payments {
-		if p.TariffID == basicID {
+		if p.TariffID == proID {
 			payment := p
 			renewalPayment = &payment
 		}
 	}
 	if renewalPayment == nil {
-		t.Fatal("expected a renewal payment for the basic tariff")
+		t.Fatal("expected a renewal payment for the pro tariff")
 	}
 	if renewalPayment.Period != domain.PeriodYear {
 		t.Errorf("expected renewal period year, got %s", renewalPayment.Period)
 	}
-	if renewalPayment.AmountKopecks != 10000 {
-		t.Errorf("expected renewal amount 10000 (basic yearly price), got %d", renewalPayment.AmountKopecks)
+	if renewalPayment.AmountKopecks != 50000 {
+		t.Errorf("expected renewal amount 50000 (pro yearly price), got %d", renewalPayment.AmountKopecks)
 	}
-	if d.provider.chargeReq.AmountKopecks != 10000 {
-		t.Errorf("expected charged amount 10000, got %d", d.provider.chargeReq.AmountKopecks)
+	if renewalPayment.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("expected renewal payment succeeded, got %s", renewalPayment.Status)
+	}
+	if d.provider.chargeReq.AmountKopecks != 50000 {
+		t.Errorf("expected charged amount 50000, got %d", d.provider.chargeReq.AmountKopecks)
+	}
+
+	sub = d.subscriptions.subs[userID]
+	if sub.TariffID != proID {
+		t.Errorf("expected tariff pro after the charged apply, got %s", sub.TariffID)
+	}
+	wantValidUntil := fixedNow.AddDate(1, 0, 0)
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+		t.Errorf("expected valid_until %v (now + 1 year), got %v", wantValidUntil, sub.ValidUntil)
+	}
+	if sub.Status != domain.SubscriptionStatusActive {
+		t.Errorf("expected status active, got %s", sub.Status)
+	}
+	if sub.CurrentPeriod == nil || *sub.CurrentPeriod != domain.PeriodYear {
+		t.Errorf("expected current period year after the charged apply, got %v", sub.CurrentPeriod)
+	}
+	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
+		t.Errorf("expected pending_* cleared, got %+v/%+v/%+v", sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
+	}
+	if len(d.propertyArchiver.calls) != 1 || d.propertyArchiver.calls[0].limit != 50 {
+		t.Errorf("expected property archiver called once with the pro limit 50, got %v", d.propertyArchiver.calls)
+	}
+
+	// One year later the downgraded subscription renews again: the period comes
+	// from the subscription's current_period, so the charge is the yearly price
+	// of the new tariff once more.
+	renewalAt := fixedNow.AddDate(1, 0, 0)
+	count, err = d.service.Renewals.ProcessRenewals(context.Background(), renewalAt)
+	if err != nil {
+		t.Fatalf("second ProcessRenewals error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 renewal one year later, got %d", count)
+	}
+	if d.provider.chargeReq.AmountKopecks != 50000 {
+		t.Errorf("expected charged amount 50000 on the second renewal, got %d", d.provider.chargeReq.AmountKopecks)
+	}
+}
+
+// Failure variant of the charged apply: the renewal charge for the pending
+// paid downgrade fails, so the payment is marked failed with the provider
+// error code, the subscription enters grace, and the pending downgrade is
+// dropped — it is considered consumed by the failed charge, and re-scheduling
+// after renewal is a fresh user action.
+func TestBilling_ProcessRenewals_PaidScheduledDowngradeFailedChargeMovesToGrace(t *testing.T) {
+	d := newTestDeps(t)
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	basicID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	proID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	businessID := uuid.MustParse("77777777-7777-7777-7777-777777777777")
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	subID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+
+	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
+	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000, YearlyPriceKopecks: 50000})
+	d.addTariff(domain.Tariff{ID: businessID, Name: domain.TariffBusiness, ActivePropertyLimit: 100, MonthlyPriceKopecks: 15000, YearlyPriceKopecks: 150000})
+
+	validUntil := fixedNow
+	changeAt := fixedNow.Add(-time.Hour)
+	yearPeriod := domain.PeriodYear
+	d.addSubscription(domain.Subscription{
+		ID:                    subID,
+		UserID:                userID,
+		TariffID:              businessID,
+		Source:                domain.SubscriptionSourcePaid,
+		Status:                domain.SubscriptionStatusActive,
+		ValidUntil:            &validUntil,
+		AutoRenewEnabled:      true,
+		ActivePaymentMethodID: &methodID,
+		PendingTariffID:       &proID,
+		PendingChangeAt:       &changeAt,
+		PendingPeriod:         &yearPeriod,
+	})
+	//nolint:gosec // test token, not a real credential
+	d.paymentMethods.methods[methodID] = domain.PaymentMethod{
+		ID:            methodID,
+		UserID:        userID,
+		Provider:      domain.ProviderFake,
+		ProviderToken: "fake_fail_test_token",
+		IsActive:      true,
+	}
+	d.provider.chargeRes = ChargeResult{ProviderPaymentID: "charge_1", Status: domain.PaymentStatusFailed, ErrorCode: "1051"}
+
+	count, err := d.service.Renewals.ProcessRenewals(context.Background(), fixedNow)
+	if err != nil {
+		t.Fatalf("ProcessRenewals error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 renewal processed, got %d", count)
+	}
+	if d.provider.chargeReq.AmountKopecks != 50000 {
+		t.Errorf("expected charged amount 50000 (pro yearly price), got %d", d.provider.chargeReq.AmountKopecks)
+	}
+
+	sub := d.subscriptions.subs[userID]
+	if sub.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("expected status grace, got %s", sub.Status)
+	}
+	if sub.ValidUntil == nil || !sub.ValidUntil.After(fixedNow) {
+		t.Errorf("expected grace valid_until set, got %v", sub.ValidUntil)
+	}
+	if sub.TariffID != businessID {
+		t.Errorf("expected tariff unchanged (business), got %s", sub.TariffID)
+	}
+	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
+		t.Errorf("expected pending change cleared (consumed by the failed charge), got %+v/%+v/%+v",
+			sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
+	}
+
+	if len(d.subscriptionPayments.payments) != 1 {
+		t.Fatalf("expected 1 payment, got %d", len(d.subscriptionPayments.payments))
+	}
+	for _, payment := range d.subscriptionPayments.payments {
+		if payment.Status != domain.PaymentStatusFailed {
+			t.Errorf("expected payment failed, got %s", payment.Status)
+		}
+		if payment.ErrorCode == nil || *payment.ErrorCode != "1051" {
+			t.Errorf("expected payment error code 1051, got %v", payment.ErrorCode)
+		}
+		if payment.TariffID != proID || payment.Period != domain.PeriodYear || payment.AmountKopecks != 50000 {
+			t.Errorf("expected payment for pro/year at 50000, got tariff %s period %s amount %d",
+				payment.TariffID, payment.Period, payment.AmountKopecks)
+		}
+	}
+	if len(d.propertyArchiver.calls) != 0 {
+		t.Errorf("expected property archiver not called, got %v", d.propertyArchiver.calls)
 	}
 }
 
@@ -7701,7 +7905,7 @@ func TestBilling_ProcessScheduledChanges_PendingTariffNotFound_ErrTariffNotFound
 	if !ok {
 		t.Fatalf("ScheduledChanges service is %T, expected *ScheduledChangeService", d.service.ScheduledChanges)
 	}
-	err := svc.applyScheduledChange(t.Context(), d.subscriptions.subs[userID], fixedNow)
+	_, err := svc.applyScheduledChange(t.Context(), d.subscriptions.subs[userID], fixedNow)
 	if !errors.Is(err, ErrTariffNotFound) {
 		t.Fatalf("expected ErrTariffNotFound, got %v", err)
 	}

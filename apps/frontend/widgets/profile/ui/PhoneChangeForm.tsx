@@ -19,6 +19,7 @@ import {
 } from '@/features/profile/api/hooks';
 import { formatPhoneInput, normalizePhone } from '@/shared/lib/phone';
 import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
 import styles from './PhoneChangeForm.module.css';
 
 const CODE_LENGTH = 6;
@@ -101,7 +102,7 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
         {
           onSuccess: () => {
             notify.scenarios.profile.phoneChanged();
-            router.push(ROUTES.profileAccount);
+            goBack(router, ROUTES.profileAccount);
           },
           onError: (error) => {
             notify.scenarios.profile.phoneChangeError(error);

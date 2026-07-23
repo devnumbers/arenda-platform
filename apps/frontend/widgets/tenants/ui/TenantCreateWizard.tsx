@@ -5,7 +5,7 @@ import {useRouter} from 'next/navigation';
 import {useCreateTenantContact} from '@/features/tenant-contacts/api';
 import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
-import {goBack} from '@/shared/lib/navigation';
+import {buildReturnUrl, goBack} from '@/shared/lib/navigation';
 import {WizardHeader} from '@/shared/ui/wizard-header';
 import {useTenantCreateDraft} from '../lib/use-tenant-create-draft';
 import {TenantFormStep} from './TenantFormStep';
@@ -14,7 +14,11 @@ import {TenantCreateWizardLoading} from './TenantCreateWizardLoading';
 import styles from './TenantCreateWizard.module.css';
 import type {TenantContactFormData} from './TenantForm';
 
-export function TenantCreateWizard(): JSX.Element {
+export type TenantCreateWizardProps = {
+    readonly returnTo?: string;
+};
+
+export function TenantCreateWizard({returnTo}: TenantCreateWizardProps): JSX.Element {
     const router = useRouter();
     const {draft, isLoaded, setDraft, clearDraft} = useTenantCreateDraft();
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,7 +51,7 @@ export function TenantCreateWizard(): JSX.Element {
         setIsSubmitting(true);
 
         try {
-            await createTenantContact.mutateAsync({
+            const created = await createTenantContact.mutateAsync({
                 name: data.name.trim(),
                 surname: data.surname.trim() || undefined,
                 patronymic: data.patronymic.trim() || undefined,
@@ -55,6 +59,12 @@ export function TenantCreateWizard(): JSX.Element {
                 email: data.email.trim() || undefined,
                 comment: data.comment.trim() || undefined,
             });
+
+            if (returnTo) {
+                clearDraft();
+                router.replace(buildReturnUrl(returnTo, {tenantContactId: created.id}));
+                return;
+            }
 
             setDraft((prev) => ({...prev, step: 'success'}));
         } catch (error: unknown) {
@@ -86,11 +96,11 @@ export function TenantCreateWizard(): JSX.Element {
                 <TenantSuccessStep
                     onAddLater={() => {
                         clearDraft();
-                        router.push(ROUTES.tenants);
+                        goBack(router, ROUTES.tenants);
                     }}
                     onAddOperations={() => {
                         clearDraft();
-                        router.push(ROUTES.finance);
+                        router.replace(ROUTES.finance);
                     }}
                 />
             </div>

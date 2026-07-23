@@ -8,6 +8,7 @@ import { PageShell } from '@/shared/ui/page-shell';
 import { Button } from '@/shared/ui/button';
 import { useAddPaymentMethod } from '@/features/billing/api/hooks';
 import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
 import styles from './page.module.css';
 
 export default function AddPaymentMethodPage(): JSX.Element {
@@ -24,7 +25,7 @@ export default function AddPaymentMethodPage(): JSX.Element {
             return;
           }
 
-          router.push(ROUTES.profilePaymentMethods);
+          goBack(router, ROUTES.profilePaymentMethods);
         },
         onError: (error) => {
           notify.scenarios.auth.addCardStartError({description: error.detail});

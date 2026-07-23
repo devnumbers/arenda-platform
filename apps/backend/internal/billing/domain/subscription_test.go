@@ -429,6 +429,37 @@ func TestSubscriptionEnterGrace(t *testing.T) {
 			t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, farFuture)
 		}
 	})
+
+	t.Run("clears pending scheduled change", func(t *testing.T) {
+		pendingID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15")
+		validUntil := now.Add(-time.Hour)
+		pendingAt := validUntil
+		period := PeriodYear
+		sub := Subscription{
+			ID:              uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16"),
+			UserID:          userID,
+			TariffID:        proID,
+			Status:          SubscriptionStatusActive,
+			ValidUntil:      &validUntil,
+			PendingTariffID: &pendingID,
+			PendingChangeAt: &pendingAt,
+			PendingPeriod:   &period,
+		}
+
+		sub.EnterGrace(now)
+
+		if sub.Status != SubscriptionStatusGrace {
+			t.Errorf("Status = %v, want %v", sub.Status, SubscriptionStatusGrace)
+		}
+		if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
+			t.Errorf("expected pending change fields cleared, got %+v/%+v/%+v",
+				sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
+		}
+		wantValidUntil := now.Add(gracePeriod)
+		if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+			t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, wantValidUntil)
+		}
+	})
 }
 
 func TestSubscriptionApplyScheduledDowngrade(t *testing.T) {
