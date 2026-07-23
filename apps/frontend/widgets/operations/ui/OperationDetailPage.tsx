@@ -5,6 +5,7 @@ import {useState, type ComponentType, type JSX} from 'react';
 import {Modal} from '@heroui/react';
 import type {components} from '@/shared/api/generated';
 import {ROUTES} from '@/shared/config/routes';
+import {goBack} from '@/shared/lib/navigation';
 import {ArchiveBold, BadgeDanger, BadgeGood, BadgeInfo} from '@/shared/assets/icons';
 import {Button} from '@/shared/ui/button';
 import {PageHeader} from '@/shared/ui/page-header';
@@ -241,11 +242,7 @@ export function OperationDetailPage(): JSX.Element {
             {
                 onSuccess: () => {
                     setIsDeleteModalOpen(false);
-                    router.push(
-                        data.lease_id
-                            ? ROUTES.lease(data.lease_id)
-                            : ROUTES.financeOperations,
-                    );
+                    goBack(router, ROUTES.financeOperations);
                 },
             },
         );

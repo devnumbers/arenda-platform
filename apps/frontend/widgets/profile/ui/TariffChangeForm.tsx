@@ -153,7 +153,7 @@ export function TariffChangeForm(): JSX.Element {
           }
 
           notify.scenarios.tariff.changed();
-          void router.push(ROUTES.profileTariffChangeSuccess);
+          void router.replace(ROUTES.profileTariffChangeSuccess);
         })
         .catch((error: unknown) => {
           notify.close(loadingToastId);

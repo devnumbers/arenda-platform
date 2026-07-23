@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, type JSX } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { Loading, StatusDanger, StatusGood } from '@/shared/assets/icons';
 import { Icon } from '@/shared/ui/icon';
+import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import {
   PAYMENT_STALE_MS,
@@ -15,6 +16,7 @@ import {
 import { billingKeys } from '@/features/billing/api/keys';
 import { formatDate } from '@/shared/lib/format-date';
 import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
 import styles from './TariffChangeSuccess.module.css';
 
 function isPaymentStale(createdAt: string): boolean {
@@ -22,6 +24,7 @@ function isPaymentStale(createdAt: string): boolean {
 }
 
 export function TariffChangeSuccess(): JSX.Element {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const paymentId = searchParams.get('paymentId');
   const queryClient = useQueryClient();
@@ -61,14 +64,14 @@ export function TariffChangeSuccess(): JSX.Element {
               )}
             </div>
 
-            <LinkButton
-              href={ROUTES.profileTariff}
+            <Button
               variant="primary"
               size="large"
               fullWidth
+              onClick={() => goBack(router, ROUTES.profileTariff)}
             >
               Вернуться к тарифу
-            </LinkButton>
+            </Button>
           </div>
         </div>
       );
@@ -130,14 +133,14 @@ export function TariffChangeSuccess(): JSX.Element {
           )}
         </div>
 
-        <LinkButton
-          href={ROUTES.profileTariff}
+        <Button
           variant="primary"
           size="large"
           fullWidth
+          onClick={() => goBack(router, ROUTES.profileTariff)}
         >
           Вернуться к тарифу
-        </LinkButton>
+        </Button>
       </div>
     </div>
   );

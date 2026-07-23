@@ -15,6 +15,7 @@ import { DateSelect } from '@/shared/ui/date-select';
 import { IconButton } from '@/shared/ui/icon-button';
 import { Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import type { components } from '@/shared/api/generated';
 import { type OperationType } from '@/entities/operation/model/types';
@@ -205,7 +206,7 @@ function OperationEditFormContent({
       },
       {
         onSuccess: () => {
-          router.push(ROUTES.financeOperation(id));
+          goBack(router, ROUTES.financeOperation(id));
         },
         onError: (error) => {
           notify.scenarios.operations.operationSaveError(error);
@@ -302,7 +303,7 @@ export function OperationEditForm(): JSX.Element {
       size="large"
       icon={<Cancel />}
       aria-label="Отменить"
-      onClick={() => router.push(ROUTES.financeOperation(id))}
+      onClick={() => goBack(router, ROUTES.financeOperation(id))}
     />
   ) : undefined;
 

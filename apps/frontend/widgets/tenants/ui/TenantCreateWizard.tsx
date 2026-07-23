@@ -96,11 +96,11 @@ export function TenantCreateWizard({returnTo}: TenantCreateWizardProps): JSX.Ele
                 <TenantSuccessStep
                     onAddLater={() => {
                         clearDraft();
-                        router.push(ROUTES.tenants);
+                        goBack(router, ROUTES.tenants);
                     }}
                     onAddOperations={() => {
                         clearDraft();
-                        router.push(ROUTES.finance);
+                        router.replace(ROUTES.finance);
                     }}
                 />
             </div>
