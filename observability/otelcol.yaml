@@ -28,7 +28,9 @@ receivers:
   docker_stats:
     endpoint: unix:///var/run/docker.sock
     collection_interval: 30s
-    timeout: 10s
+    # 10s was not enough under host load spikes: the Docker API answered
+    # with bursts of "context deadline exceeded".
+    timeout: 30s
     container_labels_to_metric_labels:
       com.docker.compose.project: docker_compose_project
       com.docker.compose.service: docker_compose_service
