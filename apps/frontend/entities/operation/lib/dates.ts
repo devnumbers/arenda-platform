@@ -1,4 +1,5 @@
 import type { components } from '@/shared/api/generated';
+import { formatCountdownLabel } from '@/shared/lib/format-countdown';
 import { diffDays, parseLocalDate } from '@/shared/lib/lease-payment';
 
 type OperationResponse = components['schemas']['OperationResponse'];
@@ -128,10 +129,8 @@ export function getOperationTrailing(
     const dueDate = parseLocalDate(operation.operation_date);
     const today = new Date();
     const diff = diffDays(today, dueDate);
-    if (diff === 0) return 'Сегодня';
-    if (diff === 1) return 'Завтра';
-    if (diff > 1) return `через ${formatCalendarDuration(today, dueDate)}`;
-    return formatOperationDateShort(operation.operation_date);
+    if (diff < 0) return formatOperationDateShort(operation.operation_date);
+    return formatCountdownLabel(diff);
   }
 
   return formatOperationDateShort(operation.operation_date);

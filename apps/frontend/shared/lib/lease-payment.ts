@@ -5,8 +5,6 @@ export type LeasePaymentInput = {
   payment_day: number;
 };
 
-export type PaymentCountdown = { kind: 'future' | 'today'; days: number };
-
 /** Количество дней в месяце (monthIndex0: 0..11). */
 export function lastDayOfMonth(year: number, monthIndex0: number): number {
   return new Date(year, monthIndex0 + 1, 0).getDate();
@@ -136,55 +134,6 @@ export function monthPeriodProgress(
     (today.getTime() - periodStart.getTime()) /
     (periodEnd.getTime() - periodStart.getTime());
   return Math.min(1, Math.max(0, ratio));
-}
-
-/** Доля истечения периода перед реальной датой платежа (0..1).
- *  Начало периода — плановый день оплаты (payment_day) месяцем раньше target
- *  (или start_date, если он позже); конец — target. */
-export function progressToPaymentDate(
-  input: LeasePaymentInput,
-  target: Date,
-  now: Date = new Date(),
-): number {
-  const start = parseLocalDate(input.start_date);
-  const today = startOfDay(now);
-  const t = startOfDay(target);
-
-  const prevMonth = t.getMonth() === 0 ? 11 : t.getMonth() - 1;
-  const prevYear = t.getMonth() === 0 ? t.getFullYear() - 1 : t.getFullYear();
-  let periodStart = new Date(prevYear, prevMonth, clampDay(prevYear, prevMonth, input.payment_day));
-  if (start.getTime() > periodStart.getTime()) {
-    periodStart = start;
-  }
-  if (t.getTime() <= periodStart.getTime()) {
-    return 0;
-  }
-  const ratio = (today.getTime() - periodStart.getTime()) / (t.getTime() - periodStart.getTime());
-  return Math.min(1, Math.max(0, ratio));
-}
-
-/** Обратный отсчёт до ближайшей оплаты. */
-export function paymentCountdown(
-  input: LeasePaymentInput,
-  now: Date = new Date(),
-): PaymentCountdown {
-  const today = startOfDay(now);
-  const target = nextPaymentDate(input, today);
-  const days = diffDays(today, target);
-
-  if (days === 0) {
-    return { kind: 'today', days: 0 };
-  }
-
-  return { kind: 'future', days };
-}
-
-/** 'Сегодня' или 'через N дн.'. */
-export function formatPaymentCountdown(c: PaymentCountdown): string {
-  if (c.kind === 'today') {
-    return 'Сегодня';
-  }
-  return `через ${c.days} дн.`;
 }
 
 /** 'просрочено N дн.'. */

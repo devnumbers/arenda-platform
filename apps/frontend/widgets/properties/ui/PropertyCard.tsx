@@ -122,6 +122,7 @@ export function PropertyCard({property}: PropertyCardProps): JSX.Element {
                         has_overdue: lease.hasOverdue,
                         overdue_since: lease.overdueSince ?? null,
                         next_payment_date: lease.nextPaymentDate ?? null,
+                        status: lease.status,
                         tenant_contact: lease.tenantContact ?? null,
                     }}
                 />

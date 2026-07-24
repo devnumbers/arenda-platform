@@ -3,7 +3,9 @@
 import type {JSX} from 'react';
 import {Card} from '@heroui/react/card';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
+import {ROUTES} from '@/shared/config/routes';
 import type {components} from '@/shared/api/generated';
+import {SectionHeader} from '@/widgets/dashboard/ui/SectionHeader';
 import {PropertyDetailSection} from './PropertyDetailSection';
 import styles from './PropertyOperationsCard.module.css';
 
@@ -11,12 +13,12 @@ type PropertyOperationsSummaryResponse =
     components['schemas']['PropertyOperationsSummaryResponse'];
 
 export type PropertyOperationsCardProps = {
-    readonly propertyName: string;
+    readonly propertyId: string;
     readonly summary: PropertyOperationsSummaryResponse | undefined;
 };
 
 export function PropertyOperationsCard({
-                                           propertyName,
+                                           propertyId,
                                            summary,
                                        }: PropertyOperationsCardProps): JSX.Element {
     const income = summary?.all_time_income_kopecks ?? 0;
@@ -25,11 +27,10 @@ export function PropertyOperationsCard({
 
     return (
         <PropertyDetailSection>
-            <div className={styles.header}>
-                <h2 className={styles.title}>Операции объекта</h2>
-                <span className={styles.propertyName}>{propertyName}</span>
-            </div>
-            {/*<SectionHeader title={title}/>*/}
+            <SectionHeader
+                title="Операции объекта"
+                href={`${ROUTES.financeOperations}?property_id=${propertyId}&period=all`}
+            />
 
             {isEmpty ? (
                 <p className={styles.emptyText}>

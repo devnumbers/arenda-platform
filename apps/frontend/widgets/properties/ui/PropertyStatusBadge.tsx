@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { StatusGood, StatusWarning, StatusDanger, StatusInfo, StatusDoor, BadgeDanger } from '@/shared/assets/icons';
+import { StatusGood, StatusWarning, StatusDanger, StatusDoor, BadgeDanger, BadgeInfo } from '@/shared/assets/icons';
 import type { DisplayStatus } from '@/features/properties/lib/property-statuses';
 import { formatOverduePaymentsCount } from '@/features/properties/lib/property-statuses';
 import styles from './PropertyStatusBadge.module.css';
@@ -18,7 +18,7 @@ type StatusConfig = {
 const config: Record<DisplayStatus, StatusConfig> = {
   rented: { label: 'Арендован', color: '#34C771', icon: StatusGood },
   requires_action: { label: 'Требует действия', color: '#FF4646', icon: StatusDanger },
-  awaiting_start: { label: 'Скоро начнётся', color: '#2B7FFF', icon: StatusInfo },
+  awaiting_start: { label: 'Скоро начнётся', color: '#2B7FFF', icon: BadgeInfo },
   free: { label: 'Не арендован', color: '#A1A3A6', icon: StatusDoor },
   maintenance: { label: 'На ремонте', color: '#EBB800', icon: StatusWarning },
   overdue: { color: '#FF4646', icon: BadgeDanger },

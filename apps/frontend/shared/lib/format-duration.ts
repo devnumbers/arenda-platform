@@ -2,17 +2,6 @@ import { pluralize } from '@/shared/lib/pluralize';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export function formatDuration(start: string, end: string): string {
-  const startTime = new Date(start).getTime();
-  const endTime = new Date(end).getTime();
-  if (Number.isNaN(startTime) || Number.isNaN(endTime)) return '';
-  const days = Math.max(0, Math.floor((endTime - startTime) / DAY_MS));
-  const weeks = Math.floor(days / 7);
-  const remDays = days % 7;
-  if (weeks === 0) return `${remDays} ${pluralize(remDays, 'день', 'дня', 'дней')}`;
-  return `${weeks} ${pluralize(weeks, 'неделя', 'недели', 'недель')}${remDays ? `, ${remDays} ${pluralize(remDays, 'день', 'дня', 'дней')}` : ''}`;
-}
-
 export function formatAgo(iso: string): string {
   const endTime = new Date(iso).getTime();
   if (Number.isNaN(endTime)) return '';

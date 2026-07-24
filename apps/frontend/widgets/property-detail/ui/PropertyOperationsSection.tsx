@@ -13,6 +13,7 @@ import {SectionHeader} from "@/widgets/dashboard/ui/SectionHeader";
 export type PropertyOperationsSectionProps = {
     readonly propertyId: string;
     readonly title: string;
+    readonly href: string;
     readonly emptyText: string;
     readonly filters: Omit<OperationsFilters, 'property_id'>;
     readonly badge?: ReactNode;
@@ -21,6 +22,7 @@ export type PropertyOperationsSectionProps = {
 export function PropertyOperationsSection({
                                               propertyId,
                                               title,
+                                              href,
                                               emptyText,
                                               filters,
                                               badge,
@@ -32,10 +34,7 @@ export function PropertyOperationsSection({
     return (
         <PropertyDetailSection>
             {badge}
-            <div className={styles.header}>
-                <h2 className={styles.title}>{title}</h2>ffdf
-            </div>
-            {/*<SectionHeader title={title}/>*/}
+            <SectionHeader title={title} href={href}/>
 
             {operationsQuery.isLoading && (
                 <ul className={styles.list}>

@@ -7367,22 +7367,21 @@ func TestBilling_ReconcileStaleRefunds(t *testing.T) {
 	})
 }
 
-func scheduledChangeSubscription(userID, subID, tariffID, pendingTariffID uuid.UUID, methodID *uuid.UUID) domain.Subscription {
+func scheduledChangeSubscription(userID, subID, tariffID, pendingTariffID uuid.UUID) domain.Subscription {
 	changeAt := fixedNow.Add(-time.Hour)
 	period := domain.PeriodMonth
 	validUntil := fixedNow.AddDate(0, 1, 0)
 	return domain.Subscription{
-		ID:                    subID,
-		UserID:                userID,
-		TariffID:              tariffID,
-		Source:                domain.SubscriptionSourcePaid,
-		Status:                domain.SubscriptionStatusActive,
-		ValidUntil:            &validUntil,
-		AutoRenewEnabled:      true,
-		ActivePaymentMethodID: methodID,
-		PendingTariffID:       &pendingTariffID,
-		PendingChangeAt:       &changeAt,
-		PendingPeriod:         &period,
+		ID:               subID,
+		UserID:           userID,
+		TariffID:         tariffID,
+		Source:           domain.SubscriptionSourcePaid,
+		Status:           domain.SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+		PendingTariffID:  &pendingTariffID,
+		PendingChangeAt:  &changeAt,
+		PendingPeriod:    &period,
 	}
 }
 
@@ -7395,7 +7394,7 @@ func TestBilling_ProcessScheduledChanges_NoChargeApplies(t *testing.T) {
 
 	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
 	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
-	d.addSubscription(scheduledChangeSubscription(userID, subID, proID, basicID, nil))
+	d.addSubscription(scheduledChangeSubscription(userID, subID, proID, basicID))
 
 	count, err := d.service.ScheduledChanges.ProcessScheduledChanges(context.Background(), fixedNow)
 	if err != nil {
@@ -7446,7 +7445,7 @@ func TestBilling_ProcessScheduledChanges_AppliesOnceAndNotAgain(t *testing.T) {
 	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
 
 	// (a) due row: pending_change_at <= now, must be applied.
-	d.addSubscription(scheduledChangeSubscription(userA, subA, proID, basicID, nil))
+	d.addSubscription(scheduledChangeSubscription(userA, subA, proID, basicID))
 
 	// (c) future row: pending_change_at > now, must be left untouched.
 	futureChangeAt := fixedNow.Add(24 * time.Hour)
@@ -7535,10 +7534,10 @@ func TestBilling_ProcessScheduledChanges_PaidDowngradeSkippedForRenewalCharge(t 
 	d.addTariff(domain.Tariff{ID: businessID, Name: domain.TariffBusiness, ActivePropertyLimit: 100, MonthlyPriceKopecks: 15000, YearlyPriceKopecks: 150000})
 
 	// (a) paid monthly pending period: skipped because the monthly price > 0.
-	d.addSubscription(scheduledChangeSubscription(userA, subA, businessID, proID, nil))
+	d.addSubscription(scheduledChangeSubscription(userA, subA, businessID, proID))
 
 	// (b) paid yearly pending period: skipped because the yearly price > 0.
-	yearSub := scheduledChangeSubscription(userB, subB, businessID, proID, nil)
+	yearSub := scheduledChangeSubscription(userB, subB, businessID, proID)
 	yearPeriod := domain.PeriodYear
 	yearSub.PendingPeriod = &yearPeriod
 	d.addSubscription(yearSub)
@@ -7897,7 +7896,7 @@ func TestBilling_ProcessScheduledChanges_PendingTariffNotFound_ErrTariffNotFound
 
 	d.addTariff(domain.Tariff{ID: basicID, Name: domain.TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 0})
 	d.addTariff(domain.Tariff{ID: proID, Name: domain.TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000})
-	d.addSubscription(scheduledChangeSubscription(userID, subID, basicID, missingTariffID, nil))
+	d.addSubscription(scheduledChangeSubscription(userID, subID, basicID, missingTariffID))
 
 	// The top-level ProcessScheduledChange swallows per-item errors and logs
 	// them, so we exercise the missing-pending-tariff branch directly.

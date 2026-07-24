@@ -48,7 +48,7 @@ export function PropertyLeaseCard({
 
     return (
         <PropertyDetailSection>
-            <SectionHeader title="Аренда" href={ROUTES.propertyLeases(propertyId)}/>
+            <SectionHeader title="Аренда" href={lease ? ROUTES.lease(lease.id) : ROUTES.propertyLeases(propertyId)}/>
 
             {lease ? (
                 <NextLink href={ROUTES.lease(lease.id)} className={styles.card}>

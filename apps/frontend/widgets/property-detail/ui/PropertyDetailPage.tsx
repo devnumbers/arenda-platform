@@ -258,6 +258,7 @@ export function PropertyDetailPage(): JSX.Element {
                     <PropertyOperationsSection
                         propertyId={id}
                         title="Просроченные операции"
+                        href={`${ROUTES.financeOperations}?property_id=${id}&status=overdue&period=all`}
                         emptyText="Просроченных операций нет"
                         filters={overdueFilters}
                         badge={overdueCount > 0 ? <OverdueOperationsBadge count={overdueCount}/> : undefined}
@@ -266,6 +267,7 @@ export function PropertyDetailPage(): JSX.Element {
                     <PropertyOperationsSection
                         propertyId={id}
                         title="Запланированные операции"
+                        href={`${ROUTES.financeOperations}?property_id=${id}&status=pending&period=all`}
                         emptyText="Запланированных операций нет"
                         filters={upcomingFilters}
                     />
@@ -276,7 +278,7 @@ export function PropertyDetailPage(): JSX.Element {
                     />
 
                     <PropertyOperationsCard
-                        propertyName={property.name}
+                        propertyId={id}
                         summary={summaryQuery.data}
                     />
 

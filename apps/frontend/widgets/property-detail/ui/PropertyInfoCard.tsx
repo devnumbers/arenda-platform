@@ -3,6 +3,7 @@
 import type {JSX} from 'react';
 import {LinkButton} from '@/shared/ui/link-button';
 import {ROUTES} from '@/shared/config/routes';
+import {SectionHeader} from '@/widgets/dashboard/ui/SectionHeader';
 import {PropertyDetailSection} from './PropertyDetailSection';
 import styles from './PropertyInfoCard.module.css';
 
@@ -19,7 +20,7 @@ export function PropertyInfoCard({
                                  }: PropertyInfoCardProps): JSX.Element {
     return (
         <PropertyDetailSection>
-            <h2 className={styles.title}>Информация об объекте</h2>
+            <SectionHeader title="Информация об объекте"/>
 
             {description ? (
                 <p className={styles.description}>{description}</p>
