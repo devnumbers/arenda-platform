@@ -5,8 +5,6 @@ export type LeasePaymentInput = {
   payment_day: number;
 };
 
-export type PaymentCountdown = { kind: 'future' | 'today'; days: number };
-
 /** Количество дней в месяце (monthIndex0: 0..11). */
 export function lastDayOfMonth(year: number, monthIndex0: number): number {
   return new Date(year, monthIndex0 + 1, 0).getDate();
@@ -161,30 +159,6 @@ export function progressToPaymentDate(
   }
   const ratio = (today.getTime() - periodStart.getTime()) / (t.getTime() - periodStart.getTime());
   return Math.min(1, Math.max(0, ratio));
-}
-
-/** Обратный отсчёт до ближайшей оплаты. */
-export function paymentCountdown(
-  input: LeasePaymentInput,
-  now: Date = new Date(),
-): PaymentCountdown {
-  const today = startOfDay(now);
-  const target = nextPaymentDate(input, today);
-  const days = diffDays(today, target);
-
-  if (days === 0) {
-    return { kind: 'today', days: 0 };
-  }
-
-  return { kind: 'future', days };
-}
-
-/** 'Сегодня' или 'через N дн.'. */
-export function formatPaymentCountdown(c: PaymentCountdown): string {
-  if (c.kind === 'today') {
-    return 'Сегодня';
-  }
-  return `через ${c.days} дн.`;
 }
 
 /** 'просрочено N дн.'. */

@@ -1,8 +1,9 @@
 'use client';
 
 import type { JSX } from 'react';
+import clsx from 'clsx';
 import { Icon } from '@/shared/ui/icon';
-import { Good } from '@/shared/assets/icons';
+import { Good, BadgeInfo } from '@/shared/assets/icons';
 import type { components } from '@/shared/api/generated';
 import styles from './StatusBadge.module.css';
 
@@ -22,9 +23,9 @@ const statusLabels: Record<LeaseStatus, string> = {
 
 export function StatusBadge({ status }: StatusBadgeProps): JSX.Element {
   return (
-    <span className={styles.root}>
+    <span className={clsx(styles.root, status === 'awaiting_start' && styles.awaitingStart)}>
       <Icon size="s">
-        <Good />
+        {status === 'awaiting_start' ? <BadgeInfo /> : <Good />}
       </Icon>
       <span className={styles.label}>{statusLabels[status] ?? statusLabels.active}</span>
     </span>

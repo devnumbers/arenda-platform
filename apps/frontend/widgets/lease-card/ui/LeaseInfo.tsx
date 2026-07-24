@@ -3,12 +3,12 @@
 import type {JSX} from 'react';
 import clsx from 'clsx';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
+import {formatCountdownLabel} from '@/shared/lib/format-countdown';
 import {
     currentMonthIndex,
     diffDays,
     formatLeaseMonthOrdinal,
     formatOverdue,
-    formatPaymentCountdown,
     parseLocalDate,
     progressToPaymentDate,
     startOfDay,
@@ -35,6 +35,7 @@ export type LeaseInfoLease = Pick<
     | 'has_overdue'
     | 'overdue_since'
     | 'next_payment_date'
+    | 'status'
 > & {
     readonly tenant_contact?: {readonly name: string} | null;
 };
@@ -62,13 +63,15 @@ export function LeaseInfo({
         progressTone = 'danger';
     } else if (lease.next_payment_date) {
         const days = diffDays(today, parseLocalDate(lease.next_payment_date));
-        if (days === 0) {
-            paymentLabel = 'Сегодня';
-            progressRatio = 1;
+        const label = days === 0 ? 'Сегодня' : formatCountdownLabel(days);
+        if (lease.status === 'awaiting_start') {
+            paymentLabel = `Начнётся ${label.toLowerCase()}`;
         } else {
-            paymentLabel = formatPaymentCountdown({kind: 'future', days});
-            progressRatio = progressToPaymentDate(input, parseLocalDate(lease.next_payment_date), now);
+            paymentLabel = label;
         }
+        progressRatio = days === 0
+            ? 1
+            : progressToPaymentDate(input, parseLocalDate(lease.next_payment_date), now);
     } else {
         paymentLabel = 'Все оплачено';
         progressRatio = 1;
