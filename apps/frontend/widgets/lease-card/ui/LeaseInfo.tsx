@@ -9,8 +9,8 @@ import {
     diffDays,
     formatLeaseMonthOrdinal,
     formatOverdue,
+    monthPeriodProgress,
     parseLocalDate,
-    progressToPaymentDate,
     startOfDay,
 } from '@/shared/lib/lease-payment';
 import type {components} from '@/shared/api/generated';
@@ -71,7 +71,7 @@ export function LeaseInfo({
         }
         progressRatio = days === 0
             ? 1
-            : progressToPaymentDate(input, parseLocalDate(lease.next_payment_date), now);
+            : monthPeriodProgress(input, now);
     } else {
         paymentLabel = 'Все оплачено';
         progressRatio = 1;
@@ -106,7 +106,7 @@ export function LeaseInfo({
                 })}
                 <div
                     className={clsx(styles.marker, tone.marker)}
-                    style={{left: `calc(${progressRatio * 100}% - 6px)`}}
+                    style={{left: `calc(${progressRatio * 100}% - ${progressRatio * 12}px)`}}
                 />
             </div>
 

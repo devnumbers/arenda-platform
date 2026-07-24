@@ -136,31 +136,6 @@ export function monthPeriodProgress(
   return Math.min(1, Math.max(0, ratio));
 }
 
-/** Доля истечения периода перед реальной датой платежа (0..1).
- *  Начало периода — плановый день оплаты (payment_day) месяцем раньше target
- *  (или start_date, если он позже); конец — target. */
-export function progressToPaymentDate(
-  input: LeasePaymentInput,
-  target: Date,
-  now: Date = new Date(),
-): number {
-  const start = parseLocalDate(input.start_date);
-  const today = startOfDay(now);
-  const t = startOfDay(target);
-
-  const prevMonth = t.getMonth() === 0 ? 11 : t.getMonth() - 1;
-  const prevYear = t.getMonth() === 0 ? t.getFullYear() - 1 : t.getFullYear();
-  let periodStart = new Date(prevYear, prevMonth, clampDay(prevYear, prevMonth, input.payment_day));
-  if (start.getTime() > periodStart.getTime()) {
-    periodStart = start;
-  }
-  if (t.getTime() <= periodStart.getTime()) {
-    return 0;
-  }
-  const ratio = (today.getTime() - periodStart.getTime()) / (t.getTime() - periodStart.getTime());
-  return Math.min(1, Math.max(0, ratio));
-}
-
 /** 'просрочено N дн.'. */
 export function formatOverdue(days: number): string {
   return `просрочено ${days} дн.`;
