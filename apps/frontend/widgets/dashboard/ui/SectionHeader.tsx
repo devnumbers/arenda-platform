@@ -9,10 +9,21 @@ import styles from './SectionHeader.module.css';
 export type SectionHeaderProps = {
     readonly title: string;
     readonly count?: number;
-    readonly href: string;
+    readonly href?: string;
 };
 
 export function SectionHeader({title, count, href}: SectionHeaderProps): JSX.Element {
+    if (!href) {
+        return (
+            <div className={styles.root}>
+                <h2 className={styles.title}>
+                    {title}
+                    {count !== undefined && <span className={styles.count}> {count}</span>}
+                </h2>
+            </div>
+        );
+    }
+
     return (
         <NextLink href={href} className={styles.root}>
             <h2 className={styles.title}>

@@ -23,12 +23,11 @@ export function PropertyTenantCard({
     }
 
     const tenant = lease.tenantContact;
-    const leaseHref = ROUTES.lease(lease.id);
     const leaseEditHref = `${ROUTES.leaseEdit(lease.id)}?${RETURN_TO_PARAM}=${encodeURIComponent(ROUTES.property(lease.propertyId))}`;
 
     return (
         <PropertyDetailSection>
-            <SectionHeader title="Арендатор" href={leaseHref}/>
+            <SectionHeader title="Арендатор" href={tenant ? ROUTES.tenant(tenant.id) : ROUTES.tenants}/>
 
             {tenant ? (
                 <div className={styles.card}>

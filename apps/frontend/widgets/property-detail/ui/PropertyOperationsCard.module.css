@@ -1,24 +1,3 @@
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.title {
-  margin: 0;
-  font-size: var(--font-size-text-l);
-  font-weight: 600;
-  line-height: var(--line-height-text-l);
-  color: var(--color-text);
-}
-
-.propertyName {
-  font-size: var(--font-size-text-m);
-  line-height: var(--line-height-text-m);
-  color: var(--color-text-muted);
-}
-
 .card {
   position: relative;
   display: flex;
