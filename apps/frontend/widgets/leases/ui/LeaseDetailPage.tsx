@@ -17,6 +17,7 @@ import {PageHeader} from '@/shared/ui/page-header';
 import {PropertyDetailSection} from '@/widgets/property-detail';
 import {OperationListItem} from '@/widgets/operations/ui/OperationListItem';
 import {StatusBadge} from '@/widgets/dashboard/ui/StatusBadge';
+import {SectionHeader} from '@/widgets/dashboard/ui/SectionHeader';
 import {FinanceLoading} from '@/widgets/finance/ui/FinanceLoading';
 import {FinanceErrorState} from '@/widgets/finance/ui/FinanceErrorState';
 import {LeaseDetailLoading} from './LeaseDetailLoading';
@@ -50,7 +51,7 @@ function TenantCard({
     if (!tenantContact) {
         return (
             <PropertyDetailSection>
-                <h2 className={styles.sectionTitle}>Арендатор</h2>
+                <SectionHeader title="Арендатор" href={ROUTES.tenants}/>
                 <div className={styles.card}>
                     <p className={styles.emptyText}>Арендатор не указан</p>
                 </div>
@@ -62,7 +63,7 @@ function TenantCard({
 
     return (
         <PropertyDetailSection>
-            <h2 className={styles.sectionTitle}>Арендатор</h2>
+            <SectionHeader title="Арендатор" href={ROUTES.tenant(tenantContact.id)}/>
             <NextLink
                 href={ROUTES.tenant(tenantContact.id)}
                 className={styles.card}
@@ -87,7 +88,7 @@ function TermsCard({lease}: { readonly lease: LeaseResponse }): JSX.Element {
 
     return (
         <PropertyDetailSection>
-            <h2 className={styles.sectionTitle}>Условия аренды</h2>
+            <SectionHeader title="Условия аренды"/>
             <div className={styles.card}>
                 <div className={styles.detailRow}>
                     <dt className={styles.detailLabel}>Начало аренды</dt>
@@ -152,7 +153,7 @@ function OperationsSection({
     if (isLoading) {
         return (
             <PropertyDetailSection>
-                <h2 className={styles.sectionTitle}>Арендная плата</h2>
+                <SectionHeader title="Арендная плата"/>
                 <div className={styles.card}>
                     <FinanceLoading/>
                 </div>
@@ -163,7 +164,7 @@ function OperationsSection({
     if (isError) {
         return (
             <PropertyDetailSection>
-                <h2 className={styles.sectionTitle}>Арендная плата</h2>
+                <SectionHeader title="Арендная плата"/>
                 <div className={styles.card}>
                     <p className={styles.emptyText}>
                         Не удалось загрузить арендные операции.
@@ -185,7 +186,7 @@ function OperationsSection({
     if (operations.length === 0) {
         return (
             <PropertyDetailSection>
-                <h2 className={styles.sectionTitle}>Арендная плата</h2>
+                <SectionHeader title="Арендная плата"/>
                 <div className={styles.card}>
                     <p className={styles.emptyText}>Арендных операций пока нет</p>
                 </div>
@@ -195,7 +196,7 @@ function OperationsSection({
 
     return (
         <PropertyDetailSection>
-            <h2 className={styles.sectionTitle}>Арендная плата</h2>
+            <SectionHeader title="Арендная плата"/>
             <ul className={styles.operationsList}>
                 {operations.map((operation) => (
                     <li key={operation.id}>
