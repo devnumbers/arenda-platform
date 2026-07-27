@@ -34,8 +34,8 @@ seed_data:
   delete: false
   users:
     - key: user1
-      name: Admin
-      email: admin@rentlee.ru
+      name: Владелец
+      email: smirnowwwivan@mail.ru
       password: ${UPTRACE_ADMIN_PASSWORD}
       email_confirmed: true
   orgs:
@@ -110,10 +110,16 @@ ch_schema:
 ##       metrics: 30 DAY
 ##       logs: 30 DAY
 
-## Telegram bot token from @BotFather; alert routing is done in the UI
-## (Alerting → Channels). Leave empty until the bot is created.
-telegram:
-  bot_token: ${UPTRACE_TELEGRAM_BOT_TOKEN:}
+## Email alerts via SMTP (Yandex). Credentials come from .env.obs;
+## alert routing is done in the UI (Alerting → Channels → Email).
+mailer:
+  smtp:
+    enabled: true
+    host: ${SMTP_HOST}
+    port: ${SMTP_PORT}
+    username: ${SMTP_USER}
+    password: ${SMTP_PASS}
+    from: ${SMTP_FROM}
 
 logging:
   # DEBUG, INFO, WARN, ERROR.

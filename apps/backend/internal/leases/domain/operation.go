@@ -49,10 +49,11 @@ const (
 type OperationStatus string
 
 const (
-	OperationStatusPending  OperationStatus = "pending"
-	OperationStatusOverdue  OperationStatus = "overdue"
-	OperationStatusPaid     OperationStatus = "paid"
-	OperationStatusReceived OperationStatus = "received"
+	OperationStatusPending     OperationStatus = "pending"
+	OperationStatusOverdue     OperationStatus = "overdue"
+	OperationStatusPaid        OperationStatus = "paid"
+	OperationStatusReceived    OperationStatus = "received"
+	OperationStatusUnconfirmed OperationStatus = "unconfirmed"
 )
 
 var ErrInvalidOperationStatus = errors.New("invalid operation status")
@@ -70,7 +71,8 @@ func (s OperationStatus) Valid() bool {
 	case OperationStatusPending,
 		OperationStatusOverdue,
 		OperationStatusPaid,
-		OperationStatusReceived:
+		OperationStatusReceived,
+		OperationStatusUnconfirmed:
 		return true
 	}
 	return false
@@ -81,16 +83,18 @@ func (s OperationStatus) IsCompleted() bool {
 	switch s {
 	case OperationStatusPaid, OperationStatusReceived:
 		return true
-	case OperationStatusPending, OperationStatusOverdue:
+	case OperationStatusPending, OperationStatusOverdue, OperationStatusUnconfirmed:
 		return false
 	}
 	return false
 }
 
 // CanComplete reports whether the operation may be marked as completed.
+// Unconfirmed (backdated) operations are completed explicitly, just like
+// pending and overdue ones.
 func (s OperationStatus) CanComplete() bool {
 	switch s {
-	case OperationStatusPending, OperationStatusOverdue:
+	case OperationStatusPending, OperationStatusOverdue, OperationStatusUnconfirmed:
 		return true
 	case OperationStatusPaid, OperationStatusReceived:
 		return false
@@ -122,8 +126,8 @@ func (o Operation) ValidateStatusForType() error {
 		if o.Type != OperationTypeIncome {
 			return ErrStatusReceivedRequiresIncome
 		}
-	case OperationStatusPending, OperationStatusOverdue:
-		// Pending and overdue statuses carry no operation-type constraint.
+	case OperationStatusPending, OperationStatusOverdue, OperationStatusUnconfirmed:
+		// Pending, overdue, and unconfirmed statuses carry no operation-type constraint.
 	}
 	return nil
 }

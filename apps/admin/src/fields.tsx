@@ -89,6 +89,7 @@ export const operationTypeChoices: Choice[] = [
 ];
 
 export const operationStatusChoices: Choice[] = [
+  { id: 'unconfirmed', name: 'Не подтверждена' },
   { id: 'pending', name: 'Ожидает' },
   { id: 'overdue', name: 'Просрочена' },
   { id: 'paid', name: 'Оплачена' },

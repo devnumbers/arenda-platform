@@ -1,8 +1,8 @@
 import type { components } from '@/shared/api/generated';
+import type { OperationStatus } from '@/entities/operation/model/types';
 
 type OperationsResponse = components['schemas']['OperationsResponse'];
 type OperationResponse = components['schemas']['OperationResponse'];
-type OperationStatus = components['schemas']['OperationStatus'];
 
 type IncomeExpense = {
   readonly incomeKopecks: number;
@@ -27,8 +27,15 @@ export type AggregateResult = {
  * Backward compatibility: older responses may not contain `status`.
  * Such operations are treated as actual (paid/received) so the dashboard
  * keeps showing already-completed amounts instead of silently dropping them.
+ *
+ * `unconfirmed` operations (created retroactively, awaiting user confirmation)
+ * do not participate in financial totals and are skipped entirely.
  */
-function getOperationBucket(status: OperationStatus | undefined): 'actual' | 'pending' {
+function getOperationBucket(status: OperationStatus | undefined): 'actual' | 'pending' | null {
+  if (status === 'unconfirmed') {
+    return null;
+  }
+
   if (status === 'pending' || status === 'overdue') {
     return 'pending';
   }
@@ -54,6 +61,7 @@ export function aggregateOperations(
   for (const response of operationsList) {
     for (const operation of response.items) {
       const bucket = getOperationBucket(operation.status);
+      if (bucket === null) continue;
       addOperationToBucket(bucket === 'actual' ? actual : pending, operation);
     }
   }

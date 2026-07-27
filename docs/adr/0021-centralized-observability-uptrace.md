@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Accepted (amended 2026-07-24: Telegram replaced with email alerts; resource
+limits raised after the host upgrade: clickhouse 3 GiB / 2 CPU, uptrace
+512 MiB)
 
 ## Context
 
@@ -32,7 +34,7 @@ modest (5.8 GB RAM, an upgrade to ~8-10 GB approved by the owner).
 ## Decision
 
 We run **Uptrace self-hosted** (AGPLv3) on the same VPS: logs, traces, and
-metrics in a single UI with native Telegram alerts. The stack is a separate
+metrics in a single UI with email alerts. The stack is a separate
 compose project `arenda-obs` (`docker-compose.obs.yml` + the
 `observability/` directory in the repository); on the server it is deployed
 from `/opt/arenda/obs` — outside the stage/prod checkouts, which are cleaned
@@ -65,8 +67,9 @@ Components and data flows:
   truncation, sanitization, dedicated rate limit, no DB writes) — the
   backend logs them to stdout, from where they take the usual path through
   Vector.
-- **Alerts**: Uptrace's native Telegram channel; the bot token and chat id
-  are configured in the UI and are not stored in the repository.
+- **Alerts**: email alerts via SMTP (`mailer.smtp` in `uptrace.yml`); the
+  channel is configured in the UI, and the SMTP credentials are not stored
+  in the repository.
 - **UI access**: `https://logs.rentlee.ru` — Caddy `basic_auth` +
   `reverse_proxy 127.0.0.1:14318` (credentials live only in the server
   Caddyfile); fallback is an SSH tunnel to `127.0.0.1:14318`. The OTLP port
@@ -95,8 +98,7 @@ upgrade.
 ## Consequences
 
 - (+) Search and history across all logs, traces, and metrics in one UI;
-  Telegram alerts; log ↔ trace correlation via real OTel
-  `trace_id`/`span_id`.
+  email alerts; log ↔ trace correlation via real OTel `trace_id`/`span_id`.
 - AGPLv3 accepted: internal self-hosted use, no distribution, no service
   offered to third parties.
 - The shared host gains +6 containers with ~2.1 GB RAM limits.

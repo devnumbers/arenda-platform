@@ -2,19 +2,19 @@
 
 Централизованная наблюдаемость Arenda Platform на production VPS: логи всех
 контейнеров, access-логи Caddy, трейсы и метрики backend, метрики хоста и
-контейнеров, алерты в Telegram. Решение зафиксировано в ADR:
+контейнеров, алерты на email. Решение зафиксировано в ADR:
 `docs/adr/0021-centralized-observability-uptrace.md`.
 
 Стек (compose-проект `arenda-obs`, `docker-compose.obs.yml`):
 
-| Сервис      | Образ                                        | Назначение                          | Лимиты        |
-|-------------|----------------------------------------------|-------------------------------------|---------------|
-| `clickhouse`| clickhouse/clickhouse-server:25.8.28.1       | телеметрия (спаны, логи, метрики)   | 1536m / 1.0 cpu |
-| `uptrace-pg`| postgres:18                                  | метаданные Uptrace                  | 256m / 0.5    |
-| `redis`     | redis:8.2.7-alpine                           | кэш Uptrace (обязателен для 2.0.3)  | 96m / 0.25    |
-| `uptrace`   | uptrace/uptrace:2.0.3                        | UI :14318 + OTLP :14317             | 384m / 0.5    |
-| `vector`    | timberio/vector:0.57.0-alpine                | сбор и отправка логов               | 128m / 0.25   |
-| `otelcol`   | otel/opentelemetry-collector-contrib:0.156.0 | метрики хоста и контейнеров         | 256m / 0.25   |
+| Сервис      | Образ                                        | Назначение                          | Лимиты          |
+|-------------|----------------------------------------------|-------------------------------------|-----------------|
+| `clickhouse`| clickhouse/clickhouse-server:25.8.28.1       | телеметрия (спаны, логи, метрики)   | 3072m / 2.0 cpu |
+| `uptrace-pg`| postgres:18                                  | метаданные Uptrace                  | 256m / 0.5      |
+| `redis`     | redis:8.2.7-alpine                           | кэш Uptrace (обязателен для 2.0.3)  | 96m / 0.25      |
+| `uptrace`   | uptrace/uptrace:2.0.3                        | UI :14318 + OTLP :14317             | 512m / 0.5      |
+| `vector`    | timberio/vector:0.57.0-alpine                | сбор и отправка логов               | 128m / 0.25     |
+| `otelcol`   | otel/opentelemetry-collector-contrib:0.156.0 | метрики хоста и контейнеров         | 256m / 0.25     |
 
 Потоки данных:
 
@@ -45,7 +45,7 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
 
 - Тот же VPS, где развёрнуты stage и prod (`/opt/arenda/stage`,
   `/opt/arenda/prod`).
-- +3 ГБ свободной RAM под стек (лимиты суммарно ~2.6 ГБ; хост после апгрейда ~7.9 ГБ).
+- +4.5 ГБ свободной RAM под стек (лимиты суммарно ~4.3 ГБ; хост после апгрейда ~9.7 ГБ).
 - Docker + Docker Compose v2.
 - DNS A-запись `logs.rentlee.ru` → IP сервера (добавляет владелец).
 
@@ -105,7 +105,7 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
 
 - UI: `https://logs.rentlee.ru` (после настройки Caddy, см. ниже) или
   `http://127.0.0.1:14318` на самом сервере.
-- Логин: `admin@rentlee.ru`, пароль: значение `UPTRACE_ADMIN_PASSWORD`.
+- Логин: `smirnowwwivan@mail.ru`, пароль: значение `UPTRACE_ADMIN_PASSWORD`.
   Пользователь и проекты создаются из `observability/uptrace.yml` при первом
   старте (секция `seed_data`). Смените пароль в UI после первого входа.
 - Проекты: `Arenda` (все данные платформы) и `Uptrace` (самомониторинг).
@@ -121,20 +121,22 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
   - `/opt/arenda/stage/.env.stage` и `/opt/arenda/prod/.env.prod` →
     `OTEL_EXPORTER_OTLP_HEADERS=uptrace-dsn=<то же значение>` (см. ниже).
 
-## Telegram-алерты
+## Email-алерты
 
-1. Создать бота: в Telegram открыть `@BotFather` → `/newbot` → получить
-   токен вида `123456:ABC...`.
-2. Добавить токен в `.env.obs`: `UPTRACE_TELEGRAM_BOT_TOKEN=<токен>` и
-   пересоздать стек: `docker compose -f docker-compose.obs.yml --env-file .env.obs up -d`.
-3. Узнать chat id: написать боту любое сообщение (или добавить его в группу),
-   открыть `https://api.telegram.org/bot<ТОКЕН>/getUpdates` → `chat.id`
-   (у групп — отрицательное число).
-4. В UI Uptrace: **Alerting → Channels → New channel → Telegram**, указать
-   chat id. Документация: https://uptrace.dev/features/alerting/notifications.html
-   Если api.telegram.org недоступен с сервера (блокировки РФ) — мониторы
-   работают и без канала уведомлений: срабатывания видны в UI; канал можно
-   добавить позже (прокси/VPN).
+Алерты отправляются по SMTP (Yandex): секция `mailer.smtp` в
+`observability/uptrace.yml`, секреты — в `.env.obs` (см. `.env.obs.example`).
+
+1. Заполнить SMTP в `.env.obs`: `SMTP_HOST` / `SMTP_PORT` (для Yandex —
+   `smtp.yandex.ru` / `465`), `SMTP_USER`, `SMTP_PASS` — пароль приложения
+   Яндекса (Яндекс ID → Безопасность → Пароли приложений), `SMTP_FROM` —
+   адрес отправителя (как правило, тот же ящик, что и `SMTP_USER`).
+2. Пересоздать стек после правки `.env.obs`:
+   `docker compose -f docker-compose.obs.yml --env-file .env.obs up -d`.
+3. В UI Uptrace создать канал: **Alerting → Channels → New channel →
+   Email**, указать адрес получателя `smirnowwwivan@mail.ru`. Документация:
+   https://uptrace.dev/features/alerting/notifications.html
+4. Привязать канал ко всем мониторам (канал указывается при создании
+   монитора или в его настройках).
 5. Создать мониторы **в проекте Arenda**: **Alerting → Monitors → New
    monitor → From YAML**, привязать канал. ВАЖНО: YAML-схема мониторов
    2.0.3 отличается от uptrace.dev — `detector: {type: manual, max_value}`
@@ -144,12 +146,13 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
    `flapping:`, `detectors:`). API 2.0.3 для автоматизации: создание
    `POST /internal/v1/projects/{pid}/monitors/yaml` (Content-Type:
    application/yaml), список `GET .../monitors`, обновление `PUT
-   .../monitors/{id}` полным JSON (PUT /yaml → 405). Стартовый набор:
+   .../monitors/{id}` полным JSON (PUT /yaml → 405). Стартовый набор
+   (русские имена `name:` — эталон для UI):
 
    ```yaml
    # Доля упавших HTTP-запросов (5xx/panic) по трейсам backend
    monitors:
-     - name: Failed HTTP requests
+     - name: Ошибки HTTP-запросов (5xx)
        type: metric
        metrics:
          - uptrace_tracing_spans as $spans
@@ -163,7 +166,7 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
    ```yaml
    # Всплеск error-логов (любой сервис: backend, caddy, фронты)
    monitors:
-     - name: Error logs spike
+     - name: Всплеск error-логов
        type: metric
        metrics:
          - uptrace_tracing_logs as $logs
@@ -180,7 +183,7 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
    # подчёркиванием _display_name движок отвергает: "unsupported attr") —
    # синтаксис проверен на 2.0.3 на боевом сервере.
    monitors:
-     - name: PanicDetected
+     - name: Паника backend
        type: error
        query:
          - group by _group_id
@@ -191,7 +194,7 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
    ```yaml
    # Недоступность stage/prod (cron healthcheck.sh)
    monitors:
-     - name: HealthcheckFailed
+     - name: Недоступность сервисов (healthcheck)
        type: error
        query:
          - group by _group_id
@@ -203,7 +206,7 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
    # Диск хоста > 85%. Обёртки sum() обязательны — без агрегата запрос
    # даёт no-data; host_name у метрик otelcol нет — группировка по mountpoint.
    monitors:
-     - name: Filesystem usage
+     - name: Диск заполнен >85%
        type: metric
        metrics:
          - system_filesystem_usage as $fs_usage
@@ -218,7 +221,7 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
    ```yaml
    # RAM хоста > 90%
    monitors:
-     - name: Memory usage
+     - name: Память хоста >90%
        type: metric
        metrics:
          - system_memory_usage as $mem
@@ -231,7 +234,7 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
    ```yaml
    # Средняя загрузка CPU хоста
    monitors:
-     - name: CPU usage
+     - name: Высокая загрузка CPU
        type: metric
        metrics:
          - system_cpu_load_average_15m as $load_avg_15m
@@ -248,7 +251,7 @@ UI доступен только на `127.0.0.1:14318`; наружу — чер
    # Точные имена метрик docker_stats смотрите в UI (Metrics explorer):
    # container.memory.usage.* -> container_memory_usage_*
    monitors:
-     - name: Container memory limit
+     - name: Контейнер у лимита памяти
        type: metric
        metrics:
          - container_memory_usage_total as $mem_used
@@ -331,7 +334,7 @@ ls -l /var/log/caddy/access.log   # должен появиться после �
 
 Проверка `/healthz` обоих backend и spider фронтов раз в минуту; сбой пишет
 JSON-строку в `/var/log/arenda/healthcheck.log` (далее Vector → Uptrace →
-монитор HealthcheckFailed):
+монитор «Недоступность сервисов (healthcheck)»):
 
 ```bash
 sudo install -m 0755 /opt/arenda/obs/observability/healthcheck.sh /opt/arenda/obs/healthcheck.sh
@@ -367,7 +370,7 @@ cd /opt/arenda/prod  && docker compose -f docker-compose.prod.yml up -d
    сервисы `healthy` (otelcol — `running`, healthcheck у него нет: образ
    distroless без shell; процесс под контролем restart-политики).
 2. UI `https://logs.rentlee.ru` открывается, пускает под basic auth и логином
-   `admin@rentlee.ru`.
+   `smirnowwwivan@mail.ru`.
 3. **Logs** (в UI 2.0.3 логи живут в разделе **Traces**, путь `/spans`, а не
    `/logs`): логи backend с `deployment_environment_name=stage`/`prod`,
    `service_name=backend`; access-логи `service_name=caddy`; сбои
@@ -376,8 +379,8 @@ cd /opt/arenda/prod  && docker compose -f docker-compose.prod.yml up -d
 5. **Metrics**: `system_cpu_*`, `system_memory_*`, `system_filesystem_*`,
    `container_*` (auto-дашборды Uptrace создаются самостоятельно).
 6. Тестовый алерт: остановить любой фронт (`docker stop <container>`) → через
-   минуту в Telegram приходит HealthcheckFailed; вернуть контейнер —
-   приходит recovery.
+   минуту на почту приходит алерт «Недоступность сервисов (healthcheck)»;
+   вернуть контейнер — приходит recovery.
 
 ## Доступ к UI
 
@@ -389,7 +392,7 @@ cd /opt/arenda/prod  && docker compose -f docker-compose.prod.yml up -d
 
 - **`clickhouse` не стартует / падает:** смотреть
   `docker compose ... logs clickhouse`. Частые причины: нехватка RAM
-  (лимит 1536m, хосту нужен запас), повреждённый volume после жёсткого ребута.
+  (лимит 3072m, хосту нужен запас), повреждённый volume после жёсткого ребута.
 - **`uptrace` в restart-loop:** `logs uptrace`. Ошибки YAML в
   `observability/uptrace.yml` (отступы!), пустые `${...}` — не заполнен
   `.env.obs` или стек запущен без `--env-file .env.obs`. Ошибки auth к БД —
@@ -427,7 +430,9 @@ cd /opt/arenda/prod  && docker compose -f docker-compose.prod.yml up -d
   docker.sock — otelcol должен идти с `user: "0"` (по умолчанию так и есть)
   либо удалите `user` и добавьте `group_add: ["<GID docker-группы хоста>"]`
   (`getent group docker`).
-- **Telegram молчит:** `UPTRACE_TELEGRAM_BOT_TOKEN` добавлен и стек
-  пересоздан; chat id верный (у групп — с минусом); канал привязан к монитору.
+- **Почта не приходит:** смотреть `docker compose ... logs uptrace` — ошибки
+  mailer/SMTP (auth, TLS) видны сразу. Порт 465 — implicit TLS; если
+  провайдер требует STARTTLS — порт 587. Проверить креды в `.env.obs` (для
+  Yandex — пароль приложения) и что канал привязан к монитору.
 - **Смена `ch_schema`/TTL:** требует `docker compose ... exec uptrace /uptrace ch reset`
   — удаляет все телеметрические данные (метаданные в PostgreSQL сохраняются).

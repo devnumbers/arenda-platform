@@ -14,8 +14,8 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:25.8.28.1
     restart: unless-stopped
-    mem_limit: 1536m
-    cpus: 1.00
+    mem_limit: 3072m
+    cpus: 2.00
     logging: *default-logging
     environment:
       CLICKHOUSE_DB: uptrace
@@ -73,7 +73,7 @@ services:
   uptrace:
     image: uptrace/uptrace:2.0.3
     restart: unless-stopped
-    mem_limit: 384m
+    mem_limit: 512m
     cpus: 0.50
     logging: *default-logging
     env_file: *obs-env-file

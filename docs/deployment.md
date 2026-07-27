@@ -270,8 +270,9 @@ esac
   `basic_auth` (bcrypt-хэш, учётка хранится только в Caddyfile на сервере) +
   `reverse_proxy 127.0.0.1:14318`. DNS A-запись добавляет владелец. Запасной
   доступ — SSH-туннель `ssh -L 14318:127.0.0.1:14318 <server>`.
-- Алерты в Telegram настраиваются нативно в UI Uptrace; токен бота и chat id
-  в репо не хранятся.
+- Алерты на email отправляются через SMTP (секция `mailer.smtp` в
+  `observability/uptrace.yml`, креды — в `.env.obs`); канал и получатели
+  настраиваются в UI Uptrace (Alerting → Channels), в репо не хранятся.
 
 Команды на сервере в `/opt/arenda/obs` (Makefile туда не копируется — прямые
 вызовы compose, как в `observability/README.md`):

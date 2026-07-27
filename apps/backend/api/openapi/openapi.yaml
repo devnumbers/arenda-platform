@@ -4135,7 +4135,7 @@ components:
 
     OperationStatus:
       type: string
-      enum: [pending, overdue, paid, received]
+      enum: [pending, overdue, paid, received, unconfirmed]
 
     OperationListSort:
       type: string
