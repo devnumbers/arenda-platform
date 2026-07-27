@@ -1,0 +1,8 @@
+-- Rows already in 'unconfirmed' status violate the narrowed constraint and
+-- must be resolved before the status check constraint is narrowed back.
+ALTER TABLE operations
+    DROP CONSTRAINT IF EXISTS operations_status_check;
+
+ALTER TABLE operations
+    ADD CONSTRAINT operations_status_check
+        CHECK (status IN ('pending', 'overdue', 'paid', 'received'));

@@ -76,9 +76,12 @@ func (r *RentService) GenerateRentOperations(
 	return ops, nil
 }
 
+// rentOperationStatus returns the initial status for a generated rent operation:
+// past-dated operations start as unconfirmed and must be completed explicitly,
+// operations dated today or later start as pending.
 func rentOperationStatus(operationDate, today time.Time) domain.OperationStatus {
 	if timeutil.Date(operationDate).Before(timeutil.Date(today)) {
-		return domain.OperationStatusReceived
+		return domain.OperationStatusUnconfirmed
 	}
 	return domain.OperationStatusPending
 }

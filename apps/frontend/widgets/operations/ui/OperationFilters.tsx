@@ -260,13 +260,14 @@ const PERIOD_CHIPS: ReadonlyArray<{
 ];
 
 const STATUS_CHIPS: ReadonlyArray<{
-    readonly key: 'all' | 'pending' | 'overdue' | 'completed';
+    readonly key: 'all' | 'pending' | 'overdue' | 'completed' | 'unconfirmed';
     readonly label: string;
 }> = [
     {key: 'all', label: 'Все'},
     {key: 'pending', label: 'Запланирована'},
     {key: 'overdue', label: 'Просрочена'},
     {key: 'completed', label: 'Выполнена'},
+    {key: 'unconfirmed', label: 'Не подтверждена'},
 ];
 
 export function OperationFilters({

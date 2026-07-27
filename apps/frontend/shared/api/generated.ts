@@ -1767,7 +1767,7 @@ export interface components {
             name: string;
         };
         /** @enum {string} */
-        OperationStatus: "pending" | "overdue" | "paid" | "received";
+        OperationStatus: "pending" | "overdue" | "paid" | "received" | "unconfirmed";
         /**
          * @default operation_date_desc
          * @enum {string}

@@ -16,14 +16,17 @@ We need to support three business needs:
 
 ## Decision
 
-Introduce four statuses for an operation:
+Introduce five statuses for an operation:
 
 - `pending` — planned income or expense, not yet completed.
 - `overdue` — a `pending` operation whose date has passed and which is still not completed.
 - `paid` — a completed expense operation.
 - `received` — a completed income operation.
+- `unconfirmed` — a backdated operation created for a date in the past; it requires an explicit confirmation and never becomes `overdue` automatically.
 
 A newly created operation starts as `pending`. The owner completes an operation through an explicit action; the terminal status depends on the operation type (`paid` for expenses, `received` for income).
+
+An operation created with a past operation date — manually, by a recurring operation, or by lease rent generation — starts as `unconfirmed` instead of being silently completed. Such an operation is completed through the same explicit action as `pending`/`overdue` and is excluded from the overdue transition: only `pending` operations may become `overdue`, so a backdated operation never appears as overdue.
 
 A background worker scans `pending` operations whose date has passed and transitions them to `overdue`. This transition happens once per operation. When an operation becomes `overdue`, a reminder is created and delivered through the existing reminders subsystem, which handles retry, audit, and SMS notification.
 
@@ -31,6 +34,7 @@ A background worker scans `pending` operations whose date has passed and transit
 
 - The dashboard separates actual cash flow from planned or overdue obligations.
 - New operations are created as planned by default, so historical reporting does not treat them as completed automatically.
+- Backdated operations are visible as requiring confirmation instead of distorting realized cash flow with amounts the owner never confirmed.
 - Completing an operation is an explicit step, which better matches the owner’s workflow.
 - Overdue notifications reuse the existing reminder infrastructure, including retry and audit trails.
 - Recurring operations continue to generate `pending` operation instances for future dates.

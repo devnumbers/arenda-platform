@@ -164,7 +164,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		LeaseID:            leaseID,
 		Type:               opType,
 		CategoryID:         categoryID,
-		Status:             operationStatusForDate(opType, cmd.OperationDate, now),
+		Status:             operationStatusForDate(cmd.OperationDate, now),
 		Name:               name,
 		AmountKopecks:      cmd.AmountKopecks,
 		OperationDate:      cmd.OperationDate,
@@ -458,7 +458,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	return updated, nil
 }
 
-// CompleteOperation marks a pending or overdue operation as completed.
+// CompleteOperation marks a pending, overdue, or unconfirmed operation as completed.
 // Expenses become paid, income becomes received, and future reminders are cancelled.
 func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOperationCommand) (domain.Operation, error) {
 	tx, err := s.db.Begin(ctx)
@@ -784,14 +784,11 @@ func (s *OperationService) validateAmountAndDate(amount int64, operationDate tim
 }
 
 // operationStatusForDate returns the initial status for a newly created operation:
-// past-dated operations are immediately completed (paid for expense, received
-// for income), operations dated today or later start as pending.
-func operationStatusForDate(opType domain.OperationType, operationDate, today time.Time) domain.OperationStatus {
+// past-dated operations start as unconfirmed and must be completed explicitly,
+// operations dated today or later start as pending.
+func operationStatusForDate(operationDate, today time.Time) domain.OperationStatus {
 	if timeutil.Date(operationDate).Before(timeutil.Date(today)) {
-		if opType == domain.OperationTypeExpense {
-			return domain.OperationStatusPaid
-		}
-		return domain.OperationStatusReceived
+		return domain.OperationStatusUnconfirmed
 	}
 	return domain.OperationStatusPending
 }

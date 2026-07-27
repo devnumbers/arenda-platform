@@ -17,6 +17,7 @@ const STATUS_BADGE_ICON: Record<OperationStatus, ComponentType<SVGProps<SVGSVGEl
   overdue: BadgeDanger,
   paid: BadgeGood,
   received: BadgeGood,
+  unconfirmed: BadgeInfo,
 };
 
 export type OperationListItemProps = {

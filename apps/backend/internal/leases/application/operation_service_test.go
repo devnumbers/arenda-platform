@@ -196,3 +196,132 @@ func TestMarkOperationIncomplete_ArchivedPropertyGuard(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateOperation_BackdatedOperationStartsUnconfirmed(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	for _, tc := range []struct {
+		name          string
+		opType        string
+		categoryID    uuid.UUID
+		operationDate [3]int
+		want          domain.OperationStatus
+	}{
+		{name: "past expense is unconfirmed", opType: "expense", categoryID: testCustomExpenseCategoryID, operationDate: [3]int{2026, 6, 10}, want: domain.OperationStatusUnconfirmed},
+		{name: "past income is unconfirmed", opType: "income", categoryID: testCustomIncomeCategoryID, operationDate: [3]int{2026, 6, 10}, want: domain.OperationStatusUnconfirmed},
+		{name: "today is pending", opType: "expense", categoryID: testCustomExpenseCategoryID, operationDate: [3]int{2026, 6, 15}, want: domain.OperationStatusPending},
+		{name: "future is pending", opType: "income", categoryID: testCustomIncomeCategoryID, operationDate: [3]int{2026, 6, 20}, want: domain.OperationStatusPending},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newOperationGuardService(ownerID, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "active"}})
+			op, err := svc.CreateOperation(ctx, ownerID, CreateOperationCommand{
+				PropertyID:    propertyID,
+				Type:          tc.opType,
+				CategoryID:    tc.categoryID,
+				Name:          "test",
+				AmountKopecks: 1000,
+				OperationDate: date(tc.operationDate[0], tc.operationDate[1], tc.operationDate[2]),
+			})
+			if err != nil {
+				t.Fatalf("CreateOperation: %v", err)
+			}
+			if op.Status != tc.want {
+				t.Fatalf("status = %s, want %s", op.Status, tc.want)
+			}
+		})
+	}
+}
+
+func TestCompleteOperation_Unconfirmed(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	for _, tc := range []struct {
+		name       string
+		opType     domain.OperationType
+		categoryID uuid.UUID
+		want       domain.OperationStatus
+	}{
+		{name: "expense becomes paid", opType: domain.OperationTypeExpense, categoryID: testCustomExpenseCategoryID, want: domain.OperationStatusPaid},
+		{name: "income becomes received", opType: domain.OperationTypeIncome, categoryID: testCustomIncomeCategoryID, want: domain.OperationStatusReceived},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+			op := newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusUnconfirmed)
+			op.Type = tc.opType
+			op.CategoryID = tc.categoryID
+
+			opRepo := &fakeOperationRepo{}
+			_, _ = opRepo.Create(ctx, op)
+			svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "active"}})
+
+			updated, err := svc.CompleteOperation(ctx, CompleteOperationCommand{OwnerID: ownerID, OperationID: operationID})
+			if err != nil {
+				t.Fatalf("CompleteOperation: %v", err)
+			}
+			if updated.Status != tc.want {
+				t.Fatalf("status = %s, want %s", updated.Status, tc.want)
+			}
+		})
+	}
+}
+
+func TestProcessOverdueOperation_SkipsUnconfirmed(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+
+	opRepo := &fakeOperationRepo{}
+	_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusUnconfirmed))
+	svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "active"}})
+
+	changed, err := svc.ProcessOverdueOperation(ctx, ownerID, operationID, date(2026, 6, 15))
+	if err != nil {
+		t.Fatalf("ProcessOverdueOperation: %v", err)
+	}
+	if changed {
+		t.Fatal("unconfirmed operation must not transition to overdue")
+	}
+
+	stored, err := opRepo.GetByIDAndOwner(ctx, operationID, ownerID)
+	if err != nil {
+		t.Fatalf("get operation: %v", err)
+	}
+	if stored.Status != domain.OperationStatusUnconfirmed {
+		t.Fatalf("status = %s, want %s", stored.Status, domain.OperationStatusUnconfirmed)
+	}
+}
+
+func TestUpdateOperation_UnconfirmedStatusPreservedOnDateChange(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+
+	for _, tc := range []struct {
+		name    string
+		newDate [3]int
+	}{
+		{name: "another past date", newDate: [3]int{2026, 6, 1}},
+		{name: "future date", newDate: [3]int{2026, 6, 20}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opRepo := &fakeOperationRepo{}
+			_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusUnconfirmed))
+			svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "active"}})
+
+			newDate := date(tc.newDate[0], tc.newDate[1], tc.newDate[2])
+			updated, err := svc.UpdateOperation(ctx, ownerID, operationID, UpdateOperationCommand{OperationDate: &newDate})
+			if err != nil {
+				t.Fatalf("UpdateOperation: %v", err)
+			}
+			if updated.Status != domain.OperationStatusUnconfirmed {
+				t.Fatalf("status = %s, want %s", updated.Status, domain.OperationStatusUnconfirmed)
+			}
+		})
+	}
+}

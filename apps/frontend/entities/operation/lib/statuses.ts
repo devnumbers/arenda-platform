@@ -11,6 +11,7 @@ export const operationStatusOptions: ReadonlyArray<OperationStatusOption> = [
   { value: 'overdue', label: 'Просрочена', variant: 'danger' },
   { value: 'paid', label: 'Выполнена', variant: 'success' },
   { value: 'received', label: 'Выполнена', variant: 'success' },
+  { value: 'unconfirmed', label: 'Не подтверждена', variant: 'warning' },
 ];
 
 const statusLabelMap: Record<OperationStatus, string> = {
@@ -18,6 +19,7 @@ const statusLabelMap: Record<OperationStatus, string> = {
   overdue: 'Просрочена',
   paid: 'Выполнена',
   received: 'Выполнена',
+  unconfirmed: 'Не подтверждена',
 };
 
 export function getOperationStatusLabel(status: OperationStatus): string {

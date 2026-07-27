@@ -2,10 +2,10 @@
 
 import type {JSX} from 'react';
 import type {components} from '@/shared/api/generated';
+import type {OperationStatus} from '@/entities/operation/model/types';
 import {Button} from '@/shared/ui/button';
 import styles from './OperationActionButtons.module.css';
 
-type OperationStatus = components['schemas']['OperationStatus'];
 type OperationType = components['schemas']['OperationType'];
 
 export type OperationActionButtonsProps = {
@@ -31,10 +31,15 @@ export function OperationActionButtons({
                                        }: OperationActionButtonsProps): JSX.Element {
     const isIncome = type === 'income';
 
-    const canComplete = status === 'pending' || status === 'overdue';
+    const canComplete = status === 'pending' || status === 'overdue' || status === 'unconfirmed';
     const canMarkIncomplete = status === 'paid' || status === 'received';
 
-    const completeLabel = isIncome ? 'Отметить полученной' : 'Отметить оплаченной';
+    const completeLabel =
+        status === 'unconfirmed'
+            ? 'Подтвердить'
+            : isIncome
+                ? 'Отметить полученной'
+                : 'Отметить оплаченной';
     const markIncompleteLabel = isIncome ? 'Отметить не полученной' : 'Отметить не оплаченной';
 
     return (
