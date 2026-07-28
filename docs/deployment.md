@@ -64,13 +64,14 @@ Redirect-URL (`SuccessURL`/`FailURL` для платежей, `RedirectUrl`/`Fai
 Для `AddCard` redirect-поля находятся вне официальной схемы API и исключены из
 подписи токена (prod-инцидент, error 204). Документированный fallback —
 настройка Success/Fail Add Card URL в параметрах терминала. Если `REGRU_S3_PUBLIC_BASE_URL` указывает
-на `https://cdn.rentlee.ru`, этот DNS/публичный URL должен быть настроен до
+на `https://cdn.rentlee.ru` (актуально только при `PHOTO_STORAGE_PROVIDER=s3`), этот DNS/публичный URL должен быть настроен до
 запуска backend; иначе указать рабочий публичный URL REG.RU S3.
 
 `PHOTO_STORAGE_PROVIDER=s3` включает REG.RU S3 и требует заполненные
-`REGRU_S3_*` значения. Для временного production-запуска без готового S3 можно
-поставить `PHOTO_STORAGE_PROVIDER=fake`: backend запустится без проверки бакета,
-но загрузку фотографий объектов в таком режиме использовать нельзя.
+`REGRU_S3_*` значения. Сейчас на stage и prod хранилище фотографий отключено и
+используется `PHOTO_STORAGE_PROVIDER=fake` (временный запуск без готового S3):
+backend запускается без проверки бакета, но загрузку фотографий объектов в таком
+режиме использовать нельзя.
 
 ## Caddyfile
 
