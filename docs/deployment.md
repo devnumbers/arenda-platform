@@ -14,7 +14,8 @@ push в dev (stage) или main (prod)
   → ci.yml (lint, тесты, миграции up/down, сканеры — blocking)
   → сборка 4 образов (matrix, max-parallel: 2) → trivy → push в GHCR → cosign sign
   → _deploy.yml: cosign verify → рендер env из секрета ENV_FILE (со сверкой
-    ключей против .env.<env>.example) → scp на сервер → pg_dump-бэкап →
+    ключей против .env.<env>.example) → передача env на сервер через base64
+    в envs ssh-шага → pg_dump-бэкап →
     миграции → up -d --wait → внешние smoke → точечная чистка старых образов
 ```
 
@@ -58,7 +59,7 @@ updates + сгруппированные weekly version updates в ветку `d
 ## Server Bootstrap
 
 Одноразовая подготовка нового сервера. Git-чекауты не нужны: deploy-каталоги
-получают compose-файл и env через scp из пайплайна.
+получают compose-файл через scp, а env — через base64 в envs ssh-шага пайплайна.
 
 1. Установить Docker + compose plugin; установить и зарегистрировать
    self-hosted GitHub Actions runner (labels `self-hosted, linux, x64`) —

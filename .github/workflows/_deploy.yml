@@ -100,14 +100,16 @@ jobs:
           done
 
       - name: Render env file
+        id: render
         env:
           ENV_FILE_CONTENT: ${{ secrets.ENV_FILE }}
           DEPLOY_VERSION: ${{ github.event_name == 'push' && github.sha || 'manual' }}
         run: |
           set -euo pipefail
           set +x
-          # Build in the workspace: appleboy/scp-action is a docker action and
-          # cannot see $RUNNER_TEMP. .deploy/ is removed by the final cleanup step.
+          # Build in the workspace (secrets stay out of $RUNNER_TEMP); the file is
+          # handed to the deploy step as base64 via step output (see below).
+          # .deploy/ is removed by the final cleanup step.
           umask 077
           mkdir -p .deploy
           chmod 700 .deploy
@@ -159,6 +161,12 @@ jobs:
           chmod 600 ".deploy/.env.${COMPOSE_ENV}.new"
           echo "Env file rendered: $(wc -l < "${ENV_OUT}") lines"
 
+          # Pass the env file to the deploy step via base64 in step output:
+          # appleboy/scp-action runs as uid 1000 and cannot read this 600/umask-077 file.
+          ENV_B64="$(base64 -w0 ".deploy/.env.${COMPOSE_ENV}.new")"
+          echo "::add-mask::${ENV_B64}"
+          echo "env_b64=${ENV_B64}" >> "${GITHUB_OUTPUT}"
+
       - name: Upload compose file
         uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
         with:
@@ -169,34 +177,30 @@ jobs:
           source: "docker-compose.${{ inputs.compose_env }}.yml"
           target: "${{ env.DEPLOY_DIR }}/"
 
-      - name: Upload env file as .new
-        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          fingerprint: ${{ secrets.SSH_HOST_KEY_FINGERPRINT }}
-          source: ".deploy/.env.${{ inputs.compose_env }}.new"
-          target: "${{ env.DEPLOY_DIR }}/"
-
       - name: Deploy on server
         uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
         env:
           # Passed via envs: only simple values; complex ones (with = or ,) break interpolation.
           GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          # base64 alphabet is safe for envs interpolation.
+          ENV_B64: ${{ steps.render.outputs.env_b64 }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           fingerprint: ${{ secrets.SSH_HOST_KEY_FINGERPRINT }}
-          envs: GHCR_READ_TOKEN,GHCR_USERNAME
+          envs: GHCR_READ_TOKEN,GHCR_USERNAME,ENV_B64
           script: |
             set -euo pipefail
             cd "/opt/arenda/${{ inputs.compose_env }}"
             ENV_NAME=".env.${{ inputs.compose_env }}"
             COMPOSE_FILE="docker-compose.${{ inputs.compose_env }}.yml"
             PG_CONTAINER="arenda-${{ inputs.compose_env }}-postgres"
+
+            # Env file arrives as base64 via envs (scp cannot read the 600 file on the runner).
+            echo "${ENV_B64}" | base64 -d > "${ENV_NAME}.new"
+            chmod 600 "${ENV_NAME}.new"
 
             echo "${GHCR_READ_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
