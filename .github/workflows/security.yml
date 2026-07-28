@@ -1,0 +1,53 @@
+name: Security
+
+# Heavy/noisy scanners. They do not block PRs: every job is
+# continue-on-error on pull_request and strict on schedule/dispatch.
+on:
+  schedule:
+    - cron: "17 1 * * *" # nightly, 01:17 UTC (04:17 MSK)
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: [self-hosted, linux, x64]
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    container:
+      # digest of :latest as of 2026-07-28; update periodically
+      image: semgrep/semgrep@sha256:98c2572fced2474539fd27cab3207ebd8e95e4e7aab4c3b381fdc5e2641d9941
+      # self-hosted runner keeps the checkout owned by the runner user (997:981)
+      options: --user 997:981
+    env:
+      HOME: /tmp
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Scan
+        run: semgrep scan --config=p/ci --error
+
+  # Dependency vulnerabilities are covered by Dependabot (.github/dependabot.yml:
+  # security updates + grouped weekly version updates into dev) and govulncheck
+  # in ci.yml; this workflow keeps SAST (semgrep) and the trivy filesystem scan.
+  trivy-fs:
+    name: Trivy filesystem scan
+    runs-on: [self-hosted, linux, x64]
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # vuln scanner only: secrets are covered by gitleaks, misconfig by hadolint (ci.yml).
+      - name: Scan filesystem
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scanners: vuln
+          format: table
+          severity: "HIGH,CRITICAL"
+          ignore-unfixed: "true"
+          exit-code: ${{ github.event_name == 'pull_request' && '0' || '1' }}

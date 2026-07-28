@@ -12,6 +12,13 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/arenda-
 
 FROM debian:bookworm-slim AS runtime
 
+ARG APP_VERSION=dev
+ARG VCS_REF=unknown
+ENV APP_VERSION=$APP_VERSION
+
+LABEL org.opencontainers.image.source="https://github.com/devnumbers/arenda-platform" \
+      org.opencontainers.image.revision="$VCS_REF"
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \

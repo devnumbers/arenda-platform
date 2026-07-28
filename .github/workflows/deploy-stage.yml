@@ -1,9 +1,30 @@
 name: Deploy Stage
 
+# Push to dev: CI -> build/push/scan/sign images to GHCR -> deploy by digest.
+# workflow_dispatch: deploy arbitrary digest refs (manual deploy / rollback).
+
 on:
   push:
     branches:
       - dev
+  workflow_dispatch:
+    inputs:
+      backend_image:
+        description: "Полный digest-ref (ghcr.io/devnumbers/arenda-planform-backend@sha256:...) для ручного деплоя/отката"
+        required: false
+        type: string
+      frontend_image:
+        description: "Полный digest-ref (ghcr.io/devnumbers/arenda-planform-frontend@sha256:...) для ручного деплоя/отката"
+        required: false
+        type: string
+      admin_image:
+        description: "Полный digest-ref (ghcr.io/devnumbers/arenda-planform-admin@sha256:...) для ручного деплоя/отката"
+        required: false
+        type: string
+      landing_image:
+        description: "Полный digest-ref (ghcr.io/devnumbers/arenda-planform-landing@sha256:...) для ручного деплоя/отката"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -14,92 +35,138 @@ concurrency:
 
 jobs:
   ci:
+    if: github.event_name == 'push'
     uses: ./.github/workflows/ci.yml
+
+  images:
+    name: Build & push ${{ matrix.service }}
+    needs: ci
+    if: github.event_name == 'push'
+    runs-on: [self-hosted, linux, x64]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        service: [backend, frontend, admin, landing]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: apps/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: ghcr.io/devnumbers/arenda-planform-${{ matrix.service }}:${{ github.sha }}
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+            VCS_REF=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      - name: Scan image (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # same pin as ci.yml
+        with:
+          image-ref: ghcr.io/devnumbers/arenda-planform-${{ matrix.service }}:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: "true"
+          vuln-type: "os,library"
+          severity: "HIGH,CRITICAL"
+
+      - name: Resolve and validate digest
+        id: digest
+        env:
+          SERVICE: ${{ matrix.service }}
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ref="ghcr.io/devnumbers/arenda-planform-${SERVICE}@${BUILD_DIGEST}"
+          if ! grep -qE "^ghcr\.io/devnumbers/arenda-planform-${SERVICE}@sha256:[0-9a-f]{64}$" <<<"${ref}"; then
+            echo "Unexpected image digest ref: ${ref}" >&2
+            exit 1
+          fi
+          echo "ref=${ref}" >> "${GITHUB_OUTPUT}"
+          echo "${ref}" > "${RUNNER_TEMP}/${SERVICE}.txt"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: Sign image (keyless)
+        run: cosign sign --yes "${{ steps.digest.outputs.ref }}"
+
+      - name: Upload digest artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: digest-${{ matrix.service }}
+          path: ${{ runner.temp }}/${{ matrix.service }}.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  collect:
+    name: Collect image digests
+    needs: images
+    if: github.event_name == 'push'
+    runs-on: [self-hosted, linux, x64]
+    outputs:
+      backend_digest: ${{ steps.read.outputs.backend_digest }}
+      frontend_digest: ${{ steps.read.outputs.frontend_digest }}
+      admin_digest: ${{ steps.read.outputs.admin_digest }}
+      landing_digest: ${{ steps.read.outputs.landing_digest }}
+    steps:
+      - name: Download digest artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: digest-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/digests
+
+      - name: Read digests into outputs
+        id: read
+        run: |
+          set -euo pipefail
+          for svc in backend frontend admin landing; do
+            file="${{ runner.temp }}/digests/${svc}.txt"
+            if [ ! -s "${file}" ]; then
+              echo "Missing digest file for ${svc}: ${file}" >&2
+              exit 1
+            fi
+            ref="$(tr -d '[:space:]' < "${file}")"
+            if ! grep -qE "^ghcr\.io/devnumbers/arenda-planform-${svc}@sha256:[0-9a-f]{64}$" <<<"${ref}"; then
+              echo "Invalid digest ref for ${svc}: ${ref}" >&2
+              exit 1
+            fi
+            echo "${svc}_digest=${ref}" >> "${GITHUB_OUTPUT}"
+          done
 
   deploy:
     name: Deploy
-    runs-on: [self-hosted, linux, x64]
-    needs: ci
-    steps:
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.STAGE_SSH_PRIVATE_KEY }}
-
-      - name: Deploy exact SHA
-        env:
-          DEPLOY_HOST: ${{ secrets.STAGE_SSH_HOST }}
-          DEPLOY_USER: ${{ secrets.STAGE_SSH_USER }}
-          DEPLOY_DIR: /opt/arenda/stage
-          DEPLOY_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          ssh -o StrictHostKeyChecking=accept-new "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "DEPLOY_DIR='${DEPLOY_DIR}' DEPLOY_SHA='${DEPLOY_SHA}' bash -s" <<'REMOTE'
-          set -euo pipefail
-          cd "${DEPLOY_DIR}"
-          git fetch --prune origin +refs/heads/dev:refs/remotes/origin/dev
-          git checkout --detach --force "${DEPLOY_SHA}"
-          git reset --hard "${DEPLOY_SHA}"
-          git clean -ffdx -e .env.stage
-          current_sha="$(git rev-parse HEAD)"
-          if [ "${current_sha}" != "${DEPLOY_SHA}" ]; then
-            echo "Expected checkout ${DEPLOY_SHA}, got ${current_sha}" >&2
-            exit 1
-          fi
-          test -f .env.stage
-          chmod 600 .env.stage
-          docker compose -f docker-compose.stage.yml config >/dev/null
-          docker compose -f docker-compose.stage.yml up -d --build --remove-orphans
-          docker compose -f docker-compose.stage.yml ps
-          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:28080/healthz | grep -q '"status":"ok"'
-          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:23000/login >/dev/null
-          test "$(curl -fsS --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:23001/healthz)" = "ok"
-          REMOTE
-
-      - name: Smoke test
-        run: |
-          set -euo pipefail
-
-          require_body() {
-            local url="$1"
-            local needle="$2"
-            local body
-            body="$(curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${url}")"
-            if ! grep -qi "${needle}" <<<"${body}"; then
-              echo "${body}"
-              echo "Expected ${url} to contain ${needle}" >&2
-              exit 1
-            fi
-          }
-
-          require_exact() {
-            local url="$1"
-            local expected="$2"
-            local body
-            body="$(curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${url}")"
-            if [ "${body}" != "${expected}" ]; then
-              echo "${body}"
-              echo "Expected ${url} to return ${expected}" >&2
-              exit 1
-            fi
-          }
-
-          require_status() {
-            local url="$1"
-            local expected="$2"
-            local output="$3"
-            local status
-            status="$(curl -sS --retry 10 --retry-delay 3 --retry-all-errors -o "${output}" -w '%{http_code}' "${url}")"
-            if [ "${status}" != "${expected}" ]; then
-              cat "${output}"
-              echo "Expected ${url} to return ${expected}, got ${status}" >&2
-              exit 1
-            fi
-          }
-
-          require_body https://dev.rentlee.ru/login "<html"
-          require_body https://admin.dev.rentlee.ru/ 'id="root"'
-          require_exact https://admin.dev.rentlee.ru/healthz "ok"
-          require_body https://dev.rentlee.ru/api/healthz '"status":"ok"'
-          require_status https://dev.rentlee.ru/api/me "401" /tmp/arenda-stage-me.out
+    needs: collect
+    if: github.event_name == 'workflow_dispatch' || needs.collect.result == 'success'
+    uses: ./.github/workflows/_deploy.yml
+    secrets: inherit
+    with:
+      environment: stage
+      compose_env: stage
+      base_url: https://dev.rentlee.ru
+      admin_url: https://admin.dev.rentlee.ru
+      backend_image: ${{ inputs.backend_image || needs.collect.outputs.backend_digest }}
+      frontend_image: ${{ inputs.frontend_image || needs.collect.outputs.frontend_digest }}
+      admin_image: ${{ inputs.admin_image || needs.collect.outputs.admin_digest }}
+      landing_image: ${{ inputs.landing_image || needs.collect.outputs.landing_digest }}
