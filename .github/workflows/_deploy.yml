@@ -196,7 +196,6 @@ jobs:
             cd "/opt/arenda/${{ inputs.compose_env }}"
             ENV_NAME=".env.${{ inputs.compose_env }}"
             COMPOSE_FILE="docker-compose.${{ inputs.compose_env }}.yml"
-            PG_CONTAINER="arenda-${{ inputs.compose_env }}-postgres"
 
             # Env file arrives as base64 via envs (scp cannot read the 600 file on the runner).
             echo "${ENV_B64}" | base64 -d > "${ENV_NAME}.new"
@@ -205,10 +204,15 @@ jobs:
             echo "${GHCR_READ_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
             # Record currently running images for a possible rollback.
+            # Resolve containers by compose service name — never hardcode
+            # container names (compose v2 suffixes them with a replica counter).
             : > .previous-images
             for svc in backend frontend admin landing; do
-              container="arenda-${{ inputs.compose_env }}-${svc}"
-              current="$(docker inspect -f '{{.Config.Image}}' "${container}" 2>/dev/null || true)"
+              cid="$(docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" ps -q "${svc}" 2>/dev/null | head -n1 || true)"
+              current=""
+              if [ -n "${cid}" ]; then
+                current="$(docker inspect -f '{{.Config.Image}}' "${cid}" 2>/dev/null || true)"
+              fi
               if [ -n "${current}" ]; then
                 key="$(printf '%s' "${svc}" | tr '[:lower:]' '[:upper:]')_IMAGE"
                 echo "${key}=${current}" >> .previous-images
@@ -236,7 +240,7 @@ jobs:
               exit 1
             fi
             DUMP="${BACKUP_DIR}/$(date +%Y%m%d-%H%M%S).sql.gz"
-            docker exec "${PG_CONTAINER}" pg_dump -U "${POSTGRES_USER_VALUE}" "${POSTGRES_DB_VALUE}" | gzip > "${DUMP}"
+            docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" exec -T postgres pg_dump -U "${POSTGRES_USER_VALUE}" "${POSTGRES_DB_VALUE}" | gzip > "${DUMP}"
             gzip -t "${DUMP}"
             DUMP_SIZE="$(stat -c%s "${DUMP}")"
             if [ "${DUMP_SIZE}" -le 1024 ]; then
@@ -296,7 +300,7 @@ jobs:
                 echo "No .previous-images recorded; cannot restore previous images automatically" >&2
               fi
               echo "--- backend logs (tail 100) ---" >&2
-              docker logs --tail 100 "arenda-${{ inputs.compose_env }}-backend" 2>&1 || true
+              docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" logs --tail 100 backend 2>&1 || true
               echo "ROLLBACK ВЫПОЛНЕН. ВНИМАНИЕ: миграции БД НЕ откачены — проверьте совместимость схемы" >&2
             }
             trap 'rollback' ERR
@@ -436,7 +440,7 @@ jobs:
             done < .previous-images
             docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" up -d --wait || true
             echo "--- backend logs (tail 100) ---" >&2
-            docker logs --tail 100 "arenda-${{ inputs.compose_env }}-backend" 2>&1 || true
+            docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" logs --tail 100 backend 2>&1 || true
             echo "ROLLBACK ВЫПОЛНЕН. ВНИМАНИЕ: миграции БД НЕ откачены — проверьте совместимость схемы" >&2
 
       - name: Cleanup old images on server
