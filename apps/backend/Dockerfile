@@ -19,6 +19,9 @@ ENV APP_VERSION=$APP_VERSION
 LABEL org.opencontainers.image.source="https://github.com/devnumbers/arenda-platform" \
       org.opencontainers.image.revision="$VCS_REF"
 
+# ca-certificates/curl не пинятся: версии меняются при обновлении пакетов
+# в базовом образе, и жёсткий пин ломал бы rebuild.
+# hadolint ignore=DL3008
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \

@@ -27,8 +27,15 @@ jobs:
       - name: T-Kassa spec freshness
         run: make backend-tkassa-spec-check
 
+      # -race требует cgo/gcc, которого нет на хосте раннера — гоняем тесты
+      # в контейнере golang (образ как в apps/backend/Dockerfile). GOCACHE/GOMODCACHE
+      # в /tmp контейнера, чтобы не оставлять root-файлы в workspace self-hosted раннера.
       - name: Test
-        run: go test -race ./apps/backend/...
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -e GOCACHE=/tmp/gocache -e GOMODCACHE=/tmp/gomodcache \
+            -v "${{ github.workspace }}:/src" -w /src/apps/backend \
+            golang:1.26-bookworm go test -race ./...
 
       - name: Vet
         run: go vet ./apps/backend/...
@@ -42,7 +49,7 @@ jobs:
     name: Backend migrations
     runs-on: [self-hosted, linux, x64]
     env:
-      DATABASE_URL: postgres://test:test@localhost:5432/test?sslmode=disable
+      DATABASE_URL: postgres://test:test@localhost:55432/test?sslmode=disable
       MIGRATIONS_DIR: apps/backend/db/migrations
     services:
       postgres:
@@ -52,7 +59,8 @@ jobs:
           POSTGRES_PASSWORD: test
           POSTGRES_DB: test
         ports:
-          - 5432:5432
+          # 55432, а не 5432: на self-hosted раннере 127.0.0.1:5432 занят supabase-pooler.
+          - 55432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -164,8 +172,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # gitleaks-action требует платную лицензию для org-репо, поэтому запускаем
+      # CLI напрямую через docker (v8.24.3, синтаксис: `gitleaks git <path>`).
       - name: Gitleaks scan
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        run: >-
+          docker run --rm
+          -v "${{ github.workspace }}:/repo"
+          zricethezav/gitleaks@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055
+          git /repo --redact --exit-code 1
 
   docker:
     name: Docker (${{ matrix.service }})
