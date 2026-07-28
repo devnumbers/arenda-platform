@@ -179,7 +179,7 @@ jobs:
           docker run --rm
           -v "${{ github.workspace }}:/repo"
           zricethezav/gitleaks@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055
-          git /repo --redact --exit-code 1
+          git /repo --redact --config /repo/.gitleaks.toml --exit-code 1
 
   docker:
     name: Docker (${{ matrix.service }})
