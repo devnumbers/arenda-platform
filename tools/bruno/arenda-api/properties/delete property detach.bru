@@ -1,5 +1,5 @@
 meta {
-  name: delete property detach
+  name: Delete Property Detach
   type: http
   seq: 11
 }
@@ -7,9 +7,19 @@ meta {
 delete {
   url: {{baseUrl}}/properties/{{propertyId}}?mode=detach
   body: none
-  auth: inherit
+  auth: none
 }
 
-params:query {
-  mode: detach
+script:pre-request {
+  // Requires an authenticated session and a propertyId. Run properties/create first.
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 204", function() {
+    expect(res.status).to.equal(204);
+  });
 }
