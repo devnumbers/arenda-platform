@@ -13,6 +13,7 @@ import { mapPropertyResponse } from '@/entities/property/model/mappers';
 import type { Property } from '@/entities/property/model/types';
 import { propertyKeys } from './keys';
 import { operationKeys } from '@/features/operations/api/keys';
+import { leaseKeys } from '@/features/leases/api/keys';
 import type { components } from '@/shared/api/generated';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
@@ -191,6 +192,30 @@ export function useDeletePropertyPhoto(): UseMutationResult<
     onSuccess: (_, { propertyId }) => {
       queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       queryClient.invalidateQueries({ queryKey: propertyKeys.detail(propertyId) });
+    },
+  });
+}
+
+export function useDeleteProperty(): UseMutationResult<
+  void,
+  ApiError,
+  { id: string; mode: 'cascade' | 'detach' }
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, mode }) =>
+      apiClient<void>(`/properties/${id}?mode=${mode}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      queryClient.removeQueries({ queryKey: propertyKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: leaseKeys.all });
+      queryClient.invalidateQueries({ queryKey: leaseKeys.byProperty(id) });
+      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+      queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
+      queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
     },
   });
 }
