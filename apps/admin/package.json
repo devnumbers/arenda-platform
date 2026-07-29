@@ -16,9 +16,9 @@
     "@mui/material": "^7.3.11",
     "ra-i18n-polyglot": "^5.15.0",
     "ra-language-russian": "^5.4.5",
-    "react": "19.2.4",
+    "react": "19.2.8",
     "react-admin": "^5.15.1",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
