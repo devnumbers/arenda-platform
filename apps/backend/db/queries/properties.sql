@@ -118,3 +118,7 @@ SELECT
   COUNT(*) FILTER (WHERE status IN ('active', 'maintenance')) AS active_count,
   COUNT(*) FILTER (WHERE status = 'archived') AS archived_count
 FROM properties;
+
+-- name: DeleteProperty :exec
+DELETE FROM properties
+WHERE id = $1 AND owner_id = $2;

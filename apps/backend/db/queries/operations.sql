@@ -316,3 +316,7 @@ WHERE op.id = $1;
 
 -- name: CountOperationsTotalAdmin :one
 SELECT COUNT(*) FROM operations WHERE deleted_at IS NULL;
+
+-- name: DeleteOperationsByProperty :exec
+DELETE FROM operations
+WHERE owner_id = $1 AND property_id = $2;

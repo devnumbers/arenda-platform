@@ -149,6 +149,36 @@ func (q *Queries) CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease
 	return i, err
 }
 
+const deleteLeasesByProperty = `-- name: DeleteLeasesByProperty :exec
+DELETE FROM leases
+WHERE owner_id = $1 AND property_id = $2
+`
+
+type DeleteLeasesByPropertyParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+func (q *Queries) DeleteLeasesByProperty(ctx context.Context, arg DeleteLeasesByPropertyParams) error {
+	_, err := q.db.Exec(ctx, deleteLeasesByProperty, arg.OwnerID, arg.PropertyID)
+	return err
+}
+
+const deleteRecurringOperationsByProperty = `-- name: DeleteRecurringOperationsByProperty :exec
+DELETE FROM recurring_operations
+WHERE owner_id = $1 AND property_id = $2
+`
+
+type DeleteRecurringOperationsByPropertyParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+func (q *Queries) DeleteRecurringOperationsByProperty(ctx context.Context, arg DeleteRecurringOperationsByPropertyParams) error {
+	_, err := q.db.Exec(ctx, deleteRecurringOperationsByProperty, arg.OwnerID, arg.PropertyID)
+	return err
+}
+
 const getLeaseByID = `-- name: GetLeaseByID :one
 SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
 WHERE id = $1

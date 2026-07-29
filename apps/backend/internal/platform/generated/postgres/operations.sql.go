@@ -186,6 +186,21 @@ func (q *Queries) DeleteFutureUneditedOperationsByProperty(ctx context.Context, 
 	return err
 }
 
+const deleteOperationsByProperty = `-- name: DeleteOperationsByProperty :exec
+DELETE FROM operations
+WHERE owner_id = $1 AND property_id = $2
+`
+
+type DeleteOperationsByPropertyParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+func (q *Queries) DeleteOperationsByProperty(ctx context.Context, arg DeleteOperationsByPropertyParams) error {
+	_, err := q.db.Exec(ctx, deleteOperationsByProperty, arg.OwnerID, arg.PropertyID)
+	return err
+}
+
 const deleteOperationsOutsideLeaseRange = `-- name: DeleteOperationsOutsideLeaseRange :exec
 DELETE FROM operations
 WHERE lease_id = $1
