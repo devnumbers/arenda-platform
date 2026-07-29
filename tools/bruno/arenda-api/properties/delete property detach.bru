@@ -1,0 +1,15 @@
+meta {
+  name: delete property detach
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{baseUrl}}/properties/{{propertyId}}?mode=detach
+  body: none
+  auth: inherit
+}
+
+params:query {
+  mode: detach
+}

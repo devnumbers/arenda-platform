@@ -1,0 +1,15 @@
+meta {
+  name: delete property cascade
+  type: http
+  seq: 10
+}
+
+delete {
+  url: {{baseUrl}}/properties/{{propertyId}}?mode=cascade
+  body: none
+  auth: inherit
+}
+
+params:query {
+  mode: cascade
+}
