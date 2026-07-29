@@ -185,6 +185,34 @@ func (r *PropertyRepository) CountActiveByOwner(ctx context.Context, ownerID uui
 	return int(count), nil
 }
 
+func (r *PropertyRepository) Delete(ctx context.Context, id, ownerID uuid.UUID) error {
+	return r.q().DeleteProperty(ctx, postgres.DeletePropertyParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+}
+
+func (r *PropertyRepository) DeleteOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error {
+	return r.q().DeleteOperationsByProperty(ctx, postgres.DeleteOperationsByPropertyParams{
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+}
+
+func (r *PropertyRepository) DeleteRecurringOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error {
+	return r.q().DeleteRecurringOperationsByProperty(ctx, postgres.DeleteRecurringOperationsByPropertyParams{
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+}
+
+func (r *PropertyRepository) DeleteLeasesByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error {
+	return r.q().DeleteLeasesByProperty(ctx, postgres.DeleteLeasesByPropertyParams{
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+}
+
 func propertyFromRow(row postgres.Property) domain.Property {
 	return domain.Property{
 		ID:          pgconv.UUIDFromPgtype(row.ID),
