@@ -412,6 +412,10 @@ func (s *PropertyService) DeleteProperty(
 	ownerID, id uuid.UUID,
 	mode domain.DeletePropertyMode,
 ) error {
+	if !mode.Valid() {
+		return fmt.Errorf("%w: invalid delete mode %q", ErrInvalidInput, mode)
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -435,7 +439,7 @@ func (s *PropertyService) DeleteProperty(
 		return ErrPropertyHasOpenLease
 	}
 
-	photos, err := s.photoRepo.GetByPropertyID(ctx, id)
+	photos, err := s.photoRepo.WithTx(tx).GetByPropertyID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("list photos: %w", err)
 	}
@@ -453,9 +457,6 @@ func (s *PropertyService) DeleteProperty(
 	}
 
 	if err := repo.Delete(ctx, id, ownerID); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrNotFound
-		}
 		return fmt.Errorf("delete property: %w", err)
 	}
 
