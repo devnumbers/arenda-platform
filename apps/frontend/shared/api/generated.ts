@@ -174,7 +174,7 @@ export interface paths {
         get: operations["getProperty"];
         put?: never;
         post?: never;
-        delete?: never;
+        delete: operations["deleteProperty"];
         options?: never;
         head?: never;
         patch: operations["updateProperty"];
@@ -2445,6 +2445,33 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    deleteProperty: {
+        parameters: {
+            query: {
+                mode: "cascade" | "detach";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     updateProperty: {
