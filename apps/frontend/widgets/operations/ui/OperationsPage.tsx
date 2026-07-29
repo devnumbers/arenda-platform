@@ -9,11 +9,7 @@ import {Icon} from '@/shared/ui/icon';
 import {Button} from '@/shared/ui/button';
 import {ROUTES} from '@/shared/config/routes';
 import {type OperationsFilters, useInfiniteOperations,} from '@/features/operations/api/hooks';
-import {
-    endOfMonth,
-    formatDateForApi,
-    startOfMonth,
-} from '@/entities/operation/lib/dates';
+import {endOfMonth, formatDateForApi, startOfMonth,} from '@/entities/operation/lib/dates';
 import {FinanceErrorState} from '@/widgets/finance/ui/FinanceErrorState';
 import {FinanceEmptyState} from '@/widgets/finance/ui/FinanceEmptyState';
 import {useArchivedProperties, useProperties} from '@/features/properties/api';
@@ -189,12 +185,6 @@ export function OperationsPage({initial}: OperationsPageProps): JSX.Element {
         return [...(activeProperties ?? []), ...(archivedProperties ?? [])];
     }, [activeProperties, archivedProperties]);
 
-    const propertyNameById = useMemo<ReadonlyMap<string, string>>(() => {
-        return new Map(
-            properties.map((property) => [property.id, property.name] as const),
-        );
-    }, [properties]);
-
     const operations = operationsData?.pages.flatMap((page) => page.items) ?? [];
     const hasProperties = properties.length > 0;
     const propertiesLoading = activePropertiesLoading || archivedPropertiesLoading;
@@ -229,12 +219,13 @@ export function OperationsPage({initial}: OperationsPageProps): JSX.Element {
         };
         setPeriodState(nextPeriod);
         setStatus(nextFilters.status);
+        setPropertyId(nextFilters.propertyId);
         router.replace(
             buildHref(
                 pathname,
                 buildQuery({
                     type,
-                    propertyId,
+                    propertyId: nextFilters.propertyId,
                     period: nextFilters.period,
                     from: nextFilters.from,
                     to: nextFilters.to,
@@ -313,20 +304,14 @@ export function OperationsPage({initial}: OperationsPageProps): JSX.Element {
             </nav>
 
             <OperationFilters
-                filters={{period, from, to, status}}
+                filters={{period, from, to, status, propertyId}}
+                properties={activeProperties ?? []}
+                propertiesLoading={activePropertiesLoading}
                 hasExternalFilters={activeTabKey !== 'all' || Boolean(propertyId)}
                 isDefaultPeriod={isDefaultPeriod}
                 onChange={handleFilterChange}
                 onReset={handleResetFilters}
             />
-
-            {propertyId && (
-                <div className={styles.appliedFilters}>
-          <span className={styles.appliedFilter}>
-            Объект: {propertyNameById.get(propertyId) ?? 'Выбранный объект'}
-          </span>
-                </div>
-            )}
 
             {isLoading && <OperationsListLoading/>}
 
