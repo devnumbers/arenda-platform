@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
@@ -16,6 +15,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // propertyStatusesByID maps every owner property, including archived ones, to
@@ -270,7 +270,7 @@ func (h *PropertyHandlers) DeleteProperty(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.svc.DeleteProperty(r.Context(), ownerID, uuid.UUID(id), mode); err != nil {
+	if err := h.svc.DeleteProperty(r.Context(), ownerID, id, mode); err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
