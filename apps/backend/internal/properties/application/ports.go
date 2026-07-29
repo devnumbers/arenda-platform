@@ -56,6 +56,10 @@ type PropertyRepository interface {
 	Archive(ctx context.Context, id, ownerID uuid.UUID) error
 	Unarchive(ctx context.Context, id, ownerID uuid.UUID) error
 	CountActiveByOwner(ctx context.Context, ownerID uuid.UUID) (int, error)
+	Delete(ctx context.Context, id, ownerID uuid.UUID) error
+	DeleteOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error
+	DeleteRecurringOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error
+	DeleteLeasesByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error
 	WithTx(tx transaction.Tx) PropertyRepository
 }
 
