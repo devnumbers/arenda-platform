@@ -14,6 +14,8 @@ import type { Property } from '@/entities/property/model/types';
 import { propertyKeys } from './keys';
 import { operationKeys } from '@/features/operations/api/keys';
 import { leaseKeys } from '@/features/leases/api/keys';
+import { financeKeys } from '@/features/finance/api/keys';
+import { recurringOperationKeys } from '@/features/recurring-operations/api/keys';
 import type { components } from '@/shared/api/generated';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
@@ -209,6 +211,7 @@ export function useDeleteProperty(): UseMutationResult<
       }),
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      queryClient.invalidateQueries({ queryKey: [...propertyKeys.list, 'archived'] });
       queryClient.removeQueries({ queryKey: propertyKeys.detail(id) });
       queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       queryClient.invalidateQueries({ queryKey: leaseKeys.byProperty(id) });
@@ -216,6 +219,8 @@ export function useDeleteProperty(): UseMutationResult<
       queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
       queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
       queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
+      queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
+      queryClient.invalidateQueries({ queryKey: recurringOperationKeys.byProperty(id) });
     },
   });
 }
