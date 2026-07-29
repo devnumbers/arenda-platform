@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
@@ -257,27 +257,20 @@ func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request
 }
 
 // DeleteProperty implements DELETE /properties/{id}.
-func (h *PropertyHandlers) DeleteProperty(w http.ResponseWriter, r *http.Request) {
+func (h *PropertyHandlers) DeleteProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params openapi.DeletePropertyParams) {
 	ownerID, ok := ownerIDFromContext(r)
 	if !ok {
 		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректный идентификатор объекта"))
-		return
-	}
-
-	modeStr := r.URL.Query().Get("mode")
-	mode, err := domain.ParseDeletePropertyMode(modeStr)
+	mode, err := domain.ParseDeletePropertyMode(string(params.Mode))
 	if err != nil {
 		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректный режим удаления"))
 		return
 	}
 
-	if err := h.svc.DeleteProperty(r.Context(), ownerID, id, mode); err != nil {
+	if err := h.svc.DeleteProperty(r.Context(), ownerID, uuid.UUID(id), mode); err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
