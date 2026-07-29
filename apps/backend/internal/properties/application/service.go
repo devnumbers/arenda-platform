@@ -17,6 +17,7 @@ import (
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -406,6 +407,93 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 	return properties[0], nil
 }
 
+func (s *PropertyService) DeleteProperty(
+	ctx context.Context,
+	ownerID, id uuid.UUID,
+	mode domain.DeletePropertyMode,
+) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	repo := s.repo.WithTx(tx)
+
+	if _, err := repo.GetByIDAndOwnerForUpdate(ctx, id, ownerID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("get property: %w", err)
+	}
+
+	occupied, err := s.occupancyProvider.WithTx(tx).IsOccupied(ctx, ownerID, id)
+	if err != nil {
+		return fmt.Errorf("check occupancy: %w", err)
+	}
+	if occupied {
+		return ErrPropertyHasOpenLease
+	}
+
+	photos, err := s.photoRepo.GetByPropertyID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("list photos: %w", err)
+	}
+
+	if mode == domain.DeletePropertyModeCascade {
+		if err := repo.DeleteOperationsByProperty(ctx, ownerID, id); err != nil {
+			return fmt.Errorf("delete operations: %w", err)
+		}
+		if err := repo.DeleteRecurringOperationsByProperty(ctx, ownerID, id); err != nil {
+			return fmt.Errorf("delete recurring operations: %w", err)
+		}
+		if err := repo.DeleteLeasesByProperty(ctx, ownerID, id); err != nil {
+			return fmt.Errorf("delete leases: %w", err)
+		}
+	}
+
+	if err := repo.Delete(ctx, id, ownerID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("delete property: %w", err)
+	}
+
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &ownerID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionPropertyDeleted,
+		EntityType: auditdomain.EntityProperty,
+		EntityID:   &id,
+		Context:    map[string]any{"mode": string(mode)},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+
+	for _, photo := range photos {
+		key, err := photoStorageKey(id, photo.ID, photo.URL)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to derive storage key for photo cleanup",
+				slog.String("photo_id", photo.ID.String()),
+				slog.String("error", sanitizeError(err)),
+			)
+			continue
+		}
+		if err := s.photoStorage.Delete(ctx, key); err != nil {
+			s.logger.ErrorContext(ctx, "failed to delete property photo from storage",
+				slog.String("photo_id", photo.ID.String()),
+				slog.String("error", sanitizeError(err)),
+			)
+		}
+	}
+
+	return nil
+}
+
 // archivePropertyInTx performs the core archive logic inside an existing
 // transaction. The caller is responsible for committing or rolling back tx.
 // When forceCompleteLeases is false, a property with an open lease is rejected
@@ -752,6 +840,10 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, ownerID, prop
 	}
 
 	return nil
+}
+
+func sanitizeError(err error) string {
+	return sanitize.Error(err)
 }
 
 func photoStorageKey(propertyID, photoID uuid.UUID, photoURL string) (string, error) {
