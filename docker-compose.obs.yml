@@ -23,6 +23,7 @@ services:
       CLICKHOUSE_PASSWORD: ${UPTRACE_CH_PASSWORD}
     volumes:
       - ch-data:/var/lib/clickhouse
+      - ./observability/clickhouse-config:/etc/clickhouse-server/config.d:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --spider -q localhost:8123/ping || exit 1"]
       interval: 5s
