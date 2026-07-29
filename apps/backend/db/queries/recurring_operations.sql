@@ -111,3 +111,7 @@ SELECT * FROM recurring_operations
 WHERE owner_id = $1
   AND deleted_at IS NULL
 ORDER BY created_at DESC;
+
+-- name: DeleteRecurringOperationsByProperty :exec
+DELETE FROM recurring_operations
+WHERE owner_id = $1 AND property_id = $2;

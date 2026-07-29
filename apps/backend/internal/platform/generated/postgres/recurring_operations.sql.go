@@ -95,6 +95,21 @@ func (q *Queries) DeleteRecurringOperationByLease(ctx context.Context, leaseID p
 	return err
 }
 
+const deleteRecurringOperationsByProperty = `-- name: DeleteRecurringOperationsByProperty :exec
+DELETE FROM recurring_operations
+WHERE owner_id = $1 AND property_id = $2
+`
+
+type DeleteRecurringOperationsByPropertyParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+func (q *Queries) DeleteRecurringOperationsByProperty(ctx context.Context, arg DeleteRecurringOperationsByPropertyParams) error {
+	_, err := q.db.Exec(ctx, deleteRecurringOperationsByProperty, arg.OwnerID, arg.PropertyID)
+	return err
+}
+
 const getRecurringOperationByIDAndOwner = `-- name: GetRecurringOperationByIDAndOwner :one
 SELECT id, owner_id, property_id, lease_id, type, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name, deleted_at, category_id FROM recurring_operations
 WHERE id = $1 AND owner_id = $2

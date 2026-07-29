@@ -131,7 +131,3 @@ SELECT COUNT(*) FROM leases;
 -- name: DeleteLeasesByProperty :exec
 DELETE FROM leases
 WHERE owner_id = $1 AND property_id = $2;
-
--- name: DeleteRecurringOperationsByProperty :exec
-DELETE FROM recurring_operations
-WHERE owner_id = $1 AND property_id = $2;
