@@ -37,6 +37,7 @@ const (
 	ActionPropertyUnarchived   Action = "property.unarchived"
 	ActionPropertyPhotoAdded   Action = "property.photo_added"
 	ActionPropertyPhotoDeleted Action = "property.photo_deleted"
+	ActionPropertyDeleted      Action = "property.deleted"
 
 	ActionLeaseCreated   Action = "lease.created"
 	ActionLeaseUpdated   Action = "lease.updated"
