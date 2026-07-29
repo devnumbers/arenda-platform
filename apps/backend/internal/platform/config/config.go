@@ -17,12 +17,14 @@ import (
 
 type Config struct {
 	AppEnv                              string
+	AppVersion                          string
 	HTTPAddr                            string
 	LogLevel                            string
 	LogLevelValue                       slog.Level
 	LogFormat                           string
 	DatabaseURL                         string
 	MigrationsDir                       string
+	AutoMigrate                         bool
 	CookieSecure                        bool
 	PaymentProvider                     string
 	AppBaseURL                          string
@@ -94,6 +96,7 @@ type DBPoolConfig struct {
 func Load() (Config, error) {
 	cfg := Config{
 		AppEnv:            os.Getenv("APP_ENV"),
+		AppVersion:        cmp.Or(os.Getenv("APP_VERSION"), "dev"),
 		HTTPAddr:          os.Getenv("HTTP_ADDR"),
 		LogLevel:          os.Getenv("LOG_LEVEL"),
 		LogFormat:         os.Getenv("LOG_FORMAT"),
@@ -196,6 +199,15 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("invalid LOG_SUCCESSFUL_REQUESTS %q: %w", v, err)
 		}
 		cfg.LogSuccessfulRequests = b
+	}
+
+	cfg.AutoMigrate = true
+	if v := os.Getenv("AUTO_MIGRATE"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid AUTO_MIGRATE %q: %w", v, err)
+		}
+		cfg.AutoMigrate = b
 	}
 
 	cookieSecure := os.Getenv("COOKIE_SECURE")

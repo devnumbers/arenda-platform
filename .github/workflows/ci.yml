@@ -13,10 +13,10 @@ jobs:
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: apps/backend/go.mod
           cache-dependency-path: apps/backend/go.sum
@@ -27,21 +27,74 @@ jobs:
       - name: T-Kassa spec freshness
         run: make backend-tkassa-spec-check
 
+      # -race требует cgo/gcc, которого нет на хосте раннера — гоняем тесты
+      # в контейнере golang (образ как в apps/backend/Dockerfile). GOCACHE/GOMODCACHE
+      # в /tmp контейнера, чтобы не оставлять root-файлы в workspace self-hosted раннера.
       - name: Test
-        run: go test ./apps/backend/...
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -e GOCACHE=/tmp/gocache -e GOMODCACHE=/tmp/gomodcache \
+            -v "${{ github.workspace }}:/src" -w /src/apps/backend \
+            golang:1.26-bookworm go test -race ./...
 
       - name: Vet
         run: go vet ./apps/backend/...
+
+      - name: govulncheck
+        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1
+        with:
+          work-dir: apps/backend
+          go-package: ./...
+
+  backend-migrations:
+    name: Backend migrations
+    runs-on: [self-hosted, linux, x64]
+    env:
+      DATABASE_URL: postgres://test:test@localhost:55432/test?sslmode=disable
+      MIGRATIONS_DIR: apps/backend/db/migrations
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          # 55432, а не 5432: на self-hosted раннере 127.0.0.1:5432 занят supabase-pooler.
+          - 55432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: apps/backend/go.sum
+
+      - name: Migrate up
+        run: go run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1 -database "$DATABASE_URL" -path "$MIGRATIONS_DIR" up
+
+      - name: Migrate down all
+        run: go run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1 -database "$DATABASE_URL" -path "$MIGRATIONS_DIR" down -all
+
+      - name: Migrate up again
+        run: go run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1 -database "$DATABASE_URL" -path "$MIGRATIONS_DIR" up
 
   frontend:
     name: Frontend
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
@@ -59,15 +112,19 @@ jobs:
         working-directory: apps/frontend
         run: npm run lint
 
+      - name: Typecheck
+        working-directory: apps/frontend
+        run: npx tsc --noEmit
+
   admin:
     name: Admin
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
@@ -85,55 +142,95 @@ jobs:
         working-directory: apps/admin
         run: npm run build
 
-  docker:
-    name: Docker
+  landing:
+    name: Landing
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/landing/package-lock.json
+
+      - name: Install
+        working-directory: apps/landing
+        run: npm ci
+
+      - name: Build
+        working-directory: apps/landing
+        run: npm run build
+
+  gitleaks:
+    name: Gitleaks
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      # gitleaks-action требует платную лицензию для org-репо, поэтому запускаем
+      # CLI напрямую через docker (v8.24.3, синтаксис: `gitleaks git <path>`).
+      - name: Gitleaks scan
+        run: >-
+          docker run --rm
+          -v "${{ github.workspace }}:/repo"
+          zricethezav/gitleaks@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055
+          git /repo --redact --config /repo/.gitleaks.toml --exit-code 1
+
+  docker:
+    name: Docker (${{ matrix.service }})
+    runs-on: [self-hosted, linux, x64]
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        service: [backend, frontend, admin, landing]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - name: Validate stage compose
-        run: docker compose -f docker-compose.stage.yml config >/dev/null
-
-      - name: Validate prod compose
-        run: docker compose -f docker-compose.prod.yml config >/dev/null
-
-      - name: Build backend image
-        run: docker buildx build --load -f apps/backend/Dockerfile -t arenda-backend:ci .
-
-      - name: Scan backend image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
         with:
-          image-ref: arenda-backend:ci
-          format: table
-          exit-code: "1"
-          ignore-unfixed: "true"
-          vuln-type: "os,library"
-          severity: "HIGH,CRITICAL"
+          dockerfile: apps/${{ matrix.service }}/Dockerfile
+          failure-threshold: warning
 
-      - name: Build frontend image
-        run: docker buildx build --load -f apps/frontend/Dockerfile -t arenda-frontend:ci .
+      # Compose files reference images via env vars and require .env.stage/.env.prod
+      # env files, so provide dummy values just for `config` validation.
+      - name: Validate compose configs
+        if: matrix.service == 'backend'
+        env:
+          BACKEND_IMAGE: ghcr.io/x@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          FRONTEND_IMAGE: ghcr.io/x@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          ADMIN_IMAGE: ghcr.io/x@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          LANDING_IMAGE: ghcr.io/x@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        run: |
+          touch .env.stage .env.prod
+          trap 'rm -f .env.stage .env.prod' EXIT
+          docker compose -f docker-compose.stage.yml config >/dev/null
+          docker compose -f docker-compose.prod.yml config >/dev/null
 
-      - name: Scan frontend image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+      - name: Build image
+        run: |
+          docker buildx build --load \
+            -f apps/${{ matrix.service }}/Dockerfile \
+            -t arenda-${{ matrix.service }}:ci \
+            --cache-from type=gha,scope=${{ matrix.service }} \
+            --cache-to type=gha,mode=max,scope=${{ matrix.service }} \
+            .
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: arenda-frontend:ci
-          format: table
-          exit-code: "1"
-          ignore-unfixed: "true"
-          vuln-type: "os,library"
-          severity: "HIGH,CRITICAL"
-
-      - name: Build admin image
-        run: docker buildx build --load -f apps/admin/Dockerfile -t arenda-admin:ci .
-
-      - name: Scan admin image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
-        with:
-          image-ref: arenda-admin:ci
+          image-ref: arenda-${{ matrix.service }}:ci
           format: table
           exit-code: "1"
           ignore-unfixed: "true"

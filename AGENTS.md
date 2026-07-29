@@ -24,6 +24,7 @@ The main Kimi Code agent is always an **Orchestrator**. It does not write, edit,
 - Landing: `apps/landing`, a standalone Vite + React SPA (export from Figma Make) served by nginx as the public site at `/`.
 - Product docs: `docs/`; domain glossary: `CONTEXT.md`; architecture decisions: `docs/adr/`.
 - Local infrastructure runs through `docker-compose.local.yml`; run the backend on the host with Go.
+- Stage/prod deploy: GitHub Actions on a self-hosted runner builds images, pushes them to GHCR and deploys by digest over SSH (`docs/adr/0024-deploy-pipeline-ghcr-runner.md`). Environment values live in GitHub Environments (`ENV_FILE` secret, key set pinned to `.env.<env>.example`); nothing is built or hand-edited on the server. Operational procedures (bootstrap, secrets map, backup/restore, rollback) — `docs/deployment.md`.
 - Observability: `docker-compose.obs.yml` + `observability/`, a self-hosted Uptrace stack (compose project `arenda-obs`) collecting stage/prod logs, traces, and metrics with email alerts; see `docs/adr/0021-centralized-observability-uptrace.md` and `observability/README.md`.
 
 ## Work Rules

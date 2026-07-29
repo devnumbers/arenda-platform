@@ -4,9 +4,19 @@ UPDATE user_subscriptions
 SET tariff_id = (SELECT id FROM tariffs WHERE name = 'basic')
 WHERE tariff_id IN (SELECT id FROM tariffs WHERE name IN ('pro', 'business'));
 
-UPDATE user_subscriptions
-SET pending_tariff_id = NULL
-WHERE pending_tariff_id IN (SELECT id FROM tariffs WHERE name IN ('pro', 'business'));
+-- pending_tariff_id is added by 000023, whose down migration runs before this
+-- one and drops the column; skip the update when the column is already gone.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'user_subscriptions' AND column_name = 'pending_tariff_id'
+    ) THEN
+        UPDATE user_subscriptions
+        SET pending_tariff_id = NULL
+        WHERE pending_tariff_id IN (SELECT id FROM tariffs WHERE name IN ('pro', 'business'));
+    END IF;
+END $$;
 
 DELETE FROM tariffs WHERE name IN ('pro', 'business');
 

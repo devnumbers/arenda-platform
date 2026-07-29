@@ -1,17 +1,49 @@
 # Deployment
 
-Документ описывает stage/prod деплой через Docker Compose на сервере, где Caddy
-запущен на хосте и проксирует публичные домены на localhost-порты контейнеров.
+Документ описывает stage/prod деплой: GitHub Actions собирает образы на
+self-hosted runner'е, пушит в GHCR и деплоит на сервер по digest через SSH.
+На сервере нет репозитория и сборки — только compose-файлы, env и бэкапы.
+Caddy запущен на хосте и проксирует публичные домены на localhost-порты
+контейнеров. Архитектурное решение — `docs/adr/0024-deploy-pipeline-ghcr-runner.md`,
+дизайн — `docs/plans/2026-07-28-deploy-pipeline-redesign-design.md`.
+
+## Поток деплоя
+
+```
+push в dev (stage) или main (prod)
+  → ci.yml (lint, тесты, миграции up/down, сканеры — blocking)
+  → сборка 4 образов (matrix, max-parallel: 2) → trivy → push в GHCR → cosign sign
+  → _deploy.yml: cosign verify → рендер env из секрета ENV_FILE (со сверкой
+    ключей против .env.<env>.example) → передача env на сервер через base64
+    в envs ssh-шага → pg_dump-бэкап →
+    миграции → up -d --wait → внешние smoke → точечная чистка старых образов
+```
+
+При падении раскатки или smoke — автоматический откат образов на предыдущие
+(`.previous-images` в deploy-каталоге). БД автоматически НЕ откатывается —
+см. разделы «Миграции» и «Rollback».
+
+Workflow-файлы: `.github/workflows/{ci,security,_deploy,deploy-stage,deploy-prod}.yml`.
+`security.yml` — это SAST (semgrep) и trivy-fs (ежедневный ночной прогон + non-blocking на PR);
+уязвимости зависимостей закрыты Dependabot (`.github/dependabot.yml`: security
+updates + сгруппированные weekly version updates в ветку `dev`) и govulncheck
+в `ci.yml`.
+Ручной деплой и откат — `workflow_dispatch` в `deploy-stage.yml` /
+`deploy-prod.yml` с четырьмя digest-inputs.
 
 ## Окружения
 
-- `dev` branch -> stage: `/opt/arenda/stage`, compose project `arenda-stage`.
-- `main` branch -> prod: `/opt/arenda/prod`, compose project `arenda-prod`.
+- `dev` branch → stage: `/opt/arenda/stage`, compose project `arenda-stage`,
+  GitHub Environment `stage` (deployment branch policy: только `dev`).
+- `main` branch → prod: `/opt/arenda/prod`, compose project `arenda-prod`,
+  GitHub Environment `production` (deployment branch policy: только `main`).
 - Stage backend использует `APP_ENV=dev`, чтобы T-Kassa sandbox был допустим текущей валидацией конфигурации.
 - Prod backend использует `APP_ENV=production`.
-- Stage/prod директории на сервере принадлежат `root:root`; деплой выполняется под `root`.
-- Настоящие `.env.stage` и `.env.prod` хранятся только на сервере с правами `600`.
+- Deploy-каталоги на сервере содержат только `docker-compose.<env>.yml`,
+  `.env.<env>` (+ `.prev`), `.previous-images`, `.deploy-run-id`; репозитория
+  и git-чекаута на сервере нет.
 - Лендинг (`apps/landing`) слушает `127.0.0.1:13002` в prod и `127.0.0.1:23002` в stage; Caddy отдаёт его как fallback для `/`.
+- При каждом деплое backend недоступен 5–15 секунд (один инстанс) — принято.
 
 ## DNS
 
@@ -26,52 +58,170 @@
 
 ## Server Bootstrap
 
+Одноразовая подготовка нового сервера. Git-чекауты не нужны: deploy-каталоги
+получают compose-файл через scp, а env — через base64 в envs ssh-шага пайплайна.
+
+1. Установить Docker + compose plugin; установить и зарегистрировать
+   self-hosted GitHub Actions runner (labels `self-hosted, linux, x64`) —
+   runner на продовом VPS является принятым риском, компенсации см. в ADR 0024.
+2. Создать deploy-пользователя и каталоги:
+
+   ```bash
+   mkdir -p /opt/arenda/stage /opt/arenda/prod /opt/arenda/backups/stage /opt/arenda/backups/prod
+   chmod 700 /opt/arenda/backups /opt/arenda/backups/stage /opt/arenda/backups/prod
+   ```
+
+3. Сгенерировать SSH-ключ deploy-пользователя; приватный ключ — в секрет
+   `SSH_PRIVATE_KEY` обоих GitHub Environments, публичный — в
+   `~/.ssh/authorized_keys` deploy-пользователя. Снять fingerprint хоста
+   (`ssh-keyscan <host> | ssh-keygen -lf -`) — в секрет
+   `SSH_HOST_KEY_FINGERPRINT`.
+4. Залогиниться в GHCR read-only токеном (тот же `GHCR_READ_TOKEN`, что в
+   секретах): `echo "$TOKEN" | docker login ghcr.io -u <user> --password-stdin`.
+5. Установить Caddy на хост, положить Caddyfile (ниже), настроить DNS.
+6. Первый деплой выполняется самим пайплайном: он скопирует
+   `docker-compose.<env>.yml` и отрендеренный `.env.<env>`, сделает бэкап
+   (пустая БД — дамп маленький, это нормально только для самого первого
+   запуска), применит миграции и поднимет стек.
+
+## GitHub Environments и секреты
+
+Два environment: `stage` и `production`. Набор секретов одинаковый, значения
+свои.
+
+| Секрет | Где | Назначение | Ротация |
+| --- | --- | --- | --- |
+| `ENV_FILE` | environment | Весь набор переменных окружения одним multiline-значением. Ключи должны точно совпадать с `.env.<env>.example` | При изменении любой переменной; заодно обновить example, иначе deploy упадёт на сверке ключей |
+| `SSH_PRIVATE_KEY` | environment | Deploy-доступ на сервер (appleboy scp/ssh) | При смене ключа deploy-пользователя |
+| `SSH_HOST` | environment | Хост VPS | При смене сервера |
+| `SSH_USER` | environment | Deploy-пользователь | — |
+| `SSH_HOST_KEY_FINGERPRINT` | environment | Проверка SSH host key | При пересоздании сервера; получить через `ssh-keyscan` |
+| `GHCR_READ_TOKEN` | environment | `docker login ghcr.io` на сервере и `cosign verify` на runner'е | Fine-grained PAT, `read:packages` только этого репо, expiration 90 дней — перевыпускать заранее |
+| `GHCR_USERNAME` | environment | Логин для GHCR | — |
+
+Push в GHCR из workflow идёт под встроенным `GITHUB_TOKEN` (`packages: write`
+только в джобе `images`), отдельный write-токен не нужен. Пакеты GHCR должны
+оставаться приватными.
+
+## Env: как это работает
+
+- Источник истины по **набору ключей** — `.env.stage.example` /
+  `.env.prod.example` в репозитории. Источник **значений** — секрет
+  `ENV_FILE` соответствующего GitHub Environment.
+- При деплое runner рендерит `ENV_FILE` в файл, сверяет множество ключей с
+  example-файлом (несовпадение = fail, защита от drift'а), дописывает
+  `*_IMAGE=...@sha256:...` и `service.version` в `OTEL_RESOURCE_ATTRIBUTES`,
+  маскирует значения в логе и копирует файл на сервер (`chmod 600`, прежняя
+  версия сохраняется как `.env.<env>.prev`).
+- Ручные правки `.env.<env>` на сервере не предполагаются: следующий деплой
+  их перезапишет. Изменение env = обновить секрет `ENV_FILE` (+ example при
+  изменении набора ключей) и задеплоить.
+- `AUTO_MIGRATE` задаётся в compose (`environment:`), а не в env-файле: в
+  stage/prod он `false`, миграции выполняет отдельный шаг деплоя.
+
+Требования к значениям (перенесены из старой схемы, актуальны):
+
+- Пароль в `DATABASE_URL` должен совпадать с `POSTGRES_PASSWORD`.
+- Для production `APP_BASE_URL` = `https://rentlee.ru`, `T_KASSA_BASE_URL` =
+  `https://securepay.tinkoff.ru/v2/`. При необходимости prod можно временно
+  направить на тестовую среду T-Kassa (`https://rest-api-test.tinkoff.ru/v2/`),
+  но перед реальным трафиком вернуться на боевой URL.
+- Для production-терминала T-Bank обязательно указать URL уведомлений — на него
+  приходят вебхуки платежей и привязки карт (`AddCard` не поддерживает per-request
+  `NotificationURL`): `https://rentlee.ru/webhooks/payment/tkassa`.
+  Redirect-URL (`SuccessURL`/`FailURL` для платежей, `RedirectUrl`/`FailRedirectUrl`
+  для `AddCard`) backend передаёт в T-Bank динамически из `APP_BASE_URL` в каждом
+  запросе — это основной путь, настройка return URL в терминале не требуется.
+  Для `AddCard` redirect-поля находятся вне официальной схемы API и исключены из
+  подписи токена (prod-инцидент, error 204). Документированный fallback —
+  настройка Success/Fail Add Card URL в параметрах терминала.
+- Если `REGRU_S3_PUBLIC_BASE_URL` указывает на `https://cdn.rentlee.ru`
+  (актуально только при `PHOTO_STORAGE_PROVIDER=s3`), этот DNS/публичный URL
+  должен быть настроен до запуска backend; иначе указать рабочий публичный URL
+  REG.RU S3.
+- `PHOTO_STORAGE_PROVIDER=s3` включает REG.RU S3 и требует заполненные
+  `REGRU_S3_*` значения. `REGRU_S3_*` также используются пайплайном для
+  off-site копии дампов БД (endpoint/bucket/access/secret key).
+
+## Миграции и бэкапы
+
+- Перед каждой раскаткой deploy-скрипт делает дамп:
+  `docker exec arenda-<env>-postgres pg_dump -U $POSTGRES_USER $POSTGRES_DB | gzip`
+  в `/opt/arenda/backups/<env>/<timestamp>.sql.gz`. Архив проверяется
+  (`gzip -t` + размер), хранятся последние 10 дампов, копия выгружается в
+  REG.RU S3 (`s3://<bucket>/backups/<env>/`, падение выгрузки — warning, деплой
+  продолжается). Каталоги бэкапов — `chmod 700`.
+- Миграции выполняются отдельным compose-сервисом (`profiles: ["migrate"]`,
+  команда `./arenda-api migrate`, общий env_file) после бэкапа и до раскатки.
+  Падение миграции останавливает деплой — старая версия продолжает работать.
+- `AUTO_MIGRATE=false` в stage/prod: backend при старте схему не трогает.
+- Политика миграций — **expand-contract** (ADR 0024): миграция должна быть
+  совместима с предыдущей версией кода; destructive-изменения — двумя
+  релизами; `CREATE INDEX CONCURRENTLY` на больших таблицах. Авто-rollback
+  никогда не делает `migrate down`; `down` прогоняется только в CI на
+  эфемерной БД. Контроль — чеклист в `.github/PULL_REQUEST_TEMPLATE.md`.
+
+### Restore из дампа
+
+Ручная процедура. Пример для stage; для prod заменить `ENV=prod`.
+
 ```bash
-mkdir -p /opt/arenda/stage /opt/arenda/prod
-chown -R root:root /opt/arenda
+ENV=stage
+cd /opt/arenda/$ENV
+POSTGRES_USER=$(grep '^POSTGRES_USER=' .env.$ENV | cut -d= -f2-)
+POSTGRES_DB=$(grep '^POSTGRES_DB=' .env.$ENV | cut -d= -f2-)
+DUMP=/opt/arenda/backups/$ENV/<timestamp>.sql.gz   # или файл, скачанный из S3
 
-cd /opt/arenda/stage
-git clone git@github.com:devnumbers/arenda-platform.git .
-cp .env.stage.example .env.stage
-chmod 600 .env.stage
+# 1. Остановить backend, чтобы никто не писал в БД.
+docker compose --env-file .env.$ENV -f docker-compose.$ENV.yml stop backend
 
-cd /opt/arenda/prod
-git clone git@github.com:devnumbers/arenda-platform.git .
-cp .env.prod.example .env.prod
-chmod 600 .env.prod
+# 2. Пересоздать базу (дамп plain-формата не содержит DROP).
+docker exec arenda-$ENV-postgres psql -U "$POSTGRES_USER" -d postgres \
+  -c "DROP DATABASE $POSTGRES_DB;" \
+  -c "CREATE DATABASE $POSTGRES_DB OWNER $POSTGRES_USER;"
+
+# 3. Восстановить дамп.
+gunzip -c "$DUMP" | docker exec -i arenda-$ENV-postgres \
+  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1
+
+# 4. Запустить стек.
+docker compose --env-file .env.$ENV -f docker-compose.$ENV.yml up -d --wait
+
+# 5. Smoke checks (см. ниже).
 ```
 
-В `.env.stage` и `.env.prod` заменить все `replace-*` значения. Пароль в
-`DATABASE_URL` должен совпадать с `POSTGRES_PASSWORD`. Для production
-`APP_BASE_URL` должен быть `https://rentlee.ru`, а `T_KASSA_BASE_URL` -
-`https://securepay.tinkoff.ru/v2/`.
+Процедуру нужно порепетировать на stage (восстановить дамп в отдельную базу и
+проверить целостность) до того, как она понадобится в бою.
 
-При необходимости production можно временно направить на тестовую среду T-Kassa
-(`https://rest-api-test.tinkoff.ru/v2/`), но перед реальным трафиком нужно
-вернуться на `https://securepay.tinkoff.ru/v2/`.
+## Rollback
 
-Для production-терминала T-Bank обязательно указать URL уведомлений — на него
-приходят вебхуки платежей и привязки карт (`AddCard` не поддерживает per-request
-`NotificationURL`):
+Откат кода — `workflow_dispatch` workflow `Deploy Stage` / `Deploy Prod` с
+четырьмя digest-inputs (`backend_image`, `frontend_image`, `admin_image`,
+`landing_image`) предыдущего релиза. Формат:
+`ghcr.io/devnumbers/arenda-planform-<service>@sha256:<64 hex>`.
 
-```text
-https://rentlee.ru/webhooks/payment/tkassa
-```
+Где взять digest'ы:
 
-Redirect-URL (`SuccessURL`/`FailURL` для платежей, `RedirectUrl`/`FailRedirectUrl`
-для `AddCard`) backend передаёт в T-Bank динамически из `APP_BASE_URL` в каждом
-запросе — это основной путь, настройка return URL в терминале не требуется.
-Для `AddCard` redirect-поля находятся вне официальной схемы API и исключены из
-подписи токена (prod-инцидент, error 204). Документированный fallback —
-настройка Success/Fail Add Card URL в параметрах терминала. Если `REGRU_S3_PUBLIC_BASE_URL` указывает
-на `https://cdn.rentlee.ru` (актуально только при `PHOTO_STORAGE_PROVIDER=s3`), этот DNS/публичный URL должен быть настроен до
-запуска backend; иначе указать рабочий публичный URL REG.RU S3.
+- в логе прошлого успешного рана (джоба `Build & push <service>`, шаг
+  «Resolve and validate digest») или в его артефактах `digest-<service>`
+  (retention 7 дней);
+- через GHCR UI (packages репозитория);
+- локально: `docker buildx imagetools inspect ghcr.io/devnumbers/arenda-planform-<service>:<sha>`.
 
-`PHOTO_STORAGE_PROVIDER=s3` включает REG.RU S3 и требует заполненные
-`REGRU_S3_*` значения. Сейчас на stage и prod хранилище фотографий отключено и
-используется `PHOTO_STORAGE_PROVIDER=fake` (временный запуск без готового S3):
-backend запускается без проверки бакета, но загрузку фотографий объектов в таком
-режиме использовать нельзя.
+Ручной dispatch пропускает сборку и деплоит указанные digest'ы по той же
+цепочке (verify → env → бэкап → миграции → раскатка → smoke). Миграции при
+откате уже применены (схема новее кода) — поэтому expand-contract
+обязателен; откат БД — только restore из дампа вручную.
+
+Автоматический rollback внутри деплоя (падение раскатки или smoke) откатывает
+только образы по `.previous-images` и явно пишет в лог, что БД не
+откачена.
+
+При самом первом деплое по новой схеме `.previous-images` пуст:
+автоматический откат пропускается с предупреждением, а откат на build-образы
+старой схемы невозможен — их нет в GHCR. До первого зелёного деплоя серверные
+`.env.<env>`-файлы старой схемы держать как fallback, после — удалить вместе
+с git-чекаутом.
 
 ## Caddyfile
 
@@ -157,45 +307,10 @@ sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
-## Manual Deploy
-
-Stage:
-
-```bash
-cd /opt/arenda/stage
-DEPLOY_SHA=<sha>
-git fetch --prune origin +refs/heads/dev:refs/remotes/origin/dev
-git checkout --detach --force "$DEPLOY_SHA"
-git reset --hard "$DEPLOY_SHA"
-git clean -ffdx -e .env.stage
-test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
-docker compose -f docker-compose.stage.yml config
-docker compose -f docker-compose.stage.yml up -d --build --remove-orphans
-curl -fsS http://127.0.0.1:28080/healthz | grep -q '"status":"ok"'
-curl -fsS http://127.0.0.1:23000/login >/dev/null
-test "$(curl -fsS http://127.0.0.1:23002/healthz)" = "ok"
-test "$(curl -fsS http://127.0.0.1:23001/healthz)" = "ok"
-```
-
-Prod:
-
-```bash
-cd /opt/arenda/prod
-DEPLOY_SHA=<sha>
-git fetch --prune origin +refs/heads/main:refs/remotes/origin/main
-git checkout --detach --force "$DEPLOY_SHA"
-git reset --hard "$DEPLOY_SHA"
-git clean -ffdx -e .env.prod
-test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
-docker compose -f docker-compose.prod.yml config
-docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
-curl -fsS http://127.0.0.1:18080/healthz | grep -q '"status":"ok"'
-curl -fsS http://127.0.0.1:13000/login >/dev/null
-test "$(curl -fsS http://127.0.0.1:13002/healthz)" = "ok"
-test "$(curl -fsS http://127.0.0.1:13001/healthz)" = "ok"
-```
-
 ## Smoke Checks
+
+Эти же проверки (плюс сверка `version` в `/api/healthz` с sha коммита)
+выполняет deploy-джоба снаружи; вручную их можно повторить так:
 
 ```bash
 curl -fsS https://dev.rentlee.ru/ | grep -q 'id="root"'
@@ -218,7 +333,8 @@ esac
 ```
 
 `/api/healthz` подтверждает, что Caddy попал в backend и `/api` был снят
-через `handle_path`. `/api/me` без cookie должен отвечать `401`.
+через `handle_path`. Поле `version` в ответе равно sha задеплоенного коммита
+(при ручном dispatch — `manual`). `/api/me` без cookie должен отвечать `401`.
 
 ## Runtime Guards
 
@@ -231,16 +347,20 @@ esac
   PostgreSQL не масштабируется автоматически ни под RAM хоста, ни под лимит
   cgroup: при изменении `mem_limit` или апгрейде сервера параметры
   пересчитываются по этой формуле и правятся в compose вручную. Лимиты не
-  убирать: хост общий (5.8GB RAM, swap=0, ~30 контейнеров), лимиты изолируют
-  OOM внутри cgroup вместо kernel OOM killer по всему хосту.
+  убирать: хост общий, лимиты изолируют OOM внутри cgroup вместо kernel OOM
+  killer по всему хосту. Сборка образов идёт на том же хосте (runner) —
+  поэтому в workflow `max-parallel: 2` у matrix-сборок.
 - Все runtime images имеют Dockerfile `HEALTHCHECK`; compose healthchecks
-  остаются как orchestration checks для `depends_on`.
+  остаются как orchestration checks для `depends_on` и для `up -d --wait`.
 - Runtime base images закреплены по digest (build-стадии `node:24-alpine`
   намеренно по тегу). При обновлении базового образа сначала
   проверить новый digest через `docker buildx imagetools inspect <image>:<tag>`,
   затем обновить Dockerfiles/compose и повторить полный build/test.
-- `git clean -ffdx` в deploy директории удаляет любой drift checkout-а. В этих
-  директориях должны храниться только файлы репозитория и целевой `.env.*`.
+- Чистка старых образов на сервере — только точечная из deploy-скрипта
+  (наши GHCR-образы, current+previous сохраняются). Никаких
+  `docker image prune -f` / `docker system prune`: на хосте чужие проекты.
+- Deploy-каталоги `/opt/arenda/{stage,prod}` не содержат репозитория; всё
+  лишнее туда не складывать — каталоги перезаписываются пайплайном.
 
 ## Observability
 
@@ -251,9 +371,8 @@ esac
 
 - Стек живёт в отдельном compose-проекте `arenda-obs` (`docker-compose.obs.yml`
   + каталог `observability/` в репо) и разворачивается из `/opt/arenda/obs` —
-  вне stage/prod checkout'ов, которые чистятся `git clean -ffdx`. Сервисы:
-  ClickHouse, PostgreSQL, Uptrace, Redis, Vector, OTel Collector; суммарный
-  лимит RAM ~2.6 ГБ, все порты привязаны к `127.0.0.1`.
+  отдельно от deploy-каталогов stage/prod. Сервисы: ClickHouse, PostgreSQL,
+  Uptrace, Redis, Vector, OTel Collector; все порты привязаны к `127.0.0.1`.
 - Что собирается: stdout всех контейнеров (структурированные slog-логи backend
   остаются logging source of truth, локальный json-file driver и `docker logs`
   сохраняются), access-логи Caddy (`/var/log/caddy/access.log`), лог сбоев
@@ -263,10 +382,9 @@ esac
   метрики хоста и контейнеров (OTel Collector: hostmetrics + docker_stats).
 - Backend подключается к внешней docker-сети `arenda-obs` и отправляет
   трейсы/метрики по OTLP на `http://uptrace:14317` (порт наружу не
-  публикуется). В `.env.stage`/`.env.prod` добавляется блок `OTEL_*`
-  (`OTEL_SERVICE_NAME`, `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`,
-  `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`,
-  `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_TRACES_SAMPLER_ARG`).
+  публикуется). Блок `OTEL_*` входит в `ENV_FILE`; при каждом деплое пайплайн
+  обновляет `service.version` в `OTEL_RESOURCE_ATTRIBUTES` — это deployment
+  marker в Uptrace.
 - UI: `https://logs.rentlee.ru` — отдельный блок в серверном Caddyfile:
   `basic_auth` (bcrypt-хэш, учётка хранится только в Caddyfile на сервере) +
   `reverse_proxy 127.0.0.1:14318`. DNS A-запись добавляет владелец. Запасной
@@ -330,23 +448,11 @@ docker run --rm --entrypoint curl arenda-backend:tkassa-ca -Iv https://rest-api-
 Для stage T-Bank также требует добавить IP сервера `80.78.254.79` в белый список
 тестовой среды для URL `rest-api-test.tinkoff.ru`.
 
-## Rollback
-
-```bash
-cd /opt/arenda/<stage-or-prod>
-DEPLOY_SHA=<previous-sha>
-git fetch --prune origin
-git checkout --detach --force "$DEPLOY_SHA"
-git reset --hard "$DEPLOY_SHA"
-git clean -ffdx -e .env.stage # для prod заменить на -e .env.prod
-test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
-docker compose -f docker-compose.<stage-or-prod>.yml up -d --build --remove-orphans
-```
-
-После rollback повторить smoke checks для нужного окружения.
-
 ## Notes
 
 - Все сервисные порты в compose привязаны к `127.0.0.1`; Postgres не публикуется наружу.
-- `SMS_SENDER=disabled` безопасен для stage/prod и не логирует SMS-коды. Старые SMS-сценарии смены телефона будут недоступны до подключения реального SMS-провайдера.
-- Перед реальным production traffic нужны отдельные резервные копии Postgres и S3; это не входит в текущую compose-конфигурацию.
+- Бэкапы БД делаются при каждом деплое (см. «Миграции и бэкапы») — это
+  событийные дампы, а не расписание; отдельный cron для регулярных бэкапов
+  пока не настроен.
+- Шифрование дампов (age) и выделенный DDL-пользователь для миграций —
+  отложено, см. ADR 0024.

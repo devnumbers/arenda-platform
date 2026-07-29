@@ -1,0 +1,485 @@
+name: Deploy (reusable)
+
+# Reusable deploy workflow: pulls immutable digest-pinned images from GHCR,
+# verifies cosign signatures, backs up the DB, migrates, rolls out with
+# automatic rollback, and runs external smoke checks.
+# Called by deploy-stage.yml and deploy-prod.yml.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "GitHub Environment name (stage | production)"
+        required: true
+        type: string
+      compose_env:
+        description: "Server-side environment suffix (stage | prod)"
+        required: true
+        type: string
+      base_url:
+        description: "Public base URL of the frontend (e.g. https://dev.rentlee.ru)"
+        required: true
+        type: string
+      admin_url:
+        description: "Public base URL of the admin panel (e.g. https://admin.dev.rentlee.ru)"
+        required: true
+        type: string
+      backend_image:
+        description: "ghcr.io/devnumbers/arenda-planform-backend@sha256:<64 hex>"
+        required: true
+        type: string
+      frontend_image:
+        description: "ghcr.io/devnumbers/arenda-planform-frontend@sha256:<64 hex>"
+        required: true
+        type: string
+      admin_image:
+        description: "ghcr.io/devnumbers/arenda-planform-admin@sha256:<64 hex>"
+        required: true
+        type: string
+      landing_image:
+        description: "ghcr.io/devnumbers/arenda-planform-landing@sha256:<64 hex>"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: [self-hosted, linux, x64]
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    env:
+      COMPOSE_ENV: ${{ inputs.compose_env }}
+      DEPLOY_DIR: /opt/arenda/${{ inputs.compose_env }}
+      BACKEND_IMAGE: ${{ inputs.backend_image }}
+      FRONTEND_IMAGE: ${{ inputs.frontend_image }}
+      ADMIN_IMAGE: ${{ inputs.admin_image }}
+      LANDING_IMAGE: ${{ inputs.landing_image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Validate image digest refs
+        run: |
+          set -euo pipefail
+          check_ref() {
+            local service="$1" ref="$2"
+            if ! grep -qE "^ghcr\.io/devnumbers/arenda-planform-${service}@sha256:[0-9a-f]{64}$" <<<"${ref}"; then
+              echo "Invalid ${service} image ref: ${ref}" >&2
+              echo "Expected: ghcr.io/devnumbers/arenda-planform-${service}@sha256:<64 hex>" >&2
+              exit 1
+            fi
+          }
+          check_ref backend "${BACKEND_IMAGE}"
+          check_ref frontend "${FRONTEND_IMAGE}"
+          check_ref admin "${ADMIN_IMAGE}"
+          check_ref landing "${LANDING_IMAGE}"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: Login to GHCR (for cosign verify)
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_READ_TOKEN }}
+
+      - name: Verify image signatures
+        run: |
+          set -euo pipefail
+          for ref in "${BACKEND_IMAGE}" "${FRONTEND_IMAGE}" "${ADMIN_IMAGE}" "${LANDING_IMAGE}"; do
+            echo "Verifying ${ref}"
+            cosign verify \
+              --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+              --certificate-identity-regexp='^https://github\.com/devnumbers/arenda-platform/\.github/workflows/deploy-(stage|prod)\.yml@refs/heads/(dev|main)$' \
+              "${ref}"
+          done
+
+      - name: Render env file
+        id: render
+        env:
+          ENV_FILE_CONTENT: ${{ secrets.ENV_FILE }}
+          DEPLOY_VERSION: ${{ github.event_name == 'push' && github.sha || 'manual' }}
+        run: |
+          set -euo pipefail
+          set +x
+          # Build in the workspace (secrets stay out of $RUNNER_TEMP); the file is
+          # handed to the deploy step as base64 via step output (see below).
+          # .deploy/ is removed by the final cleanup step.
+          umask 077
+          mkdir -p .deploy
+          chmod 700 .deploy
+          ENV_OUT=".deploy/.env.${COMPOSE_ENV}"
+          printf '%s\n' "${ENV_FILE_CONTENT}" > "${ENV_OUT}"
+
+          # Mask every secret value in the workflow log.
+          while IFS= read -r line; do
+            case "${line}" in ''|\#*) continue ;; esac
+            value="${line#*=}"
+            if [ -n "${value}" ]; then
+              echo "::add-mask::${value}"
+            fi
+          done < "${ENV_OUT}"
+
+          # Key drift check: keys of the ENV_FILE secret must match .env.<env>.example exactly.
+          EXAMPLE=".env.${COMPOSE_ENV}.example"
+          actual="$(sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' "${ENV_OUT}" | sort -u)"
+          expected="$(sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' "${EXAMPLE}" | sort -u)"
+          if [ "${actual}" != "${expected}" ]; then
+            echo "ENV DRIFT: keys of the ENV_FILE secret differ from ${EXAMPLE}" >&2
+            echo "--- keys only in ${EXAMPLE} (missing in ENV_FILE) / only in ENV_FILE (unexpected) ---" >&2
+            diff <(printf '%s\n' "${expected}") <(printf '%s\n' "${actual}") >&2 || true
+            echo "(< expected per ${EXAMPLE}, > actual in ENV_FILE secret)" >&2
+            exit 1
+          fi
+
+          # Pin image refs for compose (image: ${BACKEND_IMAGE} etc.).
+          {
+            echo "BACKEND_IMAGE=${BACKEND_IMAGE}"
+            echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}"
+            echo "ADMIN_IMAGE=${ADMIN_IMAGE}"
+            echo "LANDING_IMAGE=${LANDING_IMAGE}"
+          } >> "${ENV_OUT}"
+
+          # Set OTEL service.version (push: commit sha, workflow_dispatch: "manual").
+          if grep -q '^OTEL_RESOURCE_ATTRIBUTES=' "${ENV_OUT}"; then
+            if grep -q '^OTEL_RESOURCE_ATTRIBUTES=.*service\.version=' "${ENV_OUT}"; then
+              sed -i "s/service\.version=[^,]*/service.version=${DEPLOY_VERSION}/" "${ENV_OUT}"
+            else
+              sed -i "s|^OTEL_RESOURCE_ATTRIBUTES=\(.*\)$|OTEL_RESOURCE_ATTRIBUTES=\1,service.version=${DEPLOY_VERSION}|" "${ENV_OUT}"
+            fi
+          else
+            echo "OTEL_RESOURCE_ATTRIBUTES=service.version=${DEPLOY_VERSION}" >> "${ENV_OUT}"
+          fi
+
+          chmod 600 "${ENV_OUT}"
+          cp "${ENV_OUT}" ".deploy/.env.${COMPOSE_ENV}.new"
+          chmod 600 ".deploy/.env.${COMPOSE_ENV}.new"
+          echo "Env file rendered: $(wc -l < "${ENV_OUT}") lines"
+
+          # Pass the env file to the deploy step via base64 in step output:
+          # appleboy/scp-action runs as uid 1000 and cannot read this 600/umask-077 file.
+          ENV_B64="$(base64 -w0 ".deploy/.env.${COMPOSE_ENV}.new")"
+          echo "::add-mask::${ENV_B64}"
+          echo "env_b64=${ENV_B64}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload compose file
+        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_HOST_KEY_FINGERPRINT }}
+          source: "docker-compose.${{ inputs.compose_env }}.yml"
+          target: "${{ env.DEPLOY_DIR }}/"
+
+      - name: Deploy on server
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
+        env:
+          # Passed via envs: only simple values; complex ones (with = or ,) break interpolation.
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          # base64 alphabet is safe for envs interpolation.
+          ENV_B64: ${{ steps.render.outputs.env_b64 }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_HOST_KEY_FINGERPRINT }}
+          envs: GHCR_READ_TOKEN,GHCR_USERNAME,ENV_B64
+          script: |
+            set -euo pipefail
+            cd "/opt/arenda/${{ inputs.compose_env }}"
+            ENV_NAME=".env.${{ inputs.compose_env }}"
+            COMPOSE_FILE="docker-compose.${{ inputs.compose_env }}.yml"
+
+            # Env file arrives as base64 via envs (scp cannot read the 600 file on the runner).
+            echo "${ENV_B64}" | base64 -d > "${ENV_NAME}.new"
+            chmod 600 "${ENV_NAME}.new"
+
+            echo "${GHCR_READ_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
+
+            # Record currently running images for a possible rollback.
+            # Resolve containers by compose service name — never hardcode
+            # container names (compose v2 suffixes them with a replica counter).
+            : > .previous-images
+            for svc in backend frontend admin landing; do
+              cid="$(docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" ps -q "${svc}" 2>/dev/null | head -n1 || true)"
+              current=""
+              if [ -n "${cid}" ]; then
+                current="$(docker inspect -f '{{.Config.Image}}' "${cid}" 2>/dev/null || true)"
+              fi
+              if [ -n "${current}" ]; then
+                key="$(printf '%s' "${svc}" | tr '[:lower:]' '[:upper:]')_IMAGE"
+                echo "${key}=${current}" >> .previous-images
+              fi
+            done
+            chmod 600 .previous-images
+
+            # Atomic env swap (previous copy kept for reference).
+            # Marker ties .previous-images to THIS run: the post-smoke rollback
+            # step only fires when the marker matches the current run id.
+            cp -f "${ENV_NAME}" "${ENV_NAME}.prev" 2>/dev/null || true
+            mv "${ENV_NAME}.new" "${ENV_NAME}"
+            chmod 600 "${ENV_NAME}"
+            echo "${{ github.run_id }}-${{ github.run_attempt }}" > .deploy-run-id
+
+            # --- DB backup (before any change) ---
+            BACKUP_DIR="/opt/arenda/backups/${{ inputs.compose_env }}"
+            mkdir -p "${BACKUP_DIR}"
+            chmod 700 /opt/arenda/backups
+            chmod 700 "${BACKUP_DIR}"
+            POSTGRES_USER_VALUE="$(grep -E '^POSTGRES_USER=' "${ENV_NAME}" | head -n1 | cut -d= -f2-)"
+            POSTGRES_DB_VALUE="$(grep -E '^POSTGRES_DB=' "${ENV_NAME}" | head -n1 | cut -d= -f2-)"
+            if [ -z "${POSTGRES_USER_VALUE}" ] || [ -z "${POSTGRES_DB_VALUE}" ]; then
+              echo "POSTGRES_USER/POSTGRES_DB missing in ${ENV_NAME}" >&2
+              exit 1
+            fi
+            DUMP="${BACKUP_DIR}/$(date +%Y%m%d-%H%M%S).sql.gz"
+            docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" exec -T postgres pg_dump -U "${POSTGRES_USER_VALUE}" "${POSTGRES_DB_VALUE}" | gzip > "${DUMP}"
+            gzip -t "${DUMP}"
+            DUMP_SIZE="$(stat -c%s "${DUMP}")"
+            if [ "${DUMP_SIZE}" -le 1024 ]; then
+              echo "DB dump suspiciously small (${DUMP_SIZE} bytes): ${DUMP}" >&2
+              exit 1
+            fi
+            echo "DB backup OK: ${DUMP} (${DUMP_SIZE} bytes)"
+            ( cd "${BACKUP_DIR}" && ls -1t *.sql.gz | tail -n +11 | xargs -r rm -f )
+
+            # --- Off-site backup copy to S3 (optional, warn-only) ---
+            S3_ENDPOINT="$(grep -E '^REGRU_S3_ENDPOINT=' "${ENV_NAME}" | head -n1 | cut -d= -f2- || true)"
+            S3_REGION="$(grep -E '^REGRU_S3_REGION=' "${ENV_NAME}" | head -n1 | cut -d= -f2- || true)"
+            S3_BUCKET="$(grep -E '^REGRU_S3_BUCKET=' "${ENV_NAME}" | head -n1 | cut -d= -f2- || true)"
+            S3_ACCESS_KEY="$(grep -E '^REGRU_S3_ACCESS_KEY=' "${ENV_NAME}" | head -n1 | cut -d= -f2- || true)"
+            S3_SECRET_KEY="$(grep -E '^REGRU_S3_SECRET_KEY=' "${ENV_NAME}" | head -n1 | cut -d= -f2- || true)"
+            if [ -n "${S3_ENDPOINT}" ] && [ -n "${S3_BUCKET}" ] && [ -n "${S3_ACCESS_KEY}" ] && [ -n "${S3_SECRET_KEY}" ]; then
+              # Credentials via a temp env file, never on the docker command line.
+              AWS_ENV="$(mktemp)"
+              chmod 600 "${AWS_ENV}"
+              trap 'rm -f "${AWS_ENV}"' EXIT
+              {
+                echo "AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY}"
+                echo "AWS_SECRET_ACCESS_KEY=${S3_SECRET_KEY}"
+                echo "AWS_ENDPOINT_URL=${S3_ENDPOINT}"
+              } > "${AWS_ENV}"
+              docker run --rm \
+                --env-file "${AWS_ENV}" \
+                -v /opt/arenda/backups:/b \
+                amazon/aws-cli \
+                s3 cp "/b/${{ inputs.compose_env }}/$(basename "${DUMP}")" "s3://${S3_BUCKET}/backups/${{ inputs.compose_env }}/" --region "${S3_REGION:-ru-1}" \
+                || echo "WARNING: off-site backup copy failed, continuing deploy" >&2
+              rm -f "${AWS_ENV}"
+              trap - EXIT
+            else
+              echo "WARNING: REGRU_S3_* not fully configured in ${ENV_NAME}, off-site backup skipped" >&2
+            fi
+
+            # --- Pull and migrate: a failure here just stops the deploy ---
+            # (the old version keeps running, no rollback needed).
+            docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" pull
+            docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" run --rm migrate
+
+            # --- Roll out: from here on any failure triggers rollback ---
+            rollback() {
+              echo "================ ROLLBACK ================" >&2
+              if [ -s .previous-images ]; then
+                while IFS='=' read -r key value; do
+                  [ -n "${key}" ] || continue
+                  if grep -q "^${key}=" "${ENV_NAME}"; then
+                    sed -i "s|^${key}=.*|${key}=${value}|" "${ENV_NAME}"
+                  else
+                    echo "${key}=${value}" >> "${ENV_NAME}"
+                  fi
+                done < .previous-images
+                docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" up -d --wait || true
+              else
+                echo "No .previous-images recorded; cannot restore previous images automatically" >&2
+              fi
+              echo "--- backend logs (tail 100) ---" >&2
+              docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" logs --tail 100 backend 2>&1 || true
+              echo "ROLLBACK ВЫПОЛНЕН. ВНИМАНИЕ: миграции БД НЕ откачены — проверьте совместимость схемы" >&2
+            }
+            trap 'rollback' ERR
+
+            docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" up -d --wait --remove-orphans
+            docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" ps
+            trap - ERR
+
+      - name: Smoke test (external)
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          ADMIN_URL: ${{ inputs.admin_url }}
+          EVENT_NAME: ${{ github.event_name }}
+          EXPECTED_VERSION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          require_body() {
+            local url="$1"
+            local needle="$2"
+            local body
+            body="$(curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${url}")"
+            if ! grep -qi "${needle}" <<<"${body}"; then
+              echo "${body}"
+              echo "Expected ${url} to contain ${needle}" >&2
+              exit 1
+            fi
+          }
+
+          require_exact() {
+            local url="$1"
+            local expected="$2"
+            local body
+            body="$(curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${url}")"
+            if [ "${body}" != "${expected}" ]; then
+              echo "${body}"
+              echo "Expected ${url} to return ${expected}" >&2
+              exit 1
+            fi
+          }
+
+          require_status() {
+            local url="$1"
+            local expected="$2"
+            local output="$3"
+            local status
+            status="$(curl -sS --retry 10 --retry-delay 3 --retry-all-errors -o "${output}" -w '%{http_code}' "${url}")"
+            if [ "${status}" != "${expected}" ]; then
+              cat "${output}"
+              echo "Expected ${url} to return ${expected}, got ${status}" >&2
+              exit 1
+            fi
+          }
+
+          require_redirect() {
+            local url="$1"
+            local expected_prefix="$2"
+            local result
+            result="$(curl -sS --retry 10 --retry-delay 3 --retry-all-errors -o /tmp/arenda-www.out -w '%{http_code} %{redirect_url}' "${url}")"
+            case "${result}" in
+              30[18]\ ${expected_prefix}*) ;;
+              *)
+                cat /tmp/arenda-www.out
+                echo "Expected ${url} to redirect permanently to ${expected_prefix}, got ${result}" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          require_body "${BASE_URL}/login" "<html"
+          require_body "${ADMIN_URL}/" 'id="root"'
+          require_exact "${ADMIN_URL}/healthz" "ok"
+
+          healthz="$(curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${BASE_URL}/api/healthz")"
+          if ! grep -q '"status":"ok"' <<<"${healthz}"; then
+            echo "${healthz}"
+            echo "Expected ${BASE_URL}/api/healthz to contain \"status\":\"ok\"" >&2
+            exit 1
+          fi
+          if ! grep -q '"version"' <<<"${healthz}"; then
+            echo "${healthz}"
+            echo "Expected ${BASE_URL}/api/healthz to contain a \"version\" field" >&2
+            exit 1
+          fi
+          if [ "${EVENT_NAME}" = "push" ]; then
+            if ! grep -q "\"version\":\"${EXPECTED_VERSION}\"" <<<"${healthz}"; then
+              echo "${healthz}"
+              echo "Version mismatch: expected ${EXPECTED_VERSION} in ${BASE_URL}/api/healthz" >&2
+              exit 1
+            fi
+            echo "Version check OK: ${EXPECTED_VERSION}"
+          else
+            echo "workflow_dispatch: version check skipped"
+          fi
+
+          require_status "${BASE_URL}/api/me" "401" "/tmp/arenda-${COMPOSE_ENV}-me.out"
+
+          if [ "${COMPOSE_ENV}" = "prod" ]; then
+            require_redirect "https://www.rentlee.ru/" "https://rentlee.ru"
+          fi
+
+      # Smoke (or the deploy step itself) failed: roll the release back on the server.
+      # The job result stays "failure" even when this step succeeds.
+      - name: Rollback on failure
+        if: failure()
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_HOST_KEY_FINGERPRINT }}
+          script: |
+            set -euo pipefail
+            cd "/opt/arenda/${{ inputs.compose_env }}"
+            ENV_NAME=".env.${{ inputs.compose_env }}"
+            COMPOSE_FILE="docker-compose.${{ inputs.compose_env }}.yml"
+
+            # Roll back only if THIS run actually swapped the env
+            # (marker is written by the deploy step right after the env swap).
+            if [ ! -f .deploy-run-id ] || [ "$(cat .deploy-run-id)" != "${{ github.run_id }}-${{ github.run_attempt }}" ]; then
+              echo "No deploy activity in this run (marker mismatch) — rollback skipped" >&2
+              exit 0
+            fi
+            if [ ! -s .previous-images ]; then
+              echo "WARNING: .previous-images missing or empty (first deploy?) — automatic rollback skipped" >&2
+              exit 0
+            fi
+
+            echo "================ ROLLBACK (post-deploy failure) ================" >&2
+            while IFS='=' read -r key value; do
+              [ -n "${key}" ] || continue
+              if grep -q "^${key}=" "${ENV_NAME}"; then
+                sed -i "s|^${key}=.*|${key}=${value}|" "${ENV_NAME}"
+              else
+                echo "${key}=${value}" >> "${ENV_NAME}"
+              fi
+            done < .previous-images
+            docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" up -d --wait || true
+            echo "--- backend logs (tail 100) ---" >&2
+            docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" logs --tail 100 backend 2>&1 || true
+            echo "ROLLBACK ВЫПОЛНЕН. ВНИМАНИЕ: миграции БД НЕ откачены — проверьте совместимость схемы" >&2
+
+      - name: Cleanup old images on server
+        if: success()
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_HOST_KEY_FINGERPRINT }}
+          script: |
+            set -euo pipefail
+            cd "/opt/arenda/${{ inputs.compose_env }}"
+            KEEP="$(mktemp)"
+            {
+              grep -E '^(BACKEND|FRONTEND|ADMIN|LANDING)_IMAGE=' ".env.${{ inputs.compose_env }}" | cut -d= -f2-
+              if [ -f .previous-images ]; then
+                cut -d= -f2- .previous-images
+              fi
+            } | sed '/^$/d' | sort -u > "${KEEP}"
+
+            # Targeted cleanup: only our GHCR images, keep current + previous.
+            # Never use docker image/system prune — the host runs other projects.
+            docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
+              | grep '^ghcr\.io/devnumbers/arenda-planform-' \
+              | while read -r ref id; do
+                  digest_ref="$(docker image inspect -f '{{index .RepoDigests 0}}' "${id}" 2>/dev/null || true)"
+                  if grep -qxF "${ref}" "${KEEP}"; then
+                    echo "keep ${ref}"
+                  elif [ -n "${digest_ref}" ] && grep -qxF "${digest_ref}" "${KEEP}"; then
+                    echo "keep ${ref} (${digest_ref})"
+                  else
+                    echo "remove ${ref}"
+                    docker rmi "${id}" >/dev/null 2>&1 || echo "skip ${ref} (still in use)"
+                  fi
+                done
+            rm -f "${KEEP}"
+
+      # Remove the rendered secrets from the runner workspace no matter how the job ended.
+      - name: Cleanup workspace (.deploy)
+        if: always()
+        run: rm -rf .deploy

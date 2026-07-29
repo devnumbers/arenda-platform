@@ -1,0 +1,14 @@
+[extend]
+useDefault = true
+
+# All matches on these paths are known false positives: API-key examples in the
+# T-Kassa OpenAPI spec, generated code, test fixtures, env-file placeholders
+# and plan documents. Verified against the CI scan report.
+[allowlist]
+paths = [
+  '''apps/backend/internal/billing/adapters/payment/tkassa/spec/.*''',
+  '''apps/backend/internal/platform/openapi/generated\.gen\.go''',
+  '''.*_test\.go''',
+  '''\.env(\..+)?\.example''',
+  '''docs/plans/.*''',
+]

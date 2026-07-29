@@ -2,7 +2,7 @@ name: arenda-prod
 
 x-env-file: &prod-env-file
   - path: .env.prod
-    required: false
+    required: true
 
 x-logging: &default-logging
   driver: json-file
@@ -40,14 +40,14 @@ services:
       - arenda-prod
 
   backend:
-    build:
-      context: .
-      dockerfile: apps/backend/Dockerfile
+    image: ${BACKEND_IMAGE}
     restart: unless-stopped
     mem_limit: 768m
     cpus: 1.00
     logging: *default-logging
     env_file: *prod-env-file
+    environment:
+      AUTO_MIGRATE: "false"
     depends_on:
       postgres:
         condition: service_healthy
@@ -65,9 +65,7 @@ services:
       - arenda-obs
 
   frontend:
-    build:
-      context: .
-      dockerfile: apps/frontend/Dockerfile
+    image: ${FRONTEND_IMAGE}
     restart: unless-stopped
     mem_limit: 512m
     cpus: 0.75
@@ -89,9 +87,7 @@ services:
       - arenda-prod
 
   landing:
-    build:
-      context: .
-      dockerfile: apps/landing/Dockerfile
+    image: ${LANDING_IMAGE}
     restart: unless-stopped
     mem_limit: 128m
     cpus: 0.25
@@ -108,11 +104,7 @@ services:
       - arenda-prod
 
   admin:
-    build:
-      context: .
-      dockerfile: apps/admin/Dockerfile
-      args:
-        VITE_API_PREFIX: /api
+    image: ${ADMIN_IMAGE}
     restart: unless-stopped
     mem_limit: 128m
     cpus: 0.25
@@ -128,6 +120,19 @@ services:
       timeout: 3s
       retries: 12
       start_period: 10s
+    networks:
+      - arenda-prod
+
+  migrate:
+    image: ${BACKEND_IMAGE}
+    profiles: ["migrate"]
+    command: ["./arenda-api", "migrate"]
+    env_file: *prod-env-file
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    logging: *default-logging
     networks:
       - arenda-prod
 

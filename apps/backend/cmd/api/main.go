@@ -83,6 +83,10 @@ func main() {
 }
 
 func run() error {
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		return runMigrate()
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -131,8 +135,10 @@ func run() error {
 		appLogger.WarnContext(ctx, "ENCRYPTION_KEY is empty; provider tokens will be stored without encryption (local dev only)")
 	}
 
-	if err := database.MigrateUp(cfg.DatabaseURL, cfg.MigrationsDir); err != nil {
-		return fmt.Errorf("migrate: %w", err)
+	if cfg.AutoMigrate {
+		if err := database.MigrateUp(cfg.DatabaseURL, cfg.MigrationsDir); err != nil {
+			return fmt.Errorf("migrate: %w", err)
+		}
 	}
 
 	poolConfig := database.PoolConfig{
@@ -486,6 +492,7 @@ func run() error {
 		DBPoolStats:              poolStats,
 		DevMode:                  cfg.AppEnv == "local" && cfg.PaymentProvider == "fake",
 		TrustedProxies:           cfg.TrustedProxies,
+		AppVersion:               cfg.AppVersion,
 	})
 
 	server := &http.Server{
@@ -518,6 +525,21 @@ func run() error {
 		}
 		return err
 	}
+}
+
+// runMigrate applies database migrations and returns; used by the deploy
+// pipeline as a separate step (`arenda-api migrate`) instead of startup
+// auto-migration.
+func runMigrate() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if err := database.MigrateUp(cfg.DatabaseURL, cfg.MigrationsDir); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	slog.Info("migrations applied") //nolint:sloglint // migrate step runs before the app logger is configured
+	return nil
 }
 
 func backfillPhoneEncryption(ctx context.Context, db *database.InstrumentedPool, enc encryption.Encryptor, logger *slog.Logger) error {
