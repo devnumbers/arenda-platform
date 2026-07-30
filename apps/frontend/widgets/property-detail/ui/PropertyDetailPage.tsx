@@ -234,7 +234,8 @@ export function PropertyDetailPage(): JSX.Element {
             anchor.href = url;
             anchor.download = filename;
             anchor.click();
-            URL.revokeObjectURL(url);
+            // Отложенный revoke: в Firefox мгновенный revokeObjectURL после click() может отменить скачивание.
+            setTimeout(() => URL.revokeObjectURL(url), 0);
         } catch {
             notify.scenarios.property.exportError();
         }
