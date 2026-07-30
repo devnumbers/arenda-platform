@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
@@ -45,14 +48,15 @@ type PropertyHandlers struct {
 	addressSuggester propertiesapp.AddressSuggester
 	opSvc            *leasesapp.OperationService
 	leaseSvc         *leasesapp.LeaseService
+	exportSvc        *leasesapp.ExportService
 	logger           *slog.Logger
 	presenter        *leasePresenter
 	clock            clock.Clock
 }
 
 // NewPropertyHandlers creates HTTP handlers for the properties API.
-func NewPropertyHandlers(svc *propertiesapp.PropertyService, addressSuggester propertiesapp.AddressSuggester, tenantContactSvc *leasesapp.TenantContactService, opSvc *leasesapp.OperationService, leaseSvc *leasesapp.LeaseService, logger *slog.Logger, clk clock.Clock) *PropertyHandlers {
-	return &PropertyHandlers{svc: svc, addressSuggester: addressSuggester, opSvc: opSvc, leaseSvc: leaseSvc, logger: logger, presenter: newLeasePresenter(tenantContactSvc), clock: clk}
+func NewPropertyHandlers(svc *propertiesapp.PropertyService, addressSuggester propertiesapp.AddressSuggester, tenantContactSvc *leasesapp.TenantContactService, opSvc *leasesapp.OperationService, leaseSvc *leasesapp.LeaseService, exportSvc *leasesapp.ExportService, logger *slog.Logger, clk clock.Clock) *PropertyHandlers {
+	return &PropertyHandlers{svc: svc, addressSuggester: addressSuggester, opSvc: opSvc, leaseSvc: leaseSvc, exportSvc: exportSvc, logger: logger, presenter: newLeasePresenter(tenantContactSvc), clock: clk}
 }
 
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
@@ -388,6 +392,36 @@ func (h *PropertyHandlers) GetPropertyOperationsSummary(w http.ResponseWriter, r
 		OverdueTotalCount:     summary.OverdueTotalCount,
 		NextPaymentDate:       datePtrToOpenAPI(summary.NextPaymentDate),
 	})
+}
+
+// ExportPropertyData implements GET /properties/{id}/export.
+func (h *PropertyHandlers) ExportPropertyData(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	file, err := h.exportSvc.ExportProperty(r.Context(), ownerID, id)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q; filename*=UTF-8''%s", exportASCIIFilename(file.Filename), url.PathEscape(file.Filename)))
+	_, _ = w.Write(file.Content)
+}
+
+// exportASCIIFilename replaces non-ASCII runes with underscores for the
+// legacy filename= parameter of Content-Disposition.
+func exportASCIIFilename(name string) string {
+	return strings.Map(func(r rune) rune {
+		if r > unicode.MaxASCII {
+			return '_'
+		}
+		return r
+	}, name)
 }
 
 // UploadPropertyPhoto implements POST /properties/{propertyId}/photos.
