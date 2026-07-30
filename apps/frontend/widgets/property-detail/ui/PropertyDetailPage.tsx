@@ -47,6 +47,18 @@ function showMutationError(error: ApiError): void {
     notify.scenarios.property.saveError({description: error.detail});
 }
 
+const EXPORT_FILENAME_STAR_PATTERN = /filename\*=UTF-8''([^;]+)/;
+
+function resolveExportFilename(disposition: string): string {
+    const match = EXPORT_FILENAME_STAR_PATTERN.exec(disposition);
+    if (!match) return 'export.xlsx';
+    try {
+        return decodeURIComponent(match[1]);
+    } catch {
+        return 'export.xlsx';
+    }
+}
+
 export function PropertyDetailPage(): JSX.Element {
     const params = useParams<{ id: string }>();
     const id = params.id ?? '';
@@ -203,6 +215,31 @@ export function PropertyDetailPage(): JSX.Element {
         );
     }, [deleteProperty, id, router, leasesQuery]);
 
+    const handleExport = useCallback(async (): Promise<void> => {
+        try {
+            const response = await fetch(`/api/properties/${id}/export`);
+            if (!response.ok) {
+                const problem = (await response.json()) as {detail?: string};
+                notify.scenarios.property.exportError(
+                    problem.detail ? {description: problem.detail} : undefined,
+                );
+                return;
+            }
+            const blob = await response.blob();
+            const filename = resolveExportFilename(
+                response.headers.get('Content-Disposition') ?? '',
+            );
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = filename;
+            anchor.click();
+            URL.revokeObjectURL(url);
+        } catch {
+            notify.scenarios.property.exportError();
+        }
+    }, [id]);
+
     const handlePayRent = useCallback(() => {
         if (currentLease) {
             if (payableRentQuery.isFetching) return;
@@ -250,6 +287,7 @@ export function PropertyDetailPage(): JSX.Element {
                         onEdit={handleEdit}
                         onToggleMaintenance={handleToggleMaintenance}
                         onToggleArchive={handleToggleArchive}
+                        onExport={handleExport}
                         onDelete={() => setDeleteOpen(true)}
                     />
                 }

@@ -90,6 +90,8 @@ const property = {
     notify.success('Объект удалён', options)) satisfies ScenarioFn,
   deleteError: ((options?) =>
     notify.error('Не удалось удалить объект', options)) satisfies ScenarioFn,
+  exportError: ((options?) =>
+    notify.error('Не удалось сформировать экспорт', options)) satisfies ScenarioFn,
 } as const;
 
 const leases = {
