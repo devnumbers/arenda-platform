@@ -16,6 +16,9 @@ type PropertyRepository interface {
 	// GetStatusByOwner returns the property status for the owner, or an empty
 	// string when the property does not exist.
 	GetStatusByOwner(ctx context.Context, id, ownerID uuid.UUID) (string, error)
+	// GetNameByOwner returns the property name for the owner, or an empty
+	// string when the property does not exist or does not belong to the owner.
+	GetNameByOwner(ctx context.Context, id, ownerID uuid.UUID) (string, error)
 	// GetByIDAndOwnerForUpdate locks the property row for the rest of the
 	// current transaction and returns its status, or an empty string when the
 	// property does not exist.
@@ -157,6 +160,7 @@ type OperationRepository interface {
 	GetFinanceReportByProperty(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]FinanceReportPropertyRow, error)
 	GetFinanceReportByCategory(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]FinanceReportCategoryRow, error)
 	GetFinanceReportByMonth(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]FinanceReportMonthRow, error)
+	ListCompletedForExport(ctx context.Context, ownerID, propertyID uuid.UUID) ([]ExportOperationRow, error)
 	WithTx(tx transaction.Tx) OperationRepository
 }
 

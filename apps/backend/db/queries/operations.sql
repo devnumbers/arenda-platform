@@ -320,3 +320,23 @@ SELECT COUNT(*) FROM operations WHERE deleted_at IS NULL;
 -- name: DeleteOperationsByProperty :exec
 DELETE FROM operations
 WHERE owner_id = $1 AND property_id = $2;
+
+-- name: ListCompletedOperationsForExport :many
+SELECT op.operation_date,
+       op.type,
+       cat.name AS category_name,
+       op.name,
+       op.amount_kopecks,
+       op.lease_id,
+       tc.surname AS tenant_surname,
+       tc.name   AS tenant_name,
+       tc.patronymic AS tenant_patronymic,
+       op.comment
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+LEFT JOIN leases l ON l.id = op.lease_id
+LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
+WHERE op.owner_id = $1 AND op.property_id = $2
+  AND op.status IN ('paid', 'received')
+  AND op.deleted_at IS NULL
+ORDER BY op.operation_date ASC, op.id ASC;

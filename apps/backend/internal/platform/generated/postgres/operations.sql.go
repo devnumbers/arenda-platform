@@ -581,6 +581,76 @@ func (q *Queries) ListAllPendingOperationsWithPastDate(ctx context.Context, arg 
 	return items, nil
 }
 
+const listCompletedOperationsForExport = `-- name: ListCompletedOperationsForExport :many
+SELECT op.operation_date,
+       op.type,
+       cat.name AS category_name,
+       op.name,
+       op.amount_kopecks,
+       op.lease_id,
+       tc.surname AS tenant_surname,
+       tc.name   AS tenant_name,
+       tc.patronymic AS tenant_patronymic,
+       op.comment
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+LEFT JOIN leases l ON l.id = op.lease_id
+LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
+WHERE op.owner_id = $1 AND op.property_id = $2
+  AND op.status IN ('paid', 'received')
+  AND op.deleted_at IS NULL
+ORDER BY op.operation_date ASC, op.id ASC
+`
+
+type ListCompletedOperationsForExportParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+type ListCompletedOperationsForExportRow struct {
+	OperationDate    pgtype.Date `json:"operation_date"`
+	Type             string      `json:"type"`
+	CategoryName     string      `json:"category_name"`
+	Name             string      `json:"name"`
+	AmountKopecks    int64       `json:"amount_kopecks"`
+	LeaseID          pgtype.UUID `json:"lease_id"`
+	TenantSurname    pgtype.Text `json:"tenant_surname"`
+	TenantName       pgtype.Text `json:"tenant_name"`
+	TenantPatronymic pgtype.Text `json:"tenant_patronymic"`
+	Comment          pgtype.Text `json:"comment"`
+}
+
+func (q *Queries) ListCompletedOperationsForExport(ctx context.Context, arg ListCompletedOperationsForExportParams) ([]ListCompletedOperationsForExportRow, error) {
+	rows, err := q.db.Query(ctx, listCompletedOperationsForExport, arg.OwnerID, arg.PropertyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCompletedOperationsForExportRow{}
+	for rows.Next() {
+		var i ListCompletedOperationsForExportRow
+		if err := rows.Scan(
+			&i.OperationDate,
+			&i.Type,
+			&i.CategoryName,
+			&i.Name,
+			&i.AmountKopecks,
+			&i.LeaseID,
+			&i.TenantSurname,
+			&i.TenantName,
+			&i.TenantPatronymic,
+			&i.Comment,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listFutureOperationsByLease = `-- name: ListFutureOperationsByLease :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE lease_id = $1 AND operation_date > $2

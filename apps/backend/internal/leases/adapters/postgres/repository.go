@@ -1401,6 +1401,33 @@ func (r *OperationRepository) GetFinanceReportByMonth(ctx context.Context, owner
 	return result, nil
 }
 
+func (r *OperationRepository) ListCompletedForExport(ctx context.Context, ownerID, propertyID uuid.UUID) ([]application.ExportOperationRow, error) {
+	rows, err := r.q().ListCompletedOperationsForExport(ctx, postgres.ListCompletedOperationsForExportParams{
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]application.ExportOperationRow, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, application.ExportOperationRow{
+			OperationDate:    pgconv.DateFromPgtype(row.OperationDate),
+			Type:             domain.OperationType(row.Type),
+			CategoryName:     row.CategoryName,
+			Name:             row.Name,
+			AmountKopecks:    row.AmountKopecks,
+			LeaseID:          pgconv.UUIDFromPgtypePtr(row.LeaseID),
+			TenantSurname:    pgconv.TextToPtrString(row.TenantSurname),
+			TenantName:       pgconv.TextToPtrString(row.TenantName),
+			TenantPatronymic: pgconv.TextToPtrString(row.TenantPatronymic),
+			Comment:          pgconv.TextToPtrString(row.Comment),
+		})
+	}
+	return result, nil
+}
+
 func operationFromRow(row postgres.Operation) (domain.Operation, error) {
 	status, err := domain.ParseOperationStatus(row.Status)
 	if err != nil {
@@ -1673,6 +1700,22 @@ func (r *PropertyRepository) GetStatusByOwner(ctx context.Context, id, ownerID u
 		return "", err
 	}
 	return status, nil
+}
+
+// GetNameByOwner returns the property name for the owner, or an empty string
+// when the property does not exist or does not belong to the owner.
+func (r *PropertyRepository) GetNameByOwner(ctx context.Context, id, ownerID uuid.UUID) (string, error) {
+	row, err := r.q().GetPropertyByIDAndOwner(ctx, postgres.GetPropertyByIDAndOwnerParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return row.Name, nil
 }
 
 // GetByIDAndOwnerForUpdate locks the property row for the rest of the current

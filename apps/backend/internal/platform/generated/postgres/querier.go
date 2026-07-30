@@ -156,6 +156,7 @@ type Querier interface {
 	ListAllPendingOperationsWithPastDate(ctx context.Context, arg ListAllPendingOperationsWithPastDateParams) ([]Operation, error)
 	ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error)
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
+	ListCompletedOperationsForExport(ctx context.Context, arg ListCompletedOperationsForExportParams) ([]ListCompletedOperationsForExportRow, error)
 	ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error)
 	ListExpiredCancelledSubscriptions(ctx context.Context, arg ListExpiredCancelledSubscriptionsParams) ([]UserSubscription, error)
 	ListExpiredNonRenewingSubscriptions(ctx context.Context, arg ListExpiredNonRenewingSubscriptionsParams) ([]UserSubscription, error)
