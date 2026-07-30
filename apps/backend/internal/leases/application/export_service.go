@@ -49,11 +49,12 @@ type ExportService struct {
 	operations OperationRepository
 	properties PropertyRepository
 	clock      clock.Clock
+	logger     *slog.Logger
 }
 
 // NewExportService creates the property export use case.
-func NewExportService(operations OperationRepository, properties PropertyRepository, clk clock.Clock) *ExportService {
-	return &ExportService{operations: operations, properties: properties, clock: clk}
+func NewExportService(operations OperationRepository, properties PropertyRepository, clk clock.Clock, logger *slog.Logger) *ExportService {
+	return &ExportService{operations: operations, properties: properties, clock: clk, logger: logger}
 }
 
 // ExportProperty returns the xlsx workbook with the property operations.
@@ -71,7 +72,7 @@ func (s *ExportService) ExportProperty(ctx context.Context, ownerID, propertyID 
 		return ExportFile{}, fmt.Errorf("export property: list operations: %w", err)
 	}
 	if len(rows) > exportMaxRows {
-		slog.WarnContext(ctx, "property export truncated", slog.String("property_id", propertyID.String()), slog.Int("rows", len(rows)))
+		s.logger.WarnContext(ctx, "property export truncated", slog.String("property_id", propertyID.String()), slog.Int("rows", len(rows)))
 		rows = rows[:exportMaxRows]
 	}
 
@@ -181,26 +182,22 @@ func buildExportWorkbook(rows []ExportOperationRow) (_ []byte, err error) {
 	if err := f.SetPanes(exportSheetName, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"}); err != nil {
 		return nil, fmt.Errorf("freeze panes: %w", err)
 	}
-	if err := f.SetColWidth(exportSheetName, "A", "A", 12); err != nil {
-		return nil, fmt.Errorf("column width: %w", err)
+	colWidths := []struct {
+		col   string
+		width float64
+	}{
+		{"A", 12},
+		{"B", 10},
+		{"C", 22},
+		{"D", 34},
+		{"E", 16},
+		{"F", 30},
+		{"G", 40},
 	}
-	if err := f.SetColWidth(exportSheetName, "B", "B", 10); err != nil {
-		return nil, fmt.Errorf("column width: %w", err)
-	}
-	if err := f.SetColWidth(exportSheetName, "C", "C", 22); err != nil {
-		return nil, fmt.Errorf("column width: %w", err)
-	}
-	if err := f.SetColWidth(exportSheetName, "D", "D", 34); err != nil {
-		return nil, fmt.Errorf("column width: %w", err)
-	}
-	if err := f.SetColWidth(exportSheetName, "E", "E", 16); err != nil {
-		return nil, fmt.Errorf("column width: %w", err)
-	}
-	if err := f.SetColWidth(exportSheetName, "F", "F", 30); err != nil {
-		return nil, fmt.Errorf("column width: %w", err)
-	}
-	if err := f.SetColWidth(exportSheetName, "G", "G", 40); err != nil {
-		return nil, fmt.Errorf("column width: %w", err)
+	for _, cw := range colWidths {
+		if err := f.SetColWidth(exportSheetName, cw.col, cw.col, cw.width); err != nil {
+			return nil, fmt.Errorf("column %s width: %w", cw.col, err)
+		}
 	}
 
 	var buf bytes.Buffer
@@ -237,10 +234,7 @@ func sanitizeExportFilename(name string) string {
 	lastUnderscore := false
 	for _, r := range strings.TrimSpace(name) {
 		switch r {
-		case '/', '\\', '"', '*', ':', '?', '[', ']':
-			b.WriteByte('_')
-			lastUnderscore = false
-		case ' ':
+		case '/', '\\', '"', '*', ':', '?', '[', ']', ' ':
 			if !lastUnderscore {
 				b.WriteByte('_')
 				lastUnderscore = true
