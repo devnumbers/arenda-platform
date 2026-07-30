@@ -135,6 +135,7 @@ export const auditActionChoices: Choice[] = [
   { id: 'property.unarchived', name: 'Восстановление объекта' },
   { id: 'property.photo_added', name: 'Добавление фото объекта' },
   { id: 'property.photo_deleted', name: 'Удаление фото объекта' },
+  { id: 'property.deleted', name: 'Удаление объекта' },
   { id: 'lease.created', name: 'Создание договора' },
   { id: 'lease.updated', name: 'Обновление договора' },
   { id: 'lease.completed', name: 'Завершение договора' },
@@ -282,9 +283,14 @@ export const TenantContactField = (props: FieldProps) => (
   />
 );
 
+/** Плейсхолдер для записей, чей объект был удалён без сохранения имени (propertyName пуст). */
+const deletedPropertyPlaceholder = 'объект удалён';
+
 /**
  * Название объекта из текущей записи (source="propertyName") со ссылкой на Show объекта.
  * Запросов не выполняет, использует propertyName/propertyId текущей записи.
+ * При отсутствующем propertyName — плейсхолдер «объект удалён»; при имени без
+ * propertyId (объект удалён с detach) — текст без ссылки.
  */
 export const PropertyLinkField = (props: FieldProps) => {
   const record = useRecordContext();
@@ -292,10 +298,10 @@ export const PropertyLinkField = (props: FieldProps) => {
     return null;
   }
   const propertyName: unknown = record[props.source];
-  if (typeof propertyName !== 'string' || propertyName === '') {
-    return null;
-  }
   const propertyId: unknown = record.propertyId;
+  if (typeof propertyName !== 'string' || propertyName === '') {
+    return <>{deletedPropertyPlaceholder}</>;
+  }
   if (typeof propertyId !== 'string' || propertyId === '') {
     return <>{propertyName}</>;
   }
@@ -331,12 +337,22 @@ export const UserReferenceField = (props: ReferenceProps) => (
   </ReferenceField>
 );
 
-/** Объект недвижимости: ссылка на Show объекта, название. */
-export const PropertyReferenceField = (props: ReferenceProps) => (
-  <ReferenceField reference="properties" link="show" {...props}>
-    <TextField source="name" />
-  </ReferenceField>
-);
+/** Объект недвижимости: ссылка на Show объекта, название; при удалённом объекте (null propertyId) — плейсхолдер. */
+export const PropertyReferenceField = (props: ReferenceProps) => {
+  const record = useRecordContext();
+  if (!record) {
+    return null;
+  }
+  const propertyId: unknown = record[props.source];
+  if (typeof propertyId !== 'string' || propertyId === '') {
+    return <>{deletedPropertyPlaceholder}</>;
+  }
+  return (
+    <ReferenceField reference="properties" link="show" {...props}>
+      <TextField source="name" />
+    </ReferenceField>
+  );
+};
 
 /** Договор аренды: ссылка на Show договора, «{propertyName} → {ФИО арендатора}». */
 export const LeaseReferenceField = (props: ReferenceProps) => (
