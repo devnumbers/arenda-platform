@@ -443,7 +443,7 @@ func operationResponse(op domain.Operation, categoryNames map[uuid.UUID]string, 
 	resp := openapi.OperationResponse{
 		Id:            op.ID,
 		OwnerId:       op.OwnerID,
-		PropertyId:    op.PropertyID,
+		PropertyId:    domain.PropertyIDPtr(op.PropertyID),
 		Type:          openapi.OperationType(op.Type),
 		CategoryId:    op.CategoryID,
 		CategoryName:  categoryNames[op.CategoryID],

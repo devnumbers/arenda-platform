@@ -206,7 +206,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 	}
 
 	opCtx := map[string]any{
-		"property_id":    created.PropertyID,
+		"property_id":    domain.PropertyIDPtr(created.PropertyID),
 		"type":           string(created.Type),
 		"amount_kopecks": created.AmountKopecks,
 		"operation_date": created.OperationDate.Format(time.DateOnly),
@@ -521,7 +521,7 @@ func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOp
 		Action:     auditdomain.ActionOperationCompleted,
 		EntityType: auditdomain.EntityOperation,
 		EntityID:   &cmd.OperationID,
-		Context:    map[string]any{"property_id": op.PropertyID},
+		Context:    map[string]any{"property_id": domain.PropertyIDPtr(op.PropertyID)},
 	}); err != nil {
 		return domain.Operation{}, fmt.Errorf("record audit: %w", err)
 	}
@@ -616,7 +616,7 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 		Action:     auditdomain.ActionOperationMarkedIncomplete,
 		EntityType: auditdomain.EntityOperation,
 		EntityID:   &cmd.OperationID,
-		Context:    map[string]any{"property_id": op.PropertyID},
+		Context:    map[string]any{"property_id": domain.PropertyIDPtr(op.PropertyID)},
 	}); err != nil {
 		return domain.Operation{}, fmt.Errorf("record audit: %w", err)
 	}
@@ -761,7 +761,7 @@ func (s *OperationService) DeleteOperation(ctx context.Context, ownerID, id uuid
 		Action:     auditdomain.ActionOperationDeleted,
 		EntityType: auditdomain.EntityOperation,
 		EntityID:   &id,
-		Context:    map[string]any{"property_id": op.PropertyID},
+		Context:    map[string]any{"property_id": domain.PropertyIDPtr(op.PropertyID)},
 	}); err != nil {
 		return fmt.Errorf("record audit: %w", err)
 	}

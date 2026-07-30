@@ -368,8 +368,8 @@ func (r *AdminRepository) leaseViewFromRow(row postgres.ListLeasesAdminRow, now 
 	view := adminapp.AdminLeaseView{
 		ID:                   lease.ID,
 		OwnerID:              lease.OwnerID,
-		PropertyID:           lease.PropertyID,
-		PropertyName:         row.PropertyName,
+		PropertyID:           leasesdomain.PropertyIDPtr(lease.PropertyID),
+		PropertyName:         pgconv.TextToPtrString(row.PropertyName),
 		TenantContactID:      lease.TenantContactID,
 		Status:               lease.Status,
 		StartDate:            lease.StartDate,
@@ -542,8 +542,8 @@ func (r *AdminRepository) operationViewFromRow(row postgres.ListOperationsAdminR
 	view := adminapp.AdminOperationView{
 		ID:            pgconv.UUIDFromPgtype(row.ID),
 		OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
-		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
-		PropertyName:  row.PropertyName,
+		PropertyID:    pgconv.UUIDFromPgtypePtr(row.PropertyID),
+		PropertyName:  pgconv.TextToPtrString(row.PropertyName),
 		Type:          leasesdomain.OperationType(row.Type),
 		CategoryID:    pgconv.UUIDFromPgtype(row.CategoryID),
 		CategoryName:  row.CategoryName,

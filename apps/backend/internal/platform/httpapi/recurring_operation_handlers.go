@@ -287,7 +287,7 @@ func recurringOperationResponse(rec domain.RecurringOperation, categoryNames map
 	resp := openapi.RecurringOperationResponse{
 		Id:            rec.ID,
 		OwnerId:       rec.OwnerID,
-		PropertyId:    rec.PropertyID,
+		PropertyId:    domain.PropertyIDPtr(rec.PropertyID),
 		Type:          openapi.OperationType(rec.Type),
 		CategoryId:    rec.CategoryID,
 		CategoryName:  categoryNames[rec.CategoryID],

@@ -1675,6 +1675,23 @@ func (r *PropertyRepository) GetStatusByOwner(ctx context.Context, id, ownerID u
 	return status, nil
 }
 
+// GetByIDAndOwnerForUpdate locks the property row for the rest of the current
+// transaction and returns its status, or an empty string when the property
+// does not exist.
+func (r *PropertyRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (string, error) {
+	row, err := r.q().GetPropertyByIDAndOwnerForUpdate(ctx, postgres.GetPropertyByIDAndOwnerForUpdateParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return row.Status, nil
+}
+
 // HasOpenLease reports whether the property currently has an open lease.
 func (r *PropertyRepository) HasOpenLease(ctx context.Context, id uuid.UUID) (bool, error) {
 	count, err := r.q().CountOpenLeasesByProperty(ctx, pgconv.UUIDToPgtype(id))

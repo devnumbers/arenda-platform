@@ -153,6 +153,18 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 	txProperties := s.properties.WithTx(tx)
 	txRentService := NewRentService(txOps, txRecurring, s.categories.WithTx(tx), s.clock)
 
+	// Lock the property row for the rest of the transaction so a concurrent
+	// DeleteProperty cannot remove it between the fast-path check above and
+	// the lease insert. A missing or non-active property is rejected the same
+	// way as in the fast-path check.
+	propertyStatus, err := txProperties.GetByIDAndOwnerForUpdate(ctx, cmd.PropertyID, ownerID)
+	if err != nil {
+		return domain.Lease{}, fmt.Errorf("lock property: %w", err)
+	}
+	if propertyStatus != "active" {
+		return domain.Lease{}, ErrPropertyNotAvailable
+	}
+
 	hasOpen, err := txProperties.HasOpenLease(ctx, cmd.PropertyID)
 	if err != nil {
 		return domain.Lease{}, fmt.Errorf("check open lease: %w", err)
@@ -223,7 +235,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		EntityType: auditdomain.EntityLease,
 		EntityID:   &created.ID,
 		Context: map[string]any{
-			"property_id":         created.PropertyID,
+			"property_id":         domain.PropertyIDPtr(created.PropertyID),
 			"rent_amount_kopecks": created.RentAmountKopecks,
 		},
 	}); err != nil {
@@ -541,7 +553,7 @@ func (s *LeaseService) CompleteLease(ctx context.Context, ownerID, id uuid.UUID)
 		Action:     auditdomain.ActionLeaseCompleted,
 		EntityType: auditdomain.EntityLease,
 		EntityID:   &id,
-		Context:    map[string]any{"property_id": lease.PropertyID},
+		Context:    map[string]any{"property_id": domain.PropertyIDPtr(lease.PropertyID)},
 	}); err != nil {
 		return domain.Lease{}, fmt.Errorf("record audit: %w", err)
 	}

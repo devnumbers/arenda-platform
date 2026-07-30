@@ -39,6 +39,10 @@ func (r *fakePropertyRepo) HasOpenLease(_ context.Context, id uuid.UUID) (bool, 
 	return r.hasOpenLease[id], nil
 }
 
+func (r *fakePropertyRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (string, error) {
+	return r.GetStatusByOwner(ctx, id, ownerID)
+}
+
 func (r *fakePropertyRepo) WithTx(_ transaction.Tx) PropertyRepository { return r }
 
 type fakeLeaseRepo struct {

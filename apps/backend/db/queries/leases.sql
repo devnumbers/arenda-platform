@@ -90,7 +90,7 @@ SELECT l.*, p.name AS property_name,
        tc.phone AS tc_phone, tc.email AS tc_email, tc.comment AS tc_comment,
        tc.created_at AS tc_created_at, tc.updated_at AS tc_updated_at
 FROM leases l
-JOIN properties p ON p.id = l.property_id
+LEFT JOIN properties p ON p.id = l.property_id
 LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
 WHERE (sqlc.arg('owner_id')::uuid IS NULL OR l.owner_id = sqlc.arg('owner_id')::uuid)
   AND (sqlc.arg('property_id')::uuid IS NULL OR l.property_id = sqlc.arg('property_id')::uuid)
@@ -121,7 +121,7 @@ SELECT l.*, p.name AS property_name,
        tc.phone AS tc_phone, tc.email AS tc_email, tc.comment AS tc_comment,
        tc.created_at AS tc_created_at, tc.updated_at AS tc_updated_at
 FROM leases l
-JOIN properties p ON p.id = l.property_id
+LEFT JOIN properties p ON p.id = l.property_id
 LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
 WHERE l.id = $1;
 

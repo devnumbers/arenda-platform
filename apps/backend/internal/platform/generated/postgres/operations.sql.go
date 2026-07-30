@@ -297,7 +297,7 @@ const getOperationByIDAdmin = `-- name: GetOperationByIDAdmin :one
 SELECT op.id, op.owner_id, op.property_id, op.lease_id, op.recurring_operation_id, op.type, op.amount_kopecks, op.operation_date, op.comment, op.is_exception, op.created_at, op.updated_at, op.deleted_at, op.status, op.name, op.reminder_offset_days, op.source_operation_date, op.category_id, cat.name AS category_name, p.name AS property_name
 FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
-JOIN properties p ON p.id = op.property_id
+LEFT JOIN properties p ON p.id = op.property_id
 WHERE op.id = $1
 `
 
@@ -321,7 +321,7 @@ type GetOperationByIDAdminRow struct {
 	SourceOperationDate  pgtype.Date        `json:"source_operation_date"`
 	CategoryID           pgtype.UUID        `json:"category_id"`
 	CategoryName         string             `json:"category_name"`
-	PropertyName         string             `json:"property_name"`
+	PropertyName         pgtype.Text        `json:"property_name"`
 }
 
 func (q *Queries) GetOperationByIDAdmin(ctx context.Context, id pgtype.UUID) (GetOperationByIDAdminRow, error) {
@@ -755,7 +755,7 @@ const listOperationsAdmin = `-- name: ListOperationsAdmin :many
 SELECT op.id, op.owner_id, op.property_id, op.lease_id, op.recurring_operation_id, op.type, op.amount_kopecks, op.operation_date, op.comment, op.is_exception, op.created_at, op.updated_at, op.deleted_at, op.status, op.name, op.reminder_offset_days, op.source_operation_date, op.category_id, cat.name AS category_name, p.name AS property_name
 FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
-JOIN properties p ON p.id = op.property_id
+LEFT JOIN properties p ON p.id = op.property_id
 WHERE ($1::uuid IS NULL OR op.owner_id = $1::uuid)
   AND op.deleted_at IS NULL
   AND ($2::text = '' OR op.status = $2::text)
@@ -808,7 +808,7 @@ type ListOperationsAdminRow struct {
 	SourceOperationDate  pgtype.Date        `json:"source_operation_date"`
 	CategoryID           pgtype.UUID        `json:"category_id"`
 	CategoryName         string             `json:"category_name"`
-	PropertyName         string             `json:"property_name"`
+	PropertyName         pgtype.Text        `json:"property_name"`
 }
 
 func (q *Queries) ListOperationsAdmin(ctx context.Context, arg ListOperationsAdminParams) ([]ListOperationsAdminRow, error) {

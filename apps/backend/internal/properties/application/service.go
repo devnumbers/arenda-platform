@@ -456,6 +456,15 @@ func (s *PropertyService) DeleteProperty(
 		}
 	}
 
+	if mode == domain.DeletePropertyModeDetach {
+		// Detach keeps leases and operations with property_id set to NULL by
+		// the FK; pause recurring operations and drop their future unedited
+		// operations and reminders, same as archiving does.
+		if err := s.billingLifecycle.WithTx(tx).Suspend(ctx, id, timeutil.Date(s.clock.Now())); err != nil {
+			return fmt.Errorf("suspend billing: %w", err)
+		}
+	}
+
 	if err := repo.Delete(ctx, id, ownerID); err != nil {
 		return fmt.Errorf("delete property: %w", err)
 	}

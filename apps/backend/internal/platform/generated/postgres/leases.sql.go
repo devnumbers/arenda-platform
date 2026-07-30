@@ -197,7 +197,7 @@ SELECT l.id, l.owner_id, l.property_id, l.tenant_contact_id, l.status, l.start_d
        tc.phone AS tc_phone, tc.email AS tc_email, tc.comment AS tc_comment,
        tc.created_at AS tc_created_at, tc.updated_at AS tc_updated_at
 FROM leases l
-JOIN properties p ON p.id = l.property_id
+LEFT JOIN properties p ON p.id = l.property_id
 LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
 WHERE l.id = $1
 `
@@ -216,7 +216,7 @@ type GetLeaseByIDAdminRow struct {
 	Comment              pgtype.Text        `json:"comment"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	PropertyName         string             `json:"property_name"`
+	PropertyName         pgtype.Text        `json:"property_name"`
 	TcID                 pgtype.UUID        `json:"tc_id"`
 	TcOwnerID            pgtype.UUID        `json:"tc_owner_id"`
 	TcName               pgtype.Text        `json:"tc_name"`
@@ -391,7 +391,7 @@ SELECT l.id, l.owner_id, l.property_id, l.tenant_contact_id, l.status, l.start_d
        tc.phone AS tc_phone, tc.email AS tc_email, tc.comment AS tc_comment,
        tc.created_at AS tc_created_at, tc.updated_at AS tc_updated_at
 FROM leases l
-JOIN properties p ON p.id = l.property_id
+LEFT JOIN properties p ON p.id = l.property_id
 LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
 WHERE ($1::uuid IS NULL OR l.owner_id = $1::uuid)
   AND ($2::uuid IS NULL OR l.property_id = $2::uuid)
@@ -434,7 +434,7 @@ type ListLeasesAdminRow struct {
 	Comment              pgtype.Text        `json:"comment"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	PropertyName         string             `json:"property_name"`
+	PropertyName         pgtype.Text        `json:"property_name"`
 	TcID                 pgtype.UUID        `json:"tc_id"`
 	TcOwnerID            pgtype.UUID        `json:"tc_owner_id"`
 	TcName               pgtype.Text        `json:"tc_name"`

@@ -277,7 +277,7 @@ LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 SELECT op.*, cat.name AS category_name, p.name AS property_name
 FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
-JOIN properties p ON p.id = op.property_id
+LEFT JOIN properties p ON p.id = op.property_id
 WHERE (sqlc.arg('owner_id')::uuid IS NULL OR op.owner_id = sqlc.arg('owner_id')::uuid)
   AND op.deleted_at IS NULL
   AND (sqlc.arg('status')::text = '' OR op.status = sqlc.arg('status')::text)
@@ -311,7 +311,7 @@ WHERE (sqlc.arg('owner_id')::uuid IS NULL OR op.owner_id = sqlc.arg('owner_id'):
 SELECT op.*, cat.name AS category_name, p.name AS property_name
 FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
-JOIN properties p ON p.id = op.property_id
+LEFT JOIN properties p ON p.id = op.property_id
 WHERE op.id = $1;
 
 -- name: CountOperationsTotalAdmin :one
