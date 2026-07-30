@@ -1,0 +1,27 @@
+meta {
+  name: Delete Property Invalid Mode
+  type: http
+  seq: 14
+}
+
+delete {
+  url: {{baseUrl}}/properties/{{propertyId}}?mode=unknown
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  // Requires an authenticated session and a propertyId. Run properties/create first.
+  // A missing or unsupported mode is rejected with 400; only "cascade" and
+  // "detach" are valid. The object is NOT deleted, safe to re-run.
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 400 for invalid mode", function() {
+    expect(res.status).to.equal(400);
+  });
+}

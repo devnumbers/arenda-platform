@@ -12,6 +12,9 @@ delete {
 
 script:pre-request {
   // Requires an authenticated session and a propertyId. Run properties/create first.
+  // WARNING: this deletes {{propertyId}} together with all its leases, operations,
+  // recurring operations and reminders. Re-run properties/create to get a fresh
+  // object before running other delete scenarios (seq 11-15).
   const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
   if (sessionId) {
     req.setHeader("Cookie", `session_id=${sessionId}`);
@@ -22,4 +25,7 @@ tests {
   test("should return 204", function() {
     expect(res.status).to.equal(204);
   });
+
+  // Side effect check: run "get property after delete" (seq 16) right after
+  // this request — the deleted property must return 404.
 }

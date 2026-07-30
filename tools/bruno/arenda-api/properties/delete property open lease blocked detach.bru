@@ -1,11 +1,11 @@
 meta {
-  name: Delete Property Open Lease Blocked
+  name: Delete Property Open Lease Blocked Detach
   type: http
-  seq: 12
+  seq: 13
 }
 
 delete {
-  url: {{baseUrl}}/properties/{{propertyId}}?mode=cascade
+  url: {{baseUrl}}/properties/{{propertyId}}?mode=detach
   body: none
   auth: none
 }
@@ -14,7 +14,7 @@ script:pre-request {
   // Requires an authenticated session and a propertyId with an OPEN lease.
   // Setup: run properties/create, then tenant-contacts/create tenant contact,
   // then leases/create lease. An open lease blocks BOTH delete modes (409) —
-  // the detach twin of this case is seq 13.
+  // the cascade twin of this case is seq 12.
   // Does not delete the object, safe to re-run. Run it before seq 10/11
   // (they delete {{propertyId}}) or recreate the property afterwards.
   const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
