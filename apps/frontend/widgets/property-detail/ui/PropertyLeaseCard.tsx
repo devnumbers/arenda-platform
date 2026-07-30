@@ -32,6 +32,9 @@ export function PropertyLeaseCard({
                                       isPayRentLoading = false,
                                   }: PropertyLeaseCardProps): JSX.Element {
     const leaseNewHref = `${ROUTES.leaseNew}?propertyId=${propertyId}`;
+    const operationsHref = lease?.property_id
+        ? `${ROUTES.financeOperations}?property_id=${lease.property_id}`
+        : ROUTES.financeOperations;
     const showRentActions = status === 'rented';
     const showResolveActions = status === 'requires_action' && lease;
     const showCreateAction = status === 'free';
@@ -76,7 +79,7 @@ export function PropertyLeaseCard({
                                 </Button>
                             ) : (
                                 <LinkButton
-                                    href={`${ROUTES.financeOperations}?property_id=${lease?.property_id}`}
+                                    href={operationsHref}
                                     variant="primary"
                                     fullWidth
                                 >
@@ -84,7 +87,7 @@ export function PropertyLeaseCard({
                                 </LinkButton>
                             )}
                             <LinkButton
-                                href={`${ROUTES.financeOperations}?property_id=${lease?.property_id}`}
+                                href={operationsHref}
                                 variant="secondary"
                                 fullWidth
                             >

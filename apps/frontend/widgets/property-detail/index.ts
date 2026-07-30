@@ -12,6 +12,7 @@ export { PropertyTenantCard } from './ui/PropertyTenantCard';
 export { PropertyOperationsCard } from './ui/PropertyOperationsCard';
 export { PropertyInfoCard } from './ui/PropertyInfoCard';
 export { PropertyBlockedModal } from './ui/PropertyBlockedModal';
+export { PropertyDeleteModal } from './ui/PropertyDeleteModal';
 export { PropertyEndLeaseModal } from './ui/PropertyEndLeaseModal';
 export { PropertySuccessBanner } from './ui/PropertySuccessBanner';
 export { PropertyOperationsPage } from './ui/PropertyOperationsPage';

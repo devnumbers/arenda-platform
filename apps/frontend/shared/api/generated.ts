@@ -174,6 +174,7 @@ export interface paths {
         get: operations["getProperty"];
         put?: never;
         post?: never;
+        /** @description Deletes the property in the given mode. Both modes are rejected with 409 while the property has an open lease. */
         delete: operations["deleteProperty"];
         options?: never;
         head?: never;
@@ -1410,8 +1411,8 @@ export interface components {
             /** Format: uuid */
             ownerId: string;
             /** Format: uuid */
-            propertyId: string;
-            propertyName: string;
+            propertyId?: string | null;
+            propertyName?: string | null;
             tenantContact?: components["schemas"]["AdminTenantContact"] | null;
             status: components["schemas"]["LeaseStatus"];
             /** Format: date */
@@ -1458,8 +1459,8 @@ export interface components {
             /** Format: uuid */
             ownerId: string;
             /** Format: uuid */
-            propertyId: string;
-            propertyName: string;
+            propertyId?: string | null;
+            propertyName?: string | null;
             /** Format: uuid */
             leaseId?: string | null;
             /** Format: uuid */
@@ -1660,8 +1661,11 @@ export interface components {
         LeaseResponse: {
             /** Format: uuid */
             id: string;
-            /** Format: uuid */
-            property_id: string;
+            /**
+             * Format: uuid
+             * @description Null when the property was deleted in detach mode.
+             */
+            property_id?: string | null;
             /** Format: uuid */
             owner_id: string;
             tenant_contact: components["schemas"]["TenantContactResponse"] | null;
@@ -1812,8 +1816,11 @@ export interface components {
             id: string;
             /** Format: uuid */
             owner_id: string;
-            /** Format: uuid */
-            property_id: string;
+            /**
+             * Format: uuid
+             * @description Null when the property was deleted in detach mode.
+             */
+            property_id?: string | null;
             property_status?: components["schemas"]["PropertyStatus"];
             /** Format: uuid */
             lease_id?: string | null;
@@ -1891,8 +1898,11 @@ export interface components {
             id: string;
             /** Format: uuid */
             owner_id: string;
-            /** Format: uuid */
-            property_id: string;
+            /**
+             * Format: uuid
+             * @description Null when the property was deleted in detach mode.
+             */
+            property_id?: string | null;
             /** Format: uuid */
             lease_id?: string | null;
             type: components["schemas"]["OperationType"];
@@ -1998,8 +2008,11 @@ export interface components {
             profit_kopecks: number;
         };
         FinanceReportPropertyRow: {
-            /** Format: uuid */
-            property_id: string;
+            /**
+             * Format: uuid
+             * @description Null groups operations whose property was deleted in detach mode.
+             */
+            property_id?: string | null;
             income_kopecks: number;
             expense_kopecks: number;
             profit_kopecks: number;
@@ -2450,6 +2463,7 @@ export interface operations {
     deleteProperty: {
         parameters: {
             query: {
+                /** @description Deletion mode. `cascade` deletes the property together with its leases, recurring operations and operations. `detach` deletes only the property: its leases, recurring operations and operations are kept with `property_id` set to null, and its recurring operations are paused. */
                 mode: "cascade" | "detach";
             };
             header?: never;
@@ -2471,7 +2485,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description The property has an open lease and cannot be deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     updateProperty: {

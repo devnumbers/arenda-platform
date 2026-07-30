@@ -86,6 +86,10 @@ const property = {
     notify.error('Не удалось сохранить изменения', options)) satisfies ScenarioFn,
   listLoadError: ((options?) =>
     notify.error('Не удалось загрузить список объектов', options)) satisfies ScenarioFn,
+  deleted: ((options?) =>
+    notify.success('Объект удалён', options)) satisfies ScenarioFn,
+  deleteError: ((options?) =>
+    notify.error('Не удалось удалить объект', options)) satisfies ScenarioFn,
 } as const;
 
 const leases = {

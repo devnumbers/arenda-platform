@@ -23,7 +23,7 @@ export function PropertyTenantCard({
     }
 
     const tenant = lease.tenantContact;
-    const leaseEditHref = `${ROUTES.leaseEdit(lease.id)}?${RETURN_TO_PARAM}=${encodeURIComponent(ROUTES.property(lease.propertyId))}`;
+    const leaseEditHref = `${ROUTES.leaseEdit(lease.id)}?${RETURN_TO_PARAM}=${encodeURIComponent(lease.propertyId ? ROUTES.property(lease.propertyId) : ROUTES.properties)}`;
 
     return (
         <PropertyDetailSection>

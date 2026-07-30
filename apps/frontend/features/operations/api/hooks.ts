@@ -278,7 +278,7 @@ export function useCreateOperation(): UseMutationResult<
 export function useUpdateOperation(): UseMutationResult<
   OperationResponse,
   ApiError,
-  { id: string; propertyId: string; data: OperationUpdateRequest }
+  { id: string; propertyId?: string; data: OperationUpdateRequest }
 > {
   const queryClient = useQueryClient();
   return useMutation({
@@ -290,13 +290,15 @@ export function useUpdateOperation(): UseMutationResult<
     onSuccess: (operation, { id, propertyId }) => {
       queryClient.setQueryData(operationKeys.detail(id), operation);
       invalidateOperationLists(queryClient);
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.byProperty(propertyId),
-      });
       queryClient.invalidateQueries({ queryKey: operationKeys.detail(id) });
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.summary(propertyId),
-      });
+      if (propertyId) {
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.byProperty(propertyId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.summary(propertyId),
+        });
+      }
       if (shouldInvalidateLeaseKeys(queryClient, operation)) {
         queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       }
@@ -307,7 +309,7 @@ export function useUpdateOperation(): UseMutationResult<
 export function useDeleteOperation(): UseMutationResult<
   void,
   ApiError,
-  { id: string; propertyId: string }
+  { id: string; propertyId?: string }
 > {
   const queryClient = useQueryClient();
   return useMutation({
@@ -316,12 +318,14 @@ export function useDeleteOperation(): UseMutationResult<
     onSuccess: (_, { id, propertyId }) => {
       queryClient.removeQueries({ queryKey: operationKeys.detail(id), exact: true });
       invalidateOperationLists(queryClient);
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.byProperty(propertyId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.summary(propertyId),
-      });
+      if (propertyId) {
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.byProperty(propertyId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.summary(propertyId),
+        });
+      }
     },
   });
 }

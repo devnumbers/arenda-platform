@@ -16,7 +16,7 @@ import { operationKeys } from '@/features/operations/api/keys';
 import { leaseKeys } from '@/features/leases/api/keys';
 import { financeKeys } from '@/features/finance/api/keys';
 import { recurringOperationKeys } from '@/features/recurring-operations/api/keys';
-import type { components } from '@/shared/api/generated';
+import type { components, operations } from '@/shared/api/generated';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
 type PropertiesResponse = components['schemas']['PropertiesResponse'];
@@ -26,6 +26,9 @@ type PropertyPhoto = components['schemas']['PropertyPhoto'];
 type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
+
+export type DeletePropertyMode =
+  operations['deleteProperty']['parameters']['query']['mode'];
 
 export function useProperties(
   options: { enabled?: boolean } = {},
@@ -201,7 +204,7 @@ export function useDeletePropertyPhoto(): UseMutationResult<
 export function useDeleteProperty(): UseMutationResult<
   void,
   ApiError,
-  { id: string; mode: 'cascade' | 'detach' }
+  { id: string; mode: DeletePropertyMode }
 > {
   const queryClient = useQueryClient();
   return useMutation({
@@ -209,9 +212,19 @@ export function useDeleteProperty(): UseMutationResult<
       apiClient<void>(`/properties/${id}?mode=${mode}`, {
         method: 'DELETE',
       }),
-    onSuccess: (_, { id }) => {
+    onSuccess: (_, { id, mode }) => {
+      if (mode === 'cascade') {
+        // Каскад удаляет операции объекта на сервере — вычищаем все их
+        // кэши (списки и detail) по префиксу, чтобы страницы удалённых
+        // операций не рефетчились в 404, а списки не показывали фантомов.
+        queryClient.removeQueries({ queryKey: ['operations'] });
+      } else {
+        // При detach операции выживают с property_id: null — инвалидируем
+        // весь префикс операций (списки и detail), чтобы подтянуть
+        // обновлённые property_id/property_status.
+        queryClient.invalidateQueries({ queryKey: ['operations'] });
+      }
       queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-      queryClient.invalidateQueries({ queryKey: [...propertyKeys.list, 'archived'] });
       queryClient.removeQueries({ queryKey: propertyKeys.detail(id) });
       queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       queryClient.invalidateQueries({ queryKey: leaseKeys.byProperty(id) });
@@ -220,6 +233,7 @@ export function useDeleteProperty(): UseMutationResult<
       queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
       queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
       queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
+      queryClient.invalidateQueries({ queryKey: recurringOperationKeys.lists() });
       queryClient.invalidateQueries({ queryKey: recurringOperationKeys.byProperty(id) });
     },
   });

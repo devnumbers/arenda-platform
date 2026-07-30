@@ -48,9 +48,12 @@ function getNearestLease(leases: LeaseResponse[] | undefined): LeaseResponse | u
 }
 
 function getPropertyName(
-    propertyId: string,
+    propertyId: string | null | undefined,
     properties: Property[] | undefined,
 ): string {
+    if (!propertyId) {
+        return 'Без объекта';
+    }
     return properties?.find((property) => property.id === propertyId)?.name ?? 'Объект';
 }
 
@@ -145,7 +148,11 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
                     variant="filled"
                 />
                 <IconActionCard
-                    href={`${ROUTES.financeOperations}?property_id=${lease.property_id}`}
+                    href={
+                        lease.property_id
+                            ? `${ROUTES.financeOperations}?property_id=${lease.property_id}`
+                            : ROUTES.financeOperations
+                    }
                     icon={
                         <Icon size="l">
                             <BoldWallet/>
