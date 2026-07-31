@@ -99,10 +99,20 @@ Use `make local-infra-reset` only when intentionally deleting local Docker volum
 
 ## Repository Conventions
 
-- Do not create or switch to a git worktree by default. Work in the current checkout and current branch unless the user explicitly asks for a worktree or branch isolation.
+- Do not create or switch to a git worktree by default. Work in the current checkout; creating and switching branches per the Git Workflow below is normal — the ban is on worktrees. Use a worktree or branch isolation only when the user explicitly asks.
 - If a generic skill recommends a worktree, this repository rule overrides it.
 - The Orchestrator never hand-edits code. It coordinates, reviews, verifies, and reports.
 - Money is stored as `BIGINT` in kopecks across the backend. See `docs/adr/0008-subscription-lifecycle.md`.
+
+## Git Workflow
+
+- `main` = прод, `dev` = stage. Локальная рабочая ветка — `dev`.
+- Все изменения, включая мелкие фиксы, идут через PR в `dev` — прямые пуши в `dev` обходят автоматику борды (мерж PR двигает карточку).
+- Ветки создавать от `dev`: `fix/<issue>-краткое-описание`, `feat/...`.
+- В теле PR писать `Closes #N`. GitHub закрывает issue по `Closes` только при попадании коммита в дефолтную ветку (`main`), поэтому мерж в `dev` issue не закрывает — это и нужно.
+- Мерж PR в `dev` → автодеплой на stage → карточка issue на борде (project #6 «Баги Рентли») переходит в In review. Проверка на stage — вручную.
+- Проверка на stage не пройдена: карточку вернуть в In progress и оставить комментарий в issue, что именно не так. Issue не переоткрывать.
+- Релиз в прод: один накопительный PR `dev → main` с заголовком `release: stage → main`; его мерж закрывает доехавшие issue и переводит карточки в Done.
 
 ## Agent skills
 
