@@ -469,6 +469,97 @@ func (q *Queries) GetOperationByIDAndOwnerForUpdate(ctx context.Context, arg Get
 	return i, err
 }
 
+const getPropertyFinanceByCategory = `-- name: GetPropertyFinanceByCategory :many
+SELECT
+  op.type,
+  cat.name AS category_name,
+  COALESCE(SUM(op.amount_kopecks), 0)::bigint AS total_kopecks
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = $1::uuid
+  AND op.property_id = $2::uuid
+  AND op.status IN ('paid', 'received')
+  AND op.deleted_at IS NULL
+GROUP BY op.type, cat.name
+ORDER BY op.type, total_kopecks DESC
+`
+
+type GetPropertyFinanceByCategoryParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+type GetPropertyFinanceByCategoryRow struct {
+	Type         string `json:"type"`
+	CategoryName string `json:"category_name"`
+	TotalKopecks int64  `json:"total_kopecks"`
+}
+
+func (q *Queries) GetPropertyFinanceByCategory(ctx context.Context, arg GetPropertyFinanceByCategoryParams) ([]GetPropertyFinanceByCategoryRow, error) {
+	rows, err := q.db.Query(ctx, getPropertyFinanceByCategory, arg.OwnerID, arg.PropertyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetPropertyFinanceByCategoryRow{}
+	for rows.Next() {
+		var i GetPropertyFinanceByCategoryRow
+		if err := rows.Scan(&i.Type, &i.CategoryName, &i.TotalKopecks); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPropertyFinanceByMonth = `-- name: GetPropertyFinanceByMonth :many
+SELECT
+  date_trunc('month', operation_date)::date AS month,
+  COALESCE(SUM(CASE WHEN type = 'income' THEN amount_kopecks ELSE 0 END), 0)::bigint AS income_kopecks,
+  COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_kopecks ELSE 0 END), 0)::bigint AS expense_kopecks
+FROM operations
+WHERE owner_id = $1::uuid
+  AND property_id = $2::uuid
+  AND status IN ('paid', 'received')
+  AND deleted_at IS NULL
+GROUP BY month
+ORDER BY month
+`
+
+type GetPropertyFinanceByMonthParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+type GetPropertyFinanceByMonthRow struct {
+	Month          pgtype.Date `json:"month"`
+	IncomeKopecks  int64       `json:"income_kopecks"`
+	ExpenseKopecks int64       `json:"expense_kopecks"`
+}
+
+func (q *Queries) GetPropertyFinanceByMonth(ctx context.Context, arg GetPropertyFinanceByMonthParams) ([]GetPropertyFinanceByMonthRow, error) {
+	rows, err := q.db.Query(ctx, getPropertyFinanceByMonth, arg.OwnerID, arg.PropertyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetPropertyFinanceByMonthRow{}
+	for rows.Next() {
+		var i GetPropertyFinanceByMonthRow
+		if err := rows.Scan(&i.Month, &i.IncomeKopecks, &i.ExpenseKopecks); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPropertyOperationsSummary = `-- name: GetPropertyOperationsSummary :one
 SELECT
     (

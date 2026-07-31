@@ -37,6 +37,7 @@ type ExportFile struct {
 }
 
 const (
+	summarySheetName     = "Сводка"
 	exportSheetName      = "Операции"
 	exportMaxRows        = 1_000_000
 	exportFilenameMaxLen = 50
@@ -57,7 +58,7 @@ func NewExportService(operations OperationRepository, properties PropertyReposit
 	return &ExportService{operations: operations, properties: properties, clock: clk, logger: logger}
 }
 
-// ExportProperty returns the xlsx workbook with the property operations.
+// ExportProperty returns the xlsx workbook with the property summary and operations.
 func (s *ExportService) ExportProperty(ctx context.Context, ownerID, propertyID uuid.UUID) (ExportFile, error) {
 	name, err := s.properties.GetNameByOwner(ctx, propertyID, ownerID)
 	if err != nil {
@@ -76,7 +77,22 @@ func (s *ExportService) ExportProperty(ctx context.Context, ownerID, propertyID 
 		rows = rows[:exportMaxRows]
 	}
 
-	content, err := buildExportWorkbook(rows)
+	summary, err := s.operations.GetPropertyOperationsSummary(ctx, ownerID, propertyID, s.clock.Now())
+	if err != nil {
+		return ExportFile{}, fmt.Errorf("export property: get summary: %w", err)
+	}
+
+	months, err := s.operations.GetPropertyFinanceByMonth(ctx, ownerID, propertyID)
+	if err != nil {
+		return ExportFile{}, fmt.Errorf("export property: get finance by month: %w", err)
+	}
+
+	categories, err := s.operations.GetPropertyFinanceByCategory(ctx, ownerID, propertyID)
+	if err != nil {
+		return ExportFile{}, fmt.Errorf("export property: get finance by category: %w", err)
+	}
+
+	content, err := buildExportWorkbook(name, summary, months, categories, rows)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: build workbook: %w", err)
 	}
@@ -85,8 +101,8 @@ func (s *ExportService) ExportProperty(ctx context.Context, ownerID, propertyID 
 	return ExportFile{Filename: filename, Content: content}, nil
 }
 
-// buildExportWorkbook renders the "Операции" sheet in memory.
-func buildExportWorkbook(rows []ExportOperationRow) (_ []byte, err error) {
+// buildExportWorkbook renders the "Сводка" and "Операции" sheets in memory.
+func buildExportWorkbook(name string, summary OperationsSummary, months []FinanceReportMonthRow, categories []FinanceReportCategoryRow, rows []ExportOperationRow) (_ []byte, err error) {
 	f := excelize.NewFile()
 	defer func() {
 		if closeErr := f.Close(); closeErr != nil && err == nil {
@@ -94,7 +110,7 @@ func buildExportWorkbook(rows []ExportOperationRow) (_ []byte, err error) {
 		}
 	}()
 
-	if err := f.SetSheetName("Sheet1", exportSheetName); err != nil {
+	if err := f.SetSheetName("Sheet1", summarySheetName); err != nil {
 		return nil, fmt.Errorf("rename sheet: %w", err)
 	}
 
@@ -106,6 +122,10 @@ func buildExportWorkbook(rows []ExportOperationRow) (_ []byte, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("header style: %w", err)
 	}
+	boldStyle, err := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
+	if err != nil {
+		return nil, fmt.Errorf("bold style: %w", err)
+	}
 	dateStyle, err := f.NewStyle(&excelize.Style{CustomNumFmt: new("DD.MM.YYYY")})
 	if err != nil {
 		return nil, fmt.Errorf("date style: %w", err)
@@ -113,6 +133,14 @@ func buildExportWorkbook(rows []ExportOperationRow) (_ []byte, err error) {
 	moneyStyle, err := f.NewStyle(&excelize.Style{CustomNumFmt: new(`#,##0.00" ₽"`)})
 	if err != nil {
 		return nil, fmt.Errorf("money style: %w", err)
+	}
+
+	if err := renderSummarySheet(f, name, summary, months, categories, headerStyle, boldStyle, moneyStyle); err != nil {
+		return nil, fmt.Errorf("summary sheet: %w", err)
+	}
+
+	if _, err := f.NewSheet(exportSheetName); err != nil {
+		return nil, fmt.Errorf("new sheet: %w", err)
 	}
 
 	for i, header := range exportHeaders {
@@ -205,6 +233,145 @@ func buildExportWorkbook(rows []ExportOperationRow) (_ []byte, err error) {
 		return nil, fmt.Errorf("write workbook: %w", err)
 	}
 	return buf.Bytes(), nil
+}
+
+// renderSummarySheet fills the "Сводка" sheet: the property title, the
+// all-time totals, and the finance breakdowns by month and by category.
+func renderSummarySheet(f *excelize.File, name string, summary OperationsSummary, months []FinanceReportMonthRow, categories []FinanceReportCategoryRow, headerStyle, boldStyle, moneyStyle int) error {
+	setMoney := func(cell string, kopecks int64) error {
+		if err := f.SetCellFloat(summarySheetName, cell, float64(kopecks)/100, 2, 64); err != nil {
+			return fmt.Errorf("set amount %s: %w", cell, err)
+		}
+		if err := f.SetCellStyle(summarySheetName, cell, cell, moneyStyle); err != nil {
+			return fmt.Errorf("style amount %s: %w", cell, err)
+		}
+		return nil
+	}
+
+	if err := f.SetCellStr(summarySheetName, "A1", "Объект: "+name); err != nil {
+		return fmt.Errorf("set title: %w", err)
+	}
+	if err := f.SetCellStyle(summarySheetName, "A1", "A1", boldStyle); err != nil {
+		return fmt.Errorf("style title: %w", err)
+	}
+
+	if err := f.SetCellStr(summarySheetName, "A3", "Итоги за всё время"); err != nil {
+		return fmt.Errorf("set totals header: %w", err)
+	}
+	if err := f.SetCellStyle(summarySheetName, "A3", "B3", headerStyle); err != nil {
+		return fmt.Errorf("style totals header: %w", err)
+	}
+	totals := []struct {
+		label   string
+		kopecks int64
+	}{
+		{"Доход", summary.AllTimeIncomeKopecks},
+		{"Расход", summary.AllTimeExpenseKopecks},
+		{"Прибыль", summary.AllTimeProfitKopecks},
+	}
+	for i, total := range totals {
+		rowNum := 4 + i
+		if err := f.SetCellStr(summarySheetName, "A"+strconv.Itoa(rowNum), total.label); err != nil {
+			return fmt.Errorf("set totals label: %w", err)
+		}
+		if err := setMoney("B"+strconv.Itoa(rowNum), total.kopecks); err != nil {
+			return err
+		}
+	}
+
+	monthHeaderRow := 8
+	monthHeaders := []string{"Месяц", "Доход", "Расход", "Прибыль"}
+	for i, header := range monthHeaders {
+		cell, err := excelize.CoordinatesToCellName(i+1, monthHeaderRow)
+		if err != nil {
+			return fmt.Errorf("month header cell: %w", err)
+		}
+		if err := f.SetCellStr(summarySheetName, cell, header); err != nil {
+			return fmt.Errorf("set month header: %w", err)
+		}
+	}
+	if err := f.SetCellStyle(summarySheetName, "A8", "D8", headerStyle); err != nil {
+		return fmt.Errorf("style month header: %w", err)
+	}
+	for i, month := range months {
+		rowNum := monthHeaderRow + 1 + i
+		row := strconv.Itoa(rowNum)
+		if err := f.SetCellStr(summarySheetName, "A"+row, exportMonthLabel(month.Month)); err != nil {
+			return fmt.Errorf("set month: %w", err)
+		}
+		if err := setMoney("B"+row, month.IncomeKopecks); err != nil {
+			return err
+		}
+		if err := setMoney("C"+row, month.ExpenseKopecks); err != nil {
+			return err
+		}
+		if err := setMoney("D"+row, month.IncomeKopecks-month.ExpenseKopecks); err != nil {
+			return err
+		}
+	}
+
+	categoryHeaderRow := monthHeaderRow + len(months) + 2
+	categoryHeaders := []string{"Категория", "Тип", "Сумма"}
+	for i, header := range categoryHeaders {
+		cell, err := excelize.CoordinatesToCellName(i+1, categoryHeaderRow)
+		if err != nil {
+			return fmt.Errorf("category header cell: %w", err)
+		}
+		if err := f.SetCellStr(summarySheetName, cell, header); err != nil {
+			return fmt.Errorf("set category header: %w", err)
+		}
+	}
+	categoryHeaderStart := "A" + strconv.Itoa(categoryHeaderRow)
+	categoryHeaderEnd := "C" + strconv.Itoa(categoryHeaderRow)
+	if err := f.SetCellStyle(summarySheetName, categoryHeaderStart, categoryHeaderEnd, headerStyle); err != nil {
+		return fmt.Errorf("style category header: %w", err)
+	}
+	for i, category := range categories {
+		row := strconv.Itoa(categoryHeaderRow + 1 + i)
+		if err := f.SetCellStr(summarySheetName, "A"+row, category.CategoryName); err != nil {
+			return fmt.Errorf("set category: %w", err)
+		}
+		opType := "Расход"
+		if category.Type == domain.OperationTypeIncome {
+			opType = "Доход"
+		}
+		if err := f.SetCellStr(summarySheetName, "B"+row, opType); err != nil {
+			return fmt.Errorf("set category type: %w", err)
+		}
+		if err := setMoney("C"+row, category.TotalKopecks); err != nil {
+			return err
+		}
+	}
+
+	if err := f.SetPanes(summarySheetName, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"}); err != nil {
+		return fmt.Errorf("freeze panes: %w", err)
+	}
+	colWidths := []struct {
+		col   string
+		width float64
+	}{
+		{"A", 22},
+		{"B", 16},
+		{"C", 16},
+		{"D", 16},
+	}
+	for _, cw := range colWidths {
+		if err := f.SetColWidth(summarySheetName, cw.col, cw.col, cw.width); err != nil {
+			return fmt.Errorf("column %s width: %w", cw.col, err)
+		}
+	}
+	return nil
+}
+
+// exportRussianMonths maps time.Month to the Russian nominative month name.
+var exportRussianMonths = [...]string{
+	"", "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+	"Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+}
+
+// exportMonthLabel renders a month as "Январь 2025".
+func exportMonthLabel(month time.Time) string {
+	return exportRussianMonths[month.Month()] + " " + strconv.Itoa(month.Year())
 }
 
 // exportTenantName renders the lease tenant as "Фамилия Имя Отчество", or an

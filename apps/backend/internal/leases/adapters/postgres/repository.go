@@ -1401,6 +1401,46 @@ func (r *OperationRepository) GetFinanceReportByMonth(ctx context.Context, owner
 	return result, nil
 }
 
+func (r *OperationRepository) GetPropertyFinanceByMonth(ctx context.Context, ownerID, propertyID uuid.UUID) ([]application.FinanceReportMonthRow, error) {
+	rows, err := r.q().GetPropertyFinanceByMonth(ctx, postgres.GetPropertyFinanceByMonthParams{
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]application.FinanceReportMonthRow, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, application.FinanceReportMonthRow{
+			Month:          row.Month.Time,
+			IncomeKopecks:  row.IncomeKopecks,
+			ExpenseKopecks: row.ExpenseKopecks,
+		})
+	}
+	return result, nil
+}
+
+func (r *OperationRepository) GetPropertyFinanceByCategory(ctx context.Context, ownerID, propertyID uuid.UUID) ([]application.FinanceReportCategoryRow, error) {
+	rows, err := r.q().GetPropertyFinanceByCategory(ctx, postgres.GetPropertyFinanceByCategoryParams{
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]application.FinanceReportCategoryRow, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, application.FinanceReportCategoryRow{
+			Type:         domain.OperationType(row.Type),
+			CategoryName: row.CategoryName,
+			TotalKopecks: row.TotalKopecks,
+		})
+	}
+	return result, nil
+}
+
 func (r *OperationRepository) ListCompletedForExport(ctx context.Context, ownerID, propertyID uuid.UUID) ([]application.ExportOperationRow, error) {
 	rows, err := r.q().ListCompletedOperationsForExport(ctx, postgres.ListCompletedOperationsForExportParams{
 		OwnerID:    pgconv.UUIDToPgtype(ownerID),

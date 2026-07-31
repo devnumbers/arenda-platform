@@ -160,6 +160,8 @@ type OperationRepository interface {
 	GetFinanceReportByProperty(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]FinanceReportPropertyRow, error)
 	GetFinanceReportByCategory(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]FinanceReportCategoryRow, error)
 	GetFinanceReportByMonth(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]FinanceReportMonthRow, error)
+	GetPropertyFinanceByMonth(ctx context.Context, ownerID, propertyID uuid.UUID) ([]FinanceReportMonthRow, error)
+	GetPropertyFinanceByCategory(ctx context.Context, ownerID, propertyID uuid.UUID) ([]FinanceReportCategoryRow, error)
 	ListCompletedForExport(ctx context.Context, ownerID, propertyID uuid.UUID) ([]ExportOperationRow, error)
 	WithTx(tx transaction.Tx) OperationRepository
 }

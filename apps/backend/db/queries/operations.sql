@@ -340,3 +340,30 @@ WHERE op.owner_id = $1 AND op.property_id = $2
   AND op.status IN ('paid', 'received')
   AND op.deleted_at IS NULL
 ORDER BY op.operation_date ASC, op.id ASC;
+
+-- name: GetPropertyFinanceByMonth :many
+SELECT
+  date_trunc('month', operation_date)::date AS month,
+  COALESCE(SUM(CASE WHEN type = 'income' THEN amount_kopecks ELSE 0 END), 0)::bigint AS income_kopecks,
+  COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_kopecks ELSE 0 END), 0)::bigint AS expense_kopecks
+FROM operations
+WHERE owner_id = sqlc.arg('owner_id')::uuid
+  AND property_id = sqlc.arg('property_id')::uuid
+  AND status IN ('paid', 'received')
+  AND deleted_at IS NULL
+GROUP BY month
+ORDER BY month;
+
+-- name: GetPropertyFinanceByCategory :many
+SELECT
+  op.type,
+  cat.name AS category_name,
+  COALESCE(SUM(op.amount_kopecks), 0)::bigint AS total_kopecks
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = sqlc.arg('owner_id')::uuid
+  AND op.property_id = sqlc.arg('property_id')::uuid
+  AND op.status IN ('paid', 'received')
+  AND op.deleted_at IS NULL
+GROUP BY op.type, cat.name
+ORDER BY op.type, total_kopecks DESC;
