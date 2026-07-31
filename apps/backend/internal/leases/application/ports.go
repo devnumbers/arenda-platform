@@ -50,6 +50,9 @@ type LeaseRepository interface {
 	GetOpenLeaseByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) (domain.Lease, error)
 	ListOpenLeasesWithPastEndDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Lease, error)
 	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.Lease, error)
+	// ListWithTenantForExport returns the property leases joined with tenant
+	// contact data for the xlsx export, newest leases first.
+	ListWithTenantForExport(ctx context.Context, ownerID, propertyID uuid.UUID) ([]ExportLeaseRow, error)
 	WithTx(tx transaction.Tx) LeaseRepository
 }
 

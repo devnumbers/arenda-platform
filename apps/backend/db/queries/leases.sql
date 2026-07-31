@@ -83,6 +83,22 @@ SELECT * FROM leases
 WHERE property_id = $1 AND owner_id = $2
 ORDER BY updated_at DESC;
 
+-- name: ListLeasesWithTenantForExport :many
+SELECT l.id, l.status, l.start_date, l.end_date,
+       l.rent_amount_kopecks, l.deposit_amount_kopecks,
+       l.payment_day, l.comment,
+       l.tenant_contact_id,
+       tc.surname AS tenant_surname,
+       tc.name   AS tenant_name,
+       tc.patronymic AS tenant_patronymic,
+       tc.phone  AS tenant_phone,
+       tc.email  AS tenant_email,
+       tc.comment AS tenant_comment
+FROM leases l
+LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
+WHERE l.property_id = $1 AND l.owner_id = $2
+ORDER BY l.start_date DESC, l.id DESC;
+
 -- name: ListLeasesAdmin :many
 SELECT l.*, p.name AS property_name,
        tc.id AS tc_id, tc.owner_id AS tc_owner_id, tc.name AS tc_name,

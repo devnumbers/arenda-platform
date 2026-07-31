@@ -585,6 +585,82 @@ func (q *Queries) ListLeasesByProperty(ctx context.Context, arg ListLeasesByProp
 	return items, nil
 }
 
+const listLeasesWithTenantForExport = `-- name: ListLeasesWithTenantForExport :many
+SELECT l.id, l.status, l.start_date, l.end_date,
+       l.rent_amount_kopecks, l.deposit_amount_kopecks,
+       l.payment_day, l.comment,
+       l.tenant_contact_id,
+       tc.surname AS tenant_surname,
+       tc.name   AS tenant_name,
+       tc.patronymic AS tenant_patronymic,
+       tc.phone  AS tenant_phone,
+       tc.email  AS tenant_email,
+       tc.comment AS tenant_comment
+FROM leases l
+LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
+WHERE l.property_id = $1 AND l.owner_id = $2
+ORDER BY l.start_date DESC, l.id DESC
+`
+
+type ListLeasesWithTenantForExportParams struct {
+	PropertyID pgtype.UUID `json:"property_id"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+}
+
+type ListLeasesWithTenantForExportRow struct {
+	ID                   pgtype.UUID `json:"id"`
+	Status               string      `json:"status"`
+	StartDate            pgtype.Date `json:"start_date"`
+	EndDate              pgtype.Date `json:"end_date"`
+	RentAmountKopecks    int64       `json:"rent_amount_kopecks"`
+	DepositAmountKopecks int64       `json:"deposit_amount_kopecks"`
+	PaymentDay           int32       `json:"payment_day"`
+	Comment              pgtype.Text `json:"comment"`
+	TenantContactID      pgtype.UUID `json:"tenant_contact_id"`
+	TenantSurname        pgtype.Text `json:"tenant_surname"`
+	TenantName           pgtype.Text `json:"tenant_name"`
+	TenantPatronymic     pgtype.Text `json:"tenant_patronymic"`
+	TenantPhone          pgtype.Text `json:"tenant_phone"`
+	TenantEmail          pgtype.Text `json:"tenant_email"`
+	TenantComment        pgtype.Text `json:"tenant_comment"`
+}
+
+func (q *Queries) ListLeasesWithTenantForExport(ctx context.Context, arg ListLeasesWithTenantForExportParams) ([]ListLeasesWithTenantForExportRow, error) {
+	rows, err := q.db.Query(ctx, listLeasesWithTenantForExport, arg.PropertyID, arg.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLeasesWithTenantForExportRow{}
+	for rows.Next() {
+		var i ListLeasesWithTenantForExportRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.StartDate,
+			&i.EndDate,
+			&i.RentAmountKopecks,
+			&i.DepositAmountKopecks,
+			&i.PaymentDay,
+			&i.Comment,
+			&i.TenantContactID,
+			&i.TenantSurname,
+			&i.TenantName,
+			&i.TenantPatronymic,
+			&i.TenantPhone,
+			&i.TenantEmail,
+			&i.TenantComment,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOpenLeasePropertyIDsByOwner = `-- name: ListOpenLeasePropertyIDsByOwner :many
 SELECT DISTINCT property_id FROM leases
 WHERE owner_id = $1

@@ -105,6 +105,10 @@ func (r *fakeLeaseRepo) ListByProperty(_ context.Context, _, _ uuid.UUID) ([]dom
 	return nil, nil
 }
 
+func (r *fakeLeaseRepo) ListWithTenantForExport(_ context.Context, _, _ uuid.UUID) ([]ExportLeaseRow, error) {
+	return nil, nil
+}
+
 func (r *fakeLeaseRepo) WithTx(_ transaction.Tx) LeaseRepository { return r }
 
 func TestOperationService_GetPropertyOperationsSummary(t *testing.T) {

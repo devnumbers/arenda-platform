@@ -152,6 +152,38 @@ func (r *LeaseRepository) ListByProperty(ctx context.Context, ownerID, propertyI
 	return leases, nil
 }
 
+func (r *LeaseRepository) ListWithTenantForExport(ctx context.Context, ownerID, propertyID uuid.UUID) ([]application.ExportLeaseRow, error) {
+	rows, err := r.q().ListLeasesWithTenantForExport(ctx, postgres.ListLeasesWithTenantForExportParams{
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]application.ExportLeaseRow, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, application.ExportLeaseRow{
+			LeaseID:              pgconv.UUIDFromPgtype(row.ID),
+			Status:               domain.LeaseStatus(row.Status),
+			StartDate:            pgconv.DateFromPgtype(row.StartDate),
+			EndDate:              pgconv.DatePtrFromPgtype(row.EndDate),
+			RentAmountKopecks:    row.RentAmountKopecks,
+			DepositAmountKopecks: row.DepositAmountKopecks,
+			PaymentDay:           int(row.PaymentDay),
+			Comment:              pgconv.TextToPtrString(row.Comment),
+			TenantContactID:      pgconv.UUIDFromPgtypePtr(row.TenantContactID),
+			TenantSurname:        pgconv.TextToPtrString(row.TenantSurname),
+			TenantName:           pgconv.TextToPtrString(row.TenantName),
+			TenantPatronymic:     pgconv.TextToPtrString(row.TenantPatronymic),
+			TenantPhone:          pgconv.TextToPtrString(row.TenantPhone),
+			TenantEmail:          pgconv.TextToPtrString(row.TenantEmail),
+			TenantComment:        pgconv.TextToPtrString(row.TenantComment),
+		})
+	}
+	return result, nil
+}
+
 func (r *LeaseRepository) Update(ctx context.Context, ownerID uuid.UUID, lease domain.Lease) (domain.Lease, error) {
 	row, err := r.q().UpdateLease(ctx, postgres.UpdateLeaseParams{
 		ID:                   pgconv.UUIDToPgtype(lease.ID),

@@ -166,6 +166,7 @@ type Querier interface {
 	ListLeasesAdmin(ctx context.Context, arg ListLeasesAdminParams) ([]ListLeasesAdminRow, error)
 	ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Lease, error)
 	ListLeasesByProperty(ctx context.Context, arg ListLeasesByPropertyParams) ([]Lease, error)
+	ListLeasesWithTenantForExport(ctx context.Context, arg ListLeasesWithTenantForExportParams) ([]ListLeasesWithTenantForExportRow, error)
 	ListNextRentPaymentsByOwner(ctx context.Context, arg ListNextRentPaymentsByOwnerParams) ([]ListNextRentPaymentsByOwnerRow, error)
 	ListNotificationPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationPreference, error)
 	ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
