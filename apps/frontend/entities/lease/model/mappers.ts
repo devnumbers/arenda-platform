@@ -17,7 +17,7 @@ export function mapLeaseResponse(
 ): Lease {
   return {
     id: dto.id,
-    propertyId: dto.property_id,
+    propertyId: dto.property_id ?? null,
     tenantContactId: dto.tenant_contact?.id,
     tenantName: dto.tenant_contact?.name ?? 'Арендатор',
     tenantContact: dto.tenant_contact

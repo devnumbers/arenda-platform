@@ -355,7 +355,7 @@ function RecurringOperationEditPageContent({
     updateOperation.mutate(
       {
         id,
-        propertyId: operation.property_id,
+        propertyId: operation.property_id ?? undefined,
         data,
       },
       {
@@ -384,7 +384,7 @@ function RecurringOperationEditPageContent({
   const handleConfirmDelete = () => {
     const promise = deleteOperation.mutateAsync({
       id,
-      propertyId: operation.property_id,
+      propertyId: operation.property_id ?? undefined,
     });
 
     void notify.scenarios.operations.recurringOperationDeleted(promise);

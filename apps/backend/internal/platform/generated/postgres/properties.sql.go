@@ -136,6 +136,21 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 	return i, err
 }
 
+const deleteProperty = `-- name: DeleteProperty :exec
+DELETE FROM properties
+WHERE id = $1 AND owner_id = $2
+`
+
+type DeletePropertyParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) DeleteProperty(ctx context.Context, arg DeletePropertyParams) error {
+	_, err := q.db.Exec(ctx, deleteProperty, arg.ID, arg.OwnerID)
+	return err
+}
+
 const getPropertiesStatsAdmin = `-- name: GetPropertiesStatsAdmin :one
 SELECT
   COUNT(*) FILTER (WHERE status IN ('active', 'maintenance')) AS active_count,

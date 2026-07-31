@@ -160,6 +160,14 @@ Push в GHCR из workflow идёт под встроенным `GITHUB_TOKEN` (
   релизами; `CREATE INDEX CONCURRENTLY` на больших таблицах. Авто-rollback
   никогда не делает `migrate down`; `down` прогоняется только в CI на
   эфемерной БД. Контроль — чеклист в `.github/PULL_REQUEST_TEMPLATE.md`.
+- Down-миграция `000086_property_deletion_detach` **необратима после первого
+  реального удаления объекта в режиме detach**: она выполняет `SET NOT NULL`
+  на `property_id` в `leases`, `operations` и `recurring_operations` и упадёт,
+  пока в БД есть отвязанные строки (`property_id IS NULL`). Ручной откат за
+  пределы 000086 возможен только после ручной чистки таких строк
+  (перепривязка или удаление). Стандартный rollback это не ломает:
+  автоматический откат `migrate down` не выполняет никогда, а откат БД —
+  только restore из дампа (см. ниже).
 
 ### Restore из дампа
 

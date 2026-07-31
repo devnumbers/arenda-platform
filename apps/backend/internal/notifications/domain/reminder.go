@@ -62,6 +62,17 @@ func moscowLocation() *time.Location {
 	return moscowLoc
 }
 
+// propertyIDPtr returns a pointer to id if it is not the zero UUID; otherwise
+// it returns nil. A zero UUID means the entity is not attached to a property
+// (the property was deleted in detach mode); persisting it as-is would violate
+// the reminders_property_id_fkey foreign key.
+func propertyIDPtr(id uuid.UUID) *uuid.UUID {
+	if id == uuid.Nil {
+		return nil
+	}
+	return &id
+}
+
 // Reminder is a concrete scheduled notification.
 type Reminder struct {
 	ID                   uuid.UUID
@@ -129,7 +140,7 @@ func newOperationEventReminder(ownerID, operationID, propertyID uuid.UUID, event
 		OwnerID:      ownerID,
 		TargetType:   TargetOperation,
 		OperationID:  &operationID,
-		PropertyID:   &propertyID,
+		PropertyID:   propertyIDPtr(propertyID),
 		EventType:    eventType,
 		Status:       ReminderPending,
 		ScheduledAt:  ScheduledAtForDate(reminderDate),
@@ -154,7 +165,7 @@ func NewLeaseReminder(ownerID, leaseID, propertyID uuid.UUID, reminderDate time.
 		OwnerID:      ownerID,
 		TargetType:   TargetLease,
 		LeaseID:      &leaseID,
-		PropertyID:   &propertyID,
+		PropertyID:   propertyIDPtr(propertyID),
 		EventType:    eventType,
 		Status:       ReminderPending,
 		ScheduledAt:  ScheduledAtForDate(reminderDate),

@@ -149,6 +149,21 @@ func (q *Queries) CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease
 	return i, err
 }
 
+const deleteLeasesByProperty = `-- name: DeleteLeasesByProperty :exec
+DELETE FROM leases
+WHERE owner_id = $1 AND property_id = $2
+`
+
+type DeleteLeasesByPropertyParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+func (q *Queries) DeleteLeasesByProperty(ctx context.Context, arg DeleteLeasesByPropertyParams) error {
+	_, err := q.db.Exec(ctx, deleteLeasesByProperty, arg.OwnerID, arg.PropertyID)
+	return err
+}
+
 const getLeaseByID = `-- name: GetLeaseByID :one
 SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
 WHERE id = $1
@@ -182,7 +197,7 @@ SELECT l.id, l.owner_id, l.property_id, l.tenant_contact_id, l.status, l.start_d
        tc.phone AS tc_phone, tc.email AS tc_email, tc.comment AS tc_comment,
        tc.created_at AS tc_created_at, tc.updated_at AS tc_updated_at
 FROM leases l
-JOIN properties p ON p.id = l.property_id
+LEFT JOIN properties p ON p.id = l.property_id
 LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
 WHERE l.id = $1
 `
@@ -201,7 +216,7 @@ type GetLeaseByIDAdminRow struct {
 	Comment              pgtype.Text        `json:"comment"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	PropertyName         string             `json:"property_name"`
+	PropertyName         pgtype.Text        `json:"property_name"`
 	TcID                 pgtype.UUID        `json:"tc_id"`
 	TcOwnerID            pgtype.UUID        `json:"tc_owner_id"`
 	TcName               pgtype.Text        `json:"tc_name"`
@@ -376,7 +391,7 @@ SELECT l.id, l.owner_id, l.property_id, l.tenant_contact_id, l.status, l.start_d
        tc.phone AS tc_phone, tc.email AS tc_email, tc.comment AS tc_comment,
        tc.created_at AS tc_created_at, tc.updated_at AS tc_updated_at
 FROM leases l
-JOIN properties p ON p.id = l.property_id
+LEFT JOIN properties p ON p.id = l.property_id
 LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
 WHERE ($1::uuid IS NULL OR l.owner_id = $1::uuid)
   AND ($2::uuid IS NULL OR l.property_id = $2::uuid)
@@ -419,7 +434,7 @@ type ListLeasesAdminRow struct {
 	Comment              pgtype.Text        `json:"comment"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	PropertyName         string             `json:"property_name"`
+	PropertyName         pgtype.Text        `json:"property_name"`
 	TcID                 pgtype.UUID        `json:"tc_id"`
 	TcOwnerID            pgtype.UUID        `json:"tc_owner_id"`
 	TcName               pgtype.Text        `json:"tc_name"`
@@ -559,6 +574,82 @@ func (q *Queries) ListLeasesByProperty(ctx context.Context, arg ListLeasesByProp
 			&i.Comment,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeasesWithTenantForExport = `-- name: ListLeasesWithTenantForExport :many
+SELECT l.id, l.status, l.start_date, l.end_date,
+       l.rent_amount_kopecks, l.deposit_amount_kopecks,
+       l.payment_day, l.comment,
+       l.tenant_contact_id,
+       tc.surname AS tenant_surname,
+       tc.name   AS tenant_name,
+       tc.patronymic AS tenant_patronymic,
+       tc.phone  AS tenant_phone,
+       tc.email  AS tenant_email,
+       tc.comment AS tenant_comment
+FROM leases l
+LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
+WHERE l.property_id = $1 AND l.owner_id = $2
+ORDER BY l.start_date DESC, l.id DESC
+`
+
+type ListLeasesWithTenantForExportParams struct {
+	PropertyID pgtype.UUID `json:"property_id"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+}
+
+type ListLeasesWithTenantForExportRow struct {
+	ID                   pgtype.UUID `json:"id"`
+	Status               string      `json:"status"`
+	StartDate            pgtype.Date `json:"start_date"`
+	EndDate              pgtype.Date `json:"end_date"`
+	RentAmountKopecks    int64       `json:"rent_amount_kopecks"`
+	DepositAmountKopecks int64       `json:"deposit_amount_kopecks"`
+	PaymentDay           int32       `json:"payment_day"`
+	Comment              pgtype.Text `json:"comment"`
+	TenantContactID      pgtype.UUID `json:"tenant_contact_id"`
+	TenantSurname        pgtype.Text `json:"tenant_surname"`
+	TenantName           pgtype.Text `json:"tenant_name"`
+	TenantPatronymic     pgtype.Text `json:"tenant_patronymic"`
+	TenantPhone          pgtype.Text `json:"tenant_phone"`
+	TenantEmail          pgtype.Text `json:"tenant_email"`
+	TenantComment        pgtype.Text `json:"tenant_comment"`
+}
+
+func (q *Queries) ListLeasesWithTenantForExport(ctx context.Context, arg ListLeasesWithTenantForExportParams) ([]ListLeasesWithTenantForExportRow, error) {
+	rows, err := q.db.Query(ctx, listLeasesWithTenantForExport, arg.PropertyID, arg.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLeasesWithTenantForExportRow{}
+	for rows.Next() {
+		var i ListLeasesWithTenantForExportRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.StartDate,
+			&i.EndDate,
+			&i.RentAmountKopecks,
+			&i.DepositAmountKopecks,
+			&i.PaymentDay,
+			&i.Comment,
+			&i.TenantContactID,
+			&i.TenantSurname,
+			&i.TenantName,
+			&i.TenantPatronymic,
+			&i.TenantPhone,
+			&i.TenantEmail,
+			&i.TenantComment,
 		); err != nil {
 			return nil, err
 		}

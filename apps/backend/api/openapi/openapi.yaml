@@ -315,6 +315,51 @@ paths:
           $ref: '#/components/responses/NotFound'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
+    delete:
+      operationId: deleteProperty
+      description: >-
+        Deletes the property in the given mode. Both modes are rejected with
+        409 while the property has an open lease.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: mode
+          in: query
+          required: true
+          description: >-
+            Deletion mode. `cascade` deletes the property together with its
+            leases, recurring operations and operations. `detach` deletes only
+            the property: its leases, recurring operations and operations are
+            kept with `property_id` set to null, and its recurring operations
+            are paused.
+          schema:
+            type: string
+            enum:
+              - cascade
+              - detach
+      responses:
+        '204':
+          description: Property deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The property has an open lease and cannot be deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
   /properties/{id}/archive:
     post:
       operationId: archiveProperty
@@ -407,6 +452,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PropertyOperationsSummaryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{id}/export:
+    get:
+      operationId: exportPropertyData
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Property data export workbook
+          headers:
+            Content-Disposition:
+              description: Attachment header with the xlsx filename
+              schema:
+                type: string
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3373,7 +3447,7 @@ components:
 
     AdminLease:
       type: object
-      required: [id, ownerId, propertyId, propertyName, status, startDate, rentAmountKopecks, depositAmountKopecks, paymentDay, createdAt, updatedAt]
+      required: [id, ownerId, status, startDate, rentAmountKopecks, depositAmountKopecks, paymentDay, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -3384,8 +3458,10 @@ components:
         propertyId:
           type: string
           format: uuid
+          nullable: true
         propertyName:
           type: string
+          nullable: true
         tenantContact:
           nullable: true
           allOf:
@@ -3475,7 +3551,7 @@ components:
 
     AdminOperation:
       type: object
-      required: [id, ownerId, propertyId, propertyName, type, categoryId, categoryName, name, amountKopecks, operationDate, status, isException, createdAt, updatedAt]
+      required: [id, ownerId, type, categoryId, categoryName, name, amountKopecks, operationDate, status, isException, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -3486,8 +3562,10 @@ components:
         propertyId:
           type: string
           format: uuid
+          nullable: true
         propertyName:
           type: string
+          nullable: true
         leaseId:
           type: string
           format: uuid
@@ -3908,7 +3986,7 @@ components:
 
     LeaseResponse:
       type: object
-      required: [id, property_id, owner_id, tenant_contact, status, start_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, current_period_overdue, has_overdue, created_at, updated_at]
+      required: [id, owner_id, tenant_contact, status, start_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, current_period_overdue, has_overdue, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3916,6 +3994,8 @@ components:
         property_id:
           type: string
           format: uuid
+          nullable: true
+          description: Null when the property was deleted in detach mode.
         owner_id:
           type: string
           format: uuid
@@ -4202,7 +4282,7 @@ components:
 
     OperationResponse:
       type: object
-      required: [id, owner_id, property_id, type, category_id, category_name, name, amount_kopecks, operation_date, status, is_exception, created_at, updated_at]
+      required: [id, owner_id, type, category_id, category_name, name, amount_kopecks, operation_date, status, is_exception, created_at, updated_at]
       properties:
         id:
           type: string
@@ -4213,6 +4293,8 @@ components:
         property_id:
           type: string
           format: uuid
+          nullable: true
+          description: Null when the property was deleted in detach mode.
         property_status:
           $ref: '#/components/schemas/PropertyStatus'
         lease_id:
@@ -4354,7 +4436,7 @@ components:
 
     RecurringOperationResponse:
       type: object
-      required: [id, owner_id, property_id, type, category_id, category_name, name, amount_kopecks, start_date, payment_day, periodicity, status, created_at, updated_at]
+      required: [id, owner_id, type, category_id, category_name, name, amount_kopecks, start_date, payment_day, periodicity, status, created_at, updated_at]
       properties:
         id:
           type: string
@@ -4365,6 +4447,8 @@ components:
         property_id:
           type: string
           format: uuid
+          nullable: true
+          description: Null when the property was deleted in detach mode.
         lease_id:
           type: string
           format: uuid
@@ -4584,11 +4668,13 @@ components:
           type: integer
     FinanceReportPropertyRow:
       type: object
-      required: [property_id, income_kopecks, expense_kopecks, profit_kopecks]
+      required: [income_kopecks, expense_kopecks, profit_kopecks]
       properties:
         property_id:
           type: string
           format: uuid
+          nullable: true
+          description: Null groups operations whose property was deleted in detach mode.
         income_kopecks:
           type: integer
         expense_kopecks:

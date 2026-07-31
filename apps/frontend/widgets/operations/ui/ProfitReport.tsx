@@ -157,9 +157,11 @@ export function ProfitReport(): JSX.Element {
         <h2 className={styles.sectionTitle}>По объектам</h2>
         <ul className={styles.rows}>
           {report.by_property?.map((row) => (
-            <li key={row.property_id} className={styles.row}>
+            <li key={row.property_id ?? 'no-property'} className={styles.row}>
               <span className={styles.rowName}>
-                {propertyById.get(row.property_id) ?? row.property_id}
+                {row.property_id
+                  ? (propertyById.get(row.property_id) ?? row.property_id)
+                  : 'Без объекта'}
               </span>
               <div className={styles.rowAmounts}>
                 <span className={styles.incomeAmount}>

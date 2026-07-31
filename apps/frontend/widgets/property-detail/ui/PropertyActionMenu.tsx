@@ -14,6 +14,8 @@ export type PropertyActionMenuProps = {
     readonly onEdit: () => void;
     readonly onToggleMaintenance: () => void;
     readonly onToggleArchive: () => void;
+    readonly onExport: () => void;
+    readonly onDelete: () => void;
 };
 
 export function PropertyActionMenu({
@@ -22,6 +24,8 @@ export function PropertyActionMenu({
     onEdit,
     onToggleMaintenance,
     onToggleArchive,
+    onExport,
+    onDelete,
 }: PropertyActionMenuProps): JSX.Element {
     const [selectedAction, setSelectedAction] = useState('');
 
@@ -39,6 +43,8 @@ export function PropertyActionMenu({
                 value: 'toggleArchive',
                 label: status === 'archived' ? 'Вернуть из архива' : 'Перевести в архив',
             });
+            items.push({ value: 'export', label: 'Скачать экспорт (xlsx)' });
+            items.push({ value: 'delete', label: 'Удалить объект' });
         }
         return items;
     }, [status]);
@@ -59,6 +65,12 @@ export function PropertyActionMenu({
                         break;
                     case 'toggleArchive':
                         onToggleArchive();
+                        break;
+                    case 'export':
+                        onExport();
+                        break;
+                    case 'delete':
+                        onDelete();
                         break;
                 }
                 setSelectedAction('');

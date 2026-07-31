@@ -193,7 +193,7 @@ function OperationEditFormContent({
     updateOperation.mutate(
       {
         id,
-        propertyId: operation.property_id,
+        propertyId: operation.property_id ?? undefined,
         data: {
           name: form.name.trim(),
           type: form.type,

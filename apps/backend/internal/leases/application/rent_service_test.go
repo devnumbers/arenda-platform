@@ -429,6 +429,18 @@ func (r *fakeOperationRepo) GetFinanceReportByMonth(_ context.Context, _ uuid.UU
 	return nil, nil
 }
 
+func (r *fakeOperationRepo) GetPropertyFinanceByMonth(_ context.Context, _, _ uuid.UUID) ([]FinanceReportMonthRow, error) {
+	return nil, nil
+}
+
+func (r *fakeOperationRepo) GetPropertyFinanceByCategory(_ context.Context, _, _ uuid.UUID) ([]FinanceReportCategoryRow, error) {
+	return nil, nil
+}
+
+func (r *fakeOperationRepo) ListCompletedForExport(_ context.Context, _, _ uuid.UUID) ([]ExportOperationRow, error) {
+	return nil, nil
+}
+
 func (r *fakeOperationRepo) WithTx(_ transaction.Tx) OperationRepository {
 	return r
 }

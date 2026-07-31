@@ -176,7 +176,7 @@ function OperationDetailCard({
                 </div>
                 <div className={styles.detailRow}>
                     <dt className={styles.detailLabel}>Объект</dt>
-                    <dd className={styles.detailValue}>{propertyName ?? operation.property_id}</dd>
+                    <dd className={styles.detailValue}>{propertyName ?? operation.property_id ?? 'Без объекта'}</dd>
                 </div>
                 <div className={styles.detailRow}>
                     <dt className={styles.detailLabel}>Напоминание</dt>
@@ -211,7 +211,7 @@ export function OperationDetailPage(): JSX.Element {
 
     const isLoading =
         operationIsPending
-        || (data !== undefined && propertyQuery.isPending)
+        || (Boolean(data?.property_id) && propertyQuery.isPending)
         || isSubscriptionPending;
 
     const propertyName = property?.name;
@@ -220,12 +220,12 @@ export function OperationDetailPage(): JSX.Element {
 
     const handleComplete = () => {
         if (!data) return;
-        completeMutation.mutate({id: data.id, propertyId: data.property_id});
+        completeMutation.mutate({id: data.id, propertyId: data.property_id ?? undefined});
     };
 
     const handleMarkIncomplete = () => {
         if (!data) return;
-        markIncompleteMutation.mutate({id: data.id, propertyId: data.property_id});
+        markIncompleteMutation.mutate({id: data.id, propertyId: data.property_id ?? undefined});
     };
 
     const handleEdit = () => {
@@ -238,7 +238,7 @@ export function OperationDetailPage(): JSX.Element {
     const handleConfirmDelete = () => {
         if (!data) return;
         deleteMutation.mutate(
-            {id: data.id, propertyId: data.property_id},
+            {id: data.id, propertyId: data.property_id ?? undefined},
             {
                 onSuccess: () => {
                     setIsDeleteModalOpen(false);

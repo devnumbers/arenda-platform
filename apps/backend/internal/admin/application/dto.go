@@ -59,8 +59,8 @@ type AdminPropertyView struct {
 type AdminLeaseView struct {
 	ID                   uuid.UUID
 	OwnerID              uuid.UUID
-	PropertyID           uuid.UUID
-	PropertyName         string
+	PropertyID           *uuid.UUID
+	PropertyName         *string
 	TenantContactID      *uuid.UUID
 	TenantContact        *leasesdomain.TenantContact
 	Status               leasesdomain.LeaseStatus
@@ -86,8 +86,8 @@ type AdminTenantContactView struct {
 type AdminOperationView struct {
 	ID                   uuid.UUID
 	OwnerID              uuid.UUID
-	PropertyID           uuid.UUID
-	PropertyName         string
+	PropertyID           *uuid.UUID
+	PropertyName         *string
 	LeaseID              *uuid.UUID
 	RecurringOperationID *uuid.UUID
 	Type                 leasesdomain.OperationType

@@ -1,6 +1,6 @@
 'use client';
 
-import type {JSX} from 'react';
+import {useMemo, type JSX} from 'react';
 import {DateField} from '@heroui/react/date-field';
 import {DateRangePicker} from '@heroui/react/date-range-picker';
 import {Label} from '@heroui/react/label';
@@ -21,6 +21,7 @@ import {
 } from '@/entities/operation/lib/dates';
 import styles from './OperationFilters.module.css';
 import clsx from "clsx";
+import {PropertyFilter} from './PropertyFilter';
 
 export type OperationPeriod = 'all' | 'month' | 'quarter' | 'year' | 'custom';
 
@@ -29,10 +30,13 @@ export type OperationFiltersState = {
     readonly from?: string;
     readonly to?: string;
     readonly status: ReadonlyArray<string>;
+    readonly propertyId?: string;
 };
 
 export type OperationFiltersProps = {
     readonly filters: OperationFiltersState;
+    readonly properties?: ReadonlyArray<{readonly id: string; readonly name: string}>;
+    readonly propertiesLoading?: boolean;
     readonly hasExternalFilters?: boolean;
     readonly isDefaultPeriod?: boolean;
     readonly onChange: (filters: OperationFiltersState) => void;
@@ -175,7 +179,7 @@ function setPeriod(
     currentFilters: OperationFiltersState,
 ): void {
     if (period === 'all') {
-        onChange({period: 'all', status: currentFilters.status});
+        onChange({period: 'all', status: currentFilters.status, propertyId: currentFilters.propertyId});
         return;
     }
 
@@ -246,7 +250,8 @@ function hasActiveFilters(
 ): boolean {
     const statusActive = filters.status.length > 0;
     const periodActive = !isDefaultPeriod;
-    return statusActive || periodActive || hasExternalFilters;
+    const propertyActive = Boolean(filters.propertyId);
+    return statusActive || periodActive || propertyActive || hasExternalFilters;
 }
 
 const PERIOD_CHIPS: ReadonlyArray<{
@@ -272,6 +277,8 @@ const STATUS_CHIPS: ReadonlyArray<{
 
 export function OperationFilters({
                                      filters,
+                                     properties = [],
+                                     propertiesLoading = false,
                                      hasExternalFilters = false,
                                      isDefaultPeriod = false,
                                      onChange,
@@ -282,6 +289,11 @@ export function OperationFilters({
         ? {start: parseDate(selectedRange.from), end: parseDate(selectedRange.to)}
         : null;
     const canMovePeriod = filters.period !== 'all';
+
+    const propertyOptions = useMemo(
+        () => properties.map((property) => ({value: property.id, label: property.name})),
+        [properties],
+    );
 
     const handleStatusClick = (key: (typeof STATUS_CHIPS)[number]['key']) => {
         if (key === 'all') {
@@ -314,6 +326,7 @@ export function OperationFilters({
             from: currentMonth.from,
             to: currentMonth.to,
             status: [],
+            propertyId: undefined,
         });
     };
 
@@ -459,6 +472,17 @@ export function OperationFilters({
                     </Button>
                 ))}
             </div>
+
+            {(properties.length > 0 || propertiesLoading) && (
+                <div className={styles.chipGroup}>
+                    <PropertyFilter
+                        value={filters.propertyId}
+                        options={propertyOptions}
+                        loading={propertiesLoading}
+                        onChange={(value) => onChange({...filters, propertyId: value})}
+                    />
+                </div>
+            )}
         </div>
     );
 }

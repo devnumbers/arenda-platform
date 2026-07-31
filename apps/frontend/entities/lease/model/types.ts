@@ -16,7 +16,7 @@ export type TenantContact = {
 
 export type Lease = {
   readonly id: string;
-  readonly propertyId: string;
+  readonly propertyId: string | null;
   readonly tenantContactId?: string;
   readonly tenantName: string;
   readonly tenantContact?: TenantContact | null;

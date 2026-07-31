@@ -4,9 +4,12 @@ import {useParams, useRouter} from 'next/navigation';
 import type {JSX} from 'react';
 import {useCallback, useMemo, useState} from 'react';
 import {notify} from '@/shared/lib/notifications';
+import {goBack} from '@/shared/lib/navigation';
 import {ROUTES} from '@/shared/config/routes';
 import {
+    type DeletePropertyMode,
     useArchiveProperty,
+    useDeleteProperty,
     useProperty,
     useUnarchiveProperty,
     useUpdateProperty
@@ -33,6 +36,7 @@ import {PropertyOperationsCard} from './PropertyOperationsCard';
 import {PropertyInfoCard} from './PropertyInfoCard';
 import {PropertyActionMenu} from './PropertyActionMenu';
 import {PropertyBlockedModal} from './PropertyBlockedModal';
+import {PropertyDeleteModal} from './PropertyDeleteModal';
 import {PropertyEndLeaseModal} from './PropertyEndLeaseModal';
 import {PropertySuccessBanner} from './PropertySuccessBanner';
 import {PropertyDetailLoading} from './PropertyDetailLoading';
@@ -41,6 +45,18 @@ import styles from './PropertyDetailPage.module.css';
 
 function showMutationError(error: ApiError): void {
     notify.scenarios.property.saveError({description: error.detail});
+}
+
+const EXPORT_FILENAME_STAR_PATTERN = /filename\*=UTF-8''([^;]+)/;
+
+function resolveExportFilename(disposition: string): string {
+    const match = EXPORT_FILENAME_STAR_PATTERN.exec(disposition);
+    if (!match) return 'export.xlsx';
+    try {
+        return decodeURIComponent(match[1]);
+    } catch {
+        return 'export.xlsx';
+    }
 }
 
 export function PropertyDetailPage(): JSX.Element {
@@ -56,9 +72,11 @@ export function PropertyDetailPage(): JSX.Element {
     const archiveProperty = useArchiveProperty();
     const unarchiveProperty = useUnarchiveProperty();
     const completeLease = useCompleteLease();
+    const deleteProperty = useDeleteProperty();
 
     const [blockedOpen, setBlockedOpen] = useState(false);
     const [endLeaseOpen, setEndLeaseOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
     const [successBannerOpen, setSuccessBannerOpen] = useState(false);
     const [selectedLeaseId, setSelectedLeaseId] = useState<string>('');
 
@@ -175,6 +193,54 @@ export function PropertyDetailPage(): JSX.Element {
         router.push(ROUTES.propertyEdit(id));
     }, [id, router]);
 
+    const handleDelete = useCallback((mode: DeletePropertyMode) => {
+        deleteProperty.mutate(
+            {id, mode},
+            {
+                onSuccess: () => {
+                    setDeleteOpen(false);
+                    notify.scenarios.property.deleted();
+                    goBack(router, ROUTES.properties);
+                },
+                onError: (error) => {
+                    if (error.status === 409) {
+                        // Устаревший кэш: аренда открыта в другой вкладке.
+                        // Обновляем список аренд — модалка переключится
+                        // в состояние «нельзя удалить».
+                        leasesQuery.refetch();
+                    }
+                    notify.scenarios.property.deleteError({description: error.detail});
+                },
+            },
+        );
+    }, [deleteProperty, id, router, leasesQuery]);
+
+    const handleExport = useCallback(async (): Promise<void> => {
+        try {
+            const response = await fetch(`/api/properties/${id}/export`);
+            if (!response.ok) {
+                const problem = (await response.json()) as {detail?: string};
+                notify.scenarios.property.exportError(
+                    problem.detail ? {description: problem.detail} : undefined,
+                );
+                return;
+            }
+            const blob = await response.blob();
+            const filename = resolveExportFilename(
+                response.headers.get('Content-Disposition') ?? '',
+            );
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = filename;
+            anchor.click();
+            // Отложенный revoke: в Firefox мгновенный revokeObjectURL после click() может отменить скачивание.
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+        } catch {
+            notify.scenarios.property.exportError();
+        }
+    }, [id]);
+
     const handlePayRent = useCallback(() => {
         if (currentLease) {
             if (payableRentQuery.isFetching) return;
@@ -195,6 +261,15 @@ export function PropertyDetailPage(): JSX.Element {
         handleEndLease();
     }, [handleEndLease]);
 
+    const handleDeleteEndLease = useCallback(() => {
+        if (!currentLease) return;
+        // Остаёмся в модалке удаления: после инвалидации кэша currentLease
+        // пропадёт, и модалка сама вернётся к выбору режима удаления.
+        const promise = completeLease.mutateAsync(currentLease.id);
+        void notify.scenarios.leases.completed(promise);
+        promise.catch(() => {}); // ошибка уже показана через notify.promise
+    }, [currentLease, completeLease]);
+
     const hasAnyError =
         propertyQuery.isError ||
         leasesQuery.isError ||
@@ -213,6 +288,8 @@ export function PropertyDetailPage(): JSX.Element {
                         onEdit={handleEdit}
                         onToggleMaintenance={handleToggleMaintenance}
                         onToggleArchive={handleToggleArchive}
+                        onExport={handleExport}
+                        onDelete={() => setDeleteOpen(true)}
                     />
                 }
             />
@@ -294,6 +371,20 @@ export function PropertyDetailPage(): JSX.Element {
                 isOpen={blockedOpen}
                 onClose={() => setBlockedOpen(false)}
                 onContinue={handleBlockedContinue}
+            />
+
+            <PropertyDeleteModal
+                isOpen={deleteOpen}
+                onClose={() => setDeleteOpen(false)}
+                onDelete={handleDelete}
+                onEndLease={handleDeleteEndLease}
+                currentLease={currentLease}
+                deletingMode={
+                    deleteProperty.isPending
+                        ? (deleteProperty.variables?.mode ?? null)
+                        : null
+                }
+                isCompletingLease={completeLease.isPending}
             />
 
             <PropertyEndLeaseModal

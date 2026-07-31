@@ -152,6 +152,38 @@ func (r *LeaseRepository) ListByProperty(ctx context.Context, ownerID, propertyI
 	return leases, nil
 }
 
+func (r *LeaseRepository) ListWithTenantForExport(ctx context.Context, ownerID, propertyID uuid.UUID) ([]application.ExportLeaseRow, error) {
+	rows, err := r.q().ListLeasesWithTenantForExport(ctx, postgres.ListLeasesWithTenantForExportParams{
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]application.ExportLeaseRow, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, application.ExportLeaseRow{
+			LeaseID:              pgconv.UUIDFromPgtype(row.ID),
+			Status:               domain.LeaseStatus(row.Status),
+			StartDate:            pgconv.DateFromPgtype(row.StartDate),
+			EndDate:              pgconv.DatePtrFromPgtype(row.EndDate),
+			RentAmountKopecks:    row.RentAmountKopecks,
+			DepositAmountKopecks: row.DepositAmountKopecks,
+			PaymentDay:           int(row.PaymentDay),
+			Comment:              pgconv.TextToPtrString(row.Comment),
+			TenantContactID:      pgconv.UUIDFromPgtypePtr(row.TenantContactID),
+			TenantSurname:        pgconv.TextToPtrString(row.TenantSurname),
+			TenantName:           pgconv.TextToPtrString(row.TenantName),
+			TenantPatronymic:     pgconv.TextToPtrString(row.TenantPatronymic),
+			TenantPhone:          pgconv.TextToPtrString(row.TenantPhone),
+			TenantEmail:          pgconv.TextToPtrString(row.TenantEmail),
+			TenantComment:        pgconv.TextToPtrString(row.TenantComment),
+		})
+	}
+	return result, nil
+}
+
 func (r *LeaseRepository) Update(ctx context.Context, ownerID uuid.UUID, lease domain.Lease) (domain.Lease, error) {
 	row, err := r.q().UpdateLease(ctx, postgres.UpdateLeaseParams{
 		ID:                   pgconv.UUIDToPgtype(lease.ID),
@@ -1401,6 +1433,73 @@ func (r *OperationRepository) GetFinanceReportByMonth(ctx context.Context, owner
 	return result, nil
 }
 
+func (r *OperationRepository) GetPropertyFinanceByMonth(ctx context.Context, ownerID, propertyID uuid.UUID) ([]application.FinanceReportMonthRow, error) {
+	rows, err := r.q().GetPropertyFinanceByMonth(ctx, postgres.GetPropertyFinanceByMonthParams{
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]application.FinanceReportMonthRow, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, application.FinanceReportMonthRow{
+			Month:          row.Month.Time,
+			IncomeKopecks:  row.IncomeKopecks,
+			ExpenseKopecks: row.ExpenseKopecks,
+		})
+	}
+	return result, nil
+}
+
+func (r *OperationRepository) GetPropertyFinanceByCategory(ctx context.Context, ownerID, propertyID uuid.UUID) ([]application.FinanceReportCategoryRow, error) {
+	rows, err := r.q().GetPropertyFinanceByCategory(ctx, postgres.GetPropertyFinanceByCategoryParams{
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]application.FinanceReportCategoryRow, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, application.FinanceReportCategoryRow{
+			Type:         domain.OperationType(row.Type),
+			CategoryName: row.CategoryName,
+			TotalKopecks: row.TotalKopecks,
+		})
+	}
+	return result, nil
+}
+
+func (r *OperationRepository) ListCompletedForExport(ctx context.Context, ownerID, propertyID uuid.UUID) ([]application.ExportOperationRow, error) {
+	rows, err := r.q().ListCompletedOperationsForExport(ctx, postgres.ListCompletedOperationsForExportParams{
+		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]application.ExportOperationRow, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, application.ExportOperationRow{
+			OperationDate:    pgconv.DateFromPgtype(row.OperationDate),
+			Type:             domain.OperationType(row.Type),
+			CategoryName:     row.CategoryName,
+			Name:             row.Name,
+			AmountKopecks:    row.AmountKopecks,
+			LeaseID:          pgconv.UUIDFromPgtypePtr(row.LeaseID),
+			TenantSurname:    pgconv.TextToPtrString(row.TenantSurname),
+			TenantName:       pgconv.TextToPtrString(row.TenantName),
+			TenantPatronymic: pgconv.TextToPtrString(row.TenantPatronymic),
+			Comment:          pgconv.TextToPtrString(row.Comment),
+		})
+	}
+	return result, nil
+}
+
 func operationFromRow(row postgres.Operation) (domain.Operation, error) {
 	status, err := domain.ParseOperationStatus(row.Status)
 	if err != nil {
@@ -1673,6 +1772,39 @@ func (r *PropertyRepository) GetStatusByOwner(ctx context.Context, id, ownerID u
 		return "", err
 	}
 	return status, nil
+}
+
+// GetNameByOwner returns the property name for the owner, or an empty string
+// when the property does not exist or does not belong to the owner.
+func (r *PropertyRepository) GetNameByOwner(ctx context.Context, id, ownerID uuid.UUID) (string, error) {
+	row, err := r.q().GetPropertyByIDAndOwner(ctx, postgres.GetPropertyByIDAndOwnerParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return row.Name, nil
+}
+
+// GetByIDAndOwnerForUpdate locks the property row for the rest of the current
+// transaction and returns its status, or an empty string when the property
+// does not exist.
+func (r *PropertyRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (string, error) {
+	row, err := r.q().GetPropertyByIDAndOwnerForUpdate(ctx, postgres.GetPropertyByIDAndOwnerForUpdateParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return row.Status, nil
 }
 
 // HasOpenLease reports whether the property currently has an open lease.

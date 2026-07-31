@@ -74,7 +74,8 @@ export function usePropertyListData(mode: PropertiesViewMode): UsePropertyListDa
 
     for (const lease of leasesQuery.data ?? []) {
       const mappedLease = mapLeaseResponse(lease);
-      if (!isOpenLease(mappedLease)) {
+      const propertyId = mappedLease.propertyId;
+      if (!isOpenLease(mappedLease) || !propertyId) {
         continue;
       }
 
@@ -82,10 +83,10 @@ export function usePropertyListData(mode: PropertiesViewMode): UsePropertyListDa
         ...mappedLease,
         status: getEffectiveLeaseStatus(mappedLease),
       };
-      const current = openLeaseByProperty.get(effectiveLease.propertyId);
+      const current = openLeaseByProperty.get(propertyId);
 
       if (!current || compareLeaseRelevance(effectiveLease, current) > 0) {
-        openLeaseByProperty.set(effectiveLease.propertyId, effectiveLease);
+        openLeaseByProperty.set(propertyId, effectiveLease);
       }
     }
 

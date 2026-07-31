@@ -186,6 +186,21 @@ func (q *Queries) DeleteFutureUneditedOperationsByProperty(ctx context.Context, 
 	return err
 }
 
+const deleteOperationsByProperty = `-- name: DeleteOperationsByProperty :exec
+DELETE FROM operations
+WHERE owner_id = $1 AND property_id = $2
+`
+
+type DeleteOperationsByPropertyParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+func (q *Queries) DeleteOperationsByProperty(ctx context.Context, arg DeleteOperationsByPropertyParams) error {
+	_, err := q.db.Exec(ctx, deleteOperationsByProperty, arg.OwnerID, arg.PropertyID)
+	return err
+}
+
 const deleteOperationsOutsideLeaseRange = `-- name: DeleteOperationsOutsideLeaseRange :exec
 DELETE FROM operations
 WHERE lease_id = $1
@@ -282,7 +297,7 @@ const getOperationByIDAdmin = `-- name: GetOperationByIDAdmin :one
 SELECT op.id, op.owner_id, op.property_id, op.lease_id, op.recurring_operation_id, op.type, op.amount_kopecks, op.operation_date, op.comment, op.is_exception, op.created_at, op.updated_at, op.deleted_at, op.status, op.name, op.reminder_offset_days, op.source_operation_date, op.category_id, cat.name AS category_name, p.name AS property_name
 FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
-JOIN properties p ON p.id = op.property_id
+LEFT JOIN properties p ON p.id = op.property_id
 WHERE op.id = $1
 `
 
@@ -306,7 +321,7 @@ type GetOperationByIDAdminRow struct {
 	SourceOperationDate  pgtype.Date        `json:"source_operation_date"`
 	CategoryID           pgtype.UUID        `json:"category_id"`
 	CategoryName         string             `json:"category_name"`
-	PropertyName         string             `json:"property_name"`
+	PropertyName         pgtype.Text        `json:"property_name"`
 }
 
 func (q *Queries) GetOperationByIDAdmin(ctx context.Context, id pgtype.UUID) (GetOperationByIDAdminRow, error) {
@@ -454,6 +469,97 @@ func (q *Queries) GetOperationByIDAndOwnerForUpdate(ctx context.Context, arg Get
 	return i, err
 }
 
+const getPropertyFinanceByCategory = `-- name: GetPropertyFinanceByCategory :many
+SELECT
+  op.type,
+  cat.name AS category_name,
+  COALESCE(SUM(op.amount_kopecks), 0)::bigint AS total_kopecks
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+WHERE op.owner_id = $1::uuid
+  AND op.property_id = $2::uuid
+  AND op.status IN ('paid', 'received')
+  AND op.deleted_at IS NULL
+GROUP BY op.type, cat.name
+ORDER BY op.type, total_kopecks DESC
+`
+
+type GetPropertyFinanceByCategoryParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+type GetPropertyFinanceByCategoryRow struct {
+	Type         string `json:"type"`
+	CategoryName string `json:"category_name"`
+	TotalKopecks int64  `json:"total_kopecks"`
+}
+
+func (q *Queries) GetPropertyFinanceByCategory(ctx context.Context, arg GetPropertyFinanceByCategoryParams) ([]GetPropertyFinanceByCategoryRow, error) {
+	rows, err := q.db.Query(ctx, getPropertyFinanceByCategory, arg.OwnerID, arg.PropertyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetPropertyFinanceByCategoryRow{}
+	for rows.Next() {
+		var i GetPropertyFinanceByCategoryRow
+		if err := rows.Scan(&i.Type, &i.CategoryName, &i.TotalKopecks); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPropertyFinanceByMonth = `-- name: GetPropertyFinanceByMonth :many
+SELECT
+  date_trunc('month', operation_date)::date AS month,
+  COALESCE(SUM(CASE WHEN type = 'income' THEN amount_kopecks ELSE 0 END), 0)::bigint AS income_kopecks,
+  COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_kopecks ELSE 0 END), 0)::bigint AS expense_kopecks
+FROM operations
+WHERE owner_id = $1::uuid
+  AND property_id = $2::uuid
+  AND status IN ('paid', 'received')
+  AND deleted_at IS NULL
+GROUP BY month
+ORDER BY month
+`
+
+type GetPropertyFinanceByMonthParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+type GetPropertyFinanceByMonthRow struct {
+	Month          pgtype.Date `json:"month"`
+	IncomeKopecks  int64       `json:"income_kopecks"`
+	ExpenseKopecks int64       `json:"expense_kopecks"`
+}
+
+func (q *Queries) GetPropertyFinanceByMonth(ctx context.Context, arg GetPropertyFinanceByMonthParams) ([]GetPropertyFinanceByMonthRow, error) {
+	rows, err := q.db.Query(ctx, getPropertyFinanceByMonth, arg.OwnerID, arg.PropertyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetPropertyFinanceByMonthRow{}
+	for rows.Next() {
+		var i GetPropertyFinanceByMonthRow
+		if err := rows.Scan(&i.Month, &i.IncomeKopecks, &i.ExpenseKopecks); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPropertyOperationsSummary = `-- name: GetPropertyOperationsSummary :one
 SELECT
     (
@@ -555,6 +661,76 @@ func (q *Queries) ListAllPendingOperationsWithPastDate(ctx context.Context, arg 
 			&i.ReminderOffsetDays,
 			&i.SourceOperationDate,
 			&i.CategoryID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCompletedOperationsForExport = `-- name: ListCompletedOperationsForExport :many
+SELECT op.operation_date,
+       op.type,
+       cat.name AS category_name,
+       op.name,
+       op.amount_kopecks,
+       op.lease_id,
+       tc.surname AS tenant_surname,
+       tc.name   AS tenant_name,
+       tc.patronymic AS tenant_patronymic,
+       op.comment
+FROM operations op
+JOIN operation_categories cat ON cat.id = op.category_id
+LEFT JOIN leases l ON l.id = op.lease_id
+LEFT JOIN tenant_contacts tc ON tc.id = l.tenant_contact_id
+WHERE op.owner_id = $1 AND op.property_id = $2
+  AND op.status IN ('paid', 'received')
+  AND op.deleted_at IS NULL
+ORDER BY op.operation_date ASC, op.id ASC
+`
+
+type ListCompletedOperationsForExportParams struct {
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+type ListCompletedOperationsForExportRow struct {
+	OperationDate    pgtype.Date `json:"operation_date"`
+	Type             string      `json:"type"`
+	CategoryName     string      `json:"category_name"`
+	Name             string      `json:"name"`
+	AmountKopecks    int64       `json:"amount_kopecks"`
+	LeaseID          pgtype.UUID `json:"lease_id"`
+	TenantSurname    pgtype.Text `json:"tenant_surname"`
+	TenantName       pgtype.Text `json:"tenant_name"`
+	TenantPatronymic pgtype.Text `json:"tenant_patronymic"`
+	Comment          pgtype.Text `json:"comment"`
+}
+
+func (q *Queries) ListCompletedOperationsForExport(ctx context.Context, arg ListCompletedOperationsForExportParams) ([]ListCompletedOperationsForExportRow, error) {
+	rows, err := q.db.Query(ctx, listCompletedOperationsForExport, arg.OwnerID, arg.PropertyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCompletedOperationsForExportRow{}
+	for rows.Next() {
+		var i ListCompletedOperationsForExportRow
+		if err := rows.Scan(
+			&i.OperationDate,
+			&i.Type,
+			&i.CategoryName,
+			&i.Name,
+			&i.AmountKopecks,
+			&i.LeaseID,
+			&i.TenantSurname,
+			&i.TenantName,
+			&i.TenantPatronymic,
+			&i.Comment,
 		); err != nil {
 			return nil, err
 		}
@@ -740,7 +916,7 @@ const listOperationsAdmin = `-- name: ListOperationsAdmin :many
 SELECT op.id, op.owner_id, op.property_id, op.lease_id, op.recurring_operation_id, op.type, op.amount_kopecks, op.operation_date, op.comment, op.is_exception, op.created_at, op.updated_at, op.deleted_at, op.status, op.name, op.reminder_offset_days, op.source_operation_date, op.category_id, cat.name AS category_name, p.name AS property_name
 FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
-JOIN properties p ON p.id = op.property_id
+LEFT JOIN properties p ON p.id = op.property_id
 WHERE ($1::uuid IS NULL OR op.owner_id = $1::uuid)
   AND op.deleted_at IS NULL
   AND ($2::text = '' OR op.status = $2::text)
@@ -793,7 +969,7 @@ type ListOperationsAdminRow struct {
 	SourceOperationDate  pgtype.Date        `json:"source_operation_date"`
 	CategoryID           pgtype.UUID        `json:"category_id"`
 	CategoryName         string             `json:"category_name"`
-	PropertyName         string             `json:"property_name"`
+	PropertyName         pgtype.Text        `json:"property_name"`
 }
 
 func (q *Queries) ListOperationsAdmin(ctx context.Context, arg ListOperationsAdminParams) ([]ListOperationsAdminRow, error) {

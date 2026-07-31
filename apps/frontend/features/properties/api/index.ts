@@ -10,4 +10,5 @@ export {
   useAddressSuggestions,
   useUploadPropertyPhoto,
   useDeletePropertyPhoto,
+  useDeleteProperty,
 } from './hooks';

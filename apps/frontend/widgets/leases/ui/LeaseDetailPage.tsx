@@ -250,7 +250,9 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
 
     const lease = leaseQuery.data;
     const propertyQuery = useProperty(lease?.property_id ?? '');
-    const propertyName = propertyQuery.data?.name ?? 'Объект';
+    const propertyName = lease && !lease.property_id
+        ? 'Без объекта'
+        : (propertyQuery.data?.name ?? 'Объект');
     const rentOperations = useMemo(
         () => rentOperationsQuery.data?.pages.flatMap((page) => page.items) ?? [],
         [rentOperationsQuery.data],
@@ -295,13 +297,20 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
     }
 
     const title = lease ? (
-        <NextLink
-            href={ROUTES.property(lease.property_id)}
-            className={styles.titleLink}
-        >
-            <span className={styles.title}>{propertyName}</span>
-            <StatusBadge status={lease.status}/>
-        </NextLink>
+        lease.property_id ? (
+            <NextLink
+                href={ROUTES.property(lease.property_id)}
+                className={styles.titleLink}
+            >
+                <span className={styles.title}>{propertyName}</span>
+                <StatusBadge status={lease.status}/>
+            </NextLink>
+        ) : (
+            <span className={styles.titleLink}>
+                <span className={styles.title}>{propertyName}</span>
+                <StatusBadge status={lease.status}/>
+            </span>
+        )
     ) : (
         <span className={styles.title}>Аренда</span>
     );
@@ -312,7 +321,7 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
 
             <PageHeader
                 title={title}
-                backHref={lease ? ROUTES.property(lease.property_id) : ROUTES.properties}
+                backHref={lease?.property_id ? ROUTES.property(lease.property_id) : ROUTES.properties}
                 actions={
                     <LeaseActionMenu
                         leaseId={id}

@@ -41,6 +41,7 @@ type Deps struct {
 	Leases                   *leasesapp.LeaseService
 	TenantContacts           *leasesapp.TenantContactService
 	Operations               *leasesapp.OperationService
+	Export                   *leasesapp.ExportService
 	RecurringOperations      *leasesapp.RecurringOperationService
 	Categories               *leasesapp.CategoryService
 	Reminders                *notificationsapp.ReminderService
@@ -117,7 +118,7 @@ func New(deps Deps) http.Handler {
 		deps.MeEnricher,
 		deps.Audit,
 	)
-	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Logger, deps.Clock)
+	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Export, deps.Logger, deps.Clock)
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock)
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Categories, deps.Properties, deps.Logger)
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Categories, deps.Logger)

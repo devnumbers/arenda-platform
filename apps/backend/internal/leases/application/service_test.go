@@ -39,6 +39,14 @@ func (r *fakePropertyRepo) HasOpenLease(_ context.Context, id uuid.UUID) (bool, 
 	return r.hasOpenLease[id], nil
 }
 
+func (r *fakePropertyRepo) GetNameByOwner(_ context.Context, _, _ uuid.UUID) (string, error) {
+	return "", nil
+}
+
+func (r *fakePropertyRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (string, error) {
+	return r.GetStatusByOwner(ctx, id, ownerID)
+}
+
 func (r *fakePropertyRepo) WithTx(_ transaction.Tx) PropertyRepository { return r }
 
 type fakeLeaseRepo struct {
@@ -94,6 +102,10 @@ func (r *fakeLeaseRepo) ListOpenLeasesWithPastEndDate(_ context.Context, _ time.
 }
 
 func (r *fakeLeaseRepo) ListByProperty(_ context.Context, _, _ uuid.UUID) ([]domain.Lease, error) {
+	return nil, nil
+}
+
+func (r *fakeLeaseRepo) ListWithTenantForExport(_ context.Context, _, _ uuid.UUID) ([]ExportLeaseRow, error) {
 	return nil, nil
 }
 

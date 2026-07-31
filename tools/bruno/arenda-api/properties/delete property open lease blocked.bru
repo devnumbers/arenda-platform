@@ -1,0 +1,30 @@
+meta {
+  name: Delete Property Open Lease Blocked
+  type: http
+  seq: 12
+}
+
+delete {
+  url: {{baseUrl}}/properties/{{propertyId}}?mode=cascade
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  // Requires an authenticated session and a propertyId with an OPEN lease.
+  // Setup: run properties/create, then tenant-contacts/create tenant contact,
+  // then leases/create lease. An open lease blocks BOTH delete modes (409) —
+  // the detach twin of this case is seq 13.
+  // Does not delete the object, safe to re-run. Run it before seq 10/11
+  // (they delete {{propertyId}}) or recreate the property afterwards.
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 409 when property has open lease", function() {
+    expect(res.status).to.equal(409);
+  });
+}

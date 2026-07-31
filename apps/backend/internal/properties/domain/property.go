@@ -79,6 +79,32 @@ func (s PropertyStatus) Valid() bool {
 	return false
 }
 
+// DeletePropertyMode selects how a property is deleted.
+type DeletePropertyMode string
+
+const (
+	DeletePropertyModeCascade DeletePropertyMode = "cascade"
+	DeletePropertyModeDetach  DeletePropertyMode = "detach"
+)
+
+var ErrInvalidDeletePropertyMode = errors.New("invalid delete property mode")
+
+func ParseDeletePropertyMode(s string) (DeletePropertyMode, error) {
+	m := DeletePropertyMode(s)
+	if !m.Valid() {
+		return "", fmt.Errorf("%w: %q", ErrInvalidDeletePropertyMode, s)
+	}
+	return m, nil
+}
+
+func (m DeletePropertyMode) Valid() bool {
+	switch m {
+	case DeletePropertyModeCascade, DeletePropertyModeDetach:
+		return true
+	}
+	return false
+}
+
 type PropertyOccupancy string
 
 const (

@@ -436,3 +436,9 @@ cd /opt/arenda/prod  && docker compose -f docker-compose.prod.yml up -d
   Yandex — пароль приложения) и что канал привязан к монитору.
 - **Смена `ch_schema`/TTL:** требует `docker compose ... exec uptrace /uptrace ch reset`
   — удаляет все телеметрические данные (метаданные в PostgreSQL сохраняются).
+- **Рост диска от системных таблиц ClickHouse:** после инцидента с
+  переполнением диска 2026-07-29 (27G в `system.trace_log`/`text_log`)
+  самодиагностика ограничена конфигом
+  `observability/clickhouse-config/system-logs.xml` (монтируется в
+  `/etc/clickhouse-server/config.d`): `trace_log` и `processors_profile_log`
+  выключены, на `text_log` TTL 3 дня, на остальные системные логи — 7 дней.

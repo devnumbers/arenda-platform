@@ -222,7 +222,7 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		EntityType: auditdomain.EntityRecurringOperation,
 		EntityID:   &created.ID,
 		Context: map[string]any{
-			"property_id":    created.PropertyID,
+			"property_id":    domain.PropertyIDPtr(created.PropertyID),
 			"type":           string(created.Type),
 			"amount_kopecks": created.AmountKopecks,
 		},
@@ -342,7 +342,7 @@ func (s *RecurringOperationService) DeleteRecurringOperation(
 		Action:     auditdomain.ActionRecurringOperationDeleted,
 		EntityType: auditdomain.EntityRecurringOperation,
 		EntityID:   &id,
-		Context:    map[string]any{"property_id": rec.PropertyID},
+		Context:    map[string]any{"property_id": domain.PropertyIDPtr(rec.PropertyID)},
 	}); err != nil {
 		return fmt.Errorf("record audit: %w", err)
 	}
@@ -787,7 +787,7 @@ func (s *RecurringOperationService) PauseRecurringOperation(
 		Action:     auditdomain.ActionRecurringOperationPaused,
 		EntityType: auditdomain.EntityRecurringOperation,
 		EntityID:   &id,
-		Context:    map[string]any{"property_id": rec.PropertyID},
+		Context:    map[string]any{"property_id": domain.PropertyIDPtr(rec.PropertyID)},
 	}); err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("record audit: %w", err)
 	}
@@ -871,7 +871,7 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 		Action:     auditdomain.ActionRecurringOperationResumed,
 		EntityType: auditdomain.EntityRecurringOperation,
 		EntityID:   &id,
-		Context:    map[string]any{"property_id": rec.PropertyID},
+		Context:    map[string]any{"property_id": domain.PropertyIDPtr(rec.PropertyID)},
 	}); err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("record audit: %w", err)
 	}

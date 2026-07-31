@@ -62,14 +62,18 @@ type Querier interface {
 	DeleteFutureGeneratedOperations(ctx context.Context, arg DeleteFutureGeneratedOperationsParams) error
 	DeleteFutureOperationsByLease(ctx context.Context, arg DeleteFutureOperationsByLeaseParams) error
 	DeleteFutureUneditedOperationsByProperty(ctx context.Context, arg DeleteFutureUneditedOperationsByPropertyParams) error
+	DeleteLeasesByProperty(ctx context.Context, arg DeleteLeasesByPropertyParams) error
 	DeleteLoginAttemptByPhone(ctx context.Context, phone string) error
 	DeleteLoginAttemptsByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteLoginCodeByID(ctx context.Context, id pgtype.UUID) error
 	DeleteLoginCodesByUserID(ctx context.Context, userID pgtype.UUID) error
+	DeleteOperationsByProperty(ctx context.Context, arg DeleteOperationsByPropertyParams) error
 	DeleteOperationsOutsideLeaseRange(ctx context.Context, arg DeleteOperationsOutsideLeaseRangeParams) error
 	DeletePaymentMethodByID(ctx context.Context, id pgtype.UUID) error
+	DeleteProperty(ctx context.Context, arg DeletePropertyParams) error
 	DeletePropertyPhoto(ctx context.Context, id pgtype.UUID) error
 	DeleteRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) error
+	DeleteRecurringOperationsByProperty(ctx context.Context, arg DeleteRecurringOperationsByPropertyParams) error
 	DeleteSentEmailReminder(ctx context.Context, reminderID pgtype.UUID) error
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error
@@ -107,6 +111,8 @@ type Querier interface {
 	GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (GetPropertyByIDAdminRow, error)
 	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (GetPropertyByIDAndOwnerRow, error)
 	GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetPropertyByIDAndOwnerForUpdateParams) (Property, error)
+	GetPropertyFinanceByCategory(ctx context.Context, arg GetPropertyFinanceByCategoryParams) ([]GetPropertyFinanceByCategoryRow, error)
+	GetPropertyFinanceByMonth(ctx context.Context, arg GetPropertyFinanceByMonthParams) ([]GetPropertyFinanceByMonthRow, error)
 	GetPropertyOperationsSummary(ctx context.Context, arg GetPropertyOperationsSummaryParams) (GetPropertyOperationsSummaryRow, error)
 	GetPropertyPhotoByID(ctx context.Context, id pgtype.UUID) (PropertyPhoto, error)
 	GetPropertyPhotoByIDAndPropertyID(ctx context.Context, arg GetPropertyPhotoByIDAndPropertyIDParams) (PropertyPhoto, error)
@@ -152,6 +158,7 @@ type Querier interface {
 	ListAllPendingOperationsWithPastDate(ctx context.Context, arg ListAllPendingOperationsWithPastDateParams) ([]Operation, error)
 	ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error)
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
+	ListCompletedOperationsForExport(ctx context.Context, arg ListCompletedOperationsForExportParams) ([]ListCompletedOperationsForExportRow, error)
 	ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error)
 	ListExpiredCancelledSubscriptions(ctx context.Context, arg ListExpiredCancelledSubscriptionsParams) ([]UserSubscription, error)
 	ListExpiredNonRenewingSubscriptions(ctx context.Context, arg ListExpiredNonRenewingSubscriptionsParams) ([]UserSubscription, error)
@@ -159,6 +166,7 @@ type Querier interface {
 	ListLeasesAdmin(ctx context.Context, arg ListLeasesAdminParams) ([]ListLeasesAdminRow, error)
 	ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Lease, error)
 	ListLeasesByProperty(ctx context.Context, arg ListLeasesByPropertyParams) ([]Lease, error)
+	ListLeasesWithTenantForExport(ctx context.Context, arg ListLeasesWithTenantForExportParams) ([]ListLeasesWithTenantForExportRow, error)
 	ListNextRentPaymentsByOwner(ctx context.Context, arg ListNextRentPaymentsByOwnerParams) ([]ListNextRentPaymentsByOwnerRow, error)
 	ListNotificationPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationPreference, error)
 	ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)

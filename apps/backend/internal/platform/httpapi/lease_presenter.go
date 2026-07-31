@@ -36,7 +36,7 @@ func (p *leasePresenter) leaseResponse(ctx context.Context, ownerID uuid.UUID, l
 	resp := openapi.LeaseResponse{
 		Id:                   lease.ID,
 		OwnerId:              lease.OwnerID,
-		PropertyId:           lease.PropertyID,
+		PropertyId:           leasesdomain.PropertyIDPtr(lease.PropertyID),
 		Status:               openapi.LeaseStatus(lease.Status),
 		StartDate:            openapi_types.Date{Time: lease.StartDate},
 		EndDate:              datePtrToOpenAPI(lease.EndDate),

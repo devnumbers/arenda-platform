@@ -94,7 +94,7 @@ export function useCreateRecurringOperation(): UseMutationResult<
 export function useUpdateRecurringOperation(): UseMutationResult<
   RecurringOperationResponse,
   ApiError,
-  { id: string; propertyId: string; data: RecurringOperationUpdateRequest }
+  { id: string; propertyId?: string; data: RecurringOperationUpdateRequest }
 > {
   const queryClient = useQueryClient();
   return useMutation({
@@ -107,18 +107,20 @@ export function useUpdateRecurringOperation(): UseMutationResult<
       invalidateRecurringOperationLists(queryClient);
       invalidateOperationLists(queryClient);
       queryClient.invalidateQueries({
-        queryKey: recurringOperationKeys.byProperty(propertyId),
-      });
-      queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.detail(id),
       });
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.summary(propertyId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.byProperty(propertyId),
-      });
       queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
+      if (propertyId) {
+        queryClient.invalidateQueries({
+          queryKey: recurringOperationKeys.byProperty(propertyId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.summary(propertyId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: operationKeys.byProperty(propertyId),
+        });
+      }
     },
   });
 }

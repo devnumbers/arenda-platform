@@ -1,0 +1,27 @@
+meta {
+  name: Delete Property Not Found
+  type: http
+  seq: 15
+}
+
+delete {
+  url: {{baseUrl}}/properties/00000000-0000-0000-0000-000000000000?mode=cascade
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  // Requires an authenticated session. Run auth/verify-code first.
+  // Uses a non-existent uuid; another owner's property returns 404 as well.
+  // Does not touch {{propertyId}}, safe to re-run.
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 404 for non-existent property", function() {
+    expect(res.status).to.equal(404);
+  });
+}

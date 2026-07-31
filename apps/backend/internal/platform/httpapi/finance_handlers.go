@@ -5,6 +5,7 @@ import (
 	"time"
 
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
+	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -64,7 +65,7 @@ func (h *FinanceHandlers) GetFinanceReport(w http.ResponseWriter, r *http.Reques
 	for _, row := range report.ByProperty {
 		profit := row.IncomeKopecks - row.ExpenseKopecks
 		resp.ByProperty = append(resp.ByProperty, openapi.FinanceReportPropertyRow{
-			PropertyId:     row.PropertyID,
+			PropertyId:     leasesdomain.PropertyIDPtr(row.PropertyID),
 			IncomeKopecks:  int(row.IncomeKopecks),
 			ExpenseKopecks: int(row.ExpenseKopecks),
 			ProfitKopecks:  int(profit),

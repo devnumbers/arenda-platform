@@ -1,0 +1,28 @@
+meta {
+  name: Get Property After Delete
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{baseUrl}}/properties/{{propertyId}}
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  // Requires an authenticated session. Run auth/verify-code first.
+  // Side effect check for the delete scenarios: run right after
+  // "delete property cascade" (seq 10) or "delete property detach" (seq 11) —
+  // the property is gone in both modes and must return 404.
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 404 for deleted property", function() {
+    expect(res.status).to.equal(404);
+  });
+}

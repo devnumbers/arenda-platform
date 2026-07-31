@@ -16,6 +16,13 @@ type PropertyRepository interface {
 	// GetStatusByOwner returns the property status for the owner, or an empty
 	// string when the property does not exist.
 	GetStatusByOwner(ctx context.Context, id, ownerID uuid.UUID) (string, error)
+	// GetNameByOwner returns the property name for the owner, or an empty
+	// string when the property does not exist or does not belong to the owner.
+	GetNameByOwner(ctx context.Context, id, ownerID uuid.UUID) (string, error)
+	// GetByIDAndOwnerForUpdate locks the property row for the rest of the
+	// current transaction and returns its status, or an empty string when the
+	// property does not exist.
+	GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (string, error)
 	HasOpenLease(ctx context.Context, id uuid.UUID) (bool, error)
 	WithTx(tx transaction.Tx) PropertyRepository
 }
@@ -43,6 +50,9 @@ type LeaseRepository interface {
 	GetOpenLeaseByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) (domain.Lease, error)
 	ListOpenLeasesWithPastEndDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Lease, error)
 	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.Lease, error)
+	// ListWithTenantForExport returns the property leases joined with tenant
+	// contact data for the xlsx export, newest leases first.
+	ListWithTenantForExport(ctx context.Context, ownerID, propertyID uuid.UUID) ([]ExportLeaseRow, error)
 	WithTx(tx transaction.Tx) LeaseRepository
 }
 
@@ -153,6 +163,9 @@ type OperationRepository interface {
 	GetFinanceReportByProperty(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]FinanceReportPropertyRow, error)
 	GetFinanceReportByCategory(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]FinanceReportCategoryRow, error)
 	GetFinanceReportByMonth(ctx context.Context, ownerID uuid.UUID, from, to *time.Time) ([]FinanceReportMonthRow, error)
+	GetPropertyFinanceByMonth(ctx context.Context, ownerID, propertyID uuid.UUID) ([]FinanceReportMonthRow, error)
+	GetPropertyFinanceByCategory(ctx context.Context, ownerID, propertyID uuid.UUID) ([]FinanceReportCategoryRow, error)
+	ListCompletedForExport(ctx context.Context, ownerID, propertyID uuid.UUID) ([]ExportOperationRow, error)
 	WithTx(tx transaction.Tx) OperationRepository
 }
 
