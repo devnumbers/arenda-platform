@@ -442,3 +442,7 @@ cd /opt/arenda/prod  && docker compose -f docker-compose.prod.yml up -d
   `observability/clickhouse-config/system-logs.xml` (монтируется в
   `/etc/clickhouse-server/config.d`): `trace_log` и `processors_profile_log`
   выключены, на `text_log` TTL 3 дня, на остальные системные логи — 7 дней.
+  Рядом обязателен `listen.xml`: маунт каталога `config.d` затеняет штатный
+  `docker_related_config.xml` образа (в нём `listen_host ::/0.0.0.0` +
+  `listen_try`), без `listen.xml` ClickHouse слушает только localhost и
+  uptrace не может к нему подключиться — инцидент 2026-07-29.
