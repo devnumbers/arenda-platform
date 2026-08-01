@@ -254,6 +254,16 @@ type Property struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type PropertyContact struct {
+	ID         pgtype.UUID        `json:"id"`
+	PropertyID pgtype.UUID        `json:"property_id"`
+	OwnerID    pgtype.UUID        `json:"owner_id"`
+	Name       string             `json:"name"`
+	Phone      string             `json:"phone"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type PropertyPhoto struct {
 	ID         pgtype.UUID        `json:"id"`
 	PropertyID pgtype.UUID        `json:"property_id"`

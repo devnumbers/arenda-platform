@@ -37,6 +37,7 @@ type Deps struct {
 	Webhooks                 billingapp.WebhookHandler
 	Admin                    *adminapp.AdminService
 	Properties               *propertiesapp.PropertyService
+	PropertyContacts         *propertiesapp.PropertyContactService
 	AddressSuggester         propertiesapp.AddressSuggester
 	Leases                   *leasesapp.LeaseService
 	TenantContacts           *leasesapp.TenantContactService
@@ -118,7 +119,7 @@ func New(deps Deps) http.Handler {
 		deps.MeEnricher,
 		deps.Audit,
 	)
-	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Export, deps.Logger, deps.Clock)
+	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Export, deps.PropertyContacts, deps.Logger, deps.Clock)
 	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock)
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Categories, deps.Properties, deps.Logger)
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Categories, deps.Logger)

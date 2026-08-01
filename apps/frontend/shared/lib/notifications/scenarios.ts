@@ -66,6 +66,12 @@ const tenants = {
   tenantCreateError: errorScenario('Не удалось создать арендатора'),
 } as const;
 
+const propertyContacts = {
+  created: ((options?) =>
+    notify.success('Контакт добавлен', options)) satisfies ScenarioFn,
+  createError: errorScenario('Не удалось добавить контакт'),
+} as const;
+
 const property = {
   detailError: ((options?) =>
     notify.error('Не удалось загрузить объект', options)) satisfies ScenarioFn,
@@ -204,6 +210,7 @@ const demo = {
 export type Scenarios = {
   readonly auth: typeof auth;
   readonly tenants: typeof tenants;
+  readonly propertyContacts: typeof propertyContacts;
   readonly property: typeof property;
   readonly leases: typeof leases;
   readonly operations: typeof operations;
@@ -216,6 +223,7 @@ export type Scenarios = {
 export const scenarios: Scenarios = {
   auth,
   tenants,
+  propertyContacts,
   property,
   leases,
   operations,

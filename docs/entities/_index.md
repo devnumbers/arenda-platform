@@ -9,6 +9,8 @@ order: 1
 
 ## [Арендатор](./arendator)
 
+## [Контакт объекта](./kontakt-obekta)
+
 ## [Аренда](./arenda)
 
 ## [Операция](./operacija)

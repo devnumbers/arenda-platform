@@ -49,14 +49,15 @@ type PropertyHandlers struct {
 	opSvc            *leasesapp.OperationService
 	leaseSvc         *leasesapp.LeaseService
 	exportSvc        *leasesapp.ExportService
+	contactSvc       *propertiesapp.PropertyContactService
 	logger           *slog.Logger
 	presenter        *leasePresenter
 	clock            clock.Clock
 }
 
 // NewPropertyHandlers creates HTTP handlers for the properties API.
-func NewPropertyHandlers(svc *propertiesapp.PropertyService, addressSuggester propertiesapp.AddressSuggester, tenantContactSvc *leasesapp.TenantContactService, opSvc *leasesapp.OperationService, leaseSvc *leasesapp.LeaseService, exportSvc *leasesapp.ExportService, logger *slog.Logger, clk clock.Clock) *PropertyHandlers {
-	return &PropertyHandlers{svc: svc, addressSuggester: addressSuggester, opSvc: opSvc, leaseSvc: leaseSvc, exportSvc: exportSvc, logger: logger, presenter: newLeasePresenter(tenantContactSvc), clock: clk}
+func NewPropertyHandlers(svc *propertiesapp.PropertyService, addressSuggester propertiesapp.AddressSuggester, tenantContactSvc *leasesapp.TenantContactService, opSvc *leasesapp.OperationService, leaseSvc *leasesapp.LeaseService, exportSvc *leasesapp.ExportService, contactSvc *propertiesapp.PropertyContactService, logger *slog.Logger, clk clock.Clock) *PropertyHandlers {
+	return &PropertyHandlers{svc: svc, addressSuggester: addressSuggester, opSvc: opSvc, leaseSvc: leaseSvc, exportSvc: exportSvc, contactSvc: contactSvc, logger: logger, presenter: newLeasePresenter(tenantContactSvc), clock: clk}
 }
 
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
@@ -477,6 +478,65 @@ func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Re
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// CreatePropertyContact implements POST /properties/{propertyId}/contacts.
+func (h *PropertyHandlers) CreatePropertyContact(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	var body openapi.PropertyContactCreateRequest
+	if err := decodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode create property contact request", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	contact, err := h.contactSvc.CreatePropertyContact(r.Context(), ownerID, propertyID, propertiesapp.CreatePropertyContactCommand{
+		Name:  body.Name,
+		Phone: body.Phone,
+	})
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusCreated, h.propertyContactResponse(contact))
+}
+
+// ListPropertyContacts implements GET /properties/{propertyId}/contacts.
+func (h *PropertyHandlers) ListPropertyContacts(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	contacts, err := h.contactSvc.ListPropertyContacts(r.Context(), ownerID, propertyID)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.PropertyContactResponse, 0, len(contacts))
+	for _, c := range contacts {
+		items = append(items, h.propertyContactResponse(c))
+	}
+	writeJSON(r.Context(), w, http.StatusOK, openapi.PropertyContactsResponse{Items: items})
+}
+
+func (h *PropertyHandlers) propertyContactResponse(c domain.PropertyContact) openapi.PropertyContactResponse {
+	return openapi.PropertyContactResponse{
+		Id:         c.ID,
+		PropertyId: c.PropertyID,
+		Name:       c.Name,
+		Phone:      c.Phone,
+		CreatedAt:  c.CreatedAt,
+		UpdatedAt:  c.UpdatedAt,
+	}
 }
 
 // GetAddressSuggestions implements GET /dadata/suggestions/address.

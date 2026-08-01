@@ -6,6 +6,7 @@ export const ROUTES = {
   propertyArchive: '/properties/archive',
   propertyNew: '/properties/new',
   propertyEdit: (id: string) => `/properties/${id}/edit`,
+  propertyContactsNew: (id: string) => `/properties/${id}/contacts/new`,
   propertyLeases: (id: string) => `/properties/${id}/leases`,
   leaseNew: '/leases/new',
   lease: (id: string) => `/leases/${id}`,

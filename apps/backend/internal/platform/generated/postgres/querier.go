@@ -46,6 +46,7 @@ type Querier interface {
 	CreateOperationCategoryIgnoreConflict(ctx context.Context, arg CreateOperationCategoryIgnoreConflictParams) error
 	CreatePaymentMethod(ctx context.Context, arg CreatePaymentMethodParams) (PaymentMethod, error)
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
+	CreatePropertyContact(ctx context.Context, arg CreatePropertyContactParams) (PropertyContact, error)
 	CreatePropertyPhoto(ctx context.Context, arg CreatePropertyPhotoParams) (PropertyPhoto, error)
 	CreateRecurringOperation(ctx context.Context, arg CreateRecurringOperationParams) (RecurringOperation, error)
 	CreateReminder(ctx context.Context, arg CreateReminderParams) (Reminder, error)
@@ -188,6 +189,7 @@ type Querier interface {
 	ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
 	ListPendingUpgradePayments(ctx context.Context, arg ListPendingUpgradePaymentsParams) ([]SubscriptionPayment, error)
 	ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdminParams) ([]ListPropertiesAdminRow, error)
+	ListPropertyContactsByProperty(ctx context.Context, arg ListPropertyContactsByPropertyParams) ([]PropertyContact, error)
 	ListPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) ([]PropertyPhoto, error)
 	ListPropertyPhotosByPropertyIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]PropertyPhoto, error)
 	ListRecentSubscriptionPaymentsAdmin(ctx context.Context) ([]ListRecentSubscriptionPaymentsAdminRow, error)

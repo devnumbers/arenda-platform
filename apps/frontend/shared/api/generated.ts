@@ -245,6 +245,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["exportPropertyData"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/photos": {
         parameters: {
             query?: never;
@@ -272,6 +288,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["deletePropertyPhoto"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPropertyContacts"];
+        put?: never;
+        post: operations["createPropertyContact"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1738,6 +1770,25 @@ export interface components {
         TenantContactsResponse: {
             items: components["schemas"]["TenantContactResponse"][];
         };
+        PropertyContactCreateRequest: {
+            name: string;
+            phone: string;
+        };
+        PropertyContactResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            property_id: string;
+            name: string;
+            phone: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        PropertyContactsResponse: {
+            items: components["schemas"]["PropertyContactResponse"][];
+        };
         PropertiesResponse: {
             items: components["schemas"]["PropertyResponse"][];
         };
@@ -2624,6 +2675,32 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    exportPropertyData: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property data export workbook */
+            200: {
+                headers: {
+                    /** @description Attachment header with the xlsx filename */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     uploadPropertyPhoto: {
         parameters: {
             query?: never;
@@ -2679,6 +2756,61 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listPropertyContacts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property contacts list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyContactsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createPropertyContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyContactCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Property contact created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyContactResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listOperationsByProperty: {

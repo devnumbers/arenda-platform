@@ -331,6 +331,9 @@ func run() error {
 		appLogger,
 	)
 
+	propertyContactRepo := propertiespg.NewPropertyContactRepository(db)
+	propertyContactService := propertiesapp.NewPropertyContactService(propertyContactRepo, propertyRepo, platformpostgres.NewBeginner(pool, appLogger), auditRecorder, appLogger)
+
 	dadataClient := dadata.NewClient(dadata.Config{
 		BaseURL:   cfg.DaDataBaseURL,
 		APIKey:    cfg.DaDataAPIKey,
@@ -470,6 +473,7 @@ func run() error {
 		Webhooks:                 billing.Webhooks,
 		Admin:                    adminService,
 		Properties:               propertyService,
+		PropertyContacts:         propertyContactService,
 		AddressSuggester:         dadataClient,
 		Leases:                   leaseService,
 		TenantContacts:           tenantContactService,
