@@ -7,6 +7,8 @@ import {goBack} from '@/shared/lib/navigation';
 import {ROUTES} from '@/shared/config/routes';
 import {useCreatePropertyContact} from '@/features/property-contacts/api';
 import {PageHeader} from '@/shared/ui/page-header';
+import {IconButton} from '@/shared/ui/icon-button';
+import {Cancel} from '@/shared/assets/icons';
 import {PropertyContactForm, type PropertyContactFormData} from './PropertyContactForm';
 
 export type PropertyContactCreatePageProps = {
@@ -41,13 +43,21 @@ export function PropertyContactCreatePage({
             <PageHeader
                 title="Новый контакт"
                 backHref={ROUTES.property(propertyId)}
+                actions={
+                    <IconButton
+                        variant="secondary"
+                        size="large"
+                        icon={<Cancel/>}
+                        aria-label="Отменить"
+                        onClick={handleCancel}
+                    />
+                }
             />
 
             <PropertyContactForm
                 submitLabel="Добавить контакт"
                 isLoading={createContact.isPending}
                 onSubmit={handleSubmit}
-                onCancel={handleCancel}
             />
         </>
     );

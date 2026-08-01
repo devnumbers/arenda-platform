@@ -21,14 +21,12 @@ export interface PropertyContactFormProps {
     readonly submitLabel: string;
     readonly isLoading: boolean;
     readonly onSubmit: (data: PropertyContactFormData) => void;
-    readonly onCancel: () => void;
 }
 
 export function PropertyContactForm({
                                         submitLabel,
                                         isLoading,
                                         onSubmit,
-                                        onCancel,
                                     }: PropertyContactFormProps): JSX.Element {
     const [name, setName] = useState('');
     const [phone, setPhone] = useState(formatPhoneInput(''));
@@ -66,10 +64,6 @@ export function PropertyContactForm({
         [canSubmit, name, onSubmit, phone],
     );
 
-    const handleCancelClick = useCallback(() => {
-        onCancel();
-    }, [onCancel]);
-
     return (
         <form onSubmit={handleSubmit} className={styles.form}>
             <div className={styles.fields}>
@@ -84,7 +78,6 @@ export function PropertyContactForm({
                 />
                 <TextField
                     label="Телефон"
-                    placeholder="+7 (000) 000-00-00"
                     required
                     value={phone}
                     onChange={handlePhoneChange}
@@ -103,15 +96,6 @@ export function PropertyContactForm({
                     disabled={!canSubmit}
                 >
                     {submitLabel}
-                </Button>
-                <Button
-                    type="button"
-                    variant="secondary"
-                    size="large"
-                    fullWidth
-                    onClick={handleCancelClick}
-                >
-                    Отмена
                 </Button>
             </div>
         </form>

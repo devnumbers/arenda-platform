@@ -1,9 +1,8 @@
 'use client';
 
-import type {JSX, ReactNode} from 'react';
+import type {JSX} from 'react';
 import {ROUTES} from '@/shared/config/routes';
 import {LinkButton} from '@/shared/ui/link-button';
-import {EmptyState} from '@/shared/ui/empty-state';
 import {SectionHeader} from '@/widgets/dashboard/ui/SectionHeader';
 import {usePropertyContacts} from '@/features/property-contacts/api';
 import {PropertyDetailSection} from './PropertyDetailSection';
@@ -20,18 +19,6 @@ export function PropertyContactsSection({
                                        }: PropertyContactsSectionProps): JSX.Element {
     const {data: contacts, isPending, isError} = usePropertyContacts(propertyId);
 
-    const addAction = (variant: 'primary' | 'secondary'): ReactNode => (
-        <LinkButton
-            href={ROUTES.propertyContactsNew(propertyId)}
-            variant={variant}
-            fullWidth
-            disabled={isArchived}
-            title={isArchived ? 'Объект в архиве' : undefined}
-        >
-            Добавить контакт
-        </LinkButton>
-    );
-
     return (
         <PropertyDetailSection>
             <SectionHeader title="Контакты" count={contacts?.length}/>
@@ -45,11 +32,15 @@ export function PropertyContactsSection({
             )}
 
             {!isPending && !isError && (!contacts || contacts.length === 0) && (
-                <EmptyState
-                    entities="контактов"
-                    subtitle="Контакты не добавлены"
-                    actionNode={addAction('primary')}
-                />
+                <LinkButton
+                    href={ROUTES.propertyContactsNew(propertyId)}
+                    variant="primary"
+                    fullWidth
+                    disabled={isArchived}
+                    title={isArchived ? 'Объект в архиве' : undefined}
+                >
+                    Добавить контакт
+                </LinkButton>
             )}
 
             {!isPending && !isError && contacts && contacts.length > 0 && (
@@ -63,7 +54,15 @@ export function PropertyContactsSection({
                         ))}
                     </ul>
                     <div className={styles.actions}>
-                        {addAction('secondary')}
+                        <LinkButton
+                            href={ROUTES.propertyContactsNew(propertyId)}
+                            variant="secondary"
+                            fullWidth
+                            disabled={isArchived}
+                            title={isArchived ? 'Объект в архиве' : undefined}
+                        >
+                            Добавить контакт
+                        </LinkButton>
                     </div>
                 </>
             )}
