@@ -50,6 +50,13 @@ type ExportLeaseRow struct {
 	TenantComment        *string
 }
 
+// ExportContactRow is a read-model row of a property contact for the property
+// xlsx export.
+type ExportContactRow struct {
+	Name  string
+	Phone string
+}
+
 // ExportFile is a generated export workbook with its download filename.
 type ExportFile struct {
 	Filename string
@@ -61,6 +68,7 @@ const (
 	exportSheetName      = "Операции"
 	leasesSheetName      = "Аренды"
 	tenantsSheetName     = "Арендаторы"
+	contactsSheetName    = "Контакты"
 	exportMaxRows        = 1_000_000
 	exportFilenameMaxLen = 50
 )
@@ -71,22 +79,25 @@ var exportLeaseHeaders = []string{"Арендатор", "Статус", "Дат�
 
 var exportTenantHeaders = []string{"Фамилия", "Имя", "Отчество", "Телефон", "Email", "Связанная аренда/период", "Комментарий"}
 
+var exportContactHeaders = []string{"Имя", "Телефон"}
+
 // ExportService builds the property xlsx export.
 type ExportService struct {
 	operations OperationRepository
 	leases     LeaseRepository
 	properties PropertyRepository
+	contacts   PropertyContactRepository
 	clock      clock.Clock
 	logger     *slog.Logger
 }
 
 // NewExportService creates the property export use case.
-func NewExportService(operations OperationRepository, leases LeaseRepository, properties PropertyRepository, clk clock.Clock, logger *slog.Logger) *ExportService {
-	return &ExportService{operations: operations, leases: leases, properties: properties, clock: clk, logger: logger}
+func NewExportService(operations OperationRepository, leases LeaseRepository, properties PropertyRepository, contacts PropertyContactRepository, clk clock.Clock, logger *slog.Logger) *ExportService {
+	return &ExportService{operations: operations, leases: leases, properties: properties, contacts: contacts, clock: clk, logger: logger}
 }
 
 // ExportProperty returns the xlsx workbook with the property summary,
-// operations, leases, and tenants.
+// operations, leases, tenants, and contacts.
 func (s *ExportService) ExportProperty(ctx context.Context, ownerID, propertyID uuid.UUID) (ExportFile, error) {
 	name, err := s.properties.GetNameByOwner(ctx, propertyID, ownerID)
 	if err != nil {
@@ -125,7 +136,12 @@ func (s *ExportService) ExportProperty(ctx context.Context, ownerID, propertyID 
 		return ExportFile{}, fmt.Errorf("export property: get finance by category: %w", err)
 	}
 
-	content, err := buildExportWorkbook(name, summary, months, categories, rows, leases)
+	contacts, err := s.contacts.ListForExport(ctx, propertyID, ownerID)
+	if err != nil {
+		return ExportFile{}, fmt.Errorf("export property: list contacts: %w", err)
+	}
+
+	content, err := buildExportWorkbook(name, summary, months, categories, rows, leases, contacts)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: build workbook: %w", err)
 	}
@@ -134,9 +150,9 @@ func (s *ExportService) ExportProperty(ctx context.Context, ownerID, propertyID 
 	return ExportFile{Filename: filename, Content: content}, nil
 }
 
-// buildExportWorkbook renders the "Сводка", "Операции", "Аренды", and
-// "Арендаторы" sheets in memory.
-func buildExportWorkbook(name string, summary OperationsSummary, months []FinanceReportMonthRow, categories []FinanceReportCategoryRow, rows []ExportOperationRow, leases []ExportLeaseRow) (_ []byte, err error) {
+// buildExportWorkbook renders the "Сводка", "Операции", "Аренды",
+// "Арендаторы", and "Контакты" sheets in memory.
+func buildExportWorkbook(name string, summary OperationsSummary, months []FinanceReportMonthRow, categories []FinanceReportCategoryRow, rows []ExportOperationRow, leases []ExportLeaseRow, contacts []ExportContactRow) (_ []byte, err error) {
 	f := excelize.NewFile()
 	defer func() {
 		if closeErr := f.Close(); closeErr != nil && err == nil {
@@ -268,6 +284,10 @@ func buildExportWorkbook(name string, summary OperationsSummary, months []Financ
 
 	if err := renderTenantsSheet(f, leases, headerStyle); err != nil {
 		return nil, fmt.Errorf("tenants sheet: %w", err)
+	}
+
+	if err := renderContactsSheet(f, contacts, headerStyle); err != nil {
+		return nil, fmt.Errorf("contacts sheet: %w", err)
 	}
 
 	var buf bytes.Buffer
@@ -460,6 +480,58 @@ func renderTenantsSheet(f *excelize.File, leases []ExportLeaseRow, headerStyle i
 	}
 	for _, cw := range colWidths {
 		if err := f.SetColWidth(tenantsSheetName, cw.col, cw.col, cw.width); err != nil {
+			return fmt.Errorf("column %s width: %w", cw.col, err)
+		}
+	}
+	return nil
+}
+
+// renderContactsSheet fills the "Контакты" sheet with one row per property
+// contact ordered by created_at ASC. An empty contact list renders a sheet
+// with only the header row.
+func renderContactsSheet(f *excelize.File, contacts []ExportContactRow, headerStyle int) error {
+	if _, err := f.NewSheet(contactsSheetName); err != nil {
+		return fmt.Errorf("new sheet: %w", err)
+	}
+
+	for i, header := range exportContactHeaders {
+		cell, err := excelize.CoordinatesToCellName(i+1, 1)
+		if err != nil {
+			return fmt.Errorf("header cell: %w", err)
+		}
+		if err := f.SetCellStr(contactsSheetName, cell, header); err != nil {
+			return fmt.Errorf("set header: %w", err)
+		}
+	}
+	if err := f.SetCellStyle(contactsSheetName, "A1", "B1", headerStyle); err != nil {
+		return fmt.Errorf("style header: %w", err)
+	}
+
+	for i, contact := range contacts {
+		cells := []string{contact.Name, contact.Phone}
+		for col, value := range cells {
+			cell, err := excelize.CoordinatesToCellName(col+1, i+2)
+			if err != nil {
+				return fmt.Errorf("contact cell: %w", err)
+			}
+			if err := f.SetCellStr(contactsSheetName, cell, value); err != nil {
+				return fmt.Errorf("set contact %d: %w", i+2, err)
+			}
+		}
+	}
+
+	if err := f.SetPanes(contactsSheetName, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"}); err != nil {
+		return fmt.Errorf("freeze panes: %w", err)
+	}
+	colWidths := []struct {
+		col   string
+		width float64
+	}{
+		{"A", 28},
+		{"B", 18},
+	}
+	for _, cw := range colWidths {
+		if err := f.SetColWidth(contactsSheetName, cw.col, cw.col, cw.width); err != nil {
 			return fmt.Errorf("column %s width: %w", cw.col, err)
 		}
 	}

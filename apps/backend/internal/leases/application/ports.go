@@ -27,6 +27,11 @@ type PropertyRepository interface {
 	WithTx(tx transaction.Tx) PropertyRepository
 }
 
+// PropertyContactRepository reads property contacts for the export use case.
+type PropertyContactRepository interface {
+	ListForExport(ctx context.Context, propertyID, ownerID uuid.UUID) ([]ExportContactRow, error)
+}
+
 type TenantContactRepository interface {
 	Create(ctx context.Context, ownerID uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error)
 	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.TenantContact, error)

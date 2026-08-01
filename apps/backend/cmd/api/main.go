@@ -376,6 +376,7 @@ func run() error {
 	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billing.Subscriptions, adminRepo, clock.Real{})
 
 	leasePropertyRepo := leasespg.NewPropertyRepository(db)
+	leasePropertyContactRepo := leasespg.NewPropertyContactRepository(db)
 	tenantContactRepo := leasespg.NewTenantContactRepository(db)
 
 	leaseService := leasesapp.NewLeaseService(
@@ -393,7 +394,7 @@ func run() error {
 	)
 	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, auditRecorder, appLogger)
 	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, categoryRepo, reminderScheduler, platformpostgres.NewBeginner(pool, appLogger), auditRecorder, clock.Real{}, appLogger)
-	exportService := leasesapp.NewExportService(operationRepo, leaseRepo, leasePropertyRepo, clock.Real{}, appLogger)
+	exportService := leasesapp.NewExportService(operationRepo, leaseRepo, leasePropertyRepo, leasePropertyContactRepo, clock.Real{}, appLogger)
 	reminderService := notificationsapp.NewReminderService(reminderRepo, clock.Real{})
 	preferenceService := notificationsapp.NewPreferenceService(reminderRepo, platformpostgres.NewBeginner(pool, appLogger), auditRecorder)
 	popupService := popupsapp.NewPopupService(popupspg.NewPopupRepository(db))
