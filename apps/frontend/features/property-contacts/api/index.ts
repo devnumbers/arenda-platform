@@ -1,2 +1,8 @@
 export { propertyContactKeys } from './keys';
-export { usePropertyContacts, useCreatePropertyContact } from './hooks';
+export {
+  usePropertyContacts,
+  useCreatePropertyContact,
+  usePropertyContact,
+  useUpdatePropertyContact,
+  useDeletePropertyContact,
+} from './hooks';

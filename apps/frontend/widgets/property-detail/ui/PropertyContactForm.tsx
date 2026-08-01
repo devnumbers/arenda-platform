@@ -4,6 +4,7 @@ import {
     type ChangeEvent,
     type FormEvent,
     type JSX,
+    type ReactNode,
     useCallback,
     useState,
 } from 'react';
@@ -21,20 +22,30 @@ export interface PropertyContactFormProps {
     readonly submitLabel: string;
     readonly isLoading: boolean;
     readonly onSubmit: (data: PropertyContactFormData) => void;
+    readonly initialValues?: PropertyContactFormData;
+    readonly extraActions?: ReactNode;
 }
 
 export function PropertyContactForm({
                                         submitLabel,
                                         isLoading,
                                         onSubmit,
+                                        initialValues,
+                                        extraActions,
                                     }: PropertyContactFormProps): JSX.Element {
-    const [name, setName] = useState('');
-    const [phone, setPhone] = useState('');
+    const [name, setName] = useState(initialValues?.name ?? '');
+    const [phone, setPhone] = useState(
+        initialValues?.phone ? formatPhoneInput(initialValues.phone) : '',
+    );
     const [isSubmitAttempted, setIsSubmitAttempted] = useState(false);
 
     const isNameValid = name.trim() !== '';
     const isPhoneValidValue = isPhoneValid(phone);
-    const canSubmit = isNameValid && isPhoneValidValue && !isLoading;
+    const hasChanges = initialValues
+        ? name.trim() !== initialValues.name.trim() ||
+          normalizePhone(phone) !== normalizePhone(initialValues.phone)
+        : true;
+    const canSubmit = isNameValid && isPhoneValidValue && !isLoading && hasChanges;
 
     const nameError = (isSubmitAttempted || name !== '') && !isNameValid
         ? 'Введите имя'
@@ -87,6 +98,7 @@ export function PropertyContactForm({
             </div>
 
             <div className={styles.actions}>
+                {extraActions}
                 <Button
                     type="submit"
                     variant="primary"

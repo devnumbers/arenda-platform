@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -64,6 +66,48 @@ func (r *PropertyContactRepository) ListByProperty(ctx context.Context, property
 		contacts = append(contacts, propertyContactFromRow(row))
 	}
 	return contacts, nil
+}
+
+// GetByIDAndOwner returns a single property contact scoped to the owner.
+func (r *PropertyContactRepository) GetByIDAndOwner(ctx context.Context, contactID, ownerID uuid.UUID) (domain.PropertyContact, error) {
+	row, err := r.q().GetPropertyContact(ctx, postgres.GetPropertyContactParams{
+		ID:      pgconv.UUIDToPgtype(contactID),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.PropertyContact{}, application.ErrNotFound
+		}
+		return domain.PropertyContact{}, err
+	}
+	return propertyContactFromRow(row), nil
+}
+
+// Update modifies an existing property contact scoped to the owner.
+func (r *PropertyContactRepository) Update(ctx context.Context, ownerID uuid.UUID, contact domain.PropertyContact) (domain.PropertyContact, error) {
+	row, err := r.q().UpdatePropertyContact(ctx, postgres.UpdatePropertyContactParams{
+		ID:      pgconv.UUIDToPgtype(contact.ID),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		Name:    contact.Name,
+		Phone:   contact.Phone,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.PropertyContact{}, application.ErrNotFound
+		}
+		return domain.PropertyContact{}, err
+	}
+	return propertyContactFromRow(row), nil
+}
+
+// Delete removes a property contact scoped to the owner. The existence of the
+// contact is established by the service inside the same transaction before
+// calling Delete, so a zero-rows result here is not treated as NotFound.
+func (r *PropertyContactRepository) Delete(ctx context.Context, contactID, ownerID uuid.UUID) error {
+	return r.q().DeletePropertyContact(ctx, postgres.DeletePropertyContactParams{
+		ID:      pgconv.UUIDToPgtype(contactID),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
 }
 
 func propertyContactFromRow(row postgres.PropertyContact) domain.PropertyContact {

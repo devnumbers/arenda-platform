@@ -46,6 +46,46 @@ func (q *Queries) CreatePropertyContact(ctx context.Context, arg CreatePropertyC
 	return i, err
 }
 
+const deletePropertyContact = `-- name: DeletePropertyContact :exec
+DELETE FROM property_contacts
+WHERE id = $1 AND owner_id = $2
+`
+
+type DeletePropertyContactParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) DeletePropertyContact(ctx context.Context, arg DeletePropertyContactParams) error {
+	_, err := q.db.Exec(ctx, deletePropertyContact, arg.ID, arg.OwnerID)
+	return err
+}
+
+const getPropertyContact = `-- name: GetPropertyContact :one
+SELECT id, property_id, owner_id, name, phone, created_at, updated_at FROM property_contacts
+WHERE id = $1 AND owner_id = $2
+`
+
+type GetPropertyContactParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) GetPropertyContact(ctx context.Context, arg GetPropertyContactParams) (PropertyContact, error) {
+	row := q.db.QueryRow(ctx, getPropertyContact, arg.ID, arg.OwnerID)
+	var i PropertyContact
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Phone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listPropertyContactsByProperty = `-- name: ListPropertyContactsByProperty :many
 SELECT id, property_id, owner_id, name, phone, created_at, updated_at FROM property_contacts
 WHERE property_id = $1 AND owner_id = $2
@@ -83,4 +123,37 @@ func (q *Queries) ListPropertyContactsByProperty(ctx context.Context, arg ListPr
 		return nil, err
 	}
 	return items, nil
+}
+
+const updatePropertyContact = `-- name: UpdatePropertyContact :one
+UPDATE property_contacts SET name = $3, phone = $4
+WHERE id = $1 AND owner_id = $2
+RETURNING id, property_id, owner_id, name, phone, created_at, updated_at
+`
+
+type UpdatePropertyContactParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Name    string      `json:"name"`
+	Phone   string      `json:"phone"`
+}
+
+func (q *Queries) UpdatePropertyContact(ctx context.Context, arg UpdatePropertyContactParams) (PropertyContact, error) {
+	row := q.db.QueryRow(ctx, updatePropertyContact,
+		arg.ID,
+		arg.OwnerID,
+		arg.Name,
+		arg.Phone,
+	)
+	var i PropertyContact
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Phone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

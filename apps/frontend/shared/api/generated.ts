@@ -309,6 +309,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{propertyId}/contacts/{contactId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPropertyContact"];
+        put?: never;
+        post?: never;
+        delete: operations["deletePropertyContact"];
+        options?: never;
+        head?: never;
+        patch: operations["updatePropertyContact"];
+        trace?: never;
+    };
     "/properties/{propertyId}/operations": {
         parameters: {
             query?: never;
@@ -1774,6 +1790,10 @@ export interface components {
             name: string;
             phone: string;
         };
+        PropertyContactUpdateRequest: {
+            name?: string;
+            phone?: string;
+        };
         PropertyContactResponse: {
             /** Format: uuid */
             id: string;
@@ -2799,6 +2819,89 @@ export interface operations {
         responses: {
             /** @description Property contact created */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyContactResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getPropertyContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property contact */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyContactResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deletePropertyContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property contact deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updatePropertyContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyContactUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Property contact updated */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

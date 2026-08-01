@@ -5,9 +5,17 @@
 }
 
 .contact {
+  display: block;
   padding: 20px;
   border-radius: 24px;
   background: var(--color-secondary-bg);
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.contact:hover {
+  opacity: 0.85;
 }
 
 .contactName {

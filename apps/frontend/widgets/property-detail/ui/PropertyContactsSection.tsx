@@ -1,6 +1,7 @@
 'use client';
 
 import type {JSX} from 'react';
+import Link from 'next/link';
 import {ROUTES} from '@/shared/config/routes';
 import {LinkButton} from '@/shared/ui/link-button';
 import {SectionHeader} from '@/widgets/dashboard/ui/SectionHeader';
@@ -47,9 +48,14 @@ export function PropertyContactsSection({
                 <>
                     <ul className={styles.list}>
                         {contacts.map((contact) => (
-                            <li key={contact.id} className={styles.contact}>
-                                <p className={styles.contactName}>{contact.name}</p>
-                                <p className={styles.contactPhone}>{contact.phone}</p>
+                            <li key={contact.id}>
+                                <Link
+                                    href={ROUTES.propertyContactEdit(propertyId, contact.id)}
+                                    className={styles.contact}
+                                >
+                                    <p className={styles.contactName}>{contact.name}</p>
+                                    <p className={styles.contactPhone}>{contact.phone}</p>
+                                </Link>
                             </li>
                         ))}
                     </ul>

@@ -92,5 +92,8 @@ type PropertyPhotoRepository interface {
 type PropertyContactRepository interface {
 	Create(ctx context.Context, contact domain.PropertyContact) (domain.PropertyContact, error)
 	ListByProperty(ctx context.Context, propertyID, ownerID uuid.UUID) ([]domain.PropertyContact, error)
+	GetByIDAndOwner(ctx context.Context, contactID, ownerID uuid.UUID) (domain.PropertyContact, error)
+	Update(ctx context.Context, ownerID uuid.UUID, contact domain.PropertyContact) (domain.PropertyContact, error)
+	Delete(ctx context.Context, contactID, ownerID uuid.UUID) error
 	WithTx(tx transaction.Tx) PropertyContactRepository
 }

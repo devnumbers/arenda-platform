@@ -72,6 +72,7 @@ type Querier interface {
 	DeleteOperationsOutsideLeaseRange(ctx context.Context, arg DeleteOperationsOutsideLeaseRangeParams) error
 	DeletePaymentMethodByID(ctx context.Context, id pgtype.UUID) error
 	DeleteProperty(ctx context.Context, arg DeletePropertyParams) error
+	DeletePropertyContact(ctx context.Context, arg DeletePropertyContactParams) error
 	DeletePropertyPhoto(ctx context.Context, id pgtype.UUID) error
 	DeleteRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) error
 	DeleteRecurringOperationsByProperty(ctx context.Context, arg DeleteRecurringOperationsByPropertyParams) error
@@ -112,6 +113,7 @@ type Querier interface {
 	GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (GetPropertyByIDAdminRow, error)
 	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (GetPropertyByIDAndOwnerRow, error)
 	GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetPropertyByIDAndOwnerForUpdateParams) (Property, error)
+	GetPropertyContact(ctx context.Context, arg GetPropertyContactParams) (PropertyContact, error)
 	GetPropertyFinanceByCategory(ctx context.Context, arg GetPropertyFinanceByCategoryParams) ([]GetPropertyFinanceByCategoryRow, error)
 	GetPropertyFinanceByMonth(ctx context.Context, arg GetPropertyFinanceByMonthParams) ([]GetPropertyFinanceByMonthRow, error)
 	GetPropertyOperationsSummary(ctx context.Context, arg GetPropertyOperationsSummaryParams) (GetPropertyOperationsSummaryRow, error)
@@ -252,6 +254,7 @@ type Querier interface {
 	UpdateOperation(ctx context.Context, arg UpdateOperationParams) (Operation, error)
 	UpdatePaymentMethodActiveByID(ctx context.Context, arg UpdatePaymentMethodActiveByIDParams) (PaymentMethod, error)
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)
+	UpdatePropertyContact(ctx context.Context, arg UpdatePropertyContactParams) (PropertyContact, error)
 	UpdateRecurringOperation(ctx context.Context, arg UpdateRecurringOperationParams) (RecurringOperation, error)
 	UpdateRecurringOperationReminderOffset(ctx context.Context, arg UpdateRecurringOperationReminderOffsetParams) (int64, error)
 	UpdateRecurringOperationStatus(ctx context.Context, arg UpdateRecurringOperationStatusParams) (RecurringOperation, error)

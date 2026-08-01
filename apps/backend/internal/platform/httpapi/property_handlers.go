@@ -528,6 +528,66 @@ func (h *PropertyHandlers) ListPropertyContacts(w http.ResponseWriter, r *http.R
 	writeJSON(r.Context(), w, http.StatusOK, openapi.PropertyContactsResponse{Items: items})
 }
 
+// GetPropertyContact implements GET /properties/{propertyId}/contacts/{contactId}.
+func (h *PropertyHandlers) GetPropertyContact(w http.ResponseWriter, r *http.Request, propertyID, contactID uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	contact, err := h.contactSvc.GetPropertyContact(r.Context(), ownerID, propertyID, contactID)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, h.propertyContactResponse(contact))
+}
+
+// UpdatePropertyContact implements PATCH /properties/{propertyId}/contacts/{contactId}.
+func (h *PropertyHandlers) UpdatePropertyContact(w http.ResponseWriter, r *http.Request, propertyID, contactID uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	var body openapi.PropertyContactUpdateRequest
+	if err := decodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode update property contact request", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	contact, err := h.contactSvc.UpdatePropertyContact(r.Context(), ownerID, propertyID, contactID, propertiesapp.UpdatePropertyContactCommand{
+		Name:  body.Name,
+		Phone: body.Phone,
+	})
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, h.propertyContactResponse(contact))
+}
+
+// DeletePropertyContact implements DELETE /properties/{propertyId}/contacts/{contactId}.
+func (h *PropertyHandlers) DeletePropertyContact(w http.ResponseWriter, r *http.Request, propertyID, contactID uuid.UUID) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	if err := h.contactSvc.DeletePropertyContact(r.Context(), ownerID, propertyID, contactID); err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *PropertyHandlers) propertyContactResponse(c domain.PropertyContact) openapi.PropertyContactResponse {
 	return openapi.PropertyContactResponse{
 		Id:         c.ID,

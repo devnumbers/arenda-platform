@@ -17,6 +17,8 @@ import type { components } from '@/shared/api/generated';
 type PropertyContactResponse = components['schemas']['PropertyContactResponse'];
 type PropertyContactCreateRequest =
   components['schemas']['PropertyContactCreateRequest'];
+type PropertyContactUpdateRequest =
+  components['schemas']['PropertyContactUpdateRequest'];
 type PropertyContactsResponse =
   components['schemas']['PropertyContactsResponse'];
 
@@ -53,6 +55,74 @@ export function useCreatePropertyContact(
         },
       );
       return mapPropertyContactResponse(response);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: propertyContactKeys.list(propertyId),
+      });
+    },
+  });
+}
+
+export function usePropertyContact(
+  propertyId: string,
+  contactId: string,
+): UseQueryResult<PropertyContact, ApiError> {
+  return useQuery({
+    queryKey: propertyContactKeys.detail(propertyId, contactId),
+    queryFn: async () => {
+      const response = await apiClient<PropertyContactResponse>(
+        `/properties/${propertyId}/contacts/${contactId}`,
+      );
+      return mapPropertyContactResponse(response);
+    },
+    enabled: Boolean(propertyId) && Boolean(contactId),
+  });
+}
+
+export function useUpdatePropertyContact(
+  propertyId: string,
+  contactId: string,
+): UseMutationResult<
+  PropertyContact,
+  ApiError,
+  PropertyContactUpdateRequest
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: PropertyContactUpdateRequest) => {
+      const response = await apiClient<PropertyContactResponse>(
+        `/properties/${propertyId}/contacts/${contactId}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        },
+      );
+      return mapPropertyContactResponse(response);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: propertyContactKeys.list(propertyId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: propertyContactKeys.detail(propertyId, contactId),
+      });
+    },
+  });
+}
+
+export function useDeletePropertyContact(
+  propertyId: string,
+): UseMutationResult<void, ApiError, string> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (contactId: string) => {
+      await apiClient<void>(
+        `/properties/${propertyId}/contacts/${contactId}`,
+        {
+          method: 'DELETE',
+        },
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({

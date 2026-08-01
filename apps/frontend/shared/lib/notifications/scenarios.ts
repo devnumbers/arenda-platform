@@ -70,6 +70,12 @@ const propertyContacts = {
   created: ((options?) =>
     notify.success('Контакт добавлен', options)) satisfies ScenarioFn,
   createError: errorScenario('Не удалось добавить контакт'),
+  updated: ((options?) =>
+    notify.success('Контакт обновлён', options)) satisfies ScenarioFn,
+  updateError: errorScenario('Не удалось обновить контакт'),
+  deleted: ((options?) =>
+    notify.success('Контакт удалён', options)) satisfies ScenarioFn,
+  deleteError: errorScenario('Не удалось удалить контакт'),
 } as const;
 
 const property = {

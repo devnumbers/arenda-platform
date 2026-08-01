@@ -38,6 +38,8 @@ const (
 	ActionPropertyPhotoAdded     Action = "property.photo_added"
 	ActionPropertyPhotoDeleted   Action = "property.photo_deleted"
 	ActionPropertyContactCreated Action = "property_contact.created"
+	ActionPropertyContactUpdated Action = "property_contact.updated"
+	ActionPropertyContactDeleted Action = "property_contact.deleted"
 	ActionPropertyDeleted        Action = "property.deleted"
 
 	ActionLeaseCreated   Action = "lease.created"
