@@ -61,8 +61,8 @@ services:
       start_period: 20s
     networks:
       - arenda-stage
-      # Observability: reach uptrace:14317 (OTLP/gRPC) in docker-compose.obs.yml.
-      - arenda-obs
+      # Observability: reach uptrace:14317 (OTLP/gRPC); the network is created by the devnumbers/observability stack in /opt/observability.
+      - observability
 
   frontend:
     image: ${FRONTEND_IMAGE}
@@ -139,10 +139,10 @@ services:
 networks:
   arenda-stage:
     name: arenda-stage
-  # Created by docker-compose.obs.yml; start the obs stack first.
-  arenda-obs:
+  # Created by the devnumbers/observability stack in /opt/observability; start that stack first.
+  observability:
     external: true
-    name: arenda-obs
+    name: observability
 
 volumes:
   postgres-data:

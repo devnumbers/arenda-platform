@@ -377,9 +377,9 @@ esac
 `docs/adr/0021-centralized-observability-uptrace.md`. Здесь — краткий обзор;
 полная инструкция по установке и настройке — `observability/README.md`.
 
-- Стек живёт в отдельном compose-проекте `arenda-obs` (`docker-compose.obs.yml`
-  + каталог `observability/` в репо) и разворачивается из `/opt/arenda/obs` —
-  отдельно от deploy-каталогов stage/prod. Сервисы: ClickHouse, PostgreSQL,
+- Стек живёт в отдельном репозитории devnumbers/observability и
+  разворачивается из `/opt/observability` (compose-проект и сеть
+  `observability`) — отдельно от deploy-каталогов stage/prod. Сервисы: ClickHouse, PostgreSQL,
   Uptrace, Redis, Vector, OTel Collector; все порты привязаны к `127.0.0.1`.
 - Что собирается: stdout всех контейнеров (структурированные slog-логи backend
   остаются logging source of truth, локальный json-file driver и `docker logs`
@@ -388,7 +388,7 @@ esac
   (frontend/admin/landing шлют их в backend на публичный `POST /client-errors`,
   backend логирует в stdout), OTel-трейсы и метрики backend обоих окружений,
   метрики хоста и контейнеров (OTel Collector: hostmetrics + docker_stats).
-- Backend подключается к внешней docker-сети `arenda-obs` и отправляет
+- Backend подключается к внешней docker-сети `observability` и отправляет
   трейсы/метрики по OTLP на `http://uptrace:14317` (порт наружу не
   публикуется). Блок `OTEL_*` входит в `ENV_FILE`; при каждом деплое пайплайн
   обновляет `service.version` в `OTEL_RESOURCE_ATTRIBUTES` — это deployment
@@ -400,6 +400,10 @@ esac
 - Алерты на email отправляются через SMTP (секция `mailer.smtp` в
   `observability/uptrace.yml`, креды — в `.env.obs`); канал и получатели
   настраиваются в UI Uptrace (Alerting → Channels), в репо не хранятся.
+
+<!-- TODO(#83): блок ниже описывает старый стек (`/opt/arenda/obs`,
+`docker-compose.obs.yml`); актуальные команды — в репо devnumbers/observability
+(`/opt/observability`). Переписать при выводе старого стека. -->
 
 Команды на сервере в `/opt/arenda/obs` (Makefile туда не копируется — прямые
 вызовы compose, как в `observability/README.md`):
