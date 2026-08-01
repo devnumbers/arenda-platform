@@ -2751,6 +2751,50 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /admin/property-contacts:
+    get:
+      operationId: listAdminPropertyContacts
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: property_id
+          in: query
+          required: false
+          description: Filter contacts by property (always passed by the admin property page tab).
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Admin property contacts list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPropertyContactsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /admin/operations:
     get:
       operationId: listAdminOperations
@@ -3702,6 +3746,38 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdminTenantContact'
+        total:
+          type: integer
+
+    AdminPropertyContact:
+      type: object
+      required: [id, propertyId, name, phone, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        propertyId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminPropertyContactsResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminPropertyContact'
         total:
           type: integer
 

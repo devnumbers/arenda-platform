@@ -129,6 +129,8 @@ const listUrl = (resource: string, ownerId?: string | number): string => {
       return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/leases` : `${API_PREFIX}/admin/leases`;
     case 'tenantContacts':
       return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/tenant-contacts` : `${API_PREFIX}/admin/tenant-contacts`;
+    case 'propertyContacts':
+      return `${API_PREFIX}/admin/property-contacts`;
     case 'operations':
       return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/operations` : `${API_PREFIX}/admin/operations`;
     case 'subscriptionPayments':
@@ -150,6 +152,8 @@ const oneUrl = (resource: string, id: string | number): string => {
       return `${API_PREFIX}/admin/leases/${id}`;
     case 'tenantContacts':
       return `${API_PREFIX}/admin/tenant-contacts/${id}`;
+    case 'propertyContacts':
+      return `${API_PREFIX}/admin/property-contacts/${id}`;
     case 'operations':
       return `${API_PREFIX}/admin/operations/${id}`;
     case 'subscriptionPayments':
@@ -218,6 +222,9 @@ export const dataProvider: AdminDataProvider = {
           break;
         case 'auditLogs':
           data = (obj.auditLog ?? json) as T;
+          break;
+        case 'propertyContacts':
+          data = json as T;
           break;
         case 'subscriptionPayments':
         default:

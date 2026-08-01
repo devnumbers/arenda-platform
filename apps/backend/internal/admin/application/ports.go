@@ -36,6 +36,11 @@ type TenantContactRepository interface {
 	GetTenantContact(ctx context.Context, id uuid.UUID) (AdminTenantContactView, error)
 }
 
+// PropertyContactRepository provides cross-user property contact reads for the admin context.
+type PropertyContactRepository interface {
+	ListPropertyContacts(ctx context.Context, filters AdminPropertyContactFilters) ([]AdminPropertyContactView, int64, error)
+}
+
 // OperationRepository provides cross-user operation reads for the admin context.
 type OperationRepository interface {
 	ListOperations(ctx context.Context, filters AdminOperationFilters) ([]AdminOperationView, int64, error)

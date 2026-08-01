@@ -373,7 +373,7 @@ func run() error {
 	})
 
 	adminRepo := adminpg.NewAdminRepository(db, encryptor, clock.Real{}, occupancyProvider)
-	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billing.Subscriptions, adminRepo, clock.Real{})
+	adminService := adminapp.NewAdminService(adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, adminRepo, billing.Subscriptions, adminRepo, adminRepo, clock.Real{})
 
 	leasePropertyRepo := leasespg.NewPropertyRepository(db)
 	leasePropertyContactRepo := leasespg.NewPropertyContactRepository(db)

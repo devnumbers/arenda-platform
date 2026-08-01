@@ -86,6 +86,20 @@ export const PropertyShow = () => (
           <OperationDatagrid />
         </ReferenceManyField>
       </Tab>
+      <Tab label="Контакты">
+        <ReferenceManyField
+          reference="propertyContacts"
+          target="property_id"
+          label={false}
+          sort={{ field: 'createdAt', order: 'ASC' }}
+        >
+          <Datagrid bulkActionButtons={false}>
+            <TextField source="name" label="Контакт" sortable={false} />
+            <TextField source="phone" label="Телефон" sortable={false} />
+            <DateField source="updatedAt" label="Обновлён" showTime sortable={false} />
+          </Datagrid>
+        </ReferenceManyField>
+      </Tab>
     </TabbedShowLayout>
   </Show>
 );

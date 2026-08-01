@@ -178,6 +178,7 @@ func New(deps Deps) http.Handler {
 	r.With(AdminOnlyMiddleware).Get("/admin/leases/{id}", wrapper.GetAdminLease)
 	r.With(AdminOnlyMiddleware).Get("/admin/tenant-contacts", wrapper.ListAdminTenantContacts)
 	r.With(AdminOnlyMiddleware).Get("/admin/tenant-contacts/{id}", wrapper.GetAdminTenantContact)
+	r.With(AdminOnlyMiddleware).Get("/admin/property-contacts", wrapper.ListAdminPropertyContacts)
 	r.With(AdminOnlyMiddleware).Get("/admin/operations", wrapper.ListAdminOperations)
 	r.With(AdminOnlyMiddleware).Get("/admin/operations/{id}", wrapper.GetAdminOperation)
 	r.With(AdminOnlyMiddleware).Get("/admin/stats", wrapper.GetAdminStats)

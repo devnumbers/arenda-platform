@@ -20,15 +20,16 @@ var (
 
 // AdminService orchestrates cross-user read-only admin operations.
 type AdminService struct {
-	users          UserRepository
-	properties     PropertyRepository
-	leases         LeaseRepository
-	tenantContacts TenantContactRepository
-	operations     OperationRepository
-	stats          StatsRepository
-	subscriptions  SubscriptionProvider
-	auditLogs      AuditLogRepository
-	clock          clock.Clock
+	users            UserRepository
+	properties       PropertyRepository
+	leases           LeaseRepository
+	tenantContacts   TenantContactRepository
+	operations       OperationRepository
+	stats            StatsRepository
+	subscriptions    SubscriptionProvider
+	auditLogs        AuditLogRepository
+	propertyContacts PropertyContactRepository
+	clock            clock.Clock
 }
 
 // NewAdminService creates a new admin application service.
@@ -41,18 +42,20 @@ func NewAdminService(
 	stats StatsRepository,
 	subscriptions SubscriptionProvider,
 	auditLogs AuditLogRepository,
+	propertyContacts PropertyContactRepository,
 	clock clock.Clock,
 ) *AdminService {
 	return &AdminService{
-		users:          users,
-		properties:     properties,
-		leases:         leases,
-		tenantContacts: tenantContacts,
-		operations:     operations,
-		stats:          stats,
-		subscriptions:  subscriptions,
-		auditLogs:      auditLogs,
-		clock:          clock,
+		users:            users,
+		properties:       properties,
+		leases:           leases,
+		tenantContacts:   tenantContacts,
+		operations:       operations,
+		stats:            stats,
+		subscriptions:    subscriptions,
+		auditLogs:        auditLogs,
+		propertyContacts: propertyContacts,
+		clock:            clock,
 	}
 }
 
@@ -235,6 +238,13 @@ func (s *AdminService) ListTenantContacts(ctx context.Context, filters AdminTena
 // GetTenantContact returns a single tenant contact by ID.
 func (s *AdminService) GetTenantContact(ctx context.Context, id uuid.UUID) (AdminTenantContactView, error) {
 	return s.tenantContacts.GetTenantContact(ctx, id)
+}
+
+// ListPropertyContacts returns a paginated list of property contacts for a property.
+// Sort is fixed to created_at ASC; there is no client-controlled sort.
+func (s *AdminService) ListPropertyContacts(ctx context.Context, filters AdminPropertyContactFilters) ([]AdminPropertyContactView, int64, error) {
+	filters.Limit, filters.Offset = normalizePagination(filters.Limit, filters.Offset)
+	return s.propertyContacts.ListPropertyContacts(ctx, filters)
 }
 
 // ListUserOperations returns a paginated list of a user's operations.

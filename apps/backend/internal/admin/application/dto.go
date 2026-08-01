@@ -82,6 +82,11 @@ type AdminTenantContactView struct {
 	OwnerPhone string
 }
 
+// AdminPropertyContactView is a read-only view of a property contact for admin operations.
+type AdminPropertyContactView struct {
+	propertiesdomain.PropertyContact
+}
+
 // AdminOperationView is a read-only view of a financial operation for admin operations.
 type AdminOperationView struct {
 	ID                   uuid.UUID
@@ -149,6 +154,14 @@ type AdminTenantContactFilters struct {
 	Offset  int
 	Sort    string
 	Order   string
+}
+
+// AdminPropertyContactFilters carries filters for the admin property contacts list.
+// Sort is fixed (created_at ASC) and not configurable.
+type AdminPropertyContactFilters struct {
+	PropertyID uuid.UUID
+	Limit      int
+	Offset     int
 }
 
 // AdminOperationFilters carries optional filters for the admin operations list.

@@ -20,3 +20,14 @@ RETURNING *;
 -- name: DeletePropertyContact :exec
 DELETE FROM property_contacts
 WHERE id = $1 AND owner_id = $2;
+
+-- name: ListPropertyContactsAdmin :many
+SELECT *
+FROM property_contacts
+WHERE property_id = sqlc.arg('property_id')::uuid
+ORDER BY created_at ASC, id ASC
+LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
+
+-- name: CountPropertyContactsAdmin :one
+SELECT COUNT(*) FROM property_contacts
+WHERE property_id = sqlc.arg('property_id')::uuid;

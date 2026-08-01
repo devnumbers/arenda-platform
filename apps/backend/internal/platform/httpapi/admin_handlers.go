@@ -357,6 +357,32 @@ func (h *AdminHandlers) ListAdminTenantContacts(w http.ResponseWriter, r *http.R
 	})
 }
 
+// ListAdminPropertyContacts implements GET /admin/property-contacts.
+func (h *AdminHandlers) ListAdminPropertyContacts(w http.ResponseWriter, r *http.Request, params openapi.ListAdminPropertyContactsParams) {
+	filters := adminapp.AdminPropertyContactFilters{Limit: 20, Offset: 0}
+	optInt(&filters.Limit, params.Limit)
+	optInt(&filters.Offset, params.Offset)
+	if params.PropertyId != nil {
+		filters.PropertyID = *params.PropertyId
+	}
+
+	views, total, err := h.adminService.ListPropertyContacts(r.Context(), filters)
+	if err != nil {
+		h.handleAdminError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.AdminPropertyContact, 0, len(views))
+	for _, v := range views {
+		items = append(items, adminPropertyContactResponse(v))
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, openapi.AdminPropertyContactsResponse{
+		Items: items,
+		Total: int(total),
+	})
+}
+
 // GetAdminTenantContact implements GET /admin/tenant-contacts/{id}.
 func (h *AdminHandlers) GetAdminTenantContact(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	view, err := h.adminService.GetTenantContact(r.Context(), id)
@@ -750,6 +776,17 @@ func adminTenantContactResponse(view adminapp.AdminTenantContactView) openapi.Ad
 		resp.Comment = view.Comment
 	}
 	return resp
+}
+
+func adminPropertyContactResponse(view adminapp.AdminPropertyContactView) openapi.AdminPropertyContact {
+	return openapi.AdminPropertyContact{
+		Id:         view.ID,
+		PropertyId: view.PropertyID,
+		Name:       view.Name,
+		Phone:      view.Phone,
+		CreatedAt:  view.CreatedAt,
+		UpdatedAt:  view.UpdatedAt,
+	}
 }
 
 func adminOperationResponse(view adminapp.AdminOperationView) openapi.AdminOperation {
