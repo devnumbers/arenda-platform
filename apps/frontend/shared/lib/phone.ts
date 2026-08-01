@@ -23,5 +23,5 @@ export function normalizePhone(formatted: string): string {
 
 export function isPhoneValid(formatted: string): boolean {
   const normalized = normalizePhone(formatted);
-  return /^\+79\d{9}$/.test(normalized);
+  return /^\+7\d{10}$/.test(normalized);
 }
