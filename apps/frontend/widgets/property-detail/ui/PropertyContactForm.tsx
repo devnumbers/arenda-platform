@@ -29,7 +29,7 @@ export function PropertyContactForm({
                                         onSubmit,
                                     }: PropertyContactFormProps): JSX.Element {
     const [name, setName] = useState('');
-    const [phone, setPhone] = useState(formatPhoneInput(''));
+    const [phone, setPhone] = useState('');
     const [isSubmitAttempted, setIsSubmitAttempted] = useState(false);
 
     const isNameValid = name.trim() !== '';
