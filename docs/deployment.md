@@ -373,65 +373,32 @@ esac
 ## Observability
 
 Централизованная наблюдаемость stage/prod (логи, трейсы, метрики, алерты)
-работает на Uptrace self-hosted на этом же сервере; решение зафиксировано в
-`docs/adr/0021-centralized-observability-uptrace.md`. Здесь — краткий обзор;
-полная инструкция по установке и настройке — `observability/README.md`.
+работает на Uptrace self-hosted. Стек выделен в отдельный репозиторий —
+[devnumbers/observability](https://github.com/devnumbers/observability) —
+и разворачивается на сервере из `/opt/observability` (compose-проект и
+сеть `observability`). Установка, настройка, алерты и процедуры
+обслуживания описаны в README того репозитория.
 
-- Стек живёт в отдельном репозитории devnumbers/observability и
-  разворачивается из `/opt/observability` (compose-проект и сеть
-  `observability`) — отдельно от deploy-каталогов stage/prod. Сервисы: ClickHouse, PostgreSQL,
-  Uptrace, Redis, Vector, OTel Collector; все порты привязаны к `127.0.0.1`.
-- Что собирается: stdout всех контейнеров (структурированные slog-логи backend
-  остаются logging source of truth, локальный json-file driver и `docker logs`
-  сохраняются), access-логи Caddy (`/var/log/caddy/access.log`), лог сбоев
-  healthcheck-cron (`/var/log/arenda/healthcheck.log`), JS-ошибки браузера
-  (frontend/admin/landing шлют их в backend на публичный `POST /client-errors`,
-  backend логирует в stdout), OTel-трейсы и метрики backend обоих окружений,
-  метрики хоста и контейнеров (OTel Collector: hostmetrics + docker_stats).
-- Backend подключается к внешней docker-сети `observability` и отправляет
-  трейсы/метрики по OTLP на `http://uptrace:14317` (порт наружу не
-  публикуется). Блок `OTEL_*` входит в `ENV_FILE`; при каждом деплое пайплайн
-  обновляет `service.version` в `OTEL_RESOURCE_ATTRIBUTES` — это deployment
-  marker в Uptrace.
-- UI: `https://logs.rentlee.ru` — отдельный блок в серверном Caddyfile:
-  `basic_auth` (bcrypt-хэш, учётка хранится только в Caddyfile на сервере) +
-  `reverse_proxy 127.0.0.1:14318`. DNS A-запись добавляет владелец. Запасной
-  доступ — SSH-туннель `ssh -L 14318:127.0.0.1:14318 <server>`.
-- Алерты на email отправляются через SMTP (секция `mailer.smtp` в
-  `observability/uptrace.yml`, креды — в `.env.obs`); канал и получатели
-  настраиваются в UI Uptrace (Alerting → Channels), в репо не хранятся.
+Как проект подключён к стеку (потребительская сторона):
 
-<!-- TODO(#83): блок ниже описывает старый стек (`/opt/arenda/obs`,
-`docker-compose.obs.yml`); актуальные команды — в репо devnumbers/observability
-(`/opt/observability`). Переписать при выводе старого стека. -->
+- Backend обоих окружений подключается к внешней docker-сети
+  `observability` и отправляет трейсы и метрики по OTLP на
+  `http://uptrace:14317` (порт наружу не публикуется).
+- Блок `OTEL_*` (`OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`,
+  `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`,
+  `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_TRACES_SAMPLER_ARG`) входит в
+  `ENV_FILE` каждого окружения. При каждом деплое пайплайн обновляет
+  `service.version` в `OTEL_RESOURCE_ATTRIBUTES` — это deployment marker
+  в Uptrace.
+- Логи: slog stdout остаётся logging source of truth; Vector собирает
+  stdout контейнеров, access-логи Caddy и лог healthcheck-cron и шлёт в
+  Uptrace. Локальный json-file driver и `docker logs` сохраняются.
+- Healthcheck-cron (`tools/healthcheck/healthcheck.sh`) пишет JSON при
+  сбое в `/var/log/arenda/healthcheck.log`, откуда Vector забирает запись.
 
-Команды на сервере в `/opt/arenda/obs` (Makefile туда не копируется — прямые
-вызовы compose, как в `observability/README.md`):
-
-```bash
-cd /opt/arenda/obs
-docker compose -f docker-compose.obs.yml --env-file .env.obs up -d    # поднять стек
-docker compose -f docker-compose.obs.yml --env-file .env.obs down     # остановить стек
-docker compose -f docker-compose.obs.yml --env-file .env.obs ps       # статус сервисов
-docker compose -f docker-compose.obs.yml --env-file .env.obs logs -f  # логи стека
-```
-
-Те же действия доступны как make-таргеты (`make obs-up`, `make obs-down`,
-`make obs-ps`, `make obs-logs`) из любого checkout'а репозитория, где рядом
-с `docker-compose.obs.yml` есть `.env.obs`.
-
-Smoke checks после выкатки стека (на сервере, из `/opt/arenda/obs`):
-
-```bash
-docker compose -f docker-compose.obs.yml --env-file .env.obs ps      # все сервисы healthy (otelcol — running, healthcheck у него нет)
-curl -fsS -o /dev/null http://127.0.0.1:14318                        # UI Uptrace отвечает локально
-test "$(curl -sS -o /dev/null -w '%{http_code}' https://logs.rentlee.ru)" = "401"  # basic_auth требует учётку
-```
-
-Дальше — визуально в UI: логи контейнеров смотрятся в разделе Traces
-(/spans; отдельного /logs в Uptrace 2.0.3 нет) и фильтруются по атрибутам
-`deployment_environment_name`/`service_name`, трейсы запросов появляются
-после вызовов API, графики метрик хоста и контейнеров наполняются.
+Решение об observability зафиксировано в
+`docs/adr/0021-centralized-observability-uptrace.md` (superseded —
+перенесено в devnumbers/observability, ADR 0001).
 
 ## T-Bank TLS Certificates
 

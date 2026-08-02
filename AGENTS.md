@@ -25,7 +25,7 @@ The main Kimi Code agent is always an **Orchestrator**. It does not write, edit,
 - Product docs: `docs/`; domain glossary: `CONTEXT.md`; architecture decisions: `docs/adr/`.
 - Local infrastructure runs through `docker-compose.local.yml`; run the backend on the host with Go.
 - Stage/prod deploy: GitHub Actions on a self-hosted runner builds images, pushes them to GHCR and deploys by digest over SSH (`docs/adr/0024-deploy-pipeline-ghcr-runner.md`). Environment values live in GitHub Environments (`ENV_FILE` secret, key set pinned to `.env.<env>.example`); nothing is built or hand-edited on the server. Operational procedures (bootstrap, secrets map, backup/restore, rollback) — `docs/deployment.md`.
-- Observability: the self-hosted Uptrace stack collecting stage/prod logs, traces, and metrics with email alerts now lives in the devnumbers/observability repo (compose project `observability`, server directory `/opt/observability`); the local `docker-compose.obs.yml` + `observability/` (compose project `arenda-obs`) are being retired in #83 — see `docs/adr/0021-centralized-observability-uptrace.md` and `observability/README.md`.
+- Observability: the self-hosted Uptrace stack collecting stage/prod logs, traces, and metrics with email alerts lives in the devnumbers/observability repo (compose project `observability`, server directory `/opt/observability`). Consumer-side connection for stage/prod is documented in `docs/deployment.md` (section "Observability"); the decision history is in `docs/adr/0021-centralized-observability-uptrace.md` (superseded — transferred to devnumbers/observability ADR 0001).
 
 ## Work Rules
 
@@ -78,10 +78,6 @@ cp .env.example .env
 # Fill required local values in .env before backend-run.
 make local-infra-up
 make local-infra-down
-make obs-up
-make obs-down
-make obs-ps
-make obs-logs
 make backend-run
 make backend-lint
 make admin-install

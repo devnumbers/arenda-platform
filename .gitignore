@@ -9,7 +9,6 @@
 !.env.perf.example
 !.env.stage.example
 !.env.prod.example
-!.env.obs.example
 *.exe
 api
 !apps/frontend/features/*/api/
@@ -17,9 +16,6 @@ node_modules/
 apps/landing/dist
 *.log
 .tmp
-
-# Local copy of the Uptrace config (created from observability/uptrace.yml.example)
-observability/uptrace.yml
 
 # Bruno runtime environment (contains session ids and dynamic object ids)
 tools/bruno/arenda-api/environments/Local.bru
