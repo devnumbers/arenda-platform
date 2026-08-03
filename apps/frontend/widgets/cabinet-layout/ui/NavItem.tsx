@@ -14,6 +14,7 @@ import {
   BottomObjects,
   BottomWallet,
   BottomProfile,
+  Calendar,
 } from '@/shared/assets/icons';
 import styles from './NavItem.module.css';
 
@@ -39,6 +40,7 @@ const iconMap: Record<string, IconComponent> = {
   BottomObjects,
   BottomWallet,
   BottomProfile,
+  Calendar,
 };
 
 export function NavItem({

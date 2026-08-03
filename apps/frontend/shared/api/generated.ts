@@ -661,6 +661,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reminders/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCalendarReminders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reminders/{reminderId}": {
         parameters: {
             query?: never;
@@ -2136,6 +2152,45 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        CalendarRemindersResponse: {
+            items: components["schemas"]["CalendarReminderItem"][];
+        };
+        /** @description One calendar entry — a free, operation, or system reminder projected into the requested date range. Free reminders are expanded from their template on read (independent of materialization horizon) and carry no status; operation/lease reminders come from the reminders table with a status. Orphan reminders (property deleted in detach mode) have property_id = null and has_property = false. */
+        CalendarReminderItem: {
+            /**
+             * Format: uuid
+             * @description For free reminders — the free_reminder template id (same id repeats for each occurrence of a periodic reminder). For operation/system — the concrete reminder row id.
+             */
+            id: string;
+            /** @enum {string} */
+            type: "free" | "operation" | "system";
+            /** Format: date-time */
+            scheduled_at: string;
+            title: string;
+            /** Format: uuid */
+            property_id?: string | null;
+            /** @description Resolved property name; null means "Без объекта" (orphan). */
+            property_name?: string | null;
+            has_property: boolean;
+            /**
+             * @description Present only for operation/system; null for free.
+             * @enum {string|null}
+             */
+            status?: "pending" | "sent" | null;
+            /** @enum {string|null} */
+            event_type?: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder" | null;
+            /** Format: uuid */
+            operation_id?: string | null;
+            /** Format: uuid */
+            lease_id?: string | null;
+            /** Format: uuid */
+            free_reminder_id?: string | null;
+            /**
+             * @description Present only for free reminders.
+             * @enum {string|null}
+             */
+            periodicity?: "once" | "daily" | "weekly" | "monthly" | "yearly" | null;
         };
         ReminderCreateRequest: {
             /** Format: date */
@@ -3934,6 +3989,31 @@ export interface operations {
                     "application/json": components["schemas"]["RemindersResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listCalendarReminders: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Calendar reminders in range */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarRemindersResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
