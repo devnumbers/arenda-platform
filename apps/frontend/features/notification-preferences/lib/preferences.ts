@@ -28,6 +28,11 @@ export const NOTIFICATION_OPTIONS: {
     label: 'Аренда требует действия',
     description: 'Аренда закончилась и ждёт решения',
   },
+  {
+    eventType: 'free_reminder',
+    label: 'Свои напоминания',
+    description: 'Созданные вами напоминания о любых датах по объектам',
+  },
 ];
 
 export type NotificationPreferencesState = Record<NotificationEventType, boolean>;
@@ -40,6 +45,7 @@ export function buildInitialPreferences(
     operation_overdue: true,
     lease_expiring: true,
     lease_requires_action: true,
+    free_reminder: true,
   };
   for (const preference of preferences) {
     state[preference.eventType] = preference.allowed;

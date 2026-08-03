@@ -37,7 +37,8 @@ export type NotificationEventType =
   | 'operation_due'
   | 'operation_overdue'
   | 'lease_expiring'
-  | 'lease_requires_action';
+  | 'lease_requires_action'
+  | 'free_reminder';
 
 export type NotificationPreference = {
   readonly eventType: NotificationEventType;
