@@ -290,6 +290,42 @@ func (r *ReminderRepository) ListUpcomingFreeRemindersByProperty(ctx context.Con
 	return out, nil
 }
 
+// ListCalendarByOwner returns non-cancelled, non-skipped operation and system
+// reminders for an owner in [from, to), each joined with its property name
+// (nil for orphans). Ordered by scheduled_at ascending.
+func (r *ReminderRepository) ListCalendarByOwner(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]domain.CalendarReminder, error) {
+	rows, err := r.q().ListCalendarRemindersByOwner(ctx, postgres.ListCalendarRemindersByOwnerParams{
+		OwnerID:  pgconv.UUIDToPgtype(ownerID),
+		FromTime: pgtype.Timestamptz{Time: from, Valid: true},
+		ToTime:   pgtype.Timestamptz{Time: to, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list calendar reminders: %w", err)
+	}
+
+	out := make([]domain.CalendarReminder, len(rows))
+	for i, row := range rows {
+		rem := toDomain(row.Reminder)
+		status := normalizeCalendarStatus(rem.Status)
+		eventType := rem.EventType
+		out[i] = domain.CalendarReminder{
+			ID:             rem.ID,
+			Type:           domain.CalendarReminderTypeFromTarget(rem.TargetType),
+			ScheduledAt:    rem.ScheduledAt,
+			Title:          rem.MessageTitle,
+			PropertyID:     rem.PropertyID,
+			PropertyName:   pgconv.TextToPtrString(row.PropertyName),
+			HasProperty:    row.PropertyName.Valid,
+			Status:         status,
+			EventType:      &eventType,
+			OperationID:    rem.OperationID,
+			LeaseID:        rem.LeaseID,
+			FreeReminderID: rem.FreeReminderID,
+		}
+	}
+	return out, nil
+}
+
 // MarkReminderSending transitions a pending reminder to sending and returns the updated row.
 func (r *ReminderRepository) MarkReminderSending(ctx context.Context, id uuid.UUID) (domain.Reminder, error) {
 	row, err := r.q().MarkReminderSending(ctx, pgconv.UUIDToPgtype(id))
@@ -649,6 +685,22 @@ func toDomain(row postgres.Reminder) domain.Reminder {
 		MessageBody:          row.MessageBody,
 		CreatedAt:            pgconv.TimestamptzToTime(row.CreatedAt),
 		UpdatedAt:            pgconv.TimestamptzToTime(row.UpdatedAt),
+	}
+}
+
+// normalizeCalendarStatus collapses 'sending' to 'pending' for the calendar
+// view and returns nil for terminal/hidden statuses. It returns a pointer so
+// the caller can distinguish "no status" (free) from a concrete value.
+func normalizeCalendarStatus(s domain.ReminderStatus) *domain.ReminderStatus {
+	switch s {
+	case domain.ReminderPending, domain.ReminderSending:
+		v := domain.ReminderPending
+		return &v
+	case domain.ReminderSent:
+		v := domain.ReminderSent
+		return &v
+	default:
+		return nil
 	}
 }
 

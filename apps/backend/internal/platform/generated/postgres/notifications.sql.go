@@ -357,6 +357,69 @@ func (q *Queries) IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID)
 	return exists, err
 }
 
+const listCalendarRemindersByOwner = `-- name: ListCalendarRemindersByOwner :many
+SELECT r.id, r.owner_id, r.target_type, r.operation_id, r.recurring_operation_id, r.lease_id, r.property_id, r.event_type, r.status, r.scheduled_at, r.sent_at, r.failed_attempts, r.next_attempt_at, r.message_title, r.message_body, r.created_at, r.updated_at, r.free_reminder_id, p.name AS property_name
+FROM reminders r
+LEFT JOIN properties p ON p.id = r.property_id
+WHERE r.owner_id = $1
+  AND r.target_type IN ('operation', 'recurring_operation', 'lease')
+  AND r.status NOT IN ('cancelled', 'skipped')
+  AND r.scheduled_at >= $2
+  AND r.scheduled_at < $3
+ORDER BY r.scheduled_at ASC
+`
+
+type ListCalendarRemindersByOwnerParams struct {
+	OwnerID  pgtype.UUID        `json:"owner_id"`
+	FromTime pgtype.Timestamptz `json:"from_time"`
+	ToTime   pgtype.Timestamptz `json:"to_time"`
+}
+
+type ListCalendarRemindersByOwnerRow struct {
+	Reminder     Reminder    `json:"reminder"`
+	PropertyName pgtype.Text `json:"property_name"`
+}
+
+func (q *Queries) ListCalendarRemindersByOwner(ctx context.Context, arg ListCalendarRemindersByOwnerParams) ([]ListCalendarRemindersByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, listCalendarRemindersByOwner, arg.OwnerID, arg.FromTime, arg.ToTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCalendarRemindersByOwnerRow{}
+	for rows.Next() {
+		var i ListCalendarRemindersByOwnerRow
+		if err := rows.Scan(
+			&i.Reminder.ID,
+			&i.Reminder.OwnerID,
+			&i.Reminder.TargetType,
+			&i.Reminder.OperationID,
+			&i.Reminder.RecurringOperationID,
+			&i.Reminder.LeaseID,
+			&i.Reminder.PropertyID,
+			&i.Reminder.EventType,
+			&i.Reminder.Status,
+			&i.Reminder.ScheduledAt,
+			&i.Reminder.SentAt,
+			&i.Reminder.FailedAttempts,
+			&i.Reminder.NextAttemptAt,
+			&i.Reminder.MessageTitle,
+			&i.Reminder.MessageBody,
+			&i.Reminder.CreatedAt,
+			&i.Reminder.UpdatedAt,
+			&i.Reminder.FreeReminderID,
+			&i.PropertyName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDueReminders = `-- name: ListDueReminders :many
 SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
 WHERE status = 'pending'

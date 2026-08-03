@@ -34,3 +34,10 @@ SELECT * FROM free_reminders
 WHERE owner_id = $1 AND property_id = $2
 ORDER BY trigger_at ASC
 LIMIT $3;
+
+-- name: ListAllFreeRemindersByOwner :many
+SELECT fr.*, p.name AS property_name
+FROM free_reminders fr
+LEFT JOIN properties p ON p.id = fr.property_id
+WHERE fr.owner_id = sqlc.arg('owner_id')
+ORDER BY fr.trigger_at ASC;

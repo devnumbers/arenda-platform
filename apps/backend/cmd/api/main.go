@@ -275,6 +275,7 @@ func run() error {
 
 	freeReminderRepo := notificationspg.NewFreeReminderRepository(db)
 	freeReminderService := notificationsapp.NewFreeReminderService(freeReminderRepo, platformpostgres.NewBeginner(pool, appLogger), clock.Real{}, tzResolver)
+	calendarService := notificationsapp.NewCalendarService(reminderRepo, freeReminderRepo, tzResolver)
 
 	profileService := identityapp.NewProfileService(
 		identityUserRepo,
@@ -493,6 +494,7 @@ func run() error {
 		RecurringOperations:      recurringOperationService,
 		Categories:               categoryService,
 		Reminders:                reminderService,
+		Calendar:                 calendarService,
 		FreeReminders:            freeReminderService,
 		NotificationPreferences:  preferenceService,
 		Popups:                   popupService,

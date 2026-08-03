@@ -47,6 +47,7 @@ type Deps struct {
 	RecurringOperations      *leasesapp.RecurringOperationService
 	Categories               *leasesapp.CategoryService
 	Reminders                *notificationsapp.ReminderService
+	Calendar                 *notificationsapp.CalendarService
 	FreeReminders            *notificationsapp.FreeReminderService
 	NotificationPreferences  *notificationsapp.PreferenceService
 	Popups                   *popupsapp.PopupService
@@ -127,7 +128,7 @@ func New(deps Deps) http.Handler {
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Categories, deps.Properties, deps.Logger)
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Categories, deps.Logger)
 	categoryHandlers := NewCategoryHandlers(deps.Categories, deps.Logger)
-	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
+	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Calendar, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
 	freeReminderHandlers := NewFreeReminderHandlers(deps.FreeReminders, deps.Reminders, deps.Properties, deps.Clock, deps.Logger)
 	notificationPreferenceHandlers := NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	popupHandlers := NewPopupHandlers(deps.Popups, deps.Logger)

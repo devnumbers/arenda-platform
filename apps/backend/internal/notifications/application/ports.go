@@ -31,6 +31,11 @@ type ReminderRepository interface {
 	// so periodic occurrences are included. 'from' bounds the lower edge of the
 	// window (typically now).
 	ListUpcomingFreeRemindersByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error)
+	// ListCalendarByOwner returns non-cancelled, non-skipped operation and
+	// system reminders for an owner in the half-open time window [from, to),
+	// each with its resolved property name (nil for orphans). Ordered by
+	// scheduled_at ascending.
+	ListCalendarByOwner(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]domain.CalendarReminder, error)
 	MarkReminderSending(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
 	// MarkSent marks a reminder that is currently sending as sent. It is used
 	// after a notification has been dispatched successfully.
@@ -76,6 +81,10 @@ type FreeReminderRepository interface {
 	Delete(ctx context.Context, ownerID, id uuid.UUID) error
 	ListByOwner(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]domain.FreeReminder, error)
 	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, limit int) ([]domain.FreeReminder, error)
+	// ListTemplatesByOwner returns all free reminder templates for an owner
+	// with their resolved property name (nullable for orphans), ordered by
+	// trigger_at ascending. Used by the calendar read to expand occurrences.
+	ListTemplatesByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.FreeReminderTemplate, error)
 	// SaveFreeReminder inserts a concrete reminder row materialized from a free
 	// reminder template.
 	SaveFreeReminder(ctx context.Context, rm domain.Reminder) error

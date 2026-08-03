@@ -216,3 +216,10 @@ func advanceMonth(t time.Time) time.Time {
 func lastDayOfMonth(year int, month time.Month) int {
 	return time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
 }
+
+// FreeReminderTemplate is a free reminder template along with its resolved
+// property name. It is a read projection used by the calendar endpoint.
+type FreeReminderTemplate struct {
+	FreeReminder
+	PropertyName *string // nil when the property was detached (orphan)
+}

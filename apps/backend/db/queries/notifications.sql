@@ -226,3 +226,14 @@ WHERE r.owner_id = $1
   AND r.scheduled_at >= $3
 ORDER BY r.scheduled_at ASC
 LIMIT $4;
+
+-- name: ListCalendarRemindersByOwner :many
+SELECT sqlc.embed(r), p.name AS property_name
+FROM reminders r
+LEFT JOIN properties p ON p.id = r.property_id
+WHERE r.owner_id = sqlc.arg('owner_id')
+  AND r.target_type IN ('operation', 'recurring_operation', 'lease')
+  AND r.status NOT IN ('cancelled', 'skipped')
+  AND r.scheduled_at >= sqlc.arg('from_time')
+  AND r.scheduled_at < sqlc.arg('to_time')
+ORDER BY r.scheduled_at ASC;

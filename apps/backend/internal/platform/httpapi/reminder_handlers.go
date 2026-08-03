@@ -15,6 +15,7 @@ import (
 // ReminderHandlers implements the generated reminder endpoints.
 type ReminderHandlers struct {
 	svc        *notificationsapp.ReminderService
+	calendar   *notificationsapp.CalendarService
 	operations *leasesapp.OperationService
 	recurring  *leasesapp.RecurringOperationService
 	leases     *leasesapp.LeaseService
@@ -24,6 +25,7 @@ type ReminderHandlers struct {
 // NewReminderHandlers creates HTTP handlers for the reminders API.
 func NewReminderHandlers(
 	svc *notificationsapp.ReminderService,
+	calendar *notificationsapp.CalendarService,
 	operations *leasesapp.OperationService,
 	recurring *leasesapp.RecurringOperationService,
 	leases *leasesapp.LeaseService,
@@ -31,6 +33,7 @@ func NewReminderHandlers(
 ) *ReminderHandlers {
 	return &ReminderHandlers{
 		svc:        svc,
+		calendar:   calendar,
 		operations: operations,
 		recurring:  recurring,
 		leases:     leases,
@@ -118,6 +121,33 @@ func (h *ReminderHandlers) ListReminders(w http.ResponseWriter, r *http.Request,
 	writeJSON(r.Context(), w, http.StatusOK, openapi.RemindersResponse{Items: items})
 }
 
+// ListCalendarReminders implements GET /reminders/calendar.
+func (h *ReminderHandlers) ListCalendarReminders(w http.ResponseWriter, r *http.Request, params openapi.ListCalendarRemindersParams) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	if !params.To.After(params.From.Time) {
+		writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Bad request", "Диапазон дат некорректен: 'to' должно быть позже 'from'"))
+		return
+	}
+
+	items, err := h.calendar.ListCalendar(r.Context(), ownerID, params.From.Time, params.To.Time)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to list calendar reminders", slog.String("error", sanitizeError(err)))
+		writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
+		return
+	}
+
+	resp := make([]openapi.CalendarReminderItem, len(items))
+	for i, item := range items {
+		resp[i] = calendarReminderResponse(item)
+	}
+	writeJSON(r.Context(), w, http.StatusOK, openapi.CalendarRemindersResponse{Items: resp})
+}
+
 // UpdateReminder implements PATCH /reminders/{reminderId}.
 func (h *ReminderHandlers) UpdateReminder(w http.ResponseWriter, r *http.Request, reminderID uuid.UUID) {
 	ownerID, ok := ownerIDFromContext(r)
@@ -194,4 +224,34 @@ func reminderResponse(r notificationsdomain.Reminder) openapi.ReminderResponse {
 		CreatedAt:            r.CreatedAt,
 		UpdatedAt:            r.UpdatedAt,
 	}
+}
+
+func calendarReminderResponse(item notificationsdomain.CalendarReminder) openapi.CalendarReminderItem {
+	resp := openapi.CalendarReminderItem{
+		Id:             item.ID,
+		Type:           openapi.CalendarReminderItemType(item.Type),
+		ScheduledAt:    item.ScheduledAt,
+		Title:          item.Title,
+		PropertyId:     item.PropertyID,
+		PropertyName:   item.PropertyName,
+		HasProperty:    item.HasProperty,
+		OperationId:    item.OperationID,
+		LeaseId:        item.LeaseID,
+		FreeReminderId: item.FreeReminderID,
+	}
+
+	if item.Status != nil {
+		s := openapi.CalendarReminderItemStatus(*item.Status)
+		resp.Status = &s
+	}
+	if item.EventType != nil {
+		e := openapi.CalendarReminderItemEventType(*item.EventType)
+		resp.EventType = &e
+	}
+	if item.Periodicity != nil {
+		p := openapi.CalendarReminderItemPeriodicity(*item.Periodicity)
+		resp.Periodicity = &p
+	}
+
+	return resp
 }

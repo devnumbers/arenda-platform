@@ -144,6 +144,32 @@ func (r *FreeReminderRepository) ListByProperty(ctx context.Context, ownerID, pr
 	return out, nil
 }
 
+// ListTemplatesByOwner returns all free reminder templates for an owner with
+// their resolved property name (nullable for orphans), ordered by trigger_at.
+func (r *FreeReminderRepository) ListTemplatesByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.FreeReminderTemplate, error) {
+	rows, err := r.q().ListAllFreeRemindersByOwner(ctx, pgconv.UUIDToPgtype(ownerID))
+	if err != nil {
+		return nil, fmt.Errorf("list all free reminders by owner: %w", err)
+	}
+	out := make([]domain.FreeReminderTemplate, len(rows))
+	for i, row := range rows {
+		out[i] = domain.FreeReminderTemplate{
+			FreeReminder: domain.FreeReminder{
+				ID:          pgconv.UUIDFromPgtype(row.ID),
+				OwnerID:     pgconv.UUIDFromPgtype(row.OwnerID),
+				PropertyID:  pgconv.UUIDFromPgtype(row.PropertyID),
+				Title:       row.Title,
+				TriggerAt:   pgconv.TimestamptzToTime(row.TriggerAt),
+				Periodicity: domain.FreeReminderPeriodicity(row.Periodicity),
+				CreatedAt:   pgconv.TimestamptzToTime(row.CreatedAt),
+				UpdatedAt:   pgconv.TimestamptzToTime(row.UpdatedAt),
+			},
+			PropertyName: pgconv.TextToPtrString(row.PropertyName),
+		}
+	}
+	return out, nil
+}
+
 // SaveFreeReminder inserts a concrete reminder row materialized from a free
 // reminder template (target_type='free', event_type='free_reminder').
 func (r *FreeReminderRepository) SaveFreeReminder(ctx context.Context, rm domain.Reminder) error {

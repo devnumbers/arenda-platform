@@ -76,6 +76,10 @@ func (r *fakeReminderRepoForWorker) ListUpcomingFreeRemindersByProperty(context.
 	return nil, nil
 }
 
+func (r *fakeReminderRepoForWorker) ListCalendarByOwner(context.Context, uuid.UUID, time.Time, time.Time) ([]domain.CalendarReminder, error) {
+	return nil, nil
+}
+
 func (r *fakeReminderRepoForWorker) MarkReminderSending(context.Context, uuid.UUID) (domain.Reminder, error) {
 	return domain.Reminder{}, nil
 }

@@ -100,6 +100,56 @@ func (q *Queries) GetFreeReminderByIDAndOwner(ctx context.Context, arg GetFreeRe
 	return i, err
 }
 
+const listAllFreeRemindersByOwner = `-- name: ListAllFreeRemindersByOwner :many
+SELECT fr.id, fr.owner_id, fr.property_id, fr.title, fr.trigger_at, fr.periodicity, fr.created_at, fr.updated_at, p.name AS property_name
+FROM free_reminders fr
+LEFT JOIN properties p ON p.id = fr.property_id
+WHERE fr.owner_id = $1
+ORDER BY fr.trigger_at ASC
+`
+
+type ListAllFreeRemindersByOwnerRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	OwnerID      pgtype.UUID        `json:"owner_id"`
+	PropertyID   pgtype.UUID        `json:"property_id"`
+	Title        string             `json:"title"`
+	TriggerAt    pgtype.Timestamptz `json:"trigger_at"`
+	Periodicity  string             `json:"periodicity"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	PropertyName pgtype.Text        `json:"property_name"`
+}
+
+func (q *Queries) ListAllFreeRemindersByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListAllFreeRemindersByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, listAllFreeRemindersByOwner, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllFreeRemindersByOwnerRow{}
+	for rows.Next() {
+		var i ListAllFreeRemindersByOwnerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.Title,
+			&i.TriggerAt,
+			&i.Periodicity,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PropertyName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listFreeRemindersByOwner = `-- name: ListFreeRemindersByOwner :many
 SELECT id, owner_id, property_id, title, trigger_at, periodicity, created_at, updated_at FROM free_reminders
 WHERE owner_id = $1
