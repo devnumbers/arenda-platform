@@ -4,4 +4,5 @@ export {
   useDeleteFreeReminder,
   useFreeReminder,
   useUpdateFreeReminder,
+  useUpcomingFreeReminders,
 } from './hooks';

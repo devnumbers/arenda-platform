@@ -15,12 +15,26 @@ import type { components } from '@/shared/api/generated';
 type FreeReminderResponse = components['schemas']['FreeReminderResponse'];
 type FreeReminderCreateRequest = components['schemas']['FreeReminderCreateRequest'];
 type FreeReminderUpdateRequest = components['schemas']['FreeReminderUpdateRequest'];
+type UpcomingFreeRemindersResponse = components['schemas']['UpcomingFreeRemindersResponse'];
 
 export function useFreeReminder(id: string): UseQueryResult<FreeReminderResponse, ApiError> {
   return useQuery({
     queryKey: freeReminderKeys.detail(id),
     queryFn: () => apiClient<FreeReminderResponse>(`/free-reminders/${id}`),
     enabled: Boolean(id),
+  });
+}
+
+export function useUpcomingFreeReminders(
+  propertyId: string,
+): UseQueryResult<UpcomingFreeRemindersResponse, ApiError> {
+  return useQuery({
+    queryKey: freeReminderKeys.upcoming(propertyId),
+    queryFn: () =>
+      apiClient<UpcomingFreeRemindersResponse>(
+        `/properties/${propertyId}/free-reminders/upcoming?limit=3`,
+      ),
+    enabled: Boolean(propertyId),
   });
 }
 
