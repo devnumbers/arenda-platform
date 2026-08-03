@@ -1,0 +1,67 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--color-text);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fieldLabel {
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--color-text);
+}
+
+.fieldError {
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+  color: var(--color-error);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  min-height: 40px;
+}
+
+.labeledInput {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.labeledInput > :first-child {
+  flex: 1 1 auto;
+}
+
+.unit {
+  flex: 0 0 auto;
+  margin-top: 26px;
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .chip {
+    min-height: 44px;
+  }
+}

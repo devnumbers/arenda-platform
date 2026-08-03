@@ -19,12 +19,15 @@ export type PropertyPhoto = {
   readonly url: string;
 };
 
+export type PropertyAttributes = Readonly<Record<string, string | number>>;
+
 export type Property = {
   readonly id: string;
   readonly name: string;
   readonly type: PropertyType;
   readonly address: string;
   readonly description?: string;
+  readonly attributes: PropertyAttributes;
   readonly status: PropertyStatus;
   readonly occupancy: Occupancy;
   readonly photos?: PropertyPhoto[];

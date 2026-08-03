@@ -5,6 +5,7 @@ import {useRouter} from 'next/navigation';
 import {ROUTES} from '@/shared/config/routes';
 import {buildReturnUrl, goBack} from '@/shared/lib/navigation';
 import {useCreateProperty} from '@/features/properties/api';
+import {filterByType} from '@/features/property-attributes';
 import {
     clearPropertyCreateDraft,
     type CreateStep,
@@ -12,6 +13,7 @@ import {
 } from '@/widgets/properties/lib/use-property-create-draft';
 import {WizardHeader} from '@/shared/ui/wizard-header';
 import {PropertyAddressStep} from './PropertyAddressStep';
+import {PropertyAttributesStep} from './PropertyAttributesStep';
 import {PropertyInfoStep} from './PropertyInfoStep';
 import {PropertySuccessStep} from './PropertySuccessStep';
 import {PropertyTypeStep} from './PropertyTypeStep';
@@ -28,7 +30,7 @@ export function PropertyCreateWizard({returnTo}: PropertyCreateWizardProps): JSX
     const createProperty = useCreateProperty();
 
     useEffect(() => {
-        if (draft.step !== 3) return;
+        if (draft.step !== 3 && draft.step !== 4) return;
 
         if (!draft.type) {
             setDraft((prev) => ({...prev, step: 1}));
@@ -55,12 +57,18 @@ export function PropertyCreateWizard({returnTo}: PropertyCreateWizardProps): JSX
     };
 
     const handleCreate = async () => {
-        const {name, type, address, description} = draft;
+        const {name, type, address, description, attributes} = draft;
 
         if (!type || !address) {
             router.replace(ROUTES.properties);
             return;
         }
+
+        // Drop attribute keys that do not belong to the selected type's catalog:
+        // the user may have filled characteristics for another type on step 1
+        // before switching. Lossless on the client side — we just don't send
+        // foreign keys (the backend is the source of truth).
+        const filteredAttributes = attributes ? filterByType(type, attributes) : undefined;
 
         setIsSubmitting(true);
         try {
@@ -69,6 +77,7 @@ export function PropertyCreateWizard({returnTo}: PropertyCreateWizardProps): JSX
                 type,
                 address,
                 description,
+                ...(filteredAttributes !== undefined && {attributes: filteredAttributes}),
             });
 
             if (returnTo) {
@@ -85,7 +94,7 @@ export function PropertyCreateWizard({returnTo}: PropertyCreateWizardProps): JSX
         }
     };
 
-    if (draft.step === 4) {
+    if (draft.step === 5) {
         return (
             <div className={styles.root}>
                 <PropertySuccessStep
@@ -101,7 +110,7 @@ export function PropertyCreateWizard({returnTo}: PropertyCreateWizardProps): JSX
             <WizardHeader
                 title="Создание объекта"
                 step={draft.step}
-                totalSteps={3}
+                totalSteps={4}
                 onBack={handleBack}
                 onCancel={handleCancel}
             />
@@ -121,7 +130,16 @@ export function PropertyCreateWizard({returnTo}: PropertyCreateWizardProps): JSX
                         onBack={handleBack}
                     />
                 )}
-                {draft.step === 3 && (
+                {draft.step === 3 && draft.type && (
+                    <PropertyAttributesStep
+                        type={draft.type}
+                        value={draft.attributes ?? {}}
+                        onChange={(attributes) => setDraft((prev) => ({...prev, attributes}))}
+                        onNext={handleNext}
+                        onBack={handleBack}
+                    />
+                )}
+                {draft.step === 4 && (
                     <PropertyInfoStep
                         name={draft.name}
                         description={draft.description}
