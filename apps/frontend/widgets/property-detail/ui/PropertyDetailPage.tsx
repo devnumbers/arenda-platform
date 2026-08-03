@@ -34,6 +34,7 @@ import {OverdueOperationsBadge} from './OverdueOperationsBadge';
 import {PropertyOperationsActions} from './PropertyOperationsActions';
 import {PropertyOperationsCard} from './PropertyOperationsCard';
 import {PropertyInfoCard} from './PropertyInfoCard';
+import {PropertyAttributesSection} from './PropertyAttributesSection';
 import {PropertyContactsSection} from './PropertyContactsSection';
 import {PropertyRemindersSection} from './PropertyRemindersSection';
 import {PropertyActionMenu} from './PropertyActionMenu';
@@ -363,6 +364,13 @@ export function PropertyDetailPage(): JSX.Element {
 
                     <PropertyInfoCard
                         description={property.description}
+                        propertyId={id}
+                        isArchived={property.status === 'archived'}
+                    />
+
+                    <PropertyAttributesSection
+                        type={property.type}
+                        attributes={property.attributes}
                         propertyId={id}
                         isArchived={property.status === 'archived'}
                     />
