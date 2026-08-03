@@ -3834,7 +3834,7 @@ components:
 
     AdminProperty:
       type: object
-      required: [id, ownerId, ownerPhone, name, type, address, status, occupancy, createdAt, updatedAt]
+      required: [id, ownerId, ownerPhone, name, type, address, attributes, status, occupancy, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -3853,6 +3853,8 @@ components:
         description:
           type: string
           nullable: true
+        attributes:
+          $ref: '#/components/schemas/PropertyAttributes'
         status:
           $ref: '#/components/schemas/PropertyStatus'
         occupancy:
@@ -4257,6 +4259,21 @@ components:
           type: string
         requestId:
           type: string
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProblemError'
+
+    ProblemError:
+      type: object
+      required: [field, detail]
+      properties:
+        field:
+          type: string
+          description: JSON key of the invalid field (e.g. "floor").
+        detail:
+          type: string
+          description: Human-readable explanation of the validation failure.
 
     AddressSuggestionsResponse:
       type: object
@@ -4276,6 +4293,16 @@ components:
         city:
           type: string
 
+    PropertyAttributes:
+      type: object
+      additionalProperties: true
+      description: >
+        Per-type typed property characteristics. Keys and values are in English
+        snake_case; Russian labels are a frontend/admin concern. The set of
+        valid keys depends on the property type and is validated by the backend
+        catalog (see issue #125). An empty object means "no characteristics".
+        Only filled keys are stored; null values are never written.
+
     PropertyCreateRequest:
       type: object
       required: [name, type, address]
@@ -4291,6 +4318,8 @@ components:
         description:
           type: string
           maxLength: 2000
+        attributes:
+          $ref: '#/components/schemas/PropertyAttributes'
 
     PropertyUpdateRequest:
       type: object
@@ -4306,12 +4335,18 @@ components:
         description:
           type: string
           maxLength: 2000
+        attributes:
+          allOf:
+            - $ref: '#/components/schemas/PropertyAttributes'
+          description: >
+            Full replacement (idempotent). Omit the field to leave attributes
+            unchanged; send an empty object to clear all characteristics.
         status:
           $ref: '#/components/schemas/PropertyStatus'
 
     PropertyResponse:
       type: object
-      required: [id, name, type, address, status, occupancy, active_lease, overdue_rent_count, created_at, updated_at]
+      required: [id, name, type, address, status, occupancy, active_lease, overdue_rent_count, attributes, created_at, updated_at]
       properties:
         id:
           type: string
@@ -4324,6 +4359,8 @@ components:
           type: string
         description:
           type: string
+        attributes:
+          $ref: '#/components/schemas/PropertyAttributes'
         status:
           $ref: '#/components/schemas/PropertyStatus'
         occupancy:

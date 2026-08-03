@@ -1,6 +1,6 @@
 -- name: CreateProperty :one
-INSERT INTO properties (id, owner_id, name, type, address, description, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO properties (id, owner_id, name, type, address, description, attributes, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetPropertyByIDAndOwner :one
@@ -54,7 +54,7 @@ ORDER BY properties.updated_at DESC;
 
 -- name: UpdateProperty :one
 UPDATE properties
-SET name = $3, type = $4, address = $5, description = $6, status = $7
+SET name = $3, type = $4, address = $5, description = $6, attributes = $7, status = $8
 WHERE id = $1 AND owner_id = $2
 RETURNING *;
 

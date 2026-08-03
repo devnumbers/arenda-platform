@@ -65,6 +65,15 @@ func NewPropertyHandlers(svc *propertiesapp.PropertyService, addressSuggester pr
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, propertiesapp.ErrInvalidInput):
+		var attrErrs *propertiesapp.AttributesValidationError
+		if errors.As(err, &attrErrs) {
+			fieldErrors := make([]openapi.ProblemError, 0, len(attrErrs.Errors))
+			for _, e := range attrErrs.Errors {
+				fieldErrors = append(fieldErrors, openapi.ProblemError{Field: e.Field, Detail: e.Reason})
+			}
+			writeProblem(w, http.StatusBadRequest, problemWithFieldErrors(r.Context(), "Bad request", "Некорректные характеристики объекта", fieldErrors))
+			return
+		}
 		detail, ok := UserFacingDetail(err)
 		if !ok {
 			writeProblem(w, http.StatusInternalServerError, internalError(r.Context(), err))
@@ -124,11 +133,17 @@ func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request
 		description = *body.Description
 	}
 
+	var attrs map[string]any
+	if body.Attributes != nil {
+		attrs = map[string]any(*body.Attributes)
+	}
+
 	cmd := propertiesapp.CreatePropertyCommand{
 		Name:        body.Name,
 		Type:        string(body.Type),
 		Address:     body.Address,
 		Description: description,
+		Attributes:  attrs,
 	}
 
 	property, err := h.svc.CreateProperty(r.Context(), ownerID, cmd)
@@ -245,6 +260,7 @@ func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request
 		Type:        ptrString(body.Type),
 		Address:     body.Address,
 		Description: body.Description,
+		Attributes:  propertyAttributesPtr(body.Attributes),
 		Status:      ptrString(body.Status),
 	}
 
@@ -645,6 +661,7 @@ func (h *PropertyHandlers) propertyResponse(ctx context.Context, ownerID uuid.UU
 		CreatedAt:        property.CreatedAt,
 		UpdatedAt:        property.UpdatedAt,
 	}
+	resp.Attributes = propertyAttributesResponse(property.Attributes)
 	if property.Description != "" {
 		resp.Description = &property.Description
 	}
@@ -671,6 +688,26 @@ func ptrString[T ~string](v *T) *string {
 	}
 	s := string(*v)
 	return &s
+}
+
+// propertyAttributesPtr converts an optional generated PropertyAttributes value
+// to the application-layer pointer-to-map. nil means "field omitted from PATCH";
+// a non-nil pointer (even to an empty map) means "full replacement".
+func propertyAttributesPtr(v *openapi.PropertyAttributes) *map[string]any {
+	if v == nil {
+		return nil
+	}
+	m := map[string]any(*v)
+	return &m
+}
+
+// propertyAttributesResponse converts domain attributes to the response model.
+// A nil set becomes an empty object so the required field is never omitted.
+func propertyAttributesResponse(attrs domain.Attributes) openapi.PropertyAttributes {
+	if attrs == nil {
+		return openapi.PropertyAttributes{}
+	}
+	return openapi.PropertyAttributes(attrs)
 }
 
 func isInvalidStatusTransition(err error) bool {

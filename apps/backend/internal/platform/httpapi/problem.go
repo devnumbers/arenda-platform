@@ -29,6 +29,18 @@ func problem(ctx context.Context, title, detail string) openapi.Problem {
 	}
 }
 
+// problemWithFieldErrors builds an RFC 7807 problem detail carrying field-level
+// validation errors bound to specific JSON keys.
+func problemWithFieldErrors(ctx context.Context, title, detail string, fieldErrors []openapi.ProblemError) openapi.Problem {
+	p := problem(ctx, title, detail)
+	if len(fieldErrors) > 0 {
+		errs := make([]openapi.ProblemError, len(fieldErrors))
+		copy(errs, fieldErrors)
+		p.Errors = &errs
+	}
+	return p
+}
+
 // internalError logs an internal error and returns a generic problem response.
 // The error is sanitized before logging to avoid leaking secrets or PII.
 func internalError(ctx context.Context, err error) openapi.Problem {

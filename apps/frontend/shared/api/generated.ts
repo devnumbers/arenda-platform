@@ -1540,6 +1540,7 @@ export interface components {
             type: components["schemas"]["PropertyType"];
             address: string;
             description?: string | null;
+            attributes: components["schemas"]["PropertyAttributes"];
             status: components["schemas"]["PropertyStatus"];
             /** @enum {string} */
             occupancy: "free" | "occupied";
@@ -1732,6 +1733,13 @@ export interface components {
             detail?: string;
             instance?: string;
             requestId?: string;
+            errors?: components["schemas"]["ProblemError"][];
+        };
+        ProblemError: {
+            /** @description JSON key of the invalid field (e.g. "floor"). */
+            field: string;
+            /** @description Human-readable explanation of the validation failure. */
+            detail: string;
         };
         AddressSuggestionsResponse: {
             suggestions: components["schemas"]["AddressSuggestion"][];
@@ -1740,17 +1748,24 @@ export interface components {
             value: string;
             city?: string;
         };
+        /** @description Per-type typed property characteristics. Keys and values are in English snake_case; Russian labels are a frontend/admin concern. The set of valid keys depends on the property type and is validated by the backend catalog (see issue #125). An empty object means "no characteristics". Only filled keys are stored; null values are never written. */
+        PropertyAttributes: {
+            [key: string]: unknown;
+        };
         PropertyCreateRequest: {
             name: string;
             type: components["schemas"]["PropertyType"];
             address: string;
             description?: string;
+            attributes?: components["schemas"]["PropertyAttributes"];
         };
         PropertyUpdateRequest: {
             name?: string;
             type?: components["schemas"]["PropertyType"];
             address?: string;
             description?: string;
+            /** @description Full replacement (idempotent). Omit the field to leave attributes unchanged; send an empty object to clear all characteristics. */
+            attributes?: components["schemas"]["PropertyAttributes"];
             status?: components["schemas"]["PropertyStatus"];
         };
         PropertyResponse: {
@@ -1760,6 +1775,7 @@ export interface components {
             type: components["schemas"]["PropertyType"];
             address: string;
             description?: string;
+            attributes: components["schemas"]["PropertyAttributes"];
             status: components["schemas"]["PropertyStatus"];
             /** @enum {string} */
             occupancy: "free" | "occupied";

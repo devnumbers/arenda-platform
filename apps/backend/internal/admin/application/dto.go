@@ -48,6 +48,7 @@ type AdminPropertyView struct {
 	Type        propertiesdomain.PropertyType
 	Address     string
 	Description *string
+	Attributes  propertiesdomain.Attributes
 	Status      propertiesdomain.PropertyStatus
 	Occupancy   propertiesdomain.PropertyOccupancy
 	Photos      []propertiesdomain.Photo

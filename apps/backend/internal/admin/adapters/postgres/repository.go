@@ -270,6 +270,16 @@ func (r *AdminRepository) propertyViewFromRow(ctx context.Context, row postgres.
 		description = &row.Description.String
 	}
 
+	attrs := propertiesdomain.Attributes{}
+	if len(row.Attributes) > 0 {
+		if err := json.Unmarshal(row.Attributes, &attrs); err != nil {
+			return adminapp.AdminPropertyView{}, fmt.Errorf("decode property attributes: %w", err)
+		}
+		if attrs == nil {
+			attrs = propertiesdomain.Attributes{}
+		}
+	}
+
 	return adminapp.AdminPropertyView{
 		ID:          propertyID,
 		OwnerID:     ownerID,
@@ -278,6 +288,7 @@ func (r *AdminRepository) propertyViewFromRow(ctx context.Context, row postgres.
 		Type:        propType,
 		Address:     row.Address,
 		Description: description,
+		Attributes:  attrs,
 		Status:      status,
 		Occupancy:   occupancy,
 		CreatedAt:   row.CreatedAt.Time,

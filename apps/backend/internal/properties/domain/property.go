@@ -119,6 +119,7 @@ type Property struct {
 	Type             PropertyType
 	Address          string
 	Description      string
+	Attributes       Attributes
 	Status           PropertyStatus
 	Occupancy        PropertyOccupancy
 	Photos           []Photo
@@ -141,10 +142,14 @@ var (
 	ErrPropertyDescriptionTooLong = errors.New("property description exceeds 2000 characters")
 )
 
-func NewProperty(ownerID uuid.UUID, name, address, description string, propertyType PropertyType) (Property, error) {
+func NewProperty(ownerID uuid.UUID, name, address, description string, propertyType PropertyType, attrs Attributes) (Property, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return Property{}, fmt.Errorf("generate property id: %w", err)
+	}
+
+	if attrs == nil {
+		attrs = Attributes{}
 	}
 
 	p := Property{
@@ -154,6 +159,7 @@ func NewProperty(ownerID uuid.UUID, name, address, description string, propertyT
 		Type:        propertyType,
 		Address:     address,
 		Description: description,
+		Attributes:  attrs,
 		Status:      PropertyStatusActive,
 	}
 

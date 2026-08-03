@@ -44,6 +44,7 @@ type CreatePropertyCommand struct {
 	Type        string
 	Address     string
 	Description string
+	Attributes  map[string]any
 }
 
 type UpdatePropertyCommand struct {
@@ -51,6 +52,7 @@ type UpdatePropertyCommand struct {
 	Type        *string
 	Address     *string
 	Description *string
+	Attributes  *map[string]any
 	Status      *string
 }
 
@@ -111,7 +113,12 @@ func (s *PropertyService) CreateProperty(ctx context.Context, ownerID uuid.UUID,
 		return domain.Property{}, fmt.Errorf("%w: invalid property type: %w", ErrInvalidInput, err)
 	}
 
-	property, err := domain.NewProperty(ownerID, cmd.Name, cmd.Address, cmd.Description, propertyType)
+	attrs := domain.Attributes(cmd.Attributes)
+	if result := domain.ValidateAttributes(propertyType, attrs); !result.Valid() {
+		return domain.Property{}, &AttributesValidationError{Errors: result.Errors}
+	}
+
+	property, err := domain.NewProperty(ownerID, cmd.Name, cmd.Address, cmd.Description, propertyType, attrs)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
@@ -332,6 +339,13 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 			}
 		}
 		property.Status = status
+	}
+	if cmd.Attributes != nil {
+		attrs := domain.Attributes(*cmd.Attributes)
+		if result := domain.ValidateAttributes(property.Type, attrs); !result.Valid() {
+			return domain.Property{}, &AttributesValidationError{Errors: result.Errors}
+		}
+		property.Attributes = attrs
 	}
 
 	if err := property.Validate(); err != nil {
@@ -928,7 +942,7 @@ func isUpdatableStatusTransition(from, to domain.PropertyStatus) bool {
 // updatedPropertyFields lists the names of the fields a command changes. Only
 // field names are audited, never their values.
 func updatedPropertyFields(cmd UpdatePropertyCommand) []string {
-	fields := make([]string, 0, 5)
+	fields := make([]string, 0, 6)
 	if cmd.Name != nil {
 		fields = append(fields, "name")
 	}
@@ -940,6 +954,9 @@ func updatedPropertyFields(cmd UpdatePropertyCommand) []string {
 	}
 	if cmd.Description != nil {
 		fields = append(fields, "description")
+	}
+	if cmd.Attributes != nil {
+		fields = append(fields, "attributes")
 	}
 	if cmd.Status != nil {
 		fields = append(fields, "status")

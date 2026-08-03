@@ -711,6 +711,11 @@ func adminPropertyResponse(view adminapp.AdminPropertyView) openapi.AdminPropert
 		CreatedAt:  view.CreatedAt,
 		UpdatedAt:  view.UpdatedAt,
 	}
+	if view.Attributes != nil {
+		resp.Attributes = openapi.PropertyAttributes(view.Attributes)
+	} else {
+		resp.Attributes = openapi.PropertyAttributes{}
+	}
 	if view.Description != nil {
 		resp.Description = view.Description
 	}

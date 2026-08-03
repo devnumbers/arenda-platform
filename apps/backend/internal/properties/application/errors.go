@@ -35,3 +35,19 @@ func (e *InvalidStatusTransitionError) Error() string {
 func (e *InvalidStatusTransitionError) Unwrap() error {
 	return ErrInvalidTransition
 }
+
+// AttributesValidationError carries one or more catalog validation failures,
+// each bound to a specific attribute field. It wraps ErrInvalidInput so the
+// HTTP layer can unwrap it and render field-level errors in the problem+json
+// response.
+type AttributesValidationError struct {
+	Errors []domain.AttributeValidationError
+}
+
+func (e *AttributesValidationError) Error() string {
+	return fmt.Sprintf("invalid property attributes: %d error(s)", len(e.Errors))
+}
+
+func (e *AttributesValidationError) Unwrap() error {
+	return ErrInvalidInput
+}

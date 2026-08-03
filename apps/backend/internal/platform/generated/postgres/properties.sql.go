@@ -14,7 +14,7 @@ import (
 const archiveProperty = `-- name: ArchiveProperty :one
 UPDATE properties SET status = 'archived'
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes
 `
 
 type ArchivePropertyParams struct {
@@ -35,6 +35,7 @@ func (q *Queries) ArchiveProperty(ctx context.Context, arg ArchivePropertyParams
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attributes,
 	)
 	return i, err
 }
@@ -96,9 +97,9 @@ func (q *Queries) CountPropertiesAdmin(ctx context.Context, arg CountPropertiesA
 }
 
 const createProperty = `-- name: CreateProperty :one
-INSERT INTO properties (id, owner_id, name, type, address, description, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at
+INSERT INTO properties (id, owner_id, name, type, address, description, attributes, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes
 `
 
 type CreatePropertyParams struct {
@@ -108,6 +109,7 @@ type CreatePropertyParams struct {
 	Type        string      `json:"type"`
 	Address     string      `json:"address"`
 	Description pgtype.Text `json:"description"`
+	Attributes  []byte      `json:"attributes"`
 	Status      string      `json:"status"`
 }
 
@@ -119,6 +121,7 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 		arg.Type,
 		arg.Address,
 		arg.Description,
+		arg.Attributes,
 		arg.Status,
 	)
 	var i Property
@@ -132,6 +135,7 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attributes,
 	)
 	return i, err
 }
@@ -172,7 +176,7 @@ func (q *Queries) GetPropertiesStatsAdmin(ctx context.Context) (GetPropertiesSta
 }
 
 const getPropertyByIDAdmin = `-- name: GetPropertyByIDAdmin :one
-SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
 FROM properties p
 JOIN users u ON p.owner_id = u.id
 WHERE p.id = $1
@@ -188,6 +192,7 @@ type GetPropertyByIDAdminRow struct {
 	Status              string             `json:"status"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	Attributes          []byte             `json:"attributes"`
 	OwnerPhone          string             `json:"owner_phone"`
 	OwnerPhoneEncrypted bool               `json:"owner_phone_encrypted"`
 }
@@ -205,6 +210,7 @@ func (q *Queries) GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (Get
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attributes,
 		&i.OwnerPhone,
 		&i.OwnerPhoneEncrypted,
 	)
@@ -212,7 +218,7 @@ func (q *Queries) GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (Get
 }
 
 const getPropertyByIDAndOwner = `-- name: GetPropertyByIDAndOwner :one
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at,
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes,
        (SELECT COUNT(*) FROM operations o
          JOIN operation_categories cat ON cat.id = o.category_id
          WHERE o.property_id = properties.id
@@ -240,6 +246,7 @@ type GetPropertyByIDAndOwnerRow struct {
 	Status           string             `json:"status"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Attributes       []byte             `json:"attributes"`
 	OverdueRentCount int64              `json:"overdue_rent_count"`
 }
 
@@ -256,13 +263,14 @@ func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyBy
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attributes,
 		&i.OverdueRentCount,
 	)
 	return i, err
 }
 
 const getPropertyByIDAndOwnerForUpdate = `-- name: GetPropertyByIDAndOwnerForUpdate :one
-SELECT id, owner_id, name, type, address, description, status, created_at, updated_at FROM properties WHERE id = $1 AND owner_id = $2
+SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes FROM properties WHERE id = $1 AND owner_id = $2
 FOR UPDATE
 `
 
@@ -284,6 +292,7 @@ func (q *Queries) GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetP
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attributes,
 	)
 	return i, err
 }
@@ -306,7 +315,7 @@ func (q *Queries) GetPropertyStatusByOwner(ctx context.Context, arg GetPropertyS
 }
 
 const listActivePropertiesByOwner = `-- name: ListActivePropertiesByOwner :many
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at,
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes,
        (SELECT COUNT(*) FROM operations o
          JOIN operation_categories cat ON cat.id = o.category_id
          WHERE o.property_id = properties.id
@@ -330,6 +339,7 @@ type ListActivePropertiesByOwnerRow struct {
 	Status           string             `json:"status"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Attributes       []byte             `json:"attributes"`
 	OverdueRentCount int64              `json:"overdue_rent_count"`
 }
 
@@ -352,6 +362,7 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Attributes,
 			&i.OverdueRentCount,
 		); err != nil {
 			return nil, err
@@ -365,7 +376,7 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 }
 
 const listArchivedPropertiesByOwner = `-- name: ListArchivedPropertiesByOwner :many
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at,
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes,
        (SELECT COUNT(*) FROM operations o
          JOIN operation_categories cat ON cat.id = o.category_id
          WHERE o.property_id = properties.id
@@ -389,6 +400,7 @@ type ListArchivedPropertiesByOwnerRow struct {
 	Status           string             `json:"status"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Attributes       []byte             `json:"attributes"`
 	OverdueRentCount int64              `json:"overdue_rent_count"`
 }
 
@@ -411,6 +423,7 @@ func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgt
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Attributes,
 			&i.OverdueRentCount,
 		); err != nil {
 			return nil, err
@@ -424,7 +437,7 @@ func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgt
 }
 
 const listPropertiesAdmin = `-- name: ListPropertiesAdmin :many
-SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
 FROM properties p
 JOIN users u ON p.owner_id = u.id
 WHERE ($1::uuid IS NULL OR p.owner_id = $1::uuid)
@@ -464,6 +477,7 @@ type ListPropertiesAdminRow struct {
 	Status              string             `json:"status"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	Attributes          []byte             `json:"attributes"`
 	OwnerPhone          string             `json:"owner_phone"`
 	OwnerPhoneEncrypted bool               `json:"owner_phone_encrypted"`
 }
@@ -495,6 +509,7 @@ func (q *Queries) ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdm
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Attributes,
 			&i.OwnerPhone,
 			&i.OwnerPhoneEncrypted,
 		); err != nil {
@@ -511,7 +526,7 @@ func (q *Queries) ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdm
 const unarchiveProperty = `-- name: UnarchiveProperty :one
 UPDATE properties SET status = 'active'
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes
 `
 
 type UnarchivePropertyParams struct {
@@ -532,15 +547,16 @@ func (q *Queries) UnarchiveProperty(ctx context.Context, arg UnarchivePropertyPa
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attributes,
 	)
 	return i, err
 }
 
 const updateProperty = `-- name: UpdateProperty :one
 UPDATE properties
-SET name = $3, type = $4, address = $5, description = $6, status = $7
+SET name = $3, type = $4, address = $5, description = $6, attributes = $7, status = $8
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes
 `
 
 type UpdatePropertyParams struct {
@@ -550,6 +566,7 @@ type UpdatePropertyParams struct {
 	Type        string      `json:"type"`
 	Address     string      `json:"address"`
 	Description pgtype.Text `json:"description"`
+	Attributes  []byte      `json:"attributes"`
 	Status      string      `json:"status"`
 }
 
@@ -561,6 +578,7 @@ func (q *Queries) UpdateProperty(ctx context.Context, arg UpdatePropertyParams) 
 		arg.Type,
 		arg.Address,
 		arg.Description,
+		arg.Attributes,
 		arg.Status,
 	)
 	var i Property
@@ -574,6 +592,7 @@ func (q *Queries) UpdateProperty(ctx context.Context, arg UpdatePropertyParams) 
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attributes,
 	)
 	return i, err
 }

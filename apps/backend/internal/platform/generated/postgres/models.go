@@ -265,6 +265,7 @@ type Property struct {
 	Status      string             `json:"status"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Attributes  []byte             `json:"attributes"`
 }
 
 type PropertyContact struct {
