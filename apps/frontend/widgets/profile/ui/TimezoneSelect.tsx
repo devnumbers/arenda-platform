@@ -1,7 +1,7 @@
 'use client';
 
 import {type ChangeEvent, type JSX, type KeyboardEvent, useCallback, useEffect, useMemo, useState} from 'react';
-import {Select} from '@/shared/ui/select';
+import {Select, type SelectOption} from '@/shared/ui/select';
 
 export type TimezoneSelectProps = {
     readonly value?: string;
@@ -11,44 +11,58 @@ export type TimezoneSelectProps = {
     readonly required?: boolean;
 };
 
-function getAllTimezones(): readonly string[] {
-    if (typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf === 'function') {
-        try {
-            const zones = Intl.supportedValuesOf('timeZone');
-            if (zones.length > 0) {
-                return zones;
-            }
-        } catch {
-            // Fall through to default.
-        }
-    }
-    return ['Europe/Moscow'];
-}
+// All 22 IANA timezones covering the territory of the Russian Federation,
+// sorted by UTC offset (west → east). Each entry pairs the canonical IANA
+// identifier (the stored value) with a Russian display label that combines
+// the representative city and the UTC offset, so users can find their zone
+// by either the city name or the offset.
+const TIMEZONE_OPTIONS: readonly SelectOption<string>[] = [
+    {value: 'Europe/Kaliningrad', label: 'Калининград (UTC+2)'},
+    {value: 'Europe/Moscow', label: 'Москва (UTC+3)'},
+    {value: 'Europe/Samara', label: 'Самара (UTC+4)'},
+    {value: 'Europe/Saratov', label: 'Саратов (UTC+4)'},
+    {value: 'Asia/Yekaterinburg', label: 'Екатеринбург (UTC+5)'},
+    {value: 'Asia/Omsk', label: 'Омск (UTC+6)'},
+    {value: 'Asia/Novosibirsk', label: 'Новосибирск (UTC+7)'},
+    {value: 'Asia/Barnaul', label: 'Барнаул (UTC+7)'},
+    {value: 'Asia/Tomsk', label: 'Томск (UTC+7)'},
+    {value: 'Asia/Novokuznetsk', label: 'Новокузнецк (UTC+7)'},
+    {value: 'Asia/Krasnoyarsk', label: 'Красноярск (UTC+7)'},
+    {value: 'Asia/Irkutsk', label: 'Иркутск (UTC+8)'},
+    {value: 'Asia/Chita', label: 'Чита (UTC+9)'},
+    {value: 'Asia/Yakutsk', label: 'Якутск (UTC+9)'},
+    {value: 'Asia/Khandyga', label: 'Хандыга (UTC+9)'},
+    {value: 'Asia/Vladivostok', label: 'Владивосток (UTC+10)'},
+    {value: 'Asia/Ust-Nera', label: 'Усть-Нера (UTC+10)'},
+    {value: 'Asia/Magadan', label: 'Магадан (UTC+11)'},
+    {value: 'Asia/Sakhalin', label: 'Южно-Сахалинск (UTC+11)'},
+    {value: 'Asia/Srednekolymsk', label: 'Среднеколымск (UTC+11)'},
+    {value: 'Asia/Kamchatka', label: 'Петропавловск-Камчатский (UTC+12)'},
+    {value: 'Asia/Anadyr', label: 'Анадырь (UTC+12)'},
+];
 
 export function TimezoneSelect({value, onChange, error, disabled, required}: TimezoneSelectProps): JSX.Element {
-    const [inputValue, setInputValue] = useState(value ?? '');
+    const [inputValue, setInputValue] = useState(() => labelFor(value));
     const [isOpen, setIsOpen] = useState(false);
     const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
-    const allTimezones = useMemo(() => getAllTimezones(), []);
-
-    const filteredTimezones = useMemo(() => {
+    const filteredOptions = useMemo(() => {
         const query = inputValue.trim().toLowerCase();
         if (query === '') {
-            return allTimezones;
+            return TIMEZONE_OPTIONS;
         }
-        return allTimezones.filter((zone) => zone.toLowerCase().includes(query));
-    }, [allTimezones, inputValue]);
+        return TIMEZONE_OPTIONS.filter((option) => option.label.toLowerCase().includes(query));
+    }, [inputValue]);
 
     useEffect(() => {
         // Sync local input with the timezone value controlled by the parent form.
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setInputValue(value ?? '');
+        setInputValue(labelFor(value));
     }, [value]);
 
     const handleSelect = useCallback(
         (timezone: string) => {
-            setInputValue(timezone);
+            setInputValue(labelFor(timezone) ?? '');
             onChange(timezone);
             setIsOpen(false);
             setActiveIndex(null);
@@ -57,8 +71,7 @@ export function TimezoneSelect({value, onChange, error, disabled, required}: Tim
     );
 
     const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-        const nextValue = event.currentTarget.value;
-        setInputValue(nextValue);
+        setInputValue(event.currentTarget.value);
         setIsOpen(true);
         setActiveIndex(null);
     };
@@ -68,7 +81,7 @@ export function TimezoneSelect({value, onChange, error, disabled, required}: Tim
     };
 
     const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-        const items = filteredTimezones;
+        const items = filteredOptions;
         if (items.length === 0) {
             if (event.key === 'Escape') {
                 setIsOpen(false);
@@ -88,17 +101,12 @@ export function TimezoneSelect({value, onChange, error, disabled, required}: Tim
             );
         } else if (event.key === 'Enter' && activeIndex !== null) {
             event.preventDefault();
-            handleSelect(items[activeIndex]);
+            handleSelect(items[activeIndex].value);
         } else if (event.key === 'Escape') {
             setIsOpen(false);
             setActiveIndex(null);
         }
     };
-
-    const options = useMemo(
-        () => filteredTimezones.map((zone) => ({value: zone, label: zone})),
-        [filteredTimezones]
-    );
 
     return (
         <Select
@@ -109,7 +117,7 @@ export function TimezoneSelect({value, onChange, error, disabled, required}: Tim
             onFocus={handleFocus}
             onKeyDown={handleKeyDown}
             value={value}
-            options={options}
+            options={filteredOptions}
             onChange={handleSelect}
             error={error}
             disabled={disabled}
@@ -122,4 +130,11 @@ export function TimezoneSelect({value, onChange, error, disabled, required}: Tim
             onOpenChange={setIsOpen}
         />
     );
+}
+
+function labelFor(timezone: string | undefined): string {
+    if (!timezone) {
+        return '';
+    }
+    return TIMEZONE_OPTIONS.find((option) => option.value === timezone)?.label ?? '';
 }
