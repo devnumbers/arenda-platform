@@ -18,7 +18,7 @@ COPY --from=deps /app/apps/admin/node_modules ./node_modules
 COPY apps/admin ./
 RUN npm run build
 
-FROM nginxinc/nginx-unprivileged:1.29.4-alpine@sha256:a6c4f61f456b85b8fdf7ec7ab28cc3e299440e6fb4a9dea520e5fd8fd440025e AS runtime
+FROM nginxinc/nginx-unprivileged:1.31.2-alpine@sha256:6320020c7da8714feab524e02c08c5a1958675c4e68700e93a2fd8970b065786 AS runtime
 
 USER root
 
