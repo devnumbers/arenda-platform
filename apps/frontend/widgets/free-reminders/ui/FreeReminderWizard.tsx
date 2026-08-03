@@ -137,11 +137,13 @@ export function FreeReminderWizard({
   };
 
   const handleTitleChange = (event: ChangeEvent<HTMLInputElement>): void => {
-    setDraft((prev) => ({ ...prev, title: event.currentTarget.value }));
+    const title = event.currentTarget.value;
+    setDraft((prev) => ({ ...prev, title }));
   };
 
   const handleTimeChange = (event: ChangeEvent<HTMLInputElement>): void => {
-    setDraft((prev) => ({ ...prev, time: event.currentTarget.value }));
+    const time = event.currentTarget.value;
+    setDraft((prev) => ({ ...prev, time }));
   };
 
   const handleNext = (): void => {
