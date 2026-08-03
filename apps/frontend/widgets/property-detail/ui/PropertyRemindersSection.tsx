@@ -55,7 +55,7 @@ export function PropertyRemindersSection({
                         {items.map((reminder) => {
                             const {date, time} = formatReminderDateTime(reminder.trigger_at);
                             return (
-                                <li key={reminder.free_reminder_id}>
+                                <li key={`${reminder.free_reminder_id}__${reminder.trigger_at}`}>
                                     <Link
                                         href={ROUTES.freeReminder(reminder.free_reminder_id)}
                                         className={styles.row}
