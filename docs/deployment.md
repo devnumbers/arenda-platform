@@ -54,7 +54,6 @@ updates + сгруппированные weekly version updates в ветку `d
 - `admin.rentlee.ru`
 - `dev.rentlee.ru`
 - `admin.dev.rentlee.ru`
-- `logs.rentlee.ru`
 
 ## Server Bootstrap
 
