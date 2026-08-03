@@ -54,7 +54,7 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cm
 		oldEmail = user.Email.String()
 	}
 
-	if err := user.UpdatePersonalData(cmd.Name, cmd.Surname, cmd.Patronymic, cmd.Email); err != nil {
+	if err := user.UpdatePersonalData(cmd.Name, cmd.Surname, cmd.Patronymic, cmd.Email, cmd.Timezone); err != nil {
 		return domain.User{}, fmt.Errorf("update personal data: %w", err)
 	}
 
@@ -90,7 +90,7 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cm
 // updatedProfileFields lists the names of the fields a command changes. Only
 // field names are audited, never their values.
 func updatedProfileFields(cmd UpdateProfileCommand) []string {
-	fields := make([]string, 0, 4)
+	fields := make([]string, 0, 5)
 	if cmd.Name != nil {
 		fields = append(fields, "name")
 	}
@@ -102,6 +102,9 @@ func updatedProfileFields(cmd UpdateProfileCommand) []string {
 	}
 	if cmd.Email != nil {
 		fields = append(fields, "email")
+	}
+	if cmd.Timezone != nil {
+		fields = append(fields, "timezone")
 	}
 	return fields
 }

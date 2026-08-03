@@ -14,6 +14,7 @@ export function mapMeResponse(response: MeResponse): User {
     surname: response.surname ?? null,
     patronymic: response.patronymic ?? null,
     email: response.email ?? null,
+    timezone: response.timezone ?? null,
     subscription: response.subscription
       ? {
           tariff: {

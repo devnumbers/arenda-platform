@@ -337,6 +337,7 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		Name:       body.Name,
 		Surname:    body.Surname,
 		Patronymic: body.Patronymic,
+		Timezone:   body.Timezone,
 	}
 
 	user, err := h.profile.UpdateProfile(r.Context(), userID, cmd)
@@ -344,6 +345,8 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, domain.ErrInvalidEmail):
 			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid email", "Некорректный формат email"))
+		case errors.Is(err, domain.ErrInvalidTimezone):
+			writeProblem(w, http.StatusBadRequest, problem(r.Context(), "Invalid timezone", "Некорректный часовой пояс"))
 		case errors.Is(err, application.ErrEmailAlreadyTaken):
 			writeProblem(w, http.StatusConflict, problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Этот email уже используется")))
 		case errors.Is(err, application.ErrNotFound):
@@ -480,7 +483,12 @@ func meResponse(user domain.User) openapi.MeResponse {
 		Surname:    user.Surname,
 		Patronymic: user.Patronymic,
 		Email:      email,
+		Timezone:   timezonePtrFromUser(user.Timezone),
 	}
+}
+
+func timezonePtrFromUser(tz domain.Timezone) *string {
+	return new(tz.String())
 }
 
 // BillingMeEnricher returns a MeEnricher that adds the current billing

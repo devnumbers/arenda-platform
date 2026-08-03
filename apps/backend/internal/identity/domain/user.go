@@ -16,6 +16,7 @@ type User struct {
 	Patronymic      *string
 	Email           *Email
 	EmailVerifiedAt *time.Time
+	Timezone        Timezone
 }
 
 func NewOwner(phone Phone) (User, error) {
@@ -30,7 +31,7 @@ func NewOwner(phone Phone) (User, error) {
 	}, nil
 }
 
-func (u *User) UpdatePersonalData(name, surname, patronymic, email *string) error {
+func (u *User) UpdatePersonalData(name, surname, patronymic, email, timezone *string) error {
 	if name != nil {
 		u.Name = nonEmptyPtr(strings.TrimSpace(*name))
 	}
@@ -46,6 +47,13 @@ func (u *User) UpdatePersonalData(name, surname, patronymic, email *string) erro
 			return err
 		}
 		u.Email = &v
+	}
+	if timezone != nil {
+		v, err := NewTimezone(*timezone)
+		if err != nil {
+			return err
+		}
+		u.Timezone = v
 	}
 	return nil
 }

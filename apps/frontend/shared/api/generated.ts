@@ -1109,6 +1109,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/property-contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminPropertyContacts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/operations": {
         parameters: {
             query?: never;
@@ -1282,6 +1298,8 @@ export interface components {
             surname?: string | null;
             patronymic?: string | null;
             email?: string | null;
+            /** @description IANA timezone identifier, e.g. Europe/Moscow. */
+            timezone?: string | null;
             subscription?: components["schemas"]["Subscription"];
         };
         UserUpdateRequest: {
@@ -1290,6 +1308,8 @@ export interface components {
             patronymic?: string | null;
             /** @description Email is stored in lowercase. */
             email?: string | null;
+            /** @description IANA timezone identifier, e.g. Europe/Moscow. */
+            timezone?: string | null;
         };
         SendPhoneChangeCodeRequest: {
             /** @example +79990001122 */
@@ -1499,6 +1519,22 @@ export interface components {
         };
         AdminTenantContactsResponse: {
             items: components["schemas"]["AdminTenantContact"][];
+            total: number;
+        };
+        AdminPropertyContact: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            name: string;
+            phone: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AdminPropertyContactsResponse: {
+            items: components["schemas"]["AdminPropertyContact"][];
             total: number;
         };
         AdminOperation: {
@@ -4609,6 +4645,35 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAdminPropertyContacts: {
+        parameters: {
+            query?: {
+                /** @description Filter contacts by property (always passed by the admin property page tab). */
+                property_id?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin property contacts list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPropertyContactsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalServerError"];
         };
     };

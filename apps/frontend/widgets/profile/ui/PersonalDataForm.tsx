@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState, type ChangeEvent, type FormEvent, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type JSX } from 'react';
 import { notify } from '@/shared/lib/notifications';
 import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
@@ -9,6 +9,7 @@ import { PageHeader } from '@/shared/ui/page-header';
 import { useMe } from '@/features/auth/api/hooks';
 import { useUpdateMe } from '@/features/profile/api/hooks';
 import type { User, UserUpdateCommand } from '@/entities/user/model/types';
+import { TimezoneSelect } from './TimezoneSelect';
 import styles from './PersonalDataForm.module.css';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -24,6 +25,7 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
   const [name, setName] = useState(me.name ?? '');
   const [patronymic, setPatronymic] = useState(me.patronymic ?? '');
   const [email, setEmail] = useState(me.email ?? '');
+  const [timezone, setTimezone] = useState(me.timezone ?? '');
   const [isEmailTouched, setIsEmailTouched] = useState(false);
   const [isSubmitAttempted, setIsSubmitAttempted] = useState(false);
 
@@ -34,8 +36,9 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
       surname.trim() !== (me.surname ?? '') ||
       name.trim() !== (me.name ?? '') ||
       patronymic.trim() !== (me.patronymic ?? '') ||
-      email.trim() !== (me.email ?? ''),
-    [surname, name, patronymic, email, me],
+      email.trim() !== (me.email ?? '') ||
+      timezone !== (me.timezone ?? ''),
+    [surname, name, patronymic, email, timezone, me],
   );
 
   const isSubmitting = updateMe.isPending;
@@ -64,6 +67,7 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
       const initialName = me.name ?? '';
       const initialPatronymic = me.patronymic ?? '';
       const initialEmail = me.email ?? '';
+      const initialTimezone = me.timezone ?? '';
 
       const payload: UserUpdateCommand = {};
       const trimmedSurname = surname.trim();
@@ -83,6 +87,9 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
       if (trimmedEmail !== initialEmail) {
         payload.email = trimmedEmail || null;
       }
+      if (timezone !== initialTimezone) {
+        payload.timezone = timezone || null;
+      }
 
       if (Object.keys(payload).length === 0) {
         return;
@@ -95,7 +102,7 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
         notify.scenarios.profile.personalDataSaveError(error);
       }
     },
-    [canSubmit, updateMe, name, surname, patronymic, email, me],
+    [canSubmit, updateMe, name, surname, patronymic, email, timezone, me],
   );
 
   return (
@@ -130,6 +137,11 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
           error={emailError}
           fullWidth
         />
+        <TimezoneSelect
+          value={timezone}
+          onChange={setTimezone}
+          disabled={isSubmitting}
+        />
       </div>
 
       <div className={styles.actions}>
@@ -150,6 +162,31 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
 
 export function PersonalDataForm(): JSX.Element {
   const { data: me, isPending, isError, refetch } = useMe();
+  const updateMe = useUpdateMe();
+  const autoTzSent = useRef(false);
+
+  // Auto-detect the browser timezone and save it to the profile silently,
+  // but only when there is no saved timezone yet (don't override manual
+  // settings during trips). Runs once per mount.
+  useEffect(() => {
+    if (!me || autoTzSent.current) {
+      return;
+    }
+    if (me.timezone) {
+      autoTzSent.current = true;
+      return;
+    }
+    if (updateMe.isPending) {
+      return;
+    }
+    const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!detectedTz) {
+      autoTzSent.current = true;
+      return;
+    }
+    autoTzSent.current = true;
+    updateMe.mutate({ timezone: detectedTz });
+  }, [me, updateMe]);
 
   return (
     <>
@@ -169,6 +206,7 @@ export function PersonalDataForm(): JSX.Element {
             <TextField label="Имя" placeholder=" " value="" disabled fullWidth />
             <TextField label="Отчество" placeholder=" " value="" disabled fullWidth />
             <TextField label="Email" placeholder="email@example.com" value="" disabled fullWidth />
+            <TextField label="Часовой пояс" placeholder=" " value="" disabled fullWidth />
           </div>
           <div className={styles.actions}>
             <Button type="submit" variant="primary" size="large" fullWidth disabled>

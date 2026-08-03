@@ -395,6 +395,7 @@ type User struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	PhoneEncrypted  bool               `json:"phone_encrypted"`
 	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
+	Timezone        string             `json:"timezone"`
 }
 
 type UserNotificationPreference struct {
