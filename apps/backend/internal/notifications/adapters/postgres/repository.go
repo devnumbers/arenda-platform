@@ -269,6 +269,27 @@ func (r *ReminderRepository) ListDue(ctx context.Context, before time.Time, limi
 	return out, nil
 }
 
+// ListUpcomingFreeRemindersByProperty returns the nearest pending free-reminder
+// occurrences for a property from the materialized reminders table. Periodic
+// occurrences are included because they are materialized at write time.
+func (r *ReminderRepository) ListUpcomingFreeRemindersByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error) {
+	rows, err := r.q().ListUpcomingFreeRemindersByProperty(ctx, postgres.ListUpcomingFreeRemindersByPropertyParams{
+		OwnerID:     pgconv.UUIDToPgtype(ownerID),
+		PropertyID:  pgconv.UUIDToPgtype(propertyID),
+		ScheduledAt: pgtype.Timestamptz{Time: from, Valid: true},
+		//nolint:gosec // Limit is bounded by the transport layer (max 100).
+		Limit: int32(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list upcoming free reminders by property: %w", err)
+	}
+	out := make([]domain.UpcomingFreeReminder, len(rows))
+	for i, row := range rows {
+		out[i] = toUpcomingFreeReminder(row)
+	}
+	return out, nil
+}
+
 // MarkReminderSending transitions a pending reminder to sending and returns the updated row.
 func (r *ReminderRepository) MarkReminderSending(ctx context.Context, id uuid.UUID) (domain.Reminder, error) {
 	row, err := r.q().MarkReminderSending(ctx, pgconv.UUIDToPgtype(id))
@@ -628,5 +649,17 @@ func toDomain(row postgres.Reminder) domain.Reminder {
 		MessageBody:          row.MessageBody,
 		CreatedAt:            pgconv.TimestamptzToTime(row.CreatedAt),
 		UpdatedAt:            pgconv.TimestamptzToTime(row.UpdatedAt),
+	}
+}
+
+// toUpcomingFreeReminder maps a JOIN row (materialized reminder + parent
+// template periodicity) to the read projection domain.UpcomingFreeReminder.
+func toUpcomingFreeReminder(row postgres.ListUpcomingFreeRemindersByPropertyRow) domain.UpcomingFreeReminder {
+	return domain.UpcomingFreeReminder{
+		FreeReminderID: pgconv.UUIDFromPgtype(row.Reminder.FreeReminderID),
+		Title:          row.Reminder.MessageTitle,
+		PropertyID:     pgconv.UUIDFromPgtype(row.Reminder.PropertyID),
+		TriggerAt:      pgconv.TimestamptzToTime(row.Reminder.ScheduledAt),
+		Periodicity:    domain.FreeReminderPeriodicity(row.FreeReminderPeriodicity),
 	}
 }

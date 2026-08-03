@@ -769,6 +769,37 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/free-reminders/upcoming:
+    get:
+      operationId: listUpcomingFreeReminders
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 3
+      responses:
+        '200':
+          description: Up to limit nearest upcoming free reminder occurrences for the property
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpcomingFreeRemindersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /properties/{propertyId}/operations:
     get:
       operationId: listOperationsByProperty
@@ -5112,6 +5143,38 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FreeReminderResponse'
+
+    UpcomingFreeReminderResponse:
+      type: object
+      description: >
+        A single nearest upcoming occurrence of a periodic (or one-shot) free
+        reminder. Unlike FreeReminderResponse (a template), this represents one
+        projected fire time — trigger_at is the instant of this occurrence.
+      required: [free_reminder_id, title, property_id, trigger_at, periodicity]
+      properties:
+        free_reminder_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        property_id:
+          type: string
+          format: uuid
+        trigger_at:
+          type: string
+          format: date-time
+        periodicity:
+          type: string
+          enum: [once, daily, weekly, monthly, yearly]
+
+    UpcomingFreeRemindersResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpcomingFreeReminderResponse'
 
     NotificationPreference:
       type: object

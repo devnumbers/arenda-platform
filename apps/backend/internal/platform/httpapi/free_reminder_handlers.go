@@ -10,22 +10,27 @@ import (
 	notificationsdomain "github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
 // FreeReminderHandlers implements the generated free-reminder endpoints.
 type FreeReminderHandlers struct {
 	svc        *notificationsapp.FreeReminderService
+	reminders  *notificationsapp.ReminderService
 	properties *propertiesapp.PropertyService
+	clock      clock.Clock
 	logger     *slog.Logger
 }
 
 // NewFreeReminderHandlers creates HTTP handlers for the free reminders API.
 func NewFreeReminderHandlers(
 	svc *notificationsapp.FreeReminderService,
+	reminders *notificationsapp.ReminderService,
 	properties *propertiesapp.PropertyService,
+	clock clock.Clock,
 	logger *slog.Logger,
 ) *FreeReminderHandlers {
-	return &FreeReminderHandlers{svc: svc, properties: properties, logger: logger}
+	return &FreeReminderHandlers{svc: svc, reminders: reminders, properties: properties, clock: clock, logger: logger}
 }
 
 func (h *FreeReminderHandlers) handleFreeReminderError(w http.ResponseWriter, r *http.Request, err error, resource string) {
@@ -124,6 +129,42 @@ func (h *FreeReminderHandlers) ListPropertyFreeReminders(w http.ResponseWriter, 
 	}
 
 	writeJSON(r.Context(), w, http.StatusOK, openapi.FreeRemindersResponse{Items: items})
+}
+
+// ListUpcomingFreeReminders implements GET
+// /properties/{propertyId}/free-reminders/upcoming. It returns the nearest
+// pending occurrences (including periodic ones) instead of templates, for the
+// property-page "up to 3 nearest" block.
+func (h *FreeReminderHandlers) ListUpcomingFreeReminders(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID, params openapi.ListUpcomingFreeRemindersParams) {
+	ownerID, ok := ownerIDFromContext(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	if _, err := h.properties.GetProperty(r.Context(), ownerID, propertyID); err != nil {
+		h.handleFreeReminderError(w, r, err, "property")
+		return
+	}
+
+	limit := 3
+	if params.Limit != nil {
+		limit = min(*params.Limit, 100)
+		limit = max(limit, 1)
+	}
+
+	upcoming, err := h.reminders.ListUpcomingFreeRemindersByProperty(r.Context(), ownerID, propertyID, h.clock.Now(), limit)
+	if err != nil {
+		h.handleFreeReminderError(w, r, err, "free_reminder")
+		return
+	}
+
+	items := make([]openapi.UpcomingFreeReminderResponse, 0, len(upcoming))
+	for _, u := range upcoming {
+		items = append(items, upcomingFreeReminderResponse(u))
+	}
+
+	writeJSON(r.Context(), w, http.StatusOK, openapi.UpcomingFreeRemindersResponse{Items: items})
 }
 
 // ListFreeReminders implements GET /free-reminders.
@@ -238,5 +279,15 @@ func freeReminderResponse(fr notificationsdomain.FreeReminder) openapi.FreeRemin
 		Periodicity: openapi.FreeReminderResponsePeriodicity(fr.Periodicity),
 		CreatedAt:   fr.CreatedAt,
 		UpdatedAt:   fr.UpdatedAt,
+	}
+}
+
+func upcomingFreeReminderResponse(u notificationsdomain.UpcomingFreeReminder) openapi.UpcomingFreeReminderResponse {
+	return openapi.UpcomingFreeReminderResponse{
+		FreeReminderId: u.FreeReminderID,
+		Title:          u.Title,
+		PropertyId:     u.PropertyID,
+		TriggerAt:      u.TriggerAt,
+		Periodicity:    openapi.UpcomingFreeReminderResponsePeriodicity(u.Periodicity),
 	}
 }

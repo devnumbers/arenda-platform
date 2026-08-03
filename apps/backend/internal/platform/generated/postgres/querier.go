@@ -227,6 +227,7 @@ type Querier interface {
 	ListTenantContactsByIDs(ctx context.Context, arg ListTenantContactsByIDsParams) ([]TenantContact, error)
 	ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]TenantContact, error)
 	ListTenantContactsWithLeaseStatus(ctx context.Context, ownerID pgtype.UUID) ([]ListTenantContactsWithLeaseStatusRow, error)
+	ListUpcomingFreeRemindersByProperty(ctx context.Context, arg ListUpcomingFreeRemindersByPropertyParams) ([]ListUpcomingFreeRemindersByPropertyRow, error)
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
 	LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
 	MarkLoginCodeUsed(ctx context.Context, id pgtype.UUID) error

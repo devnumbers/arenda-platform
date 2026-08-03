@@ -128,7 +128,7 @@ func New(deps Deps) http.Handler {
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Categories, deps.Logger)
 	categoryHandlers := NewCategoryHandlers(deps.Categories, deps.Logger)
 	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
-	freeReminderHandlers := NewFreeReminderHandlers(deps.FreeReminders, deps.Properties, deps.Logger)
+	freeReminderHandlers := NewFreeReminderHandlers(deps.FreeReminders, deps.Reminders, deps.Properties, deps.Clock, deps.Logger)
 	notificationPreferenceHandlers := NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	popupHandlers := NewPopupHandlers(deps.Popups, deps.Logger)
 	subscriptionHandlers := NewSubscriptionHandlers(deps.Tariffs, deps.Subscriptions, deps.PaymentMethods, deps.Payments, deps.Webhooks, deps.Logger, deps.DevMode)

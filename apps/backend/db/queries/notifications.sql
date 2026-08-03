@@ -214,3 +214,15 @@ INSERT INTO reminders (
 UPDATE reminders
 SET status = 'cancelled'
 WHERE free_reminder_id = $1 AND owner_id = $2 AND status IN ('pending', 'sending');
+
+-- name: ListUpcomingFreeRemindersByProperty :many
+SELECT sqlc.embed(r), fr.periodicity AS free_reminder_periodicity
+FROM reminders r
+JOIN free_reminders fr ON fr.id = r.free_reminder_id
+WHERE r.owner_id = $1
+  AND r.property_id = $2
+  AND r.target_type = 'free'
+  AND r.status = 'pending'
+  AND r.scheduled_at >= $3
+ORDER BY r.scheduled_at ASC
+LIMIT $4;

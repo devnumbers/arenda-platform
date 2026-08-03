@@ -25,6 +25,12 @@ type ReminderRepository interface {
 	ListByRecurringOperation(ctx context.Context, ownerID, recurringOpID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	ListDue(ctx context.Context, before time.Time, limit int) ([]domain.Reminder, error)
 	ListStaleSendingReminders(ctx context.Context, staleBefore time.Time, limit int) ([]domain.Reminder, error)
+	// ListUpcomingFreeRemindersByProperty returns the nearest pending
+	// occurrences of free-reminder templates for a property, ordered by
+	// scheduled time ascending. It reads from the materialized reminders table,
+	// so periodic occurrences are included. 'from' bounds the lower edge of the
+	// window (typically now).
+	ListUpcomingFreeRemindersByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error)
 	MarkReminderSending(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
 	// MarkSent marks a reminder that is currently sending as sent. It is used
 	// after a notification has been dispatched successfully.

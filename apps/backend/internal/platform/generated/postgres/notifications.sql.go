@@ -734,6 +734,76 @@ func (q *Queries) ListStaleSendingReminders(ctx context.Context, arg ListStaleSe
 	return items, nil
 }
 
+const listUpcomingFreeRemindersByProperty = `-- name: ListUpcomingFreeRemindersByProperty :many
+SELECT r.id, r.owner_id, r.target_type, r.operation_id, r.recurring_operation_id, r.lease_id, r.property_id, r.event_type, r.status, r.scheduled_at, r.sent_at, r.failed_attempts, r.next_attempt_at, r.message_title, r.message_body, r.created_at, r.updated_at, r.free_reminder_id, fr.periodicity AS free_reminder_periodicity
+FROM reminders r
+JOIN free_reminders fr ON fr.id = r.free_reminder_id
+WHERE r.owner_id = $1
+  AND r.property_id = $2
+  AND r.target_type = 'free'
+  AND r.status = 'pending'
+  AND r.scheduled_at >= $3
+ORDER BY r.scheduled_at ASC
+LIMIT $4
+`
+
+type ListUpcomingFreeRemindersByPropertyParams struct {
+	OwnerID     pgtype.UUID        `json:"owner_id"`
+	PropertyID  pgtype.UUID        `json:"property_id"`
+	ScheduledAt pgtype.Timestamptz `json:"scheduled_at"`
+	Limit       int32              `json:"limit"`
+}
+
+type ListUpcomingFreeRemindersByPropertyRow struct {
+	Reminder                Reminder `json:"reminder"`
+	FreeReminderPeriodicity string   `json:"free_reminder_periodicity"`
+}
+
+func (q *Queries) ListUpcomingFreeRemindersByProperty(ctx context.Context, arg ListUpcomingFreeRemindersByPropertyParams) ([]ListUpcomingFreeRemindersByPropertyRow, error) {
+	rows, err := q.db.Query(ctx, listUpcomingFreeRemindersByProperty,
+		arg.OwnerID,
+		arg.PropertyID,
+		arg.ScheduledAt,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUpcomingFreeRemindersByPropertyRow{}
+	for rows.Next() {
+		var i ListUpcomingFreeRemindersByPropertyRow
+		if err := rows.Scan(
+			&i.Reminder.ID,
+			&i.Reminder.OwnerID,
+			&i.Reminder.TargetType,
+			&i.Reminder.OperationID,
+			&i.Reminder.RecurringOperationID,
+			&i.Reminder.LeaseID,
+			&i.Reminder.PropertyID,
+			&i.Reminder.EventType,
+			&i.Reminder.Status,
+			&i.Reminder.ScheduledAt,
+			&i.Reminder.SentAt,
+			&i.Reminder.FailedAttempts,
+			&i.Reminder.NextAttemptAt,
+			&i.Reminder.MessageTitle,
+			&i.Reminder.MessageBody,
+			&i.Reminder.CreatedAt,
+			&i.Reminder.UpdatedAt,
+			&i.Reminder.FreeReminderID,
+			&i.FreeReminderPeriodicity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markReminderFailed = `-- name: MarkReminderFailed :execrows
 UPDATE reminders
 SET failed_attempts = failed_attempts + 1,

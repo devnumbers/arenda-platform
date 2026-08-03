@@ -136,6 +136,17 @@ func (s *ReminderService) ListByRecurringOperation(ctx context.Context, ownerID,
 	return reminders, nil
 }
 
+// ListUpcomingFreeRemindersByProperty returns the nearest pending free-reminder
+// occurrences for a property, including periodic occurrences (which are
+// materialized at write time). 'from' is the lower bound of the window.
+func (s *ReminderService) ListUpcomingFreeRemindersByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error) {
+	reminders, err := s.repo.ListUpcomingFreeRemindersByProperty(ctx, ownerID, propertyID, from, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list upcoming free reminders by property: %w", err)
+	}
+	return reminders, nil
+}
+
 // GetByID returns a reminder by ID after verifying ownership.
 func (s *ReminderService) GetByID(ctx context.Context, ownerID, id uuid.UUID) (domain.Reminder, error) {
 	r, err := s.repo.GetByID(ctx, id, ownerID)
