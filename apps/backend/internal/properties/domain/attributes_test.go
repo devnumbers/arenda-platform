@@ -65,8 +65,39 @@ func TestAttributesCatalogKeys(t *testing.T) {
 		t.Fatalf("house keys = %v, want %v", got, houseWant)
 	}
 
-	if got := CatalogKeys(PropertyTypeOffice); got != nil {
-		t.Fatalf("office keys = %v, want nil", got)
+	officeWant := []string{
+		"area_total", "building_type", "entrance", "floor", "floors_total",
+		"renovation", "rooms",
+	}
+	if got := CatalogKeys(PropertyTypeOffice); !slices.Equal(got, officeWant) {
+		t.Fatalf("office keys = %v, want %v", got, officeWant)
+	}
+	if got := CatalogKeys(PropertyTypeCommercial); !slices.Equal(got, officeWant) {
+		t.Fatalf("commercial keys = %v, want %v", got, officeWant)
+	}
+
+	warehouseWant := []string{
+		"area_total", "building_type", "entrance",
+	}
+	if got := CatalogKeys(PropertyTypeWarehouse); !slices.Equal(got, warehouseWant) {
+		t.Fatalf("warehouse keys = %v, want %v", got, warehouseWant)
+	}
+
+	garageWant := []string{"area_total", "material"}
+	if got := CatalogKeys(PropertyTypeGarage); !slices.Equal(got, garageWant) {
+		t.Fatalf("garage keys = %v, want %v", got, garageWant)
+	}
+
+	parkingWant := []string{
+		"area_total", "parking_level", "parking_location", "spot_number",
+	}
+	if got := CatalogKeys(PropertyTypeParking); !slices.Equal(got, parkingWant) {
+		t.Fatalf("parking keys = %v, want %v", got, parkingWant)
+	}
+
+	landWant := []string{"land_area", "land_type"}
+	if got := CatalogKeys(PropertyTypeLand); !slices.Equal(got, landWant) {
+		t.Fatalf("land keys = %v, want %v", got, landWant)
 	}
 }
 
@@ -88,6 +119,14 @@ func TestAttributesEnumValues(t *testing.T) {
 		{PropertyTypeHouse, "material", "brick_monolithic", "straw"},
 		{PropertyTypeHouse, "bathroom", "outdoor", "bidet"},
 		{PropertyTypeHouse, "shower", "indoor", "bathtub"},
+		{PropertyTypeOffice, "building_type", "business_center", "skyscraper"},
+		{PropertyTypeOffice, "entrance", "separate", "private"},
+		{PropertyTypeOffice, "renovation", "design", "luxury"},
+		{PropertyTypeWarehouse, "entrance", "common", "shared"},
+		{PropertyTypeWarehouse, "building_type", "warehouse_building", "industrial"},
+		{PropertyTypeGarage, "material", "metal", "plastic"},
+		{PropertyTypeParking, "parking_location", "underground", "rooftop"},
+		{PropertyTypeLand, "land_type", "izhs", "recreational"},
 	}
 	for _, c := range enumCases {
 		res := ValidateAttributes(c.propType, Attributes{c.field: c.valid})
@@ -116,6 +155,15 @@ func TestAttributesNumberRanges(t *testing.T) {
 		{PropertyTypeApartment, "ceiling_height", 10.1, true},
 		{PropertyTypeHouse, "land_area", 0.01, false},
 		{PropertyTypeHouse, "land_area", 0.001, true},
+		{PropertyTypeWarehouse, "area_total", 1.0, false},
+		{PropertyTypeWarehouse, "area_total", 0.5, true},
+		{PropertyTypeGarage, "area_total", 100000.0, false},
+		{PropertyTypeGarage, "area_total", 100001.0, true},
+		{PropertyTypeParking, "area_total", 25.0, false},
+		{PropertyTypeLand, "land_area", 0.01, false},
+		{PropertyTypeLand, "land_area", 0.001, true},
+		{PropertyTypeLand, "land_area", 1000000.0, false},
+		{PropertyTypeLand, "land_area", 1000001.0, true},
 	}
 	for _, c := range cases {
 		res := ValidateAttributes(c.propType, Attributes{c.field: c.value})
@@ -147,6 +195,16 @@ func TestAttributesIntegerRanges(t *testing.T) {
 		{PropertyTypeApartment, "year_built", float64(currentYear + 6), true},
 		{PropertyTypeHouse, "year_built", 1800, false},
 		{PropertyTypeHouse, "year_built", float64(currentYear + 5), false},
+		{PropertyTypeOffice, "floor", -3, false},
+		{PropertyTypeOffice, "floor", -4, true},
+		{PropertyTypeOffice, "floor", 200, false},
+		{PropertyTypeOffice, "floor", 201, true},
+		{PropertyTypeOffice, "floors_total", 1, false},
+		{PropertyTypeOffice, "floors_total", 0, true},
+		{PropertyTypeParking, "parking_level", -5, false},
+		{PropertyTypeParking, "parking_level", -6, true},
+		{PropertyTypeParking, "parking_level", 100, false},
+		{PropertyTypeParking, "parking_level", 101, true},
 	}
 	for _, c := range cases {
 		res := ValidateAttributes(c.propType, Attributes{c.field: c.value})
@@ -221,6 +279,22 @@ func TestAttributesCrossValidations(t *testing.T) {
 		})
 		assertHasField(t, res, "area_kitchen", "")
 	})
+
+	t.Run("office floor exceeds floors_total", func(t *testing.T) {
+		res := ValidateAttributes(PropertyTypeOffice, Attributes{
+			"floor":        float64(10),
+			"floors_total": float64(5),
+		})
+		assertHasField(t, res, "floor", "")
+	})
+
+	t.Run("commercial floor exceeds floors_total", func(t *testing.T) {
+		res := ValidateAttributes(PropertyTypeCommercial, Attributes{
+			"floor":        float64(10),
+			"floors_total": float64(5),
+		})
+		assertHasField(t, res, "floor", "")
+	})
 }
 
 func TestAttributesUnknownKeys(t *testing.T) {
@@ -260,6 +334,12 @@ func TestAttributesEmptyAttrsValid(t *testing.T) {
 		PropertyTypeApartments,
 		PropertyTypeRoom,
 		PropertyTypeHouse,
+		PropertyTypeOffice,
+		PropertyTypeCommercial,
+		PropertyTypeWarehouse,
+		PropertyTypeGarage,
+		PropertyTypeParking,
+		PropertyTypeLand,
 	} {
 		res := ValidateAttributes(pt, Attributes{})
 		if !res.Valid() {
@@ -268,24 +348,26 @@ func TestAttributesEmptyAttrsValid(t *testing.T) {
 	}
 }
 
-func TestAttributesUnsupportedType(t *testing.T) {
-	// Empty attrs => valid (vacuous).
-	res := ValidateAttributes(PropertyTypeOffice, Attributes{})
+func TestAttributesUnknownPropertyType(t *testing.T) {
+	// An unrecognised property type string is treated as unsupported: empty
+	// attrs => valid (vacuous); non-empty => one error per key.
+	const unknownType PropertyType = "unknown"
+
+	res := ValidateAttributes(unknownType, Attributes{})
 	if !res.Valid() {
-		t.Fatalf("empty attrs for office should be valid, got errors: %+v", res.Errors)
+		t.Fatalf("empty attrs for unknown type should be valid, got errors: %+v", res.Errors)
 	}
 
-	// Non-empty => one error per key, each "unknown attribute".
-	res = ValidateAttributes(PropertyTypeOffice, Attributes{
+	res = ValidateAttributes(unknownType, Attributes{
 		"floor":      float64(3),
 		"area_total": 50.0,
 	})
 	if len(res.Errors) != 2 {
-		t.Fatalf("expected 2 errors for unsupported non-empty, got %d: %+v", len(res.Errors), res.Errors)
+		t.Fatalf("expected 2 errors for unknown type non-empty, got %d: %+v", len(res.Errors), res.Errors)
 	}
 	for _, e := range res.Errors {
-		if !strings.Contains(e.Reason, "unknown attribute for property type office") {
-			t.Fatalf("error reason = %q, want substring %q", e.Reason, "unknown attribute for property type office")
+		if !strings.Contains(e.Reason, "unknown attribute for property type unknown") {
+			t.Fatalf("error reason = %q, want substring %q", e.Reason, "unknown attribute for property type unknown")
 		}
 	}
 }
@@ -328,10 +410,11 @@ func TestAttributesFilterByType(t *testing.T) {
 		}
 	})
 
-	t.Run("unsupported type drops everything", func(t *testing.T) {
-		out := attrs.FilterByType(PropertyTypeOffice)
+	t.Run("unknown type drops everything", func(t *testing.T) {
+		const unknownType PropertyType = "unknown"
+		out := attrs.FilterByType(unknownType)
 		if len(out) != 0 {
-			t.Fatalf("office filter should drop everything, got %+v", out)
+			t.Fatalf("unknown type filter should drop everything, got %+v", out)
 		}
 	})
 }
@@ -366,4 +449,43 @@ func TestAttributesApartmentsMirrorsApartment(t *testing.T) {
 	}
 	res := ValidateAttributes(PropertyTypeApartments, bad)
 	assertHasField(t, res, "floor", "")
+}
+
+func TestAttributesCommercialMirrorsOffice(t *testing.T) {
+	valid := Attributes{
+		"building_type": "business_center",
+		"floor":         float64(3),
+		"floors_total":  float64(10),
+		"area_total":    120.0,
+		"rooms":         "4",
+		"entrance":      "separate",
+		"renovation":    "euro",
+	}
+	if res := ValidateAttributes(PropertyTypeCommercial, valid); !res.Valid() {
+		t.Fatalf("commercial valid set should be valid, got errors: %+v", res.Errors)
+	}
+
+	bad := Attributes{
+		"floor":        float64(15),
+		"floors_total": float64(5),
+	}
+	res := ValidateAttributes(PropertyTypeCommercial, bad)
+	assertHasField(t, res, "floor", "")
+}
+
+func TestAttributesParkingSpotNumber(t *testing.T) {
+	// Valid string.
+	res := ValidateAttributes(PropertyTypeParking, Attributes{"spot_number": "A-42"})
+	if !res.Valid() {
+		t.Fatalf("spot_number=A-42 should be valid, got errors: %+v", res.Errors)
+	}
+
+	// Over max length (51 chars).
+	longSpot := strings.Repeat("A", 51)
+	res = ValidateAttributes(PropertyTypeParking, Attributes{"spot_number": longSpot})
+	assertHasField(t, res, "spot_number", "must be at most 50 characters")
+
+	// Non-string value.
+	res = ValidateAttributes(PropertyTypeParking, Attributes{"spot_number": 42.0})
+	assertHasField(t, res, "spot_number", "expected a string")
 }

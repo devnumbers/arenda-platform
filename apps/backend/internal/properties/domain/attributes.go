@@ -104,11 +104,46 @@ var (
 		"shower":     {kind: kindEnum, enumVals: []string{"indoor", "outdoor", "none"}},
 		"year_built": {kind: kindInteger, minInt: 1800, maxInt: maxYearBuilt()},
 	}
+
+	officeFields = map[string]fieldDef{
+		"building_type": {kind: kindEnum, enumVals: []string{"business_center", "warehouse_building", "shopping_center", "detached", "residential"}},
+		"floor":         {kind: kindInteger, minInt: -3, maxInt: 200},
+		"floors_total":  {kind: kindInteger, minInt: 1, maxInt: 200},
+		"area_total":    {kind: kindNumber, minFloat: 1.0, maxFloat: 100000.0},
+		"rooms":         {kind: kindEnum, enumVals: []string{"1", "2", "3", "4", "5", "6", "7_plus"}},
+		"entrance":      {kind: kindEnum, enumVals: []string{"separate", "common"}},
+		"renovation":    {kind: kindEnum, enumVals: []string{"cosmetic", "euro", "design", "required"}},
+	}
+
+	// commercial mirrors office ("прочая коммерция" shares the office set).
+	commercialFields = officeFields
+
+	warehouseFields = map[string]fieldDef{
+		"area_total":    {kind: kindNumber, minFloat: 1.0, maxFloat: 100000.0},
+		"entrance":      {kind: kindEnum, enumVals: []string{"separate", "common"}},
+		"building_type": {kind: kindEnum, enumVals: []string{"business_center", "warehouse_building", "shopping_center", "detached", "residential"}},
+	}
+
+	garageFields = map[string]fieldDef{
+		"area_total": {kind: kindNumber, minFloat: 1.0, maxFloat: 100000.0},
+		"material":   {kind: kindEnum, enumVals: []string{"brick", "metal", "reinforced_concrete"}},
+	}
+
+	parkingFields = map[string]fieldDef{
+		"area_total":       {kind: kindNumber, minFloat: 1.0, maxFloat: 100000.0},
+		"parking_location": {kind: kindEnum, enumVals: []string{"underground", "indoor", "outdoor"}},
+		"parking_level":    {kind: kindInteger, minInt: -5, maxInt: 100},
+		"spot_number":      {kind: kindString, maxLen: 50},
+	}
+
+	landFields = map[string]fieldDef{
+		"land_area": {kind: kindNumber, minFloat: 0.01, maxFloat: 1000000.0},
+		"land_type": {kind: kindEnum, enumVals: []string{"izhs", "garden", "farm"}},
+	}
 )
 
 // fieldsForType returns the catalog field map for the given property type.
-// apartment and apartments share the same map; room and house have their own.
-// Returns nil for unsupported types (not yet in the catalog).
+// All ten property types are covered. Returns nil only for an unknown type.
 func fieldsForType(t PropertyType) map[string]fieldDef {
 	switch t {
 	case PropertyTypeApartment, PropertyTypeApartments:
@@ -117,15 +152,25 @@ func fieldsForType(t PropertyType) map[string]fieldDef {
 		return roomFields
 	case PropertyTypeHouse:
 		return houseFields
+	case PropertyTypeOffice:
+		return officeFields
+	case PropertyTypeCommercial:
+		return commercialFields
+	case PropertyTypeWarehouse:
+		return warehouseFields
+	case PropertyTypeGarage:
+		return garageFields
+	case PropertyTypeParking:
+		return parkingFields
+	case PropertyTypeLand:
+		return landFields
 	default:
-		// Unsupported types (commercial, office, warehouse, garage, parking,
-		// land) are added in a follow-up; nil means "no catalog yet".
 		return nil
 	}
 }
 
 // CatalogKeys returns the set of catalog attribute keys for the given property
-// type. For unsupported types (not yet in the catalog) returns nil.
+// type. Returns nil for an unknown type.
 func CatalogKeys(propType PropertyType) []string {
 	fields := fieldsForType(propType)
 	if fields == nil {
@@ -157,9 +202,8 @@ func (a Attributes) FilterByType(propType PropertyType) Attributes {
 // ValidateAttributes validates the given attributes against the catalog for the
 // given property type. Only keys belonging to the catalog of the current type
 // are accepted; unknown keys and null values are rejected. Numeric ranges,
-// enum membership, and cross-field rules are checked. Only the four residential
-// types (apartment, apartments, room, house) are supported here; all other
-// types yield a valid result for an empty set (they are added in a follow-up).
+// enum membership, and cross-field rules are checked. All ten property types
+// are supported.
 func ValidateAttributes(propType PropertyType, attrs Attributes) ValidationResult {
 	var res ValidationResult
 	fields := fieldsForType(propType)
@@ -346,6 +390,15 @@ func crossFieldErrors(propType PropertyType, fields map[string]fieldDef, attrs A
 				errs = append(errs, AttributeValidationError{
 					Field:  "area_kitchen",
 					Reason: "area_kitchen must not exceed area_total",
+				})
+			}
+		}
+	case PropertyTypeOffice, PropertyTypeCommercial:
+		if f, ok := numVal("floor"); ok {
+			if ft, ok2 := numVal("floors_total"); ok2 && f > ft {
+				errs = append(errs, AttributeValidationError{
+					Field:  "floor",
+					Reason: "floor must not exceed floors_total",
 				})
 			}
 		}
