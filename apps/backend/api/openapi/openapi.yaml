@@ -706,6 +706,69 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/free-reminders:
+    post:
+      operationId: createFreeReminder
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FreeReminderCreateRequest'
+      responses:
+        '201':
+          description: Free reminder created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FreeReminderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    get:
+      operationId: listPropertyFreeReminders
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 3
+      responses:
+        '200':
+          description: Up to limit upcoming free reminders for the property
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FreeRemindersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /properties/{propertyId}/operations:
     get:
       operationId: listOperationsByProperty
@@ -1655,6 +1718,109 @@ paths:
           $ref: '#/components/responses/NotFound'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
+  /free-reminders:
+    get:
+      operationId: listFreeReminders
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Free reminders list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FreeRemindersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /free-reminders/{freeReminderId}:
+    get:
+      operationId: getFreeReminder
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: freeReminderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Free reminder
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FreeReminderResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateFreeReminder
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: freeReminderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FreeReminderUpdateRequest'
+      responses:
+        '200':
+          description: Free reminder updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FreeReminderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteFreeReminder
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: freeReminderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Free reminder deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /notification-preferences:
     get:
       operationId: getNotificationPreferences
@@ -4804,7 +4970,7 @@ components:
           format: uuid
         target_type:
           type: string
-          enum: [operation, recurring_operation, lease]
+          enum: [operation, recurring_operation, lease, free]
         operation_id:
           type: string
           format: uuid
@@ -4817,13 +4983,17 @@ components:
           type: string
           format: uuid
           nullable: true
+        free_reminder_id:
+          type: string
+          format: uuid
+          nullable: true
         property_id:
           type: string
           format: uuid
           nullable: true
         event_type:
           type: string
-          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action]
+          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action, free_reminder]
         status:
           type: string
           enum: [pending, sent, failed, cancelled, skipped]
@@ -4877,13 +5047,79 @@ components:
           items:
             $ref: '#/components/schemas/ReminderResponse'
 
+    FreeReminderResponse:
+      type: object
+      required: [id, owner_id, property_id, title, trigger_at, periodicity, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        owner_id:
+          type: string
+          format: uuid
+        property_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        trigger_at:
+          type: string
+          format: date-time
+        periodicity:
+          type: string
+          enum: [once, daily, weekly, monthly, yearly]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    FreeReminderCreateRequest:
+      type: object
+      required: [title, trigger_at, periodicity]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 50
+        trigger_at:
+          type: string
+          format: date-time
+        periodicity:
+          type: string
+          enum: [once, daily, weekly, monthly, yearly]
+
+    FreeReminderUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 50
+        trigger_at:
+          type: string
+          format: date-time
+        periodicity:
+          type: string
+          enum: [once, daily, weekly, monthly, yearly]
+
+    FreeRemindersResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FreeReminderResponse'
+
     NotificationPreference:
       type: object
       required: [event_type, allowed]
       properties:
         event_type:
           type: string
-          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action]
+          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action, free_reminder]
         allowed:
           type: boolean
 
@@ -4902,8 +5138,8 @@ components:
       properties:
         preferences:
           type: array
-          minItems: 4
-          maxItems: 4
+          minItems: 5
+          maxItems: 5
           items:
             $ref: '#/components/schemas/NotificationPreference'
 

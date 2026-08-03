@@ -19,6 +19,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -64,6 +65,7 @@ type PropertyService struct {
 	db                txBeginner
 	audit             auditapp.Recorder
 	clock             clock.Clock
+	tzResolver        sharedtz.OwnerTimezoneResolver
 	logger            *slog.Logger
 }
 
@@ -78,6 +80,7 @@ func NewPropertyService(
 	db txBeginner,
 	audit auditapp.Recorder,
 	clock clock.Clock,
+	tzResolver sharedtz.OwnerTimezoneResolver,
 	logger *slog.Logger,
 ) *PropertyService {
 	if logger == nil {
@@ -97,6 +100,7 @@ func NewPropertyService(
 		db:                db,
 		audit:             audit,
 		clock:             clock,
+		tzResolver:        tzResolver,
 		logger:            logger,
 	}
 }
@@ -460,7 +464,12 @@ func (s *PropertyService) DeleteProperty(
 		// Detach keeps leases and operations with property_id set to NULL by
 		// the FK; pause recurring operations and drop their future unedited
 		// operations and reminders, same as archiving does.
-		if err := s.billingLifecycle.WithTx(tx).Suspend(ctx, id, timeutil.Date(s.clock.Now())); err != nil {
+		loc, err := s.tzResolver.Resolve(ctx, ownerID)
+		if err != nil {
+			return fmt.Errorf("resolve owner timezone: %w", err)
+		}
+		asOf := timeutil.DateIn(s.clock.Now(), loc)
+		if err := s.billingLifecycle.WithTx(tx).Suspend(ctx, id, ownerID, asOf); err != nil {
 			return fmt.Errorf("suspend billing: %w", err)
 		}
 	}
@@ -538,12 +547,17 @@ func (s *PropertyService) archivePropertyInTx(
 		return domain.Property{}, ErrPropertyHasOpenLease
 	}
 
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
 	now := s.clock.Now()
-	if err := billing.CompleteOpenLeases(ctx, ownerID, id, now); err != nil {
+	asOf := timeutil.DateIn(now, loc)
+	if err := billing.CompleteOpenLeases(ctx, ownerID, id, asOf); err != nil {
 		return domain.Property{}, fmt.Errorf("complete open leases: %w", err)
 	}
 
-	if err := billing.Suspend(ctx, id, timeutil.Date(now)); err != nil {
+	if err := billing.Suspend(ctx, id, ownerID, asOf); err != nil {
 		return domain.Property{}, fmt.Errorf("suspend billing: %w", err)
 	}
 
@@ -660,7 +674,12 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 		return domain.Property{}, fmt.Errorf("unarchive property: %w", err)
 	}
 
-	if err := s.billingLifecycle.WithTx(tx).Resume(ctx, id, ownerID, timeutil.Date(s.clock.Now())); err != nil {
+	resumeLoc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
+	resumeAsOf := timeutil.DateIn(s.clock.Now(), resumeLoc)
+	if err := s.billingLifecycle.WithTx(tx).Resume(ctx, id, ownerID, resumeAsOf); err != nil {
 		return domain.Property{}, fmt.Errorf("resume billing: %w", err)
 	}
 

@@ -112,6 +112,20 @@ func (r *ReminderRepository) UpdateScheduledAt(ctx context.Context, ownerID, id 
 	return nil
 }
 
+// ReschedulePendingRemindersByOwner recalculates the scheduled_at of all pending
+// reminders for an owner using wall-clock timezone conversion: the local date
+// and time-of-day seen in oldTZ are re-applied in newTZ.
+func (r *ReminderRepository) ReschedulePendingRemindersByOwner(ctx context.Context, ownerID uuid.UUID, oldTZ, newTZ string) error {
+	if _, err := r.q().ReschedulePendingRemindersByOwner(ctx, postgres.ReschedulePendingRemindersByOwnerParams{
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OldTz:   oldTZ,
+		NewTz:   newTZ,
+	}); err != nil {
+		return fmt.Errorf("reschedule pending reminders by owner: %w", err)
+	}
+	return nil
+}
+
 // GetByID returns a reminder by ID scoped to an owner.
 func (r *ReminderRepository) GetByID(ctx context.Context, id, ownerID uuid.UUID) (domain.Reminder, error) {
 	row, err := r.q().GetReminderByIDAndOwner(ctx, postgres.GetReminderByIDAndOwnerParams{
@@ -603,6 +617,7 @@ func toDomain(row postgres.Reminder) domain.Reminder {
 		RecurringOperationID: pgconv.UUIDFromPgtypePtr(row.RecurringOperationID),
 		LeaseID:              pgconv.UUIDFromPgtypePtr(row.LeaseID),
 		PropertyID:           pgconv.UUIDFromPgtypePtr(row.PropertyID),
+		FreeReminderID:       pgconv.UUIDFromPgtypePtr(row.FreeReminderID),
 		EventType:            domain.EventType(row.EventType),
 		Status:               domain.ReminderStatus(row.Status),
 		ScheduledAt:          pgconv.TimestamptzToTime(row.ScheduledAt),

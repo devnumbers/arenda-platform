@@ -1,0 +1,38 @@
+/* PROTOTYPE — throwaway, issue #105 */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.875rem;
+  color: var(--color-text);
+}
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+  border: 1px dashed var(--color-secondary-pressed);
+  border-radius: var(--radius-input);
+  background: var(--color-secondary-bg);
+}
+
+.placeholderTitle {
+  font-size: var(--font-size-text-m);
+  font-weight: 500;
+  line-height: var(--line-height-text-m);
+  color: var(--color-text-muted);
+}
+
+.placeholderText {
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+  color: var(--color-text-muted);
+}

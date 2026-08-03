@@ -572,7 +572,7 @@ func TestGenerateRentOperations_BackdatedLeaseMarksPastPeriodsUnconfirmed(t *tes
 		PaymentDay:        1,
 	}
 
-	svc := NewRentService(&fakeOperationRepo{}, &fakeRecurringOperationRepo{}, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: date(2024, 6, 30)})
+	svc := NewRentService(&fakeOperationRepo{}, &fakeRecurringOperationRepo{}, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: date(2024, 6, 30)}, fakeTzResolver{})
 	ops, err := svc.GenerateRentOperations(ctx, lease, recID, ownerID, testRentCategoryID)
 	if err != nil {
 		t.Fatalf("generate rent operations: %v", err)
@@ -639,7 +639,7 @@ func TestRebuildSchedule_DeletedManualLeaseOperationDoesNotBlockGeneratedRent(t 
 		DeletedAt:     &deletedAt,
 	})
 
-	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: date(2024, 6, 1)})
+	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: date(2024, 6, 1)}, fakeTzResolver{})
 	if err := svc.RebuildSchedule(ctx, lease, start); err != nil {
 		t.Fatalf("RebuildSchedule failed: %v", err)
 	}
@@ -714,7 +714,7 @@ func TestRebuildSchedule_MovedGeneratedRentOperationBlocksOriginalScheduleDate(t
 		IsException:          true,
 	})
 
-	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: now})
+	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: now}, fakeTzResolver{})
 	if err := svc.RebuildSchedule(ctx, lease, start); err != nil {
 		t.Fatalf("RebuildSchedule failed: %v", err)
 	}
@@ -809,7 +809,7 @@ func TestRebuildSchedule_EarlierStartDatePreservesPastOperations(t *testing.T) {
 		IsException:   true,
 	})
 
-	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: now})
+	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: now}, fakeTzResolver{})
 	if err := svc.RebuildSchedule(ctx, lease, originalStart); err != nil {
 		t.Fatalf("RebuildSchedule failed: %v", err)
 	}

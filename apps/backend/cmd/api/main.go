@@ -45,6 +45,7 @@ import (
 	mailersmtp "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/smtp"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/observability"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
+	platformtz "github.com/nambers/arenda-planform/apps/backend/internal/platform/tzresolver"
 	popupspg "github.com/nambers/arenda-planform/apps/backend/internal/popups/adapters/postgres"
 	popupsapp "github.com/nambers/arenda-planform/apps/backend/internal/popups/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/dadata"
@@ -268,10 +269,18 @@ func run() error {
 		},
 	)
 
+	reminderRepo := notificationspg.NewReminderRepository(db)
+	tzResolver := platformtz.NewOwnerTimezone(db)
+	reminderService := notificationsapp.NewReminderService(reminderRepo, clock.Real{}, tzResolver)
+
+	freeReminderRepo := notificationspg.NewFreeReminderRepository(db)
+	freeReminderService := notificationsapp.NewFreeReminderService(freeReminderRepo, platformpostgres.NewBeginner(pool, appLogger), clock.Real{}, tzResolver)
+
 	profileService := identityapp.NewProfileService(
 		identityUserRepo,
 		auditRecorder,
 		platformpostgres.NewBeginner(pool, appLogger),
+		reminderService,
 	)
 
 	logoutService := identityapp.NewLogoutService(
@@ -289,8 +298,7 @@ func run() error {
 	leaseRepo := leasespg.NewLeaseRepository(db)
 	categoryRepo := leasespg.NewOperationCategoryRepository(db)
 	categoryService := leasesapp.NewCategoryService(categoryRepo, auditRecorder)
-	reminderRepo := notificationspg.NewReminderRepository(db)
-	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, clock.Real{})
+	reminderScheduler := notificationsapp.NewReminderScheduler(reminderRepo, clock.Real{}, tzResolver)
 	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, leaseRepo, categoryRepo, reminderScheduler, auditRecorder, clock.Real{})
 
 	var photoStorage propertiesapp.PhotoStorage
@@ -328,6 +336,7 @@ func run() error {
 		platformpostgres.NewBeginner(pool, appLogger),
 		auditRecorder,
 		clock.Real{},
+		tzResolver,
 		appLogger,
 	)
 
@@ -390,12 +399,12 @@ func run() error {
 		platformpostgres.NewBeginner(pool, appLogger),
 		auditRecorder,
 		clock.Real{},
+		tzResolver,
 		appLogger,
 	)
 	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, auditRecorder, appLogger)
-	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, categoryRepo, reminderScheduler, platformpostgres.NewBeginner(pool, appLogger), auditRecorder, clock.Real{}, appLogger)
+	operationService := leasesapp.NewOperationService(operationRepo, leasePropertyRepo, leaseRepo, recurringOpRepo, categoryRepo, reminderScheduler, platformpostgres.NewBeginner(pool, appLogger), auditRecorder, clock.Real{}, tzResolver, appLogger)
 	exportService := leasesapp.NewExportService(operationRepo, leaseRepo, leasePropertyRepo, leasePropertyContactRepo, clock.Real{}, appLogger)
-	reminderService := notificationsapp.NewReminderService(reminderRepo, clock.Real{})
 	preferenceService := notificationsapp.NewPreferenceService(reminderRepo, platformpostgres.NewBeginner(pool, appLogger), auditRecorder)
 	popupService := popupsapp.NewPopupService(popupspg.NewPopupRepository(db))
 	recurringOperationService := leasesapp.NewRecurringOperationService(
@@ -408,6 +417,7 @@ func run() error {
 		platformpostgres.NewBeginner(pool, appLogger),
 		auditRecorder,
 		clock.Real{},
+		tzResolver,
 		appLogger,
 	)
 	queries := platformgenerated.New(db)
@@ -417,10 +427,10 @@ func run() error {
 		notificationsapp.ChannelEmail: emailNotifier,
 	}
 	reminderWorker := scheduler.NewReminderWorker(reminderRepo, renderer, notifiers, contactResolver, platformpostgres.NewBeginner(pool, appLogger), clock.Real{}, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, appLogger)
-	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, clock.Real{}, 1*time.Hour, 100, appLogger)
+	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, clock.Real{}, 1*time.Hour, 100, appLogger, tzResolver)
 	billingWorker := scheduler.NewBillingWorker(billing.Renewals, billing.ScheduledChanges, pool, clock.Real{}, cfg.BillingWorkerInterval, appLogger)
 	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(billing.Payments, pool, clock.Real{}, cfg.PaymentReconciliationWorkerInterval, appLogger)
-	operationOverdueWorker := scheduler.NewOperationOverdueWorker(operationService, clock.Real{}, cfg.OverdueOperationWorkerInterval, 100, appLogger)
+	operationOverdueWorker := scheduler.NewOperationOverdueWorker(operationService, clock.Real{}, cfg.OverdueOperationWorkerInterval, 100, appLogger, tzResolver)
 
 	dataCleaner := identityscheduler.NewCleaner(identitySessionRepo, identityCodeRepo, identityAttemptRepo, clock.Real{}, 1*time.Hour, 7*24*time.Hour, appLogger)
 	var workers sync.WaitGroup
@@ -483,12 +493,14 @@ func run() error {
 		RecurringOperations:      recurringOperationService,
 		Categories:               categoryService,
 		Reminders:                reminderService,
+		FreeReminders:            freeReminderService,
 		NotificationPreferences:  preferenceService,
 		Popups:                   popupService,
 		AppBaseURL:               cfg.AppBaseURL,
 		CookieSecure:             cfg.CookieSecure,
 		Logger:                   appLogger,
 		Clock:                    clock.Real{},
+		TZResolver:               tzResolver,
 		LogSuccessfulRequests:    cfg.LogSuccessfulRequests,
 		IPRateLimiter:            ipLimiter,
 		EmailSendLimiter:         emailSendLimiter,

@@ -36,6 +36,10 @@ func (r *fakeReminderRepoForWorker) UpdateScheduledAt(context.Context, uuid.UUID
 	return nil
 }
 
+func (r *fakeReminderRepoForWorker) ReschedulePendingRemindersByOwner(context.Context, uuid.UUID, string, string) error {
+	return nil
+}
+
 func (r *fakeReminderRepoForWorker) GetByID(context.Context, uuid.UUID, uuid.UUID) (domain.Reminder, error) {
 	return domain.Reminder{}, nil
 }

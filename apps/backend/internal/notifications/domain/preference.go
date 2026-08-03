@@ -16,13 +16,14 @@ func AllEventTypes() []EventType {
 		EventOperationOverdue,
 		EventLeaseExpiring,
 		EventLeaseRequiresAction,
+		EventFreeReminder,
 	}
 }
 
 // IsValid reports whether the event type is a known reminder event type.
 func (e EventType) IsValid() bool {
 	switch e {
-	case EventOperationDue, EventOperationOverdue, EventLeaseExpiring, EventLeaseRequiresAction:
+	case EventOperationDue, EventOperationOverdue, EventLeaseExpiring, EventLeaseRequiresAction, EventFreeReminder:
 		return true
 	default:
 		return false

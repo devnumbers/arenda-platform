@@ -14,6 +14,9 @@ type ReminderRepository interface {
 	Save(ctx context.Context, r domain.Reminder) error
 	SaveOrReplaceOperationReminder(ctx context.Context, r domain.Reminder) error
 	UpdateScheduledAt(ctx context.Context, ownerID, id uuid.UUID, scheduledAt time.Time) error
+	// ReschedulePendingRemindersByOwner recalculates the scheduled_at of all
+	// pending reminders for an owner using wall-clock timezone conversion.
+	ReschedulePendingRemindersByOwner(ctx context.Context, ownerID uuid.UUID, oldTZ, newTZ string) error
 	GetByID(ctx context.Context, id, ownerID uuid.UUID) (domain.Reminder, error)
 	GetByIDUnscoped(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
 	ListByOwner(ctx context.Context, ownerID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
@@ -55,6 +58,25 @@ type ReminderRepository interface {
 	// given event type. A missing row means allowed.
 	IsEventAllowed(ctx context.Context, userID uuid.UUID, eventType domain.EventType) (bool, error)
 	WithTx(tx transaction.Tx) ReminderRepository
+}
+
+// FreeReminderRepository persists free reminder templates and materializes
+// concrete reminders from them. It is a separate responsibility from
+// ReminderRepository, which deals with operation/lease reminders.
+type FreeReminderRepository interface {
+	Create(ctx context.Context, fr domain.FreeReminder) (domain.FreeReminder, error)
+	GetByID(ctx context.Context, id, ownerID uuid.UUID) (domain.FreeReminder, error)
+	Update(ctx context.Context, fr domain.FreeReminder) (domain.FreeReminder, error)
+	Delete(ctx context.Context, ownerID, id uuid.UUID) error
+	ListByOwner(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]domain.FreeReminder, error)
+	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, limit int) ([]domain.FreeReminder, error)
+	// SaveFreeReminder inserts a concrete reminder row materialized from a free
+	// reminder template.
+	SaveFreeReminder(ctx context.Context, rm domain.Reminder) error
+	// CancelRemindersByFreeReminderID cancels pending/sending concrete reminders
+	// linked to a free reminder template.
+	CancelRemindersByFreeReminderID(ctx context.Context, ownerID, freeReminderID uuid.UUID) error
+	WithTx(tx transaction.Tx) FreeReminderRepository
 }
 
 // ListFilter controls pagination and optional status filtering for ListByOwner.
@@ -159,4 +181,20 @@ type LeaseInfo struct {
 	OwnerID    uuid.UUID
 	PropertyID uuid.UUID
 	EndDate    *time.Time
+}
+
+// CreateFreeReminderInput is the user-supplied data for creating a free reminder.
+type CreateFreeReminderInput struct {
+	PropertyID  uuid.UUID
+	Title       string
+	TriggerAt   time.Time // local instant (date + time-of-day) in the owner's timezone
+	Periodicity domain.FreeReminderPeriodicity
+}
+
+// UpdateFreeReminderInput is the user-supplied data for updating a free reminder.
+// All fields are optional (partial update semantics).
+type UpdateFreeReminderInput struct {
+	Title       *string
+	TriggerAt   *time.Time
+	Periodicity *domain.FreeReminderPeriodicity
 }

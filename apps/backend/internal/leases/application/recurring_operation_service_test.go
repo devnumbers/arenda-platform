@@ -184,6 +184,7 @@ func TestUpdateRecurringOperation_ConcurrentUpdatesDoNotOverwrite(t *testing.T) 
 		fakeTxBeginner{},
 		nil,
 		fakeClock{now: date(2024, 6, 1)},
+		fakeTzResolver{},
 		nil,
 	)
 
@@ -248,7 +249,7 @@ func (fakeReminderLister) ListByRecurringOperation(_ context.Context, _, _ uuid.
 }
 
 func newRecurringGuardService(ownerID uuid.UUID, recRepo RecurringOperationRepository, opRepo *fakeOperationRepo, propertyRepo *fakePropertyRepo, reminders ReminderLister) *RecurringOperationService {
-	return NewRecurringOperationService(recRepo, opRepo, propertyRepo, newFakeCategoryRepoForOwner(ownerID), nil, reminders, fakeTxBeginner{}, nil, fakeClock{now: date(2026, 6, 15)}, nil)
+	return NewRecurringOperationService(recRepo, opRepo, propertyRepo, newFakeCategoryRepoForOwner(ownerID), nil, reminders, fakeTxBeginner{}, nil, fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, nil)
 }
 
 func newGuardTestRecurringOperation(id, ownerID, propertyID uuid.UUID, status domain.RecurringOperationStatus) domain.RecurringOperation {

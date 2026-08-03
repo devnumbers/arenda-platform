@@ -130,9 +130,10 @@ func (l *PropertyBillingLifecycle) CompleteOpenLeases(ctx context.Context, owner
 }
 
 // Suspend deletes future unedited operations for the property, pauses all
-// recurring operations associated with it, and cancels their reminders.
-func (l *PropertyBillingLifecycle) Suspend(ctx context.Context, propertyID uuid.UUID, asOf time.Time) error {
-	if err := l.ops.DeleteFutureUneditedOperationsByProperty(ctx, propertyID, timeutil.Date(asOf)); err != nil {
+// recurring operations associated with it, and cancels their reminders. The
+// caller normalizes asOf to midnight in the owner's timezone before calling.
+func (l *PropertyBillingLifecycle) Suspend(ctx context.Context, propertyID, ownerID uuid.UUID, asOf time.Time) error {
+	if err := l.ops.DeleteFutureUneditedOperationsByProperty(ctx, propertyID, asOf); err != nil {
 		return fmt.Errorf("delete future operations: %w", err)
 	}
 
@@ -173,7 +174,7 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.U
 		categoryNames[c.ID] = c.Name
 	}
 
-	from := timeutil.Date(asOf)
+	from := asOf
 	createdAt := l.clock.Now()
 	for _, rec := range recs {
 		if _, err := l.recurringOps.UpdateStatusByID(ctx, rec.ID, string(leasesdomain.RecurringOperationStatusActive)); err != nil {
@@ -236,9 +237,8 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.U
 				return fmt.Errorf("list operations for scheduling: %w", err)
 			}
 			futureOps := make([]leasesdomain.Operation, 0, len(allOps))
-			asOfDate := timeutil.Date(asOf)
 			for _, op := range allOps {
-				if !timeutil.Date(op.OperationDate).Before(asOfDate) {
+				if !timeutil.BeforeDay(op.OperationDate, asOf) {
 					futureOps = append(futureOps, op)
 				}
 			}

@@ -18,6 +18,7 @@ type Querier interface {
 	BeginSubscriptionPaymentRefund(ctx context.Context, id pgtype.UUID) (pgconn.CommandTag, error)
 	CancelByIDAndOwner(ctx context.Context, arg CancelByIDAndOwnerParams) (int64, error)
 	CancelReminderByTarget(ctx context.Context, arg CancelReminderByTargetParams) (int64, error)
+	CancelRemindersByFreeReminderID(ctx context.Context, arg CancelRemindersByFreeReminderIDParams) (int64, error)
 	CancelRemindersByRecurringOperationID(ctx context.Context, arg CancelRemindersByRecurringOperationIDParams) (int64, error)
 	CompleteLease(ctx context.Context, arg CompleteLeaseParams) (Lease, error)
 	CountActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) (int64, error)
@@ -40,6 +41,7 @@ type Querier interface {
 	CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams) (int64, error)
 	// GetUserByIDAdmin is implemented by the existing GetUserByID query (no owner filter).
 	CountUsersTotalAdmin(ctx context.Context) (int64, error)
+	CreateFreeReminder(ctx context.Context, arg CreateFreeReminderParams) (FreeReminder, error)
 	CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease, error)
 	CreateLoginCode(ctx context.Context, arg CreateLoginCodeParams) error
 	CreateOperation(ctx context.Context, arg CreateOperationParams) (Operation, error)
@@ -61,6 +63,7 @@ type Querier interface {
 	DeleteExpiredLoginCodesBatch(ctx context.Context, arg DeleteExpiredLoginCodesBatchParams) (int64, error)
 	DeleteExpiredLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndEmailParams) error
 	DeleteExpiredSessionsBatch(ctx context.Context, arg DeleteExpiredSessionsBatchParams) (int64, error)
+	DeleteFreeReminderByIDAndOwner(ctx context.Context, arg DeleteFreeReminderByIDAndOwnerParams) (int64, error)
 	DeleteFutureGeneratedOperations(ctx context.Context, arg DeleteFutureGeneratedOperationsParams) error
 	DeleteFutureOperationsByLease(ctx context.Context, arg DeleteFutureOperationsByLeaseParams) error
 	DeleteFutureUneditedOperationsByProperty(ctx context.Context, arg DeleteFutureUneditedOperationsByPropertyParams) error
@@ -92,6 +95,7 @@ type Querier interface {
 	GetFinanceReportByMonth(ctx context.Context, arg GetFinanceReportByMonthParams) ([]GetFinanceReportByMonthRow, error)
 	GetFinanceReportByProperty(ctx context.Context, arg GetFinanceReportByPropertyParams) ([]GetFinanceReportByPropertyRow, error)
 	GetFinanceReportTotals(ctx context.Context, arg GetFinanceReportTotalsParams) (GetFinanceReportTotalsRow, error)
+	GetFreeReminderByIDAndOwner(ctx context.Context, arg GetFreeReminderByIDAndOwnerParams) (FreeReminder, error)
 	GetLastSucceededSubscriptionPaymentBySubscriptionID(ctx context.Context, subscriptionID pgtype.UUID) (SubscriptionPayment, error)
 	GetLatestLoginCodeByPhoneAndEmailAndPurpose(ctx context.Context, arg GetLatestLoginCodeByPhoneAndEmailAndPurposeParams) (GetLatestLoginCodeByPhoneAndEmailAndPurposeRow, error)
 	GetLeaseByID(ctx context.Context, id pgtype.UUID) (Lease, error)
@@ -147,6 +151,7 @@ type Querier interface {
 	GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone string) (User, error)
 	GetUserByPhoneForUpdate(ctx context.Context, phone string) (User, error)
+	GetUserTimezone(ctx context.Context, id pgtype.UUID) (string, error)
 	GetVerifiedEmailByUserID(ctx context.Context, id pgtype.UUID) (pgtype.Text, error)
 	HasReminderForLeaseEvent(ctx context.Context, arg HasReminderForLeaseEventParams) (bool, error)
 	HasReminderForOperationEvent(ctx context.Context, arg HasReminderForOperationEventParams) (bool, error)
@@ -166,6 +171,8 @@ type Querier interface {
 	ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error)
 	ListExpiredCancelledSubscriptions(ctx context.Context, arg ListExpiredCancelledSubscriptionsParams) ([]UserSubscription, error)
 	ListExpiredNonRenewingSubscriptions(ctx context.Context, arg ListExpiredNonRenewingSubscriptionsParams) ([]UserSubscription, error)
+	ListFreeRemindersByOwner(ctx context.Context, arg ListFreeRemindersByOwnerParams) ([]FreeReminder, error)
+	ListFreeRemindersByProperty(ctx context.Context, arg ListFreeRemindersByPropertyParams) ([]FreeReminder, error)
 	ListFutureOperationsByLease(ctx context.Context, arg ListFutureOperationsByLeaseParams) ([]ListFutureOperationsByLeaseRow, error)
 	ListLeasesAdmin(ctx context.Context, arg ListLeasesAdminParams) ([]ListLeasesAdminRow, error)
 	ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Lease, error)
@@ -242,15 +249,18 @@ type Querier interface {
 	MarkSubscriptionPaymentReconciledSucceeded(ctx context.Context, arg MarkSubscriptionPaymentReconciledSucceededParams) (SubscriptionPayment, error)
 	MarkSubscriptionPaymentRefunded(ctx context.Context, arg MarkSubscriptionPaymentRefundedParams) (SubscriptionPayment, error)
 	MarkSubscriptionPaymentSucceeded(ctx context.Context, arg MarkSubscriptionPaymentSucceededParams) (SubscriptionPayment, error)
+	ReschedulePendingRemindersByOwner(ctx context.Context, arg ReschedulePendingRemindersByOwnerParams) (int64, error)
 	ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Roll back an in-flight refund reservation to the previous status ($2).
 	// updated_at is maintained by the trg_subscription_payments_updated_at trigger.
 	RevertSubscriptionPaymentRefund(ctx context.Context, arg RevertSubscriptionPaymentRefundParams) (pgconn.CommandTag, error)
+	SaveFreeReminder(ctx context.Context, arg SaveFreeReminderParams) (int64, error)
 	SaveOrReplaceOperationReminder(ctx context.Context, arg SaveOrReplaceOperationReminderParams) (int64, error)
 	SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) (int64, error)
 	SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperationParams) (Operation, error)
 	SoftDeleteRecurringOperation(ctx context.Context, arg SoftDeleteRecurringOperationParams) (RecurringOperation, error)
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
+	UpdateFreeReminder(ctx context.Context, arg UpdateFreeReminderParams) (FreeReminder, error)
 	UpdateFutureGeneratedOperationReminderOffsets(ctx context.Context, arg UpdateFutureGeneratedOperationReminderOffsetsParams) (int64, error)
 	UpdateLease(ctx context.Context, arg UpdateLeaseParams) (Lease, error)
 	UpdateOperation(ctx context.Context, arg UpdateOperationParams) (Operation, error)

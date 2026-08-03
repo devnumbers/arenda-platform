@@ -622,6 +622,17 @@ func (q *Queries) GetUserByPhoneForUpdate(ctx context.Context, phone string) (Us
 	return i, err
 }
 
+const getUserTimezone = `-- name: GetUserTimezone :one
+SELECT timezone FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUserTimezone(ctx context.Context, id pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getUserTimezone, id)
+	var timezone string
+	err := row.Scan(&timezone)
+	return timezone, err
+}
+
 const getVerifiedEmailByUserID = `-- name: GetVerifiedEmailByUserID :one
 SELECT email
 FROM users

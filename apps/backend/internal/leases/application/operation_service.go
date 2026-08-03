@@ -14,6 +14,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 )
 
 // CreateOperationCommand carries the data needed to create a manual operation.
@@ -65,6 +66,7 @@ type OperationService struct {
 	db           txBeginner
 	audit        auditapp.Recorder
 	clock        clock.Clock
+	tzResolver   sharedtz.OwnerTimezoneResolver
 	logger       *slog.Logger
 }
 
@@ -79,6 +81,7 @@ func NewOperationService(
 	db txBeginner,
 	audit auditapp.Recorder,
 	clock clock.Clock,
+	tzResolver sharedtz.OwnerTimezoneResolver,
 	logger *slog.Logger,
 ) *OperationService {
 	if db == nil {
@@ -106,6 +109,7 @@ func NewOperationService(
 		db:           db,
 		audit:        audit,
 		clock:        clock,
+		tzResolver:   tzResolver,
 		logger:       logger,
 	}
 }
@@ -151,7 +155,12 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		return domain.Operation{}, fmt.Errorf("generate operation id: %w", err)
 	}
 
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return domain.Operation{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
 	now := s.clock.Now()
+	today := timeutil.DateIn(now, loc)
 	var comment string
 	if cmd.Comment != nil {
 		comment = *cmd.Comment
@@ -164,7 +173,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 		LeaseID:            leaseID,
 		Type:               opType,
 		CategoryID:         categoryID,
-		Status:             operationStatusForDate(cmd.OperationDate, now),
+		Status:             operationStatusForDate(cmd.OperationDate, today),
 		Name:               name,
 		AmountKopecks:      cmd.AmountKopecks,
 		OperationDate:      cmd.OperationDate,
@@ -198,7 +207,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, ownerID uuid.UUI
 			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
 		}
 		reminderDate := created.OperationDate.AddDate(0, 0, -(*created.ReminderOffsetDays))
-		if !reminderDate.Before(timeutil.Date(s.clock.Now())) {
+		if !reminderDate.Before(today) {
 			if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(created, cat.Name), reminderDate); err != nil {
 				return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
 			}
@@ -236,7 +245,11 @@ func (s *OperationService) GetPropertyOperationsSummary(ctx context.Context, own
 	if err := validateProperty(ctx, s.properties, ownerID, propertyID); err != nil {
 		return OperationsSummary{}, err
 	}
-	return s.operations.GetPropertyOperationsSummary(ctx, ownerID, propertyID, timeutil.Date(s.clock.Now()))
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return OperationsSummary{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
+	return s.operations.GetPropertyOperationsSummary(ctx, ownerID, propertyID, timeutil.DateIn(s.clock.Now(), loc))
 }
 
 type FinanceReport struct {
@@ -394,9 +407,13 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 	}
 
 	op.IsException = true
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return domain.Operation{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
 	now := s.clock.Now()
+	today := timeutil.DateIn(now, loc)
 	if cmd.OperationDate != nil {
-		today := timeutil.Date(now)
 		switch {
 		case op.Status == domain.OperationStatusOverdue && !op.OperationDate.Before(today):
 			op.Status = domain.OperationStatusPending
@@ -432,7 +449,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, ownerID, id uuid
 
 		if updated.ReminderOffsetDays != nil {
 			reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
-			if !reminderDate.Before(timeutil.Date(now)) {
+			if !reminderDate.Before(today) {
 				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
 					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
 				}
@@ -562,9 +579,14 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 		return op, nil
 	}
 
+	loc, err := s.tzResolver.Resolve(ctx, cmd.OwnerID)
+	if err != nil {
+		return domain.Operation{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
 	now := s.clock.Now()
+	today := timeutil.DateIn(now, loc)
 	status := domain.OperationStatusPending
-	if op.OperationDate.Before(timeutil.Date(now)) {
+	if op.OperationDate.Before(today) {
 		status = domain.OperationStatusOverdue
 	}
 	op.Status = status
@@ -602,7 +624,7 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 			}
 		} else if updated.ReminderOffsetDays != nil {
 			reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
-			if !reminderDate.Before(timeutil.Date(op.UpdatedAt)) {
+			if !reminderDate.Before(today) {
 				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
 					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
 				}
@@ -664,6 +686,12 @@ func (s *OperationService) MarkOverdue(ctx context.Context, ownerID uuid.UUID, o
 // overdue reminder atomically. The returned bool is true when the operation was
 // actually changed.
 func (s *OperationService) ProcessOverdueOperation(ctx context.Context, ownerID, operationID uuid.UUID, asOf time.Time) (bool, error) {
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return false, fmt.Errorf("resolve owner timezone: %w", err)
+	}
+	normalizedAsOf := timeutil.DateIn(asOf, loc)
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin tx: %w", err)
@@ -672,7 +700,7 @@ func (s *OperationService) ProcessOverdueOperation(ctx context.Context, ownerID,
 
 	txOps := s.operations.WithTx(tx)
 
-	op, changed, err := txOps.MarkOverdue(ctx, ownerID, operationID, asOf)
+	op, changed, err := txOps.MarkOverdue(ctx, ownerID, operationID, normalizedAsOf)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return false, ErrNotFound
@@ -693,7 +721,7 @@ func (s *OperationService) ProcessOverdueOperation(ctx context.Context, ownerID,
 		if err != nil {
 			return false, fmt.Errorf("get category for reminder: %w", err)
 		}
-		if err := txScheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(op, cat.Name), asOf); err != nil {
+		if err := txScheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(op, cat.Name), normalizedAsOf); err != nil {
 			return false, fmt.Errorf("schedule overdue reminder: %w", err)
 		}
 	}
@@ -787,7 +815,7 @@ func (s *OperationService) validateAmountAndDate(amount int64, operationDate tim
 // past-dated operations start as unconfirmed and must be completed explicitly,
 // operations dated today or later start as pending.
 func operationStatusForDate(operationDate, today time.Time) domain.OperationStatus {
-	if timeutil.Date(operationDate).Before(timeutil.Date(today)) {
+	if timeutil.BeforeDay(operationDate, today) {
 		return domain.OperationStatusUnconfirmed
 	}
 	return domain.OperationStatusPending

@@ -146,7 +146,7 @@ func TestOperationService_GetPropertyOperationsSummary(t *testing.T) {
 	_, _ = opRepo.Create(ctx, incomeOp)
 	_, _ = opRepo.Create(ctx, expenseOp)
 
-	svc := NewOperationService(opRepo, propertyRepo, nil, nil, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, nil, fakeClock{now: now}, nil)
+	svc := NewOperationService(opRepo, propertyRepo, nil, nil, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, nil, fakeClock{now: now}, fakeTzResolver{}, nil)
 
 	summary, err := svc.GetPropertyOperationsSummary(ctx, ownerID, propertyID)
 	if err != nil {

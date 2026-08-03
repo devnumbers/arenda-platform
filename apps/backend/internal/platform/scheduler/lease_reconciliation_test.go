@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 )
 
 type fakeLeaseService struct {
@@ -27,6 +28,16 @@ func (s *fakeLeaseService) ReconcileRequiresAction(context.Context, uuid.UUID, t
 	return s.reconcileErr
 }
 
+// fakeTzResolver is a stub OwnerTimezoneResolver that always resolves UTC,
+// keeping worker tests decoupled from the real resolver.
+type fakeTzResolver struct{}
+
+func (fakeTzResolver) Resolve(_ context.Context, _ uuid.UUID) (*time.Location, error) {
+	return time.UTC, nil
+}
+
+var _ sharedtz.OwnerTimezoneResolver = fakeTzResolver{}
+
 func TestLeaseReconciliationWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 	t.Parallel()
 
@@ -40,7 +51,7 @@ func TestLeaseReconciliationWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 		reconcileErr: errors.New("reconcile failed: " + sensitive),
 	}
 
-	w := NewLeaseReconciliationWorker(nil, fakeClockForWorker{now: time.Now()}, time.Hour, 10, logger)
+	w := NewLeaseReconciliationWorker(nil, fakeClockForWorker{now: time.Now()}, time.Hour, 10, logger, fakeTzResolver{})
 	w.leaseService = svc
 
 	if err := w.tick(context.Background()); err != nil {

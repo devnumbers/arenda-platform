@@ -19,6 +19,7 @@ const (
 	NotificationEventTypeLeaseExpiring       NotificationEventType = "lease_expiring"
 	NotificationEventTypeLeaseRequiresAction NotificationEventType = "lease_requires_action"
 	NotificationEventTypeOperationOverdue    NotificationEventType = "operation_overdue"
+	NotificationEventTypeFreeReminder        NotificationEventType = "free_reminder"
 )
 
 func (e *NotificationEventType) Scan(src interface{}) error {
@@ -108,6 +109,7 @@ const (
 	NotificationTargetTypeOperation          NotificationTargetType = "operation"
 	NotificationTargetTypeRecurringOperation NotificationTargetType = "recurring_operation"
 	NotificationTargetTypeLease              NotificationTargetType = "lease"
+	NotificationTargetTypeFree               NotificationTargetType = "free"
 )
 
 func (e *NotificationTargetType) Scan(src interface{}) error {
@@ -156,6 +158,17 @@ type AuditLog struct {
 	Context    []byte             `json:"context"`
 	RequestID  pgtype.Text        `json:"request_id"`
 	Ip         *netip.Addr        `json:"ip"`
+}
+
+type FreeReminder struct {
+	ID          pgtype.UUID        `json:"id"`
+	OwnerID     pgtype.UUID        `json:"owner_id"`
+	PropertyID  pgtype.UUID        `json:"property_id"`
+	Title       string             `json:"title"`
+	TriggerAt   pgtype.Timestamptz `json:"trigger_at"`
+	Periodicity string             `json:"periodicity"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Lease struct {
@@ -310,6 +323,7 @@ type Reminder struct {
 	MessageBody          string                 `json:"message_body"`
 	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz     `json:"updated_at"`
+	FreeReminderID       pgtype.UUID            `json:"free_reminder_id"`
 }
 
 type SentEmailReminder struct {

@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -46,6 +47,12 @@ type fakePropertyTxBeginner struct{}
 
 func (fakePropertyTxBeginner) Begin(_ context.Context) (transaction.Tx, error) {
 	return &fakePropertyTx{}, nil
+}
+
+type fakeTzResolver struct{}
+
+func (fakeTzResolver) Resolve(_ context.Context, _ uuid.UUID) (*time.Location, error) {
+	return time.UTC, nil
 }
 
 type fakeOccupancyProvider struct{}
@@ -215,6 +222,7 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 		fakePropertyTxBeginner{},
 		nil,
 		fakePropertyClock{now: time.Now()},
+		fakeTzResolver{},
 		nil,
 	)
 
@@ -263,8 +271,9 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 }
 
 var (
-	_ PropertyRepository = (*lockingFakePropertyRepo)(nil)
-	_ OccupancyProvider  = fakeOccupancyProvider{}
+	_ PropertyRepository             = (*lockingFakePropertyRepo)(nil)
+	_ OccupancyProvider              = fakeOccupancyProvider{}
+	_ sharedtz.OwnerTimezoneResolver = fakeTzResolver{}
 )
 
 type fakeSubscriptionLimiter struct {
@@ -281,7 +290,7 @@ func (l fakeSubscriptionLimiter) WithTx(_ transaction.Tx) (SubscriptionLimiter, 
 
 type fakePropertyBillingLifecycle struct{}
 
-func (fakePropertyBillingLifecycle) Suspend(_ context.Context, _ uuid.UUID, _ time.Time) error {
+func (fakePropertyBillingLifecycle) Suspend(_ context.Context, _, _ uuid.UUID, _ time.Time) error {
 	return nil
 }
 
@@ -323,6 +332,7 @@ func TestArchiveProperty_ConcurrentArchivesDoNotDoubleArchive(t *testing.T) {
 		fakePropertyTxBeginner{},
 		nil,
 		fakePropertyClock{now: time.Now()},
+		fakeTzResolver{},
 		nil,
 	)
 
@@ -402,6 +412,7 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 		fakePropertyTxBeginner{},
 		nil,
 		fakePropertyClock{now: time.Now()},
+		fakeTzResolver{},
 		nil,
 	)
 
@@ -583,6 +594,7 @@ func TestPropertyService_ListPropertyLeases(t *testing.T) {
 		fakePropertyTxBeginner{},
 		nil,
 		fakePropertyClock{now: now},
+		fakeTzResolver{},
 		nil,
 	)
 
@@ -619,6 +631,7 @@ func TestPropertyService_ListPropertyLeases_PropertyNotFound(t *testing.T) {
 		fakePropertyTxBeginner{},
 		nil,
 		fakePropertyClock{now: now},
+		fakeTzResolver{},
 		nil,
 	)
 
@@ -654,6 +667,7 @@ func TestPropertyService_ListArchivedProperties(t *testing.T) {
 		fakePropertyTxBeginner{},
 		nil,
 		fakePropertyClock{now: time.Now()},
+		fakeTzResolver{},
 		nil,
 	)
 
@@ -809,7 +823,7 @@ type recordingBillingLifecycle struct {
 	suspendedIDs          []uuid.UUID
 }
 
-func (l *recordingBillingLifecycle) Suspend(_ context.Context, propertyID uuid.UUID, _ time.Time) error {
+func (l *recordingBillingLifecycle) Suspend(_ context.Context, propertyID, _ uuid.UUID, _ time.Time) error {
 	l.calls = append(l.calls, "suspend")
 	l.suspendedIDs = append(l.suspendedIDs, propertyID)
 	return nil
@@ -855,6 +869,7 @@ func TestPropertyService_ArchiveExcessProperties_CompletesOpenLeaseAndArchives(t
 		fakePropertyTxBeginner{},
 		nil,
 		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
+		fakeTzResolver{},
 		nil,
 	)
 
@@ -919,6 +934,7 @@ func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testi
 		fakePropertyTxBeginner{},
 		nil,
 		fakePropertyClock{now: time.Now()},
+		fakeTzResolver{},
 		nil,
 	)
 
@@ -959,6 +975,7 @@ func TestPropertyService_ArchiveProperty_OpenLeaseStillRejected(t *testing.T) {
 		fakePropertyTxBeginner{},
 		nil,
 		fakePropertyClock{now: time.Now()},
+		fakeTzResolver{},
 		nil,
 	)
 

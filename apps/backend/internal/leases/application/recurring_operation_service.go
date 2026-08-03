@@ -16,6 +16,7 @@ import (
 	notificationsdomain "github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -62,6 +63,7 @@ type RecurringOperationService struct {
 	db           txBeginner
 	audit        auditapp.Recorder
 	clock        clock.Clock
+	tzResolver   sharedtz.OwnerTimezoneResolver
 	logger       *slog.Logger
 }
 
@@ -82,6 +84,7 @@ func NewRecurringOperationService(
 	db txBeginner,
 	audit auditapp.Recorder,
 	clock clock.Clock,
+	tzResolver sharedtz.OwnerTimezoneResolver,
 	logger *slog.Logger,
 ) *RecurringOperationService {
 	if db == nil {
@@ -109,6 +112,7 @@ func NewRecurringOperationService(
 		db:           db,
 		audit:        audit,
 		clock:        clock,
+		tzResolver:   tzResolver,
 		logger:       logger,
 	}
 }
@@ -160,7 +164,12 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("generate recurring operation id: %w", err)
 	}
 
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
 	now := s.clock.Now()
+	today := timeutil.DateIn(now, loc)
 	rec := domain.RecurringOperation{
 		ID:                 id,
 		OwnerID:            ownerID,
@@ -194,7 +203,7 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("create recurring operation: %w", err)
 	}
 
-	err = s.generateOperations(ctx, txOps, created, now, nil)
+	err = s.generateOperations(ctx, txOps, created, today, nil)
 	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
 	}
@@ -210,7 +219,7 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		if err != nil {
 			return domain.RecurringOperation{}, err
 		}
-		if err := scheduleRemindersForOperations(ctx, txScheduler, created, persistedOps, categoryNames, now); err != nil {
+		if err := scheduleRemindersForOperations(ctx, txScheduler, created, persistedOps, categoryNames, today); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -386,14 +395,19 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		return domain.RecurringOperation{}, err
 	}
 
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
 	now := s.clock.Now()
+	today := timeutil.DateIn(now, loc)
 	originalReminderOffset := rec.ReminderOffsetDays
 
 	if cmd.ApplyFromDate != nil {
 		if cmd.StartDate != nil {
 			return domain.RecurringOperation{}, newInvalidInputError("start_date cannot be used with apply_from_date")
 		}
-		newRec, err := s.splitRecurringOperationSeries(ctx, tx, ownerID, rec, cmd, now)
+		newRec, err := s.splitRecurringOperationSeries(ctx, tx, ownerID, rec, cmd, today)
 		if err != nil {
 			return domain.RecurringOperation{}, err
 		}
@@ -495,7 +509,7 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 	}
 
 	if cmd.ReminderOffsetDays != nil {
-		if err := txOps.UpdateFutureGeneratedOperationReminderOffsets(ctx, ownerID, updated.ID, updated.ReminderOffsetDays, timeutil.Date(now)); err != nil {
+		if err := txOps.UpdateFutureGeneratedOperationReminderOffsets(ctx, ownerID, updated.ID, updated.ReminderOffsetDays, today); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("sync generated operation reminder offsets: %w", err)
 		}
 	}
@@ -507,12 +521,12 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		}
 	}
 
-	if err := txOps.DeleteUneditedFutureOperationsByRecurringOperation(ctx, updated.ID, now); err != nil {
+	if err := txOps.DeleteUneditedFutureOperationsByRecurringOperation(ctx, updated.ID, today); err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("delete future operations: %w", err)
 	}
 
-	err = s.generateOperations(ctx, txOps, updated, now, func(d time.Time) bool {
-		return !timeutil.Date(d).Before(timeutil.Date(now))
+	err = s.generateOperations(ctx, txOps, updated, today, func(d time.Time) bool {
+		return !timeutil.Date(d).Before(today)
 	})
 	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("regenerate operations: %w", err)
@@ -529,7 +543,7 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		if err != nil {
 			return domain.RecurringOperation{}, err
 		}
-		if err := scheduleRemindersForOperations(ctx, txScheduler, updated, persistedOps, categoryNames, now); err != nil {
+		if err := scheduleRemindersForOperations(ctx, txScheduler, updated, persistedOps, categoryNames, today); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -568,7 +582,8 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 	txCategories := s.categories.WithTx(tx)
 
 	applyFromDate := timeutil.Date(*cmd.ApplyFromDate)
-	today := timeutil.Date(now)
+	// now is already normalized to midnight in the owner's timezone by the caller.
+	today := now
 
 	if applyFromDate.Before(today) {
 		return domain.RecurringOperation{}, newInvalidInputError("apply_from_date must be today or in the future")
@@ -841,9 +856,13 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 		return domain.RecurringOperation{}, fmt.Errorf("resume recurring operation: %w", err)
 	}
 
-	now := s.clock.Now()
-	err = s.generateOperations(ctx, txOps, rec, now, func(d time.Time) bool {
-		return !timeutil.Date(d).Before(timeutil.Date(now))
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return domain.RecurringOperation{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
+	today := timeutil.DateIn(s.clock.Now(), loc)
+	err = s.generateOperations(ctx, txOps, rec, today, func(d time.Time) bool {
+		return !timeutil.Date(d).Before(today)
 	})
 	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
@@ -860,7 +879,7 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 		if err != nil {
 			return domain.RecurringOperation{}, err
 		}
-		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, persistedOps, categoryNames, now); err != nil {
+		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, persistedOps, categoryNames, today); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -940,8 +959,12 @@ func (s *RecurringOperationService) SetReminderOffset(
 		return fmt.Errorf("list operations: %w", err)
 	}
 
-	now := s.clock.Now()
-	if err := s.applyReminderOffsetInTx(ctx, tx, ownerID, rec, ops, offsetDays, now); err != nil {
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return fmt.Errorf("resolve owner timezone: %w", err)
+	}
+	today := timeutil.DateIn(s.clock.Now(), loc)
+	if err := s.applyReminderOffsetInTx(ctx, tx, ownerID, rec, ops, offsetDays, today); err != nil {
 		return err
 	}
 
@@ -969,7 +992,7 @@ func (s *RecurringOperationService) applyReminderOffsetInTx(
 	if err := txRecurring.SetReminderOffset(ctx, ownerID, rec.ID, normalizedOffsetDays); err != nil {
 		return fmt.Errorf("set reminder offset: %w", err)
 	}
-	if err := txOps.UpdateFutureGeneratedOperationReminderOffsets(ctx, ownerID, rec.ID, normalizedOffsetDays, timeutil.Date(now)); err != nil {
+	if err := txOps.UpdateFutureGeneratedOperationReminderOffsets(ctx, ownerID, rec.ID, normalizedOffsetDays, now); err != nil {
 		return fmt.Errorf("sync generated operation reminder offsets: %w", err)
 	}
 
@@ -1009,8 +1032,13 @@ func (s *RecurringOperationService) CreateReminder(
 		return nil, errors.New("reminder lister is required")
 	}
 
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve owner timezone: %w", err)
+	}
 	now := s.clock.Now()
-	if err := notificationsdomain.ValidateReminderDate(reminderDate, now); err != nil {
+	today := timeutil.DateIn(now, loc)
+	if err := notificationsdomain.ValidateReminderDate(reminderDate, now, loc); err != nil {
 		return nil, newInvalidInputError("reminder date must be today or in the future")
 	}
 
@@ -1040,7 +1068,7 @@ func (s *RecurringOperationService) CreateReminder(
 		return nil, fmt.Errorf("list operations: %w", err)
 	}
 
-	futureOps := futureOperations(ops, now)
+	futureOps := futureOperations(ops, today)
 	if len(futureOps) == 0 {
 		return nil, newInvalidInputError("no future operations for reminder")
 	}
@@ -1052,12 +1080,12 @@ func (s *RecurringOperationService) CreateReminder(
 		}
 	}
 
-	offsetDays := notificationsdomain.ReminderOffset(earliest.OperationDate, reminderDate)
+	offsetDays := notificationsdomain.ReminderOffset(earliest.OperationDate, reminderDate, loc)
 	if offsetDays < 0 {
 		return nil, newInvalidInputError("reminder date must be on or before the earliest future operation date")
 	}
 
-	if err := s.applyReminderOffsetInTx(ctx, tx, ownerID, rec, futureOps, offsetDays, now); err != nil {
+	if err := s.applyReminderOffsetInTx(ctx, tx, ownerID, rec, futureOps, offsetDays, today); err != nil {
 		return nil, err
 	}
 
@@ -1242,10 +1270,9 @@ func buildCategoryNamesMap(ctx context.Context, categories OperationCategoryRepo
 }
 
 func futureOperations(ops []domain.Operation, now time.Time) []domain.Operation {
-	today := timeutil.Date(now)
 	out := make([]domain.Operation, 0, len(ops))
 	for _, op := range ops {
-		if !timeutil.Date(op.OperationDate).Before(today) {
+		if !timeutil.BeforeDay(op.OperationDate, now) {
 			out = append(out, op)
 		}
 	}
@@ -1268,14 +1295,13 @@ func scheduleRemindersForOperations(
 	}
 
 	offsetDays := *rec.ReminderOffsetDays
-	today := timeutil.Date(now)
 
 	filtered := make([]domain.Operation, 0, len(ops))
 	var earliestOp domain.Operation
 	for i := range ops {
 		op := ops[i]
 		reminderDate := op.OperationDate.AddDate(0, 0, -offsetDays)
-		if timeutil.Date(reminderDate).Before(today) {
+		if timeutil.BeforeDay(reminderDate, now) {
 			continue
 		}
 		filtered = append(filtered, op)

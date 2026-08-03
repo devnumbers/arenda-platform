@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -22,16 +24,18 @@ type LeaseHandlers struct {
 	logger           *slog.Logger
 	presenter        *leasePresenter
 	clock            clock.Clock
+	tzResolver       sharedtz.OwnerTimezoneResolver
 }
 
 // NewLeaseHandlers creates HTTP handlers for the leases API.
-func NewLeaseHandlers(leaseSvc *leasesapp.LeaseService, tenantContactSvc *leasesapp.TenantContactService, logger *slog.Logger, clk clock.Clock) *LeaseHandlers {
+func NewLeaseHandlers(leaseSvc *leasesapp.LeaseService, tenantContactSvc *leasesapp.TenantContactService, logger *slog.Logger, clk clock.Clock, tzResolver sharedtz.OwnerTimezoneResolver) *LeaseHandlers {
 	return &LeaseHandlers{
 		leaseSvc:         leaseSvc,
 		tenantContactSvc: tenantContactSvc,
 		logger:           logger,
 		presenter:        newLeasePresenter(tenantContactSvc),
 		clock:            clk,
+		tzResolver:       tzResolver,
 	}
 }
 
@@ -137,7 +141,12 @@ func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	asOf := timeutil.Date(h.clock.Now())
+	loc, err := h.tzResolver.Resolve(r.Context(), ownerID)
+	if err != nil {
+		h.handleLeaseError(w, r, fmt.Errorf("resolve owner timezone: %w", err))
+		return
+	}
+	asOf := timeutil.DateIn(h.clock.Now(), loc)
 	scheduleIndex, err := h.leaseSvc.LeasePaymentScheduleIndex(r.Context(), ownerID, leases, asOf)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
@@ -172,7 +181,12 @@ func (h *LeaseHandlers) GetLease(w http.ResponseWriter, r *http.Request, id uuid
 		return
 	}
 
-	asOf := timeutil.Date(h.clock.Now())
+	loc, err := h.tzResolver.Resolve(r.Context(), ownerID)
+	if err != nil {
+		h.handleLeaseError(w, r, fmt.Errorf("resolve owner timezone: %w", err))
+		return
+	}
+	asOf := timeutil.DateIn(h.clock.Now(), loc)
 	scheduleIndex, err := h.leaseSvc.LeasePaymentScheduleIndex(r.Context(), ownerID, []leasesdomain.Lease{lease}, asOf)
 	if err != nil {
 		h.handleLeaseError(w, r, err)

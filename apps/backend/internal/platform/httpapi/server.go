@@ -18,6 +18,7 @@ import (
 	popupsapp "github.com/nambers/arenda-planform/apps/backend/internal/popups/application"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -46,12 +47,14 @@ type Deps struct {
 	RecurringOperations      *leasesapp.RecurringOperationService
 	Categories               *leasesapp.CategoryService
 	Reminders                *notificationsapp.ReminderService
+	FreeReminders            *notificationsapp.FreeReminderService
 	NotificationPreferences  *notificationsapp.PreferenceService
 	Popups                   *popupsapp.PopupService
 	AppBaseURL               string
 	CookieSecure             bool
 	Logger                   *slog.Logger
 	Clock                    clock.Clock
+	TZResolver               sharedtz.OwnerTimezoneResolver
 	LogSuccessfulRequests    bool
 	IPRateLimiter            *RateLimiter
 	EmailSendLimiter         *RateLimiter
@@ -119,12 +122,13 @@ func New(deps Deps) http.Handler {
 		deps.MeEnricher,
 		deps.Audit,
 	)
-	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Export, deps.PropertyContacts, deps.Logger, deps.Clock)
-	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock)
+	propertyHandlers := NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Export, deps.PropertyContacts, deps.Logger, deps.Clock, deps.TZResolver)
+	leaseHandlers := NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock, deps.TZResolver)
 	operationHandlers := NewOperationHandlers(deps.Operations, deps.Categories, deps.Properties, deps.Logger)
 	recurringOperationHandlers := NewRecurringOperationHandlers(deps.RecurringOperations, deps.Categories, deps.Logger)
 	categoryHandlers := NewCategoryHandlers(deps.Categories, deps.Logger)
 	reminderHandlers := NewReminderHandlers(deps.Reminders, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
+	freeReminderHandlers := NewFreeReminderHandlers(deps.FreeReminders, deps.Properties, deps.Logger)
 	notificationPreferenceHandlers := NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	popupHandlers := NewPopupHandlers(deps.Popups, deps.Logger)
 	subscriptionHandlers := NewSubscriptionHandlers(deps.Tariffs, deps.Subscriptions, deps.PaymentMethods, deps.Payments, deps.Webhooks, deps.Logger, deps.DevMode)
@@ -139,6 +143,7 @@ func New(deps Deps) http.Handler {
 		OperationHandlers:              operationHandlers,
 		RecurringOperationHandlers:     recurringOperationHandlers,
 		ReminderHandlers:               reminderHandlers,
+		FreeReminderHandlers:           freeReminderHandlers,
 		NotificationPreferenceHandlers: notificationPreferenceHandlers,
 		PopupHandlers:                  popupHandlers,
 		SubscriptionHandlers:           subscriptionHandlers,
@@ -252,6 +257,7 @@ type composedHandler struct {
 	*OperationHandlers
 	*RecurringOperationHandlers
 	*ReminderHandlers
+	*FreeReminderHandlers
 	*NotificationPreferenceHandlers
 	*PopupHandlers
 	*SubscriptionHandlers

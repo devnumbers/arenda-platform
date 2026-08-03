@@ -38,7 +38,7 @@ type OccupancyProvider interface {
 // PropertyBillingLifecycle manages the billing side effects of archiving and
 // unarchiving a property.
 type PropertyBillingLifecycle interface {
-	Suspend(ctx context.Context, propertyID uuid.UUID, asOf time.Time) error
+	Suspend(ctx context.Context, propertyID, ownerID uuid.UUID, asOf time.Time) error
 	Resume(ctx context.Context, propertyID uuid.UUID, ownerID uuid.UUID, asOf time.Time) error
 	// CompleteOpenLeases force-completes all open leases of the property,
 	// applying the same side effects as a user-initiated lease completion.

@@ -1,0 +1,110 @@
+/* PROTOTYPE — throwaway, issue #105 */
+
+.strip {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(100vw - 24px);
+  padding: 4px;
+  border-radius: var(--radius-round);
+  background: rgba(30, 30, 30, 0.92);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.stripBadge {
+  padding: 0 10px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  line-height: 28px;
+  letter-spacing: 0.02em;
+}
+
+.stripLink {
+  padding: 6px 12px;
+  border-radius: var(--radius-round);
+  color: var(--color-white);
+  font-size: 12px;
+  line-height: 16px;
+  text-decoration: none;
+}
+
+.stripLink:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.stripLinkActive {
+  background: var(--color-white);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.switcher {
+  position: fixed;
+  bottom: 80px; /* над BottomNav на мобильной раскладке */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border-radius: var(--radius-round);
+  background: var(--color-text);
+  color: var(--color-white);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+
+.switcherArrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-round);
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--color-white);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.switcherArrow:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.switcherArrow svg {
+  width: 18px;
+  height: 18px;
+}
+
+.switcherLabel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 170px;
+  line-height: 1.2;
+}
+
+.switcherLetter {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.switcherName {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+@media (min-width: 1200px) {
+  .switcher {
+    bottom: 24px;
+  }
+}

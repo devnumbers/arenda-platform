@@ -18,6 +18,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -53,11 +54,12 @@ type PropertyHandlers struct {
 	logger           *slog.Logger
 	presenter        *leasePresenter
 	clock            clock.Clock
+	tzResolver       sharedtz.OwnerTimezoneResolver
 }
 
 // NewPropertyHandlers creates HTTP handlers for the properties API.
-func NewPropertyHandlers(svc *propertiesapp.PropertyService, addressSuggester propertiesapp.AddressSuggester, tenantContactSvc *leasesapp.TenantContactService, opSvc *leasesapp.OperationService, leaseSvc *leasesapp.LeaseService, exportSvc *leasesapp.ExportService, contactSvc *propertiesapp.PropertyContactService, logger *slog.Logger, clk clock.Clock) *PropertyHandlers {
-	return &PropertyHandlers{svc: svc, addressSuggester: addressSuggester, opSvc: opSvc, leaseSvc: leaseSvc, exportSvc: exportSvc, contactSvc: contactSvc, logger: logger, presenter: newLeasePresenter(tenantContactSvc), clock: clk}
+func NewPropertyHandlers(svc *propertiesapp.PropertyService, addressSuggester propertiesapp.AddressSuggester, tenantContactSvc *leasesapp.TenantContactService, opSvc *leasesapp.OperationService, leaseSvc *leasesapp.LeaseService, exportSvc *leasesapp.ExportService, contactSvc *propertiesapp.PropertyContactService, logger *slog.Logger, clk clock.Clock, tzResolver sharedtz.OwnerTimezoneResolver) *PropertyHandlers {
+	return &PropertyHandlers{svc: svc, addressSuggester: addressSuggester, opSvc: opSvc, leaseSvc: leaseSvc, exportSvc: exportSvc, contactSvc: contactSvc, logger: logger, presenter: newLeasePresenter(tenantContactSvc), clock: clk, tzResolver: tzResolver}
 }
 
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
@@ -349,7 +351,12 @@ func (h *PropertyHandlers) ListPropertyLeases(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	asOf := timeutil.Date(h.clock.Now())
+	loc, err := h.tzResolver.Resolve(r.Context(), ownerID)
+	if err != nil {
+		h.handlePropertyError(w, r, fmt.Errorf("resolve owner timezone: %w", err))
+		return
+	}
+	asOf := timeutil.DateIn(h.clock.Now(), loc)
 	scheduleIndex, err := h.leaseSvc.LeasePaymentScheduleIndex(r.Context(), ownerID, leases, asOf)
 	if err != nil {
 		h.handlePropertyError(w, r, err)

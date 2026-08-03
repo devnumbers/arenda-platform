@@ -63,6 +63,11 @@ UPDATE reminders
 SET scheduled_at = $1
 WHERE id = $2 AND owner_id = $3 AND status = 'pending';
 
+-- name: ReschedulePendingRemindersByOwner :execrows
+UPDATE reminders
+SET scheduled_at = ((scheduled_at AT TIME ZONE sqlc.arg('old_tz')::text) AT TIME ZONE sqlc.arg('new_tz')::text)
+WHERE owner_id = sqlc.arg('owner_id') AND status = 'pending';
+
 -- name: MarkReminderSending :one
 UPDATE reminders
 SET status = 'sending'
@@ -195,3 +200,17 @@ SELECT COALESCE((
     SELECT allowed FROM user_notification_preferences
     WHERE user_id = $1 AND event_type = $2
 ), true)::boolean AS allowed;
+
+-- name: SaveFreeReminder :execrows
+INSERT INTO reminders (
+    id, owner_id, target_type, operation_id, recurring_operation_id, lease_id,
+    property_id, free_reminder_id, event_type, status, scheduled_at,
+    message_title, message_body, created_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+);
+
+-- name: CancelRemindersByFreeReminderID :execrows
+UPDATE reminders
+SET status = 'cancelled'
+WHERE free_reminder_id = $1 AND owner_id = $2 AND status IN ('pending', 'sending');

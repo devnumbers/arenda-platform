@@ -31,3 +31,6 @@ screenshots
 
 docs/plans
 docs/reviews
+
+# Local agent tooling config
+.zcode/

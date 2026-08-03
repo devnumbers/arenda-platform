@@ -1,0 +1,7 @@
+/* PROTOTYPE — throwaway, issue #105 */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}

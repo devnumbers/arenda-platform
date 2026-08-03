@@ -13,6 +13,8 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -53,6 +55,7 @@ type LeaseService struct {
 	db             txBeginner
 	audit          auditapp.Recorder
 	clock          clock.Clock
+	tzResolver     sharedtz.OwnerTimezoneResolver
 	logger         *slog.Logger
 }
 
@@ -67,6 +70,7 @@ func NewLeaseService(
 	db txBeginner,
 	audit auditapp.Recorder,
 	clock clock.Clock,
+	tzResolver sharedtz.OwnerTimezoneResolver,
 	logger *slog.Logger,
 ) *LeaseService {
 	if db == nil {
@@ -95,6 +99,7 @@ func NewLeaseService(
 		db:             db,
 		audit:          audit,
 		clock:          clock,
+		tzResolver:     tzResolver,
 		logger:         logger,
 	}
 }
@@ -131,8 +136,12 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 		return domain.Lease{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return domain.Lease{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
 	now := s.clock.Now()
-	lease.Status = lease.CalculateStatus(now)
+	lease.Status = lease.CalculateStatus(timeutil.DateIn(now, loc))
 	lease.CreatedAt = now
 	lease.UpdatedAt = now
 
@@ -151,7 +160,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, ownerID uuid.UUID, cmd C
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
 	txProperties := s.properties.WithTx(tx)
-	txRentService := NewRentService(txOps, txRecurring, s.categories.WithTx(tx), s.clock)
+	txRentService := NewRentService(txOps, txRecurring, s.categories.WithTx(tx), s.clock, s.tzResolver)
 
 	// Lock the property row for the rest of the transaction so a concurrent
 	// DeleteProperty cannot remove it between the fast-path check above and
@@ -255,9 +264,14 @@ func (s *LeaseService) ListLeases(ctx context.Context, ownerID uuid.UUID) ([]dom
 		return nil, fmt.Errorf("list leases: %w", err)
 	}
 
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve owner timezone: %w", err)
+	}
+
 	result := make([]domain.Lease, 0, len(leases))
 	for _, lease := range leases {
-		result = append(result, s.applyEffectiveStatus(lease))
+		result = append(result, s.applyEffectiveStatus(lease, loc))
 	}
 	return result, nil
 }
@@ -270,11 +284,15 @@ func (s *LeaseService) GetLease(ctx context.Context, ownerID, id uuid.UUID) (dom
 		}
 		return domain.Lease{}, fmt.Errorf("get lease: %w", err)
 	}
-	return s.applyEffectiveStatus(lease), nil
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return domain.Lease{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
+	return s.applyEffectiveStatus(lease, loc), nil
 }
 
-func (s *LeaseService) applyEffectiveStatus(lease domain.Lease) domain.Lease {
-	lease.Status = lease.EffectiveStatus(s.clock.Now())
+func (s *LeaseService) applyEffectiveStatus(lease domain.Lease, loc *time.Location) domain.Lease {
+	lease.Status = lease.EffectiveStatus(timeutil.DateIn(s.clock.Now(), loc))
 	return lease
 }
 
@@ -289,7 +307,7 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 	txTenantContacts := s.tenantContacts.WithTx(tx)
 	txRecurring := s.recurringOps.WithTx(tx)
 	txOps := s.operations.WithTx(tx)
-	txRentService := NewRentService(txOps, txRecurring, s.categories.WithTx(tx), s.clock)
+	txRentService := NewRentService(txOps, txRecurring, s.categories.WithTx(tx), s.clock, s.tzResolver)
 
 	lease, err := txLeases.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
 	if err != nil {
@@ -354,8 +372,12 @@ func (s *LeaseService) UpdateLease(ctx context.Context, ownerID, id uuid.UUID, c
 		return domain.Lease{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 
+	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	if err != nil {
+		return domain.Lease{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
 	now := s.clock.Now()
-	lease.Status = lease.CalculateStatus(now)
+	lease.Status = lease.CalculateStatus(timeutil.DateIn(now, loc))
 	lease.UpdatedAt = now
 
 	updated, err := txLeases.Update(ctx, ownerID, lease)
@@ -599,7 +621,12 @@ func (s *LeaseService) ReconcileRequiresAction(ctx context.Context, leaseID uuid
 		return nil
 	}
 
-	expected := lease.CalculateStatus(asOf)
+	loc, err := s.tzResolver.Resolve(ctx, lease.OwnerID)
+	if err != nil {
+		return fmt.Errorf("resolve owner timezone: %w", err)
+	}
+
+	expected := lease.CalculateStatus(timeutil.DateIn(asOf, loc))
 	if expected != domain.LeaseStatusRequiresAction {
 		return nil
 	}
