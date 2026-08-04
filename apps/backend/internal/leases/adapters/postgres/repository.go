@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -17,6 +18,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	propdomain "github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -1788,6 +1790,44 @@ func (r *PropertyRepository) GetNameByOwner(ctx context.Context, id, ownerID uui
 		return "", err
 	}
 	return row.Name, nil
+}
+
+// GetForExport returns the property read-model for the xlsx export use case, or
+// application.ErrNotFound when the property does not exist or does not belong to
+// the owner. It reuses the same generated GetPropertyByIDAndOwner query as
+// GetNameByOwner and maps the JSONB attributes column into the properties
+// domain catalog map.
+func (r *PropertyRepository) GetForExport(ctx context.Context, id, ownerID uuid.UUID) (application.ExportPropertyRow, error) {
+	row, err := r.q().GetPropertyByIDAndOwner(ctx, postgres.GetPropertyByIDAndOwnerParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.ExportPropertyRow{}, application.ErrNotFound
+		}
+		return application.ExportPropertyRow{}, err
+	}
+
+	attrs := propdomain.Attributes{}
+	if len(row.Attributes) > 0 {
+		// Corrupted JSONB degrades to an empty attributes set: the column is
+		// NOT NULL DEFAULT '{}' and is only ever written via json.Marshal.
+		if uerr := json.Unmarshal(row.Attributes, &attrs); uerr != nil {
+			attrs = propdomain.Attributes{}
+		}
+		if attrs == nil {
+			attrs = propdomain.Attributes{}
+		}
+	}
+
+	return application.ExportPropertyRow{
+		Name:        row.Name,
+		Type:        propdomain.PropertyType(row.Type),
+		Address:     row.Address,
+		Description: pgconv.TextToString(row.Description),
+		Attributes:  attrs,
+	}, nil
 }
 
 // GetByIDAndOwnerForUpdate locks the property row for the rest of the current

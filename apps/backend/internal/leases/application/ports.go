@@ -19,6 +19,9 @@ type PropertyRepository interface {
 	// GetNameByOwner returns the property name for the owner, or an empty
 	// string when the property does not exist or does not belong to the owner.
 	GetNameByOwner(ctx context.Context, id, ownerID uuid.UUID) (string, error)
+	// GetForExport returns the property read-model for the export use case, or
+	// ErrNotFound when the property does not exist or does not belong to the owner.
+	GetForExport(ctx context.Context, id, ownerID uuid.UUID) (ExportPropertyRow, error)
 	// GetByIDAndOwnerForUpdate locks the property row for the rest of the
 	// current transaction and returns its status, or an empty string when the
 	// property does not exist.

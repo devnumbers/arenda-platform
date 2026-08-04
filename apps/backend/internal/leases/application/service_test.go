@@ -43,6 +43,12 @@ func (r *fakePropertyRepo) GetNameByOwner(_ context.Context, _, _ uuid.UUID) (st
 	return "", nil
 }
 
+// GetForExport is required to satisfy PropertyRepository but is unused by the
+// lease service tests; it reports not found.
+func (r *fakePropertyRepo) GetForExport(_ context.Context, _, _ uuid.UUID) (ExportPropertyRow, error) {
+	return ExportPropertyRow{}, ErrNotFound
+}
+
 func (r *fakePropertyRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (string, error) {
 	return r.GetStatusByOwner(ctx, id, ownerID)
 }

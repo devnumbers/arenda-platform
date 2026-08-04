@@ -104,6 +104,13 @@ jobs:
         working-directory: apps/frontend
         run: npm ci
 
+      # Каталог атрибутов (tools/property-attributes) — единый источник для
+      # Go/frontend/admin. Проверяем свежесть сгенерированных артефактов:
+      # если catalog.json изменён, но артефакты не закоммичены — падаем.
+      # Нужен Node (ставит ajv в tools/property-attributes при отсутствии node_modules).
+      - name: Property attributes catalog freshness
+        run: make attributes-check
+
       - name: Build
         working-directory: apps/frontend
         run: npm run build

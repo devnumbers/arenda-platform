@@ -78,7 +78,8 @@ go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate
 go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1 -config api/openapi/oapi-codegen.yaml api/openapi/openapi.yaml
 ```
 
-- Do not hand-edit generated files; change the OpenAPI contract, SQL, migrations, or generator configuration, then regenerate.
+- The property attributes catalog (`internal/properties/domain` field maps, `ValidateAttributes`, `crossFieldErrors`, …) is generated from `tools/property-attributes/catalog.json`. Regenerate with `make attributes-gen` (or `cd tools/property-attributes && npm run generate`); the gate `make attributes-check` fails in CI if a `catalog.json` change was not committed with its regenerated artifacts.
+- Do not hand-edit generated files (`spec.gen.go`, sqlc output, `zz_catalog.gen.go.txt`); change the OpenAPI contract, SQL, migrations, `catalog.json`, or generator configuration, then regenerate.
 - Use explicit PostgreSQL SQL with `sqlc`; do not introduce ORM models.
 - Schema changes require versioned migrations in `db/migrations` and matching queries in `db/queries`.
 - Keep database invariants in PostgreSQL with `NOT NULL`, foreign keys, `CHECK` constraints, indexes, and triggers where they protect durable rules.

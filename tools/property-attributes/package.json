@@ -1,0 +1,15 @@
+{
+  "name": "property-attributes-source",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Single source of truth for the property attributes catalog. Validated, not published.",
+  "scripts": {
+    "validate": "node validate-source.mjs",
+    "generate": "node generate.mjs"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
+  }
+}
