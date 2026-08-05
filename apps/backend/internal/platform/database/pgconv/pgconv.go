@@ -20,6 +20,15 @@ func UUIDFromPgtype(u pgtype.UUID) uuid.UUID {
 	return uuid.UUID(u.Bytes)
 }
 
+// UUIDSliceToPgtype converts a slice of uuid.UUID to a slice of pgtype.UUID.
+func UUIDSliceToPgtype(ids []uuid.UUID) []pgtype.UUID {
+	out := make([]pgtype.UUID, len(ids))
+	for i, id := range ids {
+		out[i] = UUIDToPgtype(id)
+	}
+	return out
+}
+
 // UUIDToPgtypePtr converts a *uuid.UUID to pgtype.UUID.
 func UUIDToPgtypePtr(u *uuid.UUID) pgtype.UUID {
 	if u == nil {

@@ -86,6 +86,12 @@ func (r *memRepo) ListByUser(_ context.Context, userID uuid.UUID) ([]domain.Memb
 	return out, nil
 }
 
+// MaxRoleByOwner is not exercised by the service integration tests; owner-wide
+// derived access is covered by policy tests.
+func (r *memRepo) MaxRoleByOwner(_ context.Context, _, _ uuid.UUID) (domain.Role, error) {
+	return domain.Role(""), nil
+}
+
 func (r *memRepo) UpdateRole(_ context.Context, id, propertyID uuid.UUID, role domain.Role) (domain.Membership, error) {
 	for i := range r.rows {
 		if r.rows[i].ID == id && r.rows[i].PropertyID == propertyID {

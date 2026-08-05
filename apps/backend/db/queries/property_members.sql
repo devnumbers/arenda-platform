@@ -32,3 +32,25 @@ RETURNING *;
 -- name: DeletePropertyMember :exec
 DELETE FROM property_members
 WHERE id = $1 AND property_id = $2;
+
+-- name: GetMaxMemberRoleByOwner :one
+SELECT COALESCE(
+  MAX(
+    CASE role
+      WHEN 'full_access' THEN 2
+      WHEN 'viewer' THEN 1
+      ELSE 0
+    END
+  ),
+  -1
+)::int AS max_role
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = sqlc.arg('user_id')::uuid
+  AND p.owner_id = sqlc.arg('owner_id')::uuid;
+
+-- name: ListAccessibleOwners :many
+SELECT DISTINCT p.owner_id
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = sqlc.arg('user_id')::uuid;

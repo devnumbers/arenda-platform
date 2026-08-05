@@ -69,7 +69,10 @@ type OperationService struct {
 	clock        clock.Clock
 	tzResolver   sharedtz.OwnerTimezoneResolver
 	policy       sharedpolicy.Policy
-	logger       *slog.Logger
+	// sharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
+	// finance report only covers the actor's own operations (issue #157, T3).
+	sharedIDs SharedPropertyIDs
+	logger    *slog.Logger
 }
 
 // NewOperationService creates a new operation service.
@@ -116,6 +119,15 @@ func NewOperationService(
 		policy:       policy,
 		logger:       logger,
 	}
+}
+
+// SetSharedPropertyIDs injects the access-context adapter that resolves the
+// property ids shared with an actor via property membership (issue #157, T3).
+// Optional: when nil, GetFinanceReport only aggregates the actor's own
+// operations; when set, it additionally aggregates operations of the shared
+// properties.
+func (s *OperationService) SetSharedPropertyIDs(ids SharedPropertyIDs) {
+	s.sharedIDs = ids
 }
 
 // CreateOperation creates a manual operation for the given owner and property.
@@ -264,19 +276,33 @@ type FinanceReport struct {
 }
 
 func (s *OperationService) GetFinanceReport(ctx context.Context, actor uuid.UUID, from, to *time.Time) (FinanceReport, error) {
-	totals, err := s.operations.GetFinanceReportTotals(ctx, actor, from, to)
+	// accessiblePropertyIDs restricts the report to the actor's own operations
+	// plus operations of properties shared with the actor (issue #157, T3). For
+	// the owner this is empty and the report covers all of the owner's
+	// operations; for a member it additionally includes the shared properties'
+	// operations (matched by property_id, since their owner_id differs).
+	var accessible []uuid.UUID
+	if s.sharedIDs != nil {
+		shared, err := s.sharedIDs.SharedWith(ctx, actor)
+		if err != nil {
+			return FinanceReport{}, fmt.Errorf("list shared property ids: %w", err)
+		}
+		accessible = shared
+	}
+
+	totals, err := s.operations.GetFinanceReportTotals(ctx, actor, accessible, from, to)
 	if err != nil {
 		return FinanceReport{}, fmt.Errorf("report totals: %w", err)
 	}
-	byProperty, err := s.operations.GetFinanceReportByProperty(ctx, actor, from, to)
+	byProperty, err := s.operations.GetFinanceReportByProperty(ctx, actor, accessible, from, to)
 	if err != nil {
 		return FinanceReport{}, fmt.Errorf("report by property: %w", err)
 	}
-	byCategory, err := s.operations.GetFinanceReportByCategory(ctx, actor, from, to)
+	byCategory, err := s.operations.GetFinanceReportByCategory(ctx, actor, accessible, from, to)
 	if err != nil {
 		return FinanceReport{}, fmt.Errorf("report by category: %w", err)
 	}
-	byMonth, err := s.operations.GetFinanceReportByMonth(ctx, actor, from, to)
+	byMonth, err := s.operations.GetFinanceReportByMonth(ctx, actor, accessible, from, to)
 	if err != nil {
 		return FinanceReport{}, fmt.Errorf("report by month: %w", err)
 	}

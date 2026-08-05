@@ -10,8 +10,6 @@
 !.env.stage.example
 !.env.prod.example
 *.exe
-api
-!apps/frontend/features/*/api/
 node_modules/
 apps/landing/dist
 *.log

@@ -183,19 +183,19 @@ func (r *exportOperationRepo) ListNextRentPayments(_ context.Context, _ uuid.UUI
 	return nil, nil
 }
 
-func (r *exportOperationRepo) GetFinanceReportTotals(_ context.Context, _ uuid.UUID, _, _ *time.Time) (FinanceReportTotals, error) {
+func (r *exportOperationRepo) GetFinanceReportTotals(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) (FinanceReportTotals, error) {
 	return FinanceReportTotals{}, nil
 }
 
-func (r *exportOperationRepo) GetFinanceReportByProperty(_ context.Context, _ uuid.UUID, _, _ *time.Time) ([]FinanceReportPropertyRow, error) {
+func (r *exportOperationRepo) GetFinanceReportByProperty(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportPropertyRow, error) {
 	return nil, nil
 }
 
-func (r *exportOperationRepo) GetFinanceReportByCategory(_ context.Context, _ uuid.UUID, _, _ *time.Time) ([]FinanceReportCategoryRow, error) {
+func (r *exportOperationRepo) GetFinanceReportByCategory(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportCategoryRow, error) {
 	return nil, nil
 }
 
-func (r *exportOperationRepo) GetFinanceReportByMonth(_ context.Context, _ uuid.UUID, _, _ *time.Time) ([]FinanceReportMonthRow, error) {
+func (r *exportOperationRepo) GetFinanceReportByMonth(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportMonthRow, error) {
 	return nil, nil
 }
 

@@ -61,6 +61,35 @@ func (q *Queries) DeletePropertyMember(ctx context.Context, arg DeletePropertyMe
 	return err
 }
 
+const getMaxMemberRoleByOwner = `-- name: GetMaxMemberRoleByOwner :one
+SELECT COALESCE(
+  MAX(
+    CASE role
+      WHEN 'full_access' THEN 2
+      WHEN 'viewer' THEN 1
+      ELSE 0
+    END
+  ),
+  -1
+)::int AS max_role
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1::uuid
+  AND p.owner_id = $2::uuid
+`
+
+type GetMaxMemberRoleByOwnerParams struct {
+	UserID  pgtype.UUID `json:"user_id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) GetMaxMemberRoleByOwner(ctx context.Context, arg GetMaxMemberRoleByOwnerParams) (int32, error) {
+	row := q.db.QueryRow(ctx, getMaxMemberRoleByOwner, arg.UserID, arg.OwnerID)
+	var max_role int32
+	err := row.Scan(&max_role)
+	return max_role, err
+}
+
 const getPropertyMember = `-- name: GetPropertyMember :one
 SELECT id, property_id, user_id, role, granted_by, created_at, updated_at FROM property_members
 WHERE id = $1 AND property_id = $2
@@ -126,6 +155,33 @@ func (q *Queries) GetPropertyMemberRole(ctx context.Context, arg GetPropertyMemb
 	var role string
 	err := row.Scan(&role)
 	return role, err
+}
+
+const listAccessibleOwners = `-- name: ListAccessibleOwners :many
+SELECT DISTINCT p.owner_id
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1::uuid
+`
+
+func (q *Queries) ListAccessibleOwners(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listAccessibleOwners, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var owner_id pgtype.UUID
+		if err := rows.Scan(&owner_id); err != nil {
+			return nil, err
+		}
+		items = append(items, owner_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPropertyMembers = `-- name: ListPropertyMembers :many

@@ -3,7 +3,8 @@ SELECT
   COALESCE(SUM(CASE WHEN type = 'income' THEN amount_kopecks ELSE 0 END), 0)::bigint AS income_kopecks,
   COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_kopecks ELSE 0 END), 0)::bigint AS expense_kopecks
 FROM operations
-WHERE owner_id = sqlc.arg('owner_id')::uuid
+WHERE (owner_id = sqlc.arg('owner_id')::uuid
+       OR property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[]))
   AND status IN ('paid', 'received')
   AND (sqlc.arg('from_date')::date IS NULL OR operation_date >= sqlc.arg('from_date')::date)
   AND (sqlc.arg('to_date')::date IS NULL OR operation_date <= sqlc.arg('to_date')::date)
@@ -15,7 +16,8 @@ SELECT
   COALESCE(SUM(CASE WHEN type = 'income' THEN amount_kopecks ELSE 0 END), 0)::bigint AS income_kopecks,
   COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_kopecks ELSE 0 END), 0)::bigint AS expense_kopecks
 FROM operations
-WHERE owner_id = sqlc.arg('owner_id')::uuid
+WHERE (owner_id = sqlc.arg('owner_id')::uuid
+       OR property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[]))
   AND status IN ('paid', 'received')
   AND (sqlc.arg('from_date')::date IS NULL OR operation_date >= sqlc.arg('from_date')::date)
   AND (sqlc.arg('to_date')::date IS NULL OR operation_date <= sqlc.arg('to_date')::date)
@@ -34,7 +36,8 @@ SELECT
   COALESCE(SUM(op.amount_kopecks), 0)::bigint AS total_kopecks
 FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
-WHERE op.owner_id = sqlc.arg('owner_id')::uuid
+WHERE (op.owner_id = sqlc.arg('owner_id')::uuid
+       OR op.property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[]))
   AND op.status IN ('paid', 'received')
   AND (sqlc.arg('from_date')::date IS NULL OR op.operation_date >= sqlc.arg('from_date')::date)
   AND (sqlc.arg('to_date')::date IS NULL OR op.operation_date <= sqlc.arg('to_date')::date)
@@ -47,7 +50,8 @@ SELECT
   COALESCE(SUM(CASE WHEN type = 'income' THEN amount_kopecks ELSE 0 END), 0)::bigint AS income_kopecks,
   COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_kopecks ELSE 0 END), 0)::bigint AS expense_kopecks
 FROM operations
-WHERE owner_id = sqlc.arg('owner_id')::uuid
+WHERE (owner_id = sqlc.arg('owner_id')::uuid
+       OR property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[]))
   AND status IN ('paid', 'received')
   AND (sqlc.arg('from_date')::date IS NULL OR operation_date >= sqlc.arg('from_date')::date)
   AND (sqlc.arg('to_date')::date IS NULL OR operation_date <= sqlc.arg('to_date')::date)

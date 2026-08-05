@@ -134,6 +134,30 @@ func (r *MembershipRepository) ListByUser(ctx context.Context, userID uuid.UUID)
 	return out, nil
 }
 
+// MaxRoleByOwner returns the strongest role the user holds across all of the
+// owner's properties. The SQL query encodes roles as integers (full_access=2,
+// viewer=1) and aggregates them with MAX; COALESCE collapses the no-rows case
+// (MAX of an empty set is NULL) into the sentinel -1, which maps to the empty
+// role (RoleNone). A stored role outside the known set also maps to the empty
+// role.
+func (r *MembershipRepository) MaxRoleByOwner(ctx context.Context, userID, ownerID uuid.UUID) (domain.Role, error) {
+	maxRole, err := r.q().GetMaxMemberRoleByOwner(ctx, postgres.GetMaxMemberRoleByOwnerParams{
+		UserID:  pgconv.UUIDToPgtype(userID),
+		OwnerID: pgconv.UUIDToPgtype(ownerID),
+	})
+	if err != nil {
+		return domain.Role(""), err
+	}
+	switch maxRole {
+	case 2:
+		return domain.RoleFullAccess, nil
+	case 1:
+		return domain.RoleViewer, nil
+	default:
+		return domain.Role(""), nil
+	}
+}
+
 // UpdateRole changes the role of a membership.
 func (r *MembershipRepository) UpdateRole(ctx context.Context, id, propertyID uuid.UUID, role domain.Role) (domain.Membership, error) {
 	row, err := r.q().UpdatePropertyMemberRole(ctx, postgres.UpdatePropertyMemberRoleParams{

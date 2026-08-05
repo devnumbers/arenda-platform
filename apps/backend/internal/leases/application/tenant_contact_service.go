@@ -11,6 +11,7 @@ import (
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
 // CreateTenantContactCommand carries the data needed to create a tenant contact.
@@ -39,6 +40,13 @@ type TenantContactService struct {
 	repo   TenantContactRepository
 	audit  auditapp.Recorder
 	logger *slog.Logger
+	// policy is injected after construction (see SetPolicy) because the
+	// membership-aware policy is built after the tenant contact service in the
+	// composition root. When nil, only the actor's own data is listed (pre-T2a).
+	policy sharedpolicy.Policy
+	// scopes is optionally injected (see SetAccessibleScopes); when nil only the
+	// actor's own contacts are listed.
+	scopes AccessibleScopes
 }
 
 // NewTenantContactService creates a new tenant contact service.
@@ -50,6 +58,21 @@ func NewTenantContactService(repo TenantContactRepository, audit auditapp.Record
 		audit = auditapp.Noop{}
 	}
 	return &TenantContactService{repo: repo, audit: audit, logger: logger}
+}
+
+// SetPolicy injects the authorization policy. The membership-aware policy is
+// built after the tenant contact service in the composition root, so it is
+// wired via this setter. When not set, only the actor's own data is listed
+// (issue #157).
+func (s *TenantContactService) SetPolicy(policy sharedpolicy.Policy) {
+	s.policy = policy
+}
+
+// SetAccessibleScopes injects the access-context adapter that resolves the
+// owners whose owner-wide data the actor may read. Optional: when nil, only the
+// actor's own contacts are listed (issue #157).
+func (s *TenantContactService) SetAccessibleScopes(scopes AccessibleScopes) {
+	s.scopes = scopes
 }
 
 // CreateTenantContact creates a tenant contact for the given owner.
@@ -209,23 +232,84 @@ func (s *TenantContactService) UpdateTenantContact(ctx context.Context, actor, i
 	return updated, nil
 }
 
-// ListTenantContacts returns all tenant contacts for the given owner.
+// ListTenantContacts returns all tenant contacts for the owner, plus the
+// contacts of owners whose properties the actor is a member of when the access
+// adapter is injected (issue #157, T2a). Each accessible owner is gated by the
+// policy port so the actor only sees owners for which CanView holds.
 func (s *TenantContactService) ListTenantContacts(ctx context.Context, actor uuid.UUID) ([]domain.TenantContact, error) {
-	contacts, err := s.repo.ListByOwner(ctx, actor)
-	if err != nil {
-		return nil, fmt.Errorf("list tenant contacts: %w", err)
+	var result []domain.TenantContact
+	seen := map[uuid.UUID]bool{}
+	if err := s.forEachAccessibleScope(ctx, actor, func(ctx context.Context, scope uuid.UUID) error {
+		contacts, err := s.repo.ListByOwner(ctx, scope)
+		if err != nil {
+			return fmt.Errorf("list tenant contacts: %w", err)
+		}
+		for _, c := range contacts {
+			if !seen[c.ID] {
+				seen[c.ID] = true
+				result = append(result, c)
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-	return contacts, nil
+	return result, nil
 }
 
 // ListTenantContactsWithLeaseStatus returns all tenant contacts for the owner,
-// each enriched with the active lease (if any) and the most recent terminal lease.
+// each enriched with the active lease (if any) and the most recent terminal
+// lease. When the access adapter is injected, contacts of owners whose
+// properties the actor is a member of are appended (issue #157, T2a).
 func (s *TenantContactService) ListTenantContactsWithLeaseStatus(ctx context.Context, actor uuid.UUID) ([]domain.TenantContactWithLeases, error) {
-	contacts, err := s.repo.ListWithLeaseStatus(ctx, actor)
-	if err != nil {
-		return nil, fmt.Errorf("list tenant contacts with lease status: %w", err)
+	var result []domain.TenantContactWithLeases
+	seen := map[uuid.UUID]bool{}
+	if err := s.forEachAccessibleScope(ctx, actor, func(ctx context.Context, scope uuid.UUID) error {
+		contacts, err := s.repo.ListWithLeaseStatus(ctx, scope)
+		if err != nil {
+			return fmt.Errorf("list tenant contacts with lease status: %w", err)
+		}
+		for _, c := range contacts {
+			if !seen[c.ID] {
+				seen[c.ID] = true
+				result = append(result, c)
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-	return contacts, nil
+	return result, nil
+}
+
+// forEachAccessibleScope invokes load for the actor's own scope and, when the
+// policy and scopes adapter are injected, for each accessible owner gated by
+// CanView (issue #157, T2a). When either dependency is nil only the actor's own
+// scope is loaded (the pre-T2a behaviour).
+func (s *TenantContactService) forEachAccessibleScope(ctx context.Context, actor uuid.UUID, load func(ctx context.Context, scope uuid.UUID) error) error {
+	if err := load(ctx, actor); err != nil {
+		return err
+	}
+	if s.policy == nil || s.scopes == nil {
+		return nil
+	}
+	owners, err := s.scopes.AccessibleOwners(ctx, actor)
+	if err != nil {
+		return fmt.Errorf("list accessible owners: %w", err)
+	}
+	for _, owner := range owners {
+		role, err := s.policy.Role(ctx, actor, owner)
+		if err != nil {
+			return fmt.Errorf("resolve role for owner: %w", err)
+		}
+		if !sharedpolicy.CanView(role) {
+			continue
+		}
+		if err := load(ctx, owner); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ListTenantContactsByIDs returns the tenant contacts for the given owner and IDs.

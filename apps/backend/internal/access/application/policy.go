@@ -13,9 +13,12 @@ import (
 // relative to a data owner (owner-wide data) or a specific property
 // (property-scoped data, issue #156).
 //
-// Owner-wide data (operation categories, tenant contacts) is not shared via
-// property membership: only the owner (actor == scope) gets RoleOwner, anyone
-// else gets RoleNone. Derived access for owner-wide data is a future slice.
+// Owner-wide data (operation categories, tenant contacts and other account-level
+// entities) is resolved as follows: the owner (actor == scope) gets RoleOwner;
+// for any other actor the role is derived from the strongest membership the
+// actor holds across all of the scope's properties — full access to at least
+// one property grants RoleFullAccess over the scope's owner-wide data, view-only
+// access grants RoleViewer, and no membership grants RoleNone (issue #157).
 //
 // Property-scoped data is resolved via the property's owner and any membership
 // the actor holds: owner → RoleOwner, member → RoleFullAccess/RoleViewer,
@@ -30,13 +33,29 @@ func NewMembershipPolicy(owners PropertyOwnerResolver, members MembershipReposit
 	return &MembershipPolicy{owners: owners, members: members}
 }
 
-// Role returns the actor's role over owner-wide data. Only the owner gets
-// RoleOwner; everyone else gets RoleNone.
-func (p *MembershipPolicy) Role(_ context.Context, actor, scope uuid.UUID) (sharedpolicy.Role, error) {
+// Role returns the actor's role over owner-wide data (operation categories,
+// tenant contacts and other account-level entities). For the owner's own data
+// (actor == scope) it is RoleOwner. For any other actor the role is derived
+// from the strongest membership the actor holds across all of the scope's
+// properties: full access to at least one property grants RoleFullAccess over
+// the scope's owner-wide data, view-only access grants RoleViewer, and no
+// membership grants RoleNone (issue #157).
+func (p *MembershipPolicy) Role(ctx context.Context, actor, scope uuid.UUID) (sharedpolicy.Role, error) {
 	if actor == scope {
 		return sharedpolicy.RoleOwner, nil
 	}
-	return sharedpolicy.RoleNone, nil
+	role, err := p.members.MaxRoleByOwner(ctx, actor, scope)
+	if err != nil {
+		return sharedpolicy.RoleNone, err
+	}
+	switch role {
+	case domain.RoleFullAccess:
+		return sharedpolicy.RoleFullAccess, nil
+	case domain.RoleViewer:
+		return sharedpolicy.RoleViewer, nil
+	default:
+		return sharedpolicy.RoleNone, nil
+	}
 }
 
 // RoleForProperty returns the actor's role over a specific property. The

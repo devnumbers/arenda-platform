@@ -60,12 +60,24 @@ func (r *fakeTenantContactRepo) Update(ctx context.Context, ownerID uuid.UUID, c
 	return contact, nil
 }
 
-func (r *fakeTenantContactRepo) ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.TenantContact, error) {
-	return r.contacts, nil
+func (r *fakeTenantContactRepo) ListByOwner(_ context.Context, ownerID uuid.UUID) ([]domain.TenantContact, error) {
+	var out []domain.TenantContact
+	for _, c := range r.contacts {
+		if c.OwnerID == ownerID {
+			out = append(out, c)
+		}
+	}
+	return out, nil
 }
 
-func (r *fakeTenantContactRepo) ListWithLeaseStatus(ctx context.Context, ownerID uuid.UUID) ([]domain.TenantContactWithLeases, error) {
-	return nil, nil
+func (r *fakeTenantContactRepo) ListWithLeaseStatus(_ context.Context, ownerID uuid.UUID) ([]domain.TenantContactWithLeases, error) {
+	var out []domain.TenantContactWithLeases
+	for _, c := range r.contacts {
+		if c.OwnerID == ownerID {
+			out = append(out, domain.TenantContactWithLeases{TenantContact: c})
+		}
+	}
+	return out, nil
 }
 
 func (r *fakeTenantContactRepo) WithTx(tx transaction.Tx) TenantContactRepository {

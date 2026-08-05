@@ -413,19 +413,19 @@ func (r *fakeOperationRepo) MarkOverdue(_ context.Context, ownerID, id uuid.UUID
 	return domain.Operation{}, false, ErrNotFound
 }
 
-func (r *fakeOperationRepo) GetFinanceReportTotals(_ context.Context, _ uuid.UUID, _, _ *time.Time) (FinanceReportTotals, error) {
+func (r *fakeOperationRepo) GetFinanceReportTotals(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) (FinanceReportTotals, error) {
 	return FinanceReportTotals{}, nil
 }
 
-func (r *fakeOperationRepo) GetFinanceReportByProperty(_ context.Context, _ uuid.UUID, _, _ *time.Time) ([]FinanceReportPropertyRow, error) {
+func (r *fakeOperationRepo) GetFinanceReportByProperty(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportPropertyRow, error) {
 	return nil, nil
 }
 
-func (r *fakeOperationRepo) GetFinanceReportByCategory(_ context.Context, _ uuid.UUID, _, _ *time.Time) ([]FinanceReportCategoryRow, error) {
+func (r *fakeOperationRepo) GetFinanceReportByCategory(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportCategoryRow, error) {
 	return nil, nil
 }
 
-func (r *fakeOperationRepo) GetFinanceReportByMonth(_ context.Context, _ uuid.UUID, _, _ *time.Time) ([]FinanceReportMonthRow, error) {
+func (r *fakeOperationRepo) GetFinanceReportByMonth(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportMonthRow, error) {
 	return nil, nil
 }
 

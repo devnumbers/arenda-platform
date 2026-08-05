@@ -87,6 +87,12 @@ func run() error {
 	}
 	p.Policy = accessMod.Policy
 
+	// The category service is built before the access module (it is needed for
+	// the user_registered subscriber), so wire the membership-aware policy and
+	// the accessible-scopes adapter into it now that both exist (issue #157).
+	leasesRepos.CategoryService.SetPolicy(accessMod.Policy)
+	leasesRepos.CategoryService.SetAccessibleScopes(accessMod.AccessibleScopes)
+
 	// 8. Properties: repos, subscription limiter, photo storage, property and
 	//    property-contact services, dadata suggester.
 	propertiesMod, err := wire.WireProperties(ctx, p, billingRepos, leasesRepos)
@@ -124,6 +130,15 @@ func run() error {
 
 	// 11. Leases services: lease/operation/recurring/tenant-contact/export.
 	leasesMod := wire.WireLeasesServices(p, leasesRepos, notificationsMod.ReminderScheduler, notificationsMod.ReminderService)
+	// Wire the membership-aware policy and the accessible-scopes adapter into
+	// the tenant contact service so list endpoints include owner-wide data the
+	// actor may read via property memberships (issue #157, T2a).
+	leasesMod.TenantContactService.SetPolicy(accessMod.Policy)
+	leasesMod.TenantContactService.SetAccessibleScopes(accessMod.AccessibleScopes)
+	// Wire the shared-property-ids adapter into the operation service so the
+	// finance report includes the actor's own operations plus operations of
+	// properties shared with the actor via property membership (issue #157, T3).
+	leasesMod.OperationService.SetSharedPropertyIDs(accessMod.SharedProperties)
 
 	// 12. Popups service.
 	popupsMod := wire.WirePopups(p)

@@ -1356,11 +1356,12 @@ func (r *OperationRepository) SoftDeleteOperation(ctx context.Context, id, scope
 	return nil
 }
 
-func (r *OperationRepository) GetFinanceReportTotals(ctx context.Context, scope uuid.UUID, from, to *time.Time) (application.FinanceReportTotals, error) {
+func (r *OperationRepository) GetFinanceReportTotals(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) (application.FinanceReportTotals, error) {
 	row, err := r.q().GetFinanceReportTotals(ctx, postgres.GetFinanceReportTotalsParams{
-		OwnerID:  pgconv.UUIDToPgtype(scope),
-		FromDate: pgconv.DatePtrToPgtype(from),
-		ToDate:   pgconv.DatePtrToPgtype(to),
+		OwnerID:               pgconv.UUIDToPgtype(scope),
+		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
+		FromDate:              pgconv.DatePtrToPgtype(from),
+		ToDate:                pgconv.DatePtrToPgtype(to),
 	})
 	if err != nil {
 		return application.FinanceReportTotals{}, err
@@ -1371,11 +1372,12 @@ func (r *OperationRepository) GetFinanceReportTotals(ctx context.Context, scope 
 	}, nil
 }
 
-func (r *OperationRepository) GetFinanceReportByProperty(ctx context.Context, scope uuid.UUID, from, to *time.Time) ([]application.FinanceReportPropertyRow, error) {
+func (r *OperationRepository) GetFinanceReportByProperty(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]application.FinanceReportPropertyRow, error) {
 	rows, err := r.q().GetFinanceReportByProperty(ctx, postgres.GetFinanceReportByPropertyParams{
-		OwnerID:  pgconv.UUIDToPgtype(scope),
-		FromDate: pgconv.DatePtrToPgtype(from),
-		ToDate:   pgconv.DatePtrToPgtype(to),
+		OwnerID:               pgconv.UUIDToPgtype(scope),
+		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
+		FromDate:              pgconv.DatePtrToPgtype(from),
+		ToDate:                pgconv.DatePtrToPgtype(to),
 	})
 	if err != nil {
 		return nil, err
@@ -1392,11 +1394,12 @@ func (r *OperationRepository) GetFinanceReportByProperty(ctx context.Context, sc
 	return result, nil
 }
 
-func (r *OperationRepository) GetFinanceReportByCategory(ctx context.Context, scope uuid.UUID, from, to *time.Time) ([]application.FinanceReportCategoryRow, error) {
+func (r *OperationRepository) GetFinanceReportByCategory(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]application.FinanceReportCategoryRow, error) {
 	rows, err := r.q().GetFinanceReportByCategory(ctx, postgres.GetFinanceReportByCategoryParams{
-		OwnerID:  pgconv.UUIDToPgtype(scope),
-		FromDate: pgconv.DatePtrToPgtype(from),
-		ToDate:   pgconv.DatePtrToPgtype(to),
+		OwnerID:               pgconv.UUIDToPgtype(scope),
+		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
+		FromDate:              pgconv.DatePtrToPgtype(from),
+		ToDate:                pgconv.DatePtrToPgtype(to),
 	})
 	if err != nil {
 		return nil, err
@@ -1414,11 +1417,12 @@ func (r *OperationRepository) GetFinanceReportByCategory(ctx context.Context, sc
 	return result, nil
 }
 
-func (r *OperationRepository) GetFinanceReportByMonth(ctx context.Context, scope uuid.UUID, from, to *time.Time) ([]application.FinanceReportMonthRow, error) {
+func (r *OperationRepository) GetFinanceReportByMonth(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]application.FinanceReportMonthRow, error) {
 	rows, err := r.q().GetFinanceReportByMonth(ctx, postgres.GetFinanceReportByMonthParams{
-		OwnerID:  pgconv.UUIDToPgtype(scope),
-		FromDate: pgconv.DatePtrToPgtype(from),
-		ToDate:   pgconv.DatePtrToPgtype(to),
+		OwnerID:               pgconv.UUIDToPgtype(scope),
+		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
+		FromDate:              pgconv.DatePtrToPgtype(from),
+		ToDate:                pgconv.DatePtrToPgtype(to),
 	})
 	if err != nil {
 		return nil, err

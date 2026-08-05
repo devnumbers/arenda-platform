@@ -21,6 +21,11 @@ type MembershipRepository interface {
 	GetRole(ctx context.Context, propertyID, userID uuid.UUID) (domain.Role, error)
 	ListByProperty(ctx context.Context, propertyID uuid.UUID) ([]domain.Membership, error)
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]domain.Membership, error)
+	// MaxRoleByOwner returns the strongest role the user holds across all
+	// properties of the given owner (scope). Returns RoleNone when the user has no
+	// membership on any of the owner's properties. Used by the policy port to
+	// derive owner-wide access (issue #157).
+	MaxRoleByOwner(ctx context.Context, userID, ownerID uuid.UUID) (domain.Role, error)
 	UpdateRole(ctx context.Context, id, propertyID uuid.UUID, role domain.Role) (domain.Membership, error)
 	Delete(ctx context.Context, id, propertyID uuid.UUID) error
 	WithTx(tx transaction.Tx) MembershipRepository

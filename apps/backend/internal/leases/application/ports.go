@@ -171,10 +171,10 @@ type OperationRepository interface {
 	GetPropertyOperationsSummary(ctx context.Context, scope, propertyID uuid.UUID, asOf time.Time) (OperationsSummary, error)
 	ListOverdueRentOperations(ctx context.Context, scope uuid.UUID) ([]OverdueRentOperation, error)
 	ListNextRentPayments(ctx context.Context, scope uuid.UUID, asOf time.Time) ([]NextRentPayment, error)
-	GetFinanceReportTotals(ctx context.Context, scope uuid.UUID, from, to *time.Time) (FinanceReportTotals, error)
-	GetFinanceReportByProperty(ctx context.Context, scope uuid.UUID, from, to *time.Time) ([]FinanceReportPropertyRow, error)
-	GetFinanceReportByCategory(ctx context.Context, scope uuid.UUID, from, to *time.Time) ([]FinanceReportCategoryRow, error)
-	GetFinanceReportByMonth(ctx context.Context, scope uuid.UUID, from, to *time.Time) ([]FinanceReportMonthRow, error)
+	GetFinanceReportTotals(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) (FinanceReportTotals, error)
+	GetFinanceReportByProperty(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]FinanceReportPropertyRow, error)
+	GetFinanceReportByCategory(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]FinanceReportCategoryRow, error)
+	GetFinanceReportByMonth(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]FinanceReportMonthRow, error)
 	GetPropertyFinanceByMonth(ctx context.Context, scope, propertyID uuid.UUID) ([]FinanceReportMonthRow, error)
 	GetPropertyFinanceByCategory(ctx context.Context, scope, propertyID uuid.UUID) ([]FinanceReportCategoryRow, error)
 	ListCompletedForExport(ctx context.Context, scope, propertyID uuid.UUID) ([]ExportOperationRow, error)
@@ -188,4 +188,23 @@ type OperationCategoryRepository interface {
 	GetByOwnerAndCode(ctx context.Context, scope uuid.UUID, code domain.OperationCategoryDefaultCode) (domain.OperationCategory, error)
 	CreateDefaultCategories(ctx context.Context, scope uuid.UUID) error
 	WithTx(tx transaction.Tx) OperationCategoryRepository
+}
+
+// AccessibleScopes returns the owner ids whose owner-wide data the actor may
+// read, i.e. the owners of properties the actor is a member of (issue #157).
+// Implemented by the access bounded context and injected optionally: when nil,
+// only the actor's own data is returned (the pre-T2a behaviour).
+type AccessibleScopes interface {
+	AccessibleOwners(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
+}
+
+// SharedPropertyIDs returns the ids of properties shared with a user via
+// property membership (issue #157). It mirrors
+// properties/application.SharedPropertyIDs locally to avoid a cross-context
+// import; it is implemented by the access bounded context and injected
+// optionally into OperationService so the finance report can include the
+// actor's shared properties. When nil, only the actor's own operations are
+// aggregated (the pre-T3 behaviour).
+type SharedPropertyIDs interface {
+	SharedWith(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 }

@@ -31,7 +31,9 @@ type Policy interface {
 	// (the data owner). The role determines which capabilities the actor has
 	// over the scope's owner-wide data (operation categories, tenant contacts
 	// and other account-level entities). For the owner's own data actor ==
-	// scope and the role is RoleOwner; for anyone else it is RoleNone.
+	// scope and the role is RoleOwner; for an actor with property memberships the
+	// role is derived as the strongest role across the scope's properties;
+	// otherwise RoleNone.
 	Role(ctx context.Context, actor, scope uuid.UUID) (Role, error)
 
 	// RoleForProperty returns the authorization role of the actor relative to a
