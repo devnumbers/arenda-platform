@@ -30,43 +30,43 @@ type SubscriptionLimiter interface {
 
 // OccupancyProvider reports which properties have an open lease.
 type OccupancyProvider interface {
-	IsOccupied(ctx context.Context, ownerID, propertyID uuid.UUID) (bool, error)
-	OccupiedPropertyIDs(ctx context.Context, ownerID uuid.UUID) (map[uuid.UUID]bool, error)
+	IsOccupied(ctx context.Context, scope, propertyID uuid.UUID) (bool, error)
+	OccupiedPropertyIDs(ctx context.Context, scope uuid.UUID) (map[uuid.UUID]bool, error)
 	WithTx(tx transaction.Tx) OccupancyProvider
 }
 
 // PropertyBillingLifecycle manages the billing side effects of archiving and
 // unarchiving a property.
 type PropertyBillingLifecycle interface {
-	Suspend(ctx context.Context, propertyID, ownerID uuid.UUID, asOf time.Time) error
-	Resume(ctx context.Context, propertyID uuid.UUID, ownerID uuid.UUID, asOf time.Time) error
+	Suspend(ctx context.Context, propertyID, scope uuid.UUID, asOf time.Time) error
+	Resume(ctx context.Context, propertyID uuid.UUID, scope uuid.UUID, asOf time.Time) error
 	// CompleteOpenLeases force-completes all open leases of the property,
 	// applying the same side effects as a user-initiated lease completion.
-	CompleteOpenLeases(ctx context.Context, ownerID, propertyID uuid.UUID, asOf time.Time) error
+	CompleteOpenLeases(ctx context.Context, scope, propertyID uuid.UUID, asOf time.Time) error
 	WithTx(tx transaction.Tx) PropertyBillingLifecycle
 }
 
 type PropertyRepository interface {
-	Create(ctx context.Context, ownerID uuid.UUID, property domain.Property) (domain.Property, error)
-	GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Property, error)
-	GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Property, error)
-	ListActiveByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Property, error)
-	ListArchivedByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Property, error)
-	Update(ctx context.Context, ownerID uuid.UUID, property domain.Property) (domain.Property, error)
-	Archive(ctx context.Context, id, ownerID uuid.UUID) error
-	Unarchive(ctx context.Context, id, ownerID uuid.UUID) error
-	CountActiveByOwner(ctx context.Context, ownerID uuid.UUID) (int, error)
-	Delete(ctx context.Context, id, ownerID uuid.UUID) error
-	DeleteOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error
-	DeleteRecurringOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error
-	DeleteLeasesByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error
+	Create(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error)
+	GetByIDAndOwner(ctx context.Context, id, scope uuid.UUID) (domain.Property, error)
+	GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (domain.Property, error)
+	ListActiveByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error)
+	ListArchivedByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error)
+	Update(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error)
+	Archive(ctx context.Context, id, scope uuid.UUID) error
+	Unarchive(ctx context.Context, id, scope uuid.UUID) error
+	CountActiveByOwner(ctx context.Context, scope uuid.UUID) (int, error)
+	Delete(ctx context.Context, id, scope uuid.UUID) error
+	DeleteOperationsByProperty(ctx context.Context, scope, propertyID uuid.UUID) error
+	DeleteRecurringOperationsByProperty(ctx context.Context, scope, propertyID uuid.UUID) error
+	DeleteLeasesByProperty(ctx context.Context, scope, propertyID uuid.UUID) error
 	WithTx(tx transaction.Tx) PropertyRepository
 }
 
 // LeaseRepository provides lease data needed by the properties bounded context.
 type LeaseRepository interface {
-	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) ([]leasesdomain.Lease, error)
-	GetOpenLeaseByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) (leasesdomain.Lease, error)
+	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID) ([]leasesdomain.Lease, error)
+	GetOpenLeaseByProperty(ctx context.Context, scope, propertyID uuid.UUID) (leasesdomain.Lease, error)
 }
 
 // PhotoStorage persists uploaded property photos and returns their public URL.
@@ -91,9 +91,9 @@ type PropertyPhotoRepository interface {
 // PropertyContactRepository persists property contact records.
 type PropertyContactRepository interface {
 	Create(ctx context.Context, contact domain.PropertyContact) (domain.PropertyContact, error)
-	ListByProperty(ctx context.Context, propertyID, ownerID uuid.UUID) ([]domain.PropertyContact, error)
-	GetByIDAndOwner(ctx context.Context, contactID, ownerID uuid.UUID) (domain.PropertyContact, error)
-	Update(ctx context.Context, ownerID uuid.UUID, contact domain.PropertyContact) (domain.PropertyContact, error)
-	Delete(ctx context.Context, contactID, ownerID uuid.UUID) error
+	ListByProperty(ctx context.Context, propertyID, scope uuid.UUID) ([]domain.PropertyContact, error)
+	GetByIDAndOwner(ctx context.Context, contactID, scope uuid.UUID) (domain.PropertyContact, error)
+	Update(ctx context.Context, scope uuid.UUID, contact domain.PropertyContact) (domain.PropertyContact, error)
+	Delete(ctx context.Context, contactID, scope uuid.UUID) error
 	WithTx(tx transaction.Tx) PropertyContactRepository
 }

@@ -48,7 +48,7 @@ func NewPropertyContactService(repo PropertyContactRepository, propertyRepo Prop
 
 // CreatePropertyContact creates a contact for the given property. The property
 // must exist, belong to the owner, and not be archived.
-func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, ownerID, propertyID uuid.UUID, cmd CreatePropertyContactCommand) (domain.PropertyContact, error) {
+func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, actor, propertyID uuid.UUID, cmd CreatePropertyContactCommand) (domain.PropertyContact, error) {
 	name := strings.TrimSpace(cmd.Name)
 	if name == "" {
 		return domain.PropertyContact{}, ErrInvalidInput
@@ -69,7 +69,7 @@ func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, owne
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txPropertyRepo := s.propertyRepo.WithTx(tx)
-	property, err := txPropertyRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, ownerID)
+	property, err := txPropertyRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, actor)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.PropertyContact{}, ErrNotFound
@@ -88,7 +88,7 @@ func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, owne
 	contact := domain.PropertyContact{
 		ID:         id,
 		PropertyID: propertyID,
-		OwnerID:    ownerID,
+		OwnerID:    actor,
 		Name:       name,
 		Phone:      normalized,
 	}
@@ -101,7 +101,7 @@ func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, owne
 
 	// PII (name, phone) is never written to the audit context.
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &ownerID,
+		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
 		Action:     auditdomain.ActionPropertyContactCreated,
 		EntityType: auditdomain.EntityPropertyContact,
@@ -119,15 +119,15 @@ func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, owne
 // ListPropertyContacts returns all contacts of a property ordered by created_at
 // ASC. Reading contacts of an archived property is allowed; a missing or foreign
 // property returns ErrNotFound before any contact is read.
-func (s *PropertyContactService) ListPropertyContacts(ctx context.Context, ownerID, propertyID uuid.UUID) ([]domain.PropertyContact, error) {
-	if _, err := s.propertyRepo.GetByIDAndOwner(ctx, propertyID, ownerID); err != nil {
+func (s *PropertyContactService) ListPropertyContacts(ctx context.Context, actor, propertyID uuid.UUID) ([]domain.PropertyContact, error) {
+	if _, err := s.propertyRepo.GetByIDAndOwner(ctx, propertyID, actor); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get property: %w", err)
 	}
 
-	contacts, err := s.repo.ListByProperty(ctx, propertyID, ownerID)
+	contacts, err := s.repo.ListByProperty(ctx, propertyID, actor)
 	if err != nil {
 		return nil, fmt.Errorf("list property contacts: %w", err)
 	}
@@ -137,15 +137,15 @@ func (s *PropertyContactService) ListPropertyContacts(ctx context.Context, owner
 // GetPropertyContact returns a single contact owned by the owner. Reading a
 // contact of an archived property is allowed; a missing or foreign contact
 // returns ErrNotFound.
-func (s *PropertyContactService) GetPropertyContact(ctx context.Context, ownerID, propertyID, contactID uuid.UUID) (domain.PropertyContact, error) {
-	if _, err := s.propertyRepo.GetByIDAndOwner(ctx, propertyID, ownerID); err != nil {
+func (s *PropertyContactService) GetPropertyContact(ctx context.Context, actor, propertyID, contactID uuid.UUID) (domain.PropertyContact, error) {
+	if _, err := s.propertyRepo.GetByIDAndOwner(ctx, propertyID, actor); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.PropertyContact{}, ErrNotFound
 		}
 		return domain.PropertyContact{}, fmt.Errorf("get property: %w", err)
 	}
 
-	contact, err := s.repo.GetByIDAndOwner(ctx, contactID, ownerID)
+	contact, err := s.repo.GetByIDAndOwner(ctx, contactID, actor)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.PropertyContact{}, ErrNotFound
@@ -161,8 +161,8 @@ func (s *PropertyContactService) GetPropertyContact(ctx context.Context, ownerID
 // UpdatePropertyContact applies a diff-patch to a property contact. The property
 // must exist, belong to the owner, and not be archived. Only provided fields are
 // changed.
-func (s *PropertyContactService) UpdatePropertyContact(ctx context.Context, ownerID, propertyID, contactID uuid.UUID, cmd UpdatePropertyContactCommand) (domain.PropertyContact, error) {
-	contact, err := s.repo.GetByIDAndOwner(ctx, contactID, ownerID)
+func (s *PropertyContactService) UpdatePropertyContact(ctx context.Context, actor, propertyID, contactID uuid.UUID, cmd UpdatePropertyContactCommand) (domain.PropertyContact, error) {
+	contact, err := s.repo.GetByIDAndOwner(ctx, contactID, actor)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.PropertyContact{}, ErrNotFound
@@ -195,7 +195,7 @@ func (s *PropertyContactService) UpdatePropertyContact(ctx context.Context, owne
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txPropertyRepo := s.propertyRepo.WithTx(tx)
-	property, err := txPropertyRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, ownerID)
+	property, err := txPropertyRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, actor)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.PropertyContact{}, ErrNotFound
@@ -207,7 +207,7 @@ func (s *PropertyContactService) UpdatePropertyContact(ctx context.Context, owne
 	}
 
 	txContactRepo := s.repo.WithTx(tx)
-	updated, err := txContactRepo.Update(ctx, ownerID, contact)
+	updated, err := txContactRepo.Update(ctx, actor, contact)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.PropertyContact{}, ErrNotFound
@@ -217,7 +217,7 @@ func (s *PropertyContactService) UpdatePropertyContact(ctx context.Context, owne
 
 	// PII (name, phone) is never written to the audit context.
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &ownerID,
+		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
 		Action:     auditdomain.ActionPropertyContactUpdated,
 		EntityType: auditdomain.EntityPropertyContact,
@@ -235,7 +235,7 @@ func (s *PropertyContactService) UpdatePropertyContact(ctx context.Context, owne
 
 // DeletePropertyContact removes a property contact. The property must exist,
 // belong to the owner, and not be archived.
-func (s *PropertyContactService) DeletePropertyContact(ctx context.Context, ownerID, propertyID, contactID uuid.UUID) error {
+func (s *PropertyContactService) DeletePropertyContact(ctx context.Context, actor, propertyID, contactID uuid.UUID) error {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -243,7 +243,7 @@ func (s *PropertyContactService) DeletePropertyContact(ctx context.Context, owne
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txPropertyRepo := s.propertyRepo.WithTx(tx)
-	property, err := txPropertyRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, ownerID)
+	property, err := txPropertyRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, actor)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
@@ -255,7 +255,7 @@ func (s *PropertyContactService) DeletePropertyContact(ctx context.Context, owne
 	}
 
 	txContactRepo := s.repo.WithTx(tx)
-	contact, err := txContactRepo.GetByIDAndOwner(ctx, contactID, ownerID)
+	contact, err := txContactRepo.GetByIDAndOwner(ctx, contactID, actor)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
@@ -266,13 +266,13 @@ func (s *PropertyContactService) DeletePropertyContact(ctx context.Context, owne
 		return ErrNotFound
 	}
 
-	if err := txContactRepo.Delete(ctx, contactID, ownerID); err != nil {
+	if err := txContactRepo.Delete(ctx, contactID, actor); err != nil {
 		return fmt.Errorf("delete property contact: %w", err)
 	}
 
 	// PII (name, phone) is never written to the audit context.
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &ownerID,
+		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
 		Action:     auditdomain.ActionPropertyContactDeleted,
 		EntityType: auditdomain.EntityPropertyContact,

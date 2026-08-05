@@ -53,7 +53,7 @@ func NewTenantContactService(repo TenantContactRepository, audit auditapp.Record
 }
 
 // CreateTenantContact creates a tenant contact for the given owner.
-func (s *TenantContactService) CreateTenantContact(ctx context.Context, ownerID uuid.UUID, cmd CreateTenantContactCommand) (domain.TenantContact, error) {
+func (s *TenantContactService) CreateTenantContact(ctx context.Context, actor uuid.UUID, cmd CreateTenantContactCommand) (domain.TenantContact, error) {
 	if strings.TrimSpace(cmd.Name) == "" {
 		return domain.TenantContact{}, ErrInvalidInput
 	}
@@ -79,7 +79,7 @@ func (s *TenantContactService) CreateTenantContact(ctx context.Context, ownerID 
 
 	contact := domain.TenantContact{
 		ID:         id,
-		OwnerID:    ownerID,
+		OwnerID:    actor,
 		Name:       cmd.Name,
 		Surname:    cmd.Surname,
 		Patronymic: cmd.Patronymic,
@@ -88,7 +88,7 @@ func (s *TenantContactService) CreateTenantContact(ctx context.Context, ownerID 
 		Comment:    cmd.Comment,
 	}
 
-	created, err := s.repo.Create(ctx, ownerID, contact)
+	created, err := s.repo.Create(ctx, actor, contact)
 	if err != nil {
 		return domain.TenantContact{}, fmt.Errorf("create tenant contact: %w", err)
 	}
@@ -98,7 +98,7 @@ func (s *TenantContactService) CreateTenantContact(ctx context.Context, ownerID 
 	// duplicate the contact — acceptable for this entity.
 	// Tenant PII (name, phone, email) is never written to the audit context.
 	if err := s.audit.Record(ctx, auditdomain.Entry{
-		ActorID:    &ownerID,
+		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
 		Action:     auditdomain.ActionTenantContactCreated,
 		EntityType: auditdomain.EntityTenantContact,
@@ -110,8 +110,8 @@ func (s *TenantContactService) CreateTenantContact(ctx context.Context, ownerID 
 }
 
 // GetTenantContact returns a tenant contact owned by the given owner.
-func (s *TenantContactService) GetTenantContact(ctx context.Context, ownerID, id uuid.UUID) (domain.TenantContact, error) {
-	contact, err := s.repo.GetByIDAndOwner(ctx, id, ownerID)
+func (s *TenantContactService) GetTenantContact(ctx context.Context, actor, id uuid.UUID) (domain.TenantContact, error) {
+	contact, err := s.repo.GetByIDAndOwner(ctx, id, actor)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.TenantContact{}, ErrNotFound
@@ -122,8 +122,8 @@ func (s *TenantContactService) GetTenantContact(ctx context.Context, ownerID, id
 }
 
 // UpdateTenantContact updates a tenant contact owned by the given owner.
-func (s *TenantContactService) UpdateTenantContact(ctx context.Context, ownerID, id uuid.UUID, cmd UpdateTenantContactCommand) (domain.TenantContact, error) {
-	contact, err := s.repo.GetByIDAndOwner(ctx, id, ownerID)
+func (s *TenantContactService) UpdateTenantContact(ctx context.Context, actor, id uuid.UUID, cmd UpdateTenantContactCommand) (domain.TenantContact, error) {
+	contact, err := s.repo.GetByIDAndOwner(ctx, id, actor)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.TenantContact{}, ErrNotFound
@@ -186,7 +186,7 @@ func (s *TenantContactService) UpdateTenantContact(ctx context.Context, ownerID,
 		}
 	}
 
-	updated, err := s.repo.Update(ctx, ownerID, contact)
+	updated, err := s.repo.Update(ctx, actor, contact)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.TenantContact{}, ErrNotFound
@@ -197,7 +197,7 @@ func (s *TenantContactService) UpdateTenantContact(ctx context.Context, ownerID,
 	// Post-commit, fail-loud: the update is already committed, so the audit
 	// error is returned deliberately to surface audit gaps. Retries are safe.
 	if err := s.audit.Record(ctx, auditdomain.Entry{
-		ActorID:    &ownerID,
+		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
 		Action:     auditdomain.ActionTenantContactUpdated,
 		EntityType: auditdomain.EntityTenantContact,
@@ -210,8 +210,8 @@ func (s *TenantContactService) UpdateTenantContact(ctx context.Context, ownerID,
 }
 
 // ListTenantContacts returns all tenant contacts for the given owner.
-func (s *TenantContactService) ListTenantContacts(ctx context.Context, ownerID uuid.UUID) ([]domain.TenantContact, error) {
-	contacts, err := s.repo.ListByOwner(ctx, ownerID)
+func (s *TenantContactService) ListTenantContacts(ctx context.Context, actor uuid.UUID) ([]domain.TenantContact, error) {
+	contacts, err := s.repo.ListByOwner(ctx, actor)
 	if err != nil {
 		return nil, fmt.Errorf("list tenant contacts: %w", err)
 	}
@@ -220,8 +220,8 @@ func (s *TenantContactService) ListTenantContacts(ctx context.Context, ownerID u
 
 // ListTenantContactsWithLeaseStatus returns all tenant contacts for the owner,
 // each enriched with the active lease (if any) and the most recent terminal lease.
-func (s *TenantContactService) ListTenantContactsWithLeaseStatus(ctx context.Context, ownerID uuid.UUID) ([]domain.TenantContactWithLeases, error) {
-	contacts, err := s.repo.ListWithLeaseStatus(ctx, ownerID)
+func (s *TenantContactService) ListTenantContactsWithLeaseStatus(ctx context.Context, actor uuid.UUID) ([]domain.TenantContactWithLeases, error) {
+	contacts, err := s.repo.ListWithLeaseStatus(ctx, actor)
 	if err != nil {
 		return nil, fmt.Errorf("list tenant contacts with lease status: %w", err)
 	}
@@ -229,11 +229,11 @@ func (s *TenantContactService) ListTenantContactsWithLeaseStatus(ctx context.Con
 }
 
 // ListTenantContactsByIDs returns the tenant contacts for the given owner and IDs.
-func (s *TenantContactService) ListTenantContactsByIDs(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]domain.TenantContact, error) {
+func (s *TenantContactService) ListTenantContactsByIDs(ctx context.Context, actor uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]domain.TenantContact, error) {
 	if len(ids) == 0 {
 		return map[uuid.UUID]domain.TenantContact{}, nil
 	}
-	contacts, err := s.repo.ListByIDs(ctx, ownerID, ids)
+	contacts, err := s.repo.ListByIDs(ctx, actor, ids)
 	if err != nil {
 		return nil, fmt.Errorf("list tenant contacts by ids: %w", err)
 	}

@@ -79,7 +79,7 @@ func (h *LeaseHandlers) handleLeaseError(w http.ResponseWriter, r *http.Request,
 
 // CreateLease implements POST /leases.
 func (h *LeaseHandlers) CreateLease(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -107,13 +107,13 @@ func (h *LeaseHandlers) CreateLease(w http.ResponseWriter, r *http.Request) {
 		cmd.Comment = *body.Comment
 	}
 
-	lease, err := h.leaseSvc.CreateLease(r.Context(), ownerID, cmd)
+	lease, err := h.leaseSvc.CreateLease(r.Context(), actor, cmd)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
 	}
 
-	resp, err := h.presenter.LeaseResponse(r.Context(), ownerID, lease, nil, nil, nil, false)
+	resp, err := h.presenter.LeaseResponse(r.Context(), actor, lease, nil, nil, nil, false)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -124,31 +124,31 @@ func (h *LeaseHandlers) CreateLease(w http.ResponseWriter, r *http.Request) {
 
 // ListLeases implements GET /leases.
 func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	leases, err := h.leaseSvc.ListLeases(r.Context(), ownerID)
+	leases, err := h.leaseSvc.ListLeases(r.Context(), actor)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
 	}
 
-	contacts, err := h.presenter.TenantContactIDs(r.Context(), ownerID, leases)
+	contacts, err := h.presenter.TenantContactIDs(r.Context(), actor, leases)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
 	}
 
-	loc, err := h.tzResolver.Resolve(r.Context(), ownerID)
+	loc, err := h.tzResolver.Resolve(r.Context(), actor)
 	if err != nil {
 		h.handleLeaseError(w, r, fmt.Errorf("resolve owner timezone: %w", err))
 		return
 	}
 	asOf := timeutil.DateIn(h.clock.Now(), loc)
-	scheduleIndex, err := h.leaseSvc.LeasePaymentScheduleIndex(r.Context(), ownerID, leases, asOf)
+	scheduleIndex, err := h.leaseSvc.LeasePaymentScheduleIndex(r.Context(), actor, leases, asOf)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -157,7 +157,7 @@ func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
 	items := make([]openapi.LeaseResponse, 0, len(leases))
 	for _, lease := range leases {
 		schedule := scheduleIndex[lease.ID]
-		resp, err := h.presenter.LeaseResponse(r.Context(), ownerID, lease, contacts, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
+		resp, err := h.presenter.LeaseResponse(r.Context(), actor, lease, contacts, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
 		if err != nil {
 			h.handleLeaseError(w, r, err)
 			return
@@ -170,32 +170,32 @@ func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
 
 // GetLease implements GET /leases/{id}.
 func (h *LeaseHandlers) GetLease(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	lease, err := h.leaseSvc.GetLease(r.Context(), ownerID, id)
+	lease, err := h.leaseSvc.GetLease(r.Context(), actor, id)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
 	}
 
-	loc, err := h.tzResolver.Resolve(r.Context(), ownerID)
+	loc, err := h.tzResolver.Resolve(r.Context(), actor)
 	if err != nil {
 		h.handleLeaseError(w, r, fmt.Errorf("resolve owner timezone: %w", err))
 		return
 	}
 	asOf := timeutil.DateIn(h.clock.Now(), loc)
-	scheduleIndex, err := h.leaseSvc.LeasePaymentScheduleIndex(r.Context(), ownerID, []leasesdomain.Lease{lease}, asOf)
+	scheduleIndex, err := h.leaseSvc.LeasePaymentScheduleIndex(r.Context(), actor, []leasesdomain.Lease{lease}, asOf)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
 	}
 	schedule := scheduleIndex[lease.ID]
 
-	resp, err := h.presenter.LeaseResponse(r.Context(), ownerID, lease, nil, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
+	resp, err := h.presenter.LeaseResponse(r.Context(), actor, lease, nil, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -206,7 +206,7 @@ func (h *LeaseHandlers) GetLease(w http.ResponseWriter, r *http.Request, id uuid
 
 // UpdateLease implements PATCH /leases/{id}.
 func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -236,13 +236,13 @@ func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id u
 		cmd.PaymentDay = body.PaymentDay
 	}
 
-	lease, err := h.leaseSvc.UpdateLease(r.Context(), ownerID, id, cmd)
+	lease, err := h.leaseSvc.UpdateLease(r.Context(), actor, id, cmd)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
 	}
 
-	resp, err := h.presenter.LeaseResponse(r.Context(), ownerID, lease, nil, nil, nil, false)
+	resp, err := h.presenter.LeaseResponse(r.Context(), actor, lease, nil, nil, nil, false)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -253,19 +253,19 @@ func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id u
 
 // CompleteLease implements POST /leases/{id}/complete.
 func (h *LeaseHandlers) CompleteLease(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	lease, err := h.leaseSvc.CompleteLease(r.Context(), ownerID, id)
+	lease, err := h.leaseSvc.CompleteLease(r.Context(), actor, id)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
 	}
 
-	resp, err := h.presenter.LeaseResponse(r.Context(), ownerID, lease, nil, nil, nil, false)
+	resp, err := h.presenter.LeaseResponse(r.Context(), actor, lease, nil, nil, nil, false)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -276,7 +276,7 @@ func (h *LeaseHandlers) CompleteLease(w http.ResponseWriter, r *http.Request, id
 
 // CreateTenantContact implements POST /tenant-contacts.
 func (h *LeaseHandlers) CreateTenantContact(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -298,7 +298,7 @@ func (h *LeaseHandlers) CreateTenantContact(w http.ResponseWriter, r *http.Reque
 		Comment:    body.Comment,
 	}
 
-	contact, err := h.tenantContactSvc.CreateTenantContact(r.Context(), ownerID, cmd)
+	contact, err := h.tenantContactSvc.CreateTenantContact(r.Context(), actor, cmd)
 	if err != nil {
 		handleTenantContactError(w, r, err)
 		return
@@ -309,13 +309,13 @@ func (h *LeaseHandlers) CreateTenantContact(w http.ResponseWriter, r *http.Reque
 
 // ListTenantContacts implements GET /tenant-contacts.
 func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	contacts, err := h.tenantContactSvc.ListTenantContactsWithLeaseStatus(r.Context(), ownerID)
+	contacts, err := h.tenantContactSvc.ListTenantContactsWithLeaseStatus(r.Context(), actor)
 	if err != nil {
 		handleTenantContactError(w, r, err)
 		return
@@ -331,7 +331,7 @@ func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Reques
 		}
 
 		if contact.ActiveLease != nil {
-			leaseResp, err := h.presenter.LeaseResponse(r.Context(), ownerID, *contact.ActiveLease, contactsMap, nil, nil, false)
+			leaseResp, err := h.presenter.LeaseResponse(r.Context(), actor, *contact.ActiveLease, contactsMap, nil, nil, false)
 			if err != nil {
 				handleTenantContactError(w, r, err)
 				return
@@ -339,7 +339,7 @@ func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Reques
 			resp.ActiveLease = &leaseResp
 		}
 		if contact.LastLease != nil {
-			leaseResp, err := h.presenter.LeaseResponse(r.Context(), ownerID, *contact.LastLease, contactsMap, nil, nil, false)
+			leaseResp, err := h.presenter.LeaseResponse(r.Context(), actor, *contact.LastLease, contactsMap, nil, nil, false)
 			if err != nil {
 				handleTenantContactError(w, r, err)
 				return
@@ -354,13 +354,13 @@ func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Reques
 
 // GetTenantContact implements GET /tenant-contacts/{id}.
 func (h *LeaseHandlers) GetTenantContact(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	contact, err := h.tenantContactSvc.GetTenantContact(r.Context(), ownerID, id)
+	contact, err := h.tenantContactSvc.GetTenantContact(r.Context(), actor, id)
 	if err != nil {
 		handleTenantContactError(w, r, err)
 		return
@@ -371,7 +371,7 @@ func (h *LeaseHandlers) GetTenantContact(w http.ResponseWriter, r *http.Request,
 
 // UpdateTenantContact implements PATCH /tenant-contacts/{id}.
 func (h *LeaseHandlers) UpdateTenantContact(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -393,7 +393,7 @@ func (h *LeaseHandlers) UpdateTenantContact(w http.ResponseWriter, r *http.Reque
 		Comment:    body.Comment,
 	}
 
-	contact, err := h.tenantContactSvc.UpdateTenantContact(r.Context(), ownerID, id, cmd)
+	contact, err := h.tenantContactSvc.UpdateTenantContact(r.Context(), actor, id, cmd)
 	if err != nil {
 		handleTenantContactError(w, r, err)
 		return

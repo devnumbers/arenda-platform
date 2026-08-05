@@ -35,8 +35,8 @@ func NewCalendarService(
 // the half-open window [from, to). 'from' and 'to' are calendar dates; they
 // are interpreted as local midnights in the owner's timezone before conversion
 // to UTC. The result is sorted by scheduled_at ascending.
-func (s *CalendarService) ListCalendar(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]domain.CalendarReminder, error) {
-	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+func (s *CalendarService) ListCalendar(ctx context.Context, actor uuid.UUID, from, to time.Time) ([]domain.CalendarReminder, error) {
+	loc, err := s.tzResolver.Resolve(ctx, actor)
 	if err != nil {
 		return nil, fmt.Errorf("resolve owner timezone: %w", err)
 	}
@@ -48,14 +48,14 @@ func (s *CalendarService) ListCalendar(ctx context.Context, ownerID uuid.UUID, f
 
 	// Operation and system reminders come straight from the reminders table
 	// with a LEFT JOIN for the property name.
-	opSys, err := s.reminders.ListCalendarByOwner(ctx, ownerID, fromUTC, toUTC)
+	opSys, err := s.reminders.ListCalendarByOwner(ctx, actor, fromUTC, toUTC)
 	if err != nil {
 		return nil, fmt.Errorf("list calendar operation/system reminders: %w", err)
 	}
 
 	// Free reminders are expanded from templates in the requested window,
 	// independent of the materialization horizon.
-	templates, err := s.freeReminders.ListTemplatesByOwner(ctx, ownerID)
+	templates, err := s.freeReminders.ListTemplatesByOwner(ctx, actor)
 	if err != nil {
 		return nil, fmt.Errorf("list free reminder templates: %w", err)
 	}

@@ -30,7 +30,7 @@ func (h *RecurringOperationHandlers) handleRecurringOperationError(w http.Respon
 
 // CreateRecurringOperation implements POST /properties/{propertyId}/recurring-operations.
 func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -68,13 +68,13 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 		cmd.ReminderOffsetDays = &offset
 	}
 
-	rec, err := h.svc.CreateRecurringOperation(r.Context(), ownerID, cmd)
+	rec, err := h.svc.CreateRecurringOperation(r.Context(), actor, cmd)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
@@ -85,19 +85,19 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 
 // ListRecurringOperationsByProperty implements GET /properties/{propertyId}/recurring-operations.
 func (h *RecurringOperationHandlers) ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	recs, err := h.svc.ListRecurringOperationsByProperty(r.Context(), ownerID, propertyID)
+	recs, err := h.svc.ListRecurringOperationsByProperty(r.Context(), actor, propertyID)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
@@ -113,19 +113,19 @@ func (h *RecurringOperationHandlers) ListRecurringOperationsByProperty(w http.Re
 
 // ListRecurringOperations implements GET /recurring-operations.
 func (h *RecurringOperationHandlers) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	recs, err := h.svc.ListRecurringOperations(r.Context(), ownerID)
+	recs, err := h.svc.ListRecurringOperations(r.Context(), actor)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
@@ -141,19 +141,19 @@ func (h *RecurringOperationHandlers) ListRecurringOperations(w http.ResponseWrit
 
 // GetRecurringOperation implements GET /recurring-operations/{id}.
 func (h *RecurringOperationHandlers) GetRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	rec, err := h.svc.GetRecurringOperation(r.Context(), ownerID, id)
+	rec, err := h.svc.GetRecurringOperation(r.Context(), actor, id)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
@@ -164,13 +164,13 @@ func (h *RecurringOperationHandlers) GetRecurringOperation(w http.ResponseWriter
 
 // DeleteRecurringOperation implements DELETE /recurring-operations/{id}.
 func (h *RecurringOperationHandlers) DeleteRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	if err := h.svc.DeleteRecurringOperation(r.Context(), ownerID, id); err != nil {
+	if err := h.svc.DeleteRecurringOperation(r.Context(), actor, id); err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
 	}
@@ -180,7 +180,7 @@ func (h *RecurringOperationHandlers) DeleteRecurringOperation(w http.ResponseWri
 
 // UpdateRecurringOperation implements PATCH /recurring-operations/{id}.
 func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -223,13 +223,13 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 		cmd.ReminderOffsetDays = &offset
 	}
 
-	rec, err := h.svc.UpdateRecurringOperation(r.Context(), ownerID, id, cmd)
+	rec, err := h.svc.UpdateRecurringOperation(r.Context(), actor, id, cmd)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
@@ -240,19 +240,19 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 
 // PauseRecurringOperation implements POST /recurring-operations/{id}/pause.
 func (h *RecurringOperationHandlers) PauseRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	rec, err := h.svc.PauseRecurringOperation(r.Context(), ownerID, id)
+	rec, err := h.svc.PauseRecurringOperation(r.Context(), actor, id)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
@@ -263,19 +263,19 @@ func (h *RecurringOperationHandlers) PauseRecurringOperation(w http.ResponseWrit
 
 // ResumeRecurringOperation implements POST /recurring-operations/{id}/resume.
 func (h *RecurringOperationHandlers) ResumeRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	rec, err := h.svc.ResumeRecurringOperation(r.Context(), ownerID, id)
+	rec, err := h.svc.ResumeRecurringOperation(r.Context(), actor, id)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleRecurringOperationError(w, r, err)
 		return

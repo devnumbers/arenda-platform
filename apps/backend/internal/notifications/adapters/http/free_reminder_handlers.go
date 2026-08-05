@@ -65,13 +65,13 @@ func freeReminderNotFoundMessage(resource string) string {
 
 // CreateFreeReminder implements POST /properties/{propertyId}/free-reminders.
 func (h *FreeReminderHandlers) CreateFreeReminder(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	if _, err := h.properties.GetProperty(r.Context(), ownerID, propertyID); err != nil {
+	if _, err := h.properties.GetProperty(r.Context(), actor, propertyID); err != nil {
 		h.handleFreeReminderError(w, r, err, "property")
 		return
 	}
@@ -90,7 +90,7 @@ func (h *FreeReminderHandlers) CreateFreeReminder(w http.ResponseWriter, r *http
 		Periodicity: notificationsdomain.FreeReminderPeriodicity(body.Periodicity),
 	}
 
-	fr, err := h.svc.Create(r.Context(), ownerID, input)
+	fr, err := h.svc.Create(r.Context(), actor, input)
 	if err != nil {
 		h.handleFreeReminderError(w, r, err, "free_reminder")
 		return
@@ -101,13 +101,13 @@ func (h *FreeReminderHandlers) CreateFreeReminder(w http.ResponseWriter, r *http
 
 // ListPropertyFreeReminders implements GET /properties/{propertyId}/free-reminders.
 func (h *FreeReminderHandlers) ListPropertyFreeReminders(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID, params openapi.ListPropertyFreeRemindersParams) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	if _, err := h.properties.GetProperty(r.Context(), ownerID, propertyID); err != nil {
+	if _, err := h.properties.GetProperty(r.Context(), actor, propertyID); err != nil {
 		h.handleFreeReminderError(w, r, err, "property")
 		return
 	}
@@ -118,7 +118,7 @@ func (h *FreeReminderHandlers) ListPropertyFreeReminders(w http.ResponseWriter, 
 		limit = max(limit, 1)
 	}
 
-	reminders, err := h.svc.ListByProperty(r.Context(), ownerID, propertyID, limit)
+	reminders, err := h.svc.ListByProperty(r.Context(), actor, propertyID, limit)
 	if err != nil {
 		h.handleFreeReminderError(w, r, err, "free_reminder")
 		return
@@ -137,13 +137,13 @@ func (h *FreeReminderHandlers) ListPropertyFreeReminders(w http.ResponseWriter, 
 // pending occurrences (including periodic ones) instead of templates, for the
 // property-page "up to 3 nearest" block.
 func (h *FreeReminderHandlers) ListUpcomingFreeReminders(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID, params openapi.ListUpcomingFreeRemindersParams) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	if _, err := h.properties.GetProperty(r.Context(), ownerID, propertyID); err != nil {
+	if _, err := h.properties.GetProperty(r.Context(), actor, propertyID); err != nil {
 		h.handleFreeReminderError(w, r, err, "property")
 		return
 	}
@@ -154,7 +154,7 @@ func (h *FreeReminderHandlers) ListUpcomingFreeReminders(w http.ResponseWriter, 
 		limit = max(limit, 1)
 	}
 
-	upcoming, err := h.reminders.ListUpcomingFreeRemindersByProperty(r.Context(), ownerID, propertyID, h.clock.Now(), limit)
+	upcoming, err := h.reminders.ListUpcomingFreeRemindersByProperty(r.Context(), actor, propertyID, h.clock.Now(), limit)
 	if err != nil {
 		h.handleFreeReminderError(w, r, err, "free_reminder")
 		return
@@ -170,7 +170,7 @@ func (h *FreeReminderHandlers) ListUpcomingFreeReminders(w http.ResponseWriter, 
 
 // ListFreeReminders implements GET /free-reminders.
 func (h *FreeReminderHandlers) ListFreeReminders(w http.ResponseWriter, r *http.Request, params openapi.ListFreeRemindersParams) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -187,7 +187,7 @@ func (h *FreeReminderHandlers) ListFreeReminders(w http.ResponseWriter, r *http.
 		offset = max(*params.Offset, 0)
 	}
 
-	reminders, err := h.svc.ListByOwner(r.Context(), ownerID, limit, offset)
+	reminders, err := h.svc.ListByOwner(r.Context(), actor, limit, offset)
 	if err != nil {
 		h.handleFreeReminderError(w, r, err, "free_reminder")
 		return
@@ -203,13 +203,13 @@ func (h *FreeReminderHandlers) ListFreeReminders(w http.ResponseWriter, r *http.
 
 // GetFreeReminder implements GET /free-reminders/{freeReminderId}.
 func (h *FreeReminderHandlers) GetFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	fr, err := h.svc.Get(r.Context(), ownerID, freeReminderID)
+	fr, err := h.svc.Get(r.Context(), actor, freeReminderID)
 	if err != nil {
 		h.handleFreeReminderError(w, r, err, "free_reminder")
 		return
@@ -220,7 +220,7 @@ func (h *FreeReminderHandlers) GetFreeReminder(w http.ResponseWriter, r *http.Re
 
 // UpdateFreeReminder implements PATCH /free-reminders/{freeReminderId}.
 func (h *FreeReminderHandlers) UpdateFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -245,7 +245,7 @@ func (h *FreeReminderHandlers) UpdateFreeReminder(w http.ResponseWriter, r *http
 		input.Periodicity = &p
 	}
 
-	fr, err := h.svc.Update(r.Context(), ownerID, freeReminderID, input)
+	fr, err := h.svc.Update(r.Context(), actor, freeReminderID, input)
 	if err != nil {
 		h.handleFreeReminderError(w, r, err, "free_reminder")
 		return
@@ -256,13 +256,13 @@ func (h *FreeReminderHandlers) UpdateFreeReminder(w http.ResponseWriter, r *http
 
 // DeleteFreeReminder implements DELETE /free-reminders/{freeReminderId}.
 func (h *FreeReminderHandlers) DeleteFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	if err := h.svc.Delete(r.Context(), ownerID, freeReminderID); err != nil {
+	if err := h.svc.Delete(r.Context(), actor, freeReminderID); err != nil {
 		h.handleFreeReminderError(w, r, err, "free_reminder")
 		return
 	}

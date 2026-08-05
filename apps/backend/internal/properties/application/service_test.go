@@ -224,6 +224,7 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		nil,
+		nil,
 	)
 
 	var wg sync.WaitGroup
@@ -334,6 +335,7 @@ func TestArchiveProperty_ConcurrentArchivesDoNotDoubleArchive(t *testing.T) {
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		nil,
+		nil,
 	)
 
 	var wg sync.WaitGroup
@@ -413,6 +415,7 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 		nil,
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
+		nil,
 		nil,
 	)
 
@@ -596,6 +599,7 @@ func TestPropertyService_ListPropertyLeases(t *testing.T) {
 		fakePropertyClock{now: now},
 		fakeTzResolver{},
 		nil,
+		nil,
 	)
 
 	result, err := svc.ListPropertyLeases(ctx, ownerID, propertyID)
@@ -633,6 +637,7 @@ func TestPropertyService_ListPropertyLeases_PropertyNotFound(t *testing.T) {
 		fakePropertyClock{now: now},
 		fakeTzResolver{},
 		nil,
+		nil,
 	)
 
 	_, err := svc.ListPropertyLeases(ctx, ownerID, missingPropertyID)
@@ -668,6 +673,7 @@ func TestPropertyService_ListArchivedProperties(t *testing.T) {
 		nil,
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
+		nil,
 		nil,
 	)
 
@@ -871,6 +877,7 @@ func TestPropertyService_ArchiveExcessProperties_CompletesOpenLeaseAndArchives(t
 		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
 		fakeTzResolver{},
 		nil,
+		nil,
 	)
 
 	if err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2); err != nil {
@@ -936,6 +943,7 @@ func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testi
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		nil,
+		nil,
 	)
 
 	if err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2); err != nil {
@@ -976,6 +984,7 @@ func TestPropertyService_ArchiveProperty_OpenLeaseStillRejected(t *testing.T) {
 		nil,
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
+		nil,
 		nil,
 	)
 

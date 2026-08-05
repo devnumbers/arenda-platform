@@ -26,13 +26,13 @@ func NewNotificationPreferenceHandlers(svc *notificationsapp.PreferenceService, 
 
 // GetNotificationPreferences implements GET /notification-preferences.
 func (h *NotificationPreferenceHandlers) GetNotificationPreferences(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	prefs, err := h.svc.ListPreferences(r.Context(), ownerID)
+	prefs, err := h.svc.ListPreferences(r.Context(), actor)
 	if err != nil {
 		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
@@ -42,7 +42,7 @@ func (h *NotificationPreferenceHandlers) GetNotificationPreferences(w http.Respo
 
 // UpdateNotificationPreferences implements PUT /notification-preferences.
 func (h *NotificationPreferenceHandlers) UpdateNotificationPreferences(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -63,7 +63,7 @@ func (h *NotificationPreferenceHandlers) UpdateNotificationPreferences(w http.Re
 		})
 	}
 
-	updated, err := h.svc.ReplacePreferences(r.Context(), ownerID, prefs)
+	updated, err := h.svc.ReplacePreferences(r.Context(), actor, prefs)
 	if err != nil {
 		if errors.Is(err, notificationsapp.ErrInvalidPreferences) {
 			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректные настройки уведомлений"))

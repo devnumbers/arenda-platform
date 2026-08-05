@@ -13,16 +13,16 @@ import (
 type ReminderRepository interface {
 	Save(ctx context.Context, r domain.Reminder) error
 	SaveOrReplaceOperationReminder(ctx context.Context, r domain.Reminder) error
-	UpdateScheduledAt(ctx context.Context, ownerID, id uuid.UUID, scheduledAt time.Time) error
+	UpdateScheduledAt(ctx context.Context, scope, id uuid.UUID, scheduledAt time.Time) error
 	// ReschedulePendingRemindersByOwner recalculates the scheduled_at of all
 	// pending reminders for an owner using wall-clock timezone conversion.
-	ReschedulePendingRemindersByOwner(ctx context.Context, ownerID uuid.UUID, oldTZ, newTZ string) error
-	GetByID(ctx context.Context, id, ownerID uuid.UUID) (domain.Reminder, error)
+	ReschedulePendingRemindersByOwner(ctx context.Context, scope uuid.UUID, oldTZ, newTZ string) error
+	GetByID(ctx context.Context, id, scope uuid.UUID) (domain.Reminder, error)
 	GetByIDUnscoped(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
-	ListByOwner(ctx context.Context, ownerID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
-	ListByOperation(ctx context.Context, ownerID, operationID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
-	ListByLease(ctx context.Context, ownerID, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
-	ListByRecurringOperation(ctx context.Context, ownerID, recurringOpID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
+	ListByOwner(ctx context.Context, scope uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
+	ListByOperation(ctx context.Context, scope, operationID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
+	ListByLease(ctx context.Context, scope, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
+	ListByRecurringOperation(ctx context.Context, scope, recurringOpID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	ListDue(ctx context.Context, before time.Time, limit int) ([]domain.Reminder, error)
 	ListStaleSendingReminders(ctx context.Context, staleBefore time.Time, limit int) ([]domain.Reminder, error)
 	// ListUpcomingFreeRemindersByProperty returns the nearest pending
@@ -30,12 +30,12 @@ type ReminderRepository interface {
 	// scheduled time ascending. It reads from the materialized reminders table,
 	// so periodic occurrences are included. 'from' bounds the lower edge of the
 	// window (typically now).
-	ListUpcomingFreeRemindersByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error)
+	ListUpcomingFreeRemindersByProperty(ctx context.Context, scope, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error)
 	// ListCalendarByOwner returns non-cancelled, non-skipped operation and
 	// system reminders for an owner in the half-open time window [from, to),
 	// each with its resolved property name (nil for orphans). Ordered by
 	// scheduled_at ascending.
-	ListCalendarByOwner(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]domain.CalendarReminder, error)
+	ListCalendarByOwner(ctx context.Context, scope uuid.UUID, from, to time.Time) ([]domain.CalendarReminder, error)
 	MarkReminderSending(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
 	// MarkSent marks a reminder that is currently sending as sent. It is used
 	// after a notification has been dispatched successfully.
@@ -44,7 +44,7 @@ type ReminderRepository interface {
 	// used when the sent SMS audit row already exists (idempotent success path).
 	MarkReminderSent(ctx context.Context, id uuid.UUID, sentAt time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, nextAttempt *time.Time, terminal bool) error
-	SaveSentSMSReminder(ctx context.Context, id, reminderID, ownerID uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error
+	SaveSentSMSReminder(ctx context.Context, id, reminderID, scope uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error
 	UpdateSMSProviderResponse(ctx context.Context, reminderID uuid.UUID, response string) error
 	IsSMSReminderSent(ctx context.Context, reminderID uuid.UUID) (bool, error)
 	SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) error
@@ -55,11 +55,11 @@ type ReminderRepository interface {
 	// MarkReminderSkipped marks a pending or sending reminder as skipped. It is
 	// used by the worker when the owner revoked permission for the event type.
 	MarkReminderSkipped(ctx context.Context, id uuid.UUID) error
-	CancelByIDAndOwner(ctx context.Context, ownerID, reminderID uuid.UUID) (bool, error)
-	CancelByTarget(ctx context.Context, ownerID uuid.UUID, targetType domain.TargetType, targetID uuid.UUID, eventType domain.EventType) error
-	CancelByRecurringOperationID(ctx context.Context, ownerID, recID uuid.UUID) error
-	HasReminderForLeaseEvent(ctx context.Context, ownerID, leaseID uuid.UUID, eventType domain.EventType) (bool, error)
-	HasReminderForOperationEvent(ctx context.Context, ownerID, operationID uuid.UUID, eventType domain.EventType) (bool, error)
+	CancelByIDAndOwner(ctx context.Context, scope, reminderID uuid.UUID) (bool, error)
+	CancelByTarget(ctx context.Context, scope uuid.UUID, targetType domain.TargetType, targetID uuid.UUID, eventType domain.EventType) error
+	CancelByRecurringOperationID(ctx context.Context, scope, recID uuid.UUID) error
+	HasReminderForLeaseEvent(ctx context.Context, scope, leaseID uuid.UUID, eventType domain.EventType) (bool, error)
+	HasReminderForOperationEvent(ctx context.Context, scope, operationID uuid.UUID, eventType domain.EventType) (bool, error)
 	// ListPreferences returns the stored notification preference rows of a
 	// user. A missing row means the event type is allowed (opt-out model).
 	ListPreferences(ctx context.Context, userID uuid.UUID) ([]domain.NotificationPreference, error)
@@ -76,21 +76,21 @@ type ReminderRepository interface {
 // ReminderRepository, which deals with operation/lease reminders.
 type FreeReminderRepository interface {
 	Create(ctx context.Context, fr domain.FreeReminder) (domain.FreeReminder, error)
-	GetByID(ctx context.Context, id, ownerID uuid.UUID) (domain.FreeReminder, error)
+	GetByID(ctx context.Context, id, scope uuid.UUID) (domain.FreeReminder, error)
 	Update(ctx context.Context, fr domain.FreeReminder) (domain.FreeReminder, error)
-	Delete(ctx context.Context, ownerID, id uuid.UUID) error
-	ListByOwner(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]domain.FreeReminder, error)
-	ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, limit int) ([]domain.FreeReminder, error)
+	Delete(ctx context.Context, scope, id uuid.UUID) error
+	ListByOwner(ctx context.Context, scope uuid.UUID, limit, offset int) ([]domain.FreeReminder, error)
+	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID, limit int) ([]domain.FreeReminder, error)
 	// ListTemplatesByOwner returns all free reminder templates for an owner
 	// with their resolved property name (nullable for orphans), ordered by
 	// trigger_at ascending. Used by the calendar read to expand occurrences.
-	ListTemplatesByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.FreeReminderTemplate, error)
+	ListTemplatesByOwner(ctx context.Context, scope uuid.UUID) ([]domain.FreeReminderTemplate, error)
 	// SaveFreeReminder inserts a concrete reminder row materialized from a free
 	// reminder template.
 	SaveFreeReminder(ctx context.Context, rm domain.Reminder) error
 	// CancelRemindersByFreeReminderID cancels pending/sending concrete reminders
 	// linked to a free reminder template.
-	CancelRemindersByFreeReminderID(ctx context.Context, ownerID, freeReminderID uuid.UUID) error
+	CancelRemindersByFreeReminderID(ctx context.Context, scope, freeReminderID uuid.UUID) error
 	WithTx(tx transaction.Tx) FreeReminderRepository
 }
 
@@ -105,7 +105,7 @@ type ListFilter struct {
 type SaveSentEmailReminderParams struct {
 	ID         uuid.UUID
 	ReminderID uuid.UUID
-	OwnerID    uuid.UUID
+	ScopeID    uuid.UUID
 	Email      string
 	Subject    string
 	PlainBody  string
@@ -124,7 +124,7 @@ type SMSSender interface {
 
 // ContactResolver resolves the delivery channel and address for an owner.
 type ContactResolver interface {
-	Resolve(ctx context.Context, ownerID uuid.UUID) (Contact, error)
+	Resolve(ctx context.Context, scope uuid.UUID) (Contact, error)
 }
 
 // Notification is a channel-agnostic outbound message.
@@ -159,13 +159,13 @@ type ReminderScheduler interface {
 	ScheduleForRecurringOperation(ctx context.Context, rec RecurringOperationInfo, baseReminderDate time.Time, ops []OperationInfo) error
 	ScheduleForLease(ctx context.Context, lease LeaseInfo) error
 	EnsureRequiresActionReminder(ctx context.Context, lease LeaseInfo) error
-	CancelByOperation(ctx context.Context, ownerID, opID uuid.UUID) error
-	CancelOverdueReminderByOperation(ctx context.Context, ownerID, opID uuid.UUID) error
-	CancelByRecurringOperation(ctx context.Context, ownerID, recID uuid.UUID) error
-	CancelByLease(ctx context.Context, ownerID, leaseID uuid.UUID) error
-	HasReminderForOperationEvent(ctx context.Context, ownerID, operationID uuid.UUID, eventType domain.EventType) (bool, error)
-	ListByOperation(ctx context.Context, ownerID, operationID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
-	ListByLease(ctx context.Context, ownerID, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
+	CancelByOperation(ctx context.Context, scope, opID uuid.UUID) error
+	CancelOverdueReminderByOperation(ctx context.Context, scope, opID uuid.UUID) error
+	CancelByRecurringOperation(ctx context.Context, scope, recID uuid.UUID) error
+	CancelByLease(ctx context.Context, scope, leaseID uuid.UUID) error
+	HasReminderForOperationEvent(ctx context.Context, scope, operationID uuid.UUID, eventType domain.EventType) (bool, error)
+	ListByOperation(ctx context.Context, scope, operationID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
+	ListByLease(ctx context.Context, scope, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	WithTx(tx transaction.Tx) ReminderScheduler
 }
 

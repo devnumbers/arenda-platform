@@ -35,7 +35,7 @@ func (p *OccupancyProvider) WithTx(tx transaction.Tx) application.OccupancyProvi
 }
 
 // IsOccupied reports whether the given property currently has an open lease.
-func (p *OccupancyProvider) IsOccupied(ctx context.Context, ownerID, propertyID uuid.UUID) (bool, error) {
+func (p *OccupancyProvider) IsOccupied(ctx context.Context, scope, propertyID uuid.UUID) (bool, error) {
 	count, err := p.q().CountOpenLeasesByProperty(ctx, pgconv.UUIDToPgtype(propertyID))
 	if err != nil {
 		return false, err
@@ -44,8 +44,8 @@ func (p *OccupancyProvider) IsOccupied(ctx context.Context, ownerID, propertyID 
 }
 
 // OccupiedPropertyIDs returns a set of property IDs that currently have an open lease for the owner.
-func (p *OccupancyProvider) OccupiedPropertyIDs(ctx context.Context, ownerID uuid.UUID) (map[uuid.UUID]bool, error) {
-	rows, err := p.q().ListOpenLeasePropertyIDsByOwner(ctx, pgconv.UUIDToPgtype(ownerID))
+func (p *OccupancyProvider) OccupiedPropertyIDs(ctx context.Context, scope uuid.UUID) (map[uuid.UUID]bool, error) {
+	rows, err := p.q().ListOpenLeasePropertyIDsByOwner(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {
 		return nil, err
 	}

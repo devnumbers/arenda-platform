@@ -25,7 +25,7 @@ func NewCategoryService(categories OperationCategoryRepository, audit auditapp.R
 	return &CategoryService{categories: categories, audit: audit}
 }
 
-func (s *CategoryService) CreateCategory(ctx context.Context, ownerID uuid.UUID, cmd CreateOperationCategoryCommand) (domain.OperationCategory, error) {
+func (s *CategoryService) CreateCategory(ctx context.Context, actor uuid.UUID, cmd CreateOperationCategoryCommand) (domain.OperationCategory, error) {
 	if err := cmd.validate(); err != nil {
 		return domain.OperationCategory{}, err
 	}
@@ -33,7 +33,7 @@ func (s *CategoryService) CreateCategory(ctx context.Context, ownerID uuid.UUID,
 	if err != nil {
 		return domain.OperationCategory{}, newInvalidInputError(err.Error())
 	}
-	created, err := s.categories.Create(ctx, ownerID, opType, cmd.Name)
+	created, err := s.categories.Create(ctx, actor, opType, cmd.Name)
 	if err != nil {
 		return domain.OperationCategory{}, err
 	}
@@ -41,7 +41,7 @@ func (s *CategoryService) CreateCategory(ctx context.Context, ownerID uuid.UUID,
 	// error is returned deliberately to surface audit gaps. A retry may
 	// duplicate the category — acceptable for this entity.
 	if err := s.audit.Record(ctx, auditdomain.Entry{
-		ActorID:    &ownerID,
+		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
 		Action:     auditdomain.ActionOperationCategoryCreated,
 		EntityType: auditdomain.EntityOperationCategory,
@@ -53,7 +53,7 @@ func (s *CategoryService) CreateCategory(ctx context.Context, ownerID uuid.UUID,
 	return created, nil
 }
 
-func (s *CategoryService) ListCategories(ctx context.Context, ownerID uuid.UUID, q ListOperationCategoriesQuery) ([]domain.OperationCategory, error) {
+func (s *CategoryService) ListCategories(ctx context.Context, actor uuid.UUID, q ListOperationCategoriesQuery) ([]domain.OperationCategory, error) {
 	var t *domain.OperationType
 	if q.Type != "" {
 		qt, err := domain.ParseOperationType(q.Type)
@@ -62,11 +62,11 @@ func (s *CategoryService) ListCategories(ctx context.Context, ownerID uuid.UUID,
 		}
 		t = &qt
 	}
-	return s.categories.ListByOwner(ctx, ownerID, t)
+	return s.categories.ListByOwner(ctx, actor, t)
 }
 
-func (s *CategoryService) SeedDefaultCategories(ctx context.Context, ownerID uuid.UUID) error {
-	return s.categories.CreateDefaultCategories(ctx, ownerID)
+func (s *CategoryService) SeedDefaultCategories(ctx context.Context, actor uuid.UUID) error {
+	return s.categories.CreateDefaultCategories(ctx, actor)
 }
 
 type CreateOperationCategoryCommand struct {

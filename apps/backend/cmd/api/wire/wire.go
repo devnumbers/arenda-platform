@@ -32,8 +32,10 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/observability"
+	platformpolicy "github.com/nambers/arenda-planform/apps/backend/internal/platform/policy"
 	platformtz "github.com/nambers/arenda-planform/apps/backend/internal/platform/tzresolver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -49,6 +51,7 @@ type platformDeps struct {
 	Renderer      *mailer.Renderer
 	AuditRecorder auditapp.Recorder
 	TZResolver    *platformtz.OwnerTimezone
+	Policy        sharedpolicy.Policy
 	Clock         clock.Clock
 	Beginner      transaction.Beginner
 	OTelShutdown  func(ctx context.Context) error
@@ -151,6 +154,7 @@ func WirePlatform() (*Platform, error) {
 	)
 
 	tzResolver := platformtz.NewOwnerTimezone(db)
+	policy := platformpolicy.NewOwnerOnlyPolicy()
 
 	deps := platformDeps{
 		Cfg:           &cfg,
@@ -161,6 +165,7 @@ func WirePlatform() (*Platform, error) {
 		Renderer:      renderer,
 		AuditRecorder: auditRecorder,
 		TZResolver:    tzResolver,
+		Policy:        policy,
 		Clock:         clock.Real{},
 		Beginner:      platformpostgres.NewBeginner(pool, appLogger),
 		OTelShutdown:  otelSDK.Shutdown,

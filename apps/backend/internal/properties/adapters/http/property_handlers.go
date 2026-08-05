@@ -96,7 +96,7 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 
 // CreateProperty implements POST /properties.
 func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -127,13 +127,13 @@ func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request
 		Attributes:  attrs,
 	}
 
-	property, err := h.svc.CreateProperty(r.Context(), ownerID, cmd)
+	property, err := h.svc.CreateProperty(r.Context(), actor, cmd)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
-	resp, err := h.propertyResponse(r.Context(), ownerID, property, leasesdomain.Lease{})
+	resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
@@ -144,13 +144,13 @@ func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request
 
 // ListProperties implements GET /properties.
 func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	properties, err := h.svc.ListProperties(r.Context(), ownerID)
+	properties, err := h.svc.ListProperties(r.Context(), actor)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
@@ -158,7 +158,7 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 
 	items := make([]openapi.PropertyResponse, 0, len(properties))
 	for _, property := range properties {
-		resp, err := h.propertyResponse(r.Context(), ownerID, property, leasesdomain.Lease{})
+		resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
 		if err != nil {
 			h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
 			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
@@ -172,13 +172,13 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 
 // ListArchivedProperties implements GET /properties/archive.
 func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	properties, err := h.svc.ListArchivedProperties(r.Context(), ownerID)
+	properties, err := h.svc.ListArchivedProperties(r.Context(), actor)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
@@ -186,7 +186,7 @@ func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http
 
 	items := make([]openapi.PropertyResponse, 0, len(properties))
 	for _, property := range properties {
-		resp, err := h.propertyResponse(r.Context(), ownerID, property, leasesdomain.Lease{})
+		resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
 		if err != nil {
 			h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
 			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
@@ -200,19 +200,19 @@ func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http
 
 // GetProperty implements GET /properties/{id}.
 func (h *PropertyHandlers) GetProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	property, activeLease, err := h.svc.GetPropertyWithOpenLease(r.Context(), ownerID, id)
+	property, activeLease, err := h.svc.GetPropertyWithOpenLease(r.Context(), actor, id)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
-	resp, err := h.propertyResponse(r.Context(), ownerID, property, activeLease)
+	resp, err := h.propertyResponse(r.Context(), actor, property, activeLease)
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
@@ -223,7 +223,7 @@ func (h *PropertyHandlers) GetProperty(w http.ResponseWriter, r *http.Request, i
 
 // UpdateProperty implements PATCH /properties/{id}.
 func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -245,13 +245,13 @@ func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request
 		Status:      httpsupport.PtrString(body.Status),
 	}
 
-	property, err := h.svc.UpdateProperty(r.Context(), ownerID, id, cmd)
+	property, err := h.svc.UpdateProperty(r.Context(), actor, id, cmd)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
-	resp, err := h.propertyResponse(r.Context(), ownerID, property, leasesdomain.Lease{})
+	resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
@@ -262,7 +262,7 @@ func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request
 
 // DeleteProperty implements DELETE /properties/{id}.
 func (h *PropertyHandlers) DeleteProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params openapi.DeletePropertyParams) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -274,7 +274,7 @@ func (h *PropertyHandlers) DeleteProperty(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.svc.DeleteProperty(r.Context(), ownerID, id, mode); err != nil {
+	if err := h.svc.DeleteProperty(r.Context(), actor, id, mode); err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
@@ -284,19 +284,19 @@ func (h *PropertyHandlers) DeleteProperty(w http.ResponseWriter, r *http.Request
 
 // ArchiveProperty implements POST /properties/{id}/archive.
 func (h *PropertyHandlers) ArchiveProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	property, err := h.svc.ArchiveProperty(r.Context(), ownerID, id)
+	property, err := h.svc.ArchiveProperty(r.Context(), actor, id)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
-	resp, err := h.propertyResponse(r.Context(), ownerID, property, leasesdomain.Lease{})
+	resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
@@ -307,19 +307,19 @@ func (h *PropertyHandlers) ArchiveProperty(w http.ResponseWriter, r *http.Reques
 
 // UnarchiveProperty implements POST /properties/{id}/unarchive.
 func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	property, err := h.svc.UnarchiveProperty(r.Context(), ownerID, id)
+	property, err := h.svc.UnarchiveProperty(r.Context(), actor, id)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
-	resp, err := h.propertyResponse(r.Context(), ownerID, property, leasesdomain.Lease{})
+	resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
@@ -330,31 +330,31 @@ func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Requ
 
 // ListPropertyLeases implements GET /properties/{id}/leases.
 func (h *PropertyHandlers) ListPropertyLeases(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	leases, err := h.svc.ListPropertyLeases(r.Context(), ownerID, id)
+	leases, err := h.svc.ListPropertyLeases(r.Context(), actor, id)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
-	contacts, err := h.presenter.TenantContactIDs(r.Context(), ownerID, leases)
+	contacts, err := h.presenter.TenantContactIDs(r.Context(), actor, leases)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
-	loc, err := h.tzResolver.Resolve(r.Context(), ownerID)
+	loc, err := h.tzResolver.Resolve(r.Context(), actor)
 	if err != nil {
 		h.handlePropertyError(w, r, fmt.Errorf("resolve owner timezone: %w", err))
 		return
 	}
 	asOf := timeutil.DateIn(h.clock.Now(), loc)
-	scheduleIndex, err := h.leaseSvc.LeasePaymentScheduleIndex(r.Context(), ownerID, leases, asOf)
+	scheduleIndex, err := h.leaseSvc.LeasePaymentScheduleIndex(r.Context(), actor, leases, asOf)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
@@ -363,7 +363,7 @@ func (h *PropertyHandlers) ListPropertyLeases(w http.ResponseWriter, r *http.Req
 	items := make([]openapi.LeaseResponse, 0, len(leases))
 	for _, lease := range leases {
 		schedule := scheduleIndex[lease.ID]
-		resp, err := h.presenter.LeaseResponse(r.Context(), ownerID, lease, contacts, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
+		resp, err := h.presenter.LeaseResponse(r.Context(), actor, lease, contacts, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
 		if err != nil {
 			h.handlePropertyError(w, r, err)
 			return
@@ -376,13 +376,13 @@ func (h *PropertyHandlers) ListPropertyLeases(w http.ResponseWriter, r *http.Req
 
 // GetPropertyOperationsSummary implements GET /properties/{id}/operations/summary.
 func (h *PropertyHandlers) GetPropertyOperationsSummary(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	summary, err := h.opSvc.GetPropertyOperationsSummary(r.Context(), ownerID, id)
+	summary, err := h.opSvc.GetPropertyOperationsSummary(r.Context(), actor, id)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
@@ -401,13 +401,13 @@ func (h *PropertyHandlers) GetPropertyOperationsSummary(w http.ResponseWriter, r
 
 // ExportPropertyData implements GET /properties/{id}/export.
 func (h *PropertyHandlers) ExportPropertyData(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	file, err := h.exportSvc.ExportProperty(r.Context(), ownerID, id)
+	file, err := h.exportSvc.ExportProperty(r.Context(), actor, id)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
@@ -431,7 +431,7 @@ func exportASCIIFilename(name string) string {
 
 // UploadPropertyPhoto implements POST /properties/{propertyId}/photos.
 func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -453,7 +453,7 @@ func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Re
 	}
 	defer func() { _ = file.Close() }()
 
-	property, err := h.svc.AddPropertyPhoto(r.Context(), ownerID, propertyID, file, header.Filename, header.Header.Get("Content-Type"), header.Size)
+	property, err := h.svc.AddPropertyPhoto(r.Context(), actor, propertyID, file, header.Filename, header.Header.Get("Content-Type"), header.Size)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
@@ -470,13 +470,13 @@ func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Re
 
 // DeletePropertyPhoto implements DELETE /properties/{propertyId}/photos/{photoId}.
 func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID, photoID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	if err := h.svc.DeletePropertyPhoto(r.Context(), ownerID, propertyID, photoID); err != nil {
+	if err := h.svc.DeletePropertyPhoto(r.Context(), actor, propertyID, photoID); err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
@@ -486,7 +486,7 @@ func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Re
 
 // CreatePropertyContact implements POST /properties/{propertyId}/contacts.
 func (h *PropertyHandlers) CreatePropertyContact(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -499,7 +499,7 @@ func (h *PropertyHandlers) CreatePropertyContact(w http.ResponseWriter, r *http.
 		return
 	}
 
-	contact, err := h.contactSvc.CreatePropertyContact(r.Context(), ownerID, propertyID, propertiesapp.CreatePropertyContactCommand{
+	contact, err := h.contactSvc.CreatePropertyContact(r.Context(), actor, propertyID, propertiesapp.CreatePropertyContactCommand{
 		Name:  body.Name,
 		Phone: body.Phone,
 	})
@@ -513,13 +513,13 @@ func (h *PropertyHandlers) CreatePropertyContact(w http.ResponseWriter, r *http.
 
 // ListPropertyContacts implements GET /properties/{propertyId}/contacts.
 func (h *PropertyHandlers) ListPropertyContacts(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	contacts, err := h.contactSvc.ListPropertyContacts(r.Context(), ownerID, propertyID)
+	contacts, err := h.contactSvc.ListPropertyContacts(r.Context(), actor, propertyID)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
@@ -534,13 +534,13 @@ func (h *PropertyHandlers) ListPropertyContacts(w http.ResponseWriter, r *http.R
 
 // GetPropertyContact implements GET /properties/{propertyId}/contacts/{contactId}.
 func (h *PropertyHandlers) GetPropertyContact(w http.ResponseWriter, r *http.Request, propertyID, contactID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	contact, err := h.contactSvc.GetPropertyContact(r.Context(), ownerID, propertyID, contactID)
+	contact, err := h.contactSvc.GetPropertyContact(r.Context(), actor, propertyID, contactID)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
@@ -551,7 +551,7 @@ func (h *PropertyHandlers) GetPropertyContact(w http.ResponseWriter, r *http.Req
 
 // UpdatePropertyContact implements PATCH /properties/{propertyId}/contacts/{contactId}.
 func (h *PropertyHandlers) UpdatePropertyContact(w http.ResponseWriter, r *http.Request, propertyID, contactID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -564,7 +564,7 @@ func (h *PropertyHandlers) UpdatePropertyContact(w http.ResponseWriter, r *http.
 		return
 	}
 
-	contact, err := h.contactSvc.UpdatePropertyContact(r.Context(), ownerID, propertyID, contactID, propertiesapp.UpdatePropertyContactCommand{
+	contact, err := h.contactSvc.UpdatePropertyContact(r.Context(), actor, propertyID, contactID, propertiesapp.UpdatePropertyContactCommand{
 		Name:  body.Name,
 		Phone: body.Phone,
 	})
@@ -578,13 +578,13 @@ func (h *PropertyHandlers) UpdatePropertyContact(w http.ResponseWriter, r *http.
 
 // DeletePropertyContact implements DELETE /properties/{propertyId}/contacts/{contactId}.
 func (h *PropertyHandlers) DeletePropertyContact(w http.ResponseWriter, r *http.Request, propertyID, contactID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	if err := h.contactSvc.DeletePropertyContact(r.Context(), ownerID, propertyID, contactID); err != nil {
+	if err := h.contactSvc.DeletePropertyContact(r.Context(), actor, propertyID, contactID); err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
@@ -605,7 +605,7 @@ func (h *PropertyHandlers) propertyContactResponse(c domain.PropertyContact) ope
 
 // GetAddressSuggestions implements GET /dadata/suggestions/address.
 func (h *PropertyHandlers) GetAddressSuggestions(w http.ResponseWriter, r *http.Request, params openapi.GetAddressSuggestionsParams) {
-	_, ok := httpsupport.OwnerIDFromContext(r)
+	_, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -630,7 +630,7 @@ func (h *PropertyHandlers) GetAddressSuggestions(w http.ResponseWriter, r *http.
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AddressSuggestionsResponse{Suggestions: resp})
 }
 
-func (h *PropertyHandlers) propertyResponse(ctx context.Context, ownerID uuid.UUID, property domain.Property, activeLease leasesdomain.Lease) (openapi.PropertyResponse, error) {
+func (h *PropertyHandlers) propertyResponse(ctx context.Context, actor uuid.UUID, property domain.Property, activeLease leasesdomain.Lease) (openapi.PropertyResponse, error) {
 	resp := openapi.PropertyResponse{
 		Id:               property.ID,
 		Name:             property.Name,
@@ -654,7 +654,7 @@ func (h *PropertyHandlers) propertyResponse(ctx context.Context, ownerID uuid.UU
 		resp.Photos = &photos
 	}
 	if activeLease.ID != uuid.Nil {
-		leaseResp, err := h.presenter.LeaseResponse(ctx, ownerID, activeLease, nil, nil, nil, false)
+		leaseResp, err := h.presenter.LeaseResponse(ctx, actor, activeLease, nil, nil, nil, false)
 		if err != nil {
 			return openapi.PropertyResponse{}, fmt.Errorf("map active lease: %w", err)
 		}

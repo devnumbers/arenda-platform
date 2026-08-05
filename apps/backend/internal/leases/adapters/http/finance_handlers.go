@@ -20,7 +20,7 @@ func NewFinanceHandlers(svc *leasesapp.OperationService) *FinanceHandlers {
 }
 
 func (h *FinanceHandlers) GetFinanceReport(w http.ResponseWriter, r *http.Request, params openapi.GetFinanceReportParams) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -34,7 +34,7 @@ func (h *FinanceHandlers) GetFinanceReport(w http.ResponseWriter, r *http.Reques
 		to = &params.To.Time
 	}
 
-	report, err := h.svc.GetFinanceReport(r.Context(), ownerID, from, to)
+	report, err := h.svc.GetFinanceReport(r.Context(), actor, from, to)
 	if err != nil {
 		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return

@@ -15,8 +15,8 @@ import (
 
 // categoryNamesByID loads all operation categories of the owner (any type) and
 // returns a map from category ID to category name for response enrichment.
-func categoryNamesByID(ctx context.Context, svc *leasesapp.CategoryService, ownerID uuid.UUID) (map[uuid.UUID]string, error) {
-	categories, err := svc.ListCategories(ctx, ownerID, leasesapp.ListOperationCategoriesQuery{})
+func categoryNamesByID(ctx context.Context, svc *leasesapp.CategoryService, actor uuid.UUID) (map[uuid.UUID]string, error) {
+	categories, err := svc.ListCategories(ctx, actor, leasesapp.ListOperationCategoriesQuery{})
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func (h *CategoryHandlers) handleCategoryError(w http.ResponseWriter, r *http.Re
 
 // ListOperationCategories implements GET /operation-categories.
 func (h *CategoryHandlers) ListOperationCategories(w http.ResponseWriter, r *http.Request, params openapi.ListOperationCategoriesParams) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -69,7 +69,7 @@ func (h *CategoryHandlers) ListOperationCategories(w http.ResponseWriter, r *htt
 		q.Type = string(*params.Type)
 	}
 
-	categories, err := h.svc.ListCategories(r.Context(), ownerID, q)
+	categories, err := h.svc.ListCategories(r.Context(), actor, q)
 	if err != nil {
 		h.handleCategoryError(w, r, err)
 		return
@@ -91,7 +91,7 @@ func (h *CategoryHandlers) ListOperationCategories(w http.ResponseWriter, r *htt
 
 // CreateOperationCategory implements POST /operation-categories.
 func (h *CategoryHandlers) CreateOperationCategory(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -104,7 +104,7 @@ func (h *CategoryHandlers) CreateOperationCategory(w http.ResponseWriter, r *htt
 		return
 	}
 
-	category, err := h.svc.CreateCategory(r.Context(), ownerID, leasesapp.CreateOperationCategoryCommand{
+	category, err := h.svc.CreateCategory(r.Context(), actor, leasesapp.CreateOperationCategoryCommand{
 		Type: string(body.Type),
 		Name: body.Name,
 	})

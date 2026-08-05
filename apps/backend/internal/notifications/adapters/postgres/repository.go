@@ -97,11 +97,11 @@ func (r *ReminderRepository) SaveOrReplaceOperationReminder(ctx context.Context,
 }
 
 // UpdateScheduledAt updates the scheduled time of a pending reminder.
-func (r *ReminderRepository) UpdateScheduledAt(ctx context.Context, ownerID, id uuid.UUID, scheduledAt time.Time) error {
+func (r *ReminderRepository) UpdateScheduledAt(ctx context.Context, scope, id uuid.UUID, scheduledAt time.Time) error {
 	rows, err := r.q().UpdateReminderScheduledAt(ctx, postgres.UpdateReminderScheduledAtParams{
 		ScheduledAt: pgtype.Timestamptz{Time: scheduledAt, Valid: true},
 		ID:          pgconv.UUIDToPgtype(id),
-		OwnerID:     pgconv.UUIDToPgtype(ownerID),
+		OwnerID:     pgconv.UUIDToPgtype(scope),
 	})
 	if err != nil {
 		return fmt.Errorf("update reminder scheduled at: %w", err)
@@ -115,9 +115,9 @@ func (r *ReminderRepository) UpdateScheduledAt(ctx context.Context, ownerID, id 
 // ReschedulePendingRemindersByOwner recalculates the scheduled_at of all pending
 // reminders for an owner using wall-clock timezone conversion: the local date
 // and time-of-day seen in oldTZ are re-applied in newTZ.
-func (r *ReminderRepository) ReschedulePendingRemindersByOwner(ctx context.Context, ownerID uuid.UUID, oldTZ, newTZ string) error {
+func (r *ReminderRepository) ReschedulePendingRemindersByOwner(ctx context.Context, scope uuid.UUID, oldTZ, newTZ string) error {
 	if _, err := r.q().ReschedulePendingRemindersByOwner(ctx, postgres.ReschedulePendingRemindersByOwnerParams{
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 		OldTz:   oldTZ,
 		NewTz:   newTZ,
 	}); err != nil {
@@ -127,10 +127,10 @@ func (r *ReminderRepository) ReschedulePendingRemindersByOwner(ctx context.Conte
 }
 
 // GetByID returns a reminder by ID scoped to an owner.
-func (r *ReminderRepository) GetByID(ctx context.Context, id, ownerID uuid.UUID) (domain.Reminder, error) {
+func (r *ReminderRepository) GetByID(ctx context.Context, id, scope uuid.UUID) (domain.Reminder, error) {
 	row, err := r.q().GetReminderByIDAndOwner(ctx, postgres.GetReminderByIDAndOwnerParams{
 		ID:      pgconv.UUIDToPgtype(id),
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -143,10 +143,10 @@ func (r *ReminderRepository) GetByID(ctx context.Context, id, ownerID uuid.UUID)
 
 // CancelByIDAndOwner cancels a reminder if it belongs to the owner and is still
 // pending or sending. It returns true when a row was updated.
-func (r *ReminderRepository) CancelByIDAndOwner(ctx context.Context, ownerID, reminderID uuid.UUID) (bool, error) {
+func (r *ReminderRepository) CancelByIDAndOwner(ctx context.Context, scope, reminderID uuid.UUID) (bool, error) {
 	rows, err := r.q().CancelByIDAndOwner(ctx, postgres.CancelByIDAndOwnerParams{
 		ID:      pgconv.UUIDToPgtype(reminderID),
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 	})
 	if err != nil {
 		return false, fmt.Errorf("cancel reminder by id and owner: %w", err)
@@ -167,9 +167,9 @@ func (r *ReminderRepository) GetByIDUnscoped(ctx context.Context, id uuid.UUID) 
 }
 
 // ListByOwner returns reminders for an owner with optional status filter.
-func (r *ReminderRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID, filter application.ListFilter) ([]domain.Reminder, error) {
+func (r *ReminderRepository) ListByOwner(ctx context.Context, scope uuid.UUID, filter application.ListFilter) ([]domain.Reminder, error) {
 	params := postgres.ListRemindersByOwnerParams{
-		OwnerID:        pgconv.UUIDToPgtype(ownerID),
+		OwnerID:        pgconv.UUIDToPgtype(scope),
 		FilterByStatus: filter.Status != nil,
 		//nolint:gosec // Pagination values are bounded by the transport layer.
 		Offset: int32(filter.Offset),
@@ -192,9 +192,9 @@ func (r *ReminderRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID,
 
 // ListByOperation returns non-cancelled reminders linked to a concrete operation
 // for the given owner.
-func (r *ReminderRepository) ListByOperation(ctx context.Context, ownerID, operationID uuid.UUID, filter application.ListFilter) ([]domain.Reminder, error) {
+func (r *ReminderRepository) ListByOperation(ctx context.Context, scope, operationID uuid.UUID, filter application.ListFilter) ([]domain.Reminder, error) {
 	rows, err := r.q().ListRemindersByOperation(ctx, postgres.ListRemindersByOperationParams{
-		OwnerID:     pgconv.UUIDToPgtype(ownerID),
+		OwnerID:     pgconv.UUIDToPgtype(scope),
 		OperationID: pgconv.UUIDToPgtype(operationID),
 		//nolint:gosec // Pagination values are bounded by the transport layer.
 		Limit: int32(filter.Limit),
@@ -212,9 +212,9 @@ func (r *ReminderRepository) ListByOperation(ctx context.Context, ownerID, opera
 }
 
 // ListByLease returns non-cancelled reminders linked to a lease for the given owner.
-func (r *ReminderRepository) ListByLease(ctx context.Context, ownerID, leaseID uuid.UUID, filter application.ListFilter) ([]domain.Reminder, error) {
+func (r *ReminderRepository) ListByLease(ctx context.Context, scope, leaseID uuid.UUID, filter application.ListFilter) ([]domain.Reminder, error) {
 	rows, err := r.q().ListRemindersByLease(ctx, postgres.ListRemindersByLeaseParams{
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 		LeaseID: pgconv.UUIDToPgtype(leaseID),
 		//nolint:gosec // Pagination values are bounded by the transport layer.
 		Limit: int32(filter.Limit),
@@ -233,9 +233,9 @@ func (r *ReminderRepository) ListByLease(ctx context.Context, ownerID, leaseID u
 
 // ListByRecurringOperation returns non-cancelled reminders linked to a recurring
 // operation template for the given owner.
-func (r *ReminderRepository) ListByRecurringOperation(ctx context.Context, ownerID, recurringOpID uuid.UUID, filter application.ListFilter) ([]domain.Reminder, error) {
+func (r *ReminderRepository) ListByRecurringOperation(ctx context.Context, scope, recurringOpID uuid.UUID, filter application.ListFilter) ([]domain.Reminder, error) {
 	rows, err := r.q().ListRemindersByRecurringOperation(ctx, postgres.ListRemindersByRecurringOperationParams{
-		OwnerID:              pgconv.UUIDToPgtype(ownerID),
+		OwnerID:              pgconv.UUIDToPgtype(scope),
 		RecurringOperationID: pgconv.UUIDToPgtype(recurringOpID),
 		//nolint:gosec // Pagination values are bounded by the transport layer.
 		Limit: int32(filter.Limit),
@@ -272,9 +272,9 @@ func (r *ReminderRepository) ListDue(ctx context.Context, before time.Time, limi
 // ListUpcomingFreeRemindersByProperty returns the nearest pending free-reminder
 // occurrences for a property from the materialized reminders table. Periodic
 // occurrences are included because they are materialized at write time.
-func (r *ReminderRepository) ListUpcomingFreeRemindersByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error) {
+func (r *ReminderRepository) ListUpcomingFreeRemindersByProperty(ctx context.Context, scope, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error) {
 	rows, err := r.q().ListUpcomingFreeRemindersByProperty(ctx, postgres.ListUpcomingFreeRemindersByPropertyParams{
-		OwnerID:     pgconv.UUIDToPgtype(ownerID),
+		OwnerID:     pgconv.UUIDToPgtype(scope),
 		PropertyID:  pgconv.UUIDToPgtype(propertyID),
 		ScheduledAt: pgtype.Timestamptz{Time: from, Valid: true},
 		//nolint:gosec // Limit is bounded by the transport layer (max 100).
@@ -293,9 +293,9 @@ func (r *ReminderRepository) ListUpcomingFreeRemindersByProperty(ctx context.Con
 // ListCalendarByOwner returns non-cancelled, non-skipped operation and system
 // reminders for an owner in [from, to), each joined with its property name
 // (nil for orphans). Ordered by scheduled_at ascending.
-func (r *ReminderRepository) ListCalendarByOwner(ctx context.Context, ownerID uuid.UUID, from, to time.Time) ([]domain.CalendarReminder, error) {
+func (r *ReminderRepository) ListCalendarByOwner(ctx context.Context, scope uuid.UUID, from, to time.Time) ([]domain.CalendarReminder, error) {
 	rows, err := r.q().ListCalendarRemindersByOwner(ctx, postgres.ListCalendarRemindersByOwnerParams{
-		OwnerID:  pgconv.UUIDToPgtype(ownerID),
+		OwnerID:  pgconv.UUIDToPgtype(scope),
 		FromTime: pgtype.Timestamptz{Time: from, Valid: true},
 		ToTime:   pgtype.Timestamptz{Time: to, Valid: true},
 	})
@@ -423,9 +423,9 @@ func (r *ReminderRepository) MarkFailed(ctx context.Context, id uuid.UUID, nextA
 }
 
 // CancelByTarget cancels pending or sending reminders for a concrete target and event type.
-func (r *ReminderRepository) CancelByTarget(ctx context.Context, ownerID uuid.UUID, targetType domain.TargetType, targetID uuid.UUID, eventType domain.EventType) error {
+func (r *ReminderRepository) CancelByTarget(ctx context.Context, scope uuid.UUID, targetType domain.TargetType, targetID uuid.UUID, eventType domain.EventType) error {
 	_, err := r.q().CancelReminderByTarget(ctx, postgres.CancelReminderByTargetParams{
-		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		OwnerID:    pgconv.UUIDToPgtype(scope),
 		TargetType: postgres.NotificationTargetType(targetType),
 		TargetID:   pgconv.UUIDToPgtype(targetID),
 		EventType:  postgres.NotificationEventType(eventType),
@@ -437,9 +437,9 @@ func (r *ReminderRepository) CancelByTarget(ctx context.Context, ownerID uuid.UU
 }
 
 // CancelByRecurringOperationID cancels all pending or sending reminders linked to a recurring operation template.
-func (r *ReminderRepository) CancelByRecurringOperationID(ctx context.Context, ownerID, recID uuid.UUID) error {
+func (r *ReminderRepository) CancelByRecurringOperationID(ctx context.Context, scope, recID uuid.UUID) error {
 	_, err := r.q().CancelRemindersByRecurringOperationID(ctx, postgres.CancelRemindersByRecurringOperationIDParams{
-		OwnerID:              pgconv.UUIDToPgtype(ownerID),
+		OwnerID:              pgconv.UUIDToPgtype(scope),
 		RecurringOperationID: pgconv.UUIDToPgtype(recID),
 	})
 	if err != nil {
@@ -450,9 +450,9 @@ func (r *ReminderRepository) CancelByRecurringOperationID(ctx context.Context, o
 
 // HasReminderForLeaseEvent reports whether an active reminder already exists
 // for the given lease and event type.
-func (r *ReminderRepository) HasReminderForLeaseEvent(ctx context.Context, ownerID, leaseID uuid.UUID, eventType domain.EventType) (bool, error) {
+func (r *ReminderRepository) HasReminderForLeaseEvent(ctx context.Context, scope, leaseID uuid.UUID, eventType domain.EventType) (bool, error) {
 	exists, err := r.q().HasReminderForLeaseEvent(ctx, postgres.HasReminderForLeaseEventParams{
-		OwnerID:   pgconv.UUIDToPgtype(ownerID),
+		OwnerID:   pgconv.UUIDToPgtype(scope),
 		LeaseID:   pgconv.UUIDToPgtype(leaseID),
 		EventType: postgres.NotificationEventType(eventType),
 	})
@@ -464,9 +464,9 @@ func (r *ReminderRepository) HasReminderForLeaseEvent(ctx context.Context, owner
 
 // HasReminderForOperationEvent reports whether an active reminder already exists
 // for the given operation and event type.
-func (r *ReminderRepository) HasReminderForOperationEvent(ctx context.Context, ownerID, operationID uuid.UUID, eventType domain.EventType) (bool, error) {
+func (r *ReminderRepository) HasReminderForOperationEvent(ctx context.Context, scope, operationID uuid.UUID, eventType domain.EventType) (bool, error) {
 	exists, err := r.q().HasReminderForOperationEvent(ctx, postgres.HasReminderForOperationEventParams{
-		OwnerID:     pgconv.UUIDToPgtype(ownerID),
+		OwnerID:     pgconv.UUIDToPgtype(scope),
 		OperationID: pgconv.UUIDToPgtype(operationID),
 		EventType:   postgres.NotificationEventType(eventType),
 	})
@@ -508,11 +508,11 @@ func (r *ReminderRepository) MarkSendingReminderPending(ctx context.Context, id 
 // SaveSentSMSReminder records a successfully sent SMS reminder for audit. It
 // returns ErrDuplicateSMSReminder when an audit row for the same reminder_id
 // already exists.
-func (r *ReminderRepository) SaveSentSMSReminder(ctx context.Context, id, reminderID, ownerID uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error {
+func (r *ReminderRepository) SaveSentSMSReminder(ctx context.Context, id, reminderID, scope uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error {
 	rows, err := r.q().CreateSentSMSReminder(ctx, postgres.CreateSentSMSReminderParams{
 		ID:               pgconv.UUIDToPgtype(id),
 		ReminderID:       pgconv.UUIDToPgtype(reminderID),
-		OwnerID:          pgconv.UUIDToPgtype(ownerID),
+		OwnerID:          pgconv.UUIDToPgtype(scope),
 		Phone:            phone,
 		Message:          message,
 		ProviderResponse: pgtype.Text{String: providerResponse, Valid: providerResponse != ""},
@@ -568,7 +568,7 @@ func (r *ReminderRepository) SaveSentEmailReminder(ctx context.Context, arg appl
 	rows, err := r.q().SaveSentEmailReminder(ctx, postgres.SaveSentEmailReminderParams{
 		ID:         pgconv.UUIDToPgtype(arg.ID),
 		ReminderID: pgconv.UUIDToPgtype(arg.ReminderID),
-		OwnerID:    pgconv.UUIDToPgtype(arg.OwnerID),
+		OwnerID:    pgconv.UUIDToPgtype(arg.ScopeID),
 		Email:      arg.Email,
 		Subject:    arg.Subject,
 		PlainBody:  arg.PlainBody,

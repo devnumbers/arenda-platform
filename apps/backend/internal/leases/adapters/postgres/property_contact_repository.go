@@ -27,10 +27,10 @@ func (r *PropertyContactRepository) q() *postgres.Queries {
 
 // ListForExport returns the property contacts ordered by created_at ASC. The
 // query is scoped by owner_id, so a foreign property yields no rows.
-func (r *PropertyContactRepository) ListForExport(ctx context.Context, propertyID, ownerID uuid.UUID) ([]application.ExportContactRow, error) {
+func (r *PropertyContactRepository) ListForExport(ctx context.Context, propertyID, scope uuid.UUID) ([]application.ExportContactRow, error) {
 	rows, err := r.q().ListPropertyContactsByProperty(ctx, postgres.ListPropertyContactsByPropertyParams{
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
-		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		OwnerID:    pgconv.UUIDToPgtype(scope),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list property contacts: %w", err)

@@ -17,6 +17,7 @@ import (
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
@@ -68,6 +69,7 @@ type PropertyService struct {
 	audit             auditapp.Recorder
 	clock             clock.Clock
 	tzResolver        sharedtz.OwnerTimezoneResolver
+	policy            sharedpolicy.Policy
 	logger            *slog.Logger
 }
 
@@ -83,6 +85,7 @@ func NewPropertyService(
 	audit auditapp.Recorder,
 	clock clock.Clock,
 	tzResolver sharedtz.OwnerTimezoneResolver,
+	policy sharedpolicy.Policy,
 	logger *slog.Logger,
 ) *PropertyService {
 	if logger == nil {
@@ -103,11 +106,12 @@ func NewPropertyService(
 		audit:             audit,
 		clock:             clock,
 		tzResolver:        tzResolver,
+		policy:            policy,
 		logger:            logger,
 	}
 }
 
-func (s *PropertyService) CreateProperty(ctx context.Context, ownerID uuid.UUID, cmd CreatePropertyCommand) (domain.Property, error) {
+func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, cmd CreatePropertyCommand) (domain.Property, error) {
 	propertyType, err := domain.ParsePropertyType(cmd.Type)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("%w: invalid property type: %w", ErrInvalidInput, err)
@@ -118,7 +122,7 @@ func (s *PropertyService) CreateProperty(ctx context.Context, ownerID uuid.UUID,
 		return domain.Property{}, &AttributesValidationError{Errors: result.Errors}
 	}
 
-	property, err := domain.NewProperty(ownerID, cmd.Name, cmd.Address, cmd.Description, propertyType, attrs)
+	property, err := domain.NewProperty(actor, cmd.Name, cmd.Address, cmd.Description, propertyType, attrs)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
@@ -139,12 +143,12 @@ func (s *PropertyService) CreateProperty(ctx context.Context, ownerID uuid.UUID,
 		return domain.Property{}, fmt.Errorf("bind limiter transaction: %w", err)
 	}
 
-	limit, err := txLimiter.ActivePropertyLimit(ctx, ownerID)
+	limit, err := txLimiter.ActivePropertyLimit(ctx, actor)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("get active property limit: %w", err)
 	}
 
-	count, err := txRepo.CountActiveByOwner(ctx, ownerID)
+	count, err := txRepo.CountActiveByOwner(ctx, actor)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("count active properties: %w", err)
 	}
@@ -152,13 +156,13 @@ func (s *PropertyService) CreateProperty(ctx context.Context, ownerID uuid.UUID,
 		return domain.Property{}, ErrLimitExceeded
 	}
 
-	created, err := txRepo.Create(ctx, ownerID, property)
+	created, err := txRepo.Create(ctx, actor, property)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("create property: %w", err)
 	}
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &ownerID,
+		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
 		Action:     auditdomain.ActionPropertyCreated,
 		EntityType: auditdomain.EntityProperty,
@@ -177,13 +181,13 @@ func (s *PropertyService) CreateProperty(ctx context.Context, ownerID uuid.UUID,
 	return created, nil
 }
 
-func (s *PropertyService) ListProperties(ctx context.Context, ownerID uuid.UUID) ([]domain.Property, error) {
-	properties, err := s.repo.ListActiveByOwner(ctx, ownerID)
+func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) ([]domain.Property, error) {
+	properties, err := s.repo.ListActiveByOwner(ctx, actor)
 	if err != nil {
 		return nil, fmt.Errorf("list properties: %w", err)
 	}
 
-	occupied, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, ownerID)
+	occupied, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, actor)
 	if err != nil {
 		return nil, fmt.Errorf("check occupancy: %w", err)
 	}
@@ -204,8 +208,8 @@ func (s *PropertyService) ListProperties(ctx context.Context, ownerID uuid.UUID)
 	return properties, nil
 }
 
-func (s *PropertyService) ListArchivedProperties(ctx context.Context, ownerID uuid.UUID) ([]domain.Property, error) {
-	properties, err := s.repo.ListArchivedByOwner(ctx, ownerID)
+func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid.UUID) ([]domain.Property, error) {
+	properties, err := s.repo.ListArchivedByOwner(ctx, actor)
 	if err != nil {
 		return nil, fmt.Errorf("list archived properties: %w", err)
 	}
@@ -218,8 +222,8 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, ownerID uu
 	return properties, nil
 }
 
-func (s *PropertyService) GetProperty(ctx context.Context, ownerID, id uuid.UUID) (domain.Property, error) {
-	property, err := s.repo.GetByIDAndOwner(ctx, id, ownerID)
+func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {
+	property, err := s.repo.GetByIDAndOwner(ctx, id, actor)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
@@ -227,7 +231,7 @@ func (s *PropertyService) GetProperty(ctx context.Context, ownerID, id uuid.UUID
 		return domain.Property{}, fmt.Errorf("get property: %w", err)
 	}
 
-	occupied, err := s.occupancyProvider.IsOccupied(ctx, ownerID, property.ID)
+	occupied, err := s.occupancyProvider.IsOccupied(ctx, actor, property.ID)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
 	}
@@ -244,13 +248,13 @@ func (s *PropertyService) GetProperty(ctx context.Context, ownerID, id uuid.UUID
 	return properties[0], nil
 }
 
-func (s *PropertyService) GetPropertyWithOpenLease(ctx context.Context, ownerID, id uuid.UUID) (domain.Property, leasesdomain.Lease, error) {
-	property, err := s.GetProperty(ctx, ownerID, id)
+func (s *PropertyService) GetPropertyWithOpenLease(ctx context.Context, actor, id uuid.UUID) (domain.Property, leasesdomain.Lease, error) {
+	property, err := s.GetProperty(ctx, actor, id)
 	if err != nil {
 		return domain.Property{}, leasesdomain.Lease{}, err
 	}
 
-	lease, err := s.leaseRepo.GetOpenLeaseByProperty(ctx, ownerID, property.ID)
+	lease, err := s.leaseRepo.GetOpenLeaseByProperty(ctx, actor, property.ID)
 	if err != nil {
 		if errors.Is(err, leasesapp.ErrNotFound) {
 			return property, leasesdomain.Lease{}, nil
@@ -263,15 +267,15 @@ func (s *PropertyService) GetPropertyWithOpenLease(ctx context.Context, ownerID,
 	return property, lease, nil
 }
 
-func (s *PropertyService) ListPropertyLeases(ctx context.Context, ownerID, propertyID uuid.UUID) ([]leasesdomain.Lease, error) {
-	if _, err := s.repo.GetByIDAndOwner(ctx, propertyID, ownerID); err != nil {
+func (s *PropertyService) ListPropertyLeases(ctx context.Context, actor, propertyID uuid.UUID) ([]leasesdomain.Lease, error) {
+	if _, err := s.repo.GetByIDAndOwner(ctx, propertyID, actor); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get property: %w", err)
 	}
 
-	leases, err := s.leaseRepo.ListByProperty(ctx, ownerID, propertyID)
+	leases, err := s.leaseRepo.ListByProperty(ctx, actor, propertyID)
 	if err != nil {
 		return nil, fmt.Errorf("list property leases: %w", err)
 	}
@@ -283,7 +287,7 @@ func (s *PropertyService) ListPropertyLeases(ctx context.Context, ownerID, prope
 	return leases, nil
 }
 
-func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.UUID, cmd UpdatePropertyCommand) (domain.Property, error) {
+func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUID, cmd UpdatePropertyCommand) (domain.Property, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
@@ -293,7 +297,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 	txRepo := s.repo.WithTx(tx)
 	txOccupancy := s.occupancyProvider.WithTx(tx)
 
-	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
+	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, id, actor)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
@@ -330,7 +334,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 			return domain.Property{}, &InvalidStatusTransitionError{From: property.Status, To: status}
 		}
 		if status == domain.PropertyStatusMaintenance && property.Status == domain.PropertyStatusActive {
-			occupied, err := txOccupancy.IsOccupied(ctx, ownerID, property.ID)
+			occupied, err := txOccupancy.IsOccupied(ctx, actor, property.ID)
 			if err != nil {
 				return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
 			}
@@ -354,7 +358,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 
 	property.UpdatedAt = s.clock.Now()
 
-	updated, err := txRepo.Update(ctx, ownerID, property)
+	updated, err := txRepo.Update(ctx, actor, property)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
@@ -363,7 +367,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 	}
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &ownerID,
+		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
 		Action:     auditdomain.ActionPropertyUpdated,
 		EntityType: auditdomain.EntityProperty,
@@ -384,7 +388,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, ownerID, id uuid.U
 	return properties[0], nil
 }
 
-func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.UUID) (domain.Property, error) {
+func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
@@ -396,7 +400,7 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 		s.repo.WithTx(tx),
 		s.occupancyProvider.WithTx(tx),
 		s.billingLifecycle.WithTx(tx),
-		ownerID,
+		actor,
 		id,
 		false,
 	)
@@ -405,7 +409,7 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 	}
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &ownerID,
+		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
 		Action:     auditdomain.ActionPropertyArchived,
 		EntityType: auditdomain.EntityProperty,
@@ -427,7 +431,7 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, ownerID, id uuid.
 
 func (s *PropertyService) DeleteProperty(
 	ctx context.Context,
-	ownerID, id uuid.UUID,
+	actor, id uuid.UUID,
 	mode domain.DeletePropertyMode,
 ) error {
 	if !mode.Valid() {
@@ -442,14 +446,14 @@ func (s *PropertyService) DeleteProperty(
 
 	repo := s.repo.WithTx(tx)
 
-	if _, err := repo.GetByIDAndOwnerForUpdate(ctx, id, ownerID); err != nil {
+	if _, err := repo.GetByIDAndOwnerForUpdate(ctx, id, actor); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
 		}
 		return fmt.Errorf("get property: %w", err)
 	}
 
-	occupied, err := s.occupancyProvider.WithTx(tx).IsOccupied(ctx, ownerID, id)
+	occupied, err := s.occupancyProvider.WithTx(tx).IsOccupied(ctx, actor, id)
 	if err != nil {
 		return fmt.Errorf("check occupancy: %w", err)
 	}
@@ -463,13 +467,13 @@ func (s *PropertyService) DeleteProperty(
 	}
 
 	if mode == domain.DeletePropertyModeCascade {
-		if err := repo.DeleteOperationsByProperty(ctx, ownerID, id); err != nil {
+		if err := repo.DeleteOperationsByProperty(ctx, actor, id); err != nil {
 			return fmt.Errorf("delete operations: %w", err)
 		}
-		if err := repo.DeleteRecurringOperationsByProperty(ctx, ownerID, id); err != nil {
+		if err := repo.DeleteRecurringOperationsByProperty(ctx, actor, id); err != nil {
 			return fmt.Errorf("delete recurring operations: %w", err)
 		}
-		if err := repo.DeleteLeasesByProperty(ctx, ownerID, id); err != nil {
+		if err := repo.DeleteLeasesByProperty(ctx, actor, id); err != nil {
 			return fmt.Errorf("delete leases: %w", err)
 		}
 	}
@@ -478,22 +482,22 @@ func (s *PropertyService) DeleteProperty(
 		// Detach keeps leases and operations with property_id set to NULL by
 		// the FK; pause recurring operations and drop their future unedited
 		// operations and reminders, same as archiving does.
-		loc, err := s.tzResolver.Resolve(ctx, ownerID)
+		loc, err := s.tzResolver.Resolve(ctx, actor)
 		if err != nil {
 			return fmt.Errorf("resolve owner timezone: %w", err)
 		}
 		asOf := timeutil.DateIn(s.clock.Now(), loc)
-		if err := s.billingLifecycle.WithTx(tx).Suspend(ctx, id, ownerID, asOf); err != nil {
+		if err := s.billingLifecycle.WithTx(tx).Suspend(ctx, id, actor, asOf); err != nil {
 			return fmt.Errorf("suspend billing: %w", err)
 		}
 	}
 
-	if err := repo.Delete(ctx, id, ownerID); err != nil {
+	if err := repo.Delete(ctx, id, actor); err != nil {
 		return fmt.Errorf("delete property: %w", err)
 	}
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &ownerID,
+		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
 		Action:     auditdomain.ActionPropertyDeleted,
 		EntityType: auditdomain.EntityProperty,
@@ -538,10 +542,10 @@ func (s *PropertyService) archivePropertyInTx(
 	repo PropertyRepository,
 	occupancy OccupancyProvider,
 	billing PropertyBillingLifecycle,
-	ownerID, id uuid.UUID,
+	scope, id uuid.UUID,
 	forceCompleteLeases bool,
 ) (domain.Property, error) {
-	property, err := repo.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
+	property, err := repo.GetByIDAndOwnerForUpdate(ctx, id, scope)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
@@ -553,7 +557,7 @@ func (s *PropertyService) archivePropertyInTx(
 		return domain.Property{}, ErrAlreadyArchived
 	}
 
-	occupied, err := occupancy.IsOccupied(ctx, ownerID, property.ID)
+	occupied, err := occupancy.IsOccupied(ctx, scope, property.ID)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
 	}
@@ -561,28 +565,28 @@ func (s *PropertyService) archivePropertyInTx(
 		return domain.Property{}, ErrPropertyHasOpenLease
 	}
 
-	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	loc, err := s.tzResolver.Resolve(ctx, scope)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("resolve owner timezone: %w", err)
 	}
 	now := s.clock.Now()
 	asOf := timeutil.DateIn(now, loc)
-	if err := billing.CompleteOpenLeases(ctx, ownerID, id, asOf); err != nil {
+	if err := billing.CompleteOpenLeases(ctx, scope, id, asOf); err != nil {
 		return domain.Property{}, fmt.Errorf("complete open leases: %w", err)
 	}
 
-	if err := billing.Suspend(ctx, id, ownerID, asOf); err != nil {
+	if err := billing.Suspend(ctx, id, scope, asOf); err != nil {
 		return domain.Property{}, fmt.Errorf("suspend billing: %w", err)
 	}
 
-	if err := repo.Archive(ctx, id, ownerID); err != nil {
+	if err := repo.Archive(ctx, id, scope); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
 		}
 		return domain.Property{}, fmt.Errorf("archive property: %w", err)
 	}
 
-	archived, err := repo.GetByIDAndOwner(ctx, id, ownerID)
+	archived, err := repo.GetByIDAndOwner(ctx, id, scope)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("reload archived property: %w", err)
 	}
@@ -594,13 +598,13 @@ func (s *PropertyService) archivePropertyInTx(
 // keeping the most recently updated properties. Properties with an open lease
 // have that lease force-completed (same side effects as a user-initiated lease
 // completion) before archiving, so the tariff limit is always enforced.
-func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transaction.Tx, ownerID uuid.UUID, limit int) error {
+func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transaction.Tx, scope uuid.UUID, limit int) error {
 	if limit < 0 {
 		return nil
 	}
 
 	txRepo := s.repo.WithTx(tx)
-	properties, err := txRepo.ListActiveByOwner(ctx, ownerID)
+	properties, err := txRepo.ListActiveByOwner(ctx, scope)
 	if err != nil {
 		return fmt.Errorf("list active properties: %w", err)
 	}
@@ -619,12 +623,12 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 	txAudit := s.audit.WithTx(tx)
 
 	for _, p := range properties[limit:] {
-		_, err := s.archivePropertyInTx(ctx, txRepo, txOccupancy, txBillingLifecycle, ownerID, p.ID, true)
+		_, err := s.archivePropertyInTx(ctx, txRepo, txOccupancy, txBillingLifecycle, scope, p.ID, true)
 		if err != nil {
 			if errors.Is(err, ErrAlreadyArchived) {
 				s.logger.WarnContext(ctx, "skipping auto-archive of property",
 					"property_id", p.ID.String(),
-					"owner_id", ownerID.String(),
+					"owner_id", scope.String(),
 					"error", err.Error())
 				continue
 			}
@@ -633,7 +637,7 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 		// Fail-safe: an audit failure aborts the billing operation that
 		// triggered the auto-archive.
 		if err := txAudit.Record(ctx, auditdomain.Entry{
-			ActorID:    &ownerID,
+			ActorID:    &scope,
 			ActorRole:  auditdomain.ActorRoleOwner,
 			Action:     auditdomain.ActionPropertyArchived,
 			EntityType: auditdomain.EntityProperty,
@@ -646,7 +650,7 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 	return nil
 }
 
-func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uuid.UUID) (domain.Property, error) {
+func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
@@ -659,7 +663,7 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 		return domain.Property{}, fmt.Errorf("bind limiter transaction: %w", err)
 	}
 
-	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, id, ownerID)
+	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, id, actor)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
@@ -671,12 +675,12 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 		return domain.Property{}, ErrNotArchived
 	}
 
-	limit, err := txLimiter.ActivePropertyLimit(ctx, ownerID)
+	limit, err := txLimiter.ActivePropertyLimit(ctx, actor)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("get active property limit: %w", err)
 	}
 
-	count, err := txRepo.CountActiveByOwner(ctx, ownerID)
+	count, err := txRepo.CountActiveByOwner(ctx, actor)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("count active properties: %w", err)
 	}
@@ -684,25 +688,25 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 		return domain.Property{}, ErrLimitExceeded
 	}
 
-	if err := txRepo.Unarchive(ctx, id, ownerID); err != nil {
+	if err := txRepo.Unarchive(ctx, id, actor); err != nil {
 		return domain.Property{}, fmt.Errorf("unarchive property: %w", err)
 	}
 
-	resumeLoc, err := s.tzResolver.Resolve(ctx, ownerID)
+	resumeLoc, err := s.tzResolver.Resolve(ctx, actor)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("resolve owner timezone: %w", err)
 	}
 	resumeAsOf := timeutil.DateIn(s.clock.Now(), resumeLoc)
-	if err := s.billingLifecycle.WithTx(tx).Resume(ctx, id, ownerID, resumeAsOf); err != nil {
+	if err := s.billingLifecycle.WithTx(tx).Resume(ctx, id, actor, resumeAsOf); err != nil {
 		return domain.Property{}, fmt.Errorf("resume billing: %w", err)
 	}
 
-	unarchived, err := txRepo.GetByIDAndOwner(ctx, id, ownerID)
+	unarchived, err := txRepo.GetByIDAndOwner(ctx, id, actor)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("reload unarchived property: %w", err)
 	}
 
-	occupied, err := s.occupancyProvider.WithTx(tx).IsOccupied(ctx, ownerID, unarchived.ID)
+	occupied, err := s.occupancyProvider.WithTx(tx).IsOccupied(ctx, actor, unarchived.ID)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
 	}
@@ -713,7 +717,7 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 	}
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &ownerID,
+		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
 		Action:     auditdomain.ActionPropertyUnarchived,
 		EntityType: auditdomain.EntityProperty,
@@ -734,7 +738,7 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, ownerID, id uui
 }
 
 // AddPropertyPhoto validates and uploads a photo for the given property.
-func (s *PropertyService) AddPropertyPhoto(ctx context.Context, ownerID, propertyID uuid.UUID, file io.Reader, filename string, contentType string, size int64) (domain.Property, error) {
+func (s *PropertyService) AddPropertyPhoto(ctx context.Context, actor, propertyID uuid.UUID, file io.Reader, filename string, contentType string, size int64) (domain.Property, error) {
 	if _, ok := allowedPhotoContentTypes[contentType]; !ok {
 		return domain.Property{}, fmt.Errorf("%w: unsupported content type %q", ErrInvalidInput, contentType)
 	}
@@ -751,7 +755,7 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, ownerID, propert
 	txRepo := s.repo.WithTx(tx)
 	txPhotoRepo := s.photoRepo.WithTx(tx)
 
-	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, ownerID)
+	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, actor)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
@@ -789,7 +793,7 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, ownerID, propert
 	}
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &ownerID,
+		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
 		Action:     auditdomain.ActionPropertyPhotoAdded,
 		EntityType: auditdomain.EntityPropertyPhoto,
@@ -816,7 +820,7 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, ownerID, propert
 // the file from storage on a best-effort basis. The DB record is the source of
 // truth; if storage cleanup fails, the operation still succeeds and the orphan
 // object is logged for later cleanup.
-func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, ownerID, propertyID, photoID uuid.UUID) error {
+func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, propertyID, photoID uuid.UUID) error {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -826,7 +830,7 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, ownerID, prop
 	txRepo := s.repo.WithTx(tx)
 	txPhotoRepo := s.photoRepo.WithTx(tx)
 
-	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, ownerID)
+	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, actor)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
@@ -851,7 +855,7 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, ownerID, prop
 	}
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &ownerID,
+		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
 		Action:     auditdomain.ActionPropertyPhotoDeleted,
 		EntityType: auditdomain.EntityPropertyPhoto,

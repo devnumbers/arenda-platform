@@ -74,6 +74,7 @@ func WireProperties(
 		p.AuditRecorder,
 		p.Clock,
 		p.TZResolver,
+		p.Policy,
 		p.Logger,
 	)
 

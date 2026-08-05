@@ -39,7 +39,7 @@ func (r *RentService) GenerateRentOperations(
 	ctx context.Context,
 	lease domain.Lease,
 	recurringOpID uuid.UUID,
-	ownerID uuid.UUID,
+	scope uuid.UUID,
 	rentCategoryID uuid.UUID,
 ) ([]domain.Operation, error) {
 	dates := domain.GenerateDates(lease.StartDate, lease.PaymentDay, lease.EndDate, r.clock.Now(), domain.RecurringOperationPeriodicityMonthly)
@@ -48,7 +48,7 @@ func (r *RentService) GenerateRentOperations(
 	}
 
 	now := r.clock.Now()
-	loc, err := r.tzResolver.Resolve(ctx, ownerID)
+	loc, err := r.tzResolver.Resolve(ctx, scope)
 	if err != nil {
 		return nil, fmt.Errorf("resolve owner timezone: %w", err)
 	}
@@ -63,7 +63,7 @@ func (r *RentService) GenerateRentOperations(
 		sourceDate := d
 		ops = append(ops, domain.Operation{
 			ID:                   opID,
-			OwnerID:              ownerID,
+			OwnerID:              scope,
 			PropertyID:           lease.PropertyID,
 			LeaseID:              lease.ID,
 			RecurringOperationID: recurringOpID,

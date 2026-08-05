@@ -10,7 +10,7 @@ import (
 )
 
 func newOperationGuardService(ownerID uuid.UUID, opRepo *fakeOperationRepo, propertyRepo *fakePropertyRepo) *OperationService {
-	return NewOperationService(opRepo, propertyRepo, nil, nil, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, nil, fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, nil)
+	return NewOperationService(opRepo, propertyRepo, nil, nil, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, nil, fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, nil, nil)
 }
 
 func newGuardTestOperation(id, ownerID, propertyID uuid.UUID, status domain.OperationStatus) domain.Operation {
@@ -145,7 +145,7 @@ func TestCompleteOperation_ArchivedPropertyGuard(t *testing.T) {
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 
-	cmd := CompleteOperationCommand{OwnerID: ownerID, OperationID: operationID}
+	cmd := CompleteOperationCommand{Actor: ownerID, OperationID: operationID}
 
 	for _, tc := range []struct {
 		name    string
@@ -174,7 +174,7 @@ func TestMarkOperationIncomplete_ArchivedPropertyGuard(t *testing.T) {
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 
-	cmd := MarkOperationIncompleteCommand{OwnerID: ownerID, OperationID: operationID}
+	cmd := MarkOperationIncompleteCommand{Actor: ownerID, OperationID: operationID}
 
 	for _, tc := range []struct {
 		name    string
@@ -258,7 +258,7 @@ func TestCompleteOperation_Unconfirmed(t *testing.T) {
 			_, _ = opRepo.Create(ctx, op)
 			svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "active"}})
 
-			updated, err := svc.CompleteOperation(ctx, CompleteOperationCommand{OwnerID: ownerID, OperationID: operationID})
+			updated, err := svc.CompleteOperation(ctx, CompleteOperationCommand{Actor: ownerID, OperationID: operationID})
 			if err != nil {
 				t.Fatalf("CompleteOperation: %v", err)
 			}

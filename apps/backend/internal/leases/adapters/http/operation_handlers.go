@@ -18,12 +18,12 @@ import (
 
 // propertyStatusesByID maps every owner property, including archived ones, to
 // its status so operation responses can expose the property status.
-func propertyStatusesByID(ctx context.Context, svc *propertiesapp.PropertyService, ownerID uuid.UUID) (map[uuid.UUID]propertiesdomain.PropertyStatus, error) {
-	active, err := svc.ListProperties(ctx, ownerID)
+func propertyStatusesByID(ctx context.Context, svc *propertiesapp.PropertyService, actor uuid.UUID) (map[uuid.UUID]propertiesdomain.PropertyStatus, error) {
+	active, err := svc.ListProperties(ctx, actor)
 	if err != nil {
 		return nil, err
 	}
-	archived, err := svc.ListArchivedProperties(ctx, ownerID)
+	archived, err := svc.ListArchivedProperties(ctx, actor)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func operationSortFromQuery(sort *openapi.OperationListSort) leasesapp.Operation
 
 // CreateOperation implements POST /properties/{propertyId}/operations.
 func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -152,19 +152,19 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 		cmd.ReminderOffsetDays = &offset
 	}
 
-	op, err := h.svc.CreateOperation(r.Context(), ownerID, cmd)
+	op, err := h.svc.CreateOperation(r.Context(), actor, cmd)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, ownerID)
+	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
@@ -175,7 +175,7 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 
 // ListOperationsByProperty implements GET /properties/{propertyId}/operations.
 func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID, params openapi.ListOperationsByPropertyParams) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -209,19 +209,19 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 		filter.ToDate = &params.To.Time
 	}
 
-	ops, err := h.svc.ListOperationsByProperty(r.Context(), ownerID, propertyID, filter)
+	ops, err := h.svc.ListOperationsByProperty(r.Context(), actor, propertyID, filter)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, ownerID)
+	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
@@ -232,7 +232,7 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 
 // ListOperations implements GET /operations.
 func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Request, params openapi.ListOperationsParams) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -278,19 +278,19 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 		filter.ExcludeArchivedProperties = *params.ExcludeArchivedProperties
 	}
 
-	ops, err := h.svc.ListOperations(r.Context(), ownerID, filter)
+	ops, err := h.svc.ListOperations(r.Context(), actor, filter)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, ownerID)
+	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
@@ -301,25 +301,25 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 
 // GetOperation implements GET /operations/{id}.
 func (h *OperationHandlers) GetOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	op, err := h.svc.GetOperation(r.Context(), ownerID, id)
+	op, err := h.svc.GetOperation(r.Context(), actor, id)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, ownerID)
+	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
@@ -330,7 +330,7 @@ func (h *OperationHandlers) GetOperation(w http.ResponseWriter, r *http.Request,
 
 // UpdateOperation implements PATCH /operations/{id}.
 func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -361,19 +361,19 @@ func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Reque
 		cmd.ReminderOffsetDays = &offset
 	}
 
-	op, err := h.svc.UpdateOperation(r.Context(), ownerID, id, cmd)
+	op, err := h.svc.UpdateOperation(r.Context(), actor, id, cmd)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, ownerID)
+	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
@@ -384,13 +384,13 @@ func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Reque
 
 // DeleteOperation implements DELETE /operations/{id}.
 func (h *OperationHandlers) DeleteOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	if err := h.svc.DeleteOperation(r.Context(), ownerID, id); err != nil {
+	if err := h.svc.DeleteOperation(r.Context(), actor, id); err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
@@ -400,14 +400,14 @@ func (h *OperationHandlers) DeleteOperation(w http.ResponseWriter, r *http.Reque
 
 // CompleteOperation implements POST /operations/{id}/complete.
 func (h *OperationHandlers) CompleteOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	op, err := h.svc.CompleteOperation(r.Context(), leasesapp.CompleteOperationCommand{
-		OwnerID:     ownerID,
+		Actor:       actor,
 		OperationID: id,
 	})
 	if err != nil {
@@ -415,13 +415,13 @@ func (h *OperationHandlers) CompleteOperation(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, ownerID)
+	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
@@ -432,14 +432,14 @@ func (h *OperationHandlers) CompleteOperation(w http.ResponseWriter, r *http.Req
 
 // MarkOperationIncomplete implements POST /operations/{id}/mark-incomplete.
 func (h *OperationHandlers) MarkOperationIncomplete(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	op, err := h.svc.MarkOperationIncomplete(r.Context(), leasesapp.MarkOperationIncompleteCommand{
-		OwnerID:     ownerID,
+		Actor:       actor,
 		OperationID: id,
 	})
 	if err != nil {
@@ -447,13 +447,13 @@ func (h *OperationHandlers) MarkOperationIncomplete(w http.ResponseWriter, r *ht
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, ownerID)
+	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return

@@ -100,8 +100,8 @@ func (s *ReminderService) CreateForLease(ctx context.Context, lease LeaseInfo) e
 }
 
 // ListByOwner returns reminders for an owner with optional status filter.
-func (s *ReminderService) ListByOwner(ctx context.Context, ownerID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
-	reminders, err := s.repo.ListByOwner(ctx, ownerID, filter)
+func (s *ReminderService) ListByOwner(ctx context.Context, actor uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
+	reminders, err := s.repo.ListByOwner(ctx, actor, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list reminders: %w", err)
 	}
@@ -109,8 +109,8 @@ func (s *ReminderService) ListByOwner(ctx context.Context, ownerID uuid.UUID, fi
 }
 
 // ListByOperation returns non-cancelled reminders for a concrete operation and owner.
-func (s *ReminderService) ListByOperation(ctx context.Context, ownerID, operationID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
-	reminders, err := s.repo.ListByOperation(ctx, ownerID, operationID, filter)
+func (s *ReminderService) ListByOperation(ctx context.Context, actor, operationID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
+	reminders, err := s.repo.ListByOperation(ctx, actor, operationID, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list reminders: %w", err)
 	}
@@ -118,8 +118,8 @@ func (s *ReminderService) ListByOperation(ctx context.Context, ownerID, operatio
 }
 
 // ListByLease returns non-cancelled reminders for a lease and owner.
-func (s *ReminderService) ListByLease(ctx context.Context, ownerID, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
-	reminders, err := s.repo.ListByLease(ctx, ownerID, leaseID, filter)
+func (s *ReminderService) ListByLease(ctx context.Context, actor, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
+	reminders, err := s.repo.ListByLease(ctx, actor, leaseID, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list reminders: %w", err)
 	}
@@ -128,8 +128,8 @@ func (s *ReminderService) ListByLease(ctx context.Context, ownerID, leaseID uuid
 
 // ListByRecurringOperation returns non-cancelled reminders for a recurring
 // operation template and owner.
-func (s *ReminderService) ListByRecurringOperation(ctx context.Context, ownerID, recurringOpID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
-	reminders, err := s.repo.ListByRecurringOperation(ctx, ownerID, recurringOpID, filter)
+func (s *ReminderService) ListByRecurringOperation(ctx context.Context, actor, recurringOpID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
+	reminders, err := s.repo.ListByRecurringOperation(ctx, actor, recurringOpID, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list reminders: %w", err)
 	}
@@ -139,8 +139,8 @@ func (s *ReminderService) ListByRecurringOperation(ctx context.Context, ownerID,
 // ListUpcomingFreeRemindersByProperty returns the nearest pending free-reminder
 // occurrences for a property, including periodic occurrences (which are
 // materialized at write time). 'from' is the lower bound of the window.
-func (s *ReminderService) ListUpcomingFreeRemindersByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error) {
-	reminders, err := s.repo.ListUpcomingFreeRemindersByProperty(ctx, ownerID, propertyID, from, limit)
+func (s *ReminderService) ListUpcomingFreeRemindersByProperty(ctx context.Context, actor, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error) {
+	reminders, err := s.repo.ListUpcomingFreeRemindersByProperty(ctx, actor, propertyID, from, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list upcoming free reminders by property: %w", err)
 	}
@@ -148,8 +148,8 @@ func (s *ReminderService) ListUpcomingFreeRemindersByProperty(ctx context.Contex
 }
 
 // GetByID returns a reminder by ID after verifying ownership.
-func (s *ReminderService) GetByID(ctx context.Context, ownerID, id uuid.UUID) (domain.Reminder, error) {
-	r, err := s.repo.GetByID(ctx, id, ownerID)
+func (s *ReminderService) GetByID(ctx context.Context, actor, id uuid.UUID) (domain.Reminder, error) {
+	r, err := s.repo.GetByID(ctx, id, actor)
 	if err != nil {
 		return domain.Reminder{}, err
 	}
@@ -157,15 +157,15 @@ func (s *ReminderService) GetByID(ctx context.Context, ownerID, id uuid.UUID) (d
 }
 
 // Reschedule updates the scheduled date of a pending reminder.
-func (s *ReminderService) Reschedule(ctx context.Context, ownerID, id uuid.UUID, newDate time.Time) (domain.Reminder, error) {
-	r, err := s.GetByID(ctx, ownerID, id)
+func (s *ReminderService) Reschedule(ctx context.Context, actor, id uuid.UUID, newDate time.Time) (domain.Reminder, error) {
+	r, err := s.GetByID(ctx, actor, id)
 	if err != nil {
 		return domain.Reminder{}, err
 	}
 	if r.Status != domain.ReminderPending {
 		return domain.Reminder{}, ErrReminderNotPending
 	}
-	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	loc, err := s.tzResolver.Resolve(ctx, actor)
 	if err != nil {
 		return domain.Reminder{}, fmt.Errorf("resolve owner timezone: %w", err)
 	}
@@ -173,7 +173,7 @@ func (s *ReminderService) Reschedule(ctx context.Context, ownerID, id uuid.UUID,
 		return domain.Reminder{}, fmt.Errorf("%w: %w", ErrInvalidReminderDate, err)
 	}
 	scheduledAt := domain.ScheduledAtForDate(newDate, loc, dispatchHour)
-	if err := s.repo.UpdateScheduledAt(ctx, ownerID, id, scheduledAt); err != nil {
+	if err := s.repo.UpdateScheduledAt(ctx, actor, id, scheduledAt); err != nil {
 		return domain.Reminder{}, fmt.Errorf("update rescheduled reminder: %w", err)
 	}
 	r.ScheduledAt = scheduledAt
@@ -182,11 +182,11 @@ func (s *ReminderService) Reschedule(ctx context.Context, ownerID, id uuid.UUID,
 
 // RescheduleForTimezoneChange recalculates all pending reminders for the owner
 // using wall-clock timezone conversion. It is a no-op when oldTZ == newTZ.
-func (s *ReminderService) RescheduleForTimezoneChange(ctx context.Context, ownerID uuid.UUID, oldTZ, newTZ string) error {
+func (s *ReminderService) RescheduleForTimezoneChange(ctx context.Context, actor uuid.UUID, oldTZ, newTZ string) error {
 	if oldTZ == newTZ {
 		return nil
 	}
-	if err := s.repo.ReschedulePendingRemindersByOwner(ctx, ownerID, oldTZ, newTZ); err != nil {
+	if err := s.repo.ReschedulePendingRemindersByOwner(ctx, actor, oldTZ, newTZ); err != nil {
 		return fmt.Errorf("reschedule reminders for timezone change: %w", err)
 	}
 	return nil
@@ -195,8 +195,8 @@ func (s *ReminderService) RescheduleForTimezoneChange(ctx context.Context, owner
 var _ tzresolver.ReminderRescheduler = (*ReminderService)(nil)
 
 // Cancel cancels a pending or sending reminder.
-func (s *ReminderService) Cancel(ctx context.Context, ownerID, id uuid.UUID) error {
-	cancelled, err := s.repo.CancelByIDAndOwner(ctx, ownerID, id)
+func (s *ReminderService) Cancel(ctx context.Context, actor, id uuid.UUID) error {
+	cancelled, err := s.repo.CancelByIDAndOwner(ctx, actor, id)
 	if err != nil {
 		return fmt.Errorf("cancel reminder: %w", err)
 	}
@@ -283,7 +283,7 @@ func buildLeaseReminders(lease LeaseInfo, now time.Time, loc *time.Location) ([]
 	if lease.EndDate == nil || lease.EndDate.IsZero() {
 		return nil, nil
 	}
-	ownerID := lease.OwnerID
+	scope := lease.OwnerID
 	propertyID := lease.PropertyID
 	endDate := *lease.EndDate
 
@@ -293,7 +293,7 @@ func buildLeaseReminders(lease LeaseInfo, now time.Time, loc *time.Location) ([]
 	if !timeutil.DateIn(expiringDate, loc).Before(timeutil.DateIn(now, loc)) {
 		expiringTitle := "Аренда скоро заканчивается"
 		expiringBody := "Аренда по объекту заканчивается " + endDate.Format("02.01.2006")
-		expiring, err := domain.NewLeaseReminder(ownerID, lease.ID, propertyID, expiringDate, expiringTitle, expiringBody, domain.EventLeaseExpiring, now, loc, dispatchHour)
+		expiring, err := domain.NewLeaseReminder(scope, lease.ID, propertyID, expiringDate, expiringTitle, expiringBody, domain.EventLeaseExpiring, now, loc, dispatchHour)
 		if err != nil {
 			return nil, fmt.Errorf("create lease expiring reminder: %w", err)
 		}
@@ -419,11 +419,11 @@ func (s *scheduler) ScheduleForLease(ctx context.Context, lease LeaseInfo) error
 	if len(reminders) == 0 {
 		return nil
 	}
-	ownerID := lease.OwnerID
-	if err := s.repo.CancelByTarget(ctx, ownerID, domain.TargetLease, lease.ID, domain.EventLeaseExpiring); err != nil {
+	scope := lease.OwnerID
+	if err := s.repo.CancelByTarget(ctx, scope, domain.TargetLease, lease.ID, domain.EventLeaseExpiring); err != nil {
 		return err
 	}
-	if err := s.repo.CancelByTarget(ctx, ownerID, domain.TargetLease, lease.ID, domain.EventLeaseRequiresAction); err != nil {
+	if err := s.repo.CancelByTarget(ctx, scope, domain.TargetLease, lease.ID, domain.EventLeaseRequiresAction); err != nil {
 		return err
 	}
 	for _, r := range reminders {
@@ -475,27 +475,27 @@ func (s *scheduler) EnsureRequiresActionReminder(ctx context.Context, lease Leas
 }
 
 // CancelByOperation cancels reminders for a concrete operation.
-func (s *scheduler) CancelByOperation(ctx context.Context, ownerID, opID uuid.UUID) error {
-	return s.repo.CancelByTarget(ctx, ownerID, domain.TargetOperation, opID, domain.EventOperationDue)
+func (s *scheduler) CancelByOperation(ctx context.Context, actor, opID uuid.UUID) error {
+	return s.repo.CancelByTarget(ctx, actor, domain.TargetOperation, opID, domain.EventOperationDue)
 }
 
 // CancelOverdueReminderByOperation cancels overdue reminders for a concrete operation.
-func (s *scheduler) CancelOverdueReminderByOperation(ctx context.Context, ownerID, opID uuid.UUID) error {
-	return s.repo.CancelByTarget(ctx, ownerID, domain.TargetOperation, opID, domain.EventOperationOverdue)
+func (s *scheduler) CancelOverdueReminderByOperation(ctx context.Context, actor, opID uuid.UUID) error {
+	return s.repo.CancelByTarget(ctx, actor, domain.TargetOperation, opID, domain.EventOperationOverdue)
 }
 
 // CancelByRecurringOperation cancels reminders for a recurring operation template.
-func (s *scheduler) CancelByRecurringOperation(ctx context.Context, ownerID, recID uuid.UUID) error {
-	return s.repo.CancelByRecurringOperationID(ctx, ownerID, recID)
+func (s *scheduler) CancelByRecurringOperation(ctx context.Context, actor, recID uuid.UUID) error {
+	return s.repo.CancelByRecurringOperationID(ctx, actor, recID)
 }
 
 // CancelByLease cancels reminders for a lease.
-func (s *scheduler) CancelByLease(ctx context.Context, ownerID, leaseID uuid.UUID) error {
+func (s *scheduler) CancelByLease(ctx context.Context, actor, leaseID uuid.UUID) error {
 	var errs []error
-	if err := s.repo.CancelByTarget(ctx, ownerID, domain.TargetLease, leaseID, domain.EventLeaseExpiring); err != nil {
+	if err := s.repo.CancelByTarget(ctx, actor, domain.TargetLease, leaseID, domain.EventLeaseExpiring); err != nil {
 		errs = append(errs, err)
 	}
-	if err := s.repo.CancelByTarget(ctx, ownerID, domain.TargetLease, leaseID, domain.EventLeaseRequiresAction); err != nil {
+	if err := s.repo.CancelByTarget(ctx, actor, domain.TargetLease, leaseID, domain.EventLeaseRequiresAction); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
@@ -503,16 +503,16 @@ func (s *scheduler) CancelByLease(ctx context.Context, ownerID, leaseID uuid.UUI
 
 // HasReminderForOperationEvent reports whether an active reminder exists for the
 // given operation and event type.
-func (s *scheduler) HasReminderForOperationEvent(ctx context.Context, ownerID, operationID uuid.UUID, eventType domain.EventType) (bool, error) {
-	return s.repo.HasReminderForOperationEvent(ctx, ownerID, operationID, eventType)
+func (s *scheduler) HasReminderForOperationEvent(ctx context.Context, actor, operationID uuid.UUID, eventType domain.EventType) (bool, error) {
+	return s.repo.HasReminderForOperationEvent(ctx, actor, operationID, eventType)
 }
 
 // ListByOperation returns non-cancelled reminders for a concrete operation and owner.
-func (s *scheduler) ListByOperation(ctx context.Context, ownerID, operationID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
-	return s.repo.ListByOperation(ctx, ownerID, operationID, filter)
+func (s *scheduler) ListByOperation(ctx context.Context, actor, operationID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
+	return s.repo.ListByOperation(ctx, actor, operationID, filter)
 }
 
 // ListByLease returns non-cancelled reminders for a lease and owner.
-func (s *scheduler) ListByLease(ctx context.Context, ownerID, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
-	return s.repo.ListByLease(ctx, ownerID, leaseID, filter)
+func (s *scheduler) ListByLease(ctx context.Context, actor, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
+	return s.repo.ListByLease(ctx, actor, leaseID, filter)
 }

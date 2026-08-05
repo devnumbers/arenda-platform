@@ -78,10 +78,24 @@ func WireLeasesServices(
 		p.AuditRecorder,
 		p.Clock,
 		p.TZResolver,
+		p.Policy,
 		p.Logger,
 	)
 	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, p.AuditRecorder, p.Logger)
-	operationService := leasesapp.NewOperationService(repos.OperationRepo, leasePropertyRepo, repos.LeaseRepo, repos.RecurringOpRepo, repos.CategoryRepo, reminderScheduler, p.Beginner, p.AuditRecorder, p.Clock, p.TZResolver, p.Logger)
+	operationService := leasesapp.NewOperationService(
+		repos.OperationRepo,
+		leasePropertyRepo,
+		repos.LeaseRepo,
+		repos.RecurringOpRepo,
+		repos.CategoryRepo,
+		reminderScheduler,
+		p.Beginner,
+		p.AuditRecorder,
+		p.Clock,
+		p.TZResolver,
+		p.Policy,
+		p.Logger,
+	)
 	exportService := leasesapp.NewExportService(repos.OperationRepo, repos.LeaseRepo, leasePropertyRepo, leasePropertyContactRepo, p.Clock, p.Logger)
 	recurringOperationService := leasesapp.NewRecurringOperationService(
 		repos.RecurringOpRepo,
@@ -94,6 +108,7 @@ func WireLeasesServices(
 		p.AuditRecorder,
 		p.Clock,
 		p.TZResolver,
+		p.Policy,
 		p.Logger,
 	)
 

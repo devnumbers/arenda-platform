@@ -26,7 +26,7 @@ func NewLeasePresenter(tenantContactSvc *leasesapp.TenantContactService) *LeaseP
 	return &LeasePresenter{tenantContactSvc: tenantContactSvc}
 }
 
-func (p *LeasePresenter) tenantContactIDs(ctx context.Context, ownerID uuid.UUID, leases []leasesdomain.Lease) (map[uuid.UUID]leasesdomain.TenantContact, error) {
+func (p *LeasePresenter) tenantContactIDs(ctx context.Context, actor uuid.UUID, leases []leasesdomain.Lease) (map[uuid.UUID]leasesdomain.TenantContact, error) {
 	ids := make([]uuid.UUID, 0, len(leases))
 	for _, lease := range leases {
 		if lease.TenantContactID != nil && *lease.TenantContactID != uuid.Nil {
@@ -36,17 +36,17 @@ func (p *LeasePresenter) tenantContactIDs(ctx context.Context, ownerID uuid.UUID
 	if len(ids) == 0 {
 		return map[uuid.UUID]leasesdomain.TenantContact{}, nil
 	}
-	return p.tenantContactSvc.ListTenantContactsByIDs(ctx, ownerID, ids)
+	return p.tenantContactSvc.ListTenantContactsByIDs(ctx, actor, ids)
 }
 
 // TenantContactIDs resolves the distinct tenant contacts referenced by the
 // given leases into a map keyed by contact ID. It is the batched lookup used by
 // list endpoints so each response avoids a per-lease round trip.
-func (p *LeasePresenter) TenantContactIDs(ctx context.Context, ownerID uuid.UUID, leases []leasesdomain.Lease) (map[uuid.UUID]leasesdomain.TenantContact, error) {
-	return p.tenantContactIDs(ctx, ownerID, leases)
+func (p *LeasePresenter) TenantContactIDs(ctx context.Context, actor uuid.UUID, leases []leasesdomain.Lease) (map[uuid.UUID]leasesdomain.TenantContact, error) {
+	return p.tenantContactIDs(ctx, actor, leases)
 }
 
-func (p *LeasePresenter) leaseResponse(ctx context.Context, ownerID uuid.UUID, lease leasesdomain.Lease, contacts map[uuid.UUID]leasesdomain.TenantContact, overdueSince, nextPaymentDate *time.Time, hasOverdue bool) (openapi.LeaseResponse, error) {
+func (p *LeasePresenter) leaseResponse(ctx context.Context, actor uuid.UUID, lease leasesdomain.Lease, contacts map[uuid.UUID]leasesdomain.TenantContact, overdueSince, nextPaymentDate *time.Time, hasOverdue bool) (openapi.LeaseResponse, error) {
 	resp := openapi.LeaseResponse{
 		Id:                   lease.ID,
 		OwnerId:              lease.OwnerID,
@@ -79,7 +79,7 @@ func (p *LeasePresenter) leaseResponse(ctx context.Context, ownerID uuid.UUID, l
 			}
 			resp.TenantContact = new(tenantContactResponse(contact))
 		} else {
-			contact, err := p.tenantContactSvc.GetTenantContact(ctx, ownerID, *lease.TenantContactID)
+			contact, err := p.tenantContactSvc.GetTenantContact(ctx, actor, *lease.TenantContactID)
 			if err != nil {
 				return openapi.LeaseResponse{}, err
 			}
@@ -93,6 +93,6 @@ func (p *LeasePresenter) leaseResponse(ctx context.Context, ownerID uuid.UUID, l
 // payment-schedule fields) into the openapi LeaseResponse DTO. The properties
 // HTTP adapter calls this to embed the active lease summary in property
 // responses and to render a property's lease list.
-func (p *LeasePresenter) LeaseResponse(ctx context.Context, ownerID uuid.UUID, lease leasesdomain.Lease, contacts map[uuid.UUID]leasesdomain.TenantContact, overdueSince, nextPaymentDate *time.Time, hasOverdue bool) (openapi.LeaseResponse, error) {
-	return p.leaseResponse(ctx, ownerID, lease, contacts, overdueSince, nextPaymentDate, hasOverdue)
+func (p *LeasePresenter) LeaseResponse(ctx context.Context, actor uuid.UUID, lease leasesdomain.Lease, contacts map[uuid.UUID]leasesdomain.TenantContact, overdueSince, nextPaymentDate *time.Time, hasOverdue bool) (openapi.LeaseResponse, error) {
+	return p.leaseResponse(ctx, actor, lease, contacts, overdueSince, nextPaymentDate, hasOverdue)
 }

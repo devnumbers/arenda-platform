@@ -65,18 +65,18 @@ func (h *ReminderHandlers) handleReminderError(w http.ResponseWriter, r *http.Re
 
 // ListLeaseReminders implements GET /leases/{leaseId}/reminders.
 func (h *ReminderHandlers) ListLeaseReminders(w http.ResponseWriter, r *http.Request, leaseID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	if _, err := h.leases.GetLease(r.Context(), ownerID, leaseID); err != nil {
+	if _, err := h.leases.GetLease(r.Context(), actor, leaseID); err != nil {
 		h.handleReminderError(w, r, err, "lease")
 		return
 	}
 
-	reminders, err := h.svc.ListByLease(r.Context(), ownerID, leaseID, notificationsapp.ListFilter{Limit: 1000})
+	reminders, err := h.svc.ListByLease(r.Context(), actor, leaseID, notificationsapp.ListFilter{Limit: 1000})
 	if err != nil {
 		h.handleReminderError(w, r, err, "lease")
 		return
@@ -91,7 +91,7 @@ func (h *ReminderHandlers) ListLeaseReminders(w http.ResponseWriter, r *http.Req
 
 // ListReminders implements GET /reminders.
 func (h *ReminderHandlers) ListReminders(w http.ResponseWriter, r *http.Request, params openapi.ListRemindersParams) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -108,7 +108,7 @@ func (h *ReminderHandlers) ListReminders(w http.ResponseWriter, r *http.Request,
 		offset = max(*params.Offset, 0)
 	}
 
-	reminders, err := h.svc.ListByOwner(r.Context(), ownerID, notificationsapp.ListFilter{Limit: limit, Offset: offset})
+	reminders, err := h.svc.ListByOwner(r.Context(), actor, notificationsapp.ListFilter{Limit: limit, Offset: offset})
 	if err != nil {
 		h.handleReminderError(w, r, err, "reminder")
 		return
@@ -124,7 +124,7 @@ func (h *ReminderHandlers) ListReminders(w http.ResponseWriter, r *http.Request,
 
 // ListCalendarReminders implements GET /reminders/calendar.
 func (h *ReminderHandlers) ListCalendarReminders(w http.ResponseWriter, r *http.Request, params openapi.ListCalendarRemindersParams) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -135,7 +135,7 @@ func (h *ReminderHandlers) ListCalendarReminders(w http.ResponseWriter, r *http.
 		return
 	}
 
-	items, err := h.calendar.ListCalendar(r.Context(), ownerID, params.From.Time, params.To.Time)
+	items, err := h.calendar.ListCalendar(r.Context(), actor, params.From.Time, params.To.Time)
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to list calendar reminders", slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
@@ -151,7 +151,7 @@ func (h *ReminderHandlers) ListCalendarReminders(w http.ResponseWriter, r *http.
 
 // UpdateReminder implements PATCH /reminders/{reminderId}.
 func (h *ReminderHandlers) UpdateReminder(w http.ResponseWriter, r *http.Request, reminderID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -164,7 +164,7 @@ func (h *ReminderHandlers) UpdateReminder(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	reminder, err := h.svc.Reschedule(r.Context(), ownerID, reminderID, body.ReminderDate.Time)
+	reminder, err := h.svc.Reschedule(r.Context(), actor, reminderID, body.ReminderDate.Time)
 	if err != nil {
 		h.handleReminderError(w, r, err, "reminder")
 		return
@@ -175,13 +175,13 @@ func (h *ReminderHandlers) UpdateReminder(w http.ResponseWriter, r *http.Request
 
 // DeleteReminder implements DELETE /reminders/{reminderId}.
 func (h *ReminderHandlers) DeleteReminder(w http.ResponseWriter, r *http.Request, reminderID uuid.UUID) {
-	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	if err := h.svc.Cancel(r.Context(), ownerID, reminderID); err != nil {
+	if err := h.svc.Cancel(r.Context(), actor, reminderID); err != nil {
 		h.handleReminderError(w, r, err, "reminder")
 		return
 	}

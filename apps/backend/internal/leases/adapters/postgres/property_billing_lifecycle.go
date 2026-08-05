@@ -75,8 +75,8 @@ func (l *PropertyBillingLifecycle) WithTx(tx transaction.Tx) propertiesapp.Prope
 // operations are deleted, recurring operations are paused, and lease and
 // recurring-operation reminders are cancelled. Each completion is audited as
 // ActionLeaseCompleted with trigger "billing_limit".
-func (l *PropertyBillingLifecycle) CompleteOpenLeases(ctx context.Context, ownerID, propertyID uuid.UUID, asOf time.Time) error {
-	leases, err := l.leases.ListByProperty(ctx, ownerID, propertyID)
+func (l *PropertyBillingLifecycle) CompleteOpenLeases(ctx context.Context, scope, propertyID uuid.UUID, asOf time.Time) error {
+	leases, err := l.leases.ListByProperty(ctx, scope, propertyID)
 	if err != nil {
 		return fmt.Errorf("list leases: %w", err)
 	}
@@ -87,7 +87,7 @@ func (l *PropertyBillingLifecycle) CompleteOpenLeases(ctx context.Context, owner
 		}
 		leaseID := lease.ID
 
-		if _, err := l.leases.Complete(ctx, leaseID, ownerID); err != nil {
+		if _, err := l.leases.Complete(ctx, leaseID, scope); err != nil {
 			return fmt.Errorf("complete lease %s: %w", leaseID, err)
 		}
 
@@ -95,27 +95,27 @@ func (l *PropertyBillingLifecycle) CompleteOpenLeases(ctx context.Context, owner
 			return fmt.Errorf("delete future operations for lease %s: %w", leaseID, err)
 		}
 
-		if err := l.recurringOps.UpdateStatusByLeaseID(ctx, leaseID, ownerID, string(leasesdomain.RecurringOperationStatusPaused)); err != nil {
+		if err := l.recurringOps.UpdateStatusByLeaseID(ctx, leaseID, scope, string(leasesdomain.RecurringOperationStatusPaused)); err != nil {
 			return fmt.Errorf("pause recurring operations for lease %s: %w", leaseID, err)
 		}
 
 		if l.scheduler != nil {
-			if err := l.scheduler.CancelByLease(ctx, ownerID, leaseID); err != nil {
+			if err := l.scheduler.CancelByLease(ctx, scope, leaseID); err != nil {
 				return fmt.Errorf("cancel reminders for lease %s: %w", leaseID, err)
 			}
-			rec, err := l.recurringOps.GetByLeaseID(ctx, ownerID, leaseID)
+			rec, err := l.recurringOps.GetByLeaseID(ctx, scope, leaseID)
 			if err != nil && !errors.Is(err, leasesapp.ErrNotFound) {
 				return fmt.Errorf("get recurring operation for lease %s: %w", leaseID, err)
 			}
 			if err == nil {
-				if err := l.scheduler.CancelByRecurringOperation(ctx, ownerID, rec.ID); err != nil {
+				if err := l.scheduler.CancelByRecurringOperation(ctx, scope, rec.ID); err != nil {
 					return fmt.Errorf("cancel recurring operation reminders for lease %s: %w", leaseID, err)
 				}
 			}
 		}
 
 		if err := l.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &ownerID,
+			ActorID:    &scope,
 			ActorRole:  auditdomain.ActorRoleOwner,
 			Action:     auditdomain.ActionLeaseCompleted,
 			EntityType: auditdomain.EntityLease,
@@ -132,7 +132,7 @@ func (l *PropertyBillingLifecycle) CompleteOpenLeases(ctx context.Context, owner
 // Suspend deletes future unedited operations for the property, pauses all
 // recurring operations associated with it, and cancels their reminders. The
 // caller normalizes asOf to midnight in the owner's timezone before calling.
-func (l *PropertyBillingLifecycle) Suspend(ctx context.Context, propertyID, ownerID uuid.UUID, asOf time.Time) error {
+func (l *PropertyBillingLifecycle) Suspend(ctx context.Context, propertyID, scope uuid.UUID, asOf time.Time) error {
 	if err := l.ops.DeleteFutureUneditedOperationsByProperty(ctx, propertyID, asOf); err != nil {
 		return fmt.Errorf("delete future operations: %w", err)
 	}
@@ -159,13 +159,13 @@ func (l *PropertyBillingLifecycle) Suspend(ctx context.Context, propertyID, owne
 // Resume activates all recurring operations for the property and generates
 // missing operation instances from asOf up to 100 years ahead (or end_date),
 // skipping dates that already have operations.
-func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.UUID, ownerID uuid.UUID, asOf time.Time) error {
-	recs, err := l.recurringOps.ListByProperty(ctx, ownerID, propertyID)
+func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.UUID, scope uuid.UUID, asOf time.Time) error {
+	recs, err := l.recurringOps.ListByProperty(ctx, scope, propertyID)
 	if err != nil {
 		return fmt.Errorf("list recurring operations: %w", err)
 	}
 
-	cats, err := l.categories.ListByOwner(ctx, ownerID, nil)
+	cats, err := l.categories.ListByOwner(ctx, scope, nil)
 	if err != nil {
 		return fmt.Errorf("list categories for reminders: %w", err)
 	}

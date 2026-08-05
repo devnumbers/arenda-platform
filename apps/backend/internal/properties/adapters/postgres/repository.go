@@ -69,14 +69,14 @@ func (r *PropertyRepository) WithTx(tx transaction.Tx) application.PropertyRepos
 	return NewPropertyRepository(dbtx)
 }
 
-func (r *PropertyRepository) Create(ctx context.Context, ownerID uuid.UUID, property domain.Property) (domain.Property, error) {
+func (r *PropertyRepository) Create(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error) {
 	attrsJSON, err := attributesToJSON(property.Attributes)
 	if err != nil {
 		return domain.Property{}, err
 	}
 	row, err := r.q().CreateProperty(ctx, postgres.CreatePropertyParams{
 		ID:          pgconv.UUIDToPgtype(property.ID),
-		OwnerID:     pgconv.UUIDToPgtype(ownerID),
+		OwnerID:     pgconv.UUIDToPgtype(scope),
 		Name:        property.Name,
 		Type:        string(property.Type),
 		Address:     property.Address,
@@ -90,10 +90,10 @@ func (r *PropertyRepository) Create(ctx context.Context, ownerID uuid.UUID, prop
 	return propertyFromRow(row), nil
 }
 
-func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.Property, error) {
+func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, scope uuid.UUID) (domain.Property, error) {
 	row, err := r.q().GetPropertyByIDAndOwner(ctx, postgres.GetPropertyByIDAndOwnerParams{
 		ID:      pgconv.UUIDToPgtype(id),
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -115,10 +115,10 @@ func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, ownerID uu
 	}, row.OverdueRentCount), nil
 }
 
-func (r *PropertyRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Property, error) {
+func (r *PropertyRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (domain.Property, error) {
 	row, err := r.q().GetPropertyByIDAndOwnerForUpdate(ctx, postgres.GetPropertyByIDAndOwnerForUpdateParams{
 		ID:      pgconv.UUIDToPgtype(id),
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -129,8 +129,8 @@ func (r *PropertyRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, o
 	return propertyFromRow(row), nil
 }
 
-func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Property, error) {
-	rows, err := r.q().ListActivePropertiesByOwner(ctx, pgconv.UUIDToPgtype(ownerID))
+func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error) {
+	rows, err := r.q().ListActivePropertiesByOwner(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {
 		return nil, err
 	}
@@ -152,8 +152,8 @@ func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, ownerID uuid
 	return properties, nil
 }
 
-func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Property, error) {
-	rows, err := r.q().ListArchivedPropertiesByOwner(ctx, pgconv.UUIDToPgtype(ownerID))
+func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error) {
+	rows, err := r.q().ListArchivedPropertiesByOwner(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {
 		return nil, err
 	}
@@ -175,14 +175,14 @@ func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, ownerID uu
 	return properties, nil
 }
 
-func (r *PropertyRepository) Update(ctx context.Context, ownerID uuid.UUID, property domain.Property) (domain.Property, error) {
+func (r *PropertyRepository) Update(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error) {
 	attrsJSON, err := attributesToJSON(property.Attributes)
 	if err != nil {
 		return domain.Property{}, err
 	}
 	row, err := r.q().UpdateProperty(ctx, postgres.UpdatePropertyParams{
 		ID:          pgconv.UUIDToPgtype(property.ID),
-		OwnerID:     pgconv.UUIDToPgtype(ownerID),
+		OwnerID:     pgconv.UUIDToPgtype(scope),
 		Name:        property.Name,
 		Type:        string(property.Type),
 		Address:     property.Address,
@@ -199,10 +199,10 @@ func (r *PropertyRepository) Update(ctx context.Context, ownerID uuid.UUID, prop
 	return propertyFromRow(row), nil
 }
 
-func (r *PropertyRepository) Archive(ctx context.Context, id, ownerID uuid.UUID) error {
+func (r *PropertyRepository) Archive(ctx context.Context, id, scope uuid.UUID) error {
 	_, err := r.q().ArchiveProperty(ctx, postgres.ArchivePropertyParams{
 		ID:      pgconv.UUIDToPgtype(id),
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return application.ErrNotFound
@@ -210,10 +210,10 @@ func (r *PropertyRepository) Archive(ctx context.Context, id, ownerID uuid.UUID)
 	return err
 }
 
-func (r *PropertyRepository) Unarchive(ctx context.Context, id, ownerID uuid.UUID) error {
+func (r *PropertyRepository) Unarchive(ctx context.Context, id, scope uuid.UUID) error {
 	_, err := r.q().UnarchiveProperty(ctx, postgres.UnarchivePropertyParams{
 		ID:      pgconv.UUIDToPgtype(id),
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return application.ErrNotFound
@@ -221,38 +221,38 @@ func (r *PropertyRepository) Unarchive(ctx context.Context, id, ownerID uuid.UUI
 	return err
 }
 
-func (r *PropertyRepository) CountActiveByOwner(ctx context.Context, ownerID uuid.UUID) (int, error) {
-	count, err := r.q().CountActivePropertiesByOwner(ctx, pgconv.UUIDToPgtype(ownerID))
+func (r *PropertyRepository) CountActiveByOwner(ctx context.Context, scope uuid.UUID) (int, error) {
+	count, err := r.q().CountActivePropertiesByOwner(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {
 		return 0, err
 	}
 	return int(count), nil
 }
 
-func (r *PropertyRepository) Delete(ctx context.Context, id, ownerID uuid.UUID) error {
+func (r *PropertyRepository) Delete(ctx context.Context, id, scope uuid.UUID) error {
 	return r.q().DeleteProperty(ctx, postgres.DeletePropertyParams{
 		ID:      pgconv.UUIDToPgtype(id),
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 	})
 }
 
-func (r *PropertyRepository) DeleteOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error {
+func (r *PropertyRepository) DeleteOperationsByProperty(ctx context.Context, scope, propertyID uuid.UUID) error {
 	return r.q().DeleteOperationsByProperty(ctx, postgres.DeleteOperationsByPropertyParams{
-		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		OwnerID:    pgconv.UUIDToPgtype(scope),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
 	})
 }
 
-func (r *PropertyRepository) DeleteRecurringOperationsByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error {
+func (r *PropertyRepository) DeleteRecurringOperationsByProperty(ctx context.Context, scope, propertyID uuid.UUID) error {
 	return r.q().DeleteRecurringOperationsByProperty(ctx, postgres.DeleteRecurringOperationsByPropertyParams{
-		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		OwnerID:    pgconv.UUIDToPgtype(scope),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
 	})
 }
 
-func (r *PropertyRepository) DeleteLeasesByProperty(ctx context.Context, ownerID, propertyID uuid.UUID) error {
+func (r *PropertyRepository) DeleteLeasesByProperty(ctx context.Context, scope, propertyID uuid.UUID) error {
 	return r.q().DeleteLeasesByProperty(ctx, postgres.DeleteLeasesByPropertyParams{
-		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		OwnerID:    pgconv.UUIDToPgtype(scope),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
 	})
 }

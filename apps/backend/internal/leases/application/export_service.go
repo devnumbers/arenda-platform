@@ -113,13 +113,13 @@ func NewExportService(operations OperationRepository, leases LeaseRepository, pr
 
 // ExportProperty returns the xlsx workbook with the property card, operations,
 // finance summaries, leases, tenants, and contacts.
-func (s *ExportService) ExportProperty(ctx context.Context, ownerID, propertyID uuid.UUID) (ExportFile, error) {
-	propRow, err := s.properties.GetForExport(ctx, propertyID, ownerID)
+func (s *ExportService) ExportProperty(ctx context.Context, actor, propertyID uuid.UUID) (ExportFile, error) {
+	propRow, err := s.properties.GetForExport(ctx, propertyID, actor)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: get property: %w", err)
 	}
 
-	rows, err := s.operations.ListCompletedForExport(ctx, ownerID, propertyID)
+	rows, err := s.operations.ListCompletedForExport(ctx, actor, propertyID)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: list operations: %w", err)
 	}
@@ -128,27 +128,27 @@ func (s *ExportService) ExportProperty(ctx context.Context, ownerID, propertyID 
 		rows = rows[:exportMaxRows]
 	}
 
-	leases, err := s.leases.ListWithTenantForExport(ctx, ownerID, propertyID)
+	leases, err := s.leases.ListWithTenantForExport(ctx, actor, propertyID)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: list leases: %w", err)
 	}
 
-	summary, err := s.operations.GetPropertyOperationsSummary(ctx, ownerID, propertyID, s.clock.Now())
+	summary, err := s.operations.GetPropertyOperationsSummary(ctx, actor, propertyID, s.clock.Now())
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: get summary: %w", err)
 	}
 
-	months, err := s.operations.GetPropertyFinanceByMonth(ctx, ownerID, propertyID)
+	months, err := s.operations.GetPropertyFinanceByMonth(ctx, actor, propertyID)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: get finance by month: %w", err)
 	}
 
-	categories, err := s.operations.GetPropertyFinanceByCategory(ctx, ownerID, propertyID)
+	categories, err := s.operations.GetPropertyFinanceByCategory(ctx, actor, propertyID)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: get finance by category: %w", err)
 	}
 
-	contacts, err := s.contacts.ListForExport(ctx, propertyID, ownerID)
+	contacts, err := s.contacts.ListForExport(ctx, propertyID, actor)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: list contacts: %w", err)
 	}

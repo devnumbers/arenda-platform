@@ -58,10 +58,10 @@ func (r *FreeReminderRepository) Create(ctx context.Context, fr domain.FreeRemin
 }
 
 // GetByID returns a free reminder by ID scoped to an owner.
-func (r *FreeReminderRepository) GetByID(ctx context.Context, id, ownerID uuid.UUID) (domain.FreeReminder, error) {
+func (r *FreeReminderRepository) GetByID(ctx context.Context, id, scope uuid.UUID) (domain.FreeReminder, error) {
 	row, err := r.q().GetFreeReminderByIDAndOwner(ctx, postgres.GetFreeReminderByIDAndOwnerParams{
 		ID:      pgconv.UUIDToPgtype(id),
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -93,10 +93,10 @@ func (r *FreeReminderRepository) Update(ctx context.Context, fr domain.FreeRemin
 
 // Delete removes a free reminder template. Concrete reminders are removed by
 // the ON DELETE CASCADE on reminders.free_reminder_id.
-func (r *FreeReminderRepository) Delete(ctx context.Context, ownerID, id uuid.UUID) error {
+func (r *FreeReminderRepository) Delete(ctx context.Context, scope, id uuid.UUID) error {
 	rows, err := r.q().DeleteFreeReminderByIDAndOwner(ctx, postgres.DeleteFreeReminderByIDAndOwnerParams{
 		ID:      pgconv.UUIDToPgtype(id),
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 	})
 	if err != nil {
 		return fmt.Errorf("delete free reminder: %w", err)
@@ -108,9 +108,9 @@ func (r *FreeReminderRepository) Delete(ctx context.Context, ownerID, id uuid.UU
 }
 
 // ListByOwner returns free reminders for an owner ordered by trigger_at.
-func (r *FreeReminderRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]domain.FreeReminder, error) {
+func (r *FreeReminderRepository) ListByOwner(ctx context.Context, scope uuid.UUID, limit, offset int) ([]domain.FreeReminder, error) {
 	rows, err := r.q().ListFreeRemindersByOwner(ctx, postgres.ListFreeRemindersByOwnerParams{
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 		//nolint:gosec // Pagination values are bounded by the transport layer.
 		Limit: int32(limit),
 		//nolint:gosec // Pagination values are bounded by the transport layer.
@@ -127,9 +127,9 @@ func (r *FreeReminderRepository) ListByOwner(ctx context.Context, ownerID uuid.U
 }
 
 // ListByProperty returns up to limit free reminders for a property ordered by trigger_at.
-func (r *FreeReminderRepository) ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, limit int) ([]domain.FreeReminder, error) {
+func (r *FreeReminderRepository) ListByProperty(ctx context.Context, scope, propertyID uuid.UUID, limit int) ([]domain.FreeReminder, error) {
 	rows, err := r.q().ListFreeRemindersByProperty(ctx, postgres.ListFreeRemindersByPropertyParams{
-		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		OwnerID:    pgconv.UUIDToPgtype(scope),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
 		//nolint:gosec // Limit is bounded by the caller.
 		Limit: int32(limit),
@@ -146,8 +146,8 @@ func (r *FreeReminderRepository) ListByProperty(ctx context.Context, ownerID, pr
 
 // ListTemplatesByOwner returns all free reminder templates for an owner with
 // their resolved property name (nullable for orphans), ordered by trigger_at.
-func (r *FreeReminderRepository) ListTemplatesByOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.FreeReminderTemplate, error) {
-	rows, err := r.q().ListAllFreeRemindersByOwner(ctx, pgconv.UUIDToPgtype(ownerID))
+func (r *FreeReminderRepository) ListTemplatesByOwner(ctx context.Context, scope uuid.UUID) ([]domain.FreeReminderTemplate, error) {
+	rows, err := r.q().ListAllFreeRemindersByOwner(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {
 		return nil, fmt.Errorf("list all free reminders by owner: %w", err)
 	}
@@ -197,10 +197,10 @@ func (r *FreeReminderRepository) SaveFreeReminder(ctx context.Context, rm domain
 
 // CancelRemindersByFreeReminderID cancels pending/sending concrete reminders
 // linked to a free reminder template.
-func (r *FreeReminderRepository) CancelRemindersByFreeReminderID(ctx context.Context, ownerID, freeReminderID uuid.UUID) error {
+func (r *FreeReminderRepository) CancelRemindersByFreeReminderID(ctx context.Context, scope, freeReminderID uuid.UUID) error {
 	_, err := r.q().CancelRemindersByFreeReminderID(ctx, postgres.CancelRemindersByFreeReminderIDParams{
 		FreeReminderID: pgconv.UUIDToPgtype(freeReminderID),
-		OwnerID:        pgconv.UUIDToPgtype(ownerID),
+		OwnerID:        pgconv.UUIDToPgtype(scope),
 	})
 	if err != nil {
 		return fmt.Errorf("cancel reminders by free reminder id: %w", err)

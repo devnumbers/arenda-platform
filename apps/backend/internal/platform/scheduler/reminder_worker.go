@@ -216,7 +216,7 @@ func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Rem
 	if err := w.repo.SaveSentEmailReminder(ctx, application.SaveSentEmailReminderParams{
 		ID:         id,
 		ReminderID: r.ID,
-		OwnerID:    r.OwnerID,
+		ScopeID:    r.OwnerID,
 		Email:      contact.Email,
 		Subject:    r.MessageTitle,
 		PlainBody:  plain,

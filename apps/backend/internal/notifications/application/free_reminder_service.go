@@ -71,7 +71,7 @@ func (s *FreeReminderService) WithTx(tx transaction.Tx) *FreeReminderService {
 // Create validates input, resolves the owner's timezone, computes the UTC
 // trigger_at, persists the template and materializes concrete reminders in a
 // single transaction.
-func (s *FreeReminderService) Create(ctx context.Context, ownerID uuid.UUID, in CreateFreeReminderInput) (domain.FreeReminder, error) {
+func (s *FreeReminderService) Create(ctx context.Context, actor uuid.UUID, in CreateFreeReminderInput) (domain.FreeReminder, error) {
 	title, err := validateFreeReminderTitle(in.Title)
 	if err != nil {
 		return domain.FreeReminder{}, err
@@ -80,7 +80,7 @@ func (s *FreeReminderService) Create(ctx context.Context, ownerID uuid.UUID, in 
 		return domain.FreeReminder{}, fmt.Errorf("%w: unknown periodicity %q", ErrInvalidFreeReminderInput, in.Periodicity)
 	}
 
-	loc, err := s.tzResolver.Resolve(ctx, ownerID)
+	loc, err := s.tzResolver.Resolve(ctx, actor)
 	if err != nil {
 		return domain.FreeReminder{}, fmt.Errorf("resolve owner timezone: %w", err)
 	}
@@ -106,7 +106,7 @@ func (s *FreeReminderService) Create(ctx context.Context, ownerID uuid.UUID, in 
 
 	template := domain.FreeReminder{
 		ID:          id,
-		OwnerID:     ownerID,
+		OwnerID:     actor,
 		PropertyID:  in.PropertyID,
 		Title:       title,
 		TriggerAt:   triggerAt,
@@ -131,8 +131,8 @@ func (s *FreeReminderService) Create(ctx context.Context, ownerID uuid.UUID, in 
 }
 
 // Get returns a free reminder by ID after verifying ownership.
-func (s *FreeReminderService) Get(ctx context.Context, ownerID, id uuid.UUID) (domain.FreeReminder, error) {
-	fr, err := s.repo.GetByID(ctx, id, ownerID)
+func (s *FreeReminderService) Get(ctx context.Context, actor, id uuid.UUID) (domain.FreeReminder, error) {
+	fr, err := s.repo.GetByID(ctx, id, actor)
 	if err != nil {
 		return domain.FreeReminder{}, err
 	}
@@ -142,8 +142,8 @@ func (s *FreeReminderService) Get(ctx context.Context, ownerID, id uuid.UUID) (d
 // Update applies a partial update to a free reminder and rematerializes its
 // concrete reminders in a single transaction. Existing concrete reminders are
 // cancelled, then new ones are generated from the updated template.
-func (s *FreeReminderService) Update(ctx context.Context, ownerID, id uuid.UUID, in UpdateFreeReminderInput) (domain.FreeReminder, error) {
-	existing, err := s.repo.GetByID(ctx, id, ownerID)
+func (s *FreeReminderService) Update(ctx context.Context, actor, id uuid.UUID, in UpdateFreeReminderInput) (domain.FreeReminder, error) {
+	existing, err := s.repo.GetByID(ctx, id, actor)
 	if err != nil {
 		return domain.FreeReminder{}, err
 	}
@@ -157,7 +157,7 @@ func (s *FreeReminderService) Update(ctx context.Context, ownerID, id uuid.UUID,
 		updated.Title = title
 	}
 	if in.TriggerAt != nil {
-		loc, err := s.tzResolver.Resolve(ctx, ownerID)
+		loc, err := s.tzResolver.Resolve(ctx, actor)
 		if err != nil {
 			return domain.FreeReminder{}, fmt.Errorf("resolve owner timezone: %w", err)
 		}
@@ -189,7 +189,7 @@ func (s *FreeReminderService) Update(ctx context.Context, ownerID, id uuid.UUID,
 		return domain.FreeReminder{}, err
 	}
 
-	if err := txRepo.CancelRemindersByFreeReminderID(ctx, ownerID, saved.ID); err != nil {
+	if err := txRepo.CancelRemindersByFreeReminderID(ctx, actor, saved.ID); err != nil {
 		return domain.FreeReminder{}, err
 	}
 
@@ -205,16 +205,16 @@ func (s *FreeReminderService) Update(ctx context.Context, ownerID, id uuid.UUID,
 
 // Delete removes a free reminder template; concrete reminders cascade-delete
 // via the ON DELETE CASCADE on reminders.free_reminder_id.
-func (s *FreeReminderService) Delete(ctx context.Context, ownerID, id uuid.UUID) error {
-	if err := s.repo.Delete(ctx, ownerID, id); err != nil {
+func (s *FreeReminderService) Delete(ctx context.Context, actor, id uuid.UUID) error {
+	if err := s.repo.Delete(ctx, actor, id); err != nil {
 		return err
 	}
 	return nil
 }
 
 // ListByOwner returns paginated free reminders for an owner.
-func (s *FreeReminderService) ListByOwner(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]domain.FreeReminder, error) {
-	reminders, err := s.repo.ListByOwner(ctx, ownerID, limit, offset)
+func (s *FreeReminderService) ListByOwner(ctx context.Context, actor uuid.UUID, limit, offset int) ([]domain.FreeReminder, error) {
+	reminders, err := s.repo.ListByOwner(ctx, actor, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list free reminders: %w", err)
 	}
@@ -222,8 +222,8 @@ func (s *FreeReminderService) ListByOwner(ctx context.Context, ownerID uuid.UUID
 }
 
 // ListByProperty returns up to limit free reminders for a property.
-func (s *FreeReminderService) ListByProperty(ctx context.Context, ownerID, propertyID uuid.UUID, limit int) ([]domain.FreeReminder, error) {
-	reminders, err := s.repo.ListByProperty(ctx, ownerID, propertyID, limit)
+func (s *FreeReminderService) ListByProperty(ctx context.Context, actor, propertyID uuid.UUID, limit int) ([]domain.FreeReminder, error) {
+	reminders, err := s.repo.ListByProperty(ctx, actor, propertyID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list free reminders by property: %w", err)
 	}

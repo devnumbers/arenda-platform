@@ -39,8 +39,8 @@ type LeasePaymentSchedule struct {
 // date. The presence of a key means the lease has an overdue rent payment for
 // the current period; overdue debt from past periods does not set the flag.
 // A single repository call is made regardless of the number of leases.
-func (s *LeaseService) CurrentPeriodOverdueIndex(ctx context.Context, ownerID uuid.UUID, leases []domain.Lease, asOf time.Time) (map[uuid.UUID]time.Time, error) {
-	ops, err := s.operations.ListOverdueRentOperations(ctx, ownerID)
+func (s *LeaseService) CurrentPeriodOverdueIndex(ctx context.Context, actor uuid.UUID, leases []domain.Lease, asOf time.Time) (map[uuid.UUID]time.Time, error) {
+	ops, err := s.operations.ListOverdueRentOperations(ctx, actor)
 	if err != nil {
 		return nil, fmt.Errorf("list overdue rent operations: %w", err)
 	}
@@ -69,8 +69,8 @@ func (s *LeaseService) CurrentPeriodOverdueIndex(ctx context.Context, ownerID uu
 // the map only when at least one of the three is known; callers must check key
 // presence. Two owner-scoped repository calls are made regardless of the number
 // of leases.
-func (s *LeaseService) LeasePaymentScheduleIndex(ctx context.Context, ownerID uuid.UUID, leases []domain.Lease, asOf time.Time) (map[uuid.UUID]LeasePaymentSchedule, error) {
-	nextOps, err := s.operations.ListNextRentPayments(ctx, ownerID, asOf)
+func (s *LeaseService) LeasePaymentScheduleIndex(ctx context.Context, actor uuid.UUID, leases []domain.Lease, asOf time.Time) (map[uuid.UUID]LeasePaymentSchedule, error) {
+	nextOps, err := s.operations.ListNextRentPayments(ctx, actor, asOf)
 	if err != nil {
 		return nil, fmt.Errorf("list next rent payments: %w", err)
 	}
@@ -79,7 +79,7 @@ func (s *LeaseService) LeasePaymentScheduleIndex(ctx context.Context, ownerID uu
 		nextByLease[op.LeaseID] = op.NextPaymentDate
 	}
 
-	overdueOps, err := s.operations.ListOverdueRentOperations(ctx, ownerID)
+	overdueOps, err := s.operations.ListOverdueRentOperations(ctx, actor)
 	if err != nil {
 		return nil, fmt.Errorf("list overdue rent operations: %w", err)
 	}

@@ -53,10 +53,10 @@ func (r *PropertyContactRepository) Create(ctx context.Context, contact domain.P
 }
 
 // ListByProperty returns all contacts of a property ordered by created_at ASC.
-func (r *PropertyContactRepository) ListByProperty(ctx context.Context, propertyID, ownerID uuid.UUID) ([]domain.PropertyContact, error) {
+func (r *PropertyContactRepository) ListByProperty(ctx context.Context, propertyID, scope uuid.UUID) ([]domain.PropertyContact, error) {
 	rows, err := r.q().ListPropertyContactsByProperty(ctx, postgres.ListPropertyContactsByPropertyParams{
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
-		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		OwnerID:    pgconv.UUIDToPgtype(scope),
 	})
 	if err != nil {
 		return nil, err
@@ -69,10 +69,10 @@ func (r *PropertyContactRepository) ListByProperty(ctx context.Context, property
 }
 
 // GetByIDAndOwner returns a single property contact scoped to the owner.
-func (r *PropertyContactRepository) GetByIDAndOwner(ctx context.Context, contactID, ownerID uuid.UUID) (domain.PropertyContact, error) {
+func (r *PropertyContactRepository) GetByIDAndOwner(ctx context.Context, contactID, scope uuid.UUID) (domain.PropertyContact, error) {
 	row, err := r.q().GetPropertyContact(ctx, postgres.GetPropertyContactParams{
 		ID:      pgconv.UUIDToPgtype(contactID),
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -84,10 +84,10 @@ func (r *PropertyContactRepository) GetByIDAndOwner(ctx context.Context, contact
 }
 
 // Update modifies an existing property contact scoped to the owner.
-func (r *PropertyContactRepository) Update(ctx context.Context, ownerID uuid.UUID, contact domain.PropertyContact) (domain.PropertyContact, error) {
+func (r *PropertyContactRepository) Update(ctx context.Context, scope uuid.UUID, contact domain.PropertyContact) (domain.PropertyContact, error) {
 	row, err := r.q().UpdatePropertyContact(ctx, postgres.UpdatePropertyContactParams{
 		ID:      pgconv.UUIDToPgtype(contact.ID),
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 		Name:    contact.Name,
 		Phone:   contact.Phone,
 	})
@@ -103,10 +103,10 @@ func (r *PropertyContactRepository) Update(ctx context.Context, ownerID uuid.UUI
 // Delete removes a property contact scoped to the owner. The existence of the
 // contact is established by the service inside the same transaction before
 // calling Delete, so a zero-rows result here is not treated as NotFound.
-func (r *PropertyContactRepository) Delete(ctx context.Context, contactID, ownerID uuid.UUID) error {
+func (r *PropertyContactRepository) Delete(ctx context.Context, contactID, scope uuid.UUID) error {
 	return r.q().DeletePropertyContact(ctx, postgres.DeletePropertyContactParams{
 		ID:      pgconv.UUIDToPgtype(contactID),
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
+		OwnerID: pgconv.UUIDToPgtype(scope),
 	})
 }
 
