@@ -23,6 +23,14 @@ type AddressSuggester interface {
 	SuggestAddresses(ctx context.Context, query string) ([]AddressSuggestion, error)
 }
 
+// SharedPropertyIDs returns the ids of properties shared with a user via
+// property membership (issue #156, T3). Implemented by the access bounded
+// context and injected optionally: when nil, only the owner's own properties
+// are listed (the pre-T3 behaviour).
+type SharedPropertyIDs interface {
+	SharedWith(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
+}
+
 type SubscriptionLimiter interface {
 	ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error)
 	WithTx(tx transaction.Tx) (SubscriptionLimiter, error)
@@ -50,6 +58,13 @@ type PropertyRepository interface {
 	Create(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error)
 	GetByIDAndOwner(ctx context.Context, id, scope uuid.UUID) (domain.Property, error)
 	GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (domain.Property, error)
+	// GetByID returns a property by id without owner scoping. Used by the
+	// policy/access layer (T3, issue #156) to resolve the data owner for
+	// authorization before applying a scope. Callers must not leak existence to
+	// actors without a view capability.
+	GetByID(ctx context.Context, id uuid.UUID) (domain.Property, error)
+	// GetByIDForUpdate is the pessimistic-lock variant of GetByID.
+	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Property, error)
 	ListActiveByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error)
 	ListArchivedByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error)
 	Update(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error)

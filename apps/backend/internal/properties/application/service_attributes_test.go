@@ -32,7 +32,7 @@ func newAttrService(repo *lockingFakePropertyRepo) *PropertyService {
 		nil,
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
-		nil,
+		testOwnerPolicy{},
 		nil,
 	)
 }
@@ -53,7 +53,7 @@ func newAttrCreateService(repo *lockingFakePropertyRepo) *PropertyService {
 		nil,
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
-		nil,
+		testOwnerPolicy{},
 		nil,
 	)
 }

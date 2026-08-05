@@ -12,6 +12,11 @@ var (
 	ErrLimitExceeded     = errors.New("active property limit exceeded")
 	ErrInvalidTransition = errors.New("invalid property status transition")
 	ErrInvalidInput      = errors.New("invalid property input")
+	// ErrForbidden is returned when an actor can view a property (so its
+	// existence is not secret) but lacks the capability for the requested
+	// operation — e.g. a viewer attempting an edit, or a member attempting a
+	// lifecycle change (T3, issue #156).
+	ErrForbidden = errors.New("forbidden")
 
 	ErrAddressSuggestFailed = errors.New("address suggestion request failed")
 

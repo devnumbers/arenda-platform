@@ -70,7 +70,15 @@ type PropertyService struct {
 	clock             clock.Clock
 	tzResolver        sharedtz.OwnerTimezoneResolver
 	policy            sharedpolicy.Policy
+	sharedIDs         SharedPropertyIDs
 	logger            *slog.Logger
+}
+
+// SetSharedPropertyIDs injects the access-context adapter that resolves the
+// property ids shared with a user (issue #156, T3). Optional: when not set,
+// only the owner's own properties are listed.
+func (s *PropertyService) SetSharedPropertyIDs(sharedIDs SharedPropertyIDs) {
+	s.sharedIDs = sharedIDs
 }
 
 func NewPropertyService(
@@ -187,12 +195,57 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 		return nil, fmt.Errorf("list properties: %w", err)
 	}
 
-	occupied, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, actor)
-	if err != nil {
-		return nil, fmt.Errorf("check occupancy: %w", err)
+	// Append properties shared with the actor (issue #156, T3). Each shared
+	// property belongs to another owner; load it by id and dedupe against the
+	// owner's own set in case of an accidental self-membership.
+	if s.sharedIDs != nil {
+		sharedIDs, err := s.sharedIDs.SharedWith(ctx, actor)
+		if err != nil {
+			return nil, fmt.Errorf("list shared property ids: %w", err)
+		}
+		seen := make(map[uuid.UUID]bool, len(properties))
+		for i := range properties {
+			seen[properties[i].ID] = true
+		}
+		for _, sid := range sharedIDs {
+			if seen[sid] {
+				continue
+			}
+			p, err := s.repo.GetByID(ctx, sid)
+			if err != nil {
+				if errors.Is(err, ErrNotFound) {
+					continue
+				}
+				return nil, fmt.Errorf("load shared property: %w", err)
+			}
+			// Only active/maintenance properties belong in the main list.
+			if p.Status != domain.PropertyStatusActive && p.Status != domain.PropertyStatusMaintenance {
+				continue
+			}
+			seen[sid] = true
+			properties = append(properties, p)
+		}
 	}
 
+	// Occupancy is resolved per owner (scope); for shared properties it reflects
+	// the data owner's leases, which the actor is entitled to see.
+	ownerOccupied := make(map[uuid.UUID]map[uuid.UUID]bool)
+	ensureOccupied := func(owner uuid.UUID) (map[uuid.UUID]bool, error) {
+		if m, ok := ownerOccupied[owner]; ok {
+			return m, nil
+		}
+		m, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, owner)
+		if err != nil {
+			return nil, err
+		}
+		ownerOccupied[owner] = m
+		return m, nil
+	}
 	for i := range properties {
+		occupied, err := ensureOccupied(properties[i].OwnerID)
+		if err != nil {
+			return nil, fmt.Errorf("check occupancy: %w", err)
+		}
 		if occupied[properties[i].ID] {
 			properties[i].Occupancy = domain.OccupancyOccupied
 		} else {
@@ -214,6 +267,34 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid
 		return nil, fmt.Errorf("list archived properties: %w", err)
 	}
 
+	if s.sharedIDs != nil {
+		sharedIDs, err := s.sharedIDs.SharedWith(ctx, actor)
+		if err != nil {
+			return nil, fmt.Errorf("list shared property ids: %w", err)
+		}
+		seen := make(map[uuid.UUID]bool, len(properties))
+		for i := range properties {
+			seen[properties[i].ID] = true
+		}
+		for _, sid := range sharedIDs {
+			if seen[sid] {
+				continue
+			}
+			p, err := s.repo.GetByID(ctx, sid)
+			if err != nil {
+				if errors.Is(err, ErrNotFound) {
+					continue
+				}
+				return nil, fmt.Errorf("load shared property: %w", err)
+			}
+			if p.Status != domain.PropertyStatusArchived {
+				continue
+			}
+			seen[sid] = true
+			properties = append(properties, p)
+		}
+	}
+
 	properties, err = s.withPhotos(ctx, properties...)
 	if err != nil {
 		return nil, err
@@ -223,7 +304,16 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid
 }
 
 func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {
-	property, err := s.repo.GetByIDAndOwner(ctx, id, actor)
+	role, err := s.policy.RoleForProperty(ctx, actor, id)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("resolve role: %w", err)
+	}
+	if !sharedpolicy.CanView(role) {
+		// Privacy: a missing property and lack of access both look like 404 so
+		// the existence of an object is never revealed (issue #156, T3).
+		return domain.Property{}, ErrNotFound
+	}
+	property, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
@@ -231,7 +321,7 @@ func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) 
 		return domain.Property{}, fmt.Errorf("get property: %w", err)
 	}
 
-	occupied, err := s.occupancyProvider.IsOccupied(ctx, actor, property.ID)
+	occupied, err := s.occupancyProvider.IsOccupied(ctx, property.OwnerID, property.ID)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
 	}
@@ -254,7 +344,7 @@ func (s *PropertyService) GetPropertyWithOpenLease(ctx context.Context, actor, i
 		return domain.Property{}, leasesdomain.Lease{}, err
 	}
 
-	lease, err := s.leaseRepo.GetOpenLeaseByProperty(ctx, actor, property.ID)
+	lease, err := s.leaseRepo.GetOpenLeaseByProperty(ctx, property.OwnerID, property.ID)
 	if err != nil {
 		if errors.Is(err, leasesapp.ErrNotFound) {
 			return property, leasesdomain.Lease{}, nil
@@ -268,14 +358,22 @@ func (s *PropertyService) GetPropertyWithOpenLease(ctx context.Context, actor, i
 }
 
 func (s *PropertyService) ListPropertyLeases(ctx context.Context, actor, propertyID uuid.UUID) ([]leasesdomain.Lease, error) {
-	if _, err := s.repo.GetByIDAndOwner(ctx, propertyID, actor); err != nil {
+	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve role: %w", err)
+	}
+	if !sharedpolicy.CanView(role) {
+		return nil, ErrNotFound
+	}
+	property, err := s.repo.GetByID(ctx, propertyID)
+	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get property: %w", err)
 	}
 
-	leases, err := s.leaseRepo.ListByProperty(ctx, actor, propertyID)
+	leases, err := s.leaseRepo.ListByProperty(ctx, property.OwnerID, propertyID)
 	if err != nil {
 		return nil, fmt.Errorf("list property leases: %w", err)
 	}
@@ -288,6 +386,17 @@ func (s *PropertyService) ListPropertyLeases(ctx context.Context, actor, propert
 }
 
 func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUID, cmd UpdatePropertyCommand) (domain.Property, error) {
+	role, err := s.policy.RoleForProperty(ctx, actor, id)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("resolve role: %w", err)
+	}
+	if role == sharedpolicy.RoleNone {
+		return domain.Property{}, ErrNotFound
+	}
+	if !sharedpolicy.CanEdit(role) {
+		return domain.Property{}, ErrForbidden
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
@@ -297,13 +406,14 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 	txRepo := s.repo.WithTx(tx)
 	txOccupancy := s.occupancyProvider.WithTx(tx)
 
-	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, id, actor)
+	property, err := txRepo.GetByIDForUpdate(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
 		}
 		return domain.Property{}, fmt.Errorf("get property: %w", err)
 	}
+	scope := property.OwnerID
 
 	if property.Status == domain.PropertyStatusArchived {
 		return domain.Property{}, ErrArchivedProperty
@@ -334,7 +444,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 			return domain.Property{}, &InvalidStatusTransitionError{From: property.Status, To: status}
 		}
 		if status == domain.PropertyStatusMaintenance && property.Status == domain.PropertyStatusActive {
-			occupied, err := txOccupancy.IsOccupied(ctx, actor, property.ID)
+			occupied, err := txOccupancy.IsOccupied(ctx, scope, property.ID)
 			if err != nil {
 				return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
 			}
@@ -358,7 +468,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 
 	property.UpdatedAt = s.clock.Now()
 
-	updated, err := txRepo.Update(ctx, actor, property)
+	updated, err := txRepo.Update(ctx, scope, property)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
@@ -389,6 +499,17 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 }
 
 func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {
+	role, err := s.policy.RoleForProperty(ctx, actor, id)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("resolve role: %w", err)
+	}
+	if role == sharedpolicy.RoleNone {
+		return domain.Property{}, ErrNotFound
+	}
+	if !sharedpolicy.CanLifecycle(role) {
+		return domain.Property{}, ErrForbidden
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
@@ -436,6 +557,17 @@ func (s *PropertyService) DeleteProperty(
 ) error {
 	if !mode.Valid() {
 		return fmt.Errorf("%w: invalid delete mode %q", ErrInvalidInput, mode)
+	}
+
+	role, err := s.policy.RoleForProperty(ctx, actor, id)
+	if err != nil {
+		return fmt.Errorf("resolve role: %w", err)
+	}
+	if role == sharedpolicy.RoleNone {
+		return ErrNotFound
+	}
+	if !sharedpolicy.CanLifecycle(role) {
+		return ErrForbidden
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -651,6 +783,17 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 }
 
 func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {
+	role, err := s.policy.RoleForProperty(ctx, actor, id)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("resolve role: %w", err)
+	}
+	if role == sharedpolicy.RoleNone {
+		return domain.Property{}, ErrNotFound
+	}
+	if !sharedpolicy.CanLifecycle(role) {
+		return domain.Property{}, ErrForbidden
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
@@ -746,6 +889,17 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, actor, propertyI
 		return domain.Property{}, fmt.Errorf("%w: file size %d exceeds %d bytes", ErrInvalidInput, size, maxPhotoSize)
 	}
 
+	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
+	if err != nil {
+		return domain.Property{}, fmt.Errorf("resolve role: %w", err)
+	}
+	if role == sharedpolicy.RoleNone {
+		return domain.Property{}, ErrNotFound
+	}
+	if !sharedpolicy.CanEdit(role) {
+		return domain.Property{}, ErrForbidden
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
@@ -755,7 +909,7 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, actor, propertyI
 	txRepo := s.repo.WithTx(tx)
 	txPhotoRepo := s.photoRepo.WithTx(tx)
 
-	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, actor)
+	property, err := txRepo.GetByIDForUpdate(ctx, propertyID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Property{}, ErrNotFound
@@ -821,6 +975,17 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, actor, propertyI
 // truth; if storage cleanup fails, the operation still succeeds and the orphan
 // object is logged for later cleanup.
 func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, propertyID, photoID uuid.UUID) error {
+	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
+	if err != nil {
+		return fmt.Errorf("resolve role: %w", err)
+	}
+	if role == sharedpolicy.RoleNone {
+		return ErrNotFound
+	}
+	if !sharedpolicy.CanEdit(role) {
+		return ErrForbidden
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -830,7 +995,7 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 	txRepo := s.repo.WithTx(tx)
 	txPhotoRepo := s.photoRepo.WithTx(tx)
 
-	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, actor)
+	property, err := txRepo.GetByIDForUpdate(ctx, propertyID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound

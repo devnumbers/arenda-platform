@@ -21,3 +21,4 @@ export { PropertyEndLeaseModal } from './ui/PropertyEndLeaseModal';
 export { PropertySuccessBanner } from './ui/PropertySuccessBanner';
 export { PropertyOperationsPage } from './ui/PropertyOperationsPage';
 export { PropertyLeasesPage } from './ui/PropertyLeasesPage';
+export { PropertyAccessPage } from './ui/PropertyAccessPage';

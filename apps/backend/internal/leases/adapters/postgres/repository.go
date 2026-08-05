@@ -1792,6 +1792,20 @@ func (r *PropertyRepository) GetNameByOwner(ctx context.Context, id, scope uuid.
 	return row.Name, nil
 }
 
+// GetOwnerByID returns the data owner of a property by id (T3, issue #156),
+// without owner scoping. Used to resolve the scope for shared-access write
+// operations. ErrNotFound is returned for a missing property.
+func (r *PropertyRepository) GetOwnerByID(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row, err := r.q().GetPropertyByID(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, application.ErrNotFound
+		}
+		return uuid.Nil, err
+	}
+	return pgconv.UUIDFromPgtype(row.OwnerID), nil
+}
+
 // GetForExport returns the property read-model for the xlsx export use case, or
 // application.ErrNotFound when the property does not exist or does not belong to
 // the owner. It reuses the same generated GetPropertyByIDAndOwner query as

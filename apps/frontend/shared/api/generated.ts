@@ -325,7 +325,43 @@ export interface paths {
         patch: operations["updatePropertyContact"];
         trace?: never;
     };
-    "/properties/{propertyId}/free-reminders": {
+    "/properties/{propertyId}/access/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List property participants (owner first, then members) */
+        get: operations["listPropertyAccessMembers"];
+        put?: never;
+        /** Grant a registered user shared access to the property */
+        post: operations["createPropertyAccessMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/access/members/{memberId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke a member's access */
+        delete: operations["deletePropertyAccessMember"];
+        options?: never;
+        head?: never;
+        /** Change a member's role */
+        patch: operations["updatePropertyAccessMember"];
+        trace?: never;
+    };
+    "/properties/{propertyId}/access/members/self": {
         parameters: {
             query?: never;
             header?: never;
@@ -335,7 +371,8 @@ export interface paths {
         get: operations["listPropertyFreeReminders"];
         put?: never;
         post: operations["createFreeReminder"];
-        delete?: never;
+        /** Self-exit from a shared property */
+        delete: operations["leaveProperty"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1941,6 +1978,41 @@ export interface components {
         PropertyContactsResponse: {
             items: components["schemas"]["PropertyContactResponse"][];
         };
+        /**
+         * @description The participant's role on a property. `owner` is the object owner (synthesized, never stored as a membership); `full_access` and `viewer` are granted memberships.
+         * @enum {string}
+         */
+        PropertyAccessMemberRole: "owner" | "full_access" | "viewer";
+        PropertyAccessMemberResponse: {
+            /**
+             * Format: uuid
+             * @description Membership id; null for the synthesized owner row.
+             */
+            id?: string | null;
+            /** Format: uuid */
+            user_id: string;
+            role: components["schemas"]["PropertyAccessMemberRole"];
+            is_owner: boolean;
+            /** @description Participant display name (name and surname, or a masked phone). Never the raw phone or email. */
+            display_name?: string;
+            has_email?: boolean;
+        };
+        PropertyAccessMembersResponse: {
+            items: components["schemas"]["PropertyAccessMemberResponse"][];
+        };
+        PropertyAccessMemberCreateRequest: {
+            /**
+             * Format: uuid
+             * @description Registered user to grant access to.
+             */
+            user_id: string;
+            /** @enum {string} */
+            role: "full_access" | "viewer";
+        };
+        PropertyAccessMemberUpdateRequest: {
+            /** @enum {string} */
+            role: "full_access" | "viewer";
+        };
         PropertiesResponse: {
             items: components["schemas"]["PropertyResponse"][];
         };
@@ -2423,7 +2495,9 @@ export interface components {
             };
         };
     };
-    parameters: never;
+    parameters: {
+        PropertyId: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -3138,6 +3212,116 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    listPropertyAccessMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property access members list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAccessMembersResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createPropertyAccessMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyAccessMemberCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Member added */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAccessMemberResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deletePropertyAccessMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Member removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updatePropertyAccessMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyAccessMemberUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Member role updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAccessMemberResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     listPropertyFreeReminders: {
         parameters: {
             query?: {
@@ -3191,6 +3375,29 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    leaveProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Left the property */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

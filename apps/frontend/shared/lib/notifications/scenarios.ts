@@ -78,6 +78,23 @@ const propertyContacts = {
   deleteError: errorScenario('Не удалось удалить контакт'),
 } as const;
 
+const access = {
+  memberAdded: ((options?) =>
+    notify.success('Участник добавлен', options)) satisfies ScenarioFn,
+  addError: errorScenario('Не удалось добавить участника'),
+  roleChanged: ((options?) =>
+    notify.success('Роль изменена', options)) satisfies ScenarioFn,
+  roleChangeError: errorScenario('Не удалось изменить роль'),
+  revoked: ((options?) =>
+    notify.success('Доступ отозван', options)) satisfies ScenarioFn,
+  revokeError: errorScenario('Не удалось отозвать доступ'),
+  left: ((options?) =>
+    notify.success('Вы покинули объект', options)) satisfies ScenarioFn,
+  leaveError: errorScenario('Не удалось покинуть объект'),
+  loadError: ((options?) =>
+    notify.error('Не удалось загрузить участников', options)) satisfies ScenarioFn,
+} as const;
+
 const property = {
   detailError: ((options?) =>
     notify.error('Не удалось загрузить объект', options)) satisfies ScenarioFn,
@@ -226,6 +243,7 @@ export type Scenarios = {
   readonly tenants: typeof tenants;
   readonly propertyContacts: typeof propertyContacts;
   readonly property: typeof property;
+  readonly access: typeof access;
   readonly leases: typeof leases;
   readonly operations: typeof operations;
   readonly profile: typeof profile;
@@ -240,6 +258,7 @@ export const scenarios: Scenarios = {
   tenants,
   propertyContacts,
   property,
+  access,
   leases,
   operations,
   profile,

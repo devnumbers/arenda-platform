@@ -706,7 +706,129 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-  /properties/{propertyId}/free-reminders:
+  /properties/{propertyId}/access/members:
+    post:
+      operationId: createPropertyAccessMember
+      summary: Grant a registered user shared access to the property
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyAccessMemberCreateRequest'
+      responses:
+        '201':
+          description: Member added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAccessMemberResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      operationId: listPropertyAccessMembers
+      summary: List property participants (owner first, then members)
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      responses:
+        '200':
+          description: Property access members list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAccessMembersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/access/members/{memberId}:
+    patch:
+      operationId: updatePropertyAccessMember
+      summary: Change a member's role
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyAccessMemberUpdateRequest'
+      responses:
+        '200':
+          description: Member role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAccessMemberResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deletePropertyAccessMember
+      summary: Revoke a member's access
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Member removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/access/members/self:
+    delete:
+      operationId: leaveProperty
+      summary: Self-exit from a shared property
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      responses:
+        '204':
+          description: Left the property
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       operationId: createFreeReminder
       security:
@@ -3429,6 +3551,15 @@ components:
         The actual cookie name depends on the `cookieSecure` setting:
         `session_id` when insecure and `__Host-session_id` when secure.
 
+  parameters:
+    PropertyId:
+      name: propertyId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
   schemas:
 
     SendCodeRequest:
@@ -4698,6 +4829,67 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PropertyContactResponse'
+
+    PropertyAccessMemberRole:
+      type: string
+      enum: [owner, full_access, viewer]
+      description: >
+        The participant's role on a property. `owner` is the object owner
+        (synthesized, never stored as a membership); `full_access` and
+        `viewer` are granted memberships.
+
+    PropertyAccessMemberResponse:
+      type: object
+      required: [user_id, role, is_owner]
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Membership id; null for the synthesized owner row.
+        user_id:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/PropertyAccessMemberRole'
+        is_owner:
+          type: boolean
+        display_name:
+          type: string
+          description: >
+            Participant display name (name and surname, or a masked phone).
+            Never the raw phone or email.
+        has_email:
+          type: boolean
+
+    PropertyAccessMembersResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyAccessMemberResponse'
+
+    PropertyAccessMemberCreateRequest:
+      type: object
+      required: [user_id, role]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: Registered user to grant access to.
+        role:
+          type: string
+          enum: [full_access, viewer]
+
+    PropertyAccessMemberUpdateRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [full_access, viewer]
 
     PropertiesResponse:
       type: object

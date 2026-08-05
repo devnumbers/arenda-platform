@@ -24,6 +24,18 @@ FOR UPDATE;
 SELECT status FROM properties
 WHERE id = $1 AND owner_id = $2;
 
+-- name: GetPropertyByID :one
+-- Unscoped lookup by id. Used by the policy/access layer (T3, issue #156) to
+-- resolve the data owner for authorization before applying a scope. Read-only;
+-- callers must never leak existence to actors without a view capability (the
+-- application maps "no access" to ErrNotFound to preserve object privacy).
+SELECT * FROM properties WHERE id = $1;
+
+-- name: GetPropertyByIDForUpdate :one
+-- Unscoped pessimistic-lock lookup by id, for write paths that resolve access
+-- via the policy port before applying scope = owner_id (T3, issue #156).
+SELECT * FROM properties WHERE id = $1 FOR UPDATE;
+
 -- name: ListActivePropertiesByOwner :many
 SELECT properties.*,
        (SELECT COUNT(*) FROM operations o

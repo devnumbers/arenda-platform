@@ -59,6 +59,10 @@ func (r *exportPropertyRepo) GetByIDAndOwnerForUpdate(_ context.Context, _, _ uu
 	return "", nil
 }
 
+func (r *exportPropertyRepo) GetOwnerByID(_ context.Context, id uuid.UUID) (uuid.UUID, error) {
+	return id, nil
+}
+
 func (r *exportPropertyRepo) HasOpenLease(_ context.Context, _ uuid.UUID) (bool, error) {
 	return false, nil
 }

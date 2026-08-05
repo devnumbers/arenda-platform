@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	accesshttp "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/http"
+	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	adminhttp "github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters/http"
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
@@ -48,6 +50,7 @@ type Deps struct {
 	Properties               *propertiesapp.PropertyService
 	PropertyContacts         *propertiesapp.PropertyContactService
 	AddressSuggester         propertiesapp.AddressSuggester
+	Access                   *accessapp.AccessService
 	Leases                   *leasesapp.LeaseService
 	TenantContacts           *leasesapp.TenantContactService
 	Operations               *leasesapp.OperationService
@@ -132,6 +135,7 @@ func New(deps Deps) http.Handler {
 		deps.Audit,
 	)
 	propertyHandlers := propertieshttp.NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Export, deps.PropertyContacts, deps.Logger, deps.Clock, deps.TZResolver)
+	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)
 	leaseHandlers := leaseshttp.NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock, deps.TZResolver)
 	operationHandlers := leaseshttp.NewOperationHandlers(deps.Operations, deps.Categories, deps.Properties, deps.Logger)
 	recurringOperationHandlers := leaseshttp.NewRecurringOperationHandlers(deps.RecurringOperations, deps.Categories, deps.Logger)
@@ -148,6 +152,7 @@ func New(deps Deps) http.Handler {
 	handler := &composedHandler{
 		AuthHandlers:                   authHandlers,
 		PropertyHandlers:               propertyHandlers,
+		MemberHandlers:                 accessMemberHandlers,
 		LeaseHandlers:                  leaseHandlers,
 		OperationHandlers:              operationHandlers,
 		RecurringOperationHandlers:     recurringOperationHandlers,
@@ -262,6 +267,7 @@ func clientErrorsBodyLimitMiddleware(next http.Handler) http.Handler {
 type composedHandler struct {
 	*identityhttp.AuthHandlers
 	*propertieshttp.PropertyHandlers
+	*accesshttp.MemberHandlers
 	*leaseshttp.LeaseHandlers
 	*leaseshttp.OperationHandlers
 	*leaseshttp.RecurringOperationHandlers

@@ -175,6 +175,32 @@ func (q *Queries) GetPropertiesStatsAdmin(ctx context.Context) (GetPropertiesSta
 	return i, err
 }
 
+const getPropertyByID = `-- name: GetPropertyByID :one
+SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes FROM properties WHERE id = $1
+`
+
+// Unscoped lookup by id. Used by the policy/access layer (T3, issue #156) to
+// resolve the data owner for authorization before applying a scope. Read-only;
+// callers must never leak existence to actors without a view capability (the
+// application maps "no access" to ErrNotFound to preserve object privacy).
+func (q *Queries) GetPropertyByID(ctx context.Context, id pgtype.UUID) (Property, error) {
+	row := q.db.QueryRow(ctx, getPropertyByID, id)
+	var i Property
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Type,
+		&i.Address,
+		&i.Description,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Attributes,
+	)
+	return i, err
+}
+
 const getPropertyByIDAdmin = `-- name: GetPropertyByIDAdmin :one
 SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
 FROM properties p
@@ -281,6 +307,30 @@ type GetPropertyByIDAndOwnerForUpdateParams struct {
 
 func (q *Queries) GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetPropertyByIDAndOwnerForUpdateParams) (Property, error) {
 	row := q.db.QueryRow(ctx, getPropertyByIDAndOwnerForUpdate, arg.ID, arg.OwnerID)
+	var i Property
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Type,
+		&i.Address,
+		&i.Description,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Attributes,
+	)
+	return i, err
+}
+
+const getPropertyByIDForUpdate = `-- name: GetPropertyByIDForUpdate :one
+SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes FROM properties WHERE id = $1 FOR UPDATE
+`
+
+// Unscoped pessimistic-lock lookup by id, for write paths that resolve access
+// via the policy port before applying scope = owner_id (T3, issue #156).
+func (q *Queries) GetPropertyByIDForUpdate(ctx context.Context, id pgtype.UUID) (Property, error) {
+	row := q.db.QueryRow(ctx, getPropertyByIDForUpdate, id)
 	var i Property
 	err := row.Scan(
 		&i.ID,

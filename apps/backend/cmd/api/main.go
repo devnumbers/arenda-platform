@@ -77,12 +77,26 @@ func run() error {
 	//    PropertyService depends on the lifecycle and the shared lease repo.
 	leasesRepos := wire.WireLeasesRepos(p, notificationsMod.ReminderScheduler)
 
-	// 7. Properties: repos, subscription limiter, photo storage, property and
+	// 7. Access (T3, issue #156): membership repository, property owner
+	//    resolver, membership-aware policy and access service. Built before
+	//    properties because the policy replaces the T2 owner-only policy and is
+	//    injected into every property/lease/operation service.
+	accessMod, err := wire.WireAccess(ctx, p)
+	if err != nil {
+		return err
+	}
+	p.Policy = accessMod.Policy
+
+	// 8. Properties: repos, subscription limiter, photo storage, property and
 	//    property-contact services, dadata suggester.
 	propertiesMod, err := wire.WireProperties(ctx, p, billingRepos, leasesRepos)
 	if err != nil {
 		return err
 	}
+	// Wire the shared-property-ids adapter from the access context into the
+	// property service so list endpoints include properties shared with the
+	// actor (issue #156, T3).
+	propertiesMod.PropertyService.SetSharedPropertyIDs(accessMod.SharedProperties)
 
 	// 8. Billing Services aggregate. Depends on the property service.
 	billingMod := wire.BuildBillingServices(p, billingRepos, propertiesMod.PropertyService)
@@ -157,6 +171,7 @@ func run() error {
 		Properties:               propertiesMod.PropertyService,
 		PropertyContacts:         propertiesMod.PropertyContactService,
 		AddressSuggester:         propertiesMod.DadataClient,
+		Access:                   accessMod.AccessService,
 		Leases:                   leasesMod.LeaseService,
 		TenantContacts:           leasesMod.TenantContactService,
 		Operations:               leasesMod.OperationService,

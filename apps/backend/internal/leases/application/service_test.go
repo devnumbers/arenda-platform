@@ -53,6 +53,13 @@ func (r *fakePropertyRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, own
 	return r.GetStatusByOwner(ctx, id, ownerID)
 }
 
+func (r *fakePropertyRepo) GetOwnerByID(_ context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if _, ok := r.statuses[id]; ok {
+		return id, nil
+	}
+	return uuid.Nil, ErrNotFound
+}
+
 func (r *fakePropertyRepo) WithTx(_ transaction.Tx) PropertyRepository { return r }
 
 type fakeLeaseRepo struct {

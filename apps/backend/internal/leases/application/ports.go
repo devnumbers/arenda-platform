@@ -26,6 +26,10 @@ type PropertyRepository interface {
 	// current transaction and returns its status, or an empty string when the
 	// property does not exist.
 	GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (string, error)
+	// GetOwnerByID returns the property's data owner by id (T3, issue #156).
+	// Used to resolve the scope for shared-access operations; returns
+	// ErrNotFound when the property does not exist.
+	GetOwnerByID(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	HasOpenLease(ctx context.Context, id uuid.UUID) (bool, error)
 	WithTx(tx transaction.Tx) PropertyRepository
 }

@@ -63,6 +63,8 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, propertiesapp.ErrNotFound), errors.Is(err, leasesapp.ErrNotFound):
 		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))
+	case errors.Is(err, propertiesapp.ErrForbidden):
+		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
 	case errors.Is(err, propertiesapp.ErrLimitExceeded):
 		httpsupport.WriteProblem(w, http.StatusPaymentRequired, httpsupport.Problem(r.Context(), "Limit exceeded", "Превышен лимит активных объектов"))
 	case errors.Is(err, propertiesapp.ErrArchivedProperty):

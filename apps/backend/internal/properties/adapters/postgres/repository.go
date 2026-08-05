@@ -129,6 +129,31 @@ func (r *PropertyRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, s
 	return propertyFromRow(row), nil
 }
 
+// GetByID returns a property by id without owner scoping (T3, issue #156). Used
+// by the policy/access layer to resolve the data owner before authorization.
+func (r *PropertyRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Property, error) {
+	row, err := r.q().GetPropertyByID(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Property{}, application.ErrNotFound
+		}
+		return domain.Property{}, err
+	}
+	return propertyFromRow(row), nil
+}
+
+// GetByIDForUpdate is the pessimistic-lock variant of GetByID (T3, issue #156).
+func (r *PropertyRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Property, error) {
+	row, err := r.q().GetPropertyByIDForUpdate(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Property{}, application.ErrNotFound
+		}
+		return domain.Property{}, err
+	}
+	return propertyFromRow(row), nil
+}
+
 func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error) {
 	rows, err := r.q().ListActivePropertiesByOwner(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {

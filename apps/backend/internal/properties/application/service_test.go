@@ -113,6 +113,18 @@ func (r *lockingFakePropertyRepo) GetByIDAndOwnerForUpdate(_ context.Context, id
 	return p, nil
 }
 
+func (r *lockingFakePropertyRepo) GetByID(_ context.Context, id uuid.UUID) (domain.Property, error) {
+	p, ok := r.data[id]
+	if !ok {
+		return domain.Property{}, ErrNotFound
+	}
+	return p, nil
+}
+
+func (r *lockingFakePropertyRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Property, error) {
+	return r.GetByIDAndOwnerForUpdate(ctx, id, uuid.Nil)
+}
+
 func (r *lockingFakePropertyRepo) ListActiveByOwner(_ context.Context, _ uuid.UUID) ([]domain.Property, error) {
 	return nil, nil
 }
@@ -223,7 +235,7 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 		nil,
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
-		nil,
+		testOwnerPolicy{},
 		nil,
 	)
 
@@ -334,7 +346,7 @@ func TestArchiveProperty_ConcurrentArchivesDoNotDoubleArchive(t *testing.T) {
 		nil,
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
-		nil,
+		testOwnerPolicy{},
 		nil,
 	)
 
@@ -415,7 +427,7 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 		nil,
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
-		nil,
+		testOwnerPolicy{},
 		nil,
 	)
 
@@ -598,7 +610,7 @@ func TestPropertyService_ListPropertyLeases(t *testing.T) {
 		nil,
 		fakePropertyClock{now: now},
 		fakeTzResolver{},
-		nil,
+		testOwnerPolicy{},
 		nil,
 	)
 
@@ -636,7 +648,7 @@ func TestPropertyService_ListPropertyLeases_PropertyNotFound(t *testing.T) {
 		nil,
 		fakePropertyClock{now: now},
 		fakeTzResolver{},
-		nil,
+		testOwnerPolicy{},
 		nil,
 	)
 
@@ -673,7 +685,7 @@ func TestPropertyService_ListArchivedProperties(t *testing.T) {
 		nil,
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
-		nil,
+		testOwnerPolicy{},
 		nil,
 	)
 
@@ -721,6 +733,14 @@ func (r *fakePropertyRepo) GetByIDAndOwner(_ context.Context, id, _ uuid.UUID) (
 
 func (r *fakePropertyRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.Property, error) {
 	return r.GetByIDAndOwner(ctx, id, ownerID)
+}
+
+func (r *fakePropertyRepo) GetByID(ctx context.Context, id uuid.UUID) (domain.Property, error) {
+	return r.GetByIDAndOwner(ctx, id, uuid.Nil)
+}
+
+func (r *fakePropertyRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Property, error) {
+	return r.GetByIDAndOwner(ctx, id, uuid.Nil)
 }
 
 func (r *fakePropertyRepo) ListActiveByOwner(_ context.Context, _ uuid.UUID) ([]domain.Property, error) {
@@ -876,7 +896,7 @@ func TestPropertyService_ArchiveExcessProperties_CompletesOpenLeaseAndArchives(t
 		nil,
 		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
 		fakeTzResolver{},
-		nil,
+		testOwnerPolicy{},
 		nil,
 	)
 
@@ -942,7 +962,7 @@ func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testi
 		nil,
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
-		nil,
+		testOwnerPolicy{},
 		nil,
 	)
 
@@ -984,7 +1004,7 @@ func TestPropertyService_ArchiveProperty_OpenLeaseStillRejected(t *testing.T) {
 		nil,
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
-		nil,
+		testOwnerPolicy{},
 		nil,
 	)
 

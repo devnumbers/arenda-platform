@@ -42,6 +42,14 @@ const (
 	ActionPropertyContactDeleted Action = "property_contact.deleted"
 	ActionPropertyDeleted        Action = "property.deleted"
 
+	// ActionPropertyMemberAdded records a member granted shared access to a
+	// property. Context never carries the member's email or phone (PII); only
+	// ids and the role granted. See ADR 0020 and issue #156 (T3).
+	ActionPropertyMemberAdded   Action = "property_member.added"
+	ActionPropertyMemberUpdated Action = "property_member.updated"
+	ActionPropertyMemberRemoved Action = "property_member.removed"
+	ActionPropertyMemberLeft    Action = "property_member.left"
+
 	ActionLeaseCreated   Action = "lease.created"
 	ActionLeaseUpdated   Action = "lease.updated"
 	ActionLeaseCompleted Action = "lease.completed"
@@ -85,6 +93,7 @@ const (
 	EntityProperty            EntityType = "property"
 	EntityPropertyPhoto       EntityType = "property_photo"
 	EntityPropertyContact     EntityType = "property_contact"
+	EntityPropertyMember      EntityType = "property_member"
 	EntityLease               EntityType = "lease"
 	EntityTenantContact       EntityType = "tenant_contact"
 	EntityOperation           EntityType = "operation"

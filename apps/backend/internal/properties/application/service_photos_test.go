@@ -108,7 +108,7 @@ func newPhotoService(t *testing.T, repo PropertyRepository, photoRepo PropertyPh
 		nil,
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
-		nil,
+		testOwnerPolicy{},
 		nil,
 	)
 }

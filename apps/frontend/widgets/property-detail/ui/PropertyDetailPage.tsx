@@ -196,6 +196,10 @@ export function PropertyDetailPage(): JSX.Element {
         router.push(ROUTES.propertyEdit(id));
     }, [id, router]);
 
+    const handleAccess = useCallback(() => {
+        router.push(ROUTES.propertyAccess(id));
+    }, [id, router]);
+
     const handleDelete = useCallback((mode: DeletePropertyMode) => {
         deleteProperty.mutate(
             {id, mode},
@@ -289,6 +293,7 @@ export function PropertyDetailPage(): JSX.Element {
                         status={property?.status}
                         disabled={isLoading || hasAnyError || !property}
                         onEdit={handleEdit}
+                        onAccess={handleAccess}
                         onToggleMaintenance={handleToggleMaintenance}
                         onToggleArchive={handleToggleArchive}
                         onExport={handleExport}
