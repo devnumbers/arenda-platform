@@ -1,0 +1,318 @@
+package http
+
+import (
+	"log/slog"
+	"net/http"
+
+	"github.com/google/uuid"
+	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	openapi_types "github.com/oapi-codegen/runtime/types"
+)
+
+// RecurringOperationHandlers implements the generated recurring operation endpoints.
+type RecurringOperationHandlers struct {
+	svc        *leasesapp.RecurringOperationService
+	categories *leasesapp.CategoryService
+	logger     *slog.Logger
+}
+
+// NewRecurringOperationHandlers creates HTTP handlers for the recurring operations API.
+func NewRecurringOperationHandlers(svc *leasesapp.RecurringOperationService, categories *leasesapp.CategoryService, logger *slog.Logger) *RecurringOperationHandlers {
+	return &RecurringOperationHandlers{svc: svc, categories: categories, logger: logger}
+}
+
+func (h *RecurringOperationHandlers) handleRecurringOperationError(w http.ResponseWriter, r *http.Request, err error) {
+	handleLeaseOperationError(w, r, err, leasesapp.ErrRecurringOperationLeaseCreated, "Серийная операция не найдена")
+}
+
+// CreateRecurringOperation implements POST /properties/{propertyId}/recurring-operations.
+func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	var body openapi.RecurringOperationCreateRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode create recurring operation request", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	cmd := leasesapp.CreateRecurringOperationCommand{
+		PropertyID:    propertyID,
+		Type:          string(body.Type),
+		CategoryID:    body.CategoryId,
+		Name:          body.Name,
+		AmountKopecks: int64(body.AmountKopecks),
+		StartDate:     body.StartDate.Time,
+	}
+	if body.PaymentDay != nil {
+		cmd.PaymentDay = *body.PaymentDay
+	}
+	if body.EndDate != nil {
+		cmd.EndDate = new(body.EndDate.Time)
+	}
+	if body.Comment != nil {
+		cmd.Comment = body.Comment
+	}
+	if body.Periodicity != nil {
+		cmd.Periodicity = string(*body.Periodicity)
+	}
+	if body.ReminderOffsetDays != nil {
+		offset := int(*body.ReminderOffsetDays)
+		cmd.ReminderOffsetDays = &offset
+	}
+
+	rec, err := h.svc.CreateRecurringOperation(r.Context(), ownerID, cmd)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusCreated, recurringOperationResponse(rec, names))
+}
+
+// ListRecurringOperationsByProperty implements GET /properties/{propertyId}/recurring-operations.
+func (h *RecurringOperationHandlers) ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	recs, err := h.svc.ListRecurringOperationsByProperty(r.Context(), ownerID, propertyID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.RecurringOperationResponse, 0, len(recs))
+	for _, rec := range recs {
+		items = append(items, recurringOperationResponse(rec, names))
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.RecurringOperationsResponse{Items: items})
+}
+
+// ListRecurringOperations implements GET /recurring-operations.
+func (h *RecurringOperationHandlers) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	recs, err := h.svc.ListRecurringOperations(r.Context(), ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.RecurringOperationResponse, 0, len(recs))
+	for _, rec := range recs {
+		items = append(items, recurringOperationResponse(rec, names))
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.RecurringOperationsResponse{Items: items})
+}
+
+// GetRecurringOperation implements GET /recurring-operations/{id}.
+func (h *RecurringOperationHandlers) GetRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	rec, err := h.svc.GetRecurringOperation(r.Context(), ownerID, id)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, recurringOperationResponse(rec, names))
+}
+
+// DeleteRecurringOperation implements DELETE /recurring-operations/{id}.
+func (h *RecurringOperationHandlers) DeleteRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	if err := h.svc.DeleteRecurringOperation(r.Context(), ownerID, id); err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// UpdateRecurringOperation implements PATCH /recurring-operations/{id}.
+func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	var body openapi.RecurringOperationUpdateRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode update recurring operation request", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	cmd := leasesapp.UpdateRecurringOperationCommand{
+		Type:       httpsupport.PtrString(body.Type),
+		CategoryID: uuidPtrFromOpenAPI(body.CategoryId),
+		Name:       body.Name,
+		Comment:    body.Comment,
+	}
+	if body.AmountKopecks != nil {
+		cmd.AmountKopecks = new(int64(*body.AmountKopecks))
+	}
+	if body.StartDate != nil {
+		cmd.StartDate = new(body.StartDate.Time)
+	}
+	if body.PaymentDay != nil {
+		cmd.PaymentDay = body.PaymentDay
+	}
+	if body.EndDate != nil {
+		cmd.EndDate = new(body.EndDate.Time)
+	}
+	if body.Periodicity != nil {
+		p := string(*body.Periodicity)
+		cmd.Periodicity = &p
+	}
+	if body.ApplyFromDate != nil {
+		cmd.ApplyFromDate = new(body.ApplyFromDate.Time)
+	}
+	if body.ReminderOffsetDays != nil {
+		offset := int(*body.ReminderOffsetDays)
+		cmd.ReminderOffsetDays = &offset
+	}
+
+	rec, err := h.svc.UpdateRecurringOperation(r.Context(), ownerID, id, cmd)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, recurringOperationResponse(rec, names))
+}
+
+// PauseRecurringOperation implements POST /recurring-operations/{id}/pause.
+func (h *RecurringOperationHandlers) PauseRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	rec, err := h.svc.PauseRecurringOperation(r.Context(), ownerID, id)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, recurringOperationResponse(rec, names))
+}
+
+// ResumeRecurringOperation implements POST /recurring-operations/{id}/resume.
+func (h *RecurringOperationHandlers) ResumeRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	rec, err := h.svc.ResumeRecurringOperation(r.Context(), ownerID, id)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	names, err := categoryNamesByID(r.Context(), h.categories, ownerID)
+	if err != nil {
+		h.handleRecurringOperationError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, recurringOperationResponse(rec, names))
+}
+
+func recurringOperationResponse(rec domain.RecurringOperation, categoryNames map[uuid.UUID]string) openapi.RecurringOperationResponse {
+	resp := openapi.RecurringOperationResponse{
+		Id:            rec.ID,
+		OwnerId:       rec.OwnerID,
+		PropertyId:    domain.PropertyIDPtr(rec.PropertyID),
+		Type:          openapi.OperationType(rec.Type),
+		CategoryId:    rec.CategoryID,
+		CategoryName:  categoryNames[rec.CategoryID],
+		Name:          rec.Name,
+		AmountKopecks: int(rec.AmountKopecks),
+		StartDate:     openapi_types.Date{Time: rec.StartDate},
+		PaymentDay:    rec.PaymentDay,
+		Periodicity:   openapi.RecurringOperationResponsePeriodicity(rec.Periodicity),
+		Status:        openapi.RecurringOperationResponseStatus(rec.Status),
+		CreatedAt:     rec.CreatedAt,
+		UpdatedAt:     rec.UpdatedAt,
+	}
+	if rec.LeaseID != uuid.Nil {
+		resp.LeaseId = &rec.LeaseID
+	}
+	if rec.EndDate != nil {
+		resp.EndDate = &openapi_types.Date{Time: *rec.EndDate}
+	}
+	if rec.Comment != "" {
+		resp.Comment = &rec.Comment
+	}
+	if rec.ReminderOffsetDays != nil {
+		offset := openapi.RecurringOperationResponseReminderOffsetDays(*rec.ReminderOffsetDays)
+		resp.ReminderOffsetDays = &offset
+	}
+	return resp
+}
