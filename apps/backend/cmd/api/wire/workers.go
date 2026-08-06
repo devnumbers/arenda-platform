@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	accesspg "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/postgres"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
 	identityscheduler "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/scheduler"
@@ -17,6 +18,12 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
 )
 
+// Compile-time check that the access member-recipient adapter satisfies the
+// notifications recipient-lister port consumed by the reminder worker (issue
+// #159). The assertion lives in the wiring layer so the access context never
+// imports notifications.
+var _ notificationsapp.PropertyRecipientLister = (*accesspg.MemberRecipientAdapter)(nil)
+
 // Workers bundles the six background workers and exposes Wait (block until they
 // exit). NewWorkers builds the notifier infrastructure (contact resolver, email
 // notifier, notifiers map), the identity data cleaner, the six workers and
@@ -28,10 +35,11 @@ type Workers struct {
 }
 
 // NewWorkers builds and starts the six background workers: the identity data
-// cleaner, the notifications reminder worker, the lease reconciliation worker,
-// the billing worker, the payment reconciliation worker and the operation
-// overdue worker. It must be called with the still-active request context so
-// the workers shut down when cancellation propagates.
+// cleaner, the notifications reminder worker (with the property member
+// recipient lister for the fan-out, issue #159), the lease reconciliation
+// worker, the billing worker, the payment reconciliation worker and the
+// operation overdue worker. It must be called with the still-active request
+// context so the workers shut down when cancellation propagates.
 func NewWorkers(
 	ctx context.Context,
 	p platformDeps,
@@ -52,7 +60,10 @@ func NewWorkers(
 	notifiers := map[notificationsapp.Channel]notificationsapp.Notifier{
 		notificationsapp.ChannelEmail: emailNotifier,
 	}
-	reminderWorker := scheduler.NewReminderWorker(reminderRepo, p.Renderer, notifiers, contactResolver, p.Beginner, p.Clock, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, p.Logger)
+	// The membership repository is stateless, so the recipient lister is built
+	// here directly instead of being exported from WireAccess (issue #159).
+	recipientLister := accesspg.NewMemberRecipientAdapter(accesspg.NewMembershipRepository(p.DB))
+	reminderWorker := scheduler.NewReminderWorker(reminderRepo, p.Renderer, notifiers, contactResolver, recipientLister, p.Beginner, p.Clock, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, p.Logger)
 	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, p.Clock, 1*time.Hour, 100, p.Logger, p.TZResolver)
 	billingWorker := scheduler.NewBillingWorker(billingRenewals, billingScheduledChanges, p.Pool, p.Clock, p.Cfg.BillingWorkerInterval, p.Logger)
 	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(billingPayments, p.Pool, p.Clock, p.Cfg.PaymentReconciliationWorkerInterval, p.Logger)

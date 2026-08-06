@@ -85,7 +85,7 @@ type Querier interface {
 	DeletePropertyPhoto(ctx context.Context, id pgtype.UUID) error
 	DeleteRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) error
 	DeleteRecurringOperationsByProperty(ctx context.Context, arg DeleteRecurringOperationsByPropertyParams) error
-	DeleteSentEmailReminder(ctx context.Context, reminderID pgtype.UUID) error
+	DeleteSentEmailReminder(ctx context.Context, arg DeleteSentEmailReminderParams) error
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) error
@@ -181,7 +181,7 @@ type Querier interface {
 	// updated_at is maintained by the trg_subscription_payments_updated_at trigger.
 	IncrementSubscriptionPaymentChargeAttempts(ctx context.Context, id pgtype.UUID) (int32, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
-	IsEmailReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
+	IsEmailReminderSent(ctx context.Context, arg IsEmailReminderSentParams) (bool, error)
 	IsNotificationEventAllowed(ctx context.Context, arg IsNotificationEventAllowedParams) (bool, error)
 	IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
 	ListAccessibleOwners(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)

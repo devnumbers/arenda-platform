@@ -167,17 +167,17 @@ WHERE reminder_id = $2;
 
 -- name: IsEmailReminderSent :one
 SELECT EXISTS (
-    SELECT 1 FROM sent_email_reminders WHERE reminder_id = $1
+    SELECT 1 FROM sent_email_reminders WHERE reminder_id = $1 AND owner_id = $2
 );
 
 -- name: SaveSentEmailReminder :execrows
 INSERT INTO sent_email_reminders (
     id, reminder_id, owner_id, email, subject, plain_body, sent_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (reminder_id) DO NOTHING;
+ON CONFLICT (reminder_id, owner_id) DO NOTHING;
 
 -- name: DeleteSentEmailReminder :exec
-DELETE FROM sent_email_reminders WHERE reminder_id = $1;
+DELETE FROM sent_email_reminders WHERE reminder_id = $1 AND owner_id = $2;
 
 -- name: MarkReminderSkipped :execrows
 UPDATE reminders

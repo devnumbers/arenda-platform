@@ -203,11 +203,16 @@ func (q *Queries) CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSRe
 }
 
 const deleteSentEmailReminder = `-- name: DeleteSentEmailReminder :exec
-DELETE FROM sent_email_reminders WHERE reminder_id = $1
+DELETE FROM sent_email_reminders WHERE reminder_id = $1 AND owner_id = $2
 `
 
-func (q *Queries) DeleteSentEmailReminder(ctx context.Context, reminderID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteSentEmailReminder, reminderID)
+type DeleteSentEmailReminderParams struct {
+	ReminderID pgtype.UUID `json:"reminder_id"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) DeleteSentEmailReminder(ctx context.Context, arg DeleteSentEmailReminderParams) error {
+	_, err := q.db.Exec(ctx, deleteSentEmailReminder, arg.ReminderID, arg.OwnerID)
 	return err
 }
 
@@ -316,12 +321,17 @@ func (q *Queries) HasReminderForOperationEvent(ctx context.Context, arg HasRemin
 
 const isEmailReminderSent = `-- name: IsEmailReminderSent :one
 SELECT EXISTS (
-    SELECT 1 FROM sent_email_reminders WHERE reminder_id = $1
+    SELECT 1 FROM sent_email_reminders WHERE reminder_id = $1 AND owner_id = $2
 )
 `
 
-func (q *Queries) IsEmailReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, isEmailReminderSent, reminderID)
+type IsEmailReminderSentParams struct {
+	ReminderID pgtype.UUID `json:"reminder_id"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) IsEmailReminderSent(ctx context.Context, arg IsEmailReminderSentParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isEmailReminderSent, arg.ReminderID, arg.OwnerID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -1136,7 +1146,7 @@ const saveSentEmailReminder = `-- name: SaveSentEmailReminder :execrows
 INSERT INTO sent_email_reminders (
     id, reminder_id, owner_id, email, subject, plain_body, sent_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (reminder_id) DO NOTHING
+ON CONFLICT (reminder_id, owner_id) DO NOTHING
 `
 
 type SaveSentEmailReminderParams struct {

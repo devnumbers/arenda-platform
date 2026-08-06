@@ -31,6 +31,7 @@ type ReminderWorker struct {
 	renderer        *mailer.Renderer
 	notifiers       map[application.Channel]application.Notifier
 	resolver        application.ContactResolver
+	recipients      application.PropertyRecipientLister
 	db              transaction.Beginner
 	clock           clock.Clock
 	backoff         Backoff
@@ -46,6 +47,7 @@ func NewReminderWorker(
 	renderer *mailer.Renderer,
 	notifiers map[application.Channel]application.Notifier,
 	resolver application.ContactResolver,
+	recipients application.PropertyRecipientLister,
 	db transaction.Beginner,
 	clock clock.Clock,
 	backoff Backoff,
@@ -62,6 +64,7 @@ func NewReminderWorker(
 		renderer:        renderer,
 		notifiers:       notifiers,
 		resolver:        resolver,
+		recipients:      recipients,
 		db:              db,
 		clock:           clock,
 		backoff:         backoff,
@@ -157,46 +160,109 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 	dispatchCtx, cancel := context.WithTimeout(ctx, w.dispatchTimeout)
 	defer cancel()
 
-	allowed, err := w.repo.IsEventAllowed(dispatchCtx, r.OwnerID, r.EventType)
-	if err != nil {
-		w.logger.ErrorContext(dispatchCtx, "check notification permission failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
-		return w.finalizeFailure(dispatchCtx, r, now)
-	}
-	if !allowed {
-		w.logger.InfoContext(dispatchCtx, "reminder skipped: event type not allowed by user preferences", "reminder_id", r.ID, "event_type", r.EventType)
-		return w.finalizeSkipped(dispatchCtx, r)
-	}
-
-	contact, err := w.resolver.Resolve(dispatchCtx, r.OwnerID)
-	if err != nil {
-		w.logger.ErrorContext(dispatchCtx, "resolve contact failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
-		if errors.Is(err, application.ErrNoContact) {
-			return w.finalizeCancel(dispatchCtx, r)
+	// Fan-out (issue #159): a property reminder goes to the owner and to every
+	// active member of the property. Each recipient is checked against their
+	// own notification preferences and deduplicated by their own audit row.
+	recipientIDs := []uuid.UUID{r.OwnerID}
+	if r.PropertyID != nil {
+		memberIDs, err := w.recipients.ListActiveRecipientIDs(dispatchCtx, *r.PropertyID)
+		if err != nil {
+			w.logger.ErrorContext(dispatchCtx, "list property reminder recipients failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+			return w.finalizeFailure(dispatchCtx, r, now)
 		}
+		for _, id := range memberIDs {
+			if id != r.OwnerID {
+				recipientIDs = append(recipientIDs, id)
+			}
+		}
+	}
+
+	var delivered, skippedByPrefs, failures int
+	var providerResponse string
+	for _, recipientID := range recipientIDs {
+		allowed, err := w.repo.IsEventAllowed(dispatchCtx, recipientID, r.EventType)
+		if err != nil {
+			w.logger.ErrorContext(dispatchCtx, "check notification permission failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+			failures++
+			continue
+		}
+		if !allowed {
+			w.logger.InfoContext(dispatchCtx, "reminder recipient skipped: event type not allowed by user preferences", "reminder_id", r.ID, "event_type", r.EventType)
+			skippedByPrefs++
+			continue
+		}
+
+		contact, err := w.resolver.Resolve(dispatchCtx, recipientID)
+		if err != nil {
+			if errors.Is(err, application.ErrNoContact) {
+				w.logger.InfoContext(dispatchCtx, "reminder recipient skipped: no contact", "reminder_id", r.ID, "event_type", r.EventType)
+				continue
+			}
+			w.logger.ErrorContext(dispatchCtx, "resolve contact failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+			failures++
+			continue
+		}
+
+		notifier, ok := w.notifiers[contact.Channel]
+		if !ok {
+			w.logger.ErrorContext(dispatchCtx, "unsupported contact channel", "reminder_id", r.ID, "event_type", r.EventType, "channel", contact.Channel)
+			failures++
+			continue
+		}
+
+		// TODO: re-add SMS dispatch here when ContactResolver supports ChannelSMS.
+		outcome, response := w.dispatchEmailReminder(dispatchCtx, r, now, recipientID, contact, notifier)
+		switch outcome {
+		case emailDispatchSent:
+			delivered++
+			providerResponse = response
+		case emailDispatchDuplicate:
+			delivered++
+		default:
+			failures++
+		}
+	}
+
+	switch {
+	case failures > 0:
+		// The retry re-sends only to recipients without an audit row
+		// (per-recipient dedup), so delivered recipients are not notified twice.
 		return w.finalizeFailure(dispatchCtx, r, now)
+	case delivered > 0:
+		return w.finalizeSuccess(dispatchCtx, r, now, providerResponse, application.ChannelEmail)
+	case skippedByPrefs == len(recipientIDs):
+		// skipped = every recipient revoked permission for the event type.
+		return w.finalizeSkipped(dispatchCtx, r)
+	default:
+		// No recipient has a resolvable contact: cancel the reminder.
+		return w.finalizeCancel(dispatchCtx, r)
 	}
-
-	notifier, ok := w.notifiers[contact.Channel]
-	if !ok {
-		w.logger.ErrorContext(dispatchCtx, "unsupported contact channel", "reminder_id", r.ID, "event_type", r.EventType, "channel", contact.Channel)
-		return fmt.Errorf("unsupported contact channel: %s", contact.Channel)
-	}
-
-	// TODO: re-add SMS dispatch here when ContactResolver supports ChannelSMS.
-	return w.dispatchEmailReminder(dispatchCtx, r, now, contact, notifier)
 }
 
-func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Reminder, now time.Time, contact application.Contact, notifier application.Notifier) error {
+// emailDispatchOutcome is the per-recipient result of dispatchEmailReminder.
+type emailDispatchOutcome int
+
+const (
+	emailDispatchSent emailDispatchOutcome = iota
+	emailDispatchDuplicate
+	emailDispatchFailed
+)
+
+// dispatchEmailReminder delivers the reminder to a single recipient. It does
+// not finalize the reminder: the caller aggregates per-recipient outcomes and
+// finalizes once after the fan-out loop.
+func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Reminder, now time.Time, recipientID uuid.UUID, contact application.Contact, notifier application.Notifier) (emailDispatchOutcome, string) {
 	// Defensive check: the worker-level sending status already ensures a single
 	// processing attempt, but this guards against duplicate sends after
-	// stale-sending recovery or concurrent dispatch races.
-	alreadySent, err := w.repo.IsEmailReminderSent(ctx, r.ID)
+	// stale-sending recovery, failed-run retries or concurrent dispatch races.
+	alreadySent, err := w.repo.IsEmailReminderSent(ctx, r.ID, recipientID)
 	if err != nil {
-		return fmt.Errorf("check sent email reminder: %w", err)
+		w.logger.ErrorContext(ctx, "check sent email reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+		return emailDispatchFailed, ""
 	}
 	if alreadySent {
-		w.logger.InfoContext(ctx, "reminder already sent, skipping notification", "reminder_id", r.ID, "event_type", r.EventType)
-		return w.finalizeAlreadySent(ctx, r, now)
+		w.logger.InfoContext(ctx, "reminder already sent to recipient, skipping notification", "reminder_id", r.ID, "event_type", r.EventType)
+		return emailDispatchDuplicate, ""
 	}
 
 	plain, _, err := w.renderer.Render("reminder", map[string]any{
@@ -205,32 +271,34 @@ func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Rem
 		"Body":    r.MessageBody,
 	})
 	if err != nil {
-		return fmt.Errorf("render reminder email: %w", err)
+		w.logger.ErrorContext(ctx, "render reminder email failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+		return emailDispatchFailed, ""
 	}
 
 	id, err := uuid.NewV7()
 	if err != nil {
-		return fmt.Errorf("generate sent email id: %w", err)
+		w.logger.ErrorContext(ctx, "generate sent email id failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+		return emailDispatchFailed, ""
 	}
 
 	if err := w.repo.SaveSentEmailReminder(ctx, application.SaveSentEmailReminderParams{
 		ID:         id,
 		ReminderID: r.ID,
-		ScopeID:    r.OwnerID,
+		ScopeID:    recipientID,
 		Email:      contact.Email,
 		Subject:    r.MessageTitle,
 		PlainBody:  plain,
 		SentAt:     now,
 	}); errors.Is(err, application.ErrDuplicateEmailReminder) {
-		w.logger.InfoContext(ctx, "reminder already sent, skipping notification", "reminder_id", r.ID, "event_type", r.EventType)
-		return w.finalizeAlreadySent(ctx, r, now)
+		w.logger.InfoContext(ctx, "reminder already sent to recipient, skipping notification", "reminder_id", r.ID, "event_type", r.EventType)
+		return emailDispatchDuplicate, ""
 	} else if err != nil {
 		w.logger.ErrorContext(ctx, "save sent email reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
-		return w.finalizeFailure(ctx, r, now)
+		return emailDispatchFailed, ""
 	}
 
 	providerResponse, _, err := notifier.Notify(ctx, application.Notification{
-		RecipientID: r.OwnerID,
+		RecipientID: recipientID,
 		ReminderID:  r.ID,
 		EventType:   r.EventType,
 		Title:       r.MessageTitle,
@@ -239,13 +307,13 @@ func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Rem
 	})
 	if err != nil {
 		w.logger.ErrorContext(ctx, "notify reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
-		if delErr := w.repo.DeleteSentEmailReminder(ctx, r.ID); delErr != nil {
+		if delErr := w.repo.DeleteSentEmailReminder(ctx, r.ID, recipientID); delErr != nil {
 			w.logger.ErrorContext(ctx, "failed to delete email audit row after send failure", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(delErr))
 		}
-		return w.finalizeFailure(ctx, r, now)
+		return emailDispatchFailed, ""
 	}
 
-	return w.finalizeSuccess(ctx, r, now, providerResponse, application.ChannelEmail)
+	return emailDispatchSent, providerResponse
 }
 
 func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time, providerResponse string, channel application.Channel) error {
@@ -265,25 +333,6 @@ func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder,
 		if err := txRepo.UpdateSMSProviderResponse(ctx, r.ID, providerResponse); err != nil {
 			return fmt.Errorf("update sms provider response: %w", err)
 		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit finalize transaction: %w", err)
-	}
-	return nil
-}
-
-// finalizeAlreadySent marks a reminder as sent when the audit row already exists.
-func (w *ReminderWorker) finalizeAlreadySent(ctx context.Context, r domain.Reminder, now time.Time) error {
-	tx, err := w.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin finalize transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRepo := w.repo.WithTx(tx)
-	if err := txRepo.MarkReminderSent(ctx, r.ID, now); err != nil {
-		return fmt.Errorf("mark reminder sent: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -337,8 +386,8 @@ func (w *ReminderWorker) finalizeCancel(ctx context.Context, r domain.Reminder) 
 	return nil
 }
 
-// finalizeSkipped marks a reminder as skipped: the owner revoked permission
-// for its event type, so it must not be sent or retried.
+// finalizeSkipped marks a reminder as skipped: every recipient revoked
+// permission for its event type, so it must not be sent or retried.
 func (w *ReminderWorker) finalizeSkipped(ctx context.Context, r domain.Reminder) error {
 	tx, err := w.db.Begin(ctx)
 	if err != nil {

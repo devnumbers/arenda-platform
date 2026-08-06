@@ -48,8 +48,8 @@ type ReminderRepository interface {
 	UpdateSMSProviderResponse(ctx context.Context, reminderID uuid.UUID, response string) error
 	IsSMSReminderSent(ctx context.Context, reminderID uuid.UUID) (bool, error)
 	SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) error
-	IsEmailReminderSent(ctx context.Context, reminderID uuid.UUID) (bool, error)
-	DeleteSentEmailReminder(ctx context.Context, reminderID uuid.UUID) error
+	IsEmailReminderSent(ctx context.Context, reminderID, recipientID uuid.UUID) (bool, error)
+	DeleteSentEmailReminder(ctx context.Context, reminderID, recipientID uuid.UUID) error
 	ResetReminderSending(ctx context.Context, id uuid.UUID) error
 	MarkSendingReminderPending(ctx context.Context, id uuid.UUID, nextAttemptAt time.Time) error
 	// MarkReminderSkipped marks a pending or sending reminder as skipped. It is
@@ -105,11 +105,14 @@ type ListFilter struct {
 type SaveSentEmailReminderParams struct {
 	ID         uuid.UUID
 	ReminderID uuid.UUID
-	ScopeID    uuid.UUID
-	Email      string
-	Subject    string
-	PlainBody  string
-	SentAt     time.Time
+	// ScopeID is the user_id of the recipient the email was sent to. Since the
+	// per-recipient fan-out (issue #159) it is not necessarily the reminder
+	// owner: one audit row is stored per recipient.
+	ScopeID   uuid.UUID
+	Email     string
+	Subject   string
+	PlainBody string
+	SentAt    time.Time
 }
 
 // Notifier dispatches a notification to a recipient.
@@ -125,6 +128,12 @@ type SMSSender interface {
 // ContactResolver resolves the delivery channel and address for an owner.
 type ContactResolver interface {
 	Resolve(ctx context.Context, scope uuid.UUID) (Contact, error)
+}
+
+// PropertyRecipientLister lists users (besides the owner) who actively share
+// the property and must receive its reminders (issue #159).
+type PropertyRecipientLister interface {
+	ListActiveRecipientIDs(ctx context.Context, propertyID uuid.UUID) ([]uuid.UUID, error)
 }
 
 // Notification is a channel-agnostic outbound message.
