@@ -24,3 +24,21 @@ func (testOwnerPolicy) Role(_ context.Context, actor, scope uuid.UUID) (sharedpo
 func (testOwnerPolicy) RoleForProperty(_ context.Context, _, _ uuid.UUID) (sharedpolicy.Role, error) {
 	return sharedpolicy.RoleOwner, nil
 }
+
+// staticRolePolicy returns a fixed role for every RoleForProperty lookup. It
+// backs privacy/outcome tests of the property service: how a given policy
+// outcome (owner, member, none, suspended) maps to service errors (T9).
+type staticRolePolicy struct {
+	role sharedpolicy.Role
+}
+
+func (p staticRolePolicy) Role(_ context.Context, actor, scope uuid.UUID) (sharedpolicy.Role, error) {
+	if actor == scope {
+		return sharedpolicy.RoleOwner, nil
+	}
+	return sharedpolicy.RoleNone, nil
+}
+
+func (p staticRolePolicy) RoleForProperty(_ context.Context, _, _ uuid.UUID) (sharedpolicy.Role, error) {
+	return p.role, nil
+}

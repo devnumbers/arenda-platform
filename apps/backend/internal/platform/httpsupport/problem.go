@@ -29,6 +29,15 @@ func Problem(ctx context.Context, title, detail string) openapi.Problem {
 	}
 }
 
+// ProblemWithCode builds an RFC 7807 problem detail carrying a machine-readable
+// error code for failures the client must distinguish from the generic HTTP
+// status (e.g. "membership_suspended", T9).
+func ProblemWithCode(ctx context.Context, title, detail, code string) openapi.Problem {
+	p := Problem(ctx, title, detail)
+	p.Code = StringPtr(code)
+	return p
+}
+
 // ProblemWithFieldErrors builds an RFC 7807 problem detail carrying field-level
 // validation errors bound to specific JSON keys.
 func ProblemWithFieldErrors(ctx context.Context, title, detail string, fieldErrors []openapi.ProblemError) openapi.Problem {

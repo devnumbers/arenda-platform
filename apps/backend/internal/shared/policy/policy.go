@@ -21,6 +21,12 @@ const (
 	// RoleViewer is the role of a property member with view-only access (issue
 	// #156, T3): read-only of all object data, no exceptions.
 	RoleViewer Role = "viewer"
+	// RoleSuspended is the role of an actor whose property membership is
+	// suspended because their tariff's active-property limit is exceeded
+	// (issue #158, T4). It grants no capabilities, but unlike RoleNone it is
+	// distinguishable: the property page entry point maps it to a dedicated
+	// "access suspended" outcome so the UI can show an honest screen (T9).
+	RoleSuspended Role = "suspended"
 )
 
 // Policy is the single point of authorization for the application. It maps an
@@ -40,9 +46,10 @@ type Policy interface {
 	// specific property (issue #156, T3). It resolves the property's owner and
 	// any membership the actor holds on that property: the owner gets
 	// RoleOwner, a property member gets RoleFullAccess or RoleViewer, and
-	// anyone else gets RoleNone. Callers that render object privacy must map
-	// RoleNone to a "not found" outcome so the existence of an object is never
-	// revealed.
+	// anyone else gets RoleNone. A suspended membership gets RoleSuspended
+	// (T9): no capabilities, but distinguishable from RoleNone. Callers that
+	// render object privacy must map RoleNone to a "not found" outcome so the
+	// existence of an object is never revealed.
 	RoleForProperty(ctx context.Context, actor, propertyID uuid.UUID) (Role, error)
 }
 

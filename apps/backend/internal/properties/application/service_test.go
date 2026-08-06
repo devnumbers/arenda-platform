@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -1022,5 +1023,68 @@ func TestPropertyService_ArchiveProperty_OpenLeaseStillRejected(t *testing.T) {
 	}
 	if len(billing.calls) != 0 {
 		t.Errorf("expected no lifecycle calls on rejected manual archive, got %v", billing.calls)
+	}
+}
+
+// TestGetProperty_AccessOutcomes verifies the page-entry privacy policy (issue
+// #156 T3, T9): the owner and active members read the object; a missing
+// membership (including a revoked one) is indistinguishable from a missing
+// object (ErrNotFound); a suspended membership is the single exception and
+// yields ErrAccessSuspended so the transport can answer 403 with the
+// membership_suspended code.
+func TestGetProperty_AccessOutcomes(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	tests := []struct {
+		name    string
+		role    sharedpolicy.Role
+		wantErr error
+	}{
+		{"owner reads the object", sharedpolicy.RoleOwner, nil},
+		{"active full-access member reads the object", sharedpolicy.RoleFullAccess, nil},
+		{"active viewer reads the object", sharedpolicy.RoleViewer, nil},
+		{"no membership looks like not found", sharedpolicy.RoleNone, ErrNotFound},
+		{"revoked membership looks like not found", sharedpolicy.RoleNone, ErrNotFound},
+		{"suspended membership signals access suspended", sharedpolicy.RoleSuspended, ErrAccessSuspended},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newFakePropertyRepo(
+				domain.Property{ID: propertyID, OwnerID: ownerID, Name: "Obj", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+			)
+			svc := NewPropertyService(
+				repo,
+				fakePropertyPhotoRepo{},
+				fakePropertyPhotoStorage{},
+				fakeOccupancyProvider{},
+				nil,
+				nil,
+				stubLeaseRepo{},
+				fakePropertyTxBeginner{},
+				nil,
+				fakePropertyClock{now: time.Now()},
+				fakeTzResolver{},
+				staticRolePolicy{role: tt.role},
+				nil,
+			)
+
+			_, err := svc.GetProperty(ctx, ownerID, propertyID)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("GetProperty error = %v, want %v", err, tt.wantErr)
+			}
+
+			// GetPropertyWithOpenLease goes through GetProperty, so a denial
+			// must propagate unchanged (the success path is not exercised
+			// here: the shared lease stubs report no-open-lease with the
+			// properties sentinel, which the service does not translate).
+			if tt.wantErr != nil {
+				_, _, err = svc.GetPropertyWithOpenLease(ctx, ownerID, propertyID)
+				if !errors.Is(err, tt.wantErr) {
+					t.Errorf("GetPropertyWithOpenLease error = %v, want %v", err, tt.wantErr)
+				}
+			}
+		})
 	}
 }

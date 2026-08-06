@@ -17,6 +17,13 @@ var (
 	// operation — e.g. a viewer attempting an edit, or a member attempting a
 	// lifecycle change (T3, issue #156).
 	ErrForbidden = errors.New("forbidden")
+	// ErrAccessSuspended is returned when the actor's membership on the
+	// property is suspended because their tariff's active-property limit is
+	// exceeded (issue #158, T4). It is the single exception to the privacy
+	// 404-policy: the suspended recipient gets a distinguishable signal so the
+	// UI can show an honest "limit exceeded" screen (T9); every other access
+	// failure stays an indistinguishable ErrNotFound.
+	ErrAccessSuspended = errors.New("membership access suspended")
 
 	ErrAddressSuggestFailed = errors.New("address suggestion request failed")
 

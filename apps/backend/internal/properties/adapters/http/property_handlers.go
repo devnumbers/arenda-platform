@@ -65,6 +65,10 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))
 	case errors.Is(err, propertiesapp.ErrForbidden):
 		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
+	case errors.Is(err, propertiesapp.ErrAccessSuspended):
+		// The suspended recipient gets a distinguishable 403 so the frontend
+		// can show the honest "tariff limit exceeded" screen (T9, issue #158).
+		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.ProblemWithCode(r.Context(), "Forbidden", "Доступ к объекту приостановлен: превышен лимит объектов по тарифу", "membership_suspended"))
 	case errors.Is(err, propertiesapp.ErrLimitExceeded):
 		httpsupport.WriteProblem(w, http.StatusPaymentRequired, httpsupport.Problem(r.Context(), "Limit exceeded", "Превышен лимит активных объектов"))
 	case errors.Is(err, propertiesapp.ErrArchivedProperty):

@@ -275,7 +275,11 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 	if err != nil {
 		return fmt.Errorf("resolve role: %w", err)
 	}
-	if role == sharedpolicy.RoleNone {
+	if role == sharedpolicy.RoleNone || role == sharedpolicy.RoleSuspended {
+		// A suspended membership stays indistinguishable from no access here:
+		// the object is hidden from the recipient, so self-exit keeps the
+		// privacy-preserving not-found (T9 lifts the suspension signal only at
+		// the property page entry point).
 		return domain.ErrMemberNotFound
 	}
 	if role == sharedpolicy.RoleOwner {

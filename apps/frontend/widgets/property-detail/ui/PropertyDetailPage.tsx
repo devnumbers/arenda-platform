@@ -24,6 +24,7 @@ import {useOperationCategories} from '@/features/operation-categories/api';
 import {formatDateForApi} from '@/entities/operation/lib/dates';
 import {ApiError} from '@/shared/api/errors';
 import {findCurrentLease, getPropertyPageStatus,} from '../lib/get-property-page-status';
+import {resolvePropertyDetailError} from '../lib/resolve-property-detail-error';
 import {PropertyDetailHeader} from './PropertyDetailHeader';
 import {PropertyGallery} from './PropertyGallery';
 import {PropertyStatusSection} from './PropertyStatusSection';
@@ -44,6 +45,8 @@ import {PropertyEndLeaseModal} from './PropertyEndLeaseModal';
 import {PropertySuccessBanner} from './PropertySuccessBanner';
 import {PropertyDetailLoading} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
+import {PropertyNotFoundScreen} from './PropertyNotFoundScreen';
+import {PropertySuspendedScreen} from './PropertySuspendedScreen';
 import styles from './PropertyDetailPage.module.css';
 
 function showMutationError(error: ApiError): void {
@@ -282,6 +285,13 @@ export function PropertyDetailPage(): JSX.Element {
         leasesQuery.isError ||
         summaryQuery.isError;
 
+    // Разводим только ошибку основного запроса объекта: 404 (нет объекта
+    // или нет доступа) и 403 membership_suspended (лимит тарифа) получают
+    // свои экраны; ошибки дочерних запросов остаются на generic-экране.
+    const propertyErrorKind = propertyQuery.isError
+        ? resolvePropertyDetailError(propertyQuery.error)
+        : null;
+
     const isLoading = propertyQuery.isPending || leasesQuery.isPending;
 
     return (
@@ -304,7 +314,16 @@ export function PropertyDetailPage(): JSX.Element {
 
             {isLoading && <PropertyDetailLoading/>}
 
-            {!isLoading && (hasAnyError || !property) && (
+            {!isLoading && propertyErrorKind === 'not_found' && (
+                <PropertyNotFoundScreen/>
+            )}
+
+            {!isLoading && propertyErrorKind === 'suspended' && (
+                <PropertySuspendedScreen/>
+            )}
+
+            {!isLoading && (propertyErrorKind === null || propertyErrorKind === 'generic') &&
+                (hasAnyError || !property) && (
                 <PropertyDetailError
                     onRetry={() => {
                         propertyQuery.refetch();

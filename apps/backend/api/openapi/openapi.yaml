@@ -283,6 +283,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/MembershipSuspended'
     patch:
       operationId: updateProperty
       security:
@@ -4390,6 +4392,12 @@ components:
           type: string
         requestId:
           type: string
+        code:
+          type: string
+          description: >-
+            Machine-readable error code for failures the client must
+            distinguish from the generic HTTP status (e.g.
+            `membership_suspended`).
         errors:
           type: array
           items:
@@ -5722,6 +5730,20 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Problem'
+    MembershipSuspended:
+      description: >-
+        Access to the property is suspended because the recipient's tariff
+        active-property limit is exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: about:blank
+            title: Forbidden
+            status: 403
+            detail: "Доступ к объекту приостановлен: превышен лимит объектов по тарифу"
+            code: membership_suspended
     InternalServerError:
       description: Internal server error
       content:

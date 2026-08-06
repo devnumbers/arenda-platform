@@ -343,6 +343,12 @@ func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) 
 		return domain.Property{}, fmt.Errorf("resolve role: %w", err)
 	}
 	if !sharedpolicy.CanView(role) {
+		// A suspended membership is the single exception to the privacy rule:
+		// the recipient gets a distinguishable signal so the UI can show the
+		// "tariff limit exceeded" screen (T9, issue #158).
+		if role == sharedpolicy.RoleSuspended {
+			return domain.Property{}, ErrAccessSuspended
+		}
 		// Privacy: a missing property and lack of access both look like 404 so
 		// the existence of an object is never revealed (issue #156, T3).
 		return domain.Property{}, ErrNotFound

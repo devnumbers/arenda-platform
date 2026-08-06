@@ -21,13 +21,15 @@ func (f fakeOwnerResolver) GetOwnerID(_ context.Context, propertyID uuid.UUID) (
 	return uuid.Nil, domain.ErrMemberNotFound
 }
 
-// fakeMemberRepo holds two lookup tables for policy tests: rolesByProperty maps
-// (propertyID, userID) to a role for GetRole, and maxByOwner maps (userID,
-// ownerID) to the strongest role across the owner's properties for
-// MaxRoleByOwner. The remaining MembershipRepository methods panic since they
-// are not exercised here.
+// fakeMemberRepo holds lookup tables for policy tests: rolesByProperty maps
+// (propertyID, userID) to a role for GetRole, memberships maps (propertyID,
+// userID) to a full membership row for GetByPropertyAndUser, and maxByOwner
+// maps (userID, ownerID) to the strongest role across the owner's properties
+// for MaxRoleByOwner. The remaining MembershipRepository methods panic since
+// they are not exercised here.
 type fakeMemberRepo struct {
 	rolesByProperty map[[2]uuid.UUID]domain.Role
+	memberships     map[[2]uuid.UUID]domain.Membership
 	maxByOwner      map[[2]uuid.UUID]domain.Role
 }
 
@@ -36,6 +38,13 @@ func (f fakeMemberRepo) GetRole(_ context.Context, propertyID, userID uuid.UUID)
 		return role, nil
 	}
 	return "", domain.ErrMemberNotFound
+}
+
+func (f fakeMemberRepo) GetByPropertyAndUser(_ context.Context, propertyID, userID uuid.UUID) (domain.Membership, error) {
+	if m, ok := f.memberships[[2]uuid.UUID{propertyID, userID}]; ok {
+		return m, nil
+	}
+	return domain.Membership{}, domain.ErrMemberNotFound
 }
 
 func (f fakeMemberRepo) MaxRoleByOwner(_ context.Context, userID, ownerID uuid.UUID) (domain.Role, error) {
@@ -50,10 +59,6 @@ func (f fakeMemberRepo) Create(context.Context, domain.Membership) (domain.Membe
 }
 
 func (f fakeMemberRepo) GetByID(context.Context, uuid.UUID, uuid.UUID) (domain.Membership, error) {
-	panic("not implemented")
-}
-
-func (f fakeMemberRepo) GetByPropertyAndUser(context.Context, uuid.UUID, uuid.UUID) (domain.Membership, error) {
 	panic("not implemented")
 }
 
@@ -113,14 +118,26 @@ func TestMembershipPolicy_RoleForProperty(t *testing.T) {
 
 	owner := uuid.New()
 	member := uuid.New()
+	suspended := uuid.New()
 	stranger := uuid.New()
 	property := uuid.New()
 	missingProperty := uuid.New()
 
 	resolver := fakeOwnerResolver{property: owner}
 	repo := fakeMemberRepo{
-		rolesByProperty: map[[2]uuid.UUID]domain.Role{
-			{property, member}: domain.RoleFullAccess,
+		memberships: map[[2]uuid.UUID]domain.Membership{
+			{property, member}: {
+				PropertyID: property,
+				UserID:     member,
+				Role:       domain.RoleFullAccess,
+				Status:     domain.MemberStatusActive,
+			},
+			{property, suspended}: {
+				PropertyID: property,
+				UserID:     suspended,
+				Role:       domain.RoleViewer,
+				Status:     domain.MemberStatusSuspended,
+			},
 		},
 	}
 	policy := NewMembershipPolicy(resolver, repo)
@@ -133,6 +150,7 @@ func TestMembershipPolicy_RoleForProperty(t *testing.T) {
 	}{
 		{"owner is owner", owner, property, sharedpolicy.RoleOwner},
 		{"full member", member, property, sharedpolicy.RoleFullAccess},
+		{"suspended member is distinguishable", suspended, property, sharedpolicy.RoleSuspended},
 		{"stranger gets none", stranger, property, sharedpolicy.RoleNone},
 		{"missing property looks like none", owner, missingProperty, sharedpolicy.RoleNone},
 	}
@@ -159,7 +177,14 @@ func TestMembershipPolicy_ViewerMember(t *testing.T) {
 
 	resolver := fakeOwnerResolver{property: owner}
 	repo := fakeMemberRepo{
-		rolesByProperty: map[[2]uuid.UUID]domain.Role{{property, viewer}: domain.RoleViewer},
+		memberships: map[[2]uuid.UUID]domain.Membership{
+			{property, viewer}: {
+				PropertyID: property,
+				UserID:     viewer,
+				Role:       domain.RoleViewer,
+				Status:     domain.MemberStatusActive,
+			},
+		},
 	}
 	policy := NewMembershipPolicy(resolver, repo)
 

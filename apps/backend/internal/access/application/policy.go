@@ -21,8 +21,9 @@ import (
 // access grants RoleViewer, and no membership grants RoleNone (issue #157).
 //
 // Property-scoped data is resolved via the property's owner and any membership
-// the actor holds: owner → RoleOwner, member → RoleFullAccess/RoleViewer,
-// anyone else → RoleNone.
+// the actor holds: owner → RoleOwner, active member →
+// RoleFullAccess/RoleViewer, suspended member → RoleSuspended (T9), anyone
+// else → RoleNone.
 type MembershipPolicy struct {
 	owners  PropertyOwnerResolver
 	members MembershipRepository
@@ -60,14 +61,14 @@ func (p *MembershipPolicy) Role(ctx context.Context, actor, scope uuid.UUID) (sh
 
 // RoleForProperty returns the actor's role over a specific property. The
 // property's existence is never revealed: a missing property, a missing
-// membership, and lack of access all resolve to RoleNone, so callers can map
-// RoleNone to a "not found" outcome and preserve object privacy.
+// membership, and a revoked membership all resolve to RoleNone, so callers can
+// map RoleNone to a "not found" outcome and preserve object privacy.
 //
-// A suspended membership is treated as no access (RoleNone): the membership's
-// role row is filtered out at the SQL level (status = 'active' in
-// GetPropertyMemberRole), so a suspended recipient is indistinguishable from a
-// non-member for authorization purposes. The UI distinguishes suspended for a
-// dedicated screen (T9); here, privacy-preserving RoleNone is returned.
+// The single exception is a suspended membership (the recipient's tariff
+// active-property limit is exceeded, issue #158 T4): it resolves to
+// RoleSuspended, which grants no capabilities but lets the property page entry
+// point return a distinguishable "access suspended" signal for the dedicated
+// UI screen (T9).
 func (p *MembershipPolicy) RoleForProperty(ctx context.Context, actor, propertyID uuid.UUID) (sharedpolicy.Role, error) {
 	owner, err := p.owners.GetOwnerID(ctx, propertyID)
 	if err != nil {
@@ -81,14 +82,17 @@ func (p *MembershipPolicy) RoleForProperty(ctx context.Context, actor, propertyI
 	if actor == owner {
 		return sharedpolicy.RoleOwner, nil
 	}
-	role, err := p.members.GetRole(ctx, propertyID, actor)
+	membership, err := p.members.GetByPropertyAndUser(ctx, propertyID, actor)
 	if err != nil {
 		if errors.Is(err, domain.ErrMemberNotFound) {
 			return sharedpolicy.RoleNone, nil
 		}
 		return sharedpolicy.RoleNone, err
 	}
-	switch role {
+	if membership.IsSuspended() {
+		return sharedpolicy.RoleSuspended, nil
+	}
+	switch membership.Role {
 	case domain.RoleFullAccess:
 		return sharedpolicy.RoleFullAccess, nil
 	case domain.RoleViewer:

@@ -200,6 +200,44 @@ func TestMembershipRepository_UpdateRoleAndDelete(t *testing.T) {
 	}
 }
 
+// TestMembershipRepository_SuspendedMembershipVisible verifies the T9 lookup
+// contract: GetByPropertyAndUser sees a suspended membership (so the policy
+// can return RoleSuspended), while the active-only GetRole projection treats
+// it as absent.
+func TestMembershipRepository_SuspendedMembershipVisible(t *testing.T) {
+	pool := setupAccessDB(t)
+	ctx, tx, cleanup := beginAccessTx(t, pool)
+	defer cleanup()
+
+	q := genpostgres.New(tx)
+	owner := createAccessTestUser(t, ctx, q)
+	other := createAccessTestUser(t, ctx, q)
+	property := createAccessTestProperty(t, ctx, q, owner)
+
+	repo := NewMembershipRepository(tx)
+	id, _ := uuid.NewV7()
+	if _, err := repo.Create(ctx, domain.Membership{
+		ID: id, PropertyID: property, UserID: other, Role: domain.RoleViewer, GrantedBy: owner,
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := repo.Suspend(ctx, id, property); err != nil {
+		t.Fatalf("Suspend: %v", err)
+	}
+
+	got, err := repo.GetByPropertyAndUser(ctx, property, other)
+	if err != nil {
+		t.Fatalf("GetByPropertyAndUser: %v", err)
+	}
+	if !got.IsSuspended() {
+		t.Errorf("expected suspended membership, got status %q", got.Status)
+	}
+
+	if _, err := repo.GetRole(ctx, property, other); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("expected GetRole to hide suspended membership as ErrMemberNotFound, got %v", err)
+	}
+}
+
 func TestOwnerResolver_ReturnsOwner(t *testing.T) {
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
