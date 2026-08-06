@@ -1,10 +1,13 @@
 export { accessKeys } from './keys';
 export {
     usePropertyAccessMembers,
-    useCreatePropertyAccessMember,
+    useInvitePropertyAccessMember,
     useUpdatePropertyAccessMember,
+    useUpdatePropertyAccessInvitation,
+    useResendPropertyAccessInvitation,
+    useCancelPropertyAccessInvitation,
     useDeletePropertyAccessMember,
     useLeaveProperty,
-    type AddMemberInput,
+    type InviteMemberInput,
     type ChangeMemberRoleInput,
 } from './hooks';

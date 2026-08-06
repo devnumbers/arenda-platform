@@ -81,6 +81,9 @@ const propertyContacts = {
 const access = {
   memberAdded: ((options?) =>
     notify.success('Участник добавлен', options)) satisfies ScenarioFn,
+  invited: ((options?) =>
+    notify.success('Приглашение отправлено', options)) satisfies ScenarioFn,
+  inviteError: errorScenario('Не удалось отправить приглашение'),
   addError: errorScenario('Не удалось добавить участника'),
   roleChanged: ((options?) =>
     notify.success('Роль изменена', options)) satisfies ScenarioFn,
@@ -88,6 +91,12 @@ const access = {
   revoked: ((options?) =>
     notify.success('Доступ отозван', options)) satisfies ScenarioFn,
   revokeError: errorScenario('Не удалось отозвать доступ'),
+  invitationResent: ((options?) =>
+    notify.success('Приглашение отправлено повторно', options)) satisfies ScenarioFn,
+  resendError: errorScenario('Не удалось переотправить приглашение'),
+  invitationCancelled: ((options?) =>
+    notify.success('Приглашение отменено', options)) satisfies ScenarioFn,
+  cancelInvitationError: errorScenario('Не удалось отменить приглашение'),
   left: ((options?) =>
     notify.success('Вы покинули объект', options)) satisfies ScenarioFn,
   leaveError: errorScenario('Не удалось покинуть объект'),

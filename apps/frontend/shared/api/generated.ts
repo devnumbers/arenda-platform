@@ -378,6 +378,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{propertyId}/access/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invite a user by email to shared access to the property
+         * @description Invites a user by email. When the email belongs to a registered user, the membership is activated instantly (equivalent to adding a member, no invite email is sent); otherwise a pending invitation is stored and a single invite email is sent. A pending invitation never expires and activates automatically when a user registers with the same email. The response uses the shared member shape: status "active"/"suspended" for an instant membership, "pending" for a stored invitation.
+         */
+        post: operations["createPropertyAccessInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/access/invitations/{invitationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Cancel a pending invitation silently (no email is sent) */
+        delete: operations["deletePropertyAccessInvitation"];
+        options?: never;
+        head?: never;
+        /** Change a pending invitation's role (no new email is sent) */
+        patch: operations["updatePropertyAccessInvitation"];
+        trace?: never;
+    };
+    "/properties/{propertyId}/access/invitations/{invitationId}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resend the invite email (24-hour cooldown) */
+        post: operations["resendPropertyAccessInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/free-reminders/upcoming": {
         parameters: {
             query?: never;
@@ -1770,6 +1825,8 @@ export interface components {
             detail?: string;
             instance?: string;
             requestId?: string;
+            /** @description Machine-readable error code for failures the client must distinguish from the generic HTTP status (e.g. `membership_suspended`). */
+            code?: string;
             errors?: components["schemas"]["ProblemError"][];
         };
         ProblemError: {
@@ -1986,26 +2043,39 @@ export interface components {
         PropertyAccessMemberResponse: {
             /**
              * Format: uuid
-             * @description Membership id; null for the synthesized owner row.
+             * @description Membership id; null for the synthesized owner row. For a pending invitation row this is the invitation id.
              */
             id?: string | null;
-            /** Format: uuid */
-            user_id: string;
+            /**
+             * Format: uuid
+             * @description Participant user id; null for a pending invitation row.
+             */
+            user_id: string | null;
+            /**
+             * Format: email
+             * @description Invitee email; filled only on pending invitation rows, null for registered participants.
+             */
+            email?: string | null;
             role: components["schemas"]["PropertyAccessMemberRole"];
             is_owner: boolean;
             /** @description Participant display name (name and surname, or a masked phone). Never the raw phone or email. */
             display_name?: string;
             has_email?: boolean;
             /**
-             * @description Membership lifecycle status. "suspended" means the recipient's tariff slot was exceeded, so the object is hidden from the recipient's list and grants no access until a slot frees up.
+             * @description Membership lifecycle status. "suspended" means the recipient's tariff slot was exceeded, so the object is hidden from the recipient's list and grants no access until a slot frees up. "pending" is an email invitation waiting for the invitee to register.
              * @enum {string}
              */
-            status: "active" | "suspended";
+            status: "active" | "suspended" | "pending";
             /**
              * Format: date-time
              * @description When the membership was suspended; null when active.
              */
             suspended_at?: string | null;
+            /**
+             * Format: date-time
+             * @description When the invite email was last sent; filled only on pending invitation rows.
+             */
+            last_sent_at?: string | null;
         };
         PropertyAccessMembersResponse: {
             items: components["schemas"]["PropertyAccessMemberResponse"][];
@@ -2016,6 +2086,15 @@ export interface components {
              * @description Registered user to grant access to.
              */
             user_id: string;
+            /** @enum {string} */
+            role: "full_access" | "viewer";
+        };
+        PropertyAccessInvitationCreateRequest: {
+            /**
+             * Format: email
+             * @description Invitee email. A registered email activates the membership instantly; an unregistered email becomes a pending invitation.
+             */
+            email: string;
             /** @enum {string} */
             role: "full_access" | "viewer";
         };
@@ -2500,6 +2579,24 @@ export interface components {
                 "application/json": components["schemas"]["Problem"];
             };
         };
+        /** @description Access to the property is suspended because the recipient's tariff active-property limit is exceeded */
+        MembershipSuspended: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "about:blank",
+                 *       "title": "Forbidden",
+                 *       "status": 403,
+                 *       "detail": "Доступ к объекту приостановлен: превышен лимит объектов по тарифу",
+                 *       "code": "membership_suspended"
+                 *     }
+                 */
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Internal server error */
         InternalServerError: {
             headers: {
@@ -2839,6 +2936,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["MembershipSuspended"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -3414,6 +3512,125 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    createPropertyAccessInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyAccessInvitationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Member added instantly or pending invitation created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAccessMemberResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deletePropertyAccessInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                invitationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Invitation cancelled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updatePropertyAccessInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                invitationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyAccessMemberUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Invitation role updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAccessMemberResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    resendPropertyAccessInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                invitationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Invite email resent */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Resend cooldown has not elapsed yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     listUpcomingFreeReminders: {

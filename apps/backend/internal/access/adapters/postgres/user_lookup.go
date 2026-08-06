@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
+	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	identitydomain "github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 )
 
@@ -38,14 +40,19 @@ func (a *UserLookupAdapter) GetByID(ctx context.Context, id uuid.UUID) (applicat
 }
 
 // GetByEmail resolves a registered user by email. Used by the member lookup
-// path (the email is not stored and never appears in audit context).
+// and email invitation paths (the email is not stored and never appears in
+// audit context). A missing user maps to domain.ErrUserNotFound so the
+// invitation flow can distinguish "unregistered email" from real failures.
 func (a *UserLookupAdapter) GetByEmail(ctx context.Context, email string) (application.MemberUser, error) {
 	parsed, err := identitydomain.NewEmail(email)
 	if err != nil {
-		return application.MemberUser{}, errors.New("user not found")
+		return application.MemberUser{}, domain.ErrUserNotFound
 	}
 	u, err := a.users.GetByEmail(ctx, parsed)
 	if err != nil {
+		if errors.Is(err, identityapp.ErrNotFound) {
+			return application.MemberUser{}, domain.ErrUserNotFound
+		}
 		return application.MemberUser{}, fmt.Errorf("get user by email: %w", err)
 	}
 	return toMemberUser(u), nil

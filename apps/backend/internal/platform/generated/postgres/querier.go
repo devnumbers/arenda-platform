@@ -53,6 +53,9 @@ type Querier interface {
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
 	CreatePropertyContact(ctx context.Context, arg CreatePropertyContactParams) (PropertyContact, error)
 	CreatePropertyMember(ctx context.Context, arg CreatePropertyMemberParams) (PropertyMember, error)
+	// Pending property member invitations by email (T5, issue #161). Emails are
+	// stored lowercase; lookups compare with lower() on the parameter side too.
+	CreatePropertyMemberInvitation(ctx context.Context, arg CreatePropertyMemberInvitationParams) (PropertyMemberInvitation, error)
 	CreatePropertyMemberWithStatus(ctx context.Context, arg CreatePropertyMemberWithStatusParams) (PropertyMember, error)
 	CreatePropertyPhoto(ctx context.Context, arg CreatePropertyPhotoParams) (PropertyPhoto, error)
 	CreateRecurringOperation(ctx context.Context, arg CreateRecurringOperationParams) (RecurringOperation, error)
@@ -82,6 +85,7 @@ type Querier interface {
 	DeleteProperty(ctx context.Context, arg DeletePropertyParams) error
 	DeletePropertyContact(ctx context.Context, arg DeletePropertyContactParams) error
 	DeletePropertyMember(ctx context.Context, arg DeletePropertyMemberParams) error
+	DeletePropertyMemberInvitation(ctx context.Context, arg DeletePropertyMemberInvitationParams) error
 	DeletePropertyPhoto(ctx context.Context, id pgtype.UUID) error
 	DeleteRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) error
 	DeleteRecurringOperationsByProperty(ctx context.Context, arg DeleteRecurringOperationsByPropertyParams) error
@@ -137,6 +141,8 @@ type Querier interface {
 	GetPropertyFinanceByMonth(ctx context.Context, arg GetPropertyFinanceByMonthParams) ([]GetPropertyFinanceByMonthRow, error)
 	GetPropertyMember(ctx context.Context, arg GetPropertyMemberParams) (PropertyMember, error)
 	GetPropertyMemberByPropertyAndUser(ctx context.Context, arg GetPropertyMemberByPropertyAndUserParams) (PropertyMember, error)
+	GetPropertyMemberInvitation(ctx context.Context, arg GetPropertyMemberInvitationParams) (PropertyMemberInvitation, error)
+	GetPropertyMemberInvitationByEmail(ctx context.Context, arg GetPropertyMemberInvitationByEmailParams) (PropertyMemberInvitation, error)
 	// Returns the role of an ACTIVE membership only. A suspended membership is
 	// treated as no access: the SQL-level status filter makes a suspended
 	// recipient indistinguishable from a non-member for authorization purposes
@@ -220,6 +226,9 @@ type Querier interface {
 	ListOperationsByRecurringOperation(ctx context.Context, recurringOperationID pgtype.UUID) ([]ListOperationsByRecurringOperationRow, error)
 	ListOverdueRentOperationsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListOverdueRentOperationsByOwnerRow, error)
 	ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error)
+	// All pending invitations for an email, oldest first: activation at
+	// registration is FIFO across properties (T5, issue #161).
+	ListPendingInvitationsByEmail(ctx context.Context, email string) ([]PropertyMemberInvitation, error)
 	ListPendingOperationsWithPastDate(ctx context.Context, arg ListPendingOperationsWithPastDateParams) ([]Operation, error)
 	ListPendingPayments(ctx context.Context, arg ListPendingPaymentsParams) ([]SubscriptionPayment, error)
 	ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
@@ -227,6 +236,7 @@ type Querier interface {
 	ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdminParams) ([]ListPropertiesAdminRow, error)
 	ListPropertyContactsAdmin(ctx context.Context, arg ListPropertyContactsAdminParams) ([]PropertyContact, error)
 	ListPropertyContactsByProperty(ctx context.Context, arg ListPropertyContactsByPropertyParams) ([]PropertyContact, error)
+	ListPropertyMemberInvitations(ctx context.Context, propertyID pgtype.UUID) ([]PropertyMemberInvitation, error)
 	ListPropertyMembers(ctx context.Context, propertyID pgtype.UUID) ([]PropertyMember, error)
 	ListPropertyMembersByUser(ctx context.Context, userID pgtype.UUID) ([]ListPropertyMembersByUserRow, error)
 	ListPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) ([]PropertyPhoto, error)
@@ -299,6 +309,8 @@ type Querier interface {
 	UpdatePaymentMethodActiveByID(ctx context.Context, arg UpdatePaymentMethodActiveByIDParams) (PaymentMethod, error)
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)
 	UpdatePropertyContact(ctx context.Context, arg UpdatePropertyContactParams) (PropertyContact, error)
+	UpdatePropertyMemberInvitationLastSentAt(ctx context.Context, arg UpdatePropertyMemberInvitationLastSentAtParams) error
+	UpdatePropertyMemberInvitationRole(ctx context.Context, arg UpdatePropertyMemberInvitationRoleParams) (PropertyMemberInvitation, error)
 	UpdatePropertyMemberRole(ctx context.Context, arg UpdatePropertyMemberRoleParams) (PropertyMember, error)
 	UpdateRecurringOperation(ctx context.Context, arg UpdateRecurringOperationParams) (RecurringOperation, error)
 	UpdateRecurringOperationReminderOffset(ctx context.Context, arg UpdateRecurringOperationReminderOffsetParams) (int64, error)

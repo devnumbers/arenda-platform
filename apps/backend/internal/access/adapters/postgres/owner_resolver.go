@@ -35,3 +35,17 @@ func (r *OwnerResolver) GetOwnerID(ctx context.Context, propertyID uuid.UUID) (u
 	}
 	return pgconv.UUIDFromPgtype(row.OwnerID), nil
 }
+
+// GetTitle returns the display name of the property, used by the invite email
+// text (issue #161, T5). A missing property maps to ErrMemberNotFound, mirroring
+// GetOwnerID.
+func (r *OwnerResolver) GetTitle(ctx context.Context, propertyID uuid.UUID) (string, error) {
+	row, err := postgres.New(r.db).GetPropertyByID(ctx, pgconv.UUIDToPgtype(propertyID))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", domain.ErrMemberNotFound
+		}
+		return "", err
+	}
+	return row.Name, nil
+}

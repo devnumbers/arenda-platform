@@ -60,6 +60,23 @@ const (
 	// system actor. See issue #158 (T4).
 	ActionPropertyMemberReactivated Action = "property_member.reactivated"
 
+	// ActionPropertyMemberInvitationInvited records a pending email invitation
+	// created for a property (issue #161, T5). Invitation lifecycle context
+	// never carries the invitee's email (PII, ADR 0020); only ids and the role.
+	ActionPropertyMemberInvitationInvited Action = "property_member_invitation.invited"
+	// ActionPropertyMemberInvitationResent records a manual invite email resend.
+	ActionPropertyMemberInvitationResent Action = "property_member_invitation.resent"
+	// ActionPropertyMemberInvitationRoleChanged records a role change on a
+	// pending invitation (no new email is sent).
+	ActionPropertyMemberInvitationRoleChanged Action = "property_member_invitation.role_changed"
+	// ActionPropertyMemberInvitationCancelled records a pending invitation
+	// cancelled silently by a manager.
+	ActionPropertyMemberInvitationCancelled Action = "property_member_invitation.cancelled"
+	// ActionPropertyMemberInvitationActivated records a pending invitation
+	// turned into a membership when the invitee registered with the matching
+	// email. Recorded by the system actor.
+	ActionPropertyMemberInvitationActivated Action = "property_member_invitation.activated"
+
 	ActionLeaseCreated   Action = "lease.created"
 	ActionLeaseUpdated   Action = "lease.updated"
 	ActionLeaseCompleted Action = "lease.completed"
@@ -99,19 +116,22 @@ const (
 type EntityType string
 
 const (
-	EntityUser                EntityType = "user"
-	EntityProperty            EntityType = "property"
-	EntityPropertyPhoto       EntityType = "property_photo"
-	EntityPropertyContact     EntityType = "property_contact"
-	EntityPropertyMember      EntityType = "property_member"
-	EntityLease               EntityType = "lease"
-	EntityTenantContact       EntityType = "tenant_contact"
-	EntityOperation           EntityType = "operation"
-	EntityRecurringOperation  EntityType = "recurring_operation"
-	EntityOperationCategory   EntityType = "operation_category"
-	EntitySubscription        EntityType = "subscription"
-	EntityPaymentMethod       EntityType = "payment_method"
-	EntitySubscriptionPayment EntityType = "subscription_payment"
+	EntityUser            EntityType = "user"
+	EntityProperty        EntityType = "property"
+	EntityPropertyPhoto   EntityType = "property_photo"
+	EntityPropertyContact EntityType = "property_contact"
+	EntityPropertyMember  EntityType = "property_member"
+	// EntityPropertyMemberInvitation is a pending email invitation to shared
+	// access (issue #161, T5).
+	EntityPropertyMemberInvitation EntityType = "property_member_invitation"
+	EntityLease                    EntityType = "lease"
+	EntityTenantContact            EntityType = "tenant_contact"
+	EntityOperation                EntityType = "operation"
+	EntityRecurringOperation       EntityType = "recurring_operation"
+	EntityOperationCategory        EntityType = "operation_category"
+	EntitySubscription             EntityType = "subscription"
+	EntityPaymentMethod            EntityType = "payment_method"
+	EntitySubscriptionPayment      EntityType = "subscription_payment"
 )
 
 // Entry is a single audit log record.

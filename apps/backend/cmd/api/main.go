@@ -81,7 +81,7 @@ func run() error {
 	//    resolver, membership-aware policy and access service. Built before
 	//    properties because the policy replaces the T2 owner-only policy and is
 	//    injected into every property/lease/operation service.
-	accessMod, err := wire.WireAccess(ctx, p, billingRepos)
+	accessMod, err := wire.WireAccess(ctx, p, billingRepos, identityMod.EmailMailer)
 	if err != nil {
 		return err
 	}
@@ -131,6 +131,16 @@ func run() error {
 			return fmt.Errorf("unexpected event type %T", event)
 		}
 		return leasesRepos.CategoryService.SeedDefaultCategories(ctx, e.UserID)
+	})
+	// Email invitation activation (issue #161, T5): a registration with an
+	// invited email activates the pending invitations FIFO. An empty email is
+	// skipped by the service.
+	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
+		e, ok := event.(identityapp.UserRegistered)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessMod.InvitationService.ActivatePendingInvitations(ctx, e.UserID, e.Email.String())
 	})
 
 	// 10. Admin service (depends on billing subscriptions + occupancy provider).
@@ -195,6 +205,7 @@ func run() error {
 		PropertyContacts:         propertiesMod.PropertyContactService,
 		AddressSuggester:         propertiesMod.DadataClient,
 		Access:                   accessMod.AccessService,
+		Invitations:              accessMod.InvitationService,
 		Leases:                   leasesMod.LeaseService,
 		TenantContacts:           leasesMod.TenantContactService,
 		Operations:               leasesMod.OperationService,

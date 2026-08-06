@@ -18,15 +18,24 @@ import (
 // Member is the application-level projection of a property participant used by
 // ListMembers. The owner is synthesized from properties.owner_id and never
 // stored as a membership row, so it carries IsOwner = true and no membership id.
+// A pending email invitation (issue #161, T5) is projected as a Member with
+// Pending = true, the invitation id in ID, a zero UserID, and Email/LastSentAt
+// filled.
 type Member struct {
-	ID          uuid.UUID // membership id (zero uuid for the owner)
+	ID          uuid.UUID // membership id; invitation id when Pending (zero uuid for the owner)
 	UserID      uuid.UUID
 	Role        sharedpolicy.Role // owner | full_access | viewer
 	IsOwner     bool
 	DisplayName string
 	HasEmail    bool
-	Status      domain.MemberStatus // active | suspended (always active for the owner)
+	Status      domain.MemberStatus // active | suspended (always active for the owner; meaningless when Pending)
 	SuspendedAt *time.Time          // when the membership was suspended; nil when active
+	// Pending marks a pending email invitation row: the invitee is not
+	// registered yet, so UserID is zero and Email carries the invitee address
+	// (visible to managers only).
+	Pending    bool
+	Email      *string    // invitee email; set only when Pending
+	LastSentAt *time.Time // when the invite email was last sent; set only when Pending
 }
 
 // AccessService implements the property membership use cases (issue #156, T3):
@@ -400,14 +409,20 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 // missing property or lack of access is mapped to ErrMemberNotFound to keep
 // object existence private.
 func (s *AccessService) requireManage(ctx context.Context, actor, propertyID uuid.UUID) (uuid.UUID, error) {
-	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
+	return requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
+}
+
+// requireManageAccess is the shared manage-members gate used by both the
+// membership and the invitation services (issue #161, T5).
+func requireManageAccess(ctx context.Context, policy sharedpolicy.Policy, owners PropertyOwnerResolver, actor, propertyID uuid.UUID) (uuid.UUID, error) {
+	role, err := policy.RoleForProperty(ctx, actor, propertyID)
 	if err != nil {
 		return uuid.UUID{}, fmt.Errorf("resolve role: %w", err)
 	}
 	if !sharedpolicy.CanManageMembers(role) {
 		return uuid.UUID{}, domain.ErrMemberNotFound
 	}
-	owner, err := s.owners.GetOwnerID(ctx, propertyID)
+	owner, err := owners.GetOwnerID(ctx, propertyID)
 	if err != nil {
 		return uuid.UUID{}, domain.ErrMemberNotFound
 	}

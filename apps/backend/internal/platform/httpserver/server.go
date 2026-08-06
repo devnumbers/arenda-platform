@@ -51,6 +51,7 @@ type Deps struct {
 	PropertyContacts         *propertiesapp.PropertyContactService
 	AddressSuggester         propertiesapp.AddressSuggester
 	Access                   *accessapp.AccessService
+	Invitations              *accessapp.InvitationService
 	Leases                   *leasesapp.LeaseService
 	TenantContacts           *leasesapp.TenantContactService
 	Operations               *leasesapp.OperationService
@@ -136,6 +137,7 @@ func New(deps Deps) http.Handler {
 	)
 	propertyHandlers := propertieshttp.NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Export, deps.PropertyContacts, deps.Logger, deps.Clock, deps.TZResolver)
 	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)
+	accessInvitationHandlers := accesshttp.NewInvitationHandlers(deps.Invitations, deps.Logger)
 	leaseHandlers := leaseshttp.NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock, deps.TZResolver)
 	operationHandlers := leaseshttp.NewOperationHandlers(deps.Operations, deps.Categories, deps.Properties, deps.Logger)
 	recurringOperationHandlers := leaseshttp.NewRecurringOperationHandlers(deps.RecurringOperations, deps.Categories, deps.Logger)
@@ -153,6 +155,7 @@ func New(deps Deps) http.Handler {
 		AuthHandlers:                   authHandlers,
 		PropertyHandlers:               propertyHandlers,
 		MemberHandlers:                 accessMemberHandlers,
+		InvitationHandlers:             accessInvitationHandlers,
 		LeaseHandlers:                  leaseHandlers,
 		OperationHandlers:              operationHandlers,
 		RecurringOperationHandlers:     recurringOperationHandlers,
@@ -268,6 +271,7 @@ type composedHandler struct {
 	*identityhttp.AuthHandlers
 	*propertieshttp.PropertyHandlers
 	*accesshttp.MemberHandlers
+	*accesshttp.InvitationHandlers
 	*leaseshttp.LeaseHandlers
 	*leaseshttp.OperationHandlers
 	*leaseshttp.RecurringOperationHandlers

@@ -126,3 +126,38 @@ type OwnedPropertyMeta struct {
 	ID        uuid.UUID
 	UpdatedAt time.Time
 }
+
+// InvitationRepository persists pending property member invitations
+// (issue #161, T5). Like membership rows, invitation rows are not owner-scoped
+// at the SQL level: management operations are regulated by the policy port in
+// the application layer.
+type InvitationRepository interface {
+	Create(ctx context.Context, invitation domain.Invitation) (domain.Invitation, error)
+	GetByID(ctx context.Context, id, propertyID uuid.UUID) (domain.Invitation, error)
+	// GetByPropertyAndEmail returns the pending invitation for the normalized
+	// (lowercase) email on the property, or domain.ErrInvitationNotFound.
+	GetByPropertyAndEmail(ctx context.Context, propertyID uuid.UUID, email string) (domain.Invitation, error)
+	ListByProperty(ctx context.Context, propertyID uuid.UUID) ([]domain.Invitation, error)
+	// ListPendingByEmail returns all pending invitations for the normalized
+	// email across properties, oldest first: activation at registration is
+	// FIFO.
+	ListPendingByEmail(ctx context.Context, email string) ([]domain.Invitation, error)
+	UpdateRole(ctx context.Context, id, propertyID uuid.UUID, role domain.Role) (domain.Invitation, error)
+	UpdateLastSentAt(ctx context.Context, id, propertyID uuid.UUID, sentAt time.Time) error
+	Delete(ctx context.Context, id, propertyID uuid.UUID) error
+	WithTx(tx transaction.Tx) InvitationRepository
+}
+
+// InvitationMailer sends the invite email to an unregistered invitee. It is
+// the only email of the invitation lifecycle (issue #161, T5): role changes,
+// cancellation and activation send nothing.
+type InvitationMailer interface {
+	SendInvite(ctx context.Context, to, propertyTitle string, role domain.Role) error
+}
+
+// PropertyTitleResolver resolves a property's display title for the invite
+// email text. Kept separate from PropertyOwnerResolver so the mail path does
+// not depend on authorization semantics.
+type PropertyTitleResolver interface {
+	GetTitle(ctx context.Context, propertyID uuid.UUID) (string, error)
+}

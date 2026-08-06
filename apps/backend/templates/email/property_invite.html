@@ -1,0 +1,11 @@
+<h1 class="title">Приглашение к совместному доступу</h1>
+<p class="body">Вас пригласили к совместному доступу к объекту{{if .PropertyTitle}} «{{.PropertyTitle}}»{{end}} в Рентли с ролью «{{.Role}}».</p>
+<p class="body">Зарегистрируйтесь или войдите с этим email — доступ откроется автоматически.</p>
+{{if .AppURL}}
+<p style="margin: 0 0 24px;">
+  <a href="{{.AppURL}}" class="button">Открыть Рентли</a>
+</p>
+{{end}}
+<p class="body" style="font-size: 14px; color: rgba(30, 30, 30, 0.4); margin-bottom: 0;">
+  Если вы не ожидали это письмо, просто проигнорируйте его.
+</p>

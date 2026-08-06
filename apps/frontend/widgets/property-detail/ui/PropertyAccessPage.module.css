@@ -4,7 +4,7 @@
     gap: 24px;
 }
 
-.addForm {
+.members {
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -16,21 +16,10 @@
     font-weight: 600;
 }
 
-.hint {
-    margin: 0;
-    color: var(--color-text-muted, #6b7280);
-    font-size: 14px;
-}
-
-.fields {
+.membersHeader {
     display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-.members {
-    display: flex;
-    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
     gap: 16px;
 }
 
@@ -79,6 +68,19 @@
     border-radius: 6px;
     background: var(--color-error-bg, #fef2f2);
     color: var(--color-error, #b91c1c);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    white-space: nowrap;
+}
+
+.memberStatusPending {
+    display: inline-flex;
+    align-self: flex-start;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--color-warning-bg, #fef9c3);
+    color: var(--color-warning, #a16207);
     font-size: 12px;
     font-weight: 500;
     line-height: 16px;

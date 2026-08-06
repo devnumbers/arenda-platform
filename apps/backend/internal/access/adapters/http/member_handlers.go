@@ -57,25 +57,8 @@ func (h *MemberHandlers) CreatePropertyAccessMember(w http.ResponseWriter, r *ht
 	httpsupport.WriteJSON(r.Context(), w, http.StatusCreated, h.membershipResponse(membership, false))
 }
 
-// ListPropertyAccessMembers implements GET /properties/{propertyId}/access/members.
-func (h *MemberHandlers) ListPropertyAccessMembers(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	members, err := h.svc.ListMembers(r.Context(), actor, propertyID)
-	if err != nil {
-		h.handleError(w, r, err)
-		return
-	}
-	items := make([]openapi.PropertyAccessMemberResponse, 0, len(members))
-	for _, m := range members {
-		items = append(items, h.memberResponse(m))
-	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertyAccessMembersResponse{Items: items})
-}
+// ListPropertyAccessMembers lives on InvitationHandlers: the participant list
+// includes pending email invitations for managers (issue #161, T5).
 
 // UpdatePropertyAccessMember implements PATCH /properties/{propertyId}/access/members/{memberId}.
 func (h *MemberHandlers) UpdatePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId, memberID openapi_types.UUID) {
@@ -163,9 +146,10 @@ func (h *MemberHandlers) handleError(w http.ResponseWriter, r *http.Request, err
 // list path uses memberResponse instead.
 func (h *MemberHandlers) membershipResponse(m domain.Membership, isOwner bool) openapi.PropertyAccessMemberResponse {
 	id := m.ID
+	userID := m.UserID
 	return openapi.PropertyAccessMemberResponse{
 		Id:          &id,
-		UserId:      m.UserID,
+		UserId:      &userID,
 		Role:        openapi.PropertyAccessMemberRole(m.Role.String()),
 		IsOwner:     isOwner,
 		Status:      openapi.PropertyAccessMemberResponseStatus(m.Status.String()),
@@ -173,14 +157,31 @@ func (h *MemberHandlers) membershipResponse(m domain.Membership, isOwner bool) o
 	}
 }
 
-func (h *MemberHandlers) memberResponse(m accessapp.Member) openapi.PropertyAccessMemberResponse {
+// memberResponse maps an application-level participant projection (owner,
+// member or pending invitation) to the shared member response shape. It is
+// used by the participant list on InvitationHandlers.
+func memberResponse(m accessapp.Member) openapi.PropertyAccessMemberResponse {
 	resp := openapi.PropertyAccessMemberResponse{
-		UserId:      m.UserID,
-		Role:        openapi.PropertyAccessMemberRole(string(m.Role)),
-		IsOwner:     m.IsOwner,
-		Status:      openapi.PropertyAccessMemberResponseStatus(m.Status.String()),
-		SuspendedAt: m.SuspendedAt,
+		Role:    openapi.PropertyAccessMemberRole(string(m.Role)),
+		IsOwner: m.IsOwner,
 	}
+	if m.Pending {
+		// Pending invitation row (issue #161, T5): no user yet, the invitee
+		// email is shown to managers only (the service filters the rows).
+		resp.Status = openapi.PropertyAccessMemberResponseStatusPending
+		if m.Email != nil {
+			email := openapi_types.Email(*m.Email)
+			resp.Email = &email
+		}
+		resp.LastSentAt = m.LastSentAt
+		id := m.ID
+		resp.Id = &id
+		return resp
+	}
+	userID := m.UserID
+	resp.UserId = &userID
+	resp.Status = openapi.PropertyAccessMemberResponseStatus(m.Status.String())
+	resp.SuspendedAt = m.SuspendedAt
 	if m.DisplayName != "" {
 		resp.DisplayName = &m.DisplayName
 	}

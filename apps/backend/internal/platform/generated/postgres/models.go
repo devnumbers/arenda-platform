@@ -290,6 +290,17 @@ type PropertyMember struct {
 	SuspendedAt pgtype.Timestamptz `json:"suspended_at"`
 }
 
+type PropertyMemberInvitation struct {
+	ID         pgtype.UUID        `json:"id"`
+	PropertyID pgtype.UUID        `json:"property_id"`
+	Email      string             `json:"email"`
+	Role       string             `json:"role"`
+	InvitedBy  pgtype.UUID        `json:"invited_by"`
+	LastSentAt pgtype.Timestamptz `json:"last_sent_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type PropertyPhoto struct {
 	ID         pgtype.UUID        `json:"id"`
 	PropertyID pgtype.UUID        `json:"property_id"`

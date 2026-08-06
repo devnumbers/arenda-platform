@@ -114,7 +114,8 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
 	}
 	for _, to := range msg.To {
 		if err := client.Rcpt(to); err != nil {
-			return fmt.Errorf("smtp rcpt %q: %w", to, err)
+			// The recipient address is PII and must not leak into error logs.
+			return fmt.Errorf("smtp rcpt: %w", err)
 		}
 	}
 

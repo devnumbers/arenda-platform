@@ -18,13 +18,13 @@ type PropertyAccessMembersResponse =
     components['schemas']['PropertyAccessMembersResponse'];
 type PropertyAccessMemberResponse =
     components['schemas']['PropertyAccessMemberResponse'];
-type PropertyAccessMemberCreateRequest =
-    components['schemas']['PropertyAccessMemberCreateRequest'];
+type PropertyAccessInvitationCreateRequest =
+    components['schemas']['PropertyAccessInvitationCreateRequest'];
 type PropertyAccessMemberUpdateRequest =
     components['schemas']['PropertyAccessMemberUpdateRequest'];
 
-export type AddMemberInput = {
-    readonly userId: string;
+export type InviteMemberInput = {
+    readonly email: string;
     readonly role: 'full_access' | 'viewer';
 };
 
@@ -47,21 +47,84 @@ export function usePropertyAccessMembers(
     });
 }
 
-export function useCreatePropertyAccessMember(
+export function useInvitePropertyAccessMember(
     propertyId: string,
-): UseMutationResult<PropertyAccessMember, ApiError, AddMemberInput> {
+): UseMutationResult<PropertyAccessMember, ApiError, InviteMemberInput> {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (data: AddMemberInput) => {
-            const body: PropertyAccessMemberCreateRequest = {
-                user_id: data.userId,
+        mutationFn: async (data: InviteMemberInput) => {
+            const body: PropertyAccessInvitationCreateRequest = {
+                email: data.email,
                 role: data.role,
             };
             const response = await apiClient<PropertyAccessMemberResponse>(
-                `/properties/${propertyId}/access/members`,
+                `/properties/${propertyId}/access/invitations`,
                 { method: 'POST', body: JSON.stringify(body) },
             );
             return mapPropertyAccessMemberResponse(response);
+        },
+        onSuccess: () => {
+            void queryClient.invalidateQueries({
+                queryKey: accessKeys.list(propertyId),
+            });
+        },
+    });
+}
+
+export function useUpdatePropertyAccessInvitation(
+    propertyId: string,
+): UseMutationResult<
+    PropertyAccessMember,
+    ApiError,
+    { invitationId: string } & ChangeMemberRoleInput
+> {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data) => {
+            const body: PropertyAccessMemberUpdateRequest = { role: data.role };
+            const response = await apiClient<PropertyAccessMemberResponse>(
+                `/properties/${propertyId}/access/invitations/${data.invitationId}`,
+                { method: 'PATCH', body: JSON.stringify(body) },
+            );
+            return mapPropertyAccessMemberResponse(response);
+        },
+        onSuccess: () => {
+            void queryClient.invalidateQueries({
+                queryKey: accessKeys.list(propertyId),
+            });
+        },
+    });
+}
+
+export function useResendPropertyAccessInvitation(
+    propertyId: string,
+): UseMutationResult<void, ApiError, string> {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (invitationId: string) => {
+            await apiClient<void>(
+                `/properties/${propertyId}/access/invitations/${invitationId}/resend`,
+                { method: 'POST' },
+            );
+        },
+        onSuccess: () => {
+            void queryClient.invalidateQueries({
+                queryKey: accessKeys.list(propertyId),
+            });
+        },
+    });
+}
+
+export function useCancelPropertyAccessInvitation(
+    propertyId: string,
+): UseMutationResult<void, ApiError, string> {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (invitationId: string) => {
+            await apiClient<void>(
+                `/properties/${propertyId}/access/invitations/${invitationId}`,
+                { method: 'DELETE' },
+            );
         },
         onSuccess: () => {
             void queryClient.invalidateQueries({
