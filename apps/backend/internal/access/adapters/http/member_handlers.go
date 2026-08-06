@@ -164,18 +164,22 @@ func (h *MemberHandlers) handleError(w http.ResponseWriter, r *http.Request, err
 func (h *MemberHandlers) membershipResponse(m domain.Membership, isOwner bool) openapi.PropertyAccessMemberResponse {
 	id := m.ID
 	return openapi.PropertyAccessMemberResponse{
-		Id:      &id,
-		UserId:  m.UserID,
-		Role:    openapi.PropertyAccessMemberRole(m.Role.String()),
-		IsOwner: isOwner,
+		Id:          &id,
+		UserId:      m.UserID,
+		Role:        openapi.PropertyAccessMemberRole(m.Role.String()),
+		IsOwner:     isOwner,
+		Status:      openapi.PropertyAccessMemberResponseStatus(m.Status.String()),
+		SuspendedAt: m.SuspendedAt,
 	}
 }
 
 func (h *MemberHandlers) memberResponse(m accessapp.Member) openapi.PropertyAccessMemberResponse {
 	resp := openapi.PropertyAccessMemberResponse{
-		UserId:  m.UserID,
-		Role:    openapi.PropertyAccessMemberRole(string(m.Role)),
-		IsOwner: m.IsOwner,
+		UserId:      m.UserID,
+		Role:        openapi.PropertyAccessMemberRole(string(m.Role)),
+		IsOwner:     m.IsOwner,
+		Status:      openapi.PropertyAccessMemberResponseStatus(m.Status.String()),
+		SuspendedAt: m.SuspendedAt,
 	}
 	if m.DisplayName != "" {
 		resp.DisplayName = &m.DisplayName

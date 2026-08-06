@@ -69,7 +69,38 @@ func (f fakeMemberRepo) UpdateRole(context.Context, uuid.UUID, uuid.UUID, domain
 	panic("not implemented")
 }
 func (f fakeMemberRepo) Delete(context.Context, uuid.UUID, uuid.UUID) error { panic("not implemented") }
-func (f fakeMemberRepo) WithTx(transaction.Tx) MembershipRepository         { return f }
+func (f fakeMemberRepo) Suspend(context.Context, uuid.UUID, uuid.UUID) error {
+	panic("not implemented")
+}
+
+func (f fakeMemberRepo) Reactivate(context.Context, uuid.UUID, uuid.UUID) (domain.Membership, error) {
+	panic("not implemented")
+}
+
+func (f fakeMemberRepo) ListSuspendedByUser(context.Context, uuid.UUID) ([]domain.Membership, error) {
+	panic("not implemented")
+}
+
+func (f fakeMemberRepo) CountActiveByUser(context.Context, uuid.UUID) (int, error) {
+	panic("not implemented")
+}
+
+func (f fakeMemberRepo) CountSuspendedByUser(context.Context, uuid.UUID) (int, error) {
+	panic("not implemented")
+}
+
+func (f fakeMemberRepo) ListActiveByPropertyOwner(context.Context, uuid.UUID) ([]domain.Membership, error) {
+	panic("not implemented")
+}
+
+func (f fakeMemberRepo) ListActiveByUser(context.Context, uuid.UUID) ([]domain.Membership, error) {
+	panic("not implemented")
+}
+
+func (f fakeMemberRepo) CreateWithStatus(context.Context, domain.Membership) (domain.Membership, error) {
+	panic("not implemented")
+}
+func (f fakeMemberRepo) WithTx(transaction.Tx) MembershipRepository { return f }
 
 // Compile-time check.
 var _ MembershipRepository = fakeMemberRepo{}

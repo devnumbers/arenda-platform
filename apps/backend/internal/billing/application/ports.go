@@ -135,6 +135,16 @@ type PropertyArchiver interface {
 	ArchiveExcessProperties(ctx context.Context, tx transaction.Tx, ownerID uuid.UUID, limit int) error
 }
 
+// RecipientSlotEnforcer suspends shared-access memberships of recipients whose
+// tariff limit is exceeded after a billing limit drop (downgrade / grace expiry
+// / non-renewing expiry). Implemented by the access bounded context's
+// SlotCoordinator. Called in the same transaction as ArchiveExcessProperties.
+// Optional: when nil, no recipient enforcement runs (pre-T4 behaviour). See
+// issue #158 (T4).
+type RecipientSlotEnforcer interface {
+	EnforceRecipientLimit(ctx context.Context, tx transaction.Tx, ownerID uuid.UUID, trigger string) error
+}
+
 // ConfirmableProvider is implemented by providers that support an explicit
 // confirmation step. In the MVP only the fake provider does.
 type ConfirmableProvider interface {

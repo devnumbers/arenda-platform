@@ -31,6 +31,30 @@ type SharedPropertyIDs interface {
 	SharedWith(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 }
 
+// SuspendedSharedCounter reports how many shared memberships of a recipient
+// are currently suspended (hidden from the recipient's property list due to a
+// tariff slot shortage). Implemented by the access bounded context and injected
+// optionally: when nil, the properties list reports zero hidden shared.
+// See issue #158 (T4).
+type SuspendedSharedCounter interface {
+	CountSuspendedByUser(ctx context.Context, userID uuid.UUID) (int, error)
+}
+
+// RecipientSlotPolicy enforces the recipient tariff slot invariant for the
+// shared-access memberships of a single property. It is implemented by the
+// access bounded context's SlotCoordinator and injected optionally: when nil,
+// no slot policy runs (pre-T4 behaviour). RecoverSuspendedForProperty is called
+// when the owner archives a shared object (a slot freed for each recipient);
+// EnforceOnUnarchiveForProperty is called when the owner unarchives a shared
+// object (the object re-enters the recipients' pool); RecoverAfterPropertyDelete
+// is called before the owner deletes a shared object (the memberships are
+// dropped and the freed slots recovered FIFO). See issue #158 (T4).
+type RecipientSlotPolicy interface {
+	RecoverSuspendedForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error
+	EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error
+	RecoverAfterPropertyDelete(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error
+}
+
 type SubscriptionLimiter interface {
 	ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error)
 	WithTx(tx transaction.Tx) (SubscriptionLimiter, error)

@@ -71,6 +71,8 @@ type PropertyService struct {
 	tzResolver        sharedtz.OwnerTimezoneResolver
 	policy            sharedpolicy.Policy
 	sharedIDs         SharedPropertyIDs
+	suspendedCounter  SuspendedSharedCounter
+	slots             RecipientSlotPolicy
 	logger            *slog.Logger
 }
 
@@ -79,6 +81,38 @@ type PropertyService struct {
 // only the owner's own properties are listed.
 func (s *PropertyService) SetSharedPropertyIDs(sharedIDs SharedPropertyIDs) {
 	s.sharedIDs = sharedIDs
+}
+
+// SetSuspendedSharedCounter injects the access-context adapter that counts how
+// many of a recipient's shared memberships are suspended (hidden from the
+// recipient's property list due to a tariff slot shortage). Optional: when not
+// set, HiddenSharedCount reports zero (issue #158, T4).
+func (s *PropertyService) SetSuspendedSharedCounter(counter SuspendedSharedCounter) {
+	s.suspendedCounter = counter
+}
+
+// HiddenSharedCount returns the number of shared objects currently hidden from
+// the recipient because their tariff limit is exceeded (suspended memberships).
+// Owners always get zero: they have no shared memberships. Returns zero when no
+// suspended counter is wired (issue #158, T4).
+func (s *PropertyService) HiddenSharedCount(ctx context.Context, actor uuid.UUID) (int, error) {
+	if s.suspendedCounter == nil {
+		return 0, nil
+	}
+	count, err := s.suspendedCounter.CountSuspendedByUser(ctx, actor)
+	if err != nil {
+		return 0, fmt.Errorf("count suspended shared: %w", err)
+	}
+	return count, nil
+}
+
+// SetRecipientSlotPolicy injects the access-context slot coordinator that
+// enforces the recipient tariff slot invariant for shared-access memberships of
+// a property (issue #158, T4). Optional: when not set, archiving/unarchiving/
+// deleting a property does not suspend or recover shared memberships (the
+// pre-T4 behaviour).
+func (s *PropertyService) SetRecipientSlotPolicy(slots RecipientSlotPolicy) {
+	s.slots = slots
 }
 
 func NewPropertyService(
@@ -539,6 +573,15 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 		return domain.Property{}, fmt.Errorf("record audit: %w", err)
 	}
 
+	// Archiving a shared object freed one tariff slot for each recipient: try to
+	// recover their oldest suspended memberships FIFO in the same transaction
+	// (issue #158, T4).
+	if s.slots != nil {
+		if err := s.slots.RecoverSuspendedForProperty(ctx, tx, id); err != nil {
+			return domain.Property{}, fmt.Errorf("recover suspended memberships after archive: %w", err)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Property{}, fmt.Errorf("commit tx: %w", err)
 	}
@@ -621,6 +664,16 @@ func (s *PropertyService) DeleteProperty(
 		asOf := timeutil.DateIn(s.clock.Now(), loc)
 		if err := s.billingLifecycle.WithTx(tx).Suspend(ctx, id, actor, asOf); err != nil {
 			return fmt.Errorf("suspend billing: %w", err)
+		}
+	}
+
+	// Dropping the shared object frees one tariff slot for each recipient:
+	// the access context drops their memberships and recovers the oldest
+	// suspended ones FIFO in the same transaction, before the property row is
+	// removed (issue #158, T4).
+	if s.slots != nil {
+		if err := s.slots.RecoverAfterPropertyDelete(ctx, tx, id); err != nil {
+			return fmt.Errorf("recover suspended memberships before delete: %w", err)
 		}
 	}
 
@@ -867,6 +920,15 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 		EntityID:   &id,
 	}); err != nil {
 		return domain.Property{}, fmt.Errorf("record audit: %w", err)
+	}
+
+	// Unarchiving the object re-enters every recipient's tariff pool: suspend any
+	// recipient already at the limit so the object does not occupy a slot until
+	// one frees up (issue #158, T4).
+	if s.slots != nil {
+		if err := s.slots.EnforceOnUnarchiveForProperty(ctx, tx, id); err != nil {
+			return domain.Property{}, fmt.Errorf("enforce recipient slot on unarchive: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {

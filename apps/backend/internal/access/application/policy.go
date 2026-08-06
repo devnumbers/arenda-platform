@@ -62,6 +62,12 @@ func (p *MembershipPolicy) Role(ctx context.Context, actor, scope uuid.UUID) (sh
 // property's existence is never revealed: a missing property, a missing
 // membership, and lack of access all resolve to RoleNone, so callers can map
 // RoleNone to a "not found" outcome and preserve object privacy.
+//
+// A suspended membership is treated as no access (RoleNone): the membership's
+// role row is filtered out at the SQL level (status = 'active' in
+// GetPropertyMemberRole), so a suspended recipient is indistinguishable from a
+// non-member for authorization purposes. The UI distinguishes suspended for a
+// dedicated screen (T9); here, privacy-preserving RoleNone is returned.
 func (p *MembershipPolicy) RoleForProperty(ctx context.Context, actor, propertyID uuid.UUID) (sharedpolicy.Role, error) {
 	owner, err := p.owners.GetOwnerID(ctx, propertyID)
 	if err != nil {

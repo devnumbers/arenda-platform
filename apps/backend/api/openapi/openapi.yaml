@@ -4840,7 +4840,7 @@ components:
 
     PropertyAccessMemberResponse:
       type: object
-      required: [user_id, role, is_owner]
+      required: [user_id, role, is_owner, status]
       properties:
         id:
           type: string
@@ -4861,6 +4861,18 @@ components:
             Never the raw phone or email.
         has_email:
           type: boolean
+        status:
+          type: string
+          enum: [active, suspended]
+          description: >
+            Membership lifecycle status. "suspended" means the recipient's
+            tariff slot was exceeded, so the object is hidden from the
+            recipient's list and grants no access until a slot frees up.
+        suspended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the membership was suspended; null when active.
 
     PropertyAccessMembersResponse:
       type: object
@@ -4899,6 +4911,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PropertyResponse'
+        hidden_shared_count:
+          type: integer
+          description: >
+            Number of shared properties hidden from the recipient due to a
+            tariff slot shortage (suspended memberships). Zero for owners and
+            when the recipient is within their limit.
+          default: 0
 
     PropertyType:
       type: string

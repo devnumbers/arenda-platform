@@ -157,6 +157,11 @@ func (c *ScheduledChangeService) applyScheduledChange(ctx context.Context, sub d
 			return false, fmt.Errorf("archive excess properties after scheduled downgrade: %w", err)
 		}
 	}
+	if c.deps.recipientSlotEnforcer != nil && oldTariffID != pendingTariff.ID {
+		if err := c.deps.recipientSlotEnforcer.EnforceRecipientLimit(ctx, tx, sub.UserID, "scheduled_downgrade"); err != nil {
+			return false, fmt.Errorf("enforce recipient slot limit after scheduled downgrade: %w", err)
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit scheduled downgrade transaction: %w", err)
 	}

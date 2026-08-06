@@ -82,9 +82,15 @@ type Billing struct {
 }
 
 // BuildBillingServices constructs the billing Services aggregate from the
-// billing repos and the property service (property archiver). It runs after the
-// properties services are built.
-func BuildBillingServices(p platformDeps, repos *BillingRepos, propertyService *propertiesapp.PropertyService) *Billing {
+// billing repos, the property service (property archiver) and the recipient
+// slot enforcer (access SlotCoordinator). It runs after the properties services
+// and the access module are built.
+func BuildBillingServices(
+	p platformDeps,
+	repos *BillingRepos,
+	propertyService *propertiesapp.PropertyService,
+	recipientSlotEnforcer billingapp.RecipientSlotEnforcer,
+) *Billing {
 	services := billingapp.NewServices(
 		repos.TariffRepo,
 		repos.SubscriptionRepo,
@@ -97,6 +103,7 @@ func BuildBillingServices(p platformDeps, repos *BillingRepos, propertyService *
 		p.Logger,
 		p.Cfg.AppBaseURL,
 		propertyService,
+		recipientSlotEnforcer,
 		repos.OnboardingService,
 		repos.PaymentMethodInUseChecker,
 	)

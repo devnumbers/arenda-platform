@@ -72,6 +72,19 @@
     color: var(--color-text-muted, #6b7280);
 }
 
+.memberStatus {
+    display: inline-flex;
+    align-self: flex-start;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--color-error-bg, #fef2f2);
+    color: var(--color-error, #b91c1c);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    white-space: nowrap;
+}
+
 .memberActions {
     display: flex;
     align-items: center;

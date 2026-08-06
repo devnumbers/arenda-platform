@@ -21,6 +21,7 @@ type Querier interface {
 	CancelRemindersByFreeReminderID(ctx context.Context, arg CancelRemindersByFreeReminderIDParams) (int64, error)
 	CancelRemindersByRecurringOperationID(ctx context.Context, arg CancelRemindersByRecurringOperationIDParams) (int64, error)
 	CompleteLease(ctx context.Context, arg CompleteLeaseParams) (Lease, error)
+	CountActiveMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CountActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	CountActivePropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	CountActiveSubscriptionsAdmin(ctx context.Context) (int64, error)
@@ -37,6 +38,7 @@ type Querier interface {
 	CountPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error)
 	CountSubscriptionsByActivePaymentMethodID(ctx context.Context, activePaymentMethodID pgtype.UUID) (int64, error)
+	CountSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CountTenantContactsAdmin(ctx context.Context, arg CountTenantContactsAdminParams) (int64, error)
 	CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams) (int64, error)
 	// GetUserByIDAdmin is implemented by the existing GetUserByID query (no owner filter).
@@ -51,6 +53,7 @@ type Querier interface {
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
 	CreatePropertyContact(ctx context.Context, arg CreatePropertyContactParams) (PropertyContact, error)
 	CreatePropertyMember(ctx context.Context, arg CreatePropertyMemberParams) (PropertyMember, error)
+	CreatePropertyMemberWithStatus(ctx context.Context, arg CreatePropertyMemberWithStatusParams) (PropertyMember, error)
 	CreatePropertyPhoto(ctx context.Context, arg CreatePropertyPhotoParams) (PropertyPhoto, error)
 	CreateRecurringOperation(ctx context.Context, arg CreateRecurringOperationParams) (RecurringOperation, error)
 	CreateReminder(ctx context.Context, arg CreateReminderParams) (Reminder, error)
@@ -134,6 +137,10 @@ type Querier interface {
 	GetPropertyFinanceByMonth(ctx context.Context, arg GetPropertyFinanceByMonthParams) ([]GetPropertyFinanceByMonthRow, error)
 	GetPropertyMember(ctx context.Context, arg GetPropertyMemberParams) (PropertyMember, error)
 	GetPropertyMemberByPropertyAndUser(ctx context.Context, arg GetPropertyMemberByPropertyAndUserParams) (PropertyMember, error)
+	// Returns the role of an ACTIVE membership only. A suspended membership is
+	// treated as no access: the SQL-level status filter makes a suspended
+	// recipient indistinguishable from a non-member for authorization purposes
+	// (issue #158, T4). The UI distinguishes suspended via a dedicated screen (T9).
 	GetPropertyMemberRole(ctx context.Context, arg GetPropertyMemberRoleParams) (string, error)
 	GetPropertyOperationsSummary(ctx context.Context, arg GetPropertyOperationsSummaryParams) (GetPropertyOperationsSummaryRow, error)
 	GetPropertyPhotoByID(ctx context.Context, id pgtype.UUID) (PropertyPhoto, error)
@@ -178,6 +185,8 @@ type Querier interface {
 	IsNotificationEventAllowed(ctx context.Context, arg IsNotificationEventAllowedParams) (bool, error)
 	IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
 	ListAccessibleOwners(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
+	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
+	ListActiveMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
 	ListAllFreeRemindersByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListAllFreeRemindersByOwnerRow, error)
 	ListAllPendingOperationsWithPastDate(ctx context.Context, arg ListAllPendingOperationsWithPastDateParams) ([]Operation, error)
@@ -241,6 +250,7 @@ type Querier interface {
 	ListSubscriptionsInExpiredGrace(ctx context.Context, arg ListSubscriptionsInExpiredGraceParams) ([]UserSubscription, error)
 	ListSubscriptionsUpForRenewal(ctx context.Context, arg ListSubscriptionsUpForRenewalParams) ([]UserSubscription, error)
 	ListSubscriptionsWithPendingChange(ctx context.Context, arg ListSubscriptionsWithPendingChangeParams) ([]UserSubscription, error)
+	ListSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
 	ListTariffs(ctx context.Context) ([]Tariff, error)
 	ListTenantContactsAdmin(ctx context.Context, arg ListTenantContactsAdminParams) ([]ListTenantContactsAdminRow, error)
 	ListTenantContactsByIDs(ctx context.Context, arg ListTenantContactsByIDsParams) ([]TenantContact, error)
@@ -269,6 +279,7 @@ type Querier interface {
 	MarkSubscriptionPaymentReconciledSucceeded(ctx context.Context, arg MarkSubscriptionPaymentReconciledSucceededParams) (SubscriptionPayment, error)
 	MarkSubscriptionPaymentRefunded(ctx context.Context, arg MarkSubscriptionPaymentRefundedParams) (SubscriptionPayment, error)
 	MarkSubscriptionPaymentSucceeded(ctx context.Context, arg MarkSubscriptionPaymentSucceededParams) (SubscriptionPayment, error)
+	ReactivatePropertyMember(ctx context.Context, arg ReactivatePropertyMemberParams) (PropertyMember, error)
 	ReschedulePendingRemindersByOwner(ctx context.Context, arg ReschedulePendingRemindersByOwnerParams) (int64, error)
 	ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Roll back an in-flight refund reservation to the previous status ($2).
@@ -279,6 +290,7 @@ type Querier interface {
 	SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) (int64, error)
 	SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperationParams) (Operation, error)
 	SoftDeleteRecurringOperation(ctx context.Context, arg SoftDeleteRecurringOperationParams) (RecurringOperation, error)
+	SuspendPropertyMember(ctx context.Context, arg SuspendPropertyMemberParams) error
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
 	UpdateFreeReminder(ctx context.Context, arg UpdateFreeReminderParams) (FreeReminder, error)
 	UpdateFutureGeneratedOperationReminderOffsets(ctx context.Context, arg UpdateFutureGeneratedOperationReminderOffsetsParams) (int64, error)

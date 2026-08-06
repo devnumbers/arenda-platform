@@ -81,7 +81,7 @@ func run() error {
 	//    resolver, membership-aware policy and access service. Built before
 	//    properties because the policy replaces the T2 owner-only policy and is
 	//    injected into every property/lease/operation service.
-	accessMod, err := wire.WireAccess(ctx, p)
+	accessMod, err := wire.WireAccess(ctx, p, billingRepos)
 	if err != nil {
 		return err
 	}
@@ -103,9 +103,17 @@ func run() error {
 	// property service so list endpoints include properties shared with the
 	// actor (issue #156, T3).
 	propertiesMod.PropertyService.SetSharedPropertyIDs(accessMod.SharedProperties)
+	// Wire the recipient slot policy (access SlotCoordinator) into the property
+	// service so archive/unarchive/delete recover or suspend shared memberships
+	// of recipients (issue #158, T4).
+	propertiesMod.PropertyService.SetRecipientSlotPolicy(accessMod.SlotCoordinator)
+	// Wire the suspended-shared counter so the active properties list can report
+	// how many shared objects are hidden from the recipient by a slot shortage
+	// (issue #158, T4).
+	propertiesMod.PropertyService.SetSuspendedSharedCounter(accessMod.SuspendedCounter)
 
 	// 8. Billing Services aggregate. Depends on the property service.
-	billingMod := wire.BuildBillingServices(p, billingRepos, propertiesMod.PropertyService)
+	billingMod := wire.BuildBillingServices(p, billingRepos, propertiesMod.PropertyService, accessMod.SlotCoordinator)
 
 	// 9. Cross-module event subscribers: billing onboarding and default-category
 	//    seeding both react to user_registered. Kept here (not in wire) because

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
@@ -24,6 +25,8 @@ type Member struct {
 	IsOwner     bool
 	DisplayName string
 	HasEmail    bool
+	Status      domain.MemberStatus // active | suspended (always active for the owner)
+	SuspendedAt *time.Time          // when the membership was suspended; nil when active
 }
 
 // AccessService implements the property membership use cases (issue #156, T3):
@@ -34,17 +37,21 @@ type AccessService struct {
 	owners  PropertyOwnerResolver
 	users   UserLookup
 	policy  sharedpolicy.Policy
+	slots   *SlotCoordinator
 	db      txBeginner
 	audit   auditapp.Recorder
 	logger  *slog.Logger
 }
 
-// NewAccessService creates an AccessService.
+// NewAccessService creates an AccessService. slots is the recipient tariff slot
+// coordinator (issue #158, T4); it may be nil to disable slot enforcement
+// (pre-T4 behaviour, e.g. in tests that don't exercise the limit).
 func NewAccessService(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
 	users UserLookup,
 	policy sharedpolicy.Policy,
+	slots *SlotCoordinator,
 	db txBeginner,
 	audit auditapp.Recorder,
 	logger *slog.Logger,
@@ -60,6 +67,7 @@ func NewAccessService(
 		owners:  owners,
 		users:   users,
 		policy:  policy,
+		slots:   slots,
 		db:      db,
 		audit:   audit,
 		logger:  logger,
@@ -108,7 +116,27 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 		return domain.Membership{}, fmt.Errorf("check existing membership: %w", err)
 	}
 
-	created, err := txMembers.Create(ctx, membership)
+	// Enforce the recipient tariff slot invariant (issue #158, T4): when the
+	// recipient has no free slot, the membership is created suspended so it does
+	// not occupy a slot until one frees up and is recovered FIFO.
+	suspend := false
+	if s.slots != nil {
+		var err2 error
+		suspend, err2 = s.slots.EnforceOnActivation(ctx, tx, userID)
+		if err2 != nil {
+			return domain.Membership{}, fmt.Errorf("check recipient slot: %w", err2)
+		}
+	}
+	if suspend {
+		membership.Status = domain.MemberStatusSuspended
+	}
+
+	var created domain.Membership
+	if suspend {
+		created, err = txMembers.CreateWithStatus(ctx, membership)
+	} else {
+		created, err = txMembers.Create(ctx, membership)
+	}
 	if err != nil {
 		return domain.Membership{}, fmt.Errorf("create membership: %w", err)
 	}
@@ -125,6 +153,7 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 			"property_id": propertyID,
 			"user_id":     userID,
 			"role":        string(role),
+			"status":      string(created.Status),
 		},
 	}); err != nil {
 		return domain.Membership{}, fmt.Errorf("record audit: %w", err)
@@ -210,6 +239,14 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 		return fmt.Errorf("delete membership: %w", err)
 	}
 
+	// Revoking the recipient freed one of their tariff slots: try to recover the
+	// oldest suspended membership FIFO (issue #158, T4).
+	if s.slots != nil {
+		if err := s.slots.RecoverSuspended(ctx, tx, membership.UserID); err != nil {
+			return fmt.Errorf("recover suspended after revoke: %w", err)
+		}
+	}
+
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
 		ActorRole:  auditdomain.ActorRoleOwner,
@@ -257,8 +294,23 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 		return err
 	}
 
+	// A suspended membership is already hidden from the recipient (no slot, no
+	// access), so self-exit is not available: the object is invisible to them
+	// (issue #158, T4 AC).
+	if membership.IsSuspended() {
+		return domain.ErrCannotLeaveSuspended
+	}
+
 	if err := txMembers.Delete(ctx, membership.ID, propertyID); err != nil {
 		return fmt.Errorf("delete membership: %w", err)
+	}
+
+	// Self-exit freed one of the actor's tariff slots: try to recover the oldest
+	// suspended membership FIFO (issue #158, T4).
+	if s.slots != nil {
+		if err := s.slots.RecoverSuspended(ctx, tx, actor); err != nil {
+			return fmt.Errorf("recover suspended after leave: %w", err)
+		}
 	}
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
@@ -310,6 +362,7 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 		IsOwner:     true,
 		DisplayName: displayName(ownerUser),
 		HasEmail:    ownerUser.HasEmail,
+		Status:      domain.MemberStatusActive,
 	})
 
 	memberships, err := s.members.ListByProperty(ctx, propertyID)
@@ -331,6 +384,8 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 			IsOwner:     false,
 			DisplayName: displayName(u),
 			HasEmail:    u.HasEmail,
+			Status:      m.Status,
+			SuspendedAt: m.SuspendedAt,
 		})
 	}
 	return out, nil

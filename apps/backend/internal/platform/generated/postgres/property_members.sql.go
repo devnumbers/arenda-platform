@@ -11,10 +11,34 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countActiveMembersByUser = `-- name: CountActiveMembersByUser :one
+SELECT COUNT(*) FROM property_members
+WHERE user_id = $1 AND status = 'active'
+`
+
+func (q *Queries) CountActiveMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveMembersByUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countSuspendedMembersByUser = `-- name: CountSuspendedMembersByUser :one
+SELECT COUNT(*) FROM property_members
+WHERE user_id = $1 AND status = 'suspended'
+`
+
+func (q *Queries) CountSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSuspendedMembersByUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createPropertyMember = `-- name: CreatePropertyMember :one
 INSERT INTO property_members (id, property_id, user_id, role, granted_by)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, property_id, user_id, role, granted_by, created_at, updated_at
+RETURNING id, property_id, user_id, role, granted_by, created_at, updated_at, status, suspended_at
 `
 
 type CreatePropertyMemberParams struct {
@@ -42,6 +66,47 @@ func (q *Queries) CreatePropertyMember(ctx context.Context, arg CreatePropertyMe
 		&i.GrantedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
+		&i.SuspendedAt,
+	)
+	return i, err
+}
+
+const createPropertyMemberWithStatus = `-- name: CreatePropertyMemberWithStatus :one
+INSERT INTO property_members (id, property_id, user_id, role, granted_by, status)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, property_id, user_id, role, granted_by, created_at, updated_at, status, suspended_at
+`
+
+type CreatePropertyMemberWithStatusParams struct {
+	ID         pgtype.UUID `json:"id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+	UserID     pgtype.UUID `json:"user_id"`
+	Role       string      `json:"role"`
+	GrantedBy  pgtype.UUID `json:"granted_by"`
+	Status     string      `json:"status"`
+}
+
+func (q *Queries) CreatePropertyMemberWithStatus(ctx context.Context, arg CreatePropertyMemberWithStatusParams) (PropertyMember, error) {
+	row := q.db.QueryRow(ctx, createPropertyMemberWithStatus,
+		arg.ID,
+		arg.PropertyID,
+		arg.UserID,
+		arg.Role,
+		arg.GrantedBy,
+		arg.Status,
+	)
+	var i PropertyMember
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.UserID,
+		&i.Role,
+		&i.GrantedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Status,
+		&i.SuspendedAt,
 	)
 	return i, err
 }
@@ -76,6 +141,7 @@ FROM property_members m
 JOIN properties p ON p.id = m.property_id
 WHERE m.user_id = $1::uuid
   AND p.owner_id = $2::uuid
+  AND m.status = 'active'
 `
 
 type GetMaxMemberRoleByOwnerParams struct {
@@ -91,7 +157,7 @@ func (q *Queries) GetMaxMemberRoleByOwner(ctx context.Context, arg GetMaxMemberR
 }
 
 const getPropertyMember = `-- name: GetPropertyMember :one
-SELECT id, property_id, user_id, role, granted_by, created_at, updated_at FROM property_members
+SELECT id, property_id, user_id, role, granted_by, created_at, updated_at, status, suspended_at FROM property_members
 WHERE id = $1 AND property_id = $2
 `
 
@@ -111,12 +177,14 @@ func (q *Queries) GetPropertyMember(ctx context.Context, arg GetPropertyMemberPa
 		&i.GrantedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
+		&i.SuspendedAt,
 	)
 	return i, err
 }
 
 const getPropertyMemberByPropertyAndUser = `-- name: GetPropertyMemberByPropertyAndUser :one
-SELECT id, property_id, user_id, role, granted_by, created_at, updated_at FROM property_members
+SELECT id, property_id, user_id, role, granted_by, created_at, updated_at, status, suspended_at FROM property_members
 WHERE property_id = $1 AND user_id = $2
 `
 
@@ -136,13 +204,15 @@ func (q *Queries) GetPropertyMemberByPropertyAndUser(ctx context.Context, arg Ge
 		&i.GrantedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
+		&i.SuspendedAt,
 	)
 	return i, err
 }
 
 const getPropertyMemberRole = `-- name: GetPropertyMemberRole :one
 SELECT role FROM property_members
-WHERE property_id = $1 AND user_id = $2
+WHERE property_id = $1 AND user_id = $2 AND status = 'active'
 `
 
 type GetPropertyMemberRoleParams struct {
@@ -150,6 +220,10 @@ type GetPropertyMemberRoleParams struct {
 	UserID     pgtype.UUID `json:"user_id"`
 }
 
+// Returns the role of an ACTIVE membership only. A suspended membership is
+// treated as no access: the SQL-level status filter makes a suspended
+// recipient indistinguishable from a non-member for authorization purposes
+// (issue #158, T4). The UI distinguishes suspended via a dedicated screen (T9).
 func (q *Queries) GetPropertyMemberRole(ctx context.Context, arg GetPropertyMemberRoleParams) (string, error) {
 	row := q.db.QueryRow(ctx, getPropertyMemberRole, arg.PropertyID, arg.UserID)
 	var role string
@@ -162,6 +236,7 @@ SELECT DISTINCT p.owner_id
 FROM property_members m
 JOIN properties p ON p.id = m.property_id
 WHERE m.user_id = $1::uuid
+  AND m.status = 'active'
 `
 
 func (q *Queries) ListAccessibleOwners(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error) {
@@ -184,8 +259,81 @@ func (q *Queries) ListAccessibleOwners(ctx context.Context, userID pgtype.UUID) 
 	return items, nil
 }
 
+const listActiveMembersByPropertyOwner = `-- name: ListActiveMembersByPropertyOwner :many
+SELECT m.id, m.property_id, m.user_id, m.role, m.granted_by, m.created_at, m.updated_at, m.status, m.suspended_at
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE p.owner_id = $1 AND m.status = 'active'
+ORDER BY m.user_id, m.updated_at DESC
+`
+
+func (q *Queries) ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error) {
+	rows, err := q.db.Query(ctx, listActiveMembersByPropertyOwner, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PropertyMember{}
+	for rows.Next() {
+		var i PropertyMember
+		if err := rows.Scan(
+			&i.ID,
+			&i.PropertyID,
+			&i.UserID,
+			&i.Role,
+			&i.GrantedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Status,
+			&i.SuspendedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveMembersByUser = `-- name: ListActiveMembersByUser :many
+SELECT id, property_id, user_id, role, granted_by, created_at, updated_at, status, suspended_at FROM property_members
+WHERE user_id = $1 AND status = 'active'
+`
+
+func (q *Queries) ListActiveMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error) {
+	rows, err := q.db.Query(ctx, listActiveMembersByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PropertyMember{}
+	for rows.Next() {
+		var i PropertyMember
+		if err := rows.Scan(
+			&i.ID,
+			&i.PropertyID,
+			&i.UserID,
+			&i.Role,
+			&i.GrantedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Status,
+			&i.SuspendedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPropertyMembers = `-- name: ListPropertyMembers :many
-SELECT id, property_id, user_id, role, granted_by, created_at, updated_at FROM property_members
+SELECT id, property_id, user_id, role, granted_by, created_at, updated_at, status, suspended_at FROM property_members
 WHERE property_id = $1
 ORDER BY created_at ASC
 `
@@ -207,6 +355,8 @@ func (q *Queries) ListPropertyMembers(ctx context.Context, propertyID pgtype.UUI
 			&i.GrantedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Status,
+			&i.SuspendedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -220,7 +370,7 @@ func (q *Queries) ListPropertyMembers(ctx context.Context, propertyID pgtype.UUI
 
 const listPropertyMembersByUser = `-- name: ListPropertyMembersByUser :many
 SELECT property_id, role FROM property_members
-WHERE user_id = $1
+WHERE user_id = $1 AND status = 'active'
 `
 
 type ListPropertyMembersByUserRow struct {
@@ -248,10 +398,91 @@ func (q *Queries) ListPropertyMembersByUser(ctx context.Context, userID pgtype.U
 	return items, nil
 }
 
+const listSuspendedMembersByUser = `-- name: ListSuspendedMembersByUser :many
+SELECT id, property_id, user_id, role, granted_by, created_at, updated_at, status, suspended_at FROM property_members
+WHERE user_id = $1 AND status = 'suspended'
+ORDER BY suspended_at ASC NULLS LAST, updated_at DESC
+`
+
+func (q *Queries) ListSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error) {
+	rows, err := q.db.Query(ctx, listSuspendedMembersByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PropertyMember{}
+	for rows.Next() {
+		var i PropertyMember
+		if err := rows.Scan(
+			&i.ID,
+			&i.PropertyID,
+			&i.UserID,
+			&i.Role,
+			&i.GrantedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Status,
+			&i.SuspendedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const reactivatePropertyMember = `-- name: ReactivatePropertyMember :one
+UPDATE property_members
+SET status = 'active', suspended_at = NULL
+WHERE id = $1 AND property_id = $2
+RETURNING id, property_id, user_id, role, granted_by, created_at, updated_at, status, suspended_at
+`
+
+type ReactivatePropertyMemberParams struct {
+	ID         pgtype.UUID `json:"id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+func (q *Queries) ReactivatePropertyMember(ctx context.Context, arg ReactivatePropertyMemberParams) (PropertyMember, error) {
+	row := q.db.QueryRow(ctx, reactivatePropertyMember, arg.ID, arg.PropertyID)
+	var i PropertyMember
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.UserID,
+		&i.Role,
+		&i.GrantedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Status,
+		&i.SuspendedAt,
+	)
+	return i, err
+}
+
+const suspendPropertyMember = `-- name: SuspendPropertyMember :exec
+UPDATE property_members
+SET status = 'suspended', suspended_at = now()
+WHERE id = $1 AND property_id = $2
+`
+
+type SuspendPropertyMemberParams struct {
+	ID         pgtype.UUID `json:"id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+func (q *Queries) SuspendPropertyMember(ctx context.Context, arg SuspendPropertyMemberParams) error {
+	_, err := q.db.Exec(ctx, suspendPropertyMember, arg.ID, arg.PropertyID)
+	return err
+}
+
 const updatePropertyMemberRole = `-- name: UpdatePropertyMemberRole :one
 UPDATE property_members SET role = $3
 WHERE id = $1 AND property_id = $2
-RETURNING id, property_id, user_id, role, granted_by, created_at, updated_at
+RETURNING id, property_id, user_id, role, granted_by, created_at, updated_at, status, suspended_at
 `
 
 type UpdatePropertyMemberRoleParams struct {
@@ -271,6 +502,8 @@ func (q *Queries) UpdatePropertyMemberRole(ctx context.Context, arg UpdateProper
 		&i.GrantedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
+		&i.SuspendedAt,
 	)
 	return i, err
 }

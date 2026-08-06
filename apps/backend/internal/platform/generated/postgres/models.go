@@ -279,13 +279,15 @@ type PropertyContact struct {
 }
 
 type PropertyMember struct {
-	ID         pgtype.UUID        `json:"id"`
-	PropertyID pgtype.UUID        `json:"property_id"`
-	UserID     pgtype.UUID        `json:"user_id"`
-	Role       string             `json:"role"`
-	GrantedBy  pgtype.UUID        `json:"granted_by"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ID          pgtype.UUID        `json:"id"`
+	PropertyID  pgtype.UUID        `json:"property_id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	Role        string             `json:"role"`
+	GrantedBy   pgtype.UUID        `json:"granted_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Status      string             `json:"status"`
+	SuspendedAt pgtype.Timestamptz `json:"suspended_at"`
 }
 
 type PropertyPhoto struct {

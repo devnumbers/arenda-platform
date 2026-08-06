@@ -5,6 +5,7 @@ package application
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
@@ -28,6 +29,36 @@ type MembershipRepository interface {
 	MaxRoleByOwner(ctx context.Context, userID, ownerID uuid.UUID) (domain.Role, error)
 	UpdateRole(ctx context.Context, id, propertyID uuid.UUID, role domain.Role) (domain.Membership, error)
 	Delete(ctx context.Context, id, propertyID uuid.UUID) error
+	// Suspend marks a membership as suspended: it no longer occupies a tariff
+	// slot and grants no access until reactivated (issue #158, T4). Existence is
+	// established by the service in the same transaction.
+	Suspend(ctx context.Context, id, propertyID uuid.UUID) error
+	// Reactivate marks a suspended membership as active again, restoring its
+	// slot and access. Returns ErrMemberNotFound when no row matches.
+	Reactivate(ctx context.Context, id, propertyID uuid.UUID) (domain.Membership, error)
+	// ListSuspendedByUser returns the user's suspended memberships ordered for
+	// FIFO recovery (oldest suspended_at first).
+	ListSuspendedByUser(ctx context.Context, userID uuid.UUID) ([]domain.Membership, error)
+	// CountActiveByUser returns the number of active memberships held by the
+	// user — i.e. the number of occupied tariff slots.
+	CountActiveByUser(ctx context.Context, userID uuid.UUID) (int, error)
+	// CountSuspendedByUser returns the number of suspended memberships held by
+	// the user — i.e. the shared objects hidden from the recipient due to a
+	// tariff slot shortage. Used by the properties list to surface a footnote
+	// count (issue #158, T4).
+	CountSuspendedByUser(ctx context.Context, userID uuid.UUID) (int, error)
+	// ListActiveByPropertyOwner returns the active memberships across all of the
+	// owner's properties.
+	ListActiveByPropertyOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Membership, error)
+	// ListActiveByUser returns the user's active memberships with full rows
+	// (id, updated_at, ...), unlike ListByUser which returns a lightweight
+	// property-id+role projection. Used by the slot coordinator to build the
+	// recipient's shared-property pool. See issue #158 (T4).
+	ListActiveByUser(ctx context.Context, userID uuid.UUID) ([]domain.Membership, error)
+	// CreateWithStatus inserts a membership with an explicit status, used to
+	// create a suspended grant directly (so it can be activated later without
+	// occupying a slot until a slot frees up).
+	CreateWithStatus(ctx context.Context, m domain.Membership) (domain.Membership, error)
 	WithTx(tx transaction.Tx) MembershipRepository
 }
 
@@ -59,4 +90,39 @@ type UserLookup interface {
 // by every other bounded context's service.
 type txBeginner interface {
 	Begin(ctx context.Context) (transaction.Tx, error)
+}
+
+// RecipientLimiter reports the active-property tariff limit of a recipient —
+// i.e. the maximum number of objects (own + shared) a recipient may have
+// active at once. Implemented by a bridge adapter over the billing
+// SubscriptionPropertyLimiter. Returns math.MaxInt32 for unlimited tariffs.
+// See issue #158 (T4), PRD #153.
+type RecipientLimiter interface {
+	ActivePropertyLimit(ctx context.Context, recipientID uuid.UUID) (int, error)
+	WithTx(tx transaction.Tx) (RecipientLimiter, error)
+}
+
+// OccupancyPort reports which properties of a data owner have an open lease.
+// Implemented by a bridge adapter over the properties OccupancyProvider.
+// Occupancy is a read-only, short-lived signal, so the port has no WithTx: the
+// coordinator reads it on the main connection, consistent with how the
+// properties service reads occupancy outside its listing transaction.
+type OccupancyPort interface {
+	OccupiedPropertyIDs(ctx context.Context, ownerID uuid.UUID) (map[uuid.UUID]bool, error)
+}
+
+// OwnedActivePropertiesPort lists the active property ids owned by a user
+// (their own tariff pool entries). Implemented by a bridge adapter over the
+// properties PropertyRepository.
+type OwnedActivePropertiesPort interface {
+	// ListActiveWithMeta returns ids of active+maintenance properties of the
+	// owner, each paired with its UpdatedAt (used by the eviction comparator).
+	ListActiveWithMeta(ctx context.Context, ownerID uuid.UUID) ([]OwnedPropertyMeta, error)
+}
+
+// OwnedPropertyMeta is a property id + UpdatedAt pair from the owner's active
+// pool.
+type OwnedPropertyMeta struct {
+	ID        uuid.UUID
+	UpdatedAt time.Time
 }

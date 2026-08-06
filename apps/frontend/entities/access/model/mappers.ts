@@ -14,5 +14,7 @@ export function mapPropertyAccessMemberResponse(
         isOwner: dto.is_owner,
         displayName: dto.display_name ?? '',
         hasEmail: dto.has_email ?? false,
+        status: dto.status,
+        suspendedAt: dto.suspended_at ?? null,
     };
 }

@@ -39,7 +39,8 @@ func (r *MembershipRepository) WithTx(tx transaction.Tx) application.MembershipR
 	return NewMembershipRepository(dbtx)
 }
 
-// Create inserts a membership record and returns the created membership.
+// Create inserts a membership record and returns the created membership. The
+// row is created with the default 'active' status.
 func (r *MembershipRepository) Create(ctx context.Context, m domain.Membership) (domain.Membership, error) {
 	row, err := r.q().CreatePropertyMember(ctx, postgres.CreatePropertyMemberParams{
 		ID:         pgconv.UUIDToPgtype(m.ID),
@@ -47,6 +48,27 @@ func (r *MembershipRepository) Create(ctx context.Context, m domain.Membership) 
 		UserID:     pgconv.UUIDToPgtype(m.UserID),
 		Role:       m.Role.String(),
 		GrantedBy:  pgconv.UUIDToPgtype(m.GrantedBy),
+	})
+	if err != nil {
+		return domain.Membership{}, err
+	}
+	return membershipFromRow(row), nil
+}
+
+// CreateWithStatus inserts a membership record with an explicit status, used to
+// create a suspended grant directly. A zero-value status defaults to active.
+func (r *MembershipRepository) CreateWithStatus(ctx context.Context, m domain.Membership) (domain.Membership, error) {
+	status := m.Status
+	if status == "" {
+		status = domain.MemberStatusActive
+	}
+	row, err := r.q().CreatePropertyMemberWithStatus(ctx, postgres.CreatePropertyMemberWithStatusParams{
+		ID:         pgconv.UUIDToPgtype(m.ID),
+		PropertyID: pgconv.UUIDToPgtype(m.PropertyID),
+		UserID:     pgconv.UUIDToPgtype(m.UserID),
+		Role:       m.Role.String(),
+		GrantedBy:  pgconv.UUIDToPgtype(m.GrantedBy),
+		Status:     status.String(),
 	})
 	if err != nil {
 		return domain.Membership{}, err
@@ -183,15 +205,107 @@ func (r *MembershipRepository) Delete(ctx context.Context, id, propertyID uuid.U
 	})
 }
 
+// Suspend marks a membership as suspended. Existence is established by the
+// service in the same transaction, so a zero-rows result is not treated as
+// NotFound.
+func (r *MembershipRepository) Suspend(ctx context.Context, id, propertyID uuid.UUID) error {
+	return r.q().SuspendPropertyMember(ctx, postgres.SuspendPropertyMemberParams{
+		ID:         pgconv.UUIDToPgtype(id),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+}
+
+// Reactivate marks a suspended membership as active again.
+func (r *MembershipRepository) Reactivate(ctx context.Context, id, propertyID uuid.UUID) (domain.Membership, error) {
+	row, err := r.q().ReactivatePropertyMember(ctx, postgres.ReactivatePropertyMemberParams{
+		ID:         pgconv.UUIDToPgtype(id),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Membership{}, domain.ErrMemberNotFound
+		}
+		return domain.Membership{}, err
+	}
+	return membershipFromRow(row), nil
+}
+
+// ListSuspendedByUser returns the user's suspended memberships ordered for FIFO
+// recovery (oldest suspended_at first).
+func (r *MembershipRepository) ListSuspendedByUser(ctx context.Context, userID uuid.UUID) ([]domain.Membership, error) {
+	rows, err := r.q().ListSuspendedMembersByUser(ctx, pgconv.UUIDToPgtype(userID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Membership, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, membershipFromRow(row))
+	}
+	return out, nil
+}
+
+// CountActiveByUser returns the number of active memberships held by the user
+// (occupied tariff slots).
+func (r *MembershipRepository) CountActiveByUser(ctx context.Context, userID uuid.UUID) (int, error) {
+	count, err := r.q().CountActiveMembersByUser(ctx, pgconv.UUIDToPgtype(userID))
+	if err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
+// CountSuspendedByUser returns the number of suspended memberships held by the
+// user (shared objects hidden from the recipient due to a tariff slot
+// shortage). See issue #158 (T4).
+func (r *MembershipRepository) CountSuspendedByUser(ctx context.Context, userID uuid.UUID) (int, error) {
+	count, err := r.q().CountSuspendedMembersByUser(ctx, pgconv.UUIDToPgtype(userID))
+	if err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
+// ListActiveByPropertyOwner returns the active memberships across all of the
+// owner's properties.
+func (r *MembershipRepository) ListActiveByPropertyOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Membership, error) {
+	rows, err := r.q().ListActiveMembersByPropertyOwner(ctx, pgconv.UUIDToPgtype(ownerID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Membership, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, membershipFromRow(row))
+	}
+	return out, nil
+}
+
+// ListActiveByUser returns the user's active memberships with full rows. Unlike
+// ListByUser (a property-id+role projection), it carries the membership id and
+// updated_at the slot coordinator needs to build the recipient's shared pool
+// and suspend/reactivate entries. See issue #158 (T4).
+func (r *MembershipRepository) ListActiveByUser(ctx context.Context, userID uuid.UUID) ([]domain.Membership, error) {
+	rows, err := r.q().ListActiveMembersByUser(ctx, pgconv.UUIDToPgtype(userID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Membership, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, membershipFromRow(row))
+	}
+	return out, nil
+}
+
 func membershipFromRow(row postgres.PropertyMember) domain.Membership {
 	return domain.Membership{
-		ID:         pgconv.UUIDFromPgtype(row.ID),
-		PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
-		UserID:     pgconv.UUIDFromPgtype(row.UserID),
-		Role:       domainRole(row.Role),
-		GrantedBy:  pgconv.UUIDFromPgtype(row.GrantedBy),
-		CreatedAt:  pgconv.TimestamptzToTime(row.CreatedAt),
-		UpdatedAt:  pgconv.TimestamptzToTime(row.UpdatedAt),
+		ID:          pgconv.UUIDFromPgtype(row.ID),
+		PropertyID:  pgconv.UUIDFromPgtype(row.PropertyID),
+		UserID:      pgconv.UUIDFromPgtype(row.UserID),
+		Role:        domainRole(row.Role),
+		GrantedBy:   pgconv.UUIDFromPgtype(row.GrantedBy),
+		Status:      domainMemberStatus(row.Status),
+		SuspendedAt: pgconv.TimestamptzToPtrTime(row.SuspendedAt),
+		CreatedAt:   pgconv.TimestamptzToTime(row.CreatedAt),
+		UpdatedAt:   pgconv.TimestamptzToTime(row.UpdatedAt),
 	}
 }
 
@@ -203,4 +317,15 @@ func domainRole(s string) domain.Role {
 		return domain.RoleViewer
 	}
 	return role
+}
+
+func domainMemberStatus(s string) domain.MemberStatus {
+	// Stored statuses are validated by the CHECK constraint; a parse failure
+	// here would indicate schema drift, so fall back to active rather than
+	// panic.
+	status, err := domain.ParseMemberStatus(s)
+	if err != nil {
+		return domain.MemberStatusActive
+	}
+	return status
 }

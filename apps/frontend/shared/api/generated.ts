@@ -1996,6 +1996,16 @@ export interface components {
             /** @description Participant display name (name and surname, or a masked phone). Never the raw phone or email. */
             display_name?: string;
             has_email?: boolean;
+            /**
+             * @description Membership lifecycle status. "suspended" means the recipient's tariff slot was exceeded, so the object is hidden from the recipient's list and grants no access until a slot frees up.
+             * @enum {string}
+             */
+            status: "active" | "suspended";
+            /**
+             * Format: date-time
+             * @description When the membership was suspended; null when active.
+             */
+            suspended_at?: string | null;
         };
         PropertyAccessMembersResponse: {
             items: components["schemas"]["PropertyAccessMemberResponse"][];
@@ -2015,6 +2025,11 @@ export interface components {
         };
         PropertiesResponse: {
             items: components["schemas"]["PropertyResponse"][];
+            /**
+             * @description Number of shared properties hidden from the recipient due to a tariff slot shortage (suspended memberships). Zero for owners and when the recipient is within their limit.
+             * @default 0
+             */
+            hidden_shared_count: number;
         };
         /** @enum {string} */
         PropertyType: "apartment" | "room" | "apartments" | "house" | "commercial" | "office" | "warehouse" | "garage" | "parking" | "land";

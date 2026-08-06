@@ -36,16 +36,50 @@ func ParseRole(s string) (Role, error) {
 // String returns the string representation of the role.
 func (r Role) String() string { return string(r) }
 
+// MemberStatus is the lifecycle state of a membership. An active membership
+// occupies a tariff slot in the recipient's limit and grants access; a
+// suspended membership is hidden from the recipient (no slot, no access) when
+// the recipient's tariff limit is exceeded, and is recovered FIFO when a slot
+// frees up. See issue #158 (T4).
+type MemberStatus string
+
+const (
+	// MemberStatusActive occupies a tariff slot and grants access to the object.
+	MemberStatusActive MemberStatus = "active"
+	// MemberStatusSuspended is hidden from the recipient (no slot, no access)
+	// until a slot frees up and the membership is recovered FIFO.
+	MemberStatusSuspended MemberStatus = "suspended"
+)
+
+// ParseMemberStatus parses a membership status string.
+func ParseMemberStatus(s string) (MemberStatus, error) {
+	switch MemberStatus(s) {
+	case MemberStatusActive, MemberStatusSuspended:
+		return MemberStatus(s), nil
+	default:
+		return "", fmt.Errorf("%w: %q", ErrInvalidMemberStatus, s)
+	}
+}
+
+// String returns the string representation of the member status.
+func (ms MemberStatus) String() string { return string(ms) }
+
 // Membership is a single shared-access grant on a property.
 type Membership struct {
-	ID         uuid.UUID
-	PropertyID uuid.UUID
-	UserID     uuid.UUID
-	Role       Role
-	GrantedBy  uuid.UUID
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID          uuid.UUID
+	PropertyID  uuid.UUID
+	UserID      uuid.UUID
+	Role        Role
+	GrantedBy   uuid.UUID
+	Status      MemberStatus
+	SuspendedAt *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
+
+// IsSuspended reports whether the membership is suspended (hidden from the
+// recipient due to a tariff slot shortage).
+func (m Membership) IsSuspended() bool { return m.Status == MemberStatusSuspended }
 
 // Sentinel errors for the access domain.
 var (
@@ -65,4 +99,11 @@ var (
 	// ErrCannotLeaveOwnProperty is returned when the owner attempts to leave
 	// their own object via self-exit.
 	ErrCannotLeaveOwnProperty = errors.New("owner cannot leave their own property")
+	// ErrInvalidMemberStatus is returned when a membership status string is not
+	// a recognized member status value.
+	ErrInvalidMemberStatus = errors.New("invalid membership status")
+	// ErrCannotLeaveSuspended is returned when a recipient tries to self-exit a
+	// suspended membership. Self-exit is not available for suspended access
+	// because the object is already hidden from the recipient.
+	ErrCannotLeaveSuspended = errors.New("cannot leave a suspended membership")
 )

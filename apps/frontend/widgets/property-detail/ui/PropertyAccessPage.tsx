@@ -195,6 +195,11 @@ export function PropertyAccessPage(): JSX.Element {
                                             ? 'Владелец'
                                             : memberRoleLabel(member.role as MemberRole)}
                                     </span>
+                                    {member.status === 'suspended' && (
+                                        <span className={styles.memberStatus}>
+                                            приостановлен: лимит получателя
+                                        </span>
+                                    )}
                                 </div>
                                 {!member.isOwner && member.id !== null && (
                                     <div className={styles.memberActions}>

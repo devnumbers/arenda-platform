@@ -169,7 +169,21 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 		items = append(items, resp)
 	}
 
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{Items: items})
+	// Report how many shared objects are hidden from the recipient by a tariff
+	// slot shortage (suspended memberships), for a footnote in the UI (issue
+	// #158, T4). Owners and recipients within their limit get zero.
+	hidden, err := h.svc.HiddenSharedCount(r.Context(), actor)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to count hidden shared properties", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		return
+	}
+	hiddenSharedCount := hidden
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{
+		Items:             items,
+		HiddenSharedCount: &hiddenSharedCount,
+	})
 }
 
 // ListArchivedProperties implements GET /properties/archive.

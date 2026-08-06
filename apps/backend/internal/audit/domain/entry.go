@@ -49,6 +49,16 @@ const (
 	ActionPropertyMemberUpdated Action = "property_member.updated"
 	ActionPropertyMemberRemoved Action = "property_member.removed"
 	ActionPropertyMemberLeft    Action = "property_member.left"
+	// ActionPropertyMemberSuspended records a membership moved to the suspended
+	// state by the slot coordinator (recipient tariff downgrade / grace expiry /
+	// activation without a free slot). Recorded by the system actor; Context
+	// never carries the member's PII. See issue #158 (T4).
+	ActionPropertyMemberSuspended Action = "property_member.suspended"
+	// ActionPropertyMemberReactivated records a suspended membership recovered
+	// FIFO by the slot coordinator when a recipient slot frees up (revoke,
+	// self-exit, owner archive/delete, recipient upgrade). Recorded by the
+	// system actor. See issue #158 (T4).
+	ActionPropertyMemberReactivated Action = "property_member.reactivated"
 
 	ActionLeaseCreated   Action = "lease.created"
 	ActionLeaseUpdated   Action = "lease.updated"
