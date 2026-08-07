@@ -34,7 +34,7 @@
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "@svgr/webpack": "^8.1.0",
-    "@types/node": "^20",
+    "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
