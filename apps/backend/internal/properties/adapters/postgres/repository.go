@@ -101,7 +101,7 @@ func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, scope uuid
 		}
 		return domain.Property{}, err
 	}
-	return propertyFromOverdueRow(postgres.Property{
+	return propertyFromCountsRow(postgres.Property{
 		ID:          row.ID,
 		OwnerID:     row.OwnerID,
 		Name:        row.Name,
@@ -112,7 +112,7 @@ func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, scope uuid
 		Status:      row.Status,
 		CreatedAt:   row.CreatedAt,
 		UpdatedAt:   row.UpdatedAt,
-	}, row.OverdueRentCount), nil
+	}, row.OverdueRentCount, row.MembersCount), nil
 }
 
 func (r *PropertyRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (domain.Property, error) {
@@ -139,7 +139,18 @@ func (r *PropertyRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.
 		}
 		return domain.Property{}, err
 	}
-	return propertyFromRow(row), nil
+	return propertyFromCountsRow(postgres.Property{
+		ID:          row.ID,
+		OwnerID:     row.OwnerID,
+		Name:        row.Name,
+		Type:        row.Type,
+		Address:     row.Address,
+		Description: row.Description,
+		Attributes:  row.Attributes,
+		Status:      row.Status,
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
+	}, 0, row.MembersCount), nil
 }
 
 // GetByIDForUpdate is the pessimistic-lock variant of GetByID (T3, issue #156).
@@ -161,7 +172,7 @@ func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.U
 	}
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
-		properties = append(properties, propertyFromOverdueRow(postgres.Property{
+		properties = append(properties, propertyFromCountsRow(postgres.Property{
 			ID:          row.ID,
 			OwnerID:     row.OwnerID,
 			Name:        row.Name,
@@ -172,7 +183,7 @@ func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.U
 			Status:      row.Status,
 			CreatedAt:   row.CreatedAt,
 			UpdatedAt:   row.UpdatedAt,
-		}, row.OverdueRentCount))
+		}, row.OverdueRentCount, row.MembersCount))
 	}
 	return properties, nil
 }
@@ -184,7 +195,7 @@ func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, scope uuid
 	}
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
-		properties = append(properties, propertyFromOverdueRow(postgres.Property{
+		properties = append(properties, propertyFromCountsRow(postgres.Property{
 			ID:          row.ID,
 			OwnerID:     row.OwnerID,
 			Name:        row.Name,
@@ -195,7 +206,7 @@ func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, scope uuid
 			Status:      row.Status,
 			CreatedAt:   row.CreatedAt,
 			UpdatedAt:   row.UpdatedAt,
-		}, row.OverdueRentCount))
+		}, row.OverdueRentCount, row.MembersCount))
 	}
 	return properties, nil
 }
@@ -305,8 +316,11 @@ func propertyFromRow(row postgres.Property) domain.Property {
 	}
 }
 
-func propertyFromOverdueRow(row postgres.Property, overdueRentCount int64) domain.Property {
+// propertyFromCountsRow maps a property row plus its scalar projections
+// (overdue rent count, shared-access members count) to the domain model.
+func propertyFromCountsRow(row postgres.Property, overdueRentCount, membersCount int64) domain.Property {
 	p := propertyFromRow(row)
 	p.OverdueRentCount = int(overdueRentCount)
+	p.MembersCount = int(membersCount)
 	return p
 }

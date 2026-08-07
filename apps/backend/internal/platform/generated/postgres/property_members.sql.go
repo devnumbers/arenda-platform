@@ -12,10 +12,14 @@ import (
 )
 
 const countActiveMembersByUser = `-- name: CountActiveMembersByUser :one
-SELECT COUNT(*) FROM property_members
-WHERE user_id = $1 AND status = 'active'
+SELECT COUNT(*)
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1 AND m.status = 'active' AND p.status != 'archived'
 `
 
+// Occupied recipient tariff slots: memberships on archived properties do not
+// occupy a slot (issue #163).
 func (q *Queries) CountActiveMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countActiveMembersByUser, userID)
 	var count int64
@@ -24,10 +28,15 @@ func (q *Queries) CountActiveMembersByUser(ctx context.Context, userID pgtype.UU
 }
 
 const countSuspendedMembersByUser = `-- name: CountSuspendedMembersByUser :one
-SELECT COUNT(*) FROM property_members
-WHERE user_id = $1 AND status = 'suspended'
+SELECT COUNT(*)
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived'
 `
 
+// Shared objects hidden from the recipient by a tariff slot shortage (the
+// hidden_shared_count badge). Memberships on archived properties are excluded
+// (issue #163): those objects are hidden by the archive, not by the tariff.
 func (q *Queries) CountSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countSuspendedMembersByUser, userID)
 	var count int64
@@ -298,10 +307,15 @@ func (q *Queries) ListActiveMembersByPropertyOwner(ctx context.Context, ownerID 
 }
 
 const listActiveMembersByUser = `-- name: ListActiveMembersByUser :many
-SELECT id, property_id, user_id, role, granted_by, created_at, updated_at, status, suspended_at FROM property_members
-WHERE user_id = $1 AND status = 'active'
+SELECT m.id, m.property_id, m.user_id, m.role, m.granted_by, m.created_at, m.updated_at, m.status, m.suspended_at
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1 AND m.status = 'active' AND p.status != 'archived'
 `
 
+// The recipient's shared-pool entries for slot accounting. Memberships on
+// archived properties are excluded: an archived object does not occupy a
+// recipient slot (issue #163).
 func (q *Queries) ListActiveMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error) {
 	rows, err := q.db.Query(ctx, listActiveMembersByUser, userID)
 	if err != nil {
@@ -399,11 +413,16 @@ func (q *Queries) ListPropertyMembersByUser(ctx context.Context, userID pgtype.U
 }
 
 const listSuspendedMembersByUser = `-- name: ListSuspendedMembersByUser :many
-SELECT id, property_id, user_id, role, granted_by, created_at, updated_at, status, suspended_at FROM property_members
-WHERE user_id = $1 AND status = 'suspended'
-ORDER BY suspended_at ASC NULLS LAST, updated_at DESC
+SELECT m.id, m.property_id, m.user_id, m.role, m.granted_by, m.created_at, m.updated_at, m.status, m.suspended_at
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived'
+ORDER BY m.suspended_at ASC NULLS LAST, m.updated_at DESC
 `
 
+// The FIFO recovery queue. Memberships on archived properties are excluded:
+// an archived object does not occupy a recipient slot (issue #163), so a free
+// slot must not be wasted on them; they re-enter the selection on unarchive.
 func (q *Queries) ListSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error) {
 	rows, err := q.db.Query(ctx, listSuspendedMembersByUser, userID)
 	if err != nil {

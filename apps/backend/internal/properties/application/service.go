@@ -869,6 +869,15 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
+
+		// Same as a manual archive (issue #163): archiving freed one tariff slot
+		// for each recipient, so recover their oldest suspended memberships FIFO
+		// in the same transaction.
+		if s.slots != nil {
+			if err := s.slots.RecoverSuspendedForProperty(ctx, tx, p.ID); err != nil {
+				return fmt.Errorf("recover suspended memberships after auto-archive: %w", err)
+			}
+		}
 	}
 	return nil
 }

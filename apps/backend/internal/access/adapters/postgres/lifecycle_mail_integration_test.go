@@ -177,8 +177,8 @@ func newLifecycleMailFixture(t *testing.T) *lifecycleMailFixture {
 	beginner := lifecycleBeginner{tx: tx}
 
 	slots := accessapp.NewSlotCoordinator(memberRepo, ownerResolver, limiter, lifecycleNoOccupancy{}, lifecycleNoOwnedProps{}, lifecycle, auditapp.Noop{}, beginner)
-	access := accessapp.NewAccessService(memberRepo, ownerResolver, userLookup, policy, slots, lifecycle, beginner, auditapp.Noop{}, nil)
-	invites := accessapp.NewInvitationService(access, memberRepo, invitationRepo, ownerResolver, userLookup, policy, slots, accessMailer, lifecycle, ownerResolver, beginner, auditapp.Noop{}, nil, nil)
+	access := accessapp.NewAccessService(memberRepo, ownerResolver, ownerResolver, userLookup, policy, slots, lifecycle, beginner, auditapp.Noop{}, nil)
+	invites := accessapp.NewInvitationService(access, memberRepo, invitationRepo, ownerResolver, ownerResolver, userLookup, policy, slots, accessMailer, lifecycle, ownerResolver, beginner, auditapp.Noop{}, nil, nil)
 	deleter := accessapp.NewPropertyDeleteMailer(memberRepo, emailResolver, accessMailer, nil)
 
 	return &lifecycleMailFixture{

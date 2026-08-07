@@ -196,6 +196,27 @@ func (c *SlotCoordinator) EnforceOnActivation(ctx context.Context, tx transactio
 	return used >= limit, nil
 }
 
+// poolOverLimit reports whether the recipient's current pool (own active
+// properties plus active shared memberships) strictly exceeds the tariff
+// limit. Unlike EnforceOnActivation, the object under evaluation is already
+// part of the pool, so a pool exactly at the limit is not over.
+func (c *SlotCoordinator) poolOverLimit(ctx context.Context, tx transaction.Tx, txMembers MembershipRepository, recipientID uuid.UUID) (bool, error) {
+	txLimiter, err := c.limiter.WithTx(tx)
+	if err != nil {
+		return false, fmt.Errorf("bind limiter tx: %w", err)
+	}
+	limit, err := txLimiter.ActivePropertyLimit(ctx, recipientID)
+	if err != nil {
+		return false, fmt.Errorf("recipient limit: %w", err)
+	}
+
+	used, err := c.usedSlots(ctx, txMembers, recipientID)
+	if err != nil {
+		return false, err
+	}
+	return used > limit, nil
+}
+
 // RecoverSuspended reactivates the oldest suspended memberships of recipientID
 // when a slot has freed up. It is called whenever a recipient slot is released
 // (member revoke, self-exit, owner archive/delete) or expanded (recipient
@@ -340,13 +361,14 @@ func (c *SlotCoordinator) RecoverAfterPropertyDelete(ctx context.Context, tx tra
 	return nil
 }
 
-// EnforceOnUnarchiveForProperty suspends memberships of recipients who have no
-// free slot after a shared object is unarchived (the object re-enters the
-// recipient's tariff pool). For each recipient of the property it runs the
-// activation check: when the recipient is already at the limit, their
-// membership on this property is suspended so it does not occupy a slot until
-// one frees up. This is the third source of suspended access after activation
-// without a slot and a billing limit drop (issue #158, T4).
+// EnforceOnUnarchiveForProperty suspends memberships of recipients whose
+// tariff pool exceeds the limit after a shared object is unarchived (the
+// object re-enters the recipient's tariff pool). For each recipient of the
+// property it evaluates the full pool: the unarchived membership is already
+// active and therefore counted, so it is suspended only when the pool is
+// strictly over the limit — a pool exactly at the limit still fits and the
+// membership stays active. This is the third source of suspended access after
+// activation without a slot and a billing limit drop (issue #158, T4).
 func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error {
 	txMembers := c.members.WithTx(tx)
 
@@ -359,13 +381,14 @@ func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx 
 			// Already suspended: leave it for FIFO recovery when a slot frees.
 			continue
 		}
-		// EnforceOnActivation checks whether adding the object to the
-		// recipient's pool would exceed the limit; suspend when it would.
-		should, err := c.EnforceOnActivation(ctx, tx, m.UserID)
+		// Unlike EnforceOnActivation (a pre-insert check), the membership is
+		// already active and counted in the pool here: suspend only when the
+		// pool strictly exceeds the limit.
+		over, err := c.poolOverLimit(ctx, tx, txMembers, m.UserID)
 		if err != nil {
 			return fmt.Errorf("check recipient slot on unarchive: %w", err)
 		}
-		if !should {
+		if !over {
 			continue
 		}
 		if err := txMembers.Suspend(ctx, m.ID, propertyID); err != nil {

@@ -1092,3 +1092,74 @@ func TestGetProperty_AccessOutcomes(t *testing.T) {
 		})
 	}
 }
+
+// recordingSlotPolicy records the RecipientSlotPolicy calls so tests can assert
+// which properties triggered a suspended-membership recovery.
+type recordingSlotPolicy struct {
+	recovered []uuid.UUID
+}
+
+func (p *recordingSlotPolicy) RecoverSuspendedForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) error {
+	p.recovered = append(p.recovered, propertyID)
+	return nil
+}
+
+func (p *recordingSlotPolicy) EnforceOnUnarchiveForProperty(context.Context, transaction.Tx, uuid.UUID) error {
+	return nil
+}
+
+func (p *recordingSlotPolicy) RecoverAfterPropertyDelete(context.Context, transaction.Tx, uuid.UUID) error {
+	return nil
+}
+
+var _ RecipientSlotPolicy = (*recordingSlotPolicy)(nil)
+
+// TestPropertyService_ArchiveExcessProperties_RecoversSuspendedMembers verifies
+// that the tariff auto-archive behaves like a manual archive for shared-access
+// members (issue #163): every archived property triggers a FIFO recovery of its
+// recipients' suspended memberships.
+func TestPropertyService_ArchiveExcessProperties_RecoversSuspendedMembers(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	keepID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	excessAID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	excessBID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+
+	repo := newFakePropertyRepo(
+		domain.Property{ID: keepID, OwnerID: ownerID, Name: "Keep", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)},
+		domain.Property{ID: excessAID, OwnerID: ownerID, Name: "Excess A", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC)},
+		domain.Property{ID: excessBID, OwnerID: ownerID, Name: "Excess B", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)},
+	)
+	slots := &recordingSlotPolicy{}
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{}},
+		nil,
+		&recordingBillingLifecycle{},
+		stubLeaseRepo{},
+		fakePropertyTxBeginner{},
+		nil,
+		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
+		fakeTzResolver{},
+		testOwnerPolicy{},
+		nil,
+	)
+	svc.SetRecipientSlotPolicy(slots)
+
+	if err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 1); err != nil {
+		t.Fatalf("ArchiveExcessProperties failed: %v", err)
+	}
+
+	// Both excess properties were archived and each triggered a recovery.
+	want := map[uuid.UUID]bool{excessAID: true, excessBID: true}
+	if len(slots.recovered) != len(want) {
+		t.Fatalf("expected RecoverSuspendedForProperty for %v, got %v", want, slots.recovered)
+	}
+	for _, id := range slots.recovered {
+		if !want[id] {
+			t.Errorf("unexpected RecoverSuspendedForProperty for %s (all calls: %v)", id, slots.recovered)
+		}
+	}
+}

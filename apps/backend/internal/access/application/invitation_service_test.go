@@ -166,6 +166,7 @@ type invitationFixture struct {
 	repo        *memRepo
 	invitations *memInvitationsRepo
 	owners      staticResolver
+	statuses    fakeStatuses
 	lookup      *fakeLookup
 	mailer      *fakeAccessMailer
 	clk         *fixedClock
@@ -178,6 +179,7 @@ func newInvitationFixture() *invitationFixture {
 	repo := newMemRepo()
 	invitations := &memInvitationsRepo{}
 	owners := staticResolver{}
+	statuses := fakeStatuses{}
 	policy := NewMembershipPolicy(owners, repo)
 	lookup := newFakeLookup()
 	mailer := &fakeAccessMailer{}
@@ -188,12 +190,13 @@ func newInvitationFixture() *invitationFixture {
 	// sent from these paths.
 	lifecycle := NewLifecycleMailer(mailer, fakeEmailResolver{}, fakeTitles("Квартира на Невском"), nil)
 	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOccupancy(), newFakeOwnedProps(), lifecycle, auditapp.Noop{}, noopBeginner{})
-	access := NewAccessService(repo, owners, lookup, policy, coordinator, lifecycle, noopBeginner{}, auditapp.Noop{}, nil)
-	svc := NewInvitationService(access, repo, invitations, owners, lookup, policy, coordinator, mailer, lifecycle, fakeTitles("Квартира на Невском"), noopBeginner{}, auditapp.Noop{}, clk, nil)
+	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator, lifecycle, noopBeginner{}, auditapp.Noop{}, nil)
+	svc := NewInvitationService(access, repo, invitations, owners, statuses, lookup, policy, coordinator, mailer, lifecycle, fakeTitles("Квартира на Невском"), noopBeginner{}, auditapp.Noop{}, clk, nil)
 	return &invitationFixture{
 		repo:        repo,
 		invitations: invitations,
 		owners:      owners,
+		statuses:    statuses,
 		lookup:      lookup,
 		mailer:      mailer,
 		clk:         clk,
@@ -644,5 +647,92 @@ func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
 	}
 	if len(members) != 2 {
 		t.Errorf("viewer rows = %d, want 2 (owner + viewer)", len(members))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Archived property: invites are rejected, pending invitations activate
+// read-only without a slot (issue #163).
+// ---------------------------------------------------------------------------
+
+func TestInvitationService_InviteArchivedPropertyRejected(t *testing.T) {
+	f := newInvitationFixture()
+	owner := uuid.New()
+	property := f.addProperty(owner)
+	f.statuses[property] = true
+
+	// Unregistered email path.
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, "new@example.com", domain.RoleViewer); !errors.Is(err, domain.ErrPropertyArchived) {
+		t.Errorf("unregistered invite to archived: expected ErrPropertyArchived, got %v", err)
+	}
+	if len(f.invitations.rows) != 0 {
+		t.Errorf("no invitation must be stored, got %d", len(f.invitations.rows))
+	}
+	if len(f.mailer.sent) != 0 {
+		t.Errorf("no invite email must be sent, sent %d", len(f.mailer.sent))
+	}
+
+	// Registered email path.
+	invitee := uuid.New()
+	f.lookup.add("friend@example.com", invitee)
+	f.limiter.set(invitee, 10)
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, "friend@example.com", domain.RoleViewer); !errors.Is(err, domain.ErrPropertyArchived) {
+		t.Errorf("registered invite to archived: expected ErrPropertyArchived, got %v", err)
+	}
+	if len(f.repo.rows) != 0 {
+		t.Errorf("no membership must be created, got %d", len(f.repo.rows))
+	}
+}
+
+func TestInvitationService_ActivationToArchivedPropertySkipsSlotCheck(t *testing.T) {
+	f := newInvitationFixture()
+	owner := uuid.New()
+	property := f.addProperty(owner)
+	f.statuses[property] = true
+
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{ID: uuid.New(), PropertyID: property, Email: "new@example.com", Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: time.Now()}); err != nil {
+		t.Fatalf("create invitation: %v", err)
+	}
+
+	// Zero free slots: without the archived skip the membership would be
+	// created suspended.
+	user := uuid.New()
+	f.limiter.set(user, 0)
+
+	if err := f.svc.ActivatePendingInvitations(t.Context(), user, "new@example.com"); err != nil {
+		t.Fatalf("ActivatePendingInvitations: %v", err)
+	}
+	m, err := f.repo.GetByPropertyAndUser(t.Context(), property, user)
+	if err != nil {
+		t.Fatalf("membership: %v", err)
+	}
+	if m.Status != domain.MemberStatusActive {
+		t.Errorf("activation to an archived property must be active (no slot needed), got %v", m.Status)
+	}
+}
+
+func TestInvitationService_ActivationToActivePropertyWithoutSlotSuspends(t *testing.T) {
+	f := newInvitationFixture()
+	owner := uuid.New()
+	property := f.addProperty(owner)
+
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{ID: uuid.New(), PropertyID: property, Email: "new@example.com", Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: time.Now()}); err != nil {
+		t.Fatalf("create invitation: %v", err)
+	}
+
+	// Same setup as the archived case but the property stays active: the
+	// regular T4 slot enforcement applies and the membership is suspended.
+	user := uuid.New()
+	f.limiter.set(user, 0)
+
+	if err := f.svc.ActivatePendingInvitations(t.Context(), user, "new@example.com"); err != nil {
+		t.Fatalf("ActivatePendingInvitations: %v", err)
+	}
+	m, err := f.repo.GetByPropertyAndUser(t.Context(), property, user)
+	if err != nil {
+		t.Fatalf("membership: %v", err)
+	}
+	if m.Status != domain.MemberStatusSuspended {
+		t.Errorf("activation without a free slot must be suspended, got %v", m.Status)
 	}
 }

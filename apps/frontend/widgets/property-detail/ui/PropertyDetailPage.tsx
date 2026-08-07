@@ -40,6 +40,7 @@ import {PropertyContactsSection} from './PropertyContactsSection';
 import {PropertyRemindersSection} from './PropertyRemindersSection';
 import {PropertyActionMenu} from './PropertyActionMenu';
 import {PropertyBlockedModal} from './PropertyBlockedModal';
+import {PropertyArchiveModal} from './PropertyArchiveModal';
 import {PropertyDeleteModal} from './PropertyDeleteModal';
 import {PropertyEndLeaseModal} from './PropertyEndLeaseModal';
 import {PropertySuccessBanner} from './PropertySuccessBanner';
@@ -82,6 +83,7 @@ export function PropertyDetailPage(): JSX.Element {
 
     const [blockedOpen, setBlockedOpen] = useState(false);
     const [endLeaseOpen, setEndLeaseOpen] = useState(false);
+    const [archiveOpen, setArchiveOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [successBannerOpen, setSuccessBannerOpen] = useState(false);
     const [selectedLeaseId, setSelectedLeaseId] = useState<string>('');
@@ -170,12 +172,30 @@ export function PropertyDetailPage(): JSX.Element {
                 setBlockedOpen(true);
                 return;
             }
-            archiveProperty.mutate(id, {
-                onSuccess: () => notify.scenarios.property.movedToArchive(),
-                onError: showMutationError,
-            });
+            setArchiveOpen(true);
         }
-    }, [property, currentLease, id, archiveProperty, unarchiveProperty]);
+    }, [property, currentLease, id, unarchiveProperty]);
+
+    const handleArchive = useCallback(() => {
+        archiveProperty.mutate(id, {
+            onSuccess: () => {
+                setArchiveOpen(false);
+                notify.scenarios.property.movedToArchive();
+            },
+            onError: (error) => {
+                if (error.status === 409) {
+                    // Устаревший кэш: аренда открыта в другой вкладке.
+                    // Закрываем модалку архивации, обновляем список аренд
+                    // и показываем модалку «нельзя изменить статус».
+                    setArchiveOpen(false);
+                    leasesQuery.refetch();
+                    setBlockedOpen(true);
+                    return;
+                }
+                showMutationError(error);
+            },
+        });
+    }, [archiveProperty, id, leasesQuery]);
 
     const handleEndLease = useCallback(() => {
         if (currentLease) {
@@ -417,12 +437,21 @@ export function PropertyDetailPage(): JSX.Element {
                 onContinue={handleBlockedContinue}
             />
 
+            <PropertyArchiveModal
+                isOpen={archiveOpen}
+                onClose={() => setArchiveOpen(false)}
+                onArchive={handleArchive}
+                membersCount={property?.members_count ?? 0}
+                isArchiving={archiveProperty.isPending}
+            />
+
             <PropertyDeleteModal
                 isOpen={deleteOpen}
                 onClose={() => setDeleteOpen(false)}
                 onDelete={handleDelete}
                 onEndLease={handleDeleteEndLease}
                 currentLease={currentLease}
+                membersCount={property?.members_count ?? 0}
                 deletingMode={
                     deleteProperty.isPending
                         ? (deleteProperty.variables?.mode ?? null)

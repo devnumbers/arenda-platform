@@ -733,12 +733,39 @@ func TestSlotCoordinator_EnforceOnUnarchiveForProperty_SuspendsWhenNoSlot(t *tes
 	mUnarchived := uuid.New()
 
 	f.addActiveMember(t, mUnarchived, pUnarchived, owner, recipient, t1Old)
-	f.ownedProps.add(recipient, pOwn, t2New) // own property occupies the single slot
-	f.limiter.set(recipient, 1)              // used=1 >= limit=1 → suspend on unarchive
+	f.ownedProps.add(recipient, pOwn, t2New) // own property occupies one slot
+	f.limiter.set(recipient, 1)              // pool=2 > limit=1 → suspend on unarchive
 
 	if err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived); err != nil {
 		t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
 	}
 
 	f.assertStatus(t, mUnarchived, pUnarchived, domain.MemberStatusSuspended, "unarchived member suspended when no free slot")
+}
+
+// Scenario M boundary: the unarchived membership is already active and counted
+// in the recipient's pool, so a pool exactly at the limit still fits — the
+// membership must STAY active (only a pool strictly over the limit is
+// suspended).
+func TestSlotCoordinator_EnforceOnUnarchiveForProperty_StaysActiveAtLimit(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.New()
+	pUnarchived := uuid.New()
+	pOther := uuid.New()
+	recipient := uuid.New()
+	mUnarchived := uuid.New()
+	mOther := uuid.New()
+
+	f.addActiveMember(t, mUnarchived, pUnarchived, owner, recipient, t1Old)
+	f.addActiveMember(t, mOther, pOther, owner, recipient, t2New)
+	f.limiter.set(recipient, 2) // pool=2 == limit=2 → fits, stays active
+
+	if err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived); err != nil {
+		t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
+	}
+
+	f.assertStatus(t, mUnarchived, pUnarchived, domain.MemberStatusActive, "unarchived member stays active at exactly the limit")
+	f.assertStatus(t, mOther, pOther, domain.MemberStatusActive, "other member untouched at exactly the limit")
 }

@@ -38,6 +38,7 @@ type InvitationService struct {
 	members     MembershipRepository
 	invitations InvitationRepository
 	owners      PropertyOwnerResolver
+	statuses    PropertyStatusResolver
 	users       UserLookup
 	policy      sharedpolicy.Policy
 	slots       *SlotCoordinator
@@ -55,12 +56,14 @@ type InvitationService struct {
 // be nil to disable slot enforcement (mirrors NewAccessService); mailer may be
 // nil to skip sending (e.g. in tests that do not exercise the mail path);
 // lifecycle is the sharing lifecycle mailer (issue #162, T6) and may be nil to
-// disable the lifecycle emails.
+// disable the lifecycle emails. statuses reports the archived flag of a
+// property (issue #163); it may be nil to skip the archived-property checks.
 func NewInvitationService(
 	access *AccessService,
 	members MembershipRepository,
 	invitations InvitationRepository,
 	owners PropertyOwnerResolver,
+	statuses PropertyStatusResolver,
 	users UserLookup,
 	policy sharedpolicy.Policy,
 	slots *SlotCoordinator,
@@ -86,6 +89,7 @@ func NewInvitationService(
 		members:     members,
 		invitations: invitations,
 		owners:      owners,
+		statuses:    statuses,
 		users:       users,
 		policy:      policy,
 		slots:       slots,
@@ -106,7 +110,8 @@ func NewInvitationService(
 // commit (a send failure is logged but the invitation stays — a manual resend
 // is available). The owner's email is ErrCannotAddOwner, the actor's own email
 // is ErrCannotAddSelf, and a duplicate pending invitation is
-// ErrInvitationAlreadyExists.
+// ErrInvitationAlreadyExists. An archived property is ErrPropertyArchived for
+// both paths (issue #163).
 func (s *InvitationService) InviteByEmail(ctx context.Context, actor, propertyID uuid.UUID, rawEmail string, role domain.Role) (InviteOutcome, error) {
 	email, err := domain.NormalizeEmail(rawEmail)
 	if err != nil {
@@ -114,6 +119,11 @@ func (s *InvitationService) InviteByEmail(ctx context.Context, actor, propertyID
 	}
 	owner, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
 	if err != nil {
+		return InviteOutcome{}, err
+	}
+	// The archived gate runs before the user lookup so the registered and the
+	// unregistered path get the uniform ErrPropertyArchived (issue #163).
+	if err := requireNotArchived(ctx, s.statuses, propertyID); err != nil {
 		return InviteOutcome{}, err
 	}
 
@@ -343,8 +353,10 @@ func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propert
 // a membership for the freshly registered user, oldest invitation first (FIFO
 // across properties). Invitations whose property already grants the user a
 // membership (any status) are dropped silently. When the recipient has no free
-// tariff slot the membership is created suspended (issue #158, T4 mechanics).
-// A failing activation is logged and does not block the remaining ones.
+// tariff slot the membership is created suspended (issue #158, T4 mechanics);
+// an invitation to an archived property activates read-only without a slot
+// (issue #163). A failing activation is logged and does not block the
+// remaining ones.
 func (s *InvitationService) ActivatePendingInvitations(ctx context.Context, userID uuid.UUID, rawEmail string) error {
 	email, err := domain.NormalizeEmail(rawEmail)
 	if errors.Is(err, domain.ErrInvalidEmail) {
@@ -399,9 +411,20 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 	}
 
 	// Enforce the recipient tariff slot invariant (issue #158, T4): without a
-	// free slot the membership is created suspended until one frees up.
+	// free slot the membership is created suspended until one frees up. An
+	// archived property does not occupy a recipient slot (issue #163), so the
+	// slot check is skipped and the membership activates read-only in the
+	// active status — with the archived object excluded from slot accounting it
+	// occupies nothing.
 	suspend := false
-	if s.slots != nil {
+	archived := false
+	if s.statuses != nil {
+		archived, err = s.statuses.IsArchived(ctx, invitation.PropertyID)
+		if err != nil {
+			return fmt.Errorf("check property archived: %w", err)
+		}
+	}
+	if !archived && s.slots != nil {
 		suspend, err = s.slots.EnforceOnActivation(ctx, tx, userID)
 		if err != nil {
 			return fmt.Errorf("check recipient slot: %w", err)

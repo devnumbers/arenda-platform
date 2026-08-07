@@ -37,6 +37,9 @@ var (
 	_ propertiesapp.RecipientSlotPolicy       = (*accessapp.SlotCoordinator)(nil)
 	_ propertiesapp.SuspendedSharedCounter    = (*accesspg.SuspendedCounter)(nil)
 	_ propertiesapp.SharedMembersDeleteMailer = (*accessapp.PropertyDeleteMailer)(nil)
+	// The OwnerResolver doubles as the archived-status resolver of the access
+	// application services (issue #163).
+	_ accessapp.PropertyStatusResolver = (*accesspg.OwnerResolver)(nil)
 )
 
 // WireAccess constructs the access bounded context (issue #156, T3): the
@@ -94,6 +97,7 @@ func WireAccess(_ context.Context, p platformDeps, billingRepos *BillingRepos, e
 	accessService := accessapp.NewAccessService(
 		memberRepo,
 		ownerResolver,
+		ownerResolver,
 		userLookup,
 		policy,
 		slotCoordinator,
@@ -107,6 +111,7 @@ func WireAccess(_ context.Context, p platformDeps, billingRepos *BillingRepos, e
 		accessService,
 		memberRepo,
 		invitationRepo,
+		ownerResolver,
 		ownerResolver,
 		userLookup,
 		policy,

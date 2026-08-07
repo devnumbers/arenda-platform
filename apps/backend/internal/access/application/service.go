@@ -44,6 +44,7 @@ type Member struct {
 type AccessService struct {
 	members   MembershipRepository
 	owners    PropertyOwnerResolver
+	statuses  PropertyStatusResolver
 	users     UserLookup
 	policy    sharedpolicy.Policy
 	slots     *SlotCoordinator
@@ -57,10 +58,12 @@ type AccessService struct {
 // coordinator (issue #158, T4); it may be nil to disable slot enforcement
 // (pre-T4 behaviour, e.g. in tests that don't exercise the limit). lifecycle is
 // the sharing lifecycle mailer (issue #162, T6); it may be nil to disable the
-// lifecycle emails.
+// lifecycle emails. statuses reports the archived flag of a property (issue
+// #163); it may be nil to skip the archived-property checks.
 func NewAccessService(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
+	statuses PropertyStatusResolver,
 	users UserLookup,
 	policy sharedpolicy.Policy,
 	slots *SlotCoordinator,
@@ -78,6 +81,7 @@ func NewAccessService(
 	return &AccessService{
 		members:   members,
 		owners:    owners,
+		statuses:  statuses,
 		users:     users,
 		policy:    policy,
 		slots:     slots,
@@ -90,10 +94,14 @@ func NewAccessService(
 
 // AddMember grants a registered user a role on a property. Any participant with
 // the manage-members capability (owner or full) may add anyone, including
-// another full member — full members are equal in member management.
+// another full member — full members are equal in member management. Adding a
+// member to an archived property is rejected (issue #163).
 func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID uuid.UUID, role domain.Role) (domain.Membership, error) {
 	owner, err := s.requireManage(ctx, actor, propertyID)
 	if err != nil {
+		return domain.Membership{}, err
+	}
+	if err := requireNotArchived(ctx, s.statuses, propertyID); err != nil {
 		return domain.Membership{}, err
 	}
 	if userID == owner {
@@ -465,6 +473,25 @@ func requireManageAccess(ctx context.Context, policy sharedpolicy.Policy, owners
 		return uuid.UUID{}, domain.ErrMemberNotFound
 	}
 	return owner, nil
+}
+
+// requireNotArchived is the shared archived-property gate for granting new
+// shared access (issue #163): adding a member or an invitation to an archived
+// property is rejected with ErrPropertyArchived. Revoking, role changes and
+// self-exit do not go through this gate — they keep working on archived
+// objects. A nil resolver disables the check (tests without the dependency).
+func requireNotArchived(ctx context.Context, statuses PropertyStatusResolver, propertyID uuid.UUID) error {
+	if statuses == nil {
+		return nil
+	}
+	archived, err := statuses.IsArchived(ctx, propertyID)
+	if err != nil {
+		return fmt.Errorf("check property archived: %w", err)
+	}
+	if archived {
+		return domain.ErrPropertyArchived
+	}
+	return nil
 }
 
 func toSharedRole(r domain.Role) sharedpolicy.Role {

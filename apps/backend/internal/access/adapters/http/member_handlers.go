@@ -126,6 +126,9 @@ func (h *MemberHandlers) handleError(w http.ResponseWriter, r *http.Request, err
 		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))
 	case errors.Is(err, domain.ErrMemberAlreadyExists):
 		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Пользователь уже является участником"))
+	case errors.Is(err, domain.ErrPropertyArchived):
+		// Same 409 shape as the properties ErrArchivedProperty mapping (issue #163).
+		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Нельзя добавить участника в архивный объект"))
 	case errors.Is(err, domain.ErrCannotAddOwner):
 		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить владельца объекта"))
 	case errors.Is(err, domain.ErrCannotAddSelf):

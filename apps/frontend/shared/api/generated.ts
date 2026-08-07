@@ -1876,6 +1876,8 @@ export interface components {
             photos?: components["schemas"]["PropertyPhoto"][];
             active_lease: components["schemas"]["LeaseResponse"] | null;
             overdue_rent_count: number;
+            /** @description Shared-access participants of the property: membership rows (any status, owner excluded — the owner is never a membership row) plus pending email invitations. */
+            members_count: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */

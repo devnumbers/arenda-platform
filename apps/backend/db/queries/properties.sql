@@ -12,7 +12,11 @@ SELECT properties.*,
            AND o.status = 'overdue'
            AND o.type = 'income'
            AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count
+           AND o.deleted_at IS NULL) AS overdue_rent_count,
+       ((SELECT COUNT(*) FROM property_members pm
+         WHERE pm.property_id = properties.id) +
+       (SELECT COUNT(*) FROM property_member_invitations pmi
+         WHERE pmi.property_id = properties.id))::bigint AS members_count
 FROM properties
 WHERE properties.id = $1 AND properties.owner_id = $2;
 
@@ -29,7 +33,15 @@ WHERE id = $1 AND owner_id = $2;
 -- resolve the data owner for authorization before applying a scope. Read-only;
 -- callers must never leak existence to actors without a view capability (the
 -- application maps "no access" to ErrNotFound to preserve object privacy).
-SELECT * FROM properties WHERE id = $1;
+-- members_count is the shared-access participant count: membership rows (any
+-- status) plus pending email invitations (issue #163).
+SELECT properties.*,
+       ((SELECT COUNT(*) FROM property_members pm
+         WHERE pm.property_id = properties.id) +
+       (SELECT COUNT(*) FROM property_member_invitations pmi
+         WHERE pmi.property_id = properties.id))::bigint AS members_count
+FROM properties
+WHERE properties.id = $1;
 
 -- name: GetPropertyByIDForUpdate :one
 -- Unscoped pessimistic-lock lookup by id, for write paths that resolve access
@@ -45,7 +57,11 @@ SELECT properties.*,
            AND o.status = 'overdue'
            AND o.type = 'income'
            AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count
+           AND o.deleted_at IS NULL) AS overdue_rent_count,
+       ((SELECT COUNT(*) FROM property_members pm
+         WHERE pm.property_id = properties.id) +
+       (SELECT COUNT(*) FROM property_member_invitations pmi
+         WHERE pmi.property_id = properties.id))::bigint AS members_count
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status IN ('active', 'maintenance')
 ORDER BY properties.updated_at DESC;
@@ -59,7 +75,11 @@ SELECT properties.*,
            AND o.status = 'overdue'
            AND o.type = 'income'
            AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count
+           AND o.deleted_at IS NULL) AS overdue_rent_count,
+       ((SELECT COUNT(*) FROM property_members pm
+         WHERE pm.property_id = properties.id) +
+       (SELECT COUNT(*) FROM property_member_invitations pmi
+         WHERE pmi.property_id = properties.id))::bigint AS members_count
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status = 'archived'
 ORDER BY properties.updated_at DESC;

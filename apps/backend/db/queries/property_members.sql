@@ -73,17 +73,31 @@ WHERE id = $1 AND property_id = $2
 RETURNING *;
 
 -- name: ListSuspendedMembersByUser :many
-SELECT * FROM property_members
-WHERE user_id = $1 AND status = 'suspended'
-ORDER BY suspended_at ASC NULLS LAST, updated_at DESC;
+-- The FIFO recovery queue. Memberships on archived properties are excluded:
+-- an archived object does not occupy a recipient slot (issue #163), so a free
+-- slot must not be wasted on them; they re-enter the selection on unarchive.
+SELECT m.*
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived'
+ORDER BY m.suspended_at ASC NULLS LAST, m.updated_at DESC;
 
 -- name: CountActiveMembersByUser :one
-SELECT COUNT(*) FROM property_members
-WHERE user_id = $1 AND status = 'active';
+-- Occupied recipient tariff slots: memberships on archived properties do not
+-- occupy a slot (issue #163).
+SELECT COUNT(*)
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1 AND m.status = 'active' AND p.status != 'archived';
 
 -- name: CountSuspendedMembersByUser :one
-SELECT COUNT(*) FROM property_members
-WHERE user_id = $1 AND status = 'suspended';
+-- Shared objects hidden from the recipient by a tariff slot shortage (the
+-- hidden_shared_count badge). Memberships on archived properties are excluded
+-- (issue #163): those objects are hidden by the archive, not by the tariff.
+SELECT COUNT(*)
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1 AND m.status = 'suspended' AND p.status != 'archived';
 
 -- name: ListActiveMembersByPropertyOwner :many
 SELECT m.*
@@ -93,8 +107,13 @@ WHERE p.owner_id = $1 AND m.status = 'active'
 ORDER BY m.user_id, m.updated_at DESC;
 
 -- name: ListActiveMembersByUser :many
-SELECT * FROM property_members
-WHERE user_id = $1 AND status = 'active';
+-- The recipient's shared-pool entries for slot accounting. Memberships on
+-- archived properties are excluded: an archived object does not occupy a
+-- recipient slot (issue #163).
+SELECT m.*
+FROM property_members m
+JOIN properties p ON p.id = m.property_id
+WHERE m.user_id = $1 AND m.status = 'active' AND p.status != 'archived';
 
 -- name: CreatePropertyMemberWithStatus :one
 INSERT INTO property_members (id, property_id, user_id, role, granted_by, status)

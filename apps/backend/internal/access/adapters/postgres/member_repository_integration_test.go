@@ -267,3 +267,91 @@ func TestOwnerResolver_ReturnsOwner(t *testing.T) {
 		t.Errorf("expected ErrMemberNotFound for missing property, got %v", err)
 	}
 }
+
+// TestMembershipRepository_ArchivedPropertyExcludedFromSlotQueries verifies the
+// issue #163 slot-accounting rule: memberships on archived properties occupy no
+// recipient tariff slot — they are excluded from ListActiveByUser,
+// CountActiveByUser and the FIFO recovery queue ListSuspendedByUser — and
+// re-enter the selection when the property is unarchived.
+func TestMembershipRepository_ArchivedPropertyExcludedFromSlotQueries(t *testing.T) {
+	pool := setupAccessDB(t)
+	ctx, tx, cleanup := beginAccessTx(t, pool)
+	defer cleanup()
+
+	q := genpostgres.New(tx)
+	owner := createAccessTestUser(t, ctx, q)
+	recipient := createAccessTestUser(t, ctx, q)
+	activeProp := createAccessTestProperty(t, ctx, q, owner)
+	archivedActiveProp := createAccessTestProperty(t, ctx, q, owner)
+	archivedSuspendedProp := createAccessTestProperty(t, ctx, q, owner)
+
+	repo := NewMembershipRepository(tx)
+	activeID, _ := uuid.NewV7()
+	if _, err := repo.Create(ctx, domain.Membership{
+		ID: activeID, PropertyID: activeProp, UserID: recipient, Role: domain.RoleViewer, GrantedBy: owner,
+	}); err != nil {
+		t.Fatalf("Create active: %v", err)
+	}
+	archivedActiveID, _ := uuid.NewV7()
+	if _, err := repo.Create(ctx, domain.Membership{
+		ID: archivedActiveID, PropertyID: archivedActiveProp, UserID: recipient, Role: domain.RoleViewer, GrantedBy: owner,
+	}); err != nil {
+		t.Fatalf("Create archived-active: %v", err)
+	}
+	archivedSuspendedID, _ := uuid.NewV7()
+	if _, err := repo.CreateWithStatus(ctx, domain.Membership{
+		ID: archivedSuspendedID, PropertyID: archivedSuspendedProp, UserID: recipient, Role: domain.RoleViewer, GrantedBy: owner,
+		Status: domain.MemberStatusSuspended,
+	}); err != nil {
+		t.Fatalf("Create archived-suspended: %v", err)
+	}
+
+	// Sanity: before archiving everything is visible to the slot queries.
+	if count, err := repo.CountActiveByUser(ctx, recipient); err != nil || count != 2 {
+		t.Fatalf("CountActiveByUser before archive = %d, %v; want 2", count, err)
+	}
+	if rows, err := repo.ListSuspendedByUser(ctx, recipient); err != nil || len(rows) != 1 {
+		t.Fatalf("ListSuspendedByUser before archive = %d, %v; want 1", len(rows), err)
+	}
+
+	// Archive two of the three properties.
+	for _, prop := range []uuid.UUID{archivedActiveProp, archivedSuspendedProp} {
+		if _, err := q.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{ID: pgUUID(prop), OwnerID: pgUUID(owner)}); err != nil {
+			t.Fatalf("ArchiveProperty %s: %v", prop, err)
+		}
+	}
+
+	// The active membership on the archived property occupies no slot.
+	if count, err := repo.CountActiveByUser(ctx, recipient); err != nil || count != 1 {
+		t.Errorf("CountActiveByUser after archive = %d, %v; want 1", count, err)
+	}
+	rows, err := repo.ListActiveByUser(ctx, recipient)
+	if err != nil {
+		t.Fatalf("ListActiveByUser after archive: %v", err)
+	}
+	if len(rows) != 1 || rows[0].PropertyID != activeProp {
+		t.Errorf("ListActiveByUser after archive = %+v, want only the active property", rows)
+	}
+
+	// The suspended membership on the archived property must not waste a free
+	// slot of the FIFO recovery queue.
+	if rows, err := repo.ListSuspendedByUser(ctx, recipient); err != nil || len(rows) != 0 {
+		t.Errorf("ListSuspendedByUser after archive = %+v, %v; want empty", rows, err)
+	}
+
+	// Unarchive: both memberships re-enter the selection.
+	for _, prop := range []uuid.UUID{archivedActiveProp, archivedSuspendedProp} {
+		if _, err := q.UnarchiveProperty(ctx, genpostgres.UnarchivePropertyParams{ID: pgUUID(prop), OwnerID: pgUUID(owner)}); err != nil {
+			t.Fatalf("UnarchiveProperty %s: %v", prop, err)
+		}
+	}
+	if count, err := repo.CountActiveByUser(ctx, recipient); err != nil || count != 2 {
+		t.Errorf("CountActiveByUser after unarchive = %d, %v; want 2", count, err)
+	}
+	if rows, err := repo.ListActiveByUser(ctx, recipient); err != nil || len(rows) != 2 {
+		t.Errorf("ListActiveByUser after unarchive = %d, %v; want 2", len(rows), err)
+	}
+	if rows, err := repo.ListSuspendedByUser(ctx, recipient); err != nil || len(rows) != 1 {
+		t.Errorf("ListSuspendedByUser after unarchive = %d, %v; want 1", len(rows), err)
+	}
+}

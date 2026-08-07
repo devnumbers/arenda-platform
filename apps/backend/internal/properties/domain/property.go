@@ -126,6 +126,12 @@ type Property struct {
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	OverdueRentCount int
+	// MembersCount is the shared-access participant count: membership rows
+	// (any status; the owner is never a membership row) plus pending email
+	// invitations (issue #163). Filled by the read queries that carry the
+	// members_count projection; zero on write-path responses (create/update),
+	// mirroring OverdueRentCount.
+	MembersCount int
 }
 
 // Photo is a photo attached to a property.

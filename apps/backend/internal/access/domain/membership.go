@@ -106,4 +106,8 @@ var (
 	// suspended membership. Self-exit is not available for suspended access
 	// because the object is already hidden from the recipient.
 	ErrCannotLeaveSuspended = errors.New("cannot leave a suspended membership")
+	// ErrPropertyArchived is returned when a new member or invitation is added
+	// to an archived property. Existing members keep working: revoking and role
+	// changes stay available on archived objects (issue #163).
+	ErrPropertyArchived = errors.New("cannot add members to an archived property")
 )

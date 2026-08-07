@@ -659,6 +659,7 @@ func (h *PropertyHandlers) propertyResponse(ctx context.Context, actor uuid.UUID
 		Status:           openapi.PropertyStatus(property.Status),
 		Occupancy:        openapi.PropertyResponseOccupancy(property.Occupancy),
 		OverdueRentCount: property.OverdueRentCount,
+		MembersCount:     property.MembersCount,
 		CreatedAt:        property.CreatedAt,
 		UpdatedAt:        property.UpdatedAt,
 	}

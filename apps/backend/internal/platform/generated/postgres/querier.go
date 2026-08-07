@@ -21,6 +21,8 @@ type Querier interface {
 	CancelRemindersByFreeReminderID(ctx context.Context, arg CancelRemindersByFreeReminderIDParams) (int64, error)
 	CancelRemindersByRecurringOperationID(ctx context.Context, arg CancelRemindersByRecurringOperationIDParams) (int64, error)
 	CompleteLease(ctx context.Context, arg CompleteLeaseParams) (Lease, error)
+	// Occupied recipient tariff slots: memberships on archived properties do not
+	// occupy a slot (issue #163).
 	CountActiveMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CountActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	CountActivePropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error)
@@ -38,6 +40,9 @@ type Querier interface {
 	CountPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error)
 	CountSubscriptionsByActivePaymentMethodID(ctx context.Context, activePaymentMethodID pgtype.UUID) (int64, error)
+	// Shared objects hidden from the recipient by a tariff slot shortage (the
+	// hidden_shared_count badge). Memberships on archived properties are excluded
+	// (issue #163): those objects are hidden by the archive, not by the tariff.
 	CountSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CountTenantContactsAdmin(ctx context.Context, arg CountTenantContactsAdminParams) (int64, error)
 	CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams) (int64, error)
@@ -129,7 +134,9 @@ type Querier interface {
 	// resolve the data owner for authorization before applying a scope. Read-only;
 	// callers must never leak existence to actors without a view capability (the
 	// application maps "no access" to ErrNotFound to preserve object privacy).
-	GetPropertyByID(ctx context.Context, id pgtype.UUID) (Property, error)
+	// members_count is the shared-access participant count: membership rows (any
+	// status) plus pending email invitations (issue #163).
+	GetPropertyByID(ctx context.Context, id pgtype.UUID) (GetPropertyByIDRow, error)
 	GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (GetPropertyByIDAdminRow, error)
 	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (GetPropertyByIDAndOwnerRow, error)
 	GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetPropertyByIDAndOwnerForUpdateParams) (Property, error)
@@ -192,6 +199,9 @@ type Querier interface {
 	IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
 	ListAccessibleOwners(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
+	// The recipient's shared-pool entries for slot accounting. Memberships on
+	// archived properties are excluded: an archived object does not occupy a
+	// recipient slot (issue #163).
 	ListActiveMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
 	ListAllFreeRemindersByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListAllFreeRemindersByOwnerRow, error)
@@ -260,6 +270,9 @@ type Querier interface {
 	ListSubscriptionsInExpiredGrace(ctx context.Context, arg ListSubscriptionsInExpiredGraceParams) ([]UserSubscription, error)
 	ListSubscriptionsUpForRenewal(ctx context.Context, arg ListSubscriptionsUpForRenewalParams) ([]UserSubscription, error)
 	ListSubscriptionsWithPendingChange(ctx context.Context, arg ListSubscriptionsWithPendingChangeParams) ([]UserSubscription, error)
+	// The FIFO recovery queue. Memberships on archived properties are excluded:
+	// an archived object does not occupy a recipient slot (issue #163), so a free
+	// slot must not be wasted on them; they re-enter the selection on unarchive.
 	ListSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
 	ListTariffs(ctx context.Context) ([]Tariff, error)
 	ListTenantContactsAdmin(ctx context.Context, arg ListTenantContactsAdminParams) ([]ListTenantContactsAdminRow, error)

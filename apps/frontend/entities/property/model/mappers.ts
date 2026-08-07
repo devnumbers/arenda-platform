@@ -18,5 +18,6 @@ export function mapPropertyResponse(
     photos: dto.photos?.map((photo) => ({ id: photo.id, url: photo.url })),
     activeLease: dto.active_lease ? mapLeaseResponse(dto.active_lease) : null,
     overdue_rent_count: dto.overdue_rent_count,
+    members_count: dto.members_count,
   };
 }

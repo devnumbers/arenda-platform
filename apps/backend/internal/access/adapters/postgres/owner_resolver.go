@@ -49,3 +49,21 @@ func (r *OwnerResolver) GetTitle(ctx context.Context, propertyID uuid.UUID) (str
 	}
 	return row.Name, nil
 }
+
+// propertyStatusArchived mirrors the properties module archived status. The
+// access module must not depend on the properties module, so the status value
+// is duplicated here (same convention as leases/application).
+const propertyStatusArchived = "archived"
+
+// IsArchived reports whether the property is in the archived status (issue
+// #163). A missing property maps to ErrMemberNotFound, mirroring GetOwnerID.
+func (r *OwnerResolver) IsArchived(ctx context.Context, propertyID uuid.UUID) (bool, error) {
+	row, err := postgres.New(r.db).GetPropertyByID(ctx, pgconv.UUIDToPgtype(propertyID))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, domain.ErrMemberNotFound
+		}
+		return false, err
+	}
+	return row.Status == propertyStatusArchived, nil
+}

@@ -4610,7 +4610,7 @@ components:
 
     PropertyResponse:
       type: object
-      required: [id, name, type, address, status, occupancy, active_lease, overdue_rent_count, attributes, created_at, updated_at]
+      required: [id, name, type, address, status, occupancy, active_lease, overdue_rent_count, members_count, attributes, created_at, updated_at]
       properties:
         id:
           type: string
@@ -4641,6 +4641,13 @@ components:
         overdue_rent_count:
           type: integer
           minimum: 0
+        members_count:
+          type: integer
+          minimum: 0
+          description: >
+            Shared-access participants of the property: membership rows (any
+            status, owner excluded — the owner is never a membership row) plus
+            pending email invitations.
         created_at:
           type: string
           format: date-time

@@ -33,4 +33,5 @@ export type Property = {
   readonly photos?: PropertyPhoto[];
   readonly activeLease: Lease | null;
   readonly overdue_rent_count: number;
+  readonly members_count: number;
 };

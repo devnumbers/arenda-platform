@@ -21,6 +21,7 @@ import {
     useUpdatePropertyAccessMember,
 } from '@/features/access/api';
 import {useMe} from '@/features/auth/api/hooks';
+import {useProperty} from '@/features/properties/api/hooks';
 import {memberRoleLabel, memberRoleOptions, type MemberRole} from '@/features/access/lib/roles';
 import type {PropertyAccessMember} from '@/entities/access/model/types';
 import {PropertyInviteModal} from './PropertyInviteModal';
@@ -40,6 +41,7 @@ export function PropertyAccessPage(): JSX.Element {
     const router = useRouter();
 
     const membersQuery = usePropertyAccessMembers(propertyId);
+    const propertyQuery = useProperty(propertyId);
     const inviteMember = useInvitePropertyAccessMember(propertyId);
     const updateMember = useUpdatePropertyAccessMember(propertyId);
     const updateInvitation = useUpdatePropertyAccessInvitation(propertyId);
@@ -146,6 +148,7 @@ export function PropertyAccessPage(): JSX.Element {
     const isLoading = membersQuery.isPending;
     const hasError = membersQuery.isError;
     const isRoleUpdating = updateMember.isPending || updateInvitation.isPending;
+    const isArchived = propertyQuery.data?.status === 'archived';
 
     return (
         <div className={styles.root}>
@@ -169,6 +172,12 @@ export function PropertyAccessPage(): JSX.Element {
                     <Button
                         variant="primary"
                         size="medium"
+                        disabled={isArchived}
+                        title={
+                            isArchived
+                                ? 'Нельзя приглашать участников в архивный объект'
+                                : undefined
+                        }
                         onClick={() => setIsInviteOpen(true)}
                     >
                         Пригласить

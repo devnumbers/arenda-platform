@@ -165,8 +165,8 @@ func newLifecycleFixture() *lifecycleFixture {
 	limiter := newFakeRecipientLimiter()
 	lifecycle := NewLifecycleMailer(mailer, emails, titles, nil)
 	slots := NewSlotCoordinator(repo, owners, limiter, newFakeOccupancy(), newFakeOwnedProps(), lifecycle, auditapp.Noop{}, noopBeginner{})
-	access := NewAccessService(repo, owners, lookup, policy, slots, lifecycle, noopBeginner{}, auditapp.Noop{}, nil)
-	invites := NewInvitationService(access, repo, invitations, owners, lookup, policy, slots, mailer, lifecycle, titles, noopBeginner{}, auditapp.Noop{}, nil, nil)
+	access := NewAccessService(repo, owners, nil, lookup, policy, slots, lifecycle, noopBeginner{}, auditapp.Noop{}, nil)
+	invites := NewInvitationService(access, repo, invitations, owners, nil, lookup, policy, slots, mailer, lifecycle, titles, noopBeginner{}, auditapp.Noop{}, nil, nil)
 	return &lifecycleFixture{
 		repo:        repo,
 		invitations: invitations,

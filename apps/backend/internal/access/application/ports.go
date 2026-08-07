@@ -188,3 +188,11 @@ type UserEmailResolver interface {
 type PropertyTitleResolver interface {
 	GetTitle(ctx context.Context, propertyID uuid.UUID) (string, error)
 }
+
+// PropertyStatusResolver reports whether a property is archived. Used to
+// forbid granting new shared access on archived objects and to activate a
+// pending invitation to an archived object without a recipient tariff slot
+// (issue #163).
+type PropertyStatusResolver interface {
+	IsArchived(ctx context.Context, propertyID uuid.UUID) (bool, error)
+}
