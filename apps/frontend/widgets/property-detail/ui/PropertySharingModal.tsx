@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect, useRef, useState, type ChangeEvent, type JSX, type ReactNode} from 'react';
+import {useEffect, useRef, useState, type ChangeEvent, type JSX} from 'react';
 import {Modal} from '@heroui/react';
 import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
@@ -8,7 +8,10 @@ import {ApiError} from '@/shared/api/errors';
 import {Button} from '@/shared/ui/button';
 import {TextField} from '@/shared/ui/text-field';
 import {Select, type SelectOption} from '@/shared/ui/select';
-import {BoldKey, BoldUsers, Cancel, ChevronDown} from '@/shared/assets/icons';
+import {Cancel, ChevronDown} from '@/shared/assets/icons';
+import {ACCESS_ROLE_LABELS} from '@/entities/access/lib/role-labels';
+import {accessRoleIcon} from '@/entities/access/lib/role-icons';
+import {AccessRoleBadge} from '@/entities/access/ui/AccessRoleBadge';
 import {
     useCancelPropertyAccessInvitation,
     useDeletePropertyAccessMember,
@@ -37,15 +40,6 @@ function resendCooldownHours(lastSentAt: string | null | undefined): number {
     return remaining > 0 ? Math.ceil(remaining / (60 * 60 * 1000)) : 0;
 }
 
-const MEMBER_ROLE_LABELS: Record<MemberRole, string> = {
-    viewer: 'Просмотр',
-    full_access: 'Полный доступ',
-};
-
-function roleIcon(role: MemberRole): ReactNode {
-    return role === 'viewer' ? <BoldUsers/> : <BoldKey/>;
-}
-
 const MEMBER_STATUS_LABELS: Record<AccessMemberStatus, string> = {
     active: 'Активен',
     pending: 'Ожидает регистрации',
@@ -59,15 +53,15 @@ const STATUS_CHIP_CLASS: Record<AccessMemberStatus, string> = {
 };
 
 const ADD_ROLE_OPTIONS: readonly SelectOption<MemberRole>[] = [
-    {value: 'viewer', label: MEMBER_ROLE_LABELS.viewer},
-    {value: 'full_access', label: MEMBER_ROLE_LABELS.full_access},
+    {value: 'viewer', label: ACCESS_ROLE_LABELS.viewer},
+    {value: 'full_access', label: ACCESS_ROLE_LABELS.full_access},
 ];
 
 type RoleSelectValue = MemberRole | 'revoke';
 
 const ROLE_SELECT_OPTIONS: readonly SelectOption<RoleSelectValue>[] = [
-    {value: 'viewer', label: MEMBER_ROLE_LABELS.viewer},
-    {value: 'full_access', label: MEMBER_ROLE_LABELS.full_access},
+    {value: 'viewer', label: ACCESS_ROLE_LABELS.viewer},
+    {value: 'full_access', label: ACCESS_ROLE_LABELS.full_access},
     {value: 'revoke', label: 'Отозвать доступ'},
 ];
 
@@ -266,7 +260,7 @@ export function PropertySharingModal({
     return (
         <Modal isOpen={isOpen} onOpenChange={handleOpenChange}>
             <Modal.Backdrop>
-                <Modal.Container placement="center" size="md">
+                <Modal.Container placement="center" size="lg">
                     <Modal.Dialog aria-label="Совместный доступ">
                         <Modal.Header>
                             <Modal.Heading>Совместный доступ</Modal.Heading>
@@ -296,10 +290,10 @@ export function PropertySharingModal({
                                                         className={styles.addTrigger}
                                                         aria-expanded={triggerOpen}
                                                         aria-haspopup="listbox"
-                                                        aria-label={`Роль: ${MEMBER_ROLE_LABELS[addRole]}`}
+                                                        aria-label={`Роль: ${ACCESS_ROLE_LABELS[addRole]}`}
                                                         onClick={onClick}
                                                     >
-                                                        {MEMBER_ROLE_LABELS[addRole]}
+                                                        {ACCESS_ROLE_LABELS[addRole]}
                                                         <span
                                                             className={styles.addTriggerChevron}
                                                             aria-hidden="true"
@@ -424,13 +418,7 @@ export function PropertySharingModal({
                                                     </div>
                                                     <div className={styles.roleSelect}>
                                                         {isViewer ? (
-                                                            <span
-                                                                className={styles.roleBadge}
-                                                                title={MEMBER_ROLE_LABELS[role]}
-                                                                aria-label={`Роль: ${MEMBER_ROLE_LABELS[role]}`}
-                                                            >
-                                                                {roleIcon(role)}
-                                                            </span>
+                                                            <AccessRoleBadge role={role}/>
                                                         ) : (
                                                             <Select<RoleSelectValue>
                                                                 options={ROLE_SELECT_OPTIONS}
@@ -453,15 +441,15 @@ export function PropertySharingModal({
                                                                             styles.roleTrigger
                                                                         }
                                                                         title={
-                                                                            MEMBER_ROLE_LABELS[role]
+                                                                            ACCESS_ROLE_LABELS[role]
                                                                         }
                                                                         aria-expanded={triggerOpen}
                                                                         aria-haspopup="listbox"
-                                                                        aria-label={`Роль: ${MEMBER_ROLE_LABELS[role]}`}
+                                                                        aria-label={`Роль: ${ACCESS_ROLE_LABELS[role]}`}
                                                                         disabled={isMemberActionPending}
                                                                         onClick={onClick}
                                                                     >
-                                                                        {roleIcon(role)}
+                                                                        {accessRoleIcon(role)}
                                                                     </button>
                                                                 )}
                                                             />

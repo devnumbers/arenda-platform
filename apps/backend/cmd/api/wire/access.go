@@ -37,6 +37,10 @@ var (
 	_ propertiesapp.RecipientSlotPolicy       = (*accessapp.SlotCoordinator)(nil)
 	_ propertiesapp.SuspendedSharedCounter    = (*accesspg.SuspendedCounter)(nil)
 	_ propertiesapp.SharedMembersDeleteMailer = (*accessapp.PropertyDeleteMailer)(nil)
+	// The SharedProperties adapter serves the recipient access context (issue
+	// T11); the AccessService resolves owner display names for the banner.
+	_ propertiesapp.SharedMemberships        = (*accesspg.SharedProperties)(nil)
+	_ propertiesapp.OwnerDisplayNameResolver = (*accessapp.AccessService)(nil)
 	// The OwnerResolver doubles as the archived-status resolver of the access
 	// application services (issue #163).
 	_ accessapp.PropertyStatusResolver = (*accesspg.OwnerResolver)(nil)

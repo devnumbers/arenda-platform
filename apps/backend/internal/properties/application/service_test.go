@@ -1163,3 +1163,256 @@ func TestPropertyService_ArchiveExcessProperties_RecoversSuspendedMembers(t *tes
 		}
 	}
 }
+
+// scopedPropertyRepo wraps fakePropertyRepo with owner-scoped list semantics:
+// production repositories filter rows by the data owner (scope), while the
+// map-based fake predates sharing and returns every row. The access-context
+// tests (issue T11) need the production filtering to distinguish the actor's
+// own properties from the ones shared with them.
+type scopedPropertyRepo struct {
+	*fakePropertyRepo
+}
+
+func (r scopedPropertyRepo) ListActiveByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error) {
+	all, err := r.fakePropertyRepo.ListActiveByOwner(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Property, 0, len(all))
+	for _, p := range all {
+		if p.OwnerID == scope {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func (r scopedPropertyRepo) ListArchivedByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error) {
+	all, err := r.fakePropertyRepo.ListArchivedByOwner(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Property, 0, len(all))
+	for _, p := range all {
+		if p.OwnerID == scope {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+var _ PropertyRepository = scopedPropertyRepo{}
+
+// TestListProperties_AccessRoles verifies the actor's access context on the
+// list endpoint (issue T11): own properties carry RoleOwner, shared ones
+// carry the membership role, and an accidental self-membership never demotes
+// the owner. The owner display name is never resolved on the list path.
+func TestListProperties_AccessRoles(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	otherOwnerID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	ownID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	sharedID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	brokenID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+
+	repo := scopedPropertyRepo{newFakePropertyRepo(
+		domain.Property{ID: ownID, OwnerID: ownerID, Name: "Own", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+		domain.Property{ID: sharedID, OwnerID: otherOwnerID, Name: "Shared", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+		domain.Property{ID: brokenID, OwnerID: otherOwnerID, Name: "Broken", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+	)}
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		fakeOccupancyProvider{},
+		nil,
+		nil,
+		stubLeaseRepo{},
+		fakePropertyTxBeginner{},
+		nil,
+		fakePropertyClock{now: time.Now()},
+		fakeTzResolver{},
+		testOwnerPolicy{},
+		nil,
+	)
+	svc.SetSharedMemberships(fakeSharedMemberships{memberships: []SharedMembership{
+		{PropertyID: sharedID, Role: sharedpolicy.RoleViewer},
+		// An accidental self-membership must not demote the owner.
+		{PropertyID: ownID, Role: sharedpolicy.RoleViewer},
+		// A membership whose DB role degraded to RoleNone (corrupt data) is
+		// skipped so "none" never leaks into the API contract.
+		{PropertyID: brokenID, Role: sharedpolicy.RoleNone},
+	}})
+
+	result, err := svc.ListProperties(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ListProperties failed: %v", err)
+	}
+	byID := make(map[uuid.UUID]domain.Property, len(result))
+	for _, p := range result {
+		byID[p.ID] = p
+	}
+	if len(byID) != 2 {
+		t.Fatalf("expected 2 properties, got %d", len(byID))
+	}
+	if got := byID[ownID].AccessRole; got != sharedpolicy.RoleOwner {
+		t.Errorf("own property AccessRole = %q, want %q", got, sharedpolicy.RoleOwner)
+	}
+	if got := byID[sharedID].AccessRole; got != sharedpolicy.RoleViewer {
+		t.Errorf("shared property AccessRole = %q, want %q", got, sharedpolicy.RoleViewer)
+	}
+	if _, ok := byID[brokenID]; ok {
+		t.Errorf("membership with role %q must be excluded from the list", sharedpolicy.RoleNone)
+	}
+	if got := byID[sharedID].OwnerName; got != "" {
+		t.Errorf("list path must not resolve the owner name, got %q", got)
+	}
+}
+
+// TestListArchivedProperties_AccessRoles verifies that the archived list
+// carries the same access context as the active list (issue T11).
+func TestListArchivedProperties_AccessRoles(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	otherOwnerID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	ownID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	sharedID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	brokenID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+
+	repo := scopedPropertyRepo{newFakePropertyRepo(
+		domain.Property{ID: ownID, OwnerID: ownerID, Name: "Own", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived},
+		domain.Property{ID: sharedID, OwnerID: otherOwnerID, Name: "Shared", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived},
+		domain.Property{ID: brokenID, OwnerID: otherOwnerID, Name: "Broken", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived},
+	)}
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		fakeOccupancyProvider{},
+		nil,
+		nil,
+		stubLeaseRepo{},
+		fakePropertyTxBeginner{},
+		nil,
+		fakePropertyClock{now: time.Now()},
+		fakeTzResolver{},
+		testOwnerPolicy{},
+		nil,
+	)
+	svc.SetSharedMemberships(fakeSharedMemberships{memberships: []SharedMembership{
+		{PropertyID: sharedID, Role: sharedpolicy.RoleFullAccess},
+		// A membership whose DB role degraded to RoleNone (corrupt data) is
+		// skipped so "none" never leaks into the API contract.
+		{PropertyID: brokenID, Role: sharedpolicy.RoleNone},
+	}})
+
+	result, err := svc.ListArchivedProperties(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ListArchivedProperties failed: %v", err)
+	}
+	byID := make(map[uuid.UUID]domain.Property, len(result))
+	for _, p := range result {
+		byID[p.ID] = p
+	}
+	if len(byID) != 2 {
+		t.Fatalf("expected 2 archived properties, got %d", len(byID))
+	}
+	if got := byID[ownID].AccessRole; got != sharedpolicy.RoleOwner {
+		t.Errorf("own archived AccessRole = %q, want %q", got, sharedpolicy.RoleOwner)
+	}
+	if got := byID[sharedID].AccessRole; got != sharedpolicy.RoleFullAccess {
+		t.Errorf("shared archived AccessRole = %q, want %q", got, sharedpolicy.RoleFullAccess)
+	}
+	if _, ok := byID[brokenID]; ok {
+		t.Errorf("membership with role %q must be excluded from the archived list", sharedpolicy.RoleNone)
+	}
+}
+
+// TestGetProperty_AccessContext verifies the actor's access context on the
+// detail endpoint (issue T11): the owner gets RoleOwner and no owner name;
+// a recipient gets the membership role and the owner's public display name.
+// A resolver failure is logged and degrades to an empty name, never to a
+// failed request.
+func TestGetProperty_AccessContext(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	recipientID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	property := domain.Property{ID: propertyID, OwnerID: ownerID, Name: "Obj", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive}
+
+	newSvc := func(role sharedpolicy.Role, resolver OwnerDisplayNameResolver) *PropertyService {
+		svc := NewPropertyService(
+			newFakePropertyRepo(property),
+			fakePropertyPhotoRepo{},
+			fakePropertyPhotoStorage{},
+			fakeOccupancyProvider{},
+			nil,
+			nil,
+			stubLeaseRepo{},
+			fakePropertyTxBeginner{},
+			nil,
+			fakePropertyClock{now: time.Now()},
+			fakeTzResolver{},
+			staticRolePolicy{role: role},
+			nil,
+		)
+		if resolver != nil {
+			svc.SetOwnerDisplayNameResolver(resolver)
+		}
+		return svc
+	}
+
+	t.Run("owner gets owner role and no owner name", func(t *testing.T) {
+		svc := newSvc(sharedpolicy.RoleOwner, fakeOwnerNames{names: map[uuid.UUID]string{ownerID: "Ivan Petrov"}})
+		p, err := svc.GetProperty(ctx, ownerID, propertyID)
+		if err != nil {
+			t.Fatalf("GetProperty failed: %v", err)
+		}
+		if p.AccessRole != sharedpolicy.RoleOwner {
+			t.Errorf("AccessRole = %q, want %q", p.AccessRole, sharedpolicy.RoleOwner)
+		}
+		if p.OwnerName != "" {
+			t.Errorf("owner must not get an owner name, got %q", p.OwnerName)
+		}
+	})
+
+	t.Run("recipient gets membership role and owner name", func(t *testing.T) {
+		svc := newSvc(sharedpolicy.RoleFullAccess, fakeOwnerNames{names: map[uuid.UUID]string{ownerID: "Ivan Petrov"}})
+		p, err := svc.GetProperty(ctx, recipientID, propertyID)
+		if err != nil {
+			t.Fatalf("GetProperty failed: %v", err)
+		}
+		if p.AccessRole != sharedpolicy.RoleFullAccess {
+			t.Errorf("AccessRole = %q, want %q", p.AccessRole, sharedpolicy.RoleFullAccess)
+		}
+		if p.OwnerName != "Ivan Petrov" {
+			t.Errorf("OwnerName = %q, want %q", p.OwnerName, "Ivan Petrov")
+		}
+	})
+
+	t.Run("recipient without resolver gets no owner name", func(t *testing.T) {
+		svc := newSvc(sharedpolicy.RoleViewer, nil)
+		p, err := svc.GetProperty(ctx, recipientID, propertyID)
+		if err != nil {
+			t.Fatalf("GetProperty failed: %v", err)
+		}
+		if p.AccessRole != sharedpolicy.RoleViewer {
+			t.Errorf("AccessRole = %q, want %q", p.AccessRole, sharedpolicy.RoleViewer)
+		}
+		if p.OwnerName != "" {
+			t.Errorf("OwnerName = %q, want empty without a resolver", p.OwnerName)
+		}
+	})
+
+	t.Run("resolver error degrades to an empty owner name", func(t *testing.T) {
+		svc := newSvc(sharedpolicy.RoleViewer, fakeOwnerNames{err: errors.New("lookup failed")})
+		p, err := svc.GetProperty(ctx, recipientID, propertyID)
+		if err != nil {
+			t.Fatalf("resolver error must not fail the request: %v", err)
+		}
+		if p.OwnerName != "" {
+			t.Errorf("OwnerName = %q, want empty on resolver error", p.OwnerName)
+		}
+	})
+}

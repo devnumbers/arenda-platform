@@ -1862,6 +1862,15 @@ export interface components {
             attributes?: components["schemas"]["PropertyAttributes"];
             status?: components["schemas"]["PropertyStatus"];
         };
+        PropertyAccessContext: {
+            /**
+             * @description Actor's role on this property: owner for own properties, full_access/viewer for shared ones. Suspended memberships never appear here — the detail endpoint answers 403 membership_suspended.
+             * @enum {string}
+             */
+            role: "owner" | "full_access" | "viewer";
+            /** @description Owner display name ("Name Surname" or masked phone, never email). Present only in the detail response when the actor is not the owner. */
+            owner_name?: string;
+        };
         PropertyResponse: {
             /** Format: uuid */
             id: string;
@@ -1873,6 +1882,7 @@ export interface components {
             status: components["schemas"]["PropertyStatus"];
             /** @enum {string} */
             occupancy: "free" | "occupied";
+            access?: components["schemas"]["PropertyAccessContext"];
             photos?: components["schemas"]["PropertyPhoto"][];
             active_lease: components["schemas"]["LeaseResponse"] | null;
             overdue_rent_count: number;

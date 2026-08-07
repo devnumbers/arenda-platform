@@ -9,7 +9,7 @@ import {ROUTES} from '@/shared/config/routes';
 import {usePropertyListData} from '../lib/use-property-list-data';
 import {applyFiltersAndSort, type PropertiesViewMode} from '../lib/apply-filters';
 import {DEFAULT_PROPERTY_SORT} from '../lib/parse-property-search-params';
-import {pluralize} from '@/shared/lib/pluralize';
+import {formatHiddenSharedFootnote} from '../lib/format-hidden-shared-footnote';
 import {PropertiesToolbar} from './PropertiesToolbar';
 import {PropertyCreateButton} from './PropertyCreateButton';
 import {PropertyCard} from './PropertyCard';
@@ -85,12 +85,6 @@ export function PropertiesPage({mode = 'active', initialFilters, initialSort}: P
         && !isError
         && !metaQuery.isLoading
         && hiddenSharedCount > 0;
-    const hiddenSharedWord = pluralize(
-        hiddenSharedCount,
-        'общий объект',
-        'общих объекта',
-        'общих объектов',
-    );
 
     const isActionLoading = subscriptionQuery.isPending || activeProperties === undefined;
 
@@ -129,7 +123,7 @@ export function PropertiesPage({mode = 'active', initialFilters, initialSort}: P
 
             {showHiddenSharedNote && (
                 <p className={styles.hiddenSharedNote}>
-                    {`${hiddenSharedCount} ${hiddenSharedWord} скрыто — превышен лимит тарифа.`}
+                    {formatHiddenSharedFootnote(hiddenSharedCount)}
                 </p>
             )}
 

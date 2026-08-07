@@ -4608,6 +4608,23 @@ components:
         status:
           $ref: '#/components/schemas/PropertyStatus'
 
+    PropertyAccessContext:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [owner, full_access, viewer]
+          description: >
+            Actor's role on this property: owner for own properties,
+            full_access/viewer for shared ones. Suspended memberships never
+            appear here — the detail endpoint answers 403 membership_suspended.
+        owner_name:
+          type: string
+          description: >
+            Owner display name ("Name Surname" or masked phone, never email).
+            Present only in the detail response when the actor is not the owner.
+
     PropertyResponse:
       type: object
       required: [id, name, type, address, status, occupancy, active_lease, overdue_rent_count, members_count, attributes, created_at, updated_at]
@@ -4630,6 +4647,9 @@ components:
         occupancy:
           type: string
           enum: [free, occupied]
+        access:
+          allOf:
+            - $ref: '#/components/schemas/PropertyAccessContext'
         photos:
           type: array
           items:

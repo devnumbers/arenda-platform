@@ -42,3 +42,32 @@ func (p staticRolePolicy) Role(_ context.Context, actor, scope uuid.UUID) (share
 func (p staticRolePolicy) RoleForProperty(_ context.Context, _, _ uuid.UUID) (sharedpolicy.Role, error) {
 	return p.role, nil
 }
+
+// fakeSharedMemberships returns a fixed set of active shared-access
+// memberships (issue T11).
+type fakeSharedMemberships struct {
+	memberships []SharedMembership
+}
+
+func (f fakeSharedMemberships) MembershipsWith(_ context.Context, _ uuid.UUID) ([]SharedMembership, error) {
+	return f.memberships, nil
+}
+
+// fakeOwnerNames resolves fixed owner display names, or fails when err is set
+// (issue T11).
+type fakeOwnerNames struct {
+	names map[uuid.UUID]string
+	err   error
+}
+
+func (f fakeOwnerNames) DisplayName(_ context.Context, userID uuid.UUID) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.names[userID], nil
+}
+
+var (
+	_ SharedMemberships        = fakeSharedMemberships{}
+	_ OwnerDisplayNameResolver = fakeOwnerNames{}
+)

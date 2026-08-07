@@ -1,5 +1,8 @@
 export type AccessRole = 'owner' | 'full_access' | 'viewer';
 
+/** Роли участника совместного доступа (владелец не является membership). */
+export type SharedAccessRole = Exclude<AccessRole, 'owner'>;
+
 export type AccessMemberStatus = 'active' | 'suspended' | 'pending';
 
 export type PropertyAccessMember = {

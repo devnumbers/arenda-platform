@@ -664,6 +664,14 @@ func (h *PropertyHandlers) propertyResponse(ctx context.Context, actor uuid.UUID
 		UpdatedAt:        property.UpdatedAt,
 	}
 	resp.Attributes = propertyAttributesResponse(property.Attributes)
+	if property.AccessRole != "" {
+		resp.Access = &openapi.PropertyAccessContext{
+			Role: openapi.PropertyAccessContextRole(property.AccessRole),
+		}
+		if property.OwnerName != "" {
+			resp.Access.OwnerName = &property.OwnerName
+		}
+	}
 	if property.Description != "" {
 		resp.Description = &property.Description
 	}

@@ -70,18 +70,28 @@ type PropertyService struct {
 	clock              clock.Clock
 	tzResolver         sharedtz.OwnerTimezoneResolver
 	policy             sharedpolicy.Policy
-	sharedIDs          SharedPropertyIDs
+	sharedMemberships  SharedMemberships
+	ownerNames         OwnerDisplayNameResolver
 	suspendedCounter   SuspendedSharedCounter
 	slots              RecipientSlotPolicy
 	sharedDeleteMailer SharedMembersDeleteMailer
 	logger             *slog.Logger
 }
 
-// SetSharedPropertyIDs injects the access-context adapter that resolves the
-// property ids shared with a user (issue #156, T3). Optional: when not set,
-// only the owner's own properties are listed.
-func (s *PropertyService) SetSharedPropertyIDs(sharedIDs SharedPropertyIDs) {
-	s.sharedIDs = sharedIDs
+// SetSharedMemberships injects the access-context adapter that resolves the
+// active shared-access memberships of a user (property id + recipient role) so
+// list endpoints include properties shared with the actor and expose the
+// actor's access role (issues #156 T3, T11). Optional: when not set, only the
+// owner's own properties are listed.
+func (s *PropertyService) SetSharedMemberships(memberships SharedMemberships) {
+	s.sharedMemberships = memberships
+}
+
+// SetOwnerDisplayNameResolver injects the access-context adapter that resolves
+// the public display name of a property owner for the sharing banner (issue
+// T11). Optional: when not set, detail responses carry no owner name.
+func (s *PropertyService) SetOwnerDisplayNameResolver(resolver OwnerDisplayNameResolver) {
+	s.ownerNames = resolver
 }
 
 // SetSuspendedSharedCounter injects the access-context adapter that counts how
@@ -228,6 +238,7 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 
 	created.Occupancy = domain.OccupancyFree
 	created.Photos = []domain.Photo{}
+	created.AccessRole = sharedpolicy.RoleOwner
 	return created, nil
 }
 
@@ -237,23 +248,39 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 		return nil, fmt.Errorf("list properties: %w", err)
 	}
 
-	// Append properties shared with the actor (issue #156, T3). Each shared
-	// property belongs to another owner; load it by id and dedupe against the
-	// owner's own set in case of an accidental self-membership.
-	if s.sharedIDs != nil {
-		sharedIDs, err := s.sharedIDs.SharedWith(ctx, actor)
+	// Own properties are read with the owner role (issue T11).
+	for i := range properties {
+		properties[i].AccessRole = sharedpolicy.RoleOwner
+	}
+
+	// Append properties shared with the actor (issues #156 T3, T11). Each
+	// shared property belongs to another owner; load it by id and dedupe
+	// against the owner's own set in case of an accidental self-membership.
+	if s.sharedMemberships != nil {
+		memberships, err := s.sharedMemberships.MembershipsWith(ctx, actor)
 		if err != nil {
-			return nil, fmt.Errorf("list shared property ids: %w", err)
+			return nil, fmt.Errorf("list shared memberships: %w", err)
 		}
 		seen := make(map[uuid.UUID]bool, len(properties))
 		for i := range properties {
 			seen[properties[i].ID] = true
 		}
-		for _, sid := range sharedIDs {
-			if seen[sid] {
+		for _, m := range memberships {
+			// Defensive filter for corrupt data: an unrecognized membership
+			// role degrades to RoleNone in the access adapter and must not
+			// leak into the API contract as access.role "none"; such a
+			// membership is unusable anyway, so skip it and log a warning.
+			if m.Role != sharedpolicy.RoleFullAccess && m.Role != sharedpolicy.RoleViewer {
+				s.logger.WarnContext(ctx, "skipping shared membership with unrecognized role",
+					slog.String("property_id", m.PropertyID.String()),
+					slog.String("user_id", actor.String()),
+				)
 				continue
 			}
-			p, err := s.repo.GetByID(ctx, sid)
+			if seen[m.PropertyID] {
+				continue
+			}
+			p, err := s.repo.GetByID(ctx, m.PropertyID)
 			if err != nil {
 				if errors.Is(err, ErrNotFound) {
 					continue
@@ -264,7 +291,8 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 			if p.Status != domain.PropertyStatusActive && p.Status != domain.PropertyStatusMaintenance {
 				continue
 			}
-			seen[sid] = true
+			p.AccessRole = m.Role
+			seen[m.PropertyID] = true
 			properties = append(properties, p)
 		}
 	}
@@ -309,20 +337,36 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid
 		return nil, fmt.Errorf("list archived properties: %w", err)
 	}
 
-	if s.sharedIDs != nil {
-		sharedIDs, err := s.sharedIDs.SharedWith(ctx, actor)
+	// Own properties are read with the owner role (issue T11).
+	for i := range properties {
+		properties[i].AccessRole = sharedpolicy.RoleOwner
+	}
+
+	if s.sharedMemberships != nil {
+		memberships, err := s.sharedMemberships.MembershipsWith(ctx, actor)
 		if err != nil {
-			return nil, fmt.Errorf("list shared property ids: %w", err)
+			return nil, fmt.Errorf("list shared memberships: %w", err)
 		}
 		seen := make(map[uuid.UUID]bool, len(properties))
 		for i := range properties {
 			seen[properties[i].ID] = true
 		}
-		for _, sid := range sharedIDs {
-			if seen[sid] {
+		for _, m := range memberships {
+			// Defensive filter for corrupt data: an unrecognized membership
+			// role degrades to RoleNone in the access adapter and must not
+			// leak into the API contract as access.role "none"; such a
+			// membership is unusable anyway, so skip it and log a warning.
+			if m.Role != sharedpolicy.RoleFullAccess && m.Role != sharedpolicy.RoleViewer {
+				s.logger.WarnContext(ctx, "skipping shared membership with unrecognized role",
+					slog.String("property_id", m.PropertyID.String()),
+					slog.String("user_id", actor.String()),
+				)
 				continue
 			}
-			p, err := s.repo.GetByID(ctx, sid)
+			if seen[m.PropertyID] {
+				continue
+			}
+			p, err := s.repo.GetByID(ctx, m.PropertyID)
 			if err != nil {
 				if errors.Is(err, ErrNotFound) {
 					continue
@@ -332,7 +376,8 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid
 			if p.Status != domain.PropertyStatusArchived {
 				continue
 			}
-			seen[sid] = true
+			p.AccessRole = m.Role
+			seen[m.PropertyID] = true
 			properties = append(properties, p)
 		}
 	}
@@ -367,6 +412,22 @@ func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) 
 			return domain.Property{}, ErrNotFound
 		}
 		return domain.Property{}, fmt.Errorf("get property: %w", err)
+	}
+
+	// The actor's access context for the sharing banner (issue T11): the role
+	// is always reported; the owner's public display name is resolved only for
+	// recipients, and a resolver failure degrades to an empty name.
+	property.AccessRole = role
+	if role != sharedpolicy.RoleOwner && s.ownerNames != nil {
+		name, err := s.ownerNames.DisplayName(ctx, property.OwnerID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to resolve owner display name",
+				slog.String("property_id", property.ID.String()),
+				slog.String("error", sanitizeError(err)),
+			)
+		} else {
+			property.OwnerName = name
+		}
 	}
 
 	occupied, err := s.occupancyProvider.IsOccupied(ctx, property.OwnerID, property.ID)
@@ -543,6 +604,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 	if err != nil {
 		return domain.Property{}, err
 	}
+	properties[0].AccessRole = role
 	return properties[0], nil
 }
 
@@ -604,6 +666,7 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 	if err != nil {
 		return domain.Property{}, err
 	}
+	properties[0].AccessRole = role
 	return properties[0], nil
 }
 
@@ -986,6 +1049,7 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 	if err != nil {
 		return domain.Property{}, err
 	}
+	properties[0].AccessRole = role
 	return properties[0], nil
 }
 

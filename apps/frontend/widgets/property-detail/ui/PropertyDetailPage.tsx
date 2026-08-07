@@ -44,6 +44,7 @@ import {PropertyArchiveModal} from './PropertyArchiveModal';
 import {PropertyDeleteModal} from './PropertyDeleteModal';
 import {PropertyEndLeaseModal} from './PropertyEndLeaseModal';
 import {PropertySharingModal} from './PropertySharingModal';
+import {PropertySharedBanner} from './PropertySharedBanner';
 import {PropertySuccessBanner} from './PropertySuccessBanner';
 import {PropertyDetailLoading} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
@@ -333,6 +334,10 @@ export function PropertyDetailPage(): JSX.Element {
                     />
                 }
             />
+
+            {property?.access && property.access.role !== 'owner' && (
+                <PropertySharedBanner access={property.access}/>
+            )}
 
             {isLoading && <PropertyDetailLoading/>}
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
 type PropertyType string
@@ -132,6 +133,15 @@ type Property struct {
 	// members_count projection; zero on write-path responses (create/update),
 	// mirroring OverdueRentCount.
 	MembersCount int
+	// AccessRole is the role of the requesting actor on this property
+	// (issue T11): RoleOwner for own properties, the membership role for
+	// shared ones. Empty when not populated (internal use). Filled by the
+	// read/write service paths that resolve the actor's role.
+	AccessRole sharedpolicy.Role
+	// OwnerName is the public display name of the property owner ("Name
+	// Surname" or a masked phone, never an email), filled only by the detail
+	// read path when the actor is not the owner (issue T11); empty otherwise.
+	OwnerName string
 }
 
 // Photo is a photo attached to a property.

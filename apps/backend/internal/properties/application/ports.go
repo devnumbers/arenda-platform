@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -23,12 +24,24 @@ type AddressSuggester interface {
 	SuggestAddresses(ctx context.Context, query string) ([]AddressSuggestion, error)
 }
 
-// SharedPropertyIDs returns the ids of properties shared with a user via
-// property membership (issue #156, T3). Implemented by the access bounded
-// context and injected optionally: when nil, only the owner's own properties
-// are listed (the pre-T3 behaviour).
-type SharedPropertyIDs interface {
-	SharedWith(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
+// SharedMembership is the active shared-access membership of a user on a
+// property (issue T11): the property id and the recipient's role on it.
+type SharedMembership struct {
+	PropertyID uuid.UUID
+	Role       sharedpolicy.Role
+}
+
+// SharedMemberships returns the active shared-access memberships of a user
+// (property id + recipient role). Implemented by the access bounded context
+// (issue T11). Optional: when nil, only the owner's own properties are listed.
+type SharedMemberships interface {
+	MembershipsWith(ctx context.Context, userID uuid.UUID) ([]SharedMembership, error)
+}
+
+// OwnerDisplayNameResolver resolves the public display name of a property
+// owner for the sharing banner (issue T11). Optional.
+type OwnerDisplayNameResolver interface {
+	DisplayName(ctx context.Context, userID uuid.UUID) (string, error)
 }
 
 // SuspendedSharedCounter reports how many shared memberships of a recipient

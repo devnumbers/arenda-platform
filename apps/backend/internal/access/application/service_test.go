@@ -82,3 +82,47 @@ func TestAccessService_ArchivedPropertyKeepsExistingMembersManageable(t *testing
 		t.Errorf("membership must be revoked, got %v", err)
 	}
 }
+
+// fakeUserLookup is a UserLookup keyed by user id (issue T11 DisplayName
+// tests).
+type fakeUserLookup map[uuid.UUID]MemberUser
+
+func (f fakeUserLookup) GetByID(_ context.Context, id uuid.UUID) (MemberUser, error) {
+	u, ok := f[id]
+	if !ok {
+		return MemberUser{}, errors.New("user not found")
+	}
+	return u, nil
+}
+
+func (f fakeUserLookup) GetByEmail(_ context.Context, _ string) (MemberUser, error) {
+	return MemberUser{}, errors.New("user not found")
+}
+
+var _ UserLookup = fakeUserLookup{}
+
+// TestAccessService_DisplayName verifies the public display name used by the
+// sharing banner (issue T11): "Name Surname" when present, otherwise a masked
+// phone — never an email or a raw phone. Lookup failures propagate.
+func TestAccessService_DisplayName(t *testing.T) {
+	namedID := uuid.New()
+	phoneOnlyID := uuid.New()
+	missingID := uuid.New()
+	name, surname := "Ivan", "Petrov"
+
+	lookup := fakeUserLookup{
+		namedID:     {ID: namedID, Name: &name, Surname: &surname, Phone: "+79123456789", HasEmail: true},
+		phoneOnlyID: {ID: phoneOnlyID, Phone: "+79123456789"},
+	}
+	svc := NewAccessService(newMemRepo(), staticResolver{}, nil, lookup, nil, nil, nil, noopBeginner{}, auditapp.Noop{}, nil)
+
+	if got, err := svc.DisplayName(t.Context(), namedID); err != nil || got != "Ivan Petrov" {
+		t.Errorf("named user: got %q, %v; want %q, nil", got, err, "Ivan Petrov")
+	}
+	if got, err := svc.DisplayName(t.Context(), phoneOnlyID); err != nil || got != "+7********89" {
+		t.Errorf("phone-only user: got %q, %v; want %q, nil", got, err, "+7********89")
+	}
+	if _, err := svc.DisplayName(t.Context(), missingID); err == nil {
+		t.Errorf("missing user: expected an error, got nil")
+	}
+}

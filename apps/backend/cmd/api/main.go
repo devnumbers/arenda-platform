@@ -99,10 +99,13 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	// Wire the shared-property-ids adapter from the access context into the
+	// Wire the shared-memberships adapter from the access context into the
 	// property service so list endpoints include properties shared with the
-	// actor (issue #156, T3).
-	propertiesMod.PropertyService.SetSharedPropertyIDs(accessMod.SharedProperties)
+	// actor and expose the actor's access role (issues #156 T3, T11).
+	propertiesMod.PropertyService.SetSharedMemberships(accessMod.SharedProperties)
+	// Wire the owner display-name resolver so the property detail response can
+	// carry the owner's public name for the sharing banner (issue T11).
+	propertiesMod.PropertyService.SetOwnerDisplayNameResolver(accessMod.AccessService)
 	// Wire the recipient slot policy (access SlotCoordinator) into the property
 	// service so archive/unarchive/delete recover or suspend shared memberships
 	// of recipients (issue #158, T4).

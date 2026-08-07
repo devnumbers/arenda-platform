@@ -505,6 +505,18 @@ func toSharedRole(r domain.Role) sharedpolicy.Role {
 	}
 }
 
+// DisplayName resolves the public display name of a user (issue T11): "Name
+// Surname" when present, otherwise a masked phone — never an email or a raw
+// phone. Used cross-context (the properties sharing banner) via the
+// OwnerDisplayNameResolver port.
+func (s *AccessService) DisplayName(ctx context.Context, userID uuid.UUID) (string, error) {
+	user, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("lookup user: %w", err)
+	}
+	return displayName(user), nil
+}
+
 func displayName(u MemberUser) string {
 	parts := make([]string, 0, 2)
 	if u.Name != nil && *u.Name != "" {
