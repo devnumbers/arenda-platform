@@ -51,6 +51,8 @@ func (h *LeaseHandlers) handleLeaseError(w http.ResponseWriter, r *http.Request,
 		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
 		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Аренда не найдена"))
+	case errors.Is(err, leasesapp.ErrForbidden):
+		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
 	case errors.Is(err, leasesapp.ErrPropertyNotAvailable):
 		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Объект недоступен для аренды"))
 	case errors.Is(err, leasesapp.ErrOpenLeaseExists):

@@ -30,6 +30,11 @@ WHERE owner_id = $1 AND property_id = $2
   AND deleted_at IS NULL
 ORDER BY created_at DESC;
 
+-- name: GetRecurringOperationByID :one
+SELECT * FROM recurring_operations
+WHERE id = $1
+  AND deleted_at IS NULL;
+
 -- name: GetRecurringOperationByIDAndOwner :one
 SELECT * FROM recurring_operations
 WHERE id = $1 AND owner_id = $2

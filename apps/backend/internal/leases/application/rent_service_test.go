@@ -230,6 +230,30 @@ func (r *fakeOperationRepo) ListNextRentPayments(_ context.Context, ownerID uuid
 	return out, nil
 }
 
+func (r *fakeOperationRepo) GetByID(_ context.Context, id uuid.UUID) (domain.Operation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, op := range r.ops {
+		if op.ID == id && op.DeletedAt == nil {
+			return op, nil
+		}
+	}
+	return domain.Operation{}, ErrNotFound
+}
+
+func (r *fakeOperationRepo) MoveToProperty(_ context.Context, id, scope, propertyID uuid.UUID, updatedAt time.Time) (domain.Operation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.ops {
+		if r.ops[i].ID == id && r.ops[i].OwnerID == scope && r.ops[i].DeletedAt == nil {
+			r.ops[i].PropertyID = propertyID
+			r.ops[i].UpdatedAt = updatedAt
+			return r.ops[i], nil
+		}
+	}
+	return domain.Operation{}, ErrNotFound
+}
+
 func (r *fakeOperationRepo) GetByIDAndOwner(_ context.Context, id, _ uuid.UUID) (domain.Operation, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -468,6 +492,16 @@ func (r *fakeRecurringOperationRepo) Create(_ context.Context, rec domain.Recurr
 		r.recs = make(map[uuid.UUID]domain.RecurringOperation)
 	}
 	r.recs[rec.ID] = rec
+	return rec, nil
+}
+
+func (r *fakeRecurringOperationRepo) GetByID(_ context.Context, id uuid.UUID) (domain.RecurringOperation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rec, ok := r.recs[id]
+	if !ok || rec.DeletedAt != nil {
+		return domain.RecurringOperation{}, ErrNotFound
+	}
 	return rec, nil
 }
 

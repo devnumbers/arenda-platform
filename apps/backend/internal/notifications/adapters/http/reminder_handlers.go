@@ -47,6 +47,9 @@ func (h *ReminderHandlers) handleReminderError(w http.ResponseWriter, r *http.Re
 	case errors.Is(err, notificationsapp.ErrNotFound),
 		errors.Is(err, leasesapp.ErrNotFound):
 		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", notFoundMessage(resource)))
+	case errors.Is(err, notificationsapp.ErrForbidden),
+		errors.Is(err, leasesapp.ErrForbidden):
+		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
 	case errors.Is(err, notificationsapp.ErrInvalidReminderDate),
 		errors.Is(err, notificationsapp.ErrReminderNotPending),
 		errors.Is(err, leasesapp.ErrInvalidInput):
@@ -71,12 +74,13 @@ func (h *ReminderHandlers) ListLeaseReminders(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if _, err := h.leases.GetLease(r.Context(), actor, leaseID); err != nil {
+	lease, err := h.leases.GetLease(r.Context(), actor, leaseID)
+	if err != nil {
 		h.handleReminderError(w, r, err, "lease")
 		return
 	}
 
-	reminders, err := h.svc.ListByLease(r.Context(), actor, leaseID, notificationsapp.ListFilter{Limit: 1000})
+	reminders, err := h.svc.ListByLease(r.Context(), lease.OwnerID, leaseID, notificationsapp.ListFilter{Limit: 1000})
 	if err != nil {
 		h.handleReminderError(w, r, err, "lease")
 		return

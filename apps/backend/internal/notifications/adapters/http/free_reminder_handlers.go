@@ -39,6 +39,12 @@ func (h *FreeReminderHandlers) handleFreeReminderError(w http.ResponseWriter, r 
 	case errors.Is(err, notificationsapp.ErrNotFound),
 		errors.Is(err, propertiesapp.ErrNotFound):
 		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", freeReminderNotFoundMessage(resource)))
+	case errors.Is(err, notificationsapp.ErrForbidden):
+		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
+	case errors.Is(err, propertiesapp.ErrAccessSuspended):
+		// The suspended recipient gets a distinguishable 403 so the frontend
+		// can show the honest "tariff limit exceeded" screen (T9, issue #158).
+		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.ProblemWithCode(r.Context(), "Forbidden", "Доступ к объекту приостановлен: превышен лимит объектов по тарифу", "membership_suspended"))
 	case errors.Is(err, notificationsapp.ErrInvalidFreeReminderInput),
 		errors.Is(err, notificationsapp.ErrInvalidReminderDate):
 		detail, ok := httpsupport.UserFacingDetail(err)
@@ -71,7 +77,8 @@ func (h *FreeReminderHandlers) CreateFreeReminder(w http.ResponseWriter, r *http
 		return
 	}
 
-	if _, err := h.properties.GetProperty(r.Context(), actor, propertyID); err != nil {
+	property, err := h.properties.GetProperty(r.Context(), actor, propertyID)
+	if err != nil {
 		h.handleFreeReminderError(w, r, err, "property")
 		return
 	}
@@ -90,7 +97,7 @@ func (h *FreeReminderHandlers) CreateFreeReminder(w http.ResponseWriter, r *http
 		Periodicity: notificationsdomain.FreeReminderPeriodicity(body.Periodicity),
 	}
 
-	fr, err := h.svc.Create(r.Context(), actor, input)
+	fr, err := h.svc.Create(r.Context(), actor, property.OwnerID, input)
 	if err != nil {
 		h.handleFreeReminderError(w, r, err, "free_reminder")
 		return
@@ -107,7 +114,8 @@ func (h *FreeReminderHandlers) ListPropertyFreeReminders(w http.ResponseWriter, 
 		return
 	}
 
-	if _, err := h.properties.GetProperty(r.Context(), actor, propertyID); err != nil {
+	property, err := h.properties.GetProperty(r.Context(), actor, propertyID)
+	if err != nil {
 		h.handleFreeReminderError(w, r, err, "property")
 		return
 	}
@@ -118,7 +126,7 @@ func (h *FreeReminderHandlers) ListPropertyFreeReminders(w http.ResponseWriter, 
 		limit = max(limit, 1)
 	}
 
-	reminders, err := h.svc.ListByProperty(r.Context(), actor, propertyID, limit)
+	reminders, err := h.svc.ListByProperty(r.Context(), property.OwnerID, propertyID, limit)
 	if err != nil {
 		h.handleFreeReminderError(w, r, err, "free_reminder")
 		return
@@ -143,7 +151,8 @@ func (h *FreeReminderHandlers) ListUpcomingFreeReminders(w http.ResponseWriter, 
 		return
 	}
 
-	if _, err := h.properties.GetProperty(r.Context(), actor, propertyID); err != nil {
+	property, err := h.properties.GetProperty(r.Context(), actor, propertyID)
+	if err != nil {
 		h.handleFreeReminderError(w, r, err, "property")
 		return
 	}
@@ -154,7 +163,7 @@ func (h *FreeReminderHandlers) ListUpcomingFreeReminders(w http.ResponseWriter, 
 		limit = max(limit, 1)
 	}
 
-	upcoming, err := h.reminders.ListUpcomingFreeRemindersByProperty(r.Context(), actor, propertyID, h.clock.Now(), limit)
+	upcoming, err := h.reminders.ListUpcomingFreeRemindersByProperty(r.Context(), property.OwnerID, propertyID, h.clock.Now(), limit)
 	if err != nil {
 		h.handleFreeReminderError(w, r, err, "free_reminder")
 		return

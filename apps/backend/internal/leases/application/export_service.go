@@ -13,6 +13,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	propdomain "github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -102,24 +103,30 @@ type ExportService struct {
 	leases     LeaseRepository
 	properties PropertyRepository
 	contacts   PropertyContactRepository
+	policy     sharedpolicy.Policy
 	clock      clock.Clock
 	logger     *slog.Logger
 }
 
 // NewExportService creates the property export use case.
-func NewExportService(operations OperationRepository, leases LeaseRepository, properties PropertyRepository, contacts PropertyContactRepository, clk clock.Clock, logger *slog.Logger) *ExportService {
-	return &ExportService{operations: operations, leases: leases, properties: properties, contacts: contacts, clock: clk, logger: logger}
+func NewExportService(operations OperationRepository, leases LeaseRepository, properties PropertyRepository, contacts PropertyContactRepository, policy sharedpolicy.Policy, clk clock.Clock, logger *slog.Logger) *ExportService {
+	return &ExportService{operations: operations, leases: leases, properties: properties, contacts: contacts, policy: policy, clock: clk, logger: logger}
 }
 
 // ExportProperty returns the xlsx workbook with the property card, operations,
 // finance summaries, leases, tenants, and contacts.
 func (s *ExportService) ExportProperty(ctx context.Context, actor, propertyID uuid.UUID) (ExportFile, error) {
-	propRow, err := s.properties.GetForExport(ctx, propertyID, actor)
+	scope, err := resolveReadScope(ctx, s.policy, s.properties, actor, propertyID)
+	if err != nil {
+		return ExportFile{}, err
+	}
+
+	propRow, err := s.properties.GetForExport(ctx, propertyID, scope)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: get property: %w", err)
 	}
 
-	rows, err := s.operations.ListCompletedForExport(ctx, actor, propertyID)
+	rows, err := s.operations.ListCompletedForExport(ctx, scope, propertyID)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: list operations: %w", err)
 	}
@@ -128,27 +135,27 @@ func (s *ExportService) ExportProperty(ctx context.Context, actor, propertyID uu
 		rows = rows[:exportMaxRows]
 	}
 
-	leases, err := s.leases.ListWithTenantForExport(ctx, actor, propertyID)
+	leases, err := s.leases.ListWithTenantForExport(ctx, scope, propertyID)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: list leases: %w", err)
 	}
 
-	summary, err := s.operations.GetPropertyOperationsSummary(ctx, actor, propertyID, s.clock.Now())
+	summary, err := s.operations.GetPropertyOperationsSummary(ctx, scope, propertyID, s.clock.Now())
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: get summary: %w", err)
 	}
 
-	months, err := s.operations.GetPropertyFinanceByMonth(ctx, actor, propertyID)
+	months, err := s.operations.GetPropertyFinanceByMonth(ctx, scope, propertyID)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: get finance by month: %w", err)
 	}
 
-	categories, err := s.operations.GetPropertyFinanceByCategory(ctx, actor, propertyID)
+	categories, err := s.operations.GetPropertyFinanceByCategory(ctx, scope, propertyID)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: get finance by category: %w", err)
 	}
 
-	contacts, err := s.contacts.ListForExport(ctx, propertyID, actor)
+	contacts, err := s.contacts.ListForExport(ctx, propertyID, scope)
 	if err != nil {
 		return ExportFile{}, fmt.Errorf("export property: list contacts: %w", err)
 	}

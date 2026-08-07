@@ -119,6 +119,14 @@ func (r *exportOperationRepo) ListByPropertyWithStatuses(_ context.Context, _, _
 	return nil, nil
 }
 
+func (r *exportOperationRepo) GetByID(_ context.Context, _ uuid.UUID) (domain.Operation, error) {
+	return domain.Operation{}, ErrNotFound
+}
+
+func (r *exportOperationRepo) MoveToProperty(_ context.Context, _, _, _ uuid.UUID, _ time.Time) (domain.Operation, error) {
+	return domain.Operation{}, ErrNotFound
+}
+
 func (r *exportOperationRepo) GetByIDAndOwner(_ context.Context, _, _ uuid.UUID) (domain.Operation, error) {
 	return domain.Operation{}, ErrNotFound
 }
@@ -300,7 +308,7 @@ var (
 // newExportService wires an ExportService with the given fakes and a fixed clock.
 func newExportService(t *testing.T, prop *exportPropertyRepo, ops *exportOperationRepo, leases *exportLeaseRepo, contacts *exportContactRepo) *ExportService {
 	t.Helper()
-	return NewExportService(ops, leases, prop, contacts, fakeClock{now: time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)}, slog.Default())
+	return NewExportService(ops, leases, prop, contacts, fakePolicy{}, fakeClock{now: time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)}, slog.Default())
 }
 
 // openExport parses the generated workbook bytes for assertions.

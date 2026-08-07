@@ -129,7 +129,7 @@ func SessionMiddleware(logger *slog.Logger, sessions application.SessionService,
 				}
 			}
 
-			ctx := context.WithValue(r.Context(), userIDKey{}, user.ID)
+			ctx := WithUserID(r.Context(), user.ID)
 			ctx = context.WithValue(ctx, userKey{}, user)
 			r = r.WithContext(ctx)
 			next.ServeHTTP(w, r)

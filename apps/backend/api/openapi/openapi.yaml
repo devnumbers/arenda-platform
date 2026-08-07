@@ -1404,6 +1404,39 @@ paths:
           $ref: '#/components/responses/SubscriptionBlocked'
         '404':
           $ref: '#/components/responses/NotFound'
+  /operations/{id}/move:
+    post:
+      operationId: moveOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationMoveRequest'
+      responses:
+        '200':
+          description: Operation moved to another property of the same owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /operation-categories:
     get:
       operationId: listOperationCategories
@@ -5210,6 +5243,15 @@ components:
           nullable: true
           enum: [0, 1, 3, 7]
           description: 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before the operation date.
+
+    OperationMoveRequest:
+      type: object
+      required: [property_id]
+      properties:
+        property_id:
+          type: string
+          format: uuid
+          description: Target property. Must belong to the same owner as the operation's current property.
 
     OperationUpdateRequest:
       type: object

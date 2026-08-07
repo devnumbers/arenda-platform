@@ -20,6 +20,13 @@ func UserIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 	return id, ok
 }
 
+// WithUserID returns a context carrying the authenticated user ID, as stored
+// by the session middleware. It is the write counterpart of UserIDFromContext
+// and is also used by handler tests.
+func WithUserID(ctx context.Context, id uuid.UUID) context.Context {
+	return context.WithValue(ctx, userIDKey{}, id)
+}
+
 // UserFromContext returns the authenticated user loaded by the session middleware.
 func UserFromContext(ctx context.Context) (identitydomain.User, bool) {
 	user, ok := ctx.Value(userKey{}).(identitydomain.User)

@@ -293,6 +293,59 @@ func (q *Queries) DeleteUneditedOperationsByRecurringOperation(ctx context.Conte
 	return err
 }
 
+const getOperationByID = `-- name: GetOperationByID :one
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
+WHERE id = $1
+  AND deleted_at IS NULL
+`
+
+type GetOperationByIDRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	OwnerID              pgtype.UUID        `json:"owner_id"`
+	PropertyID           pgtype.UUID        `json:"property_id"`
+	LeaseID              pgtype.UUID        `json:"lease_id"`
+	RecurringOperationID pgtype.UUID        `json:"recurring_operation_id"`
+	Type                 string             `json:"type"`
+	CategoryID           pgtype.UUID        `json:"category_id"`
+	AmountKopecks        int64              `json:"amount_kopecks"`
+	OperationDate        pgtype.Date        `json:"operation_date"`
+	Comment              pgtype.Text        `json:"comment"`
+	IsException          bool               `json:"is_exception"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
+	Status               string             `json:"status"`
+	Name                 string             `json:"name"`
+	ReminderOffsetDays   pgtype.Int4        `json:"reminder_offset_days"`
+	SourceOperationDate  pgtype.Date        `json:"source_operation_date"`
+}
+
+func (q *Queries) GetOperationByID(ctx context.Context, id pgtype.UUID) (GetOperationByIDRow, error) {
+	row := q.db.QueryRow(ctx, getOperationByID, id)
+	var i GetOperationByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.LeaseID,
+		&i.RecurringOperationID,
+		&i.Type,
+		&i.CategoryID,
+		&i.AmountKopecks,
+		&i.OperationDate,
+		&i.Comment,
+		&i.IsException,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Status,
+		&i.Name,
+		&i.ReminderOffsetDays,
+		&i.SourceOperationDate,
+	)
+	return i, err
+}
+
 const getOperationByIDAdmin = `-- name: GetOperationByIDAdmin :one
 SELECT op.id, op.owner_id, op.property_id, op.lease_id, op.recurring_operation_id, op.type, op.amount_kopecks, op.operation_date, op.comment, op.is_exception, op.created_at, op.updated_at, op.deleted_at, op.status, op.name, op.reminder_offset_days, op.source_operation_date, op.category_id, cat.name AS category_name, p.name AS property_name
 FROM operations op
@@ -1626,6 +1679,53 @@ type MarkOperationOverdueParams struct {
 
 func (q *Queries) MarkOperationOverdue(ctx context.Context, arg MarkOperationOverdueParams) (Operation, error) {
 	row := q.db.QueryRow(ctx, markOperationOverdue, arg.ID, arg.OwnerID, arg.AsOf)
+	var i Operation
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.LeaseID,
+		&i.RecurringOperationID,
+		&i.Type,
+		&i.AmountKopecks,
+		&i.OperationDate,
+		&i.Comment,
+		&i.IsException,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Status,
+		&i.Name,
+		&i.ReminderOffsetDays,
+		&i.SourceOperationDate,
+		&i.CategoryID,
+	)
+	return i, err
+}
+
+const moveOperationToProperty = `-- name: MoveOperationToProperty :one
+UPDATE operations
+SET property_id = $3,
+    updated_at = $4
+WHERE id = $1 AND owner_id = $2
+  AND deleted_at IS NULL
+RETURNING id, owner_id, property_id, lease_id, recurring_operation_id, type, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date, category_id
+`
+
+type MoveOperationToPropertyParams struct {
+	ID         pgtype.UUID        `json:"id"`
+	OwnerID    pgtype.UUID        `json:"owner_id"`
+	PropertyID pgtype.UUID        `json:"property_id"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) MoveOperationToProperty(ctx context.Context, arg MoveOperationToPropertyParams) (Operation, error) {
+	row := q.db.QueryRow(ctx, moveOperationToProperty,
+		arg.ID,
+		arg.OwnerID,
+		arg.PropertyID,
+		arg.UpdatedAt,
+	)
 	var i Operation
 	err := row.Scan(
 		&i.ID,

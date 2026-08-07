@@ -10,7 +10,23 @@ import (
 )
 
 func newOperationGuardService(ownerID uuid.UUID, opRepo *fakeOperationRepo, propertyRepo *fakePropertyRepo) *OperationService {
-	return NewOperationService(opRepo, propertyRepo, nil, nil, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, nil, fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, nil, nil)
+	seedPropertyOwners(propertyRepo, ownerID)
+	return NewOperationService(opRepo, propertyRepo, nil, nil, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, nil, fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, fakePolicy{}, nil)
+}
+
+// seedPropertyOwners maps every property known to the fake repository to the
+// given owner so scope resolution returns the real owner instead of the
+// repository's fallback (the property id itself).
+func seedPropertyOwners(propertyRepo *fakePropertyRepo, ownerID uuid.UUID) {
+	if len(propertyRepo.statuses) == 0 {
+		return
+	}
+	if propertyRepo.owners == nil {
+		propertyRepo.owners = map[uuid.UUID]uuid.UUID{}
+	}
+	for id := range propertyRepo.statuses {
+		propertyRepo.owners[id] = ownerID
+	}
 }
 
 func newGuardTestOperation(id, ownerID, propertyID uuid.UUID, status domain.OperationStatus) domain.Operation {

@@ -10,6 +10,10 @@ RETURNING *;
 SELECT * FROM free_reminders
 WHERE id = $1 AND owner_id = $2;
 
+-- name: GetFreeReminderByIDUnscoped :one
+SELECT * FROM free_reminders
+WHERE id = $1;
+
 -- name: UpdateFreeReminder :one
 UPDATE free_reminders
 SET title = $3,

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -40,6 +41,20 @@ func validateFreeReminderTitle(title string) (string, error) {
 	return t, nil
 }
 
+// writeRoleGate maps a resolved role to the T3 shared-access write-gate
+// outcome (issue #166), mirroring the leases write paths: RoleNone and
+// RoleSuspended map to ErrNotFound (object privacy); a role that can view but
+// not edit (viewer) maps to ErrForbidden.
+func writeRoleGate(role sharedpolicy.Role) error {
+	if role == sharedpolicy.RoleNone || role == sharedpolicy.RoleSuspended {
+		return ErrNotFound
+	}
+	if !sharedpolicy.CanEdit(role) {
+		return ErrForbidden
+	}
+	return nil
+}
+
 // FreeReminderService implements CRUD use cases for free reminder templates.
 // Creating or updating a template also (re)materializes concrete reminders in a
 // single transaction: existing concrete reminders are cancelled, then new ones
@@ -49,6 +64,7 @@ type FreeReminderService struct {
 	db         transaction.Beginner
 	clock      clock.Clock
 	tzResolver tzresolver.OwnerTimezoneResolver
+	policy     sharedpolicy.Policy
 }
 
 // NewFreeReminderService creates a new free reminder service.
@@ -57,21 +73,32 @@ func NewFreeReminderService(
 	db transaction.Beginner,
 	clock clock.Clock,
 	tzResolver tzresolver.OwnerTimezoneResolver,
+	policy sharedpolicy.Policy,
 ) *FreeReminderService {
-	return &FreeReminderService{repo: repo, db: db, clock: clock, tzResolver: tzResolver}
+	return &FreeReminderService{repo: repo, db: db, clock: clock, tzResolver: tzResolver, policy: policy}
 }
 
 // WithTx returns a service bound to the provided transaction. The transaction-
 // bound repo is used for template persistence and concrete reminder
 // materialization within the caller's transaction.
 func (s *FreeReminderService) WithTx(tx transaction.Tx) *FreeReminderService {
-	return &FreeReminderService{repo: s.repo.WithTx(tx), db: nil, clock: s.clock, tzResolver: s.tzResolver}
+	return &FreeReminderService{repo: s.repo.WithTx(tx), db: nil, clock: s.clock, tzResolver: s.tzResolver, policy: s.policy}
 }
 
-// Create validates input, resolves the owner's timezone, computes the UTC
-// trigger_at, persists the template and materializes concrete reminders in a
-// single transaction.
-func (s *FreeReminderService) Create(ctx context.Context, actor uuid.UUID, in CreateFreeReminderInput) (domain.FreeReminder, error) {
+// Create validates input, applies the T3 shared-access write gate (issue
+// #166), resolves the data owner's timezone, computes the UTC trigger_at,
+// persists the template and materializes concrete reminders in a single
+// transaction. The template belongs to the data owner (scope), not to the
+// actor: a full-access member creates reminders on the owner's scope.
+func (s *FreeReminderService) Create(ctx context.Context, actor, scope uuid.UUID, in CreateFreeReminderInput) (domain.FreeReminder, error) {
+	role, err := s.policy.RoleForProperty(ctx, actor, in.PropertyID)
+	if err != nil {
+		return domain.FreeReminder{}, fmt.Errorf("resolve role: %w", err)
+	}
+	if err := writeRoleGate(role); err != nil {
+		return domain.FreeReminder{}, err
+	}
+
 	title, err := validateFreeReminderTitle(in.Title)
 	if err != nil {
 		return domain.FreeReminder{}, err
@@ -80,7 +107,7 @@ func (s *FreeReminderService) Create(ctx context.Context, actor uuid.UUID, in Cr
 		return domain.FreeReminder{}, fmt.Errorf("%w: unknown periodicity %q", ErrInvalidFreeReminderInput, in.Periodicity)
 	}
 
-	loc, err := s.tzResolver.Resolve(ctx, actor)
+	loc, err := s.tzResolver.Resolve(ctx, scope)
 	if err != nil {
 		return domain.FreeReminder{}, fmt.Errorf("resolve owner timezone: %w", err)
 	}
@@ -106,7 +133,7 @@ func (s *FreeReminderService) Create(ctx context.Context, actor uuid.UUID, in Cr
 
 	template := domain.FreeReminder{
 		ID:          id,
-		OwnerID:     actor,
+		OwnerID:     scope,
 		PropertyID:  in.PropertyID,
 		Title:       title,
 		TriggerAt:   triggerAt,
@@ -130,23 +157,45 @@ func (s *FreeReminderService) Create(ctx context.Context, actor uuid.UUID, in Cr
 	return created, nil
 }
 
-// Get returns a free reminder by ID after verifying ownership.
+// Get returns a free reminder by ID after the T3 shared-access read gate
+// (issue #166). The entity is loaded unscoped to resolve its property and
+// data owner; any role without view capability — including a suspended
+// membership — maps to ErrNotFound so the reminder's existence is never
+// revealed.
 func (s *FreeReminderService) Get(ctx context.Context, actor, id uuid.UUID) (domain.FreeReminder, error) {
-	fr, err := s.repo.GetByID(ctx, id, actor)
+	fr, err := s.repo.GetByIDUnscoped(ctx, id)
 	if err != nil {
 		return domain.FreeReminder{}, err
+	}
+	role, err := s.policy.RoleForProperty(ctx, actor, fr.PropertyID)
+	if err != nil {
+		return domain.FreeReminder{}, fmt.Errorf("resolve role: %w", err)
+	}
+	if !sharedpolicy.CanView(role) {
+		return domain.FreeReminder{}, ErrNotFound
 	}
 	return fr, nil
 }
 
 // Update applies a partial update to a free reminder and rematerializes its
-// concrete reminders in a single transaction. Existing concrete reminders are
-// cancelled, then new ones are generated from the updated template.
+// concrete reminders in a single transaction, after the T3 shared-access
+// write gate (issue #166): RoleNone/RoleSuspended map to ErrNotFound, a
+// viewer maps to ErrForbidden. All repository and timezone calls use the data
+// owner (scope) of the reminder, never the actor. Existing concrete reminders
+// are cancelled, then new ones are generated from the updated template.
 func (s *FreeReminderService) Update(ctx context.Context, actor, id uuid.UUID, in UpdateFreeReminderInput) (domain.FreeReminder, error) {
-	existing, err := s.repo.GetByID(ctx, id, actor)
+	existing, err := s.repo.GetByIDUnscoped(ctx, id)
 	if err != nil {
 		return domain.FreeReminder{}, err
 	}
+	role, err := s.policy.RoleForProperty(ctx, actor, existing.PropertyID)
+	if err != nil {
+		return domain.FreeReminder{}, fmt.Errorf("resolve role: %w", err)
+	}
+	if err := writeRoleGate(role); err != nil {
+		return domain.FreeReminder{}, err
+	}
+	scope := existing.OwnerID
 
 	updated := existing
 	if in.Title != nil {
@@ -157,7 +206,7 @@ func (s *FreeReminderService) Update(ctx context.Context, actor, id uuid.UUID, i
 		updated.Title = title
 	}
 	if in.TriggerAt != nil {
-		loc, err := s.tzResolver.Resolve(ctx, actor)
+		loc, err := s.tzResolver.Resolve(ctx, scope)
 		if err != nil {
 			return domain.FreeReminder{}, fmt.Errorf("resolve owner timezone: %w", err)
 		}
@@ -189,7 +238,7 @@ func (s *FreeReminderService) Update(ctx context.Context, actor, id uuid.UUID, i
 		return domain.FreeReminder{}, err
 	}
 
-	if err := txRepo.CancelRemindersByFreeReminderID(ctx, actor, saved.ID); err != nil {
+	if err := txRepo.CancelRemindersByFreeReminderID(ctx, scope, saved.ID); err != nil {
 		return domain.FreeReminder{}, err
 	}
 
@@ -203,10 +252,22 @@ func (s *FreeReminderService) Update(ctx context.Context, actor, id uuid.UUID, i
 	return saved, nil
 }
 
-// Delete removes a free reminder template; concrete reminders cascade-delete
-// via the ON DELETE CASCADE on reminders.free_reminder_id.
+// Delete removes a free reminder template after the T3 shared-access write
+// gate (issue #166); concrete reminders cascade-delete via the ON DELETE
+// CASCADE on reminders.free_reminder_id.
 func (s *FreeReminderService) Delete(ctx context.Context, actor, id uuid.UUID) error {
-	if err := s.repo.Delete(ctx, actor, id); err != nil {
+	fr, err := s.repo.GetByIDUnscoped(ctx, id)
+	if err != nil {
+		return err
+	}
+	role, err := s.policy.RoleForProperty(ctx, actor, fr.PropertyID)
+	if err != nil {
+		return fmt.Errorf("resolve role: %w", err)
+	}
+	if err := writeRoleGate(role); err != nil {
+		return err
+	}
+	if err := s.repo.Delete(ctx, fr.OwnerID, id); err != nil {
 		return err
 	}
 	return nil
@@ -221,9 +282,11 @@ func (s *FreeReminderService) ListByOwner(ctx context.Context, actor uuid.UUID, 
 	return reminders, nil
 }
 
-// ListByProperty returns up to limit free reminders for a property.
-func (s *FreeReminderService) ListByProperty(ctx context.Context, actor, propertyID uuid.UUID, limit int) ([]domain.FreeReminder, error) {
-	reminders, err := s.repo.ListByProperty(ctx, actor, propertyID, limit)
+// ListByProperty returns up to limit free reminders for a property. The
+// caller resolves and passes the data owner (scope); the read gate happens at
+// the transport or calling layer.
+func (s *FreeReminderService) ListByProperty(ctx context.Context, scope, propertyID uuid.UUID, limit int) ([]domain.FreeReminder, error) {
+	reminders, err := s.repo.ListByProperty(ctx, scope, propertyID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list free reminders by property: %w", err)
 	}

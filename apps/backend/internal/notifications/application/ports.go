@@ -77,6 +77,10 @@ type ReminderRepository interface {
 type FreeReminderRepository interface {
 	Create(ctx context.Context, fr domain.FreeReminder) (domain.FreeReminder, error)
 	GetByID(ctx context.Context, id, scope uuid.UUID) (domain.FreeReminder, error)
+	// GetByIDUnscoped returns a free reminder by id without owner scoping. Used
+	// to resolve the entity's owner (scope) before applying the policy gate
+	// (T3, issue #166); callers must not expose the result without a role check.
+	GetByIDUnscoped(ctx context.Context, id uuid.UUID) (domain.FreeReminder, error)
 	Update(ctx context.Context, fr domain.FreeReminder) (domain.FreeReminder, error)
 	Delete(ctx context.Context, scope, id uuid.UUID) error
 	ListByOwner(ctx context.Context, scope uuid.UUID, limit, offset int) ([]domain.FreeReminder, error)

@@ -72,6 +72,20 @@ func (r *FreeReminderRepository) GetByID(ctx context.Context, id, scope uuid.UUI
 	return freeReminderToDomain(row), nil
 }
 
+// GetByIDUnscoped returns a free reminder by id without owner scoping. It
+// exists so the application layer can resolve the entity's owner (scope)
+// before applying the policy gate (T3, issue #166).
+func (r *FreeReminderRepository) GetByIDUnscoped(ctx context.Context, id uuid.UUID) (domain.FreeReminder, error) {
+	row, err := r.q().GetFreeReminderByIDUnscoped(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.FreeReminder{}, application.ErrNotFound
+		}
+		return domain.FreeReminder{}, fmt.Errorf("get free reminder: %w", err)
+	}
+	return freeReminderToDomain(row), nil
+}
+
 // Update updates a free reminder template (title, trigger_at, periodicity).
 func (r *FreeReminderRepository) Update(ctx context.Context, fr domain.FreeReminder) (domain.FreeReminder, error) {
 	row, err := r.q().UpdateFreeReminder(ctx, postgres.UpdateFreeReminderParams{

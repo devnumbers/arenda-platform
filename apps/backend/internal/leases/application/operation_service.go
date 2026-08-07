@@ -55,6 +55,11 @@ type MarkOperationIncompleteCommand struct {
 	OperationID uuid.UUID
 }
 
+// MoveOperationCommand carries the target property for moving an operation.
+type MoveOperationCommand struct {
+	PropertyID uuid.UUID
+}
+
 // OperationService orchestrates manual operation use cases within the leases
 // bounded context.
 type OperationService struct {
@@ -132,7 +137,12 @@ func (s *OperationService) SetSharedPropertyIDs(ids SharedPropertyIDs) {
 
 // CreateOperation creates a manual operation for the given owner and property.
 func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID, cmd CreateOperationCommand) (domain.Operation, error) {
-	if err := validatePropertyNotArchived(ctx, s.properties, actor, cmd.PropertyID); err != nil {
+	scope, err := resolveWriteScope(ctx, s.policy, s.properties, actor, cmd.PropertyID)
+	if err != nil {
+		return domain.Operation{}, err
+	}
+
+	if err := validatePropertyNotArchived(ctx, s.properties, scope, cmd.PropertyID); err != nil {
 		return domain.Operation{}, err
 	}
 
@@ -140,7 +150,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID,
 	if err != nil {
 		return domain.Operation{}, err
 	}
-	if err := validateCategory(ctx, s.categories, actor, opType, categoryID); err != nil {
+	if err := validateCategory(ctx, s.categories, scope, opType, categoryID); err != nil {
 		return domain.Operation{}, err
 	}
 
@@ -161,7 +171,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID,
 	}
 	cmd.ReminderOffsetDays = normalizeReminderOffsetDays(cmd.ReminderOffsetDays)
 
-	leaseID, err := s.resolveLeaseID(ctx, actor, cmd.PropertyID, cmd.LeaseID)
+	leaseID, err := s.resolveLeaseID(ctx, scope, cmd.PropertyID, cmd.LeaseID)
 	if err != nil {
 		return domain.Operation{}, err
 	}
@@ -171,7 +181,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID,
 		return domain.Operation{}, fmt.Errorf("generate operation id: %w", err)
 	}
 
-	loc, err := s.tzResolver.Resolve(ctx, actor)
+	loc, err := s.tzResolver.Resolve(ctx, scope)
 	if err != nil {
 		return domain.Operation{}, fmt.Errorf("resolve owner timezone: %w", err)
 	}
@@ -184,7 +194,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID,
 
 	op := domain.Operation{
 		ID:                 id,
-		OwnerID:            actor,
+		OwnerID:            scope,
 		PropertyID:         cmd.PropertyID,
 		LeaseID:            leaseID,
 		Type:               opType,
@@ -218,7 +228,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID,
 	if s.scheduler != nil && created.ReminderOffsetDays != nil {
 		txScheduler := s.scheduler.WithTx(tx)
 		txCategories := s.categories.WithTx(tx)
-		cat, err := txCategories.GetByIDAndOwner(ctx, created.CategoryID, actor)
+		cat, err := txCategories.GetByIDAndOwner(ctx, created.CategoryID, scope)
 		if err != nil {
 			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
 		}
@@ -258,14 +268,15 @@ func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID,
 }
 
 func (s *OperationService) GetPropertyOperationsSummary(ctx context.Context, actor, propertyID uuid.UUID) (OperationsSummary, error) {
-	if err := validateProperty(ctx, s.properties, actor, propertyID); err != nil {
+	scope, err := resolveReadScope(ctx, s.policy, s.properties, actor, propertyID)
+	if err != nil {
 		return OperationsSummary{}, err
 	}
-	loc, err := s.tzResolver.Resolve(ctx, actor)
+	loc, err := s.tzResolver.Resolve(ctx, scope)
 	if err != nil {
 		return OperationsSummary{}, fmt.Errorf("resolve owner timezone: %w", err)
 	}
-	return s.operations.GetPropertyOperationsSummary(ctx, actor, propertyID, timeutil.DateIn(s.clock.Now(), loc))
+	return s.operations.GetPropertyOperationsSummary(ctx, scope, propertyID, timeutil.DateIn(s.clock.Now(), loc))
 }
 
 type FinanceReport struct {
@@ -326,32 +337,56 @@ func (s *OperationService) ListOperations(ctx context.Context, actor uuid.UUID, 
 // ListOperationsByProperty returns operations for the given owner and property,
 // filtered by the provided criteria.
 func (s *OperationService) ListOperationsByProperty(ctx context.Context, actor, propertyID uuid.UUID, filter OperationFilter) ([]domain.Operation, error) {
-	if err := validateProperty(ctx, s.properties, actor, propertyID); err != nil {
+	scope, err := resolveReadScope(ctx, s.policy, s.properties, actor, propertyID)
+	if err != nil {
 		return nil, err
 	}
 
 	filter.PropertyID = propertyID
-	ops, err := s.operations.ListByOwner(ctx, actor, filter)
+	ops, err := s.operations.ListByOwner(ctx, scope, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list operations: %w", err)
 	}
 	return ops, nil
 }
 
-// GetOperation returns a single operation owned by the given owner.
+// GetOperation returns a single operation after the T3 shared-access read gate.
 func (s *OperationService) GetOperation(ctx context.Context, actor, id uuid.UUID) (domain.Operation, error) {
-	op, err := s.operations.GetByIDAndOwner(ctx, id, actor)
+	op, err := s.operations.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Operation{}, ErrNotFound
 		}
 		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
 	}
+	role, err := roleForStandalone(ctx, s.policy, actor, op.PropertyID, op.OwnerID)
+	if err != nil {
+		return domain.Operation{}, err
+	}
+	if !sharedpolicy.CanView(role) {
+		return domain.Operation{}, ErrNotFound
+	}
 	return op, nil
 }
 
-// UpdateOperation updates an operation owned by the given owner.
+// UpdateOperation updates an operation after the T3 shared-access write gate.
 func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.UUID, cmd UpdateOperationCommand) (domain.Operation, error) {
+	op, err := s.operations.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, ErrNotFound
+		}
+		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
+	}
+	role, err := roleForStandalone(ctx, s.policy, actor, op.PropertyID, op.OwnerID)
+	if err != nil {
+		return domain.Operation{}, err
+	}
+	if err := writeRoleGate(role); err != nil {
+		return domain.Operation{}, err
+	}
+	scope := op.OwnerID
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
@@ -361,7 +396,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 	txOps := s.operations.WithTx(tx)
 	txCategories := s.categories.WithTx(tx)
 
-	op, err := txOps.GetByIDAndOwnerForUpdate(ctx, id, actor)
+	op, err = txOps.GetByIDAndOwnerForUpdate(ctx, id, scope)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Operation{}, ErrNotFound
@@ -369,7 +404,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
 	}
 
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), actor, op.PropertyID); err != nil {
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, op.PropertyID); err != nil {
 		return domain.Operation{}, err
 	}
 
@@ -389,7 +424,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 		categoryID = *cmd.CategoryID
 	}
 	if cmd.Type != nil || cmd.CategoryID != nil {
-		if err := validateCategory(ctx, txCategories, actor, opType, categoryID); err != nil {
+		if err := validateCategory(ctx, txCategories, scope, opType, categoryID); err != nil {
 			return domain.Operation{}, err
 		}
 	}
@@ -422,7 +457,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 	}
 
 	if cmd.LeaseID != nil {
-		leaseID, err := s.resolveLeaseID(ctx, actor, op.PropertyID, cmd.LeaseID)
+		leaseID, err := s.resolveLeaseID(ctx, scope, op.PropertyID, cmd.LeaseID)
 		if err != nil {
 			return domain.Operation{}, err
 		}
@@ -437,7 +472,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 	}
 
 	op.IsException = true
-	loc, err := s.tzResolver.Resolve(ctx, actor)
+	loc, err := s.tzResolver.Resolve(ctx, scope)
 	if err != nil {
 		return domain.Operation{}, fmt.Errorf("resolve owner timezone: %w", err)
 	}
@@ -465,15 +500,15 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 	dateChanged := !originalOperationDate.Equal(updated.OperationDate)
 	if s.scheduler != nil && (offsetChanged || dateChanged) {
 		txScheduler := s.scheduler.WithTx(tx)
-		cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, actor)
+		cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
 		if err != nil {
 			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
 		}
 
-		if err := txScheduler.CancelByOperation(ctx, actor, updated.ID); err != nil {
+		if err := txScheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
 		}
-		if err := txScheduler.CancelOverdueReminderByOperation(ctx, actor, updated.ID); err != nil {
+		if err := txScheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel overdue reminders: %w", err)
 		}
 
@@ -508,6 +543,22 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 // CompleteOperation marks a pending, overdue, or unconfirmed operation as completed.
 // Expenses become paid, income becomes received, and future reminders are cancelled.
 func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOperationCommand) (domain.Operation, error) {
+	op, err := s.operations.GetByID(ctx, cmd.OperationID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, ErrNotFound
+		}
+		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
+	}
+	role, err := roleForStandalone(ctx, s.policy, cmd.Actor, op.PropertyID, op.OwnerID)
+	if err != nil {
+		return domain.Operation{}, err
+	}
+	if err := writeRoleGate(role); err != nil {
+		return domain.Operation{}, err
+	}
+	scope := op.OwnerID
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
@@ -516,7 +567,7 @@ func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOp
 
 	txOps := s.operations.WithTx(tx)
 
-	op, err := txOps.GetByIDAndOwnerForUpdate(ctx, cmd.OperationID, cmd.Actor)
+	op, err = txOps.GetByIDAndOwnerForUpdate(ctx, cmd.OperationID, scope)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Operation{}, ErrNotFound
@@ -524,7 +575,7 @@ func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOp
 		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
 	}
 
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), cmd.Actor, op.PropertyID); err != nil {
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, op.PropertyID); err != nil {
 		return domain.Operation{}, err
 	}
 
@@ -554,10 +605,10 @@ func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOp
 
 	if s.scheduler != nil {
 		txScheduler := s.scheduler.WithTx(tx)
-		if err := txScheduler.CancelByOperation(ctx, cmd.Actor, updated.ID); err != nil {
+		if err := txScheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
 		}
-		if err := txScheduler.CancelOverdueReminderByOperation(ctx, cmd.Actor, updated.ID); err != nil {
+		if err := txScheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel overdue reminders: %w", err)
 		}
 	}
@@ -582,6 +633,22 @@ func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOp
 
 // MarkOperationIncomplete marks a completed operation as planned again.
 func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd MarkOperationIncompleteCommand) (domain.Operation, error) {
+	op, err := s.operations.GetByID(ctx, cmd.OperationID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, ErrNotFound
+		}
+		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
+	}
+	role, err := roleForStandalone(ctx, s.policy, cmd.Actor, op.PropertyID, op.OwnerID)
+	if err != nil {
+		return domain.Operation{}, err
+	}
+	if err := writeRoleGate(role); err != nil {
+		return domain.Operation{}, err
+	}
+	scope := op.OwnerID
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
@@ -590,7 +657,7 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 
 	txOps := s.operations.WithTx(tx)
 
-	op, err := txOps.GetByIDAndOwnerForUpdate(ctx, cmd.OperationID, cmd.Actor)
+	op, err = txOps.GetByIDAndOwnerForUpdate(ctx, cmd.OperationID, scope)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.Operation{}, ErrNotFound
@@ -598,7 +665,7 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
 	}
 
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), cmd.Actor, op.PropertyID); err != nil {
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, op.PropertyID); err != nil {
 		return domain.Operation{}, err
 	}
 
@@ -609,7 +676,7 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 		return op, nil
 	}
 
-	loc, err := s.tzResolver.Resolve(ctx, cmd.Actor)
+	loc, err := s.tzResolver.Resolve(ctx, scope)
 	if err != nil {
 		return domain.Operation{}, fmt.Errorf("resolve owner timezone: %w", err)
 	}
@@ -637,14 +704,14 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 	if s.scheduler != nil {
 		txScheduler := s.scheduler.WithTx(tx)
 		txCategories := s.categories.WithTx(tx)
-		cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, cmd.Actor)
+		cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
 		if err != nil {
 			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
 		}
-		if err := txScheduler.CancelByOperation(ctx, cmd.Actor, updated.ID); err != nil {
+		if err := txScheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
 		}
-		if err := txScheduler.CancelOverdueReminderByOperation(ctx, cmd.Actor, updated.ID); err != nil {
+		if err := txScheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
 			return domain.Operation{}, fmt.Errorf("cancel overdue reminders: %w", err)
 		}
 
@@ -774,8 +841,25 @@ func (s *OperationService) ProcessOverdueOperation(ctx context.Context, actor, o
 	return true, nil
 }
 
-// DeleteOperation soft-deletes an operation owned by the given owner.
+// DeleteOperation soft-deletes an operation after the T3 shared-access write
+// gate.
 func (s *OperationService) DeleteOperation(ctx context.Context, actor, id uuid.UUID) error {
+	op, err := s.operations.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("get operation: %w", err)
+	}
+	role, err := roleForStandalone(ctx, s.policy, actor, op.PropertyID, op.OwnerID)
+	if err != nil {
+		return err
+	}
+	if err := writeRoleGate(role); err != nil {
+		return err
+	}
+	scope := op.OwnerID
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -784,7 +868,7 @@ func (s *OperationService) DeleteOperation(ctx context.Context, actor, id uuid.U
 
 	txOps := s.operations.WithTx(tx)
 
-	op, err := txOps.GetByIDAndOwnerForUpdate(ctx, id, actor)
+	op, err = txOps.GetByIDAndOwnerForUpdate(ctx, id, scope)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
@@ -792,11 +876,11 @@ func (s *OperationService) DeleteOperation(ctx context.Context, actor, id uuid.U
 		return fmt.Errorf("get operation: %w", err)
 	}
 
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), actor, op.PropertyID); err != nil {
+	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, op.PropertyID); err != nil {
 		return err
 	}
 
-	if err := txOps.SoftDeleteOperation(ctx, id, actor); err != nil {
+	if err := txOps.SoftDeleteOperation(ctx, id, scope); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
 		}
@@ -805,10 +889,10 @@ func (s *OperationService) DeleteOperation(ctx context.Context, actor, id uuid.U
 
 	if s.scheduler != nil {
 		txScheduler := s.scheduler.WithTx(tx)
-		if err := txScheduler.CancelByOperation(ctx, actor, id); err != nil {
+		if err := txScheduler.CancelByOperation(ctx, scope, id); err != nil {
 			return fmt.Errorf("cancel reminders: %w", err)
 		}
-		if err := txScheduler.CancelOverdueReminderByOperation(ctx, actor, id); err != nil {
+		if err := txScheduler.CancelOverdueReminderByOperation(ctx, scope, id); err != nil {
 			return fmt.Errorf("cancel overdue reminders: %w", err)
 		}
 	}
@@ -828,6 +912,176 @@ func (s *OperationService) DeleteOperation(ctx context.Context, actor, id uuid.U
 		return fmt.Errorf("commit tx: %w", err)
 	}
 
+	return nil
+}
+
+// MoveOperation moves a manual operation to another property of the same data
+// owner (T3, issue #166). Only same-owner moves are allowed: a target property
+// of another owner is rejected with a user-facing 400. Operations generated by
+// a recurring operation, linked to a lease, already on the target property, or
+// attached to an archived source/target property are rejected the same way.
+// Completed operations may be moved.
+func (s *OperationService) MoveOperation(ctx context.Context, actor, id uuid.UUID, cmd MoveOperationCommand) (domain.Operation, error) {
+	op, err := s.operations.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, ErrNotFound
+		}
+		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
+	}
+	role, err := roleForStandalone(ctx, s.policy, actor, op.PropertyID, op.OwnerID)
+	if err != nil {
+		return domain.Operation{}, err
+	}
+	if err := writeRoleGate(role); err != nil {
+		return domain.Operation{}, err
+	}
+	scope := op.OwnerID
+
+	if err := validateMovableOperation(op, cmd.PropertyID); err != nil {
+		return domain.Operation{}, err
+	}
+
+	// The actor needs write access to the target property too, and the target
+	// must belong to the same data owner: cross-owner moves are rejected.
+	targetRole, err := s.policy.RoleForProperty(ctx, actor, cmd.PropertyID)
+	if err != nil {
+		return domain.Operation{}, fmt.Errorf("resolve role: %w", err)
+	}
+	if err := writeRoleGate(targetRole); err != nil {
+		return domain.Operation{}, err
+	}
+	targetOwner, err := propertyScope(ctx, s.properties, cmd.PropertyID)
+	if err != nil {
+		return domain.Operation{}, err
+	}
+	if targetOwner != scope {
+		return domain.Operation{}, newInvalidInputError("cannot move an operation to a property of another owner")
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txOps := s.operations.WithTx(tx)
+
+	op, err = txOps.GetByIDAndOwnerForUpdate(ctx, id, scope)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, ErrNotFound
+		}
+		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
+	}
+
+	// Repeat the guards on the locked row.
+	if err := validateMovableOperation(op, cmd.PropertyID); err != nil {
+		return domain.Operation{}, err
+	}
+	if err := validateMovePropertiesNotArchived(ctx, s.properties.WithTx(tx), scope, op.PropertyID, cmd.PropertyID); err != nil {
+		return domain.Operation{}, err
+	}
+
+	fromPropertyID := op.PropertyID
+	now := s.clock.Now()
+
+	updated, err := txOps.MoveToProperty(ctx, id, scope, cmd.PropertyID, now)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, ErrNotFound
+		}
+		return domain.Operation{}, fmt.Errorf("move operation: %w", err)
+	}
+
+	// Recreate the reminders so their payloads point at the new property,
+	// mirroring the UpdateOperation reschedule flow.
+	if s.scheduler != nil {
+		loc, err := s.tzResolver.Resolve(ctx, scope)
+		if err != nil {
+			return domain.Operation{}, fmt.Errorf("resolve owner timezone: %w", err)
+		}
+		today := timeutil.DateIn(now, loc)
+
+		txScheduler := s.scheduler.WithTx(tx)
+		txCategories := s.categories.WithTx(tx)
+		cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
+		if err != nil {
+			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
+		}
+		if err := txScheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
+			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
+		}
+		if err := txScheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
+			return domain.Operation{}, fmt.Errorf("cancel overdue reminders: %w", err)
+		}
+		if updated.ReminderOffsetDays != nil {
+			reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
+			if !reminderDate.Before(today) {
+				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
+					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
+				}
+			}
+		}
+	}
+
+	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+		ActorID:    &actor,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionOperationMoved,
+		EntityType: auditdomain.EntityOperation,
+		EntityID:   &id,
+		Context: map[string]any{
+			"from_property_id": domain.PropertyIDPtr(fromPropertyID),
+			"to_property_id":   cmd.PropertyID,
+		},
+	}); err != nil {
+		return domain.Operation{}, fmt.Errorf("record audit: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Operation{}, fmt.Errorf("commit tx: %w", err)
+	}
+
+	return updated, nil
+}
+
+// validateMovableOperation rejects operations that cannot be moved between
+// properties: generated by a recurring operation, linked to a lease, or
+// already attached to the target property.
+func validateMovableOperation(op domain.Operation, targetPropertyID uuid.UUID) error {
+	if op.RecurringOperationID != uuid.Nil {
+		return newInvalidInputError("cannot move an operation generated by a recurring operation")
+	}
+	if op.LeaseID != uuid.Nil {
+		return newInvalidInputError("cannot move an operation linked to a lease")
+	}
+	if targetPropertyID == op.PropertyID {
+		return newInvalidInputError("operation already belongs to this property")
+	}
+	return nil
+}
+
+// validateMovePropertiesNotArchived rejects a move when the source or the
+// target property is archived. A property-less operation (detached source)
+// skips the source check.
+func validateMovePropertiesNotArchived(ctx context.Context, properties PropertyRepository, scope, sourcePropertyID, targetPropertyID uuid.UUID) error {
+	if sourcePropertyID != uuid.Nil {
+		status, err := properties.GetStatusByOwner(ctx, sourcePropertyID, scope)
+		if err != nil {
+			return fmt.Errorf("check source property: %w", err)
+		}
+		if status == propertyStatusArchived {
+			return newInvalidInputError("cannot move an operation of an archived property")
+		}
+	}
+	status, err := properties.GetStatusByOwner(ctx, targetPropertyID, scope)
+	if err != nil {
+		return fmt.Errorf("check target property: %w", err)
+	}
+	if status == propertyStatusArchived {
+		return newInvalidInputError("cannot move an operation to an archived property")
+	}
 	return nil
 }
 

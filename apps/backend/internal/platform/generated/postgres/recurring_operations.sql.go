@@ -110,6 +110,38 @@ func (q *Queries) DeleteRecurringOperationsByProperty(ctx context.Context, arg D
 	return err
 }
 
+const getRecurringOperationByID = `-- name: GetRecurringOperationByID :one
+SELECT id, owner_id, property_id, lease_id, type, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name, deleted_at, category_id FROM recurring_operations
+WHERE id = $1
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) GetRecurringOperationByID(ctx context.Context, id pgtype.UUID) (RecurringOperation, error) {
+	row := q.db.QueryRow(ctx, getRecurringOperationByID, id)
+	var i RecurringOperation
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.LeaseID,
+		&i.Type,
+		&i.AmountKopecks,
+		&i.StartDate,
+		&i.PaymentDay,
+		&i.EndDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Periodicity,
+		&i.Comment,
+		&i.Status,
+		&i.ReminderOffsetDays,
+		&i.Name,
+		&i.DeletedAt,
+		&i.CategoryID,
+	)
+	return i, err
+}
+
 const getRecurringOperationByIDAndOwner = `-- name: GetRecurringOperationByIDAndOwner :one
 SELECT id, owner_id, property_id, lease_id, type, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name, deleted_at, category_id FROM recurring_operations
 WHERE id = $1 AND owner_id = $2

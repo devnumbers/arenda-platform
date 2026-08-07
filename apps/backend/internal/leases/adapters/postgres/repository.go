@@ -595,6 +595,20 @@ func (r *RecurringOperationRepository) GetByIDAndOwner(ctx context.Context, id, 
 	return recurringOperationFromRow(row), nil
 }
 
+// GetByID returns a recurring operation by id without owner scoping. It exists
+// so the application layer can resolve the entity's owner (scope) before
+// applying the policy gate (T3, issue #166).
+func (r *RecurringOperationRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.RecurringOperation, error) {
+	row, err := r.q().GetRecurringOperationByID(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.RecurringOperation{}, application.ErrNotFound
+		}
+		return domain.RecurringOperation{}, err
+	}
+	return recurringOperationFromRow(row), nil
+}
+
 func (r *RecurringOperationRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (domain.RecurringOperation, error) {
 	row, err := r.q().GetRecurringOperationByIDAndOwnerForUpdate(ctx, postgres.GetRecurringOperationByIDAndOwnerForUpdateParams{
 		ID:      pgconv.UUIDToPgtype(id),
@@ -1206,6 +1220,37 @@ func (r *OperationRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, 
 		return domain.Operation{}, err
 	}
 	return operationFromAnyRow(row)
+}
+
+// GetByID returns an operation by id without owner scoping. It exists so the
+// application layer can resolve the entity's owner (scope) before applying the
+// policy gate (T3, issue #166).
+func (r *OperationRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Operation, error) {
+	row, err := r.q().GetOperationByID(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Operation{}, application.ErrNotFound
+		}
+		return domain.Operation{}, err
+	}
+	return operationFromAnyRow(row)
+}
+
+// MoveToProperty reassigns an operation to another property of the same owner.
+func (r *OperationRepository) MoveToProperty(ctx context.Context, id, scope, propertyID uuid.UUID, updatedAt time.Time) (domain.Operation, error) {
+	row, err := r.q().MoveOperationToProperty(ctx, postgres.MoveOperationToPropertyParams{
+		ID:         pgconv.UUIDToPgtype(id),
+		OwnerID:    pgconv.UUIDToPgtype(scope),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+		UpdatedAt:  pgtype.Timestamptz{Time: updatedAt, Valid: true},
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Operation{}, application.ErrNotFound
+		}
+		return domain.Operation{}, err
+	}
+	return operationFromRow(row)
 }
 
 func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (domain.Operation, error) {

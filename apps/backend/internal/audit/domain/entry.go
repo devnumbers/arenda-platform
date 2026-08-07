@@ -89,6 +89,10 @@ const (
 	ActionOperationDeleted          Action = "operation.deleted"
 	ActionOperationCompleted        Action = "operation.completed"
 	ActionOperationMarkedIncomplete Action = "operation.marked_incomplete"
+	// ActionOperationMoved records an operation moved to another property of the
+	// same data owner (issue #166). Context carries from_property_id and
+	// to_property_id.
+	ActionOperationMoved Action = "operation.moved"
 
 	ActionRecurringOperationCreated Action = "recurring_operation.created"
 	ActionRecurringOperationUpdated Action = "recurring_operation.updated"

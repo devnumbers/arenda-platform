@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -24,16 +25,36 @@ type ReminderService struct {
 	repo       ReminderRepository
 	clock      clock.Clock
 	tzResolver tzresolver.OwnerTimezoneResolver
+	policy     sharedpolicy.Policy
 }
 
 // NewReminderService creates a new reminder service.
-func NewReminderService(repo ReminderRepository, clock clock.Clock, tzResolver tzresolver.OwnerTimezoneResolver) *ReminderService {
-	return &ReminderService{repo: repo, clock: clock, tzResolver: tzResolver}
+func NewReminderService(repo ReminderRepository, clock clock.Clock, tzResolver tzresolver.OwnerTimezoneResolver, policy sharedpolicy.Policy) *ReminderService {
+	return &ReminderService{repo: repo, clock: clock, tzResolver: tzResolver, policy: policy}
 }
 
 // WithTx returns a service bound to the provided transaction.
 func (s *ReminderService) WithTx(tx transaction.Tx) *ReminderService {
-	return &ReminderService{repo: s.repo.WithTx(tx), clock: s.clock, tzResolver: s.tzResolver}
+	return &ReminderService{repo: s.repo.WithTx(tx), clock: s.clock, tzResolver: s.tzResolver, policy: s.policy}
+}
+
+// resolveWriteScope applies the T3 shared-access write gate (issue #166) for a
+// reminder addressed by its own id and returns the data owner (scope) for
+// repository calls. The owner acts on their own data directly; any other actor
+// is checked against the owner-wide role: RoleNone and RoleSuspended map to
+// ErrNotFound (object privacy), a viewer maps to ErrForbidden.
+func (s *ReminderService) resolveWriteScope(ctx context.Context, actor, ownerID uuid.UUID) (uuid.UUID, error) {
+	if actor == ownerID {
+		return ownerID, nil
+	}
+	role, err := s.policy.Role(ctx, actor, ownerID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("resolve role: %w", err)
+	}
+	if err := writeRoleGate(role); err != nil {
+		return uuid.Nil, err
+	}
+	return ownerID, nil
 }
 
 // CreateForOperation creates a pending reminder for a future operation. It is
@@ -117,9 +138,11 @@ func (s *ReminderService) ListByOperation(ctx context.Context, actor, operationI
 	return reminders, nil
 }
 
-// ListByLease returns non-cancelled reminders for a lease and owner.
-func (s *ReminderService) ListByLease(ctx context.Context, actor, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
-	reminders, err := s.repo.ListByLease(ctx, actor, leaseID, filter)
+// ListByLease returns non-cancelled reminders for a lease. The caller resolves
+// the lease's data owner and passes it as scope; the access gate happens at
+// the transport or calling layer.
+func (s *ReminderService) ListByLease(ctx context.Context, scope, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
+	reminders, err := s.repo.ListByLease(ctx, scope, leaseID, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list reminders: %w", err)
 	}
@@ -138,9 +161,10 @@ func (s *ReminderService) ListByRecurringOperation(ctx context.Context, actor, r
 
 // ListUpcomingFreeRemindersByProperty returns the nearest pending free-reminder
 // occurrences for a property, including periodic occurrences (which are
-// materialized at write time). 'from' is the lower bound of the window.
-func (s *ReminderService) ListUpcomingFreeRemindersByProperty(ctx context.Context, actor, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error) {
-	reminders, err := s.repo.ListUpcomingFreeRemindersByProperty(ctx, actor, propertyID, from, limit)
+// materialized at write time). The caller resolves the property's data owner
+// and passes it as scope. 'from' is the lower bound of the window.
+func (s *ReminderService) ListUpcomingFreeRemindersByProperty(ctx context.Context, scope, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error) {
+	reminders, err := s.repo.ListUpcomingFreeRemindersByProperty(ctx, scope, propertyID, from, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list upcoming free reminders by property: %w", err)
 	}
@@ -156,16 +180,24 @@ func (s *ReminderService) GetByID(ctx context.Context, actor, id uuid.UUID) (dom
 	return r, nil
 }
 
-// Reschedule updates the scheduled date of a pending reminder.
+// Reschedule updates the scheduled date of a pending reminder after the T3
+// shared-access write gate (issue #166): the reminder is loaded unscoped to
+// resolve its data owner, then all timezone and repository calls use that
+// owner as scope, never the actor. RoleNone/RoleSuspended map to ErrNotFound;
+// a viewer maps to ErrForbidden.
 func (s *ReminderService) Reschedule(ctx context.Context, actor, id uuid.UUID, newDate time.Time) (domain.Reminder, error) {
-	r, err := s.GetByID(ctx, actor, id)
+	r, err := s.repo.GetByIDUnscoped(ctx, id)
+	if err != nil {
+		return domain.Reminder{}, err
+	}
+	scope, err := s.resolveWriteScope(ctx, actor, r.OwnerID)
 	if err != nil {
 		return domain.Reminder{}, err
 	}
 	if r.Status != domain.ReminderPending {
 		return domain.Reminder{}, ErrReminderNotPending
 	}
-	loc, err := s.tzResolver.Resolve(ctx, actor)
+	loc, err := s.tzResolver.Resolve(ctx, scope)
 	if err != nil {
 		return domain.Reminder{}, fmt.Errorf("resolve owner timezone: %w", err)
 	}
@@ -173,7 +205,7 @@ func (s *ReminderService) Reschedule(ctx context.Context, actor, id uuid.UUID, n
 		return domain.Reminder{}, fmt.Errorf("%w: %w", ErrInvalidReminderDate, err)
 	}
 	scheduledAt := domain.ScheduledAtForDate(newDate, loc, dispatchHour)
-	if err := s.repo.UpdateScheduledAt(ctx, actor, id, scheduledAt); err != nil {
+	if err := s.repo.UpdateScheduledAt(ctx, scope, id, scheduledAt); err != nil {
 		return domain.Reminder{}, fmt.Errorf("update rescheduled reminder: %w", err)
 	}
 	r.ScheduledAt = scheduledAt
@@ -194,9 +226,20 @@ func (s *ReminderService) RescheduleForTimezoneChange(ctx context.Context, actor
 
 var _ tzresolver.ReminderRescheduler = (*ReminderService)(nil)
 
-// Cancel cancels a pending or sending reminder.
+// Cancel cancels a pending or sending reminder after the T3 shared-access
+// write gate (issue #166), same semantics as Reschedule: the cancel runs on
+// the reminder's data owner (scope), RoleNone/RoleSuspended map to
+// ErrNotFound, a viewer maps to ErrForbidden.
 func (s *ReminderService) Cancel(ctx context.Context, actor, id uuid.UUID) error {
-	cancelled, err := s.repo.CancelByIDAndOwner(ctx, actor, id)
+	r, err := s.repo.GetByIDUnscoped(ctx, id)
+	if err != nil {
+		return err
+	}
+	scope, err := s.resolveWriteScope(ctx, actor, r.OwnerID)
+	if err != nil {
+		return err
+	}
+	cancelled, err := s.repo.CancelByIDAndOwner(ctx, scope, id)
 	if err != nil {
 		return fmt.Errorf("cancel reminder: %w", err)
 	}

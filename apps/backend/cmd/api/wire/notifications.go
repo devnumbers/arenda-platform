@@ -23,10 +23,10 @@ type Notifications struct {
 // other modules (identity profile, properties lifecycle, leases) depend on them.
 func WireNotifications(p platformDeps) *Notifications {
 	reminderRepo := notificationspg.NewReminderRepository(p.DB)
-	reminderService := notificationsapp.NewReminderService(reminderRepo, p.Clock, p.TZResolver)
+	reminderService := notificationsapp.NewReminderService(reminderRepo, p.Clock, p.TZResolver, p.Policy)
 
 	freeReminderRepo := notificationspg.NewFreeReminderRepository(p.DB)
-	freeReminderService := notificationsapp.NewFreeReminderService(freeReminderRepo, p.Beginner, p.Clock, p.TZResolver)
+	freeReminderService := notificationsapp.NewFreeReminderService(freeReminderRepo, p.Beginner, p.Clock, p.TZResolver, p.Policy)
 	calendarService := notificationsapp.NewCalendarService(reminderRepo, freeReminderRepo, p.TZResolver)
 
 	preferenceService := notificationsapp.NewPreferenceService(reminderRepo, p.Beginner, p.AuditRecorder)

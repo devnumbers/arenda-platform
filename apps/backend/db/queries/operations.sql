@@ -116,6 +116,11 @@ WHERE owner_id = $1 AND property_id = $2
   AND deleted_at IS NULL
 ORDER BY operation_date DESC;
 
+-- name: GetOperationByID :one
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
+WHERE id = $1
+  AND deleted_at IS NULL;
+
 -- name: GetOperationByIDAndOwner :one
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE id = $1 AND owner_id = $2
@@ -150,6 +155,14 @@ WHERE id = $1
   AND owner_id = $2
   AND status = 'pending'
   AND operation_date < sqlc.arg('as_of')::date
+  AND deleted_at IS NULL
+RETURNING *;
+
+-- name: MoveOperationToProperty :one
+UPDATE operations
+SET property_id = $3,
+    updated_at = $4
+WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL
 RETURNING *;
 

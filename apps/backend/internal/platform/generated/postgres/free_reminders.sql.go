@@ -100,6 +100,27 @@ func (q *Queries) GetFreeReminderByIDAndOwner(ctx context.Context, arg GetFreeRe
 	return i, err
 }
 
+const getFreeReminderByIDUnscoped = `-- name: GetFreeReminderByIDUnscoped :one
+SELECT id, owner_id, property_id, title, trigger_at, periodicity, created_at, updated_at FROM free_reminders
+WHERE id = $1
+`
+
+func (q *Queries) GetFreeReminderByIDUnscoped(ctx context.Context, id pgtype.UUID) (FreeReminder, error) {
+	row := q.db.QueryRow(ctx, getFreeReminderByIDUnscoped, id)
+	var i FreeReminder
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.Title,
+		&i.TriggerAt,
+		&i.Periodicity,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listAllFreeRemindersByOwner = `-- name: ListAllFreeRemindersByOwner :many
 SELECT fr.id, fr.owner_id, fr.property_id, fr.title, fr.trigger_at, fr.periodicity, fr.created_at, fr.updated_at, p.name AS property_name
 FROM free_reminders fr

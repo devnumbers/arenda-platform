@@ -71,6 +71,10 @@ type LeaseRepository interface {
 type RecurringOperationRepository interface {
 	Create(ctx context.Context, op domain.RecurringOperation) (domain.RecurringOperation, error)
 	GetByLeaseID(ctx context.Context, scope, leaseID uuid.UUID) (domain.RecurringOperation, error)
+	// GetByID returns a recurring operation by id without owner scoping. Used to
+	// resolve the entity's owner (scope) before applying the policy gate (T3,
+	// issue #166); callers must not expose the result without a role check.
+	GetByID(ctx context.Context, id uuid.UUID) (domain.RecurringOperation, error)
 	GetByIDAndOwner(ctx context.Context, id, scope uuid.UUID) (domain.RecurringOperation, error)
 	GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (domain.RecurringOperation, error)
 	ListByOwner(ctx context.Context, scope uuid.UUID) ([]domain.RecurringOperation, error)
@@ -157,6 +161,13 @@ type OperationRepository interface {
 	ListByPropertyWithStatuses(ctx context.Context, scope, propertyID uuid.UUID, statuses []domain.OperationStatus) ([]domain.Operation, error)
 	GetByIDAndOwner(ctx context.Context, id, scope uuid.UUID) (domain.Operation, error)
 	GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (domain.Operation, error)
+	// GetByID returns an operation by id without owner scoping. Used to resolve
+	// the entity's owner (scope) before applying the policy gate (T3, issue
+	// #166); callers must not expose the result without a role check.
+	GetByID(ctx context.Context, id uuid.UUID) (domain.Operation, error)
+	// MoveToProperty reassigns an operation to another property of the same
+	// owner (scope), returning ErrNotFound when no row matches id+scope.
+	MoveToProperty(ctx context.Context, id, scope, propertyID uuid.UUID, updatedAt time.Time) (domain.Operation, error)
 	Update(ctx context.Context, op domain.Operation) (domain.Operation, error)
 	MarkOverdue(ctx context.Context, scope, id uuid.UUID, asOf time.Time) (domain.Operation, bool, error)
 	SoftDeleteOperation(ctx context.Context, id, scope uuid.UUID) error

@@ -96,7 +96,7 @@ func WireLeasesServices(
 		p.Policy,
 		p.Logger,
 	)
-	exportService := leasesapp.NewExportService(repos.OperationRepo, repos.LeaseRepo, leasePropertyRepo, leasePropertyContactRepo, p.Clock, p.Logger)
+	exportService := leasesapp.NewExportService(repos.OperationRepo, repos.LeaseRepo, leasePropertyRepo, leasePropertyContactRepo, p.Policy, p.Clock, p.Logger)
 	recurringOperationService := leasesapp.NewRecurringOperationService(
 		repos.RecurringOpRepo,
 		repos.OperationRepo,

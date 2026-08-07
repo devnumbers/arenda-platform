@@ -76,6 +76,8 @@ func handleLeaseOperationError(w http.ResponseWriter, r *http.Request, err error
 		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
 		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", notFoundDetail))
+	case errors.Is(err, leasesapp.ErrForbidden):
+		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
 	case errors.Is(err, conflictErr), errors.Is(err, leasesapp.ErrArchivedProperty):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
@@ -442,6 +444,42 @@ func (h *OperationHandlers) MarkOperationIncomplete(w http.ResponseWriter, r *ht
 		Actor:       actor,
 		OperationID: id,
 	})
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationResponse(op, names, statuses))
+}
+
+// MoveOperation implements POST /operations/{id}/move.
+func (h *OperationHandlers) MoveOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	var body openapi.OperationMoveRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode move operation request", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	op, err := h.svc.MoveOperation(r.Context(), actor, id, leasesapp.MoveOperationCommand{PropertyID: body.PropertyId})
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
