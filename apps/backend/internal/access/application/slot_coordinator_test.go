@@ -133,6 +133,7 @@ func newCoordinatorFixture() *coordinatorFixture {
 		limiter,
 		occupancy,
 		ownedProps,
+		nil,
 		auditapp.Noop{},
 		noopBeginner{},
 	)
@@ -559,6 +560,63 @@ func TestSlotCoordinator_EnforceRecipientLimit_MultipleRecipients(t *testing.T) 
 
 	f.assertStatus(t, m1, p1, domain.MemberStatusSuspended, "r1 (limit 0) suspended")
 	f.assertStatus(t, m2, p2, domain.MemberStatusActive, "r2 (limit 1) stays active")
+}
+
+// Scenario N: EnforceRecipientLimit — the argument is the downgrading user
+// himself (billing passes sub.UserID). When he holds shared memberships on
+// OTHER owners' properties over his own limit, his excess memberships are
+// suspended even though he has no members on properties of his own.
+func TestSlotCoordinator_EnforceRecipientLimit_DowngradingUserAsRecipient(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	foreignOwner := uuid.New()
+	p1 := uuid.New()
+	p2 := uuid.New()
+	downgrading := uuid.New() // the user whose tariff dropped; billing passes his id
+	m1 := uuid.New()
+	m2 := uuid.New()
+
+	// The downgrading user holds active shared memberships on a foreign owner's
+	// properties; m1 is the earlier-updated eviction candidate.
+	f.addActiveMember(t, m1, p1, foreignOwner, downgrading, t1Old)
+	f.addActiveMember(t, m2, p2, foreignOwner, downgrading, t2New)
+	f.limiter.set(downgrading, 1)
+
+	if err := f.coordinator.EnforceRecipientLimit(context.Background(), noopTx{}, downgrading, "downgrade"); err != nil {
+		t.Fatalf("EnforceRecipientLimit: %v", err)
+	}
+
+	f.assertStatus(t, m1, p1, domain.MemberStatusSuspended, "downgrading user's excess shared membership suspended")
+	f.assertStatus(t, m2, p2, domain.MemberStatusActive, "kept membership stays active")
+}
+
+// Scenario O: EnforceRecipientLimit — the downgrading user is both an owner
+// with a member and a recipient on a foreign object: both pools are enforced
+// in one call (the member's and his own), each recipient processed once.
+func TestSlotCoordinator_EnforceRecipientLimit_OwnerAndRecipientInOneCall(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	user := uuid.New()
+	ownProp := uuid.New()
+	foreignOwner := uuid.New()
+	foreignProp := uuid.New()
+	member := uuid.New()   // member of the user's own property
+	mOwn := uuid.New()     // the member's membership on the user's property
+	mForeign := uuid.New() // the user's membership on the foreign property
+
+	f.addActiveMember(t, mOwn, ownProp, user, member, t1Old)
+	f.addActiveMember(t, mForeign, foreignProp, foreignOwner, user, t2New)
+	f.limiter.set(member, 0) // the member's pool (1 shared) exceeds → suspended
+	f.limiter.set(user, 0)   // the user's own pool (1 shared) exceeds → suspended
+
+	if err := f.coordinator.EnforceRecipientLimit(context.Background(), noopTx{}, user, "downgrade"); err != nil {
+		t.Fatalf("EnforceRecipientLimit: %v", err)
+	}
+
+	f.assertStatus(t, mOwn, ownProp, domain.MemberStatusSuspended, "member of the user's property suspended")
+	f.assertStatus(t, mForeign, foreignProp, domain.MemberStatusSuspended, "user's own foreign membership suspended")
 }
 
 // Scenario K: RecoverSuspendedForProperty — archiving a shared object frees a

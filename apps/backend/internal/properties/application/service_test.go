@@ -802,20 +802,24 @@ func (r *fakePropertyRepo) CountActiveByOwner(_ context.Context, _ uuid.UUID) (i
 	return count, nil
 }
 
-func (r *fakePropertyRepo) Delete(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
-	return errors.New("not implemented")
+func (r *fakePropertyRepo) Delete(_ context.Context, id, _ uuid.UUID) error {
+	if _, ok := r.data[id]; !ok {
+		return ErrNotFound
+	}
+	delete(r.data, id)
+	return nil
 }
 
 func (r *fakePropertyRepo) DeleteOperationsByProperty(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
-	return errors.New("not implemented")
+	return nil
 }
 
 func (r *fakePropertyRepo) DeleteRecurringOperationsByProperty(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
-	return errors.New("not implemented")
+	return nil
 }
 
 func (r *fakePropertyRepo) DeleteLeasesByProperty(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
-	return errors.New("not implemented")
+	return nil
 }
 
 func (r *fakePropertyRepo) WithTx(_ transaction.Tx) PropertyRepository {

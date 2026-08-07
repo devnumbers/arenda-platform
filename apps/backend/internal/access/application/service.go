@@ -42,25 +42,29 @@ type Member struct {
 // adding, listing, changing roles, revoking and self-exit. Authorization goes
 // through the policy port; persistence and audit share the same transaction.
 type AccessService struct {
-	members MembershipRepository
-	owners  PropertyOwnerResolver
-	users   UserLookup
-	policy  sharedpolicy.Policy
-	slots   *SlotCoordinator
-	db      txBeginner
-	audit   auditapp.Recorder
-	logger  *slog.Logger
+	members   MembershipRepository
+	owners    PropertyOwnerResolver
+	users     UserLookup
+	policy    sharedpolicy.Policy
+	slots     *SlotCoordinator
+	lifecycle *LifecycleMailer
+	db        txBeginner
+	audit     auditapp.Recorder
+	logger    *slog.Logger
 }
 
 // NewAccessService creates an AccessService. slots is the recipient tariff slot
 // coordinator (issue #158, T4); it may be nil to disable slot enforcement
-// (pre-T4 behaviour, e.g. in tests that don't exercise the limit).
+// (pre-T4 behaviour, e.g. in tests that don't exercise the limit). lifecycle is
+// the sharing lifecycle mailer (issue #162, T6); it may be nil to disable the
+// lifecycle emails.
 func NewAccessService(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
 	users UserLookup,
 	policy sharedpolicy.Policy,
 	slots *SlotCoordinator,
+	lifecycle *LifecycleMailer,
 	db txBeginner,
 	audit auditapp.Recorder,
 	logger *slog.Logger,
@@ -72,14 +76,15 @@ func NewAccessService(
 		audit = auditapp.Noop{}
 	}
 	return &AccessService{
-		members: members,
-		owners:  owners,
-		users:   users,
-		policy:  policy,
-		slots:   slots,
-		db:      db,
-		audit:   audit,
-		logger:  logger,
+		members:   members,
+		owners:    owners,
+		users:     users,
+		policy:    policy,
+		slots:     slots,
+		lifecycle: lifecycle,
+		db:        db,
+		audit:     audit,
+		logger:    logger,
 	}
 }
 
@@ -170,6 +175,13 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Membership{}, fmt.Errorf("commit tx: %w", err)
+	}
+
+	// A grant created without a free tariff slot sends the "access waits for a
+	// free slot" email post-commit (issue #162, T6); a send failure is logged
+	// inside the mailer and never fails the add.
+	if suspend {
+		s.lifecycle.SendAccessSuspended(ctx, userID, propertyID)
 	}
 	return created, nil
 }
@@ -273,6 +285,13 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
 	}
+
+	// Revoking an active membership notifies the former member post-commit
+	// (issue #162, T6); revoking a suspended one is silent (the object was
+	// already hidden from them).
+	if !membership.IsSuspended() {
+		s.lifecycle.SendAccessRevoked(ctx, membership.UserID, propertyID)
+	}
 	return nil
 }
 
@@ -342,6 +361,25 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
 	}
+
+	// Self-exit notifies the owner post-commit (issue #162, T6); the leaving
+	// member receives nothing.
+	owner, err := s.owners.GetOwnerID(ctx, propertyID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "access: owner lookup for member left email failed",
+			slog.String("property_id", propertyID.String()),
+			slog.String("error", err.Error()))
+		return nil
+	}
+	memberName := ""
+	if u, err := s.users.GetByID(ctx, actor); err != nil {
+		s.logger.WarnContext(ctx, "access: member lookup for member left email failed",
+			slog.String("user_id", actor.String()),
+			slog.String("error", err.Error()))
+	} else {
+		memberName = displayName(u)
+	}
+	s.lifecycle.SendMemberLeft(ctx, owner, propertyID, memberName)
 	return nil
 }
 

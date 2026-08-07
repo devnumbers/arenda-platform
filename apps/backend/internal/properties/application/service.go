@@ -58,22 +58,23 @@ type UpdatePropertyCommand struct {
 }
 
 type PropertyService struct {
-	repo              PropertyRepository
-	photoRepo         PropertyPhotoRepository
-	photoStorage      PhotoStorage
-	occupancyProvider OccupancyProvider
-	limiter           SubscriptionLimiter
-	billingLifecycle  PropertyBillingLifecycle
-	leaseRepo         LeaseRepository
-	db                txBeginner
-	audit             auditapp.Recorder
-	clock             clock.Clock
-	tzResolver        sharedtz.OwnerTimezoneResolver
-	policy            sharedpolicy.Policy
-	sharedIDs         SharedPropertyIDs
-	suspendedCounter  SuspendedSharedCounter
-	slots             RecipientSlotPolicy
-	logger            *slog.Logger
+	repo               PropertyRepository
+	photoRepo          PropertyPhotoRepository
+	photoStorage       PhotoStorage
+	occupancyProvider  OccupancyProvider
+	limiter            SubscriptionLimiter
+	billingLifecycle   PropertyBillingLifecycle
+	leaseRepo          LeaseRepository
+	db                 txBeginner
+	audit              auditapp.Recorder
+	clock              clock.Clock
+	tzResolver         sharedtz.OwnerTimezoneResolver
+	policy             sharedpolicy.Policy
+	sharedIDs          SharedPropertyIDs
+	suspendedCounter   SuspendedSharedCounter
+	slots              RecipientSlotPolicy
+	sharedDeleteMailer SharedMembersDeleteMailer
+	logger             *slog.Logger
 }
 
 // SetSharedPropertyIDs injects the access-context adapter that resolves the
@@ -113,6 +114,13 @@ func (s *PropertyService) HiddenSharedCount(ctx context.Context, actor uuid.UUID
 // pre-T4 behaviour).
 func (s *PropertyService) SetRecipientSlotPolicy(slots RecipientSlotPolicy) {
 	s.slots = slots
+}
+
+// SetSharedMembersDeleteMailer injects the access-context mailer that notifies
+// former shared members when the owner deletes a shared object (issue #162,
+// T6). Optional: when not set, deleting a property sends no such emails.
+func (s *PropertyService) SetSharedMembersDeleteMailer(mailer SharedMembersDeleteMailer) {
+	s.sharedDeleteMailer = mailer
 }
 
 func NewPropertyService(
@@ -627,7 +635,8 @@ func (s *PropertyService) DeleteProperty(
 
 	repo := s.repo.WithTx(tx)
 
-	if _, err := repo.GetByIDAndOwnerForUpdate(ctx, id, actor); err != nil {
+	property, err := repo.GetByIDAndOwnerForUpdate(ctx, id, actor)
+	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
 		}
@@ -673,6 +682,17 @@ func (s *PropertyService) DeleteProperty(
 		}
 	}
 
+	// Former shared members are collected before the slot policy drops their
+	// memberships, so the "object deleted" email can reach them after the
+	// commit (issue #162, T6).
+	var formerMemberEmails []string
+	if s.sharedDeleteMailer != nil {
+		formerMemberEmails, err = s.sharedDeleteMailer.CollectFormerMemberEmails(ctx, tx, id)
+		if err != nil {
+			return fmt.Errorf("collect former shared members: %w", err)
+		}
+	}
+
 	// Dropping the shared object frees one tariff slot for each recipient:
 	// the access context drops their memberships and recovers the oldest
 	// suspended ones FIFO in the same transaction, before the property row is
@@ -700,6 +720,18 @@ func (s *PropertyService) DeleteProperty(
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
+	}
+
+	// Post-commit: notify the former shared members (active+suspended) that the
+	// object was deleted (issue #162, T6). A send failure is logged and does
+	// not affect the delete.
+	for _, to := range formerMemberEmails {
+		if err := s.sharedDeleteMailer.SendPropertyDeleted(ctx, to, property.Name); err != nil {
+			s.logger.ErrorContext(ctx, "failed to send property deleted email to former member",
+				slog.String("property_id", id.String()),
+				slog.String("error", sanitizeError(err)),
+			)
+		}
 	}
 
 	for _, photo := range photos {

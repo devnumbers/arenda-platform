@@ -311,7 +311,7 @@ func TestAccessService_AllowDenyPath(t *testing.T) {
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
-	svc := NewAccessService(repo, resolver, stubLookup{}, policy, nil, noopBeginner{}, auditapp.Noop{}, nil)
+	svc := NewAccessService(repo, resolver, stubLookup{}, policy, nil, nil, noopBeginner{}, auditapp.Noop{}, nil)
 
 	// Owner adds a full member.
 	m, err := svc.AddMember(context.Background(), owner, property, member, domain.RoleFullAccess)
@@ -372,7 +372,7 @@ func TestAccessService_LeaveProperty(t *testing.T) {
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
-	svc := NewAccessService(repo, resolver, stubLookup{}, policy, nil, noopBeginner{}, auditapp.Noop{}, nil)
+	svc := NewAccessService(repo, resolver, stubLookup{}, policy, nil, nil, noopBeginner{}, auditapp.Noop{}, nil)
 
 	if _, err := svc.AddMember(context.Background(), owner, property, member, domain.RoleViewer); err != nil {
 		t.Fatalf("AddMember: %v", err)

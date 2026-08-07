@@ -111,6 +111,9 @@ func run() error {
 	// how many shared objects are hidden from the recipient by a slot shortage
 	// (issue #158, T4).
 	propertiesMod.PropertyService.SetSuspendedSharedCounter(accessMod.SuspendedCounter)
+	// Wire the shared-members delete mailer so deleting a shared object emails
+	// its former members (issue #162, T6).
+	propertiesMod.PropertyService.SetSharedMembersDeleteMailer(accessMod.PropertyDeleteMailer)
 
 	// 8. Billing Services aggregate. Depends on the property service.
 	billingMod := wire.BuildBillingServices(p, billingRepos, propertiesMod.PropertyService, accessMod.SlotCoordinator)

@@ -32,19 +32,24 @@ type SlotCoordinator struct {
 	limiter    RecipientLimiter
 	occupancy  OccupancyPort
 	ownedProps OwnedActivePropertiesPort
+	lifecycle  *LifecycleMailer
 	audit      auditapp.Recorder
 	db         txBeginner
 }
 
 // NewSlotCoordinator creates a SlotCoordinator. The recorder and limiter are
 // expected to be transaction-aware (the coordinator binds them to the caller's
-// tx per operation).
+// tx per operation). lifecycle is the sharing lifecycle mailer (issue #162,
+// T6); it may be nil to disable the lifecycle emails. The coordinator runs
+// inside the caller's transaction, so its emails are sent in-transaction: a
+// send failure is logged and never rolls the operation back.
 func NewSlotCoordinator(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
 	limiter RecipientLimiter,
 	occupancy OccupancyPort,
 	ownedProps OwnedActivePropertiesPort,
+	lifecycle *LifecycleMailer,
 	audit auditapp.Recorder,
 	db txBeginner,
 ) *SlotCoordinator {
@@ -54,41 +59,50 @@ func NewSlotCoordinator(
 		limiter:    limiter,
 		occupancy:  occupancy,
 		ownedProps: ownedProps,
+		lifecycle:  lifecycle,
 		audit:      audit,
 		db:         db,
 	}
 }
 
-// EnforceRecipientLimit enforces the recipient tariff slot invariant for every
-// recipient that holds an active shared membership on one of ownerID's
-// properties. It is called from the billing flow on a tariff downgrade, grace
-// expiry, or subscription cancellation, with the billing transaction already
-// open (PropertyArchiver.ArchiveExcessProperties runs in the same tx to handle
-// the recipient's own excess objects).
+// EnforceRecipientLimit enforces the recipient tariff slot invariant after a
+// billing limit drop of userID (a tariff downgrade, grace expiry, or
+// subscription cancellation). Billing calls it with the downgrading user's own
+// id (sub.UserID), with the billing transaction already open
+// (PropertyArchiver.ArchiveExcessProperties runs in the same tx to handle the
+// recipient's own excess objects).
 //
-// Although the trigger is scoped to one owner (the downgrading owner), the
-// recipient's limit is a single pool spanning all owners. For each affected
-// recipient the coordinator therefore recomputes the full pool (own active
-// properties + all active shared memberships) and suspends the excess shared
-// memberships. Own objects are skipped here: they are archived by the
-// PropertyArchiver in the same transaction.
+// Two groups are affected by the limit drop and both are enforced here:
+//   - the downgrading user himself, as a recipient of shared memberships on
+//     other owners' objects (the owner is never a membership row of his own
+//     object, so he never appears in the member listing below);
+//   - every recipient that holds an active shared membership on one of the
+//     downgrading user's properties.
+//
+// For each affected recipient the coordinator recomputes the full pool (own
+// active properties + all active shared memberships across every owner) and
+// suspends the excess shared memberships. Own objects are skipped here: they
+// are archived by the PropertyArchiver in the same transaction.
 //
 // trigger is a low-cardinality label recorded in the audit context (e.g.
 // "downgrade", "grace_expired", "subscription_cancelled").
-func (c *SlotCoordinator) EnforceRecipientLimit(ctx context.Context, tx transaction.Tx, ownerID uuid.UUID, trigger string) error {
+func (c *SlotCoordinator) EnforceRecipientLimit(ctx context.Context, tx transaction.Tx, userID uuid.UUID, trigger string) error {
 	txMembers := c.members.WithTx(tx)
 
-	affected, err := txMembers.ListActiveByPropertyOwner(ctx, ownerID)
+	affected, err := txMembers.ListActiveByPropertyOwner(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("list affected memberships: %w", err)
 	}
 
 	// Group affected memberships by recipient — a recipient with several
-	// memberships on this owner's properties is evaluated once.
-	recipients := make(map[uuid.UUID]struct{}, len(affected))
+	// memberships on this owner's properties is evaluated once. The downgrading
+	// user is a recipient too: his shared memberships on other owners' objects
+	// compete for his own tariff slots.
+	recipients := make(map[uuid.UUID]struct{}, len(affected)+1)
 	for _, m := range affected {
 		recipients[m.UserID] = struct{}{}
 	}
+	recipients[userID] = struct{}{}
 
 	txLimiter, err := c.limiter.WithTx(tx)
 	if err != nil {
@@ -124,6 +138,7 @@ func (c *SlotCoordinator) enforceRecipient(
 	}
 
 	toEvict := SelectForEviction(pool, limit)
+	suspended := make([]uuid.UUID, 0, len(toEvict))
 	for _, cand := range toEvict {
 		// Own objects are auto-archived by PropertyArchiver in the same tx; the
 		// coordinator only suspends shared memberships.
@@ -133,6 +148,7 @@ func (c *SlotCoordinator) enforceRecipient(
 		if err := txMembers.Suspend(ctx, cand.MemberID, cand.PropertyID); err != nil {
 			return fmt.Errorf("suspend membership %s: %w", cand.MemberID, err)
 		}
+		suspended = append(suspended, cand.PropertyID)
 		propertyID := cand.PropertyID
 		if err := c.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 			ActorRole:  auditdomain.ActorRoleSystem,
@@ -148,6 +164,10 @@ func (c *SlotCoordinator) enforceRecipient(
 			return fmt.Errorf("record suspend audit: %w", err)
 		}
 	}
+	// One summary email per recipient lists the memberships suspended by this
+	// call (issue #162, T6); it replaces the per-membership waiting email on
+	// the downgrade path.
+	c.lifecycle.SendDowngradeSummary(ctx, recipientID, suspended)
 	return nil
 }
 
@@ -253,6 +273,9 @@ func (c *SlotCoordinator) recoverSuspendedForRecipient(ctx context.Context, tx t
 		}); err != nil {
 			return fmt.Errorf("record reactivate audit: %w", err)
 		}
+		// The "access restored" email per reactivated membership (issue #162,
+		// T6); a send failure is logged inside the mailer.
+		c.lifecycle.SendAccessRestored(ctx, recipientID, cand.PropertyID)
 	}
 	return nil
 }
@@ -361,6 +384,9 @@ func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx 
 		}); err != nil {
 			return fmt.Errorf("record suspend audit on unarchive: %w", err)
 		}
+		// The "access waits for a free slot" email on the unarchive path
+		// (issue #162, T6); a send failure is logged inside the mailer.
+		c.lifecycle.SendAccessSuspended(ctx, m.UserID, propertyID)
 	}
 	return nil
 }

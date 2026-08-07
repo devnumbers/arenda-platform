@@ -141,28 +141,6 @@ func (f *fakeLookup) GetByEmail(_ context.Context, email string) (MemberUser, er
 	return MemberUser{}, domain.ErrUserNotFound
 }
 
-// sentInvite records one invite email passed through the mailer port.
-type sentInvite struct {
-	to    string
-	title string
-	role  domain.Role
-}
-
-// fakeInvitationMailer records sent invite emails; err simulates a send
-// failure.
-type fakeInvitationMailer struct {
-	sent []sentInvite
-	err  error
-}
-
-func (f *fakeInvitationMailer) SendInvite(_ context.Context, to, title string, role domain.Role) error {
-	if f.err != nil {
-		return f.err
-	}
-	f.sent = append(f.sent, sentInvite{to: to, title: title, role: role})
-	return nil
-}
-
 // fakeTitles resolves a fixed property title.
 type fakeTitles string
 
@@ -179,7 +157,6 @@ func (c *fixedClock) advance(d time.Duration) { c.now = c.now.Add(d) }
 var (
 	_ InvitationRepository  = (*memInvitationsRepo)(nil)
 	_ UserLookup            = (*fakeLookup)(nil)
-	_ InvitationMailer      = (*fakeInvitationMailer)(nil)
 	_ PropertyTitleResolver = fakeTitles("")
 )
 
@@ -190,7 +167,7 @@ type invitationFixture struct {
 	invitations *memInvitationsRepo
 	owners      staticResolver
 	lookup      *fakeLookup
-	mailer      *fakeInvitationMailer
+	mailer      *fakeAccessMailer
 	clk         *fixedClock
 	limiter     *fakeRecipientLimiter
 	access      *AccessService
@@ -203,12 +180,16 @@ func newInvitationFixture() *invitationFixture {
 	owners := staticResolver{}
 	policy := NewMembershipPolicy(owners, repo)
 	lookup := newFakeLookup()
-	mailer := &fakeInvitationMailer{}
+	mailer := &fakeAccessMailer{}
 	clk := &fixedClock{now: time.Now()}
 	limiter := newFakeRecipientLimiter()
-	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOccupancy(), newFakeOwnedProps(), auditapp.Noop{}, noopBeginner{})
-	access := NewAccessService(repo, owners, lookup, policy, coordinator, noopBeginner{}, auditapp.Noop{}, nil)
-	svc := NewInvitationService(access, repo, invitations, owners, lookup, policy, coordinator, mailer, fakeTitles("Квартира на Невском"), noopBeginner{}, auditapp.Noop{}, clk, nil)
+	// The lifecycle mailer is wired with an empty email resolver: existing T5
+	// scenarios never resolve a recipient address, so no lifecycle email is
+	// sent from these paths.
+	lifecycle := NewLifecycleMailer(mailer, fakeEmailResolver{}, fakeTitles("Квартира на Невском"), nil)
+	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOccupancy(), newFakeOwnedProps(), lifecycle, auditapp.Noop{}, noopBeginner{})
+	access := NewAccessService(repo, owners, lookup, policy, coordinator, lifecycle, noopBeginner{}, auditapp.Noop{}, nil)
+	svc := NewInvitationService(access, repo, invitations, owners, lookup, policy, coordinator, mailer, lifecycle, fakeTitles("Квартира на Невском"), noopBeginner{}, auditapp.Noop{}, clk, nil)
 	return &invitationFixture{
 		repo:        repo,
 		invitations: invitations,

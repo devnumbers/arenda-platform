@@ -28,8 +28,11 @@ type InviteOutcome struct {
 // T5): inviting an unregistered email to shared access, manual resend with a
 // 24h cooldown, role change and silent cancellation of pending invitations,
 // and FIFO activation when the invitee registers. The invite email is the only
-// email of the lifecycle. Persistence and audit share the same transaction;
-// the invitee email is PII and never appears in audit context (ADR 0020).
+// email sent by this service itself; the lifecycle emails (activation notice to
+// the owner, the "waiting for a slot" email on a suspended activation) go
+// through the LifecycleMailer (issue #162, T6). Persistence and audit share
+// the same transaction; the invitee email is PII and never appears in audit
+// context (ADR 0020).
 type InvitationService struct {
 	access      *AccessService
 	members     MembershipRepository
@@ -38,7 +41,8 @@ type InvitationService struct {
 	users       UserLookup
 	policy      sharedpolicy.Policy
 	slots       *SlotCoordinator
-	mailer      InvitationMailer
+	mailer      AccessMailer
+	lifecycle   *LifecycleMailer
 	titles      PropertyTitleResolver
 	db          txBeginner
 	audit       auditapp.Recorder
@@ -49,7 +53,9 @@ type InvitationService struct {
 // NewInvitationService creates an InvitationService. access is the membership
 // service used to delegate instant activation for registered emails; slots may
 // be nil to disable slot enforcement (mirrors NewAccessService); mailer may be
-// nil to skip sending (e.g. in tests that do not exercise the mail path).
+// nil to skip sending (e.g. in tests that do not exercise the mail path);
+// lifecycle is the sharing lifecycle mailer (issue #162, T6) and may be nil to
+// disable the lifecycle emails.
 func NewInvitationService(
 	access *AccessService,
 	members MembershipRepository,
@@ -58,7 +64,8 @@ func NewInvitationService(
 	users UserLookup,
 	policy sharedpolicy.Policy,
 	slots *SlotCoordinator,
-	mailer InvitationMailer,
+	mailer AccessMailer,
+	lifecycle *LifecycleMailer,
 	titles PropertyTitleResolver,
 	db txBeginner,
 	audit auditapp.Recorder,
@@ -83,6 +90,7 @@ func NewInvitationService(
 		policy:      policy,
 		slots:       slots,
 		mailer:      mailer,
+		lifecycle:   lifecycle,
 		titles:      titles,
 		db:          db,
 		audit:       audit,
@@ -450,6 +458,23 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
+	}
+
+	// Lifecycle emails post-commit (issue #162, T6): the owner is notified
+	// about the activation; a membership created without a free tariff slot
+	// additionally sends the "access waits for a free slot" email to the new
+	// member. Send failures are logged inside the mailer and never fail the
+	// activation.
+	owner, err := s.owners.GetOwnerID(ctx, invitation.PropertyID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "access: owner lookup for invitation activated email failed",
+			slog.String("property_id", invitation.PropertyID.String()),
+			slog.String("error", err.Error()))
+	} else {
+		s.lifecycle.SendInvitationActivated(ctx, owner, invitation.PropertyID, invitation.Email)
+	}
+	if suspend {
+		s.lifecycle.SendAccessSuspended(ctx, userID, invitation.PropertyID)
 	}
 	return nil
 }
