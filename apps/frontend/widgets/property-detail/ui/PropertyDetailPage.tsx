@@ -43,6 +43,7 @@ import {PropertyBlockedModal} from './PropertyBlockedModal';
 import {PropertyArchiveModal} from './PropertyArchiveModal';
 import {PropertyDeleteModal} from './PropertyDeleteModal';
 import {PropertyEndLeaseModal} from './PropertyEndLeaseModal';
+import {PropertySharingModal} from './PropertySharingModal';
 import {PropertySuccessBanner} from './PropertySuccessBanner';
 import {PropertyDetailLoading} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
@@ -86,6 +87,7 @@ export function PropertyDetailPage(): JSX.Element {
     const [archiveOpen, setArchiveOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [successBannerOpen, setSuccessBannerOpen] = useState(false);
+    const [sharingOpen, setSharingOpen] = useState(false);
     const [selectedLeaseId, setSelectedLeaseId] = useState<string>('');
 
     const property = propertyQuery.data;
@@ -220,8 +222,8 @@ export function PropertyDetailPage(): JSX.Element {
     }, [id, router]);
 
     const handleAccess = useCallback(() => {
-        router.push(ROUTES.propertyAccess(id));
-    }, [id, router]);
+        setSharingOpen(true);
+    }, []);
 
     const handleDelete = useCallback((mode: DeletePropertyMode) => {
         deleteProperty.mutate(
@@ -464,6 +466,13 @@ export function PropertyDetailPage(): JSX.Element {
                 isOpen={endLeaseOpen}
                 onClose={() => setEndLeaseOpen(false)}
                 onConfirm={confirmEndLease}
+            />
+
+            <PropertySharingModal
+                propertyId={id}
+                isOpen={sharingOpen}
+                onClose={() => setSharingOpen(false)}
+                isArchived={property?.status === 'archived'}
             />
 
             {successBannerOpen && (

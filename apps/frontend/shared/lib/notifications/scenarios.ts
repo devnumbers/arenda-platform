@@ -84,7 +84,6 @@ const access = {
   invited: ((options?) =>
     notify.success('Приглашение отправлено', options)) satisfies ScenarioFn,
   inviteError: errorScenario('Не удалось отправить приглашение'),
-  addError: errorScenario('Не удалось добавить участника'),
   roleChanged: ((options?) =>
     notify.success('Роль изменена', options)) satisfies ScenarioFn,
   roleChangeError: errorScenario('Не удалось изменить роль'),
@@ -97,11 +96,6 @@ const access = {
   invitationCancelled: ((options?) =>
     notify.success('Приглашение отменено', options)) satisfies ScenarioFn,
   cancelInvitationError: errorScenario('Не удалось отменить приглашение'),
-  left: ((options?) =>
-    notify.success('Вы покинули объект', options)) satisfies ScenarioFn,
-  leaveError: errorScenario('Не удалось покинуть объект'),
-  loadError: ((options?) =>
-    notify.error('Не удалось загрузить участников', options)) satisfies ScenarioFn,
 } as const;
 
 const property = {

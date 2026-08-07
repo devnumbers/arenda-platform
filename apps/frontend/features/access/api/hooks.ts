@@ -177,22 +177,3 @@ export function useDeletePropertyAccessMember(
         },
     });
 }
-
-export function useLeaveProperty(
-    propertyId: string,
-): UseMutationResult<void, ApiError, void> {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async () => {
-            await apiClient<void>(
-                `/properties/${propertyId}/access/members/self`,
-                { method: 'DELETE' },
-            );
-        },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({
-                queryKey: accessKeys.list(propertyId),
-            });
-        },
-    });
-}
