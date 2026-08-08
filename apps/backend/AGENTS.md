@@ -37,21 +37,15 @@ Invoke skills by their exact name through the harness's native skill mechanism.
 
 ## MCP Servers
 
-- `gopls` — **mandatory** for every backend task. Use it for Go semantic navigation, definitions, references, diagnostics, package APIs, and impact checks. Treat `gopls` as a navigation and diagnostics tool, not as the source of truth. The source of truth is the repository code plus `go test`, `go vet`, `make backend-lint`, generated code checks, and relevant official docs.
-  - Before starting backend implementation, verify the `mcp__gopls__*` tools are available in the agent tool set.
-  - If the `mcp__gopls__*` tools are not available, stop and tell the user. Do not continue implementation, lint, or tests until `gopls` is running.
-  - Use `gopls` diagnostics as a required quality gate before claiming backend work complete.
+- `gopls` — mandatory for every backend task (see stop-procedure in Mandatory Backend Tools above). Treat it as navigation and diagnostics, not as the source of truth — the source of truth is the repository code plus `go test`, `go vet`, `make backend-lint`, and relevant official docs. Use `gopls` diagnostics as a required quality gate before claiming backend work complete.
 - `lean-ctx` — use for broad package exploration, generated code maps, large SQL/OpenAPI files, and noisy command output. Before editing exact Go code, migrations, SQL, or OpenAPI, read the target ranges in raw/full form.
-- `context7` — use for current official docs on third-party libraries when needed.
-
-Before adding new interfaces, repositories, DTO mappings, application services, domain services, or use cases, search existing backend patterns with `Grep`/`lean-ctx` and inspect semantic references with `gopls`.
 
 ## Backend Workflow
 
 Follow the workflow from the root `AGENTS.md`. For backend tasks, additionally:
 
 1. **Before exploration** — invoke `use-modern-go` so the target Go version and modern idioms are known.
-2. **Before implementation** — verify the `mcp__gopls__*` tools are available. If they are not, stop and report to the user.
+2. **Before implementation** — verify the `mcp__gopls__*` tools are available (see Mandatory Backend Tools for the stop-procedure).
 3. **During implementation** — apply modern idioms from `use-modern-go` to every new or changed Go file.
 4. **Before final verification** — run `gopls` diagnostics on changed packages and fix reported issues before running `make backend-lint`, `go test`, or `go vet`.
 
@@ -92,23 +86,10 @@ go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1 -config a
 
 ## Observability
 
-- Use standard-library `log/slog` with JSON output for backend logs. Prefer `InfoContext`, `WarnContext`, and `ErrorContext` so request-scoped context can carry correlation fields.
-- Keep logging middleware, request IDs, OpenTelemetry setup, exporters, and metrics in `cmd/api` or `internal/platform`. Domain packages must not import loggers, OpenTelemetry, HTTP middleware, or platform observability helpers.
-- Every HTTP request must have an `X-Request-ID`. Preserve an incoming request ID when present; otherwise generate one. Include the same value in `Problem.requestId`, the response `X-Request-ID` header, and request outcome logs.
-- Request outcome logs must include low-cardinality operational fields: `request_id`, method, route or operation, status, duration, and problem/error code when available.
-- Do not log session tokens, cookies, authorization headers, S3 secrets, raw DaData payloads, raw request/response bodies, or other PII/secrets. Do not log SMS codes or full phone numbers in production integrations. The local/dev fake SMS sender is the only exception: it may log the SMS code and phone number so developers can complete manual login without a real SMS provider.
-- OpenTelemetry is the tracing/metrics foundation. The telemetry backend is Uptrace (self-hosted) per `docs/adr/0021-centralized-observability-uptrace.md` (superseded — the stack now lives in the devnumbers/observability repo): the OTel SDK in `internal/platform/observability` exports traces and metrics over OTLP to `http://uptrace:14317`, enabled by the `OTEL_*` environment block in stage/prod. Keep exporters vendor-neutral through OTLP-compatible configuration; changes to the telemetry backend, Collector topology, production alerts, or SLO policy are tracked in the devnumbers/observability repo.
-- Name HTTP server spans by the chi route pattern (set after routing), never by raw `r.URL.Path`: entity IDs in span names create high cardinality.
-- With a valid OTel span context, slog records carry the real OpenTelemetry `trace_id`/`span_id`, so Uptrace correlates logs with traces.
-- Keep metric labels low-cardinality. Do not use user IDs, property IDs, phone numbers, addresses, object storage keys, or raw paths as labels.
-- OpenTelemetry Logs are intentionally not a backend signal: structured `slog` stdout remains the logging source of truth and reaches Uptrace through Vector (see docs/deployment.md, section "Observability").
-- `POST /client-errors` is a public, rate-limited endpoint for browser JS errors: sanitized and truncated payload, no PII, nothing written to the DB; errors are logged to stdout and flow into the observability pipeline.
-- Panics are logged structurally by the platform recovery middleware (`level=error` with stack trace and `request_id`, sanitized) and answered with an RFC 7807 problem via `writeProblem`; do not reintroduce the plain chi `Recoverer`.
-- The audit log is not an observability log: business-audit records (who did what) persist to the `audit_log` table via `internal/audit` and are viewed in the admin panel, while structured `slog` stdout logs remain the source of truth for technical/operational logging. See `docs/adr/0020-audit-log.md`.
+Backend observability code conventions (slog, OpenTelemetry, request IDs, span naming, low-cardinality labels, PII redaction) — see `docs/backend-observability.md`. Infrastructure (Uptrace, Vector) — see `docs/deployment.md`, section "Observability".
 
 ## Quality Gates
 
-- Do not write new tests or use TDD unless the user explicitly asks for them.
 - Code must be gofumpt-clean with gci import order (enforced by `make backend-lint`); autofix with `cd apps/backend && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 fmt --config ../../.golangci.yml`.
 - Before claiming backend work is complete, run `gopls` diagnostics on changed packages and resolve reported issues.
 - If the `mcp__jetbrains__*` tools are available (GoLand's built-in MCP server, IDE running with this project open), run `get_file_problems` on every changed Go file before reporting completion: errors must be 0; warnings must be fixed or explicitly justified in the report. If the server is unavailable (IDE closed), note that the JetBrains inspection gate was skipped.
