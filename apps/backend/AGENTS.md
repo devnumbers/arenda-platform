@@ -6,9 +6,9 @@ Rules for the Go backend in `apps/backend`. Also follow the root `AGENTS.md`, `C
 
 ## Mandatory Backend Tools
 
-The following skill and MCP server are mandatory for every backend task. The Orchestrator must verify them before dispatching implementation subagents.
+Verify the following skill and MCP server before any backend work.
 
-- **`use-modern-go` skill** — must be invoked through the Kimi `Skill` tool before any backend planning or implementation. It detects the project's Go version from `go.mod` and instructs subagents to use modern Go idioms up to and including that version. Do not write Go code without first invoking this skill.
+- **`use-modern-go` skill** — must be invoked before any backend planning or implementation. It detects the project's Go version from `go.mod` and instructs to use modern Go idioms up to and including that version. Do not write Go code without first invoking this skill.
 - **`gopls` MCP server** — must be active, with its `mcp__gopls__*` tools present in the agent tool set, before any backend implementation or verification. It provides semantic navigation, diagnostics, definitions, references, and workspace analysis.
 
 If the `mcp__gopls__*` tools are not available:
@@ -26,7 +26,7 @@ If the `mcp__gopls__*` tools are not available:
 
 ## Required Skills
 
-Invoke skills through the Kimi `Skill` tool using the exact skill name.
+Invoke skills by their exact name through the harness's native skill mechanism.
 
 - For all Go backend work, invoke `go`. Use it for idiomatic Go, clean architecture, context propagation, error handling, and review of package boundaries.
 - Before writing or reviewing any Go code, invoke `use-modern-go` to detect the target Go version from `go.mod` and apply modern idioms up to that version.
@@ -48,11 +48,11 @@ Before adding new interfaces, repositories, DTO mappings, application services, 
 
 ## Backend Workflow
 
-Follow the Orchestrator Mode from the root `AGENTS.md`. For backend tasks, the Orchestrator additionally:
+Follow the workflow from the root `AGENTS.md`. For backend tasks, additionally:
 
-1. **Before exploration** — invoke `use-modern-go` so the target Go version and modern idioms are known to all subagents.
+1. **Before exploration** — invoke `use-modern-go` so the target Go version and modern idioms are known.
 2. **Before implementation** — verify the `mcp__gopls__*` tools are available. If they are not, stop and report to the user.
-3. **During implementation** — ensure the coder subagent applies modern idioms from `use-modern-go` to every new or changed Go file.
+3. **During implementation** — apply modern idioms from `use-modern-go` to every new or changed Go file.
 4. **Before final verification** — run `gopls` diagnostics on changed packages and fix reported issues before running `make backend-lint`, `go test`, or `go vet`.
 
 ## Architecture Rules
