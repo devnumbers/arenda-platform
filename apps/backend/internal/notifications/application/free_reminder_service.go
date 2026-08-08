@@ -64,7 +64,10 @@ type FreeReminderService struct {
 	db         transaction.Beginner
 	clock      clock.Clock
 	tzResolver tzresolver.OwnerTimezoneResolver
-	policy     sharedpolicy.Policy
+	// policy is injected after construction (see SetPolicy) because the
+	// membership-aware policy is built after the free-reminder service in the
+	// composition root. Mirrors CategoryService.SetPolicy (issue #166).
+	policy sharedpolicy.Policy
 }
 
 // NewFreeReminderService creates a new free reminder service.
@@ -83,6 +86,14 @@ func NewFreeReminderService(
 // materialization within the caller's transaction.
 func (s *FreeReminderService) WithTx(tx transaction.Tx) *FreeReminderService {
 	return &FreeReminderService{repo: s.repo.WithTx(tx), db: nil, clock: s.clock, tzResolver: s.tzResolver, policy: s.policy}
+}
+
+// SetPolicy injects the membership-aware policy. It is called after construction
+// in the composition root because the membership-aware policy is built after the
+// notifications module (see cmd/api/main.go). Mirrors CategoryService.SetPolicy
+// (issue #166).
+func (s *FreeReminderService) SetPolicy(p sharedpolicy.Policy) {
+	s.policy = p
 }
 
 // Create validates input, applies the T3 shared-access write gate (issue

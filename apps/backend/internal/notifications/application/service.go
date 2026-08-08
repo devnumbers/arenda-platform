@@ -25,7 +25,10 @@ type ReminderService struct {
 	repo       ReminderRepository
 	clock      clock.Clock
 	tzResolver tzresolver.OwnerTimezoneResolver
-	policy     sharedpolicy.Policy
+	// policy is injected after construction (see SetPolicy) because the
+	// membership-aware policy is built after the reminder service in the
+	// composition root. Mirrors CategoryService.SetPolicy (issue #166).
+	policy sharedpolicy.Policy
 }
 
 // NewReminderService creates a new reminder service.
@@ -36,6 +39,14 @@ func NewReminderService(repo ReminderRepository, clock clock.Clock, tzResolver t
 // WithTx returns a service bound to the provided transaction.
 func (s *ReminderService) WithTx(tx transaction.Tx) *ReminderService {
 	return &ReminderService{repo: s.repo.WithTx(tx), clock: s.clock, tzResolver: s.tzResolver, policy: s.policy}
+}
+
+// SetPolicy injects the membership-aware policy. It is called after construction
+// in the composition root because the membership-aware policy is built after the
+// notifications module (see cmd/api/main.go). Mirrors CategoryService.SetPolicy
+// (issue #166).
+func (s *ReminderService) SetPolicy(p sharedpolicy.Policy) {
+	s.policy = p
 }
 
 // resolveWriteScope applies the T3 shared-access write gate (issue #166) for a

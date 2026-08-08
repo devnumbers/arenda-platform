@@ -87,6 +87,14 @@ func run() error {
 	}
 	p.Policy = accessMod.Policy
 
+	// Wire the membership-aware policy into the notifications services so
+	// reminder/free-reminder write gates resolve the actor's role correctly.
+	// These services are built before the access module (they feed identity and
+	// leases), so they captured the T2 owner-only stub and must be re-injected
+	// here (issue #166, mirrors CategoryService.SetPolicy).
+	notificationsMod.FreeReminderService.SetPolicy(accessMod.Policy)
+	notificationsMod.ReminderService.SetPolicy(accessMod.Policy)
+
 	// The category service is built before the access module (it is needed for
 	// the user_registered subscriber), so wire the membership-aware policy and
 	// the accessible-scopes adapter into it now that both exist (issue #157).
