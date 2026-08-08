@@ -248,7 +248,7 @@ rentlee.ru {
 		reverse_proxy 127.0.0.1:18080
 	}
 
-	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png
+	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /calendar* /reminders* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png
 	handle @frontend {
 		reverse_proxy 127.0.0.1:13000
 	}
@@ -281,7 +281,7 @@ dev.rentlee.ru {
 		reverse_proxy 127.0.0.1:28080
 	}
 
-	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png
+	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /calendar* /reminders* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png
 	handle @frontend {
 		reverse_proxy 127.0.0.1:23000
 	}
