@@ -74,11 +74,8 @@ silently be both.
   a new read model or via data migration — the separate-entity model makes
   "merge later" non-trivial.
 - Canonical domain term: «Контакт объекта» / Property Contact; the glossary
-  collision with «контакт» (= tenant contact) is resolved in `CONTEXT.md`
-  and `docs/glossarij.md`.
+  collision with «контакт» (= tenant contact) is resolved in `CONTEXT.md`.
 
 ## See also
 
 - ADR 0025 (property deletion modes), ADR 0020 (audit log), ADR 0019 (uuid v7).
-- Implementation spec: `docs/plans/wayfinder-property-contacts-spec.md`
-  (wayfinder map #85, tickets #86–#91).

@@ -128,5 +128,3 @@ failure.
 
 - [`docs/adr/0020-audit-log.md`](./0020-audit-log.md) — business audit used
   for preference changes.
-- [`docs/plans/2026-07-18-notification-preferences-design.md`](../plans/2026-07-18-notification-preferences-design.md)
-  — the approved feature design.

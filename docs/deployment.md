@@ -4,8 +4,7 @@
 self-hosted runner'е, пушит в GHCR и деплоит на сервер по digest через SSH.
 На сервере нет репозитория и сборки — только compose-файлы, env и бэкапы.
 Caddy запущен на хосте и проксирует публичные домены на localhost-порты
-контейнеров. Архитектурное решение — `docs/adr/0024-deploy-pipeline-ghcr-runner.md`,
-дизайн — `docs/plans/2026-07-28-deploy-pipeline-redesign-design.md`.
+контейнеров. Архитектурное решение — `docs/adr/0024-deploy-pipeline-ghcr-runner.md`.
 
 ## Поток деплоя
 

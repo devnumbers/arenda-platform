@@ -83,5 +83,3 @@ audit log (ADR 0020).
 - [`docs/adr/0022-notification-preferences.md`](./0022-notification-preferences.md)
   — per-type reminder delivery permissions; the delivery side of the same
   reminders feature.
-- [`docs/plans/2026-07-18-reminders-onboarding-popup-design.md`](../plans/2026-07-18-reminders-onboarding-popup-design.md)
-  — the approved feature design.

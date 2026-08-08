@@ -228,7 +228,7 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 // paymentRedirectTTL bounds how long a user-facing payment form stays
 // payable. After the deadline T-Kassa moves the payment to
 // DEADLINE_EXPIRED and the user retries via the existing recovery flow.
-// See docs/plans/2026-07-13-tkassa-redirect-due-date-design.md.
+// See ADR 0010 (tkassa-webhook-source-of-truth) and ADR 0008 (subscription-lifecycle).
 const paymentRedirectTTL = 15 * time.Minute
 
 func (s *SubscriptionService) changeTariffUpgrade(

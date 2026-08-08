@@ -192,7 +192,4 @@ kept green.
   not add a new context).
 - Source and generator: `tools/property-attributes/` (`README.md`,
   `catalog.json`, `catalog.schema.json`, `generate.mjs`).
-- Updated spec: `docs/plans/wayfinder-export-property-xlsx-spec.md`
-  (the export consumes the generated Go label helpers on the new "Объект"
-  sheet).
 - CI gates in `Makefile`: `attributes-gen`, `attributes-check`.
