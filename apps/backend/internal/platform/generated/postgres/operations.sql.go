@@ -871,9 +871,11 @@ const listNextRentPaymentsByOwner = `-- name: ListNextRentPaymentsByOwner :many
 SELECT op.lease_id, MIN(op.operation_date)::date AS next_payment_date
 FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
-WHERE op.owner_id = $1::uuid
+WHERE (op.owner_id = $1::uuid
+       OR (op.property_id = ANY($2::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = op.property_id AND p.status = 'archived')))
   AND op.status = 'pending'
-  AND op.operation_date >= $2::date
+  AND op.operation_date >= $3::date
   AND op.type = 'income'
   AND cat.code = 'rent'
   AND op.lease_id IS NOT NULL
@@ -882,8 +884,9 @@ GROUP BY op.lease_id
 `
 
 type ListNextRentPaymentsByOwnerParams struct {
-	OwnerID pgtype.UUID `json:"owner_id"`
-	AsOf    pgtype.Date `json:"as_of"`
+	OwnerID               pgtype.UUID   `json:"owner_id"`
+	AccessiblePropertyIds []pgtype.UUID `json:"accessible_property_ids"`
+	AsOf                  pgtype.Date   `json:"as_of"`
 }
 
 type ListNextRentPaymentsByOwnerRow struct {
@@ -892,7 +895,7 @@ type ListNextRentPaymentsByOwnerRow struct {
 }
 
 func (q *Queries) ListNextRentPaymentsByOwner(ctx context.Context, arg ListNextRentPaymentsByOwnerParams) ([]ListNextRentPaymentsByOwnerRow, error) {
-	rows, err := q.db.Query(ctx, listNextRentPaymentsByOwner, arg.OwnerID, arg.AsOf)
+	rows, err := q.db.Query(ctx, listNextRentPaymentsByOwner, arg.OwnerID, arg.AccessiblePropertyIds, arg.AsOf)
 	if err != nil {
 		return nil, err
 	}
@@ -1146,23 +1149,26 @@ func (q *Queries) ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID
 
 const listOperationsByOwner = `-- name: ListOperationsByOwner :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
-WHERE operations.owner_id = $1
+WHERE (operations.owner_id = $1
+       OR (property_id = ANY($2::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = operations.property_id AND p.status = 'archived')))
   AND deleted_at IS NULL
-  AND (COALESCE($2::text[], '{}') = '{}'::text[] OR type = ANY(COALESCE($2::text[], '{}')))
-  AND (COALESCE($3::text[], '{}') = '{}'::text[] OR status = ANY(COALESCE($3::text[], '{}')))
-  AND (COALESCE($4::uuid[], '{}') = '{}'::uuid[] OR category_id = ANY(COALESCE($4::uuid[], '{}')))
-  AND ($5::uuid IS NULL OR property_id = $5::uuid)
-  AND ($6::date IS NULL OR operation_date >= $6::date)
-  AND ($7::date IS NULL OR operation_date <= $7::date)
-  AND ($8::uuid IS NULL OR recurring_operation_id = $8::uuid)
-  AND ($9::uuid IS NULL OR lease_id = $9::uuid)
-  AND ($10::bool = false OR NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = operations.property_id AND p.status = 'archived'))
+  AND (COALESCE($3::text[], '{}') = '{}'::text[] OR type = ANY(COALESCE($3::text[], '{}')))
+  AND (COALESCE($4::text[], '{}') = '{}'::text[] OR status = ANY(COALESCE($4::text[], '{}')))
+  AND (COALESCE($5::uuid[], '{}') = '{}'::uuid[] OR category_id = ANY(COALESCE($5::uuid[], '{}')))
+  AND ($6::uuid IS NULL OR property_id = $6::uuid)
+  AND ($7::date IS NULL OR operation_date >= $7::date)
+  AND ($8::date IS NULL OR operation_date <= $8::date)
+  AND ($9::uuid IS NULL OR recurring_operation_id = $9::uuid)
+  AND ($10::uuid IS NULL OR lease_id = $10::uuid)
+  AND ($11::bool = false OR NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = operations.property_id AND p.status = 'archived'))
 ORDER BY operation_date DESC, id DESC
-LIMIT $12::int OFFSET $11::int
+LIMIT $13::int OFFSET $12::int
 `
 
 type ListOperationsByOwnerParams struct {
 	OwnerID                   pgtype.UUID   `json:"owner_id"`
+	AccessiblePropertyIds     []pgtype.UUID `json:"accessible_property_ids"`
 	Types                     []string      `json:"types"`
 	Statuses                  []string      `json:"statuses"`
 	CategoryIds               []pgtype.UUID `json:"category_ids"`
@@ -1200,6 +1206,7 @@ type ListOperationsByOwnerRow struct {
 func (q *Queries) ListOperationsByOwner(ctx context.Context, arg ListOperationsByOwnerParams) ([]ListOperationsByOwnerRow, error) {
 	rows, err := q.db.Query(ctx, listOperationsByOwner,
 		arg.OwnerID,
+		arg.AccessiblePropertyIds,
 		arg.Types,
 		arg.Statuses,
 		arg.CategoryIds,
@@ -1251,23 +1258,26 @@ func (q *Queries) ListOperationsByOwner(ctx context.Context, arg ListOperationsB
 
 const listOperationsByOwnerAsc = `-- name: ListOperationsByOwnerAsc :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
-WHERE operations.owner_id = $1
+WHERE (operations.owner_id = $1
+       OR (property_id = ANY($2::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = operations.property_id AND p.status = 'archived')))
   AND deleted_at IS NULL
-  AND (COALESCE($2::text[], '{}') = '{}'::text[] OR type = ANY(COALESCE($2::text[], '{}')))
-  AND (COALESCE($3::text[], '{}') = '{}'::text[] OR status = ANY(COALESCE($3::text[], '{}')))
-  AND (COALESCE($4::uuid[], '{}') = '{}'::uuid[] OR category_id = ANY(COALESCE($4::uuid[], '{}')))
-  AND ($5::uuid IS NULL OR property_id = $5::uuid)
-  AND ($6::date IS NULL OR operation_date >= $6::date)
-  AND ($7::date IS NULL OR operation_date <= $7::date)
-  AND ($8::uuid IS NULL OR recurring_operation_id = $8::uuid)
-  AND ($9::uuid IS NULL OR lease_id = $9::uuid)
-  AND ($10::bool = false OR NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = operations.property_id AND p.status = 'archived'))
+  AND (COALESCE($3::text[], '{}') = '{}'::text[] OR type = ANY(COALESCE($3::text[], '{}')))
+  AND (COALESCE($4::text[], '{}') = '{}'::text[] OR status = ANY(COALESCE($4::text[], '{}')))
+  AND (COALESCE($5::uuid[], '{}') = '{}'::uuid[] OR category_id = ANY(COALESCE($5::uuid[], '{}')))
+  AND ($6::uuid IS NULL OR property_id = $6::uuid)
+  AND ($7::date IS NULL OR operation_date >= $7::date)
+  AND ($8::date IS NULL OR operation_date <= $8::date)
+  AND ($9::uuid IS NULL OR recurring_operation_id = $9::uuid)
+  AND ($10::uuid IS NULL OR lease_id = $10::uuid)
+  AND ($11::bool = false OR NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = operations.property_id AND p.status = 'archived'))
 ORDER BY operation_date ASC, id ASC
-LIMIT $12::int OFFSET $11::int
+LIMIT $13::int OFFSET $12::int
 `
 
 type ListOperationsByOwnerAscParams struct {
 	OwnerID                   pgtype.UUID   `json:"owner_id"`
+	AccessiblePropertyIds     []pgtype.UUID `json:"accessible_property_ids"`
 	Types                     []string      `json:"types"`
 	Statuses                  []string      `json:"statuses"`
 	CategoryIds               []pgtype.UUID `json:"category_ids"`
@@ -1305,6 +1315,7 @@ type ListOperationsByOwnerAscRow struct {
 func (q *Queries) ListOperationsByOwnerAsc(ctx context.Context, arg ListOperationsByOwnerAscParams) ([]ListOperationsByOwnerAscRow, error) {
 	rows, err := q.db.Query(ctx, listOperationsByOwnerAsc,
 		arg.OwnerID,
+		arg.AccessiblePropertyIds,
 		arg.Types,
 		arg.Statuses,
 		arg.CategoryIds,
@@ -1571,7 +1582,9 @@ const listOverdueRentOperationsByOwner = `-- name: ListOverdueRentOperationsByOw
 SELECT op.lease_id, op.operation_date
 FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
-WHERE op.owner_id = $1::uuid
+WHERE (op.owner_id = $1::uuid
+       OR (op.property_id = ANY($2::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = op.property_id AND p.status = 'archived')))
   AND op.status = 'overdue'
   AND op.type = 'income'
   AND cat.code = 'rent'
@@ -1580,13 +1593,18 @@ WHERE op.owner_id = $1::uuid
 ORDER BY op.lease_id, op.operation_date
 `
 
+type ListOverdueRentOperationsByOwnerParams struct {
+	OwnerID               pgtype.UUID   `json:"owner_id"`
+	AccessiblePropertyIds []pgtype.UUID `json:"accessible_property_ids"`
+}
+
 type ListOverdueRentOperationsByOwnerRow struct {
 	LeaseID       pgtype.UUID `json:"lease_id"`
 	OperationDate pgtype.Date `json:"operation_date"`
 }
 
-func (q *Queries) ListOverdueRentOperationsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListOverdueRentOperationsByOwnerRow, error) {
-	rows, err := q.db.Query(ctx, listOverdueRentOperationsByOwner, ownerID)
+func (q *Queries) ListOverdueRentOperationsByOwner(ctx context.Context, arg ListOverdueRentOperationsByOwnerParams) ([]ListOverdueRentOperationsByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, listOverdueRentOperationsByOwner, arg.OwnerID, arg.AccessiblePropertyIds)
 	if err != nil {
 		return nil, err
 	}

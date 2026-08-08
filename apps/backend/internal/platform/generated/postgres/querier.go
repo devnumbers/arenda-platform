@@ -133,11 +133,15 @@ type Querier interface {
 	// "active" mirrors CountActivePropertiesByOwnerAdmin: active plus maintenance.
 	GetPropertiesStatsAdmin(ctx context.Context) (GetPropertiesStatsAdminRow, error)
 	// Unscoped lookup by id. Used by the policy/access layer (T3, issue #156) to
-	// resolve the data owner for authorization before applying a scope. Read-only;
-	// callers must never leak existence to actors without a view capability (the
-	// application maps "no access" to ErrNotFound to preserve object privacy).
-	// members_count is the shared-access participant count: membership rows (any
-	// status) plus pending email invitations (issue #163).
+	// resolve the data owner for authorization before applying a scope, and by the
+	// properties list to load shared properties (whose owner_id differs from the
+	// actor). Read-only; callers must never leak existence to actors without a view
+	// capability (the application maps "no access" to ErrNotFound to preserve
+	// object privacy). members_count is the shared-access participant count
+	// (membership rows of any status plus pending email invitations, issue #163).
+	// overdue_rent_count counts the property's overdue rent operations scoped to
+	// the property's data owner so shared properties show the same count to a
+	// member as to the owner (issue #157).
 	GetPropertyByID(ctx context.Context, id pgtype.UUID) (GetPropertyByIDRow, error)
 	GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (GetPropertyByIDAdminRow, error)
 	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (GetPropertyByIDAndOwnerRow, error)
@@ -211,7 +215,7 @@ type Querier interface {
 	// recipient slot (issue #163).
 	ListActiveMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
-	ListAllFreeRemindersByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListAllFreeRemindersByOwnerRow, error)
+	ListAllFreeRemindersByOwner(ctx context.Context, arg ListAllFreeRemindersByOwnerParams) ([]ListAllFreeRemindersByOwnerRow, error)
 	ListAllPendingOperationsWithPastDate(ctx context.Context, arg ListAllPendingOperationsWithPastDateParams) ([]Operation, error)
 	ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error)
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
@@ -224,7 +228,7 @@ type Querier interface {
 	ListFreeRemindersByProperty(ctx context.Context, arg ListFreeRemindersByPropertyParams) ([]FreeReminder, error)
 	ListFutureOperationsByLease(ctx context.Context, arg ListFutureOperationsByLeaseParams) ([]ListFutureOperationsByLeaseRow, error)
 	ListLeasesAdmin(ctx context.Context, arg ListLeasesAdminParams) ([]ListLeasesAdminRow, error)
-	ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Lease, error)
+	ListLeasesByOwner(ctx context.Context, arg ListLeasesByOwnerParams) ([]Lease, error)
 	ListLeasesByProperty(ctx context.Context, arg ListLeasesByPropertyParams) ([]Lease, error)
 	ListLeasesWithTenantForExport(ctx context.Context, arg ListLeasesWithTenantForExportParams) ([]ListLeasesWithTenantForExportRow, error)
 	ListNextRentPaymentsByOwner(ctx context.Context, arg ListNextRentPaymentsByOwnerParams) ([]ListNextRentPaymentsByOwnerRow, error)
@@ -241,7 +245,7 @@ type Querier interface {
 	ListOperationsByProperty(ctx context.Context, arg ListOperationsByPropertyParams) ([]ListOperationsByPropertyRow, error)
 	ListOperationsByPropertyWithStatuses(ctx context.Context, arg ListOperationsByPropertyWithStatusesParams) ([]ListOperationsByPropertyWithStatusesRow, error)
 	ListOperationsByRecurringOperation(ctx context.Context, recurringOperationID pgtype.UUID) ([]ListOperationsByRecurringOperationRow, error)
-	ListOverdueRentOperationsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListOverdueRentOperationsByOwnerRow, error)
+	ListOverdueRentOperationsByOwner(ctx context.Context, arg ListOverdueRentOperationsByOwnerParams) ([]ListOverdueRentOperationsByOwnerRow, error)
 	ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error)
 	// All pending invitations for an email, oldest first: activation at
 	// registration is FIFO across properties (T5, issue #161).
@@ -260,7 +264,7 @@ type Querier interface {
 	ListPropertyPhotosByPropertyIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]PropertyPhoto, error)
 	ListRecentSubscriptionPaymentsAdmin(ctx context.Context) ([]ListRecentSubscriptionPaymentsAdminRow, error)
 	ListRecentUsersAdmin(ctx context.Context) ([]ListRecentUsersAdminRow, error)
-	ListRecurringOperationsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]RecurringOperation, error)
+	ListRecurringOperationsByOwner(ctx context.Context, arg ListRecurringOperationsByOwnerParams) ([]RecurringOperation, error)
 	ListRecurringOperationsByProperty(ctx context.Context, arg ListRecurringOperationsByPropertyParams) ([]RecurringOperation, error)
 	ListRecurringOperationsByPropertyID(ctx context.Context, propertyID pgtype.UUID) ([]RecurringOperation, error)
 	ListRemindersByLease(ctx context.Context, arg ListRemindersByLeaseParams) ([]Reminder, error)

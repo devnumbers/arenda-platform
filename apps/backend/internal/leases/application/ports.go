@@ -60,7 +60,11 @@ type LeaseRepository interface {
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Lease, error)
 	GetByIDAndOwner(ctx context.Context, id, scope uuid.UUID) (domain.Lease, error)
 	GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (domain.Lease, error)
-	ListByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Lease, error)
+	// ListByOwner returns leases for the scope owner plus, when
+	// accessiblePropertyIDs is non-empty, leases of properties shared with the
+	// actor via property membership (issue #157, T3), excluding archived shared
+	// properties. When empty, only the owner's own leases are returned.
+	ListByOwner(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID) ([]domain.Lease, error)
 	Update(ctx context.Context, scope uuid.UUID, lease domain.Lease) (domain.Lease, error)
 	Complete(ctx context.Context, id, scope uuid.UUID) (domain.Lease, error)
 	CountOpenLeasesByProperty(ctx context.Context, propertyID uuid.UUID) (int, error)
@@ -82,7 +86,12 @@ type RecurringOperationRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.RecurringOperation, error)
 	GetByIDAndOwner(ctx context.Context, id, scope uuid.UUID) (domain.RecurringOperation, error)
 	GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (domain.RecurringOperation, error)
-	ListByOwner(ctx context.Context, scope uuid.UUID) ([]domain.RecurringOperation, error)
+	// ListByOwner returns recurring operations for the scope owner plus, when
+	// accessiblePropertyIDs is non-empty, recurring operations of properties
+	// shared with the actor via property membership (issue #157, T3), excluding
+	// archived shared properties. When empty, only the owner's own recurring
+	// operations are returned.
+	ListByOwner(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID) ([]domain.RecurringOperation, error)
 	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID) ([]domain.RecurringOperation, error)
 	ListByPropertyID(ctx context.Context, propertyID uuid.UUID) ([]domain.RecurringOperation, error)
 	Update(ctx context.Context, op domain.RecurringOperation) (domain.RecurringOperation, error)
@@ -127,6 +136,12 @@ type OperationFilter struct {
 	Sort                 OperationSort
 	// ExcludeArchivedProperties filters out operations of properties with status 'archived'.
 	ExcludeArchivedProperties bool
+	// AccessiblePropertyIDs are the ids of properties shared with the actor via
+	// property membership (issue #157, T3). When non-empty, ListByOwner
+	// additionally returns operations of these shared properties (excluding
+	// archived ones); when empty, only the scope owner's own operations are
+	// returned (the pre-T3 behaviour).
+	AccessiblePropertyIDs []uuid.UUID
 }
 
 type FinanceReportTotals struct {
@@ -185,8 +200,8 @@ type OperationRepository interface {
 	ListPendingOperationsWithPastDate(ctx context.Context, scope uuid.UUID, asOf time.Time, limit int) ([]domain.Operation, error)
 	ListAllPendingOperationsWithPastDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Operation, error)
 	GetPropertyOperationsSummary(ctx context.Context, scope, propertyID uuid.UUID, asOf time.Time) (OperationsSummary, error)
-	ListOverdueRentOperations(ctx context.Context, scope uuid.UUID) ([]OverdueRentOperation, error)
-	ListNextRentPayments(ctx context.Context, scope uuid.UUID, asOf time.Time) ([]NextRentPayment, error)
+	ListOverdueRentOperations(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID) ([]OverdueRentOperation, error)
+	ListNextRentPayments(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, asOf time.Time) ([]NextRentPayment, error)
 	GetFinanceReportTotals(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) (FinanceReportTotals, error)
 	GetFinanceReportByProperty(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]FinanceReportPropertyRow, error)
 	GetFinanceReportByCategory(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]FinanceReportCategoryRow, error)

@@ -184,7 +184,7 @@ func (r *fakeOperationRepo) GetPropertyOperationsSummary(_ context.Context, owne
 	}, nil
 }
 
-func (r *fakeOperationRepo) ListOverdueRentOperations(_ context.Context, ownerID uuid.UUID) ([]OverdueRentOperation, error) {
+func (r *fakeOperationRepo) ListOverdueRentOperations(_ context.Context, ownerID uuid.UUID, _ []uuid.UUID) ([]OverdueRentOperation, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []OverdueRentOperation
@@ -202,7 +202,7 @@ func (r *fakeOperationRepo) ListOverdueRentOperations(_ context.Context, ownerID
 	return out, nil
 }
 
-func (r *fakeOperationRepo) ListNextRentPayments(_ context.Context, ownerID uuid.UUID, asOf time.Time) ([]NextRentPayment, error) {
+func (r *fakeOperationRepo) ListNextRentPayments(_ context.Context, ownerID uuid.UUID, _ []uuid.UUID, asOf time.Time) ([]NextRentPayment, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	minByLease := make(map[uuid.UUID]time.Time)
@@ -530,7 +530,7 @@ func (r *fakeRecurringOperationRepo) GetByIDAndOwnerForUpdate(ctx context.Contex
 	return r.GetByIDAndOwner(ctx, id, ownerID)
 }
 
-func (r *fakeRecurringOperationRepo) ListByOwner(_ context.Context, _ uuid.UUID) ([]domain.RecurringOperation, error) {
+func (r *fakeRecurringOperationRepo) ListByOwner(_ context.Context, _ uuid.UUID, _ []uuid.UUID) ([]domain.RecurringOperation, error) {
 	return nil, nil
 }
 

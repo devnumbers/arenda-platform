@@ -113,9 +113,12 @@ RETURNING *;
 
 -- name: ListRecurringOperationsByOwner :many
 SELECT * FROM recurring_operations
-WHERE owner_id = $1
-  AND deleted_at IS NULL
-ORDER BY created_at DESC;
+WHERE (recurring_operations.owner_id = $1
+       OR (recurring_operations.property_id IS NOT NULL
+           AND recurring_operations.property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = recurring_operations.property_id AND p.status = 'archived')))
+  AND recurring_operations.deleted_at IS NULL
+ORDER BY recurring_operations.created_at DESC;
 
 -- name: DeleteRecurringOperationsByProperty :exec
 DELETE FROM recurring_operations

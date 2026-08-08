@@ -68,6 +68,19 @@ type FreeReminderService struct {
 	// membership-aware policy is built after the free-reminder service in the
 	// composition root. Mirrors CategoryService.SetPolicy (issue #166).
 	policy sharedpolicy.Policy
+	// sharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
+	// aggregate list covers only the actor's own free reminders, when set it
+	// additionally includes free reminders of properties shared with the actor
+	// (issue #157, T3), excluding archived shared properties.
+	sharedIDs SharedPropertyIDs
+}
+
+// SetSharedPropertyIDs injects the access-context adapter that resolves the
+// property ids shared with an actor via property membership (issue #157, T3).
+// Optional: when nil, ListByOwner only returns the actor's own free reminders;
+// when set, it additionally returns free reminders of the shared properties.
+func (s *FreeReminderService) SetSharedPropertyIDs(ids SharedPropertyIDs) {
+	s.sharedIDs = ids
 }
 
 // NewFreeReminderService creates a new free reminder service.
@@ -284,9 +297,19 @@ func (s *FreeReminderService) Delete(ctx context.Context, actor, id uuid.UUID) e
 	return nil
 }
 
-// ListByOwner returns paginated free reminders for an owner.
+// ListByOwner returns the actor's own free reminders plus, when the shared-ids
+// adapter is injected, free reminders of properties shared with the actor
+// (issue #157, T3), excluding archived shared properties.
 func (s *FreeReminderService) ListByOwner(ctx context.Context, actor uuid.UUID, limit, offset int) ([]domain.FreeReminder, error) {
-	reminders, err := s.repo.ListByOwner(ctx, actor, limit, offset)
+	var accessible []uuid.UUID
+	if s.sharedIDs != nil {
+		shared, err := s.sharedIDs.SharedWith(ctx, actor)
+		if err != nil {
+			return nil, fmt.Errorf("list shared property ids: %w", err)
+		}
+		accessible = shared
+	}
+	reminders, err := s.repo.ListByOwner(ctx, actor, limit, offset, accessible)
 	if err != nil {
 		return nil, fmt.Errorf("list free reminders: %w", err)
 	}

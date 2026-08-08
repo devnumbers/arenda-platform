@@ -119,8 +119,11 @@ func (r *LeaseRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, scop
 	return leaseFromRow(row)
 }
 
-func (r *LeaseRepository) ListByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Lease, error) {
-	rows, err := r.q().ListLeasesByOwner(ctx, pgconv.UUIDToPgtype(scope))
+func (r *LeaseRepository) ListByOwner(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID) ([]domain.Lease, error) {
+	rows, err := r.q().ListLeasesByOwner(ctx, postgres.ListLeasesByOwnerParams{
+		OwnerID:               pgconv.UUIDToPgtype(scope),
+		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -638,8 +641,11 @@ func (r *RecurringOperationRepository) GetByIDAndOwnerForUpdate(ctx context.Cont
 	return recurringOperationFromRow(row), nil
 }
 
-func (r *RecurringOperationRepository) ListByOwner(ctx context.Context, scope uuid.UUID) ([]domain.RecurringOperation, error) {
-	rows, err := r.q().ListRecurringOperationsByOwner(ctx, pgconv.UUIDToPgtype(scope))
+func (r *RecurringOperationRepository) ListByOwner(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID) ([]domain.RecurringOperation, error) {
+	rows, err := r.q().ListRecurringOperationsByOwner(ctx, postgres.ListRecurringOperationsByOwnerParams{
+		OwnerID:               pgconv.UUIDToPgtype(scope),
+		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -952,6 +958,7 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, scope uuid.UUID, 
 	}
 
 	sort := application.NormalizeOperationSort(filter.Sort)
+	accessiblePropertyIDs := pgconv.UUIDSliceToPgtype(filter.AccessiblePropertyIDs)
 	var rows []any
 	if sort == application.OperationSortOperationDateAsc {
 		ascRows, err := r.q().ListOperationsByOwnerAsc(ctx, postgres.ListOperationsByOwnerAscParams{
@@ -959,6 +966,7 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, scope uuid.UUID, 
 			Types:                     types,
 			Statuses:                  statuses,
 			CategoryIds:               categoryIDs,
+			AccessiblePropertyIds:     accessiblePropertyIDs,
 			PropertyID:                pgconv.UUIDToPgtype(filter.PropertyID),
 			LeaseID:                   pgconv.UUIDToPgtype(filter.LeaseID),
 			FromDate:                  fromDate,
@@ -979,6 +987,7 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, scope uuid.UUID, 
 			Types:                     types,
 			Statuses:                  statuses,
 			CategoryIds:               categoryIDs,
+			AccessiblePropertyIds:     accessiblePropertyIDs,
 			PropertyID:                pgconv.UUIDToPgtype(filter.PropertyID),
 			LeaseID:                   pgconv.UUIDToPgtype(filter.LeaseID),
 			FromDate:                  fromDate,
@@ -1173,8 +1182,11 @@ func (r *OperationRepository) GetPropertyOperationsSummary(ctx context.Context, 
 	}, nil
 }
 
-func (r *OperationRepository) ListOverdueRentOperations(ctx context.Context, scope uuid.UUID) ([]application.OverdueRentOperation, error) {
-	rows, err := r.q().ListOverdueRentOperationsByOwner(ctx, pgconv.UUIDToPgtype(scope))
+func (r *OperationRepository) ListOverdueRentOperations(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID) ([]application.OverdueRentOperation, error) {
+	rows, err := r.q().ListOverdueRentOperationsByOwner(ctx, postgres.ListOverdueRentOperationsByOwnerParams{
+		OwnerID:               pgconv.UUIDToPgtype(scope),
+		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -1188,10 +1200,11 @@ func (r *OperationRepository) ListOverdueRentOperations(ctx context.Context, sco
 	return result, nil
 }
 
-func (r *OperationRepository) ListNextRentPayments(ctx context.Context, scope uuid.UUID, asOf time.Time) ([]application.NextRentPayment, error) {
+func (r *OperationRepository) ListNextRentPayments(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, asOf time.Time) ([]application.NextRentPayment, error) {
 	rows, err := r.q().ListNextRentPaymentsByOwner(ctx, postgres.ListNextRentPaymentsByOwnerParams{
-		OwnerID: pgconv.UUIDToPgtype(scope),
-		AsOf:    pgconv.DateToPgtype(asOf),
+		OwnerID:               pgconv.UUIDToPgtype(scope),
+		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
+		AsOf:                  pgconv.DateToPgtype(asOf),
 	})
 	if err != nil {
 		return nil, err

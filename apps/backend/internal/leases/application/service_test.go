@@ -98,7 +98,7 @@ func (r *fakeLeaseRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerI
 	return r.GetByIDAndOwner(ctx, id, ownerID)
 }
 
-func (r *fakeLeaseRepo) ListByOwner(_ context.Context, _ uuid.UUID) ([]domain.Lease, error) {
+func (r *fakeLeaseRepo) ListByOwner(_ context.Context, _ uuid.UUID, _ []uuid.UUID) ([]domain.Lease, error) {
 	return nil, nil
 }
 

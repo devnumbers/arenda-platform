@@ -30,12 +30,24 @@ WHERE id = $1 AND owner_id = $2;
 
 -- name: GetPropertyByID :one
 -- Unscoped lookup by id. Used by the policy/access layer (T3, issue #156) to
--- resolve the data owner for authorization before applying a scope. Read-only;
--- callers must never leak existence to actors without a view capability (the
--- application maps "no access" to ErrNotFound to preserve object privacy).
--- members_count is the shared-access participant count: membership rows (any
--- status) plus pending email invitations (issue #163).
+-- resolve the data owner for authorization before applying a scope, and by the
+-- properties list to load shared properties (whose owner_id differs from the
+-- actor). Read-only; callers must never leak existence to actors without a view
+-- capability (the application maps "no access" to ErrNotFound to preserve
+-- object privacy). members_count is the shared-access participant count
+-- (membership rows of any status plus pending email invitations, issue #163).
+-- overdue_rent_count counts the property's overdue rent operations scoped to
+-- the property's data owner so shared properties show the same count to a
+-- member as to the owner (issue #157).
 SELECT properties.*,
+       (SELECT COUNT(*) FROM operations o
+         JOIN operation_categories cat ON cat.id = o.category_id
+         WHERE o.property_id = properties.id
+           AND o.owner_id = properties.owner_id
+           AND o.status = 'overdue'
+           AND o.type = 'income'
+           AND cat.code = 'rent'
+           AND o.deleted_at IS NULL) AS overdue_rent_count,
        ((SELECT COUNT(*) FROM property_members pm
          WHERE pm.property_id = properties.id) +
        (SELECT COUNT(*) FROM property_member_invitations pmi

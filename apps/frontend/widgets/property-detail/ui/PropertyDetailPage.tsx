@@ -100,21 +100,27 @@ export function PropertyDetailPage(): JSX.Element {
     );
     const currentLease = useMemo(() => findCurrentLease(leases), [leases]);
     const categoriesQuery = useOperationCategories('income');
-    const rentCategoryId = categoriesQuery.data?.find(
-        (category) => category.code === 'rent',
-    )?.id;
+    // Collect every rent category id across the actor's own and shared-access
+    // accounts: rent operations of a shared object belong to the owner's rent
+    // category, not the member's own, so a single find() would filter them out.
+    const rentCategoryIds = useMemo(
+        () => categoriesQuery.data
+            ?.filter((category) => category.code === 'rent')
+            .map((category) => category.id) ?? [],
+        [categoriesQuery.data],
+    );
     const payableRentFilters = useMemo<OperationsFilters>(
         () => ({
             lease_id: currentLease?.id,
-            category_id: rentCategoryId ? [rentCategoryId] : undefined,
+            category_id: rentCategoryIds.length > 0 ? rentCategoryIds : undefined,
             status: ['pending', 'overdue'],
             sort: 'operation_date_asc',
             limit: 1,
         }),
-        [currentLease?.id, rentCategoryId],
+        [currentLease?.id, rentCategoryIds],
     );
     const payableRentQuery = useOperations(payableRentFilters, {
-        enabled: Boolean(currentLease?.id) && Boolean(rentCategoryId),
+        enabled: Boolean(currentLease?.id) && rentCategoryIds.length > 0,
     });
     const isPayRentLoading = Boolean(currentLease) && payableRentQuery.isFetching;
 

@@ -325,8 +325,18 @@ func (s *OperationService) GetFinanceReport(ctx context.Context, actor uuid.UUID
 	}, nil
 }
 
-// ListOperations returns all operations for the owner filtered by the provided criteria.
+// ListOperations returns the actor's own operations plus, when the shared-ids
+// adapter is injected, operations of properties shared with the actor (issue
+// #157, T3). Shared-property operations are restricted to active/maintenance
+// properties; the actor's own operations (including archived) are unchanged.
 func (s *OperationService) ListOperations(ctx context.Context, actor uuid.UUID, filter OperationFilter) ([]domain.Operation, error) {
+	if s.sharedIDs != nil {
+		shared, err := s.sharedIDs.SharedWith(ctx, actor)
+		if err != nil {
+			return nil, fmt.Errorf("list shared property ids: %w", err)
+		}
+		filter.AccessiblePropertyIDs = shared
+	}
 	ops, err := s.operations.ListByOwner(ctx, actor, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list operations: %w", err)

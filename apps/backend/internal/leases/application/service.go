@@ -59,6 +59,20 @@ type LeaseService struct {
 	tzResolver     sharedtz.OwnerTimezoneResolver
 	policy         sharedpolicy.Policy
 	logger         *slog.Logger
+	// sharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
+	// payment-schedule reads (LeasePaymentScheduleIndex,
+	// CurrentPeriodOverdueIndex) cover only the actor's own rent operations,
+	// when set they additionally include the shared properties' operations
+	// (issue #157, T3) so a member's lease card shows the correct schedule.
+	sharedIDs SharedPropertyIDs
+}
+
+// SetSharedPropertyIDs injects the access-context adapter that resolves the
+// property ids shared with an actor via property membership (issue #157, T3).
+// Optional: when nil, lease payment-schedule reads cover only the actor's own
+// data; when set, they additionally cover the shared properties.
+func (s *LeaseService) SetSharedPropertyIDs(ids SharedPropertyIDs) {
+	s.sharedIDs = ids
 }
 
 func NewLeaseService(
@@ -268,7 +282,11 @@ func (s *LeaseService) CreateLease(ctx context.Context, actor uuid.UUID, cmd Cre
 }
 
 func (s *LeaseService) ListLeases(ctx context.Context, actor uuid.UUID) ([]domain.Lease, error) {
-	leases, err := s.leases.ListByOwner(ctx, actor)
+	accessible, err := s.resolveAccessiblePropertyIDs(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	leases, err := s.leases.ListByOwner(ctx, actor, accessible)
 	if err != nil {
 		return nil, fmt.Errorf("list leases: %w", err)
 	}

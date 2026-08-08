@@ -150,7 +150,7 @@ func (r *PropertyRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.
 		Status:      row.Status,
 		CreatedAt:   row.CreatedAt,
 		UpdatedAt:   row.UpdatedAt,
-	}, 0, row.MembersCount), nil
+	}, row.OverdueRentCount, row.MembersCount), nil
 }
 
 // GetByIDForUpdate is the pessimistic-lock variant of GetByID (T3, issue #156).

@@ -29,8 +29,10 @@ SELECT * FROM leases WHERE id = $1 FOR UPDATE;
 
 -- name: ListLeasesByOwner :many
 SELECT * FROM leases
-WHERE owner_id = $1
-ORDER BY updated_at DESC;
+WHERE (leases.owner_id = $1
+       OR (leases.property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = leases.property_id AND p.status = 'archived')))
+ORDER BY leases.updated_at DESC;
 
 -- name: UpdateLease :one
 UPDATE leases

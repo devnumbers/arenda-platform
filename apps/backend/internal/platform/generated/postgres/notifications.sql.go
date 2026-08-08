@@ -371,18 +371,22 @@ const listCalendarRemindersByOwner = `-- name: ListCalendarRemindersByOwner :man
 SELECT r.id, r.owner_id, r.target_type, r.operation_id, r.recurring_operation_id, r.lease_id, r.property_id, r.event_type, r.status, r.scheduled_at, r.sent_at, r.failed_attempts, r.next_attempt_at, r.message_title, r.message_body, r.created_at, r.updated_at, r.free_reminder_id, p.name AS property_name
 FROM reminders r
 LEFT JOIN properties p ON p.id = r.property_id
-WHERE r.owner_id = $1
+WHERE (r.owner_id = $1::uuid
+       OR (r.property_id IS NOT NULL
+           AND r.property_id = ANY($2::uuid[])
+           AND p.status IN ('active', 'maintenance')))
   AND r.target_type IN ('operation', 'recurring_operation', 'lease')
   AND r.status NOT IN ('cancelled', 'skipped')
-  AND r.scheduled_at >= $2
-  AND r.scheduled_at < $3
+  AND r.scheduled_at >= $3
+  AND r.scheduled_at < $4
 ORDER BY r.scheduled_at ASC
 `
 
 type ListCalendarRemindersByOwnerParams struct {
-	OwnerID  pgtype.UUID        `json:"owner_id"`
-	FromTime pgtype.Timestamptz `json:"from_time"`
-	ToTime   pgtype.Timestamptz `json:"to_time"`
+	OwnerID               pgtype.UUID        `json:"owner_id"`
+	AccessiblePropertyIds []pgtype.UUID      `json:"accessible_property_ids"`
+	FromTime              pgtype.Timestamptz `json:"from_time"`
+	ToTime                pgtype.Timestamptz `json:"to_time"`
 }
 
 type ListCalendarRemindersByOwnerRow struct {
@@ -391,7 +395,12 @@ type ListCalendarRemindersByOwnerRow struct {
 }
 
 func (q *Queries) ListCalendarRemindersByOwner(ctx context.Context, arg ListCalendarRemindersByOwnerParams) ([]ListCalendarRemindersByOwnerRow, error) {
-	rows, err := q.db.Query(ctx, listCalendarRemindersByOwner, arg.OwnerID, arg.FromTime, arg.ToTime)
+	rows, err := q.db.Query(ctx, listCalendarRemindersByOwner,
+		arg.OwnerID,
+		arg.AccessiblePropertyIds,
+		arg.FromTime,
+		arg.ToTime,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -634,26 +643,31 @@ func (q *Queries) ListRemindersByOperation(ctx context.Context, arg ListReminder
 
 const listRemindersByOwner = `-- name: ListRemindersByOwner :many
 SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
-WHERE owner_id = $1
+WHERE (owner_id = $1::uuid
+       OR (property_id IS NOT NULL
+           AND property_id = ANY($2::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = reminders.property_id AND p.status = 'archived')))
   AND CASE
-        WHEN $2::boolean THEN status::text = $3::text
+        WHEN $3::boolean THEN status::text = $4::text
         ELSE true
       END
 ORDER BY scheduled_at ASC
-LIMIT $5 OFFSET $4
+LIMIT $6 OFFSET $5
 `
 
 type ListRemindersByOwnerParams struct {
-	OwnerID        pgtype.UUID `json:"owner_id"`
-	FilterByStatus bool        `json:"filter_by_status"`
-	Status         string      `json:"status"`
-	Offset         int32       `json:"offset"`
-	Limit          int32       `json:"limit"`
+	OwnerID               pgtype.UUID   `json:"owner_id"`
+	AccessiblePropertyIds []pgtype.UUID `json:"accessible_property_ids"`
+	FilterByStatus        bool          `json:"filter_by_status"`
+	Status                string        `json:"status"`
+	Offset                int32         `json:"offset"`
+	Limit                 int32         `json:"limit"`
 }
 
 func (q *Queries) ListRemindersByOwner(ctx context.Context, arg ListRemindersByOwnerParams) ([]Reminder, error) {
 	rows, err := q.db.Query(ctx, listRemindersByOwner,
 		arg.OwnerID,
+		arg.AccessiblePropertyIds,
 		arg.FilterByStatus,
 		arg.Status,
 		arg.Offset,

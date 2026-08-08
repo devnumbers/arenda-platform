@@ -8,6 +8,8 @@ import (
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
+	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
+	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
@@ -41,6 +43,13 @@ var (
 	// T11); the AccessService resolves owner display names for the banner.
 	_ propertiesapp.SharedMemberships        = (*accesspg.SharedProperties)(nil)
 	_ propertiesapp.OwnerDisplayNameResolver = (*accessapp.AccessService)(nil)
+	// The SharedProperties adapter also serves the leases context (operation
+	// list, finance report, lease list, recurring-operations list) and the
+	// notifications context (calendar agenda, reminders list, free-reminders
+	// list): both consume the ids of properties shared with the actor to fold
+	// shared data into aggregate reads (issue #157, T3).
+	_ leasesapp.SharedPropertyIDs        = (*accesspg.SharedProperties)(nil)
+	_ notificationsapp.SharedPropertyIDs = (*accesspg.SharedProperties)(nil)
 	// The OwnerResolver doubles as the archived-status resolver of the access
 	// application services (issue #163).
 	_ accessapp.PropertyStatusResolver = (*accesspg.OwnerResolver)(nil)

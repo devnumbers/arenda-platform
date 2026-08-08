@@ -19,7 +19,11 @@ type ReminderRepository interface {
 	ReschedulePendingRemindersByOwner(ctx context.Context, scope uuid.UUID, oldTZ, newTZ string) error
 	GetByID(ctx context.Context, id, scope uuid.UUID) (domain.Reminder, error)
 	GetByIDUnscoped(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
-	ListByOwner(ctx context.Context, scope uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
+	// ListByOwner returns reminders for the scope owner plus, when
+	// accessiblePropertyIDs is non-empty, reminders of properties shared with
+	// the actor via property membership (issue #157, T3), excluding archived
+	// shared properties. When empty, only the owner's own reminders are returned.
+	ListByOwner(ctx context.Context, scope uuid.UUID, filter ListFilter, accessiblePropertyIDs []uuid.UUID) ([]domain.Reminder, error)
 	ListByOperation(ctx context.Context, scope, operationID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	ListByLease(ctx context.Context, scope, leaseID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	ListByRecurringOperation(ctx context.Context, scope, recurringOpID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
@@ -34,8 +38,11 @@ type ReminderRepository interface {
 	// ListCalendarByOwner returns non-cancelled, non-skipped operation and
 	// system reminders for an owner in the half-open time window [from, to),
 	// each with its resolved property name (nil for orphans). Ordered by
-	// scheduled_at ascending.
-	ListCalendarByOwner(ctx context.Context, scope uuid.UUID, from, to time.Time) ([]domain.CalendarReminder, error)
+	// scheduled_at ascending. accessiblePropertyIDs extends the result with
+	// reminders of properties shared with the actor (issue #157, T3), restricted
+	// to active/maintenance properties; when empty, only the owner's own
+	// reminders are returned.
+	ListCalendarByOwner(ctx context.Context, scope uuid.UUID, from, to time.Time, accessiblePropertyIDs []uuid.UUID) ([]domain.CalendarReminder, error)
 	MarkReminderSending(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
 	// MarkSent marks a reminder that is currently sending as sent. It is used
 	// after a notification has been dispatched successfully.
@@ -83,12 +90,20 @@ type FreeReminderRepository interface {
 	GetByIDUnscoped(ctx context.Context, id uuid.UUID) (domain.FreeReminder, error)
 	Update(ctx context.Context, fr domain.FreeReminder) (domain.FreeReminder, error)
 	Delete(ctx context.Context, scope, id uuid.UUID) error
-	ListByOwner(ctx context.Context, scope uuid.UUID, limit, offset int) ([]domain.FreeReminder, error)
+	// ListByOwner returns paginated free reminders for the scope owner plus,
+	// when accessiblePropertyIDs is non-empty, free reminders of properties
+	// shared with the actor via property membership (issue #157, T3), excluding
+	// archived shared properties. When empty, only the owner's own free
+	// reminders are returned.
+	ListByOwner(ctx context.Context, scope uuid.UUID, limit, offset int, accessiblePropertyIDs []uuid.UUID) ([]domain.FreeReminder, error)
 	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID, limit int) ([]domain.FreeReminder, error)
 	// ListTemplatesByOwner returns all free reminder templates for an owner
 	// with their resolved property name (nullable for orphans), ordered by
 	// trigger_at ascending. Used by the calendar read to expand occurrences.
-	ListTemplatesByOwner(ctx context.Context, scope uuid.UUID) ([]domain.FreeReminderTemplate, error)
+	// accessiblePropertyIDs extends the result with templates of properties
+	// shared with the actor (issue #157, T3), restricted to active/maintenance
+	// properties; when empty, only the owner's own templates are returned.
+	ListTemplatesByOwner(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID) ([]domain.FreeReminderTemplate, error)
 	// SaveFreeReminder inserts a concrete reminder row materialized from a free
 	// reminder template.
 	SaveFreeReminder(ctx context.Context, rm domain.Reminder) error
@@ -96,6 +111,17 @@ type FreeReminderRepository interface {
 	// linked to a free reminder template.
 	CancelRemindersByFreeReminderID(ctx context.Context, scope, freeReminderID uuid.UUID) error
 	WithTx(tx transaction.Tx) FreeReminderRepository
+}
+
+// SharedPropertyIDs returns the ids of properties shared with a user via
+// property membership (issue #157). It mirrors
+// leases/application.SharedPropertyIDs locally to avoid a cross-context import;
+// it is implemented by the access bounded context and injected optionally into
+// CalendarService so the agenda can include reminders of the actor's shared
+// properties. When nil, only the actor's own reminders are returned (the
+// pre-T3 behaviour).
+type SharedPropertyIDs interface {
+	SharedWith(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 }
 
 // ListFilter controls pagination and optional status filtering for ListByOwner.

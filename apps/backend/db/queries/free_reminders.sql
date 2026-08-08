@@ -29,8 +29,10 @@ WHERE id = $1 AND owner_id = $2;
 
 -- name: ListFreeRemindersByOwner :many
 SELECT * FROM free_reminders
-WHERE owner_id = $1
-ORDER BY trigger_at ASC
+WHERE (free_reminders.owner_id = $1
+       OR (free_reminders.property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = free_reminders.property_id AND p.status = 'archived')))
+ORDER BY free_reminders.trigger_at ASC
 LIMIT $2 OFFSET $3;
 
 -- name: ListFreeRemindersByProperty :many
@@ -43,5 +45,7 @@ LIMIT $3;
 SELECT fr.*, p.name AS property_name
 FROM free_reminders fr
 LEFT JOIN properties p ON p.id = fr.property_id
-WHERE fr.owner_id = sqlc.arg('owner_id')
+WHERE (fr.owner_id = sqlc.arg('owner_id')::uuid
+       OR (fr.property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[])
+           AND p.status IN ('active', 'maintenance')))
 ORDER BY fr.trigger_at ASC;

@@ -156,6 +156,7 @@ func addSuspendedPolicyMembership(t *testing.T, ctx context.Context, repo *acces
 // test transaction and the real membership policy.
 type policyFixture struct {
 	q        *genpostgres.Queries
+	tx       pgx.Tx
 	beginner policyBeginner
 	policy   *accessapp.MembershipPolicy
 	members  *accesspg.MembershipRepository
@@ -170,6 +171,7 @@ type policyFixture struct {
 func newPolicyFixture(tx pgx.Tx) *policyFixture {
 	return &policyFixture{
 		q:        genpostgres.New(tx),
+		tx:       tx,
 		beginner: policyBeginner{tx: tx},
 		policy:   accessapp.NewMembershipPolicy(accesspg.NewOwnerResolver(tx), accesspg.NewMembershipRepository(tx)),
 		members:  accesspg.NewMembershipRepository(tx),
@@ -186,8 +188,26 @@ func (f *policyFixture) operationService() *application.OperationService {
 	return application.NewOperationService(f.ops, f.props, f.leases, f.recs, f.cats, nil, f.beginner, nil, f.clock, policyTestTzResolver{}, f.policy, nil)
 }
 
+// operationServiceWithShared mirrors the production wiring (main.go) where the
+// SharedProperties adapter is injected into OperationService, so aggregate
+// reads (ListOperations) fold in the actor's shared properties (issue #157).
+func (f *policyFixture) operationServiceWithShared() *application.OperationService {
+	svc := application.NewOperationService(f.ops, f.props, f.leases, f.recs, f.cats, nil, f.beginner, nil, f.clock, policyTestTzResolver{}, f.policy, nil)
+	svc.SetSharedPropertyIDs(accesspg.NewSharedProperties(f.tx))
+	return svc
+}
+
 func (f *policyFixture) leaseService() *application.LeaseService {
 	return application.NewLeaseService(f.leases, f.props, nil, f.recs, f.ops, f.cats, nil, f.beginner, nil, f.clock, policyTestTzResolver{}, f.policy, nil)
+}
+
+// leaseServiceWithShared mirrors the production wiring where the
+// SharedProperties adapter is injected into LeaseService, so the lease payment-
+// schedule reads fold in the actor's shared properties (issue #157).
+func (f *policyFixture) leaseServiceWithShared() *application.LeaseService {
+	svc := application.NewLeaseService(f.leases, f.props, nil, f.recs, f.ops, f.cats, nil, f.beginner, nil, f.clock, policyTestTzResolver{}, f.policy, nil)
+	svc.SetSharedPropertyIDs(accesspg.NewSharedProperties(f.tx))
+	return svc
 }
 
 func (f *policyFixture) recurringService() *application.RecurringOperationService {
@@ -609,5 +629,100 @@ func TestPolicyIntegration_TenantContactsOwnerWideAccess(t *testing.T) {
 	outsiderName := "Outsider Rename"
 	if _, err := contactService().UpdateTenantContact(ctx, outsider, memberCreated.ID, application.UpdateTenantContactCommand{Name: &outsiderName}); !errors.Is(err, application.ErrNotFound) {
 		t.Errorf("UpdateTenantContact as outsider: want ErrNotFound, got %v", err)
+	}
+}
+
+// TestPolicyIntegration_ListOperationsByLease_IncludesShared reproduces the bug
+// where a member opening a shared property's lease card sees no rent
+// operations: the lease detail page loads operations via the aggregate
+// ListOperations (GET /operations?lease_id=...), which — before the shared-
+// property fix — filtered strictly by owner_id = actor, hiding the owner's
+// rent operations from the member.
+func TestPolicyIntegration_ListOperationsByLease_IncludesShared(t *testing.T) {
+	pool := setupPolicyDB(t)
+	ctx, tx, cleanup := beginPolicyTx(t, pool)
+	defer cleanup()
+
+	f := newPolicyFixture(tx)
+	owner := createPolicyTestUser(t, ctx, f.q)
+	member := createPolicyTestUser(t, ctx, f.q)
+	property := createPolicyTestProperty(t, ctx, f.q, owner)
+	addPolicyMembership(t, ctx, f.members, property, member, owner, accessdomain.RoleFullAccess)
+	if err := f.cats.CreateDefaultCategories(ctx, owner); err != nil {
+		t.Fatalf("seed categories: %v", err)
+	}
+
+	// CreateLease generates rent operations on the owner's scope.
+	lease, err := f.leaseService().CreateLease(ctx, owner, f.createLeaseCmd(property))
+	if err != nil {
+		t.Fatalf("seed lease: %v", err)
+	}
+
+	// The owner sees the lease's rent operations via the aggregate read.
+	ownerOps, err := f.operationServiceWithShared().ListOperations(ctx, owner, application.OperationFilter{LeaseID: lease.ID})
+	if err != nil {
+		t.Fatalf("ListOperations as owner: %v", err)
+	}
+	if len(ownerOps) == 0 {
+		t.Fatalf("owner sees no operations for lease — test seed is broken")
+	}
+
+	// The member — who has full access to the shared property — must see the
+	// same rent operations when opening the lease card (GET /operations?lease_id).
+	memberOps, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{LeaseID: lease.ID})
+	if err != nil {
+		t.Fatalf("ListOperations as member: %v", err)
+	}
+	if len(memberOps) != len(ownerOps) {
+		t.Errorf("member sees %d operations for shared lease, owner sees %d — member should see the same rent operations",
+			len(memberOps), len(ownerOps))
+	}
+}
+
+// TestPolicyIntegration_LeasePaymentSchedule_IncludesShared reproduces the bug
+// where the lease card (GET /leases/{id}) shows a shared lease without its
+// payment schedule: LeasePaymentScheduleIndex reads overdue/next rent
+// operations scoped by owner_id = actor, so a member viewing the owner's lease
+// gets an empty schedule (no overdue, no next payment) and the lease is shown
+// incorrectly.
+func TestPolicyIntegration_LeasePaymentSchedule_IncludesShared(t *testing.T) {
+	pool := setupPolicyDB(t)
+	ctx, tx, cleanup := beginPolicyTx(t, pool)
+	defer cleanup()
+
+	f := newPolicyFixture(tx)
+	owner := createPolicyTestUser(t, ctx, f.q)
+	member := createPolicyTestUser(t, ctx, f.q)
+	property := createPolicyTestProperty(t, ctx, f.q, owner)
+	addPolicyMembership(t, ctx, f.members, property, member, owner, accessdomain.RoleFullAccess)
+	if err := f.cats.CreateDefaultCategories(ctx, owner); err != nil {
+		t.Fatalf("seed categories: %v", err)
+	}
+
+	lease, err := f.leaseService().CreateLease(ctx, owner, f.createLeaseCmd(property))
+	if err != nil {
+		t.Fatalf("seed lease: %v", err)
+	}
+
+	// The owner's schedule is the baseline — CreateLease seeds pending rent
+	// operations, so NextPaymentDate must be present.
+	ownerSchedule, err := f.leaseServiceWithShared().LeasePaymentScheduleIndex(ctx, owner, []domain.Lease{lease}, f.clock.Now())
+	if err != nil {
+		t.Fatalf("schedule as owner: %v", err)
+	}
+	ownerSched, ok := ownerSchedule[lease.ID]
+	if !ok || ownerSched.NextPaymentDate == nil {
+		t.Fatalf("owner schedule missing next payment — test seed is broken (ok=%v, sched=%+v)", ok, ownerSched)
+	}
+
+	// The member must see the same schedule for the shared lease.
+	memberSchedule, err := f.leaseServiceWithShared().LeasePaymentScheduleIndex(ctx, member, []domain.Lease{lease}, f.clock.Now())
+	if err != nil {
+		t.Fatalf("schedule as member: %v", err)
+	}
+	memberSched, ok := memberSchedule[lease.ID]
+	if !ok || memberSched.NextPaymentDate == nil {
+		t.Errorf("member schedule for shared lease is empty (ok=%v, sched=%+v) — should match owner's (next=%v)",
+			ok, memberSched, ownerSched.NextPaymentDate)
 	}
 }

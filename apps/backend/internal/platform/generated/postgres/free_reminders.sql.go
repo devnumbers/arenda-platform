@@ -125,9 +125,16 @@ const listAllFreeRemindersByOwner = `-- name: ListAllFreeRemindersByOwner :many
 SELECT fr.id, fr.owner_id, fr.property_id, fr.title, fr.trigger_at, fr.periodicity, fr.created_at, fr.updated_at, p.name AS property_name
 FROM free_reminders fr
 LEFT JOIN properties p ON p.id = fr.property_id
-WHERE fr.owner_id = $1
+WHERE (fr.owner_id = $1::uuid
+       OR (fr.property_id = ANY($2::uuid[])
+           AND p.status IN ('active', 'maintenance')))
 ORDER BY fr.trigger_at ASC
 `
+
+type ListAllFreeRemindersByOwnerParams struct {
+	OwnerID               pgtype.UUID   `json:"owner_id"`
+	AccessiblePropertyIds []pgtype.UUID `json:"accessible_property_ids"`
+}
 
 type ListAllFreeRemindersByOwnerRow struct {
 	ID           pgtype.UUID        `json:"id"`
@@ -141,8 +148,8 @@ type ListAllFreeRemindersByOwnerRow struct {
 	PropertyName pgtype.Text        `json:"property_name"`
 }
 
-func (q *Queries) ListAllFreeRemindersByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListAllFreeRemindersByOwnerRow, error) {
-	rows, err := q.db.Query(ctx, listAllFreeRemindersByOwner, ownerID)
+func (q *Queries) ListAllFreeRemindersByOwner(ctx context.Context, arg ListAllFreeRemindersByOwnerParams) ([]ListAllFreeRemindersByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, listAllFreeRemindersByOwner, arg.OwnerID, arg.AccessiblePropertyIds)
 	if err != nil {
 		return nil, err
 	}
@@ -173,19 +180,27 @@ func (q *Queries) ListAllFreeRemindersByOwner(ctx context.Context, ownerID pgtyp
 
 const listFreeRemindersByOwner = `-- name: ListFreeRemindersByOwner :many
 SELECT id, owner_id, property_id, title, trigger_at, periodicity, created_at, updated_at FROM free_reminders
-WHERE owner_id = $1
-ORDER BY trigger_at ASC
+WHERE (free_reminders.owner_id = $1
+       OR (free_reminders.property_id = ANY($4::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = free_reminders.property_id AND p.status = 'archived')))
+ORDER BY free_reminders.trigger_at ASC
 LIMIT $2 OFFSET $3
 `
 
 type ListFreeRemindersByOwnerParams struct {
-	OwnerID pgtype.UUID `json:"owner_id"`
-	Limit   int32       `json:"limit"`
-	Offset  int32       `json:"offset"`
+	OwnerID               pgtype.UUID   `json:"owner_id"`
+	Limit                 int32         `json:"limit"`
+	Offset                int32         `json:"offset"`
+	AccessiblePropertyIds []pgtype.UUID `json:"accessible_property_ids"`
 }
 
 func (q *Queries) ListFreeRemindersByOwner(ctx context.Context, arg ListFreeRemindersByOwnerParams) ([]FreeReminder, error) {
-	rows, err := q.db.Query(ctx, listFreeRemindersByOwner, arg.OwnerID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listFreeRemindersByOwner,
+		arg.OwnerID,
+		arg.Limit,
+		arg.Offset,
+		arg.AccessiblePropertyIds,
+	)
 	if err != nil {
 		return nil, err
 	}

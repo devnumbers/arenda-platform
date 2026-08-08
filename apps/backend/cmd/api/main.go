@@ -175,6 +175,21 @@ func run() error {
 	// finance report includes the actor's own operations plus operations of
 	// properties shared with the actor via property membership (issue #157, T3).
 	leasesMod.OperationService.SetSharedPropertyIDs(accessMod.SharedProperties)
+	// Wire the same adapter into the calendar service so the reminders agenda
+	// includes the actor's own reminders plus reminders of properties shared
+	// with the actor (issue #157, T3), excluding archived shared properties.
+	notificationsMod.CalendarService.SetSharedPropertyIDs(accessMod.SharedProperties)
+	// Wire the same adapter into the lease service so the lease payment schedule
+	// (overdue / next payment, shown on the lease card and property card) is
+	// computed from the actor's own rent operations plus those of properties
+	// shared with the actor (issue #157, T3).
+	leasesMod.LeaseService.SetSharedPropertyIDs(accessMod.SharedProperties)
+	// Wire the same adapter into the remaining aggregate-read services so the
+	// recurring-operations list, the reminders list, and the free-reminders
+	// list all include the actor's shared-property data (issue #157, T3).
+	leasesMod.RecurringOperationService.SetSharedPropertyIDs(accessMod.SharedProperties)
+	notificationsMod.ReminderService.SetSharedPropertyIDs(accessMod.SharedProperties)
+	notificationsMod.FreeReminderService.SetSharedPropertyIDs(accessMod.SharedProperties)
 
 	// 12. Popups service.
 	popupsMod := wire.WirePopups(p)

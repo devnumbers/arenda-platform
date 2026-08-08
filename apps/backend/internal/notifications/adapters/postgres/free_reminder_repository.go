@@ -122,9 +122,10 @@ func (r *FreeReminderRepository) Delete(ctx context.Context, scope, id uuid.UUID
 }
 
 // ListByOwner returns free reminders for an owner ordered by trigger_at.
-func (r *FreeReminderRepository) ListByOwner(ctx context.Context, scope uuid.UUID, limit, offset int) ([]domain.FreeReminder, error) {
+func (r *FreeReminderRepository) ListByOwner(ctx context.Context, scope uuid.UUID, limit, offset int, accessiblePropertyIDs []uuid.UUID) ([]domain.FreeReminder, error) {
 	rows, err := r.q().ListFreeRemindersByOwner(ctx, postgres.ListFreeRemindersByOwnerParams{
-		OwnerID: pgconv.UUIDToPgtype(scope),
+		OwnerID:               pgconv.UUIDToPgtype(scope),
+		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
 		//nolint:gosec // Pagination values are bounded by the transport layer.
 		Limit: int32(limit),
 		//nolint:gosec // Pagination values are bounded by the transport layer.
@@ -160,8 +161,11 @@ func (r *FreeReminderRepository) ListByProperty(ctx context.Context, scope, prop
 
 // ListTemplatesByOwner returns all free reminder templates for an owner with
 // their resolved property name (nullable for orphans), ordered by trigger_at.
-func (r *FreeReminderRepository) ListTemplatesByOwner(ctx context.Context, scope uuid.UUID) ([]domain.FreeReminderTemplate, error) {
-	rows, err := r.q().ListAllFreeRemindersByOwner(ctx, pgconv.UUIDToPgtype(scope))
+func (r *FreeReminderRepository) ListTemplatesByOwner(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID) ([]domain.FreeReminderTemplate, error) {
+	rows, err := r.q().ListAllFreeRemindersByOwner(ctx, postgres.ListAllFreeRemindersByOwnerParams{
+		OwnerID:               pgconv.UUIDToPgtype(scope),
+		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list all free reminders by owner: %w", err)
 	}

@@ -84,7 +84,7 @@ func (r handlerFakeLeaseRepo) GetByIDAndOwnerForUpdate(context.Context, uuid.UUI
 	return r.lease, nil
 }
 
-func (r handlerFakeLeaseRepo) ListByOwner(context.Context, uuid.UUID) ([]leasesdomain.Lease, error) {
+func (r handlerFakeLeaseRepo) ListByOwner(context.Context, uuid.UUID, []uuid.UUID) ([]leasesdomain.Lease, error) {
 	return nil, nil
 }
 
@@ -197,7 +197,7 @@ func (r *handlerFakeReminderRepo) GetByIDUnscoped(context.Context, uuid.UUID) (n
 	return notificationsdomain.Reminder{}, nil
 }
 
-func (r *handlerFakeReminderRepo) ListByOwner(context.Context, uuid.UUID, notificationsapp.ListFilter) ([]notificationsdomain.Reminder, error) {
+func (r *handlerFakeReminderRepo) ListByOwner(context.Context, uuid.UUID, notificationsapp.ListFilter, []uuid.UUID) ([]notificationsdomain.Reminder, error) {
 	return nil, nil
 }
 
@@ -227,7 +227,7 @@ func (r *handlerFakeReminderRepo) ListUpcomingFreeRemindersByProperty(context.Co
 	return nil, nil
 }
 
-func (r *handlerFakeReminderRepo) ListCalendarByOwner(context.Context, uuid.UUID, time.Time, time.Time) ([]notificationsdomain.CalendarReminder, error) {
+func (r *handlerFakeReminderRepo) ListCalendarByOwner(context.Context, uuid.UUID, time.Time, time.Time, []uuid.UUID) ([]notificationsdomain.CalendarReminder, error) {
 	return nil, nil
 }
 

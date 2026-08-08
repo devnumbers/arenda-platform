@@ -100,7 +100,7 @@ func (r *lockingFakeRecurringOperationRepo) GetByIDAndOwnerForUpdate(_ context.C
 	return rec, nil
 }
 
-func (r *lockingFakeRecurringOperationRepo) ListByOwner(_ context.Context, _ uuid.UUID) ([]domain.RecurringOperation, error) {
+func (r *lockingFakeRecurringOperationRepo) ListByOwner(_ context.Context, _ uuid.UUID, _ []uuid.UUID) ([]domain.RecurringOperation, error) {
 	return nil, nil
 }
 

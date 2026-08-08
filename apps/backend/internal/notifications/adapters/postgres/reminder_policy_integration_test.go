@@ -27,6 +27,7 @@ import (
 // bound to the test transaction and the real membership policy.
 type reminderPolicyFixture struct {
 	q        *genpostgres.Queries
+	tx       pgx.Tx
 	policy   *accessapp.MembershipPolicy
 	members  *accesspg.MembershipRepository
 	repo     *ReminderRepository
@@ -37,6 +38,7 @@ type reminderPolicyFixture struct {
 func newReminderPolicyFixture(tx pgx.Tx) *reminderPolicyFixture {
 	return &reminderPolicyFixture{
 		q:        genpostgres.New(tx),
+		tx:       tx,
 		policy:   accessapp.NewMembershipPolicy(accesspg.NewOwnerResolver(tx), accesspg.NewMembershipRepository(tx)),
 		members:  accesspg.NewMembershipRepository(tx),
 		repo:     NewReminderRepository(tx),
@@ -47,6 +49,15 @@ func newReminderPolicyFixture(tx pgx.Tx) *reminderPolicyFixture {
 
 func (f *reminderPolicyFixture) service() *application.ReminderService {
 	return application.NewReminderService(f.repo, f.clock, policyTestTzResolver{}, f.policy)
+}
+
+// serviceWithShared mirrors the production wiring where the SharedProperties
+// adapter is injected into ReminderService, so the aggregate list folds in the
+// actor's shared properties (issue #157).
+func (f *reminderPolicyFixture) serviceWithShared() *application.ReminderService {
+	svc := application.NewReminderService(f.repo, f.clock, policyTestTzResolver{}, f.policy)
+	svc.SetSharedPropertyIDs(accesspg.NewSharedProperties(f.tx))
+	return svc
 }
 
 // seedReminder inserts a pending free-target reminder on the owner's scope

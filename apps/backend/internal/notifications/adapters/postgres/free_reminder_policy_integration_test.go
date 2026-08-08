@@ -156,6 +156,7 @@ func addSuspendedPolicyMembership(t *testing.T, ctx context.Context, repo *acces
 // repository bound to the test transaction and the real membership policy.
 type freeReminderPolicyFixture struct {
 	q        *genpostgres.Queries
+	tx       pgx.Tx
 	policy   *accessapp.MembershipPolicy
 	members  *accesspg.MembershipRepository
 	repo     *FreeReminderRepository
@@ -166,6 +167,7 @@ type freeReminderPolicyFixture struct {
 func newFreeReminderPolicyFixture(tx pgx.Tx) *freeReminderPolicyFixture {
 	return &freeReminderPolicyFixture{
 		q:        genpostgres.New(tx),
+		tx:       tx,
 		policy:   accessapp.NewMembershipPolicy(accesspg.NewOwnerResolver(tx), accesspg.NewMembershipRepository(tx)),
 		members:  accesspg.NewMembershipRepository(tx),
 		repo:     NewFreeReminderRepository(tx),
@@ -176,6 +178,15 @@ func newFreeReminderPolicyFixture(tx pgx.Tx) *freeReminderPolicyFixture {
 
 func (f *freeReminderPolicyFixture) service() *application.FreeReminderService {
 	return application.NewFreeReminderService(f.repo, f.beginner, f.clock, policyTestTzResolver{}, f.policy)
+}
+
+// serviceWithShared mirrors the production wiring where the SharedProperties
+// adapter is injected into FreeReminderService, so the aggregate list folds in
+// the actor's shared properties (issue #157).
+func (f *freeReminderPolicyFixture) serviceWithShared() *application.FreeReminderService {
+	svc := application.NewFreeReminderService(f.repo, f.beginner, f.clock, policyTestTzResolver{}, f.policy)
+	svc.SetSharedPropertyIDs(accesspg.NewSharedProperties(f.tx))
+	return svc
 }
 
 func (f *freeReminderPolicyFixture) createInput(propertyID uuid.UUID) application.CreateFreeReminderInput {

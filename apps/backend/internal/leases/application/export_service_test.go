@@ -183,11 +183,11 @@ func (r *exportOperationRepo) GetPropertyOperationsSummary(_ context.Context, _,
 	return r.summary, r.summaryErr
 }
 
-func (r *exportOperationRepo) ListOverdueRentOperations(_ context.Context, _ uuid.UUID) ([]OverdueRentOperation, error) {
+func (r *exportOperationRepo) ListOverdueRentOperations(_ context.Context, _ uuid.UUID, _ []uuid.UUID) ([]OverdueRentOperation, error) {
 	return nil, nil
 }
 
-func (r *exportOperationRepo) ListNextRentPayments(_ context.Context, _ uuid.UUID, _ time.Time) ([]NextRentPayment, error) {
+func (r *exportOperationRepo) ListNextRentPayments(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _ time.Time) ([]NextRentPayment, error) {
 	return nil, nil
 }
 
@@ -247,7 +247,7 @@ func (r *exportLeaseRepo) GetByIDAndOwnerForUpdate(_ context.Context, _, _ uuid.
 	return domain.Lease{}, ErrNotFound
 }
 
-func (r *exportLeaseRepo) ListByOwner(_ context.Context, _ uuid.UUID) ([]domain.Lease, error) {
+func (r *exportLeaseRepo) ListByOwner(_ context.Context, _ uuid.UUID, _ []uuid.UUID) ([]domain.Lease, error) {
 	return nil, nil
 }
 

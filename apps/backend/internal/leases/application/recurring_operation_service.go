@@ -67,6 +67,20 @@ type RecurringOperationService struct {
 	tzResolver   sharedtz.OwnerTimezoneResolver
 	policy       sharedpolicy.Policy
 	logger       *slog.Logger
+	// sharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
+	// aggregate list covers only the actor's own recurring operations, when set
+	// it additionally includes recurring operations of properties shared with
+	// the actor (issue #157, T3), excluding archived shared properties.
+	sharedIDs SharedPropertyIDs
+}
+
+// SetSharedPropertyIDs injects the access-context adapter that resolves the
+// property ids shared with an actor via property membership (issue #157, T3).
+// Optional: when nil, ListRecurringOperations only returns the actor's own
+// recurring operations; when set, it additionally returns those of the shared
+// properties.
+func (s *RecurringOperationService) SetSharedPropertyIDs(ids SharedPropertyIDs) {
+	s.sharedIDs = ids
 }
 
 // ReminderLister lists reminders for the recurring operation command.
@@ -255,13 +269,22 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 	return created, nil
 }
 
-// ListRecurringOperations returns all recurring operations owned by the given
-// owner.
+// ListRecurringOperations returns the actor's own recurring operations plus,
+// when the shared-ids adapter is injected, recurring operations of properties
+// shared with the actor (issue #157, T3), excluding archived shared properties.
 func (s *RecurringOperationService) ListRecurringOperations(
 	ctx context.Context,
 	actor uuid.UUID,
 ) ([]domain.RecurringOperation, error) {
-	recs, err := s.recurringOps.ListByOwner(ctx, actor)
+	var accessible []uuid.UUID
+	if s.sharedIDs != nil {
+		shared, err := s.sharedIDs.SharedWith(ctx, actor)
+		if err != nil {
+			return nil, fmt.Errorf("list shared property ids: %w", err)
+		}
+		accessible = shared
+	}
+	recs, err := s.recurringOps.ListByOwner(ctx, actor, accessible)
 	if err != nil {
 		return nil, fmt.Errorf("list recurring operations: %w", err)
 	}

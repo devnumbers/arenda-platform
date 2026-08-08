@@ -230,16 +230,22 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
 
     const leaseQuery = useLease(id);
     const categoriesQuery = useOperationCategories('income');
-    const rentCategoryId = categoriesQuery.data?.find(
-        (category) => category.code === 'rent',
-    )?.id;
+    // Collect every rent category id across the actor's own and shared-access
+    // accounts: rent operations of a shared object belong to the owner's rent
+    // category, not the member's own, so a single find() would filter them out.
+    const rentCategoryIds = useMemo(
+        () => categoriesQuery.data
+            ?.filter((category) => category.code === 'rent')
+            .map((category) => category.id) ?? [],
+        [categoriesQuery.data],
+    );
     const rentOperationsQuery = useInfiniteOperations(
         {
             lease_id: id,
-            category_id: rentCategoryId ? [rentCategoryId] : undefined,
+            category_id: rentCategoryIds.length > 0 ? rentCategoryIds : undefined,
             sort: 'operation_date_asc',
         },
-        {enabled: Boolean(rentCategoryId)},
+        {enabled: rentCategoryIds.length > 0},
     );
     const {data: subscription, isPending: isSubscriptionPending} = useSubscription();
     const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
@@ -272,12 +278,12 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
     }, [leaseQuery]);
 
     const handleOperationsRetry = useCallback(() => {
-        if (!rentCategoryId) {
+        if (rentCategoryIds.length === 0) {
             categoriesQuery.refetch();
             return;
         }
         rentOperationsQuery.refetch();
-    }, [rentCategoryId, categoriesQuery, rentOperationsQuery]);
+    }, [rentCategoryIds, categoriesQuery, rentOperationsQuery]);
 
     const handleLoadMoreOperations = useCallback(() => {
         void rentOperationsQuery.fetchNextPage();
@@ -347,11 +353,11 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
                         operations={rentOperations}
                         isLoading={
                             rentOperationsQuery.isPending &&
-                            !(!rentCategoryId && categoriesQuery.isError)
+                            !(rentCategoryIds.length === 0 && categoriesQuery.isError)
                         }
                         isError={
                             (rentOperationsQuery.isError && !rentOperationsQuery.data) ||
-                            (!rentCategoryId && categoriesQuery.isError)
+                            (rentCategoryIds.length === 0 && categoriesQuery.isError)
                         }
                         isFetching={
                             rentOperationsQuery.isFetching ||

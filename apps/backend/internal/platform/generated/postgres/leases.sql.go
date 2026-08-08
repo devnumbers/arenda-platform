@@ -502,12 +502,19 @@ func (q *Queries) ListLeasesAdmin(ctx context.Context, arg ListLeasesAdminParams
 
 const listLeasesByOwner = `-- name: ListLeasesByOwner :many
 SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
-WHERE owner_id = $1
-ORDER BY updated_at DESC
+WHERE (leases.owner_id = $1
+       OR (leases.property_id = ANY($2::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = leases.property_id AND p.status = 'archived')))
+ORDER BY leases.updated_at DESC
 `
 
-func (q *Queries) ListLeasesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Lease, error) {
-	rows, err := q.db.Query(ctx, listLeasesByOwner, ownerID)
+type ListLeasesByOwnerParams struct {
+	OwnerID               pgtype.UUID   `json:"owner_id"`
+	AccessiblePropertyIds []pgtype.UUID `json:"accessible_property_ids"`
+}
+
+func (q *Queries) ListLeasesByOwner(ctx context.Context, arg ListLeasesByOwnerParams) ([]Lease, error) {
+	rows, err := q.db.Query(ctx, listLeasesByOwner, arg.OwnerID, arg.AccessiblePropertyIds)
 	if err != nil {
 		return nil, err
 	}

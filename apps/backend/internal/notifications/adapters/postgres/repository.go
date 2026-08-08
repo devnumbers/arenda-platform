@@ -167,10 +167,11 @@ func (r *ReminderRepository) GetByIDUnscoped(ctx context.Context, id uuid.UUID) 
 }
 
 // ListByOwner returns reminders for an owner with optional status filter.
-func (r *ReminderRepository) ListByOwner(ctx context.Context, scope uuid.UUID, filter application.ListFilter) ([]domain.Reminder, error) {
+func (r *ReminderRepository) ListByOwner(ctx context.Context, scope uuid.UUID, filter application.ListFilter, accessiblePropertyIDs []uuid.UUID) ([]domain.Reminder, error) {
 	params := postgres.ListRemindersByOwnerParams{
-		OwnerID:        pgconv.UUIDToPgtype(scope),
-		FilterByStatus: filter.Status != nil,
+		OwnerID:               pgconv.UUIDToPgtype(scope),
+		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
+		FilterByStatus:        filter.Status != nil,
 		//nolint:gosec // Pagination values are bounded by the transport layer.
 		Offset: int32(filter.Offset),
 		//nolint:gosec // Pagination values are bounded by the transport layer.
@@ -293,11 +294,12 @@ func (r *ReminderRepository) ListUpcomingFreeRemindersByProperty(ctx context.Con
 // ListCalendarByOwner returns non-cancelled, non-skipped operation and system
 // reminders for an owner in [from, to), each joined with its property name
 // (nil for orphans). Ordered by scheduled_at ascending.
-func (r *ReminderRepository) ListCalendarByOwner(ctx context.Context, scope uuid.UUID, from, to time.Time) ([]domain.CalendarReminder, error) {
+func (r *ReminderRepository) ListCalendarByOwner(ctx context.Context, scope uuid.UUID, from, to time.Time, accessiblePropertyIDs []uuid.UUID) ([]domain.CalendarReminder, error) {
 	rows, err := r.q().ListCalendarRemindersByOwner(ctx, postgres.ListCalendarRemindersByOwnerParams{
-		OwnerID:  pgconv.UUIDToPgtype(scope),
-		FromTime: pgtype.Timestamptz{Time: from, Valid: true},
-		ToTime:   pgtype.Timestamptz{Time: to, Valid: true},
+		OwnerID:               pgconv.UUIDToPgtype(scope),
+		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
+		FromTime:              pgtype.Timestamptz{Time: from, Valid: true},
+		ToTime:                pgtype.Timestamptz{Time: to, Valid: true},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list calendar reminders: %w", err)

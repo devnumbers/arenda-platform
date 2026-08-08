@@ -15,7 +15,10 @@ SELECT * FROM reminders WHERE id = $1;
 
 -- name: ListRemindersByOwner :many
 SELECT * FROM reminders
-WHERE owner_id = sqlc.arg('owner_id')
+WHERE (owner_id = sqlc.arg('owner_id')::uuid
+       OR (property_id IS NOT NULL
+           AND property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = reminders.property_id AND p.status = 'archived')))
   AND CASE
         WHEN sqlc.arg('filter_by_status')::boolean THEN status::text = sqlc.arg('status')::text
         ELSE true
@@ -231,7 +234,10 @@ LIMIT $4;
 SELECT sqlc.embed(r), p.name AS property_name
 FROM reminders r
 LEFT JOIN properties p ON p.id = r.property_id
-WHERE r.owner_id = sqlc.arg('owner_id')
+WHERE (r.owner_id = sqlc.arg('owner_id')::uuid
+       OR (r.property_id IS NOT NULL
+           AND r.property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[])
+           AND p.status IN ('active', 'maintenance')))
   AND r.target_type IN ('operation', 'recurring_operation', 'lease')
   AND r.status NOT IN ('cancelled', 'skipped')
   AND r.scheduled_at >= sqlc.arg('from_time')

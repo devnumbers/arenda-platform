@@ -55,7 +55,7 @@ func (r *fakeReminderRepoForWorker) GetByIDUnscoped(context.Context, uuid.UUID) 
 	return r.getByIDUnscoped, nil
 }
 
-func (r *fakeReminderRepoForWorker) ListByOwner(context.Context, uuid.UUID, application.ListFilter) ([]domain.Reminder, error) {
+func (r *fakeReminderRepoForWorker) ListByOwner(context.Context, uuid.UUID, application.ListFilter, []uuid.UUID) ([]domain.Reminder, error) {
 	return nil, nil
 }
 
@@ -83,7 +83,7 @@ func (r *fakeReminderRepoForWorker) ListUpcomingFreeRemindersByProperty(context.
 	return nil, nil
 }
 
-func (r *fakeReminderRepoForWorker) ListCalendarByOwner(context.Context, uuid.UUID, time.Time, time.Time) ([]domain.CalendarReminder, error) {
+func (r *fakeReminderRepoForWorker) ListCalendarByOwner(context.Context, uuid.UUID, time.Time, time.Time, []uuid.UUID) ([]domain.CalendarReminder, error) {
 	return nil, nil
 }
 

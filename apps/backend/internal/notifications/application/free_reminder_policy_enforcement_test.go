@@ -122,7 +122,7 @@ func (r *fakeFreeReminderRepo) Delete(_ context.Context, scope, id uuid.UUID) er
 	return nil
 }
 
-func (r *fakeFreeReminderRepo) ListByOwner(context.Context, uuid.UUID, int, int) ([]domain.FreeReminder, error) {
+func (r *fakeFreeReminderRepo) ListByOwner(context.Context, uuid.UUID, int, int, []uuid.UUID) ([]domain.FreeReminder, error) {
 	return nil, nil
 }
 
@@ -131,7 +131,7 @@ func (r *fakeFreeReminderRepo) ListByProperty(_ context.Context, scope, property
 	return nil, nil
 }
 
-func (r *fakeFreeReminderRepo) ListTemplatesByOwner(context.Context, uuid.UUID) ([]domain.FreeReminderTemplate, error) {
+func (r *fakeFreeReminderRepo) ListTemplatesByOwner(context.Context, uuid.UUID, []uuid.UUID) ([]domain.FreeReminderTemplate, error) {
 	return nil, nil
 }
 
