@@ -368,11 +368,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Self-exit from a shared property */
+        delete: operations["leaveProperty"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/free-reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get: operations["listPropertyFreeReminders"];
         put?: never;
         post: operations["createFreeReminder"];
-        /** Self-exit from a shared property */
-        delete: operations["leaveProperty"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3480,6 +3496,29 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    leaveProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Left the property */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     listPropertyFreeReminders: {
         parameters: {
             query?: {
@@ -3533,29 +3572,6 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    leaveProperty: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                propertyId: components["parameters"]["PropertyId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Left the property */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

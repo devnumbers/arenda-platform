@@ -831,6 +831,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/free-reminders:
     post:
       operationId: createFreeReminder
       security:
