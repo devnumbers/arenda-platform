@@ -2,7 +2,7 @@
 
 ## Scope
 
-Rules for the react-admin back-office SPA in `apps/admin`. Also follow the root `AGENTS.md`, `CONTEXT.md`, relevant product docs, and ADRs.
+Rules for the react-admin back-office SPA in `apps/admin`. Also follow the root `AGENTS.md`, the relevant per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`), relevant product docs, and ADRs.
 
 ## Stack & References
 

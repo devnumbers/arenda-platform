@@ -4,7 +4,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Scope
 
-Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.md`, `CONTEXT.md`, relevant product docs, and ADRs.
+Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.md`, the relevant per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`), relevant product docs, and ADRs.
 
 ## Stack & References
 

@@ -2,7 +2,7 @@
 
 ## Scope
 
-Rules for the Go backend in `apps/backend`. Also follow the root `AGENTS.md`, `CONTEXT.md`, relevant product docs, and ADRs.
+Rules for the Go backend in `apps/backend`. Also follow the root `AGENTS.md`, the relevant per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`), relevant product docs, and ADRs.
 
 ## Mandatory Backend Tools
 

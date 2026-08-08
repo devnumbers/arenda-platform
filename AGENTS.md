@@ -17,14 +17,14 @@ All coding agents in this repo — Kimi Code, ZCode, or any other harness — wo
 - Frontend: `apps/frontend`, a Next.js React application.
 - Admin: `apps/admin`, a Vite + React SPA built on react-admin 5 and MUI 7 — a separate stack from the Next.js frontend; its rules live in `apps/admin/AGENTS.md`.
 - Landing: `apps/landing`, a standalone Vite + React SPA (export from Figma Make) served by nginx as the public site at `/`.
-- Product docs: `docs/`; domain glossary: `CONTEXT.md`; architecture decisions: `docs/adr/`.
+- Product docs: `docs/`; domain glossary: `CONTEXT-MAP.md` (index) + per-context `CONTEXT.md` under `apps/backend/internal/<context>/`; architecture decisions: `docs/adr/`.
 - Local infrastructure runs through `docker-compose.local.yml`; run the backend on the host with Go.
 - Stage/prod deploy: GitHub Actions on a self-hosted runner builds images, pushes them to GHCR and deploys by digest over SSH (`docs/adr/0024-deploy-pipeline-ghcr-runner.md`). Environment values live in GitHub Environments (`ENV_FILE` secret, key set pinned to `.env.<env>.example`); nothing is built or hand-edited on the server. Operational procedures (bootstrap, secrets map, backup/restore, rollback) — `docs/deployment.md`.
 - Observability: the self-hosted Uptrace stack collecting stage/prod logs, traces, and metrics with email alerts lives in the devnumbers/observability repo (compose project `observability`, server directory `/opt/observability`). Consumer-side connection for stage/prod is documented in `docs/deployment.md` (section "Observability"); the decision history is in `docs/adr/0021-centralized-observability-uptrace.md` (superseded — transferred to devnumbers/observability ADR 0001).
 
 ## Work Rules
 
-- Before changing behavior, read `CONTEXT.md`, relevant docs under `docs/`, and relevant ADRs.
+- Before changing behavior, read the relevant per-context `CONTEXT.md` (start from `CONTEXT-MAP.md`), relevant docs under `docs/`, and relevant ADRs.
 - Check `git status` before edits and do not overwrite unrelated user changes.
 - Before adding new entities, helpers, use cases, interfaces, API contracts, or abstractions, search for existing equivalents and call sites with `Grep`, `lean-ctx`, and language-aware tools where available. Prefer existing project patterns over new conventions.
 - Use `lean-ctx` for broad repository exploration, large or generated files, noisy command output, and repeated reads. Before editing a file or relying on exact line-level behavior, read the relevant source in full or in precise raw ranges.
@@ -36,7 +36,7 @@ All coding agents in this repo — Kimi Code, ZCode, or any other harness — wo
 ## Workflow (Matt Pocock skills)
 
 Main flow (idea → ship):
-1. `/grill-with-docs` — interview to sharpen the idea before implementation (start here when there is a working directory; use `/grill-me` stateless when there is not). It challenges the plan against `CONTEXT.md`, `docs/`, and `docs/adr/`, and updates documentation only when a real glossary or ADR decision changes.
+1. `/grill-with-docs` — interview to sharpen the idea before implementation (start here when there is a working directory; use `/grill-me` stateless when there is not). It challenges the plan against the relevant per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`), `docs/`, and `docs/adr/`, and updates documentation only when a real glossary or ADR decision changes.
 2. For multi-session builds: `/to-spec` → `/to-tickets` (tracer-bullet vertical slices with blocking edges).
 3. `/implement` per ticket — runs `/tdd` inside on pre-agreed seams and closes with `/code-review`. `/clear` between tickets. For a single-session task, run `/implement` directly after grilling.
 
@@ -46,7 +46,7 @@ On-ramps (merge into the main flow):
 - `/wayfinder` — a huge, foggy effort; when the map is clear, hand off to `/to-spec`, not straight to `/implement`.
 - `/improve-codebase-architecture` — codebase health; a picked candidate feeds back into `/grill-with-docs`.
 
-Reference layer other skills invoke: `/domain-modeling` (domain language in `CONTEXT.md`), `/codebase-design` (deep-module vocabulary).
+Reference layer other skills invoke: `/domain-modeling` (domain language in per-context `CONTEXT.md` files), `/codebase-design` (deep-module vocabulary).
 
 `/tdd` and writing tests are invoked only when the user explicitly asks for them. Do not write tests or use TDD unless requested.
 
@@ -102,4 +102,4 @@ Default five canonical labels: `needs-triage`, `needs-info`, `ready-for-agent`, 
 
 ### Domain docs
 
-Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
+Multi-context: root `CONTEXT-MAP.md` (context index + shared kernel) + per-context `CONTEXT.md` co-located under `apps/backend/internal/<context>/` + `docs/adr/`. See `docs/agents/domain.md`.
