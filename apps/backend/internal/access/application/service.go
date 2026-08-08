@@ -97,7 +97,7 @@ func NewAccessService(
 // another full member — full members are equal in member management. Adding a
 // member to an archived property is rejected (issue #163).
 func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID uuid.UUID, role domain.Role) (domain.Membership, error) {
-	owner, err := s.requireManage(ctx, actor, propertyID)
+	owner, actorRole, err := s.requireManage(ctx, actor, propertyID)
 	if err != nil {
 		return domain.Membership{}, err
 	}
@@ -167,7 +167,7 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 	// member's email/phone are PII and must never appear in context (ADR 0020).
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(actorRole),
 		Action:     auditdomain.ActionPropertyMemberAdded,
 		EntityType: auditdomain.EntityPropertyMember,
 		EntityID:   &created.ID,
@@ -198,7 +198,8 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 // membership row, so it cannot be targeted here; the membership id must belong
 // to the given property.
 func (s *AccessService) ChangeMemberRole(ctx context.Context, actor, propertyID, memberID uuid.UUID, role domain.Role) (domain.Membership, error) {
-	if _, err := s.requireManage(ctx, actor, propertyID); err != nil {
+	_, actorRole, err := s.requireManage(ctx, actor, propertyID)
+	if err != nil {
 		return domain.Membership{}, err
 	}
 
@@ -222,7 +223,7 @@ func (s *AccessService) ChangeMemberRole(ctx context.Context, actor, propertyID,
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(actorRole),
 		Action:     auditdomain.ActionPropertyMemberUpdated,
 		EntityType: auditdomain.EntityPropertyMember,
 		EntityID:   &updated.ID,
@@ -244,7 +245,7 @@ func (s *AccessService) ChangeMemberRole(ctx context.Context, actor, propertyID,
 // RevokeMember removes a member's access. The owner cannot be revoked (and is
 // never a membership row); this guard exists for defence in depth.
 func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, memberID uuid.UUID) error {
-	owner, err := s.requireManage(ctx, actor, propertyID)
+	owner, actorRole, err := s.requireManage(ctx, actor, propertyID)
 	if err != nil {
 		return err
 	}
@@ -278,7 +279,7 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(actorRole),
 		Action:     auditdomain.ActionPropertyMemberRemoved,
 		EntityType: auditdomain.EntityPropertyMember,
 		EntityID:   &membership.ID,
@@ -355,7 +356,7 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionPropertyMemberLeft,
 		EntityType: auditdomain.EntityPropertyMember,
 		EntityID:   &membership.ID,
@@ -451,28 +452,31 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 }
 
 // requireManage resolves the actor's role on the property, requires the
-// manage-members capability, and returns the property owner id (scope). A
-// missing property or lack of access is mapped to ErrMemberNotFound to keep
-// object existence private.
-func (s *AccessService) requireManage(ctx context.Context, actor, propertyID uuid.UUID) (uuid.UUID, error) {
+// manage-members capability, and returns the property owner id (scope) and the
+// actor's role. A missing property or lack of access is mapped to
+// ErrMemberNotFound to keep object existence private. The role is returned so
+// callers can attribute audit entries to the actor's real role (issue #166
+// follow-up).
+func (s *AccessService) requireManage(ctx context.Context, actor, propertyID uuid.UUID) (uuid.UUID, sharedpolicy.Role, error) {
 	return requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
 }
 
 // requireManageAccess is the shared manage-members gate used by both the
-// membership and the invitation services (issue #161, T5).
-func requireManageAccess(ctx context.Context, policy sharedpolicy.Policy, owners PropertyOwnerResolver, actor, propertyID uuid.UUID) (uuid.UUID, error) {
+// membership and the invitation services (issue #161, T5). It returns the
+// property owner id (scope) and the actor's resolved role.
+func requireManageAccess(ctx context.Context, policy sharedpolicy.Policy, owners PropertyOwnerResolver, actor, propertyID uuid.UUID) (uuid.UUID, sharedpolicy.Role, error) {
 	role, err := policy.RoleForProperty(ctx, actor, propertyID)
 	if err != nil {
-		return uuid.UUID{}, fmt.Errorf("resolve role: %w", err)
+		return uuid.UUID{}, "", fmt.Errorf("resolve role: %w", err)
 	}
 	if !sharedpolicy.CanManageMembers(role) {
-		return uuid.UUID{}, domain.ErrMemberNotFound
+		return uuid.UUID{}, "", domain.ErrMemberNotFound
 	}
 	owner, err := owners.GetOwnerID(ctx, propertyID)
 	if err != nil {
-		return uuid.UUID{}, domain.ErrMemberNotFound
+		return uuid.UUID{}, "", domain.ErrMemberNotFound
 	}
-	return owner, nil
+	return owner, role, nil
 }
 
 // requireNotArchived is the shared archived-property gate for granting new
@@ -502,6 +506,22 @@ func toSharedRole(r domain.Role) sharedpolicy.Role {
 		return sharedpolicy.RoleViewer
 	default:
 		return sharedpolicy.RoleNone
+	}
+}
+
+// actorRoleFromPolicyRole maps a policy role to the audit actor role so
+// actions of shared-access members are attributed to their real role instead
+// of being masked as the owner's own (issue #166 follow-up). Roles that never
+// reach a Record call through the gates (suspended, none) and any unknown role
+// fall back to the historical owner attribution.
+func actorRoleFromPolicyRole(role sharedpolicy.Role) auditdomain.ActorRole {
+	switch role {
+	case sharedpolicy.RoleFullAccess:
+		return auditdomain.ActorRoleFullAccess
+	case sharedpolicy.RoleViewer:
+		return auditdomain.ActorRoleViewer
+	default:
+		return auditdomain.ActorRoleOwner
 	}
 }
 

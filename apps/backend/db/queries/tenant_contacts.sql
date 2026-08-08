@@ -7,6 +7,13 @@ RETURNING *;
 SELECT * FROM tenant_contacts
 WHERE id = $1 AND owner_id = $2;
 
+-- GetTenantContactByID is intentionally unscoped: it resolves the contact's
+-- data owner before the policy gate authorizes the actor (Property Sharing
+-- follow-up). Callers must not expose the result without a role check.
+-- name: GetTenantContactByID :one
+SELECT * FROM tenant_contacts
+WHERE id = $1;
+
 -- name: UpdateTenantContact :one
 UPDATE tenant_contacts
 SET name = $2,

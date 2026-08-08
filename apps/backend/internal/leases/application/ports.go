@@ -42,6 +42,11 @@ type PropertyContactRepository interface {
 type TenantContactRepository interface {
 	Create(ctx context.Context, scope uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error)
 	GetByIDAndOwner(ctx context.Context, id, scope uuid.UUID) (domain.TenantContact, error)
+	// GetByID returns a tenant contact by id without owner scoping. Used to
+	// resolve the entity's owner (scope) before applying the policy gate
+	// (Property Sharing follow-up); callers must not expose the result without
+	// a role check.
+	GetByID(ctx context.Context, id uuid.UUID) (domain.TenantContact, error)
 	ListByIDs(ctx context.Context, scope uuid.UUID, ids []uuid.UUID) ([]domain.TenantContact, error)
 	Update(ctx context.Context, scope uuid.UUID, contact domain.TenantContact) (domain.TenantContact, error)
 	ListByOwner(ctx context.Context, scope uuid.UUID) ([]domain.TenantContact, error)

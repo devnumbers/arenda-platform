@@ -82,6 +82,11 @@ func WireLeasesServices(
 		p.Logger,
 	)
 	tenantContactService := leasesapp.NewTenantContactService(tenantContactRepo, p.AuditRecorder, p.Logger)
+	// Both owner-wide services resolve the data owner of a property context
+	// through the leases property repository (Property Sharing follow-up); the
+	// policy is injected later via SetPolicy (see cmd/api/main.go).
+	repos.CategoryService.SetProperties(leasePropertyRepo)
+	tenantContactService.SetProperties(leasePropertyRepo)
 	operationService := leasesapp.NewOperationService(
 		repos.OperationRepo,
 		leasePropertyRepo,

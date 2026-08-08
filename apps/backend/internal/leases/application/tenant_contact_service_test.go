@@ -28,6 +28,15 @@ func (r *fakeTenantContactRepo) GetByIDAndOwner(ctx context.Context, id, ownerID
 	return domain.TenantContact{}, ErrNotFound
 }
 
+func (r *fakeTenantContactRepo) GetByID(ctx context.Context, id uuid.UUID) (domain.TenantContact, error) {
+	for _, c := range r.contacts {
+		if c.ID == id {
+			return c, nil
+		}
+	}
+	return domain.TenantContact{}, ErrNotFound
+}
+
 func (r *fakeTenantContactRepo) ListByIDs(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID) ([]domain.TenantContact, error) {
 	if r.err != nil {
 		return nil, r.err

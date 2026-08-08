@@ -109,7 +109,7 @@ func NewLeaseService(
 }
 
 func (s *LeaseService) CreateLease(ctx context.Context, actor uuid.UUID, cmd CreateLeaseCommand) (domain.Lease, error) {
-	scope, err := resolveWriteScope(ctx, s.policy, s.properties, actor, cmd.PropertyID)
+	role, scope, err := resolveWriteScope(ctx, s.policy, s.properties, actor, cmd.PropertyID)
 	if err != nil {
 		return domain.Lease{}, err
 	}
@@ -248,7 +248,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, actor uuid.UUID, cmd Cre
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionLeaseCreated,
 		EntityType: auditdomain.EntityLease,
 		EntityID:   &created.ID,
@@ -485,7 +485,7 @@ func (s *LeaseService) UpdateLease(ctx context.Context, actor, id uuid.UUID, cmd
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionLeaseUpdated,
 		EntityType: auditdomain.EntityLease,
 		EntityID:   &id,
@@ -619,7 +619,7 @@ func (s *LeaseService) CompleteLease(ctx context.Context, actor, id uuid.UUID) (
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionLeaseCompleted,
 		EntityType: auditdomain.EntityLease,
 		EntityID:   &id,

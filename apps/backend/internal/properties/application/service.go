@@ -587,7 +587,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionPropertyUpdated,
 		EntityType: auditdomain.EntityProperty,
 		EntityID:   &id,
@@ -1121,7 +1121,7 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, actor, propertyI
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionPropertyPhotoAdded,
 		EntityType: auditdomain.EntityPropertyPhoto,
 		EntityID:   &photoID,
@@ -1194,7 +1194,7 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionPropertyPhotoDeleted,
 		EntityType: auditdomain.EntityPropertyPhoto,
 		EntityID:   &photoID,
@@ -1304,4 +1304,20 @@ func updatedPropertyFields(cmd UpdatePropertyCommand) []string {
 		fields = append(fields, "status")
 	}
 	return fields
+}
+
+// actorRoleFromPolicyRole maps a policy role to the audit actor role so
+// actions of shared-access members are attributed to their real role instead
+// of being masked as the owner's own (issue #166 follow-up). Roles that never
+// reach a Record call through the write gates (suspended, none) and any
+// unknown role fall back to the historical owner attribution.
+func actorRoleFromPolicyRole(role sharedpolicy.Role) auditdomain.ActorRole {
+	switch role {
+	case sharedpolicy.RoleFullAccess:
+		return auditdomain.ActorRoleFullAccess
+	case sharedpolicy.RoleViewer:
+		return auditdomain.ActorRoleViewer
+	default:
+		return auditdomain.ActorRoleOwner
+	}
 }

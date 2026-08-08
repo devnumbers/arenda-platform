@@ -11,6 +11,7 @@ import (
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
 // CreatePropertyContactCommand carries the data needed to create a property contact.
@@ -33,6 +34,10 @@ type PropertyContactService struct {
 	db           txBeginner
 	audit        auditapp.Recorder
 	logger       *slog.Logger
+	// policy is injected after construction (see SetPolicy) because the
+	// membership-aware policy is built after the properties module in the
+	// composition root. When nil, the historical owner-only behaviour is kept.
+	policy sharedpolicy.Policy
 }
 
 // NewPropertyContactService creates a new property contact service.
@@ -46,8 +51,18 @@ func NewPropertyContactService(repo PropertyContactRepository, propertyRepo Prop
 	return &PropertyContactService{repo: repo, propertyRepo: propertyRepo, db: db, audit: audit, logger: logger}
 }
 
+// SetPolicy injects the authorization policy (Property Sharing follow-up). The
+// membership-aware policy is built after the properties module in the
+// composition root, so it is wired via this setter. When not set, only the
+// owner can read and write property contacts.
+func (s *PropertyContactService) SetPolicy(policy sharedpolicy.Policy) {
+	s.policy = policy
+}
+
 // CreatePropertyContact creates a contact for the given property. The property
-// must exist, belong to the owner, and not be archived.
+// must exist and not be archived. With the policy wired, a member with the edit
+// capability creates the contact in the account of the property's data owner
+// (Property Sharing follow-up); without it, only the owner can create contacts.
 func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, actor, propertyID uuid.UUID, cmd CreatePropertyContactCommand) (domain.PropertyContact, error) {
 	name := strings.TrimSpace(cmd.Name)
 	if name == "" {
@@ -62,6 +77,18 @@ func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, acto
 		return domain.PropertyContact{}, ErrInvalidInput
 	}
 
+	role := sharedpolicy.RoleOwner
+	if s.policy != nil {
+		r, err := s.policy.RoleForProperty(ctx, actor, propertyID)
+		if err != nil {
+			return domain.PropertyContact{}, fmt.Errorf("resolve role: %w", err)
+		}
+		if err := propertyContactWriteGate(r); err != nil {
+			return domain.PropertyContact{}, err
+		}
+		role = r
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return domain.PropertyContact{}, fmt.Errorf("begin tx: %w", err)
@@ -69,13 +96,14 @@ func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, acto
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txPropertyRepo := s.propertyRepo.WithTx(tx)
-	property, err := txPropertyRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, actor)
+	property, err := s.propertyForUpdate(ctx, txPropertyRepo, actor, propertyID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.PropertyContact{}, ErrNotFound
 		}
 		return domain.PropertyContact{}, fmt.Errorf("get property: %w", err)
 	}
+	scope := property.OwnerID
 	if property.Status == domain.PropertyStatusArchived {
 		return domain.PropertyContact{}, ErrArchivedProperty
 	}
@@ -88,7 +116,7 @@ func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, acto
 	contact := domain.PropertyContact{
 		ID:         id,
 		PropertyID: propertyID,
-		OwnerID:    actor,
+		OwnerID:    scope,
 		Name:       name,
 		Phone:      normalized,
 	}
@@ -102,7 +130,7 @@ func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, acto
 	// PII (name, phone) is never written to the audit context.
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionPropertyContactCreated,
 		EntityType: auditdomain.EntityPropertyContact,
 		EntityID:   &created.ID,
@@ -118,34 +146,33 @@ func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, acto
 
 // ListPropertyContacts returns all contacts of a property ordered by created_at
 // ASC. Reading contacts of an archived property is allowed; a missing or foreign
-// property returns ErrNotFound before any contact is read.
+// property returns ErrNotFound before any contact is read. With the policy
+// wired, any member with the view capability reads the contacts of the
+// property's data owner (Property Sharing follow-up).
 func (s *PropertyContactService) ListPropertyContacts(ctx context.Context, actor, propertyID uuid.UUID) ([]domain.PropertyContact, error) {
-	if _, err := s.propertyRepo.GetByIDAndOwner(ctx, propertyID, actor); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("get property: %w", err)
+	scope, err := s.readScope(ctx, actor, propertyID)
+	if err != nil {
+		return nil, err
 	}
 
-	contacts, err := s.repo.ListByProperty(ctx, propertyID, actor)
+	contacts, err := s.repo.ListByProperty(ctx, propertyID, scope)
 	if err != nil {
 		return nil, fmt.Errorf("list property contacts: %w", err)
 	}
 	return contacts, nil
 }
 
-// GetPropertyContact returns a single contact owned by the owner. Reading a
-// contact of an archived property is allowed; a missing or foreign contact
-// returns ErrNotFound.
+// GetPropertyContact returns a single contact. Reading a contact of an
+// archived property is allowed; a missing or foreign contact returns
+// ErrNotFound. With the policy wired, any member with the view capability
+// reads the contacts of the property's data owner (Property Sharing follow-up).
 func (s *PropertyContactService) GetPropertyContact(ctx context.Context, actor, propertyID, contactID uuid.UUID) (domain.PropertyContact, error) {
-	if _, err := s.propertyRepo.GetByIDAndOwner(ctx, propertyID, actor); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.PropertyContact{}, ErrNotFound
-		}
-		return domain.PropertyContact{}, fmt.Errorf("get property: %w", err)
+	scope, err := s.readScope(ctx, actor, propertyID)
+	if err != nil {
+		return domain.PropertyContact{}, err
 	}
 
-	contact, err := s.repo.GetByIDAndOwner(ctx, contactID, actor)
+	contact, err := s.repo.GetByIDAndOwner(ctx, contactID, scope)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.PropertyContact{}, ErrNotFound
@@ -158,11 +185,78 @@ func (s *PropertyContactService) GetPropertyContact(ctx context.Context, actor, 
 	return contact, nil
 }
 
-// UpdatePropertyContact applies a diff-patch to a property contact. The property
-// must exist, belong to the owner, and not be archived. Only provided fields are
-// changed.
+// readScope applies the shared-access read gate for property contacts and
+// returns the data owner (scope) for repository calls. Any role without the
+// view capability maps to ErrNotFound so the existence of a contact is never
+// revealed. Without the policy wired only the owner can read contacts (the
+// historical behaviour).
+func (s *PropertyContactService) readScope(ctx context.Context, actor, propertyID uuid.UUID) (uuid.UUID, error) {
+	if s.policy == nil {
+		if _, err := s.propertyRepo.GetByIDAndOwner(ctx, propertyID, actor); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return uuid.Nil, ErrNotFound
+			}
+			return uuid.Nil, fmt.Errorf("get property: %w", err)
+		}
+		return actor, nil
+	}
+
+	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("resolve role: %w", err)
+	}
+	if !sharedpolicy.CanView(role) {
+		return uuid.Nil, ErrNotFound
+	}
+	property, err := s.propertyRepo.GetByID(ctx, propertyID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return uuid.Nil, ErrNotFound
+		}
+		return uuid.Nil, fmt.Errorf("get property: %w", err)
+	}
+	return property.OwnerID, nil
+}
+
+// UpdatePropertyContact applies a diff-patch to a property contact. The
+// property must exist and not be archived. Only provided fields are changed.
+// With the policy wired, a member with the edit capability updates the contacts
+// of the property's data owner (Property Sharing follow-up); without it, only
+// the owner can update contacts.
 func (s *PropertyContactService) UpdatePropertyContact(ctx context.Context, actor, propertyID, contactID uuid.UUID, cmd UpdatePropertyContactCommand) (domain.PropertyContact, error) {
-	contact, err := s.repo.GetByIDAndOwner(ctx, contactID, actor)
+	role := sharedpolicy.RoleOwner
+	if s.policy != nil {
+		r, err := s.policy.RoleForProperty(ctx, actor, propertyID)
+		if err != nil {
+			return domain.PropertyContact{}, fmt.Errorf("resolve role: %w", err)
+		}
+		if err := propertyContactWriteGate(r); err != nil {
+			return domain.PropertyContact{}, err
+		}
+		role = r
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return domain.PropertyContact{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txPropertyRepo := s.propertyRepo.WithTx(tx)
+	property, err := s.propertyForUpdate(ctx, txPropertyRepo, actor, propertyID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.PropertyContact{}, ErrNotFound
+		}
+		return domain.PropertyContact{}, fmt.Errorf("get property: %w", err)
+	}
+	scope := property.OwnerID
+	if property.Status == domain.PropertyStatusArchived {
+		return domain.PropertyContact{}, ErrArchivedProperty
+	}
+
+	txContactRepo := s.repo.WithTx(tx)
+	contact, err := txContactRepo.GetByIDAndOwner(ctx, contactID, scope)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.PropertyContact{}, ErrNotFound
@@ -188,26 +282,7 @@ func (s *PropertyContactService) UpdatePropertyContact(ctx context.Context, acto
 		contact.Phone = normalized
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.PropertyContact{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txPropertyRepo := s.propertyRepo.WithTx(tx)
-	property, err := txPropertyRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, actor)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.PropertyContact{}, ErrNotFound
-		}
-		return domain.PropertyContact{}, fmt.Errorf("get property: %w", err)
-	}
-	if property.Status == domain.PropertyStatusArchived {
-		return domain.PropertyContact{}, ErrArchivedProperty
-	}
-
-	txContactRepo := s.repo.WithTx(tx)
-	updated, err := txContactRepo.Update(ctx, actor, contact)
+	updated, err := txContactRepo.Update(ctx, scope, contact)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.PropertyContact{}, ErrNotFound
@@ -218,7 +293,7 @@ func (s *PropertyContactService) UpdatePropertyContact(ctx context.Context, acto
 	// PII (name, phone) is never written to the audit context.
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionPropertyContactUpdated,
 		EntityType: auditdomain.EntityPropertyContact,
 		EntityID:   &updated.ID,
@@ -233,9 +308,23 @@ func (s *PropertyContactService) UpdatePropertyContact(ctx context.Context, acto
 	return updated, nil
 }
 
-// DeletePropertyContact removes a property contact. The property must exist,
-// belong to the owner, and not be archived.
+// DeletePropertyContact removes a property contact. The property must exist
+// and not be archived. With the policy wired, a member with the edit capability
+// deletes the contacts of the property's data owner (Property Sharing
+// follow-up); without it, only the owner can delete contacts.
 func (s *PropertyContactService) DeletePropertyContact(ctx context.Context, actor, propertyID, contactID uuid.UUID) error {
+	role := sharedpolicy.RoleOwner
+	if s.policy != nil {
+		r, err := s.policy.RoleForProperty(ctx, actor, propertyID)
+		if err != nil {
+			return fmt.Errorf("resolve role: %w", err)
+		}
+		if err := propertyContactWriteGate(r); err != nil {
+			return err
+		}
+		role = r
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -243,19 +332,20 @@ func (s *PropertyContactService) DeletePropertyContact(ctx context.Context, acto
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txPropertyRepo := s.propertyRepo.WithTx(tx)
-	property, err := txPropertyRepo.GetByIDAndOwnerForUpdate(ctx, propertyID, actor)
+	property, err := s.propertyForUpdate(ctx, txPropertyRepo, actor, propertyID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
 		}
 		return fmt.Errorf("get property: %w", err)
 	}
+	scope := property.OwnerID
 	if property.Status == domain.PropertyStatusArchived {
 		return ErrArchivedProperty
 	}
 
 	txContactRepo := s.repo.WithTx(tx)
-	contact, err := txContactRepo.GetByIDAndOwner(ctx, contactID, actor)
+	contact, err := txContactRepo.GetByIDAndOwner(ctx, contactID, scope)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
@@ -266,14 +356,14 @@ func (s *PropertyContactService) DeletePropertyContact(ctx context.Context, acto
 		return ErrNotFound
 	}
 
-	if err := txContactRepo.Delete(ctx, contactID, actor); err != nil {
+	if err := txContactRepo.Delete(ctx, contactID, scope); err != nil {
 		return fmt.Errorf("delete property contact: %w", err)
 	}
 
 	// PII (name, phone) is never written to the audit context.
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionPropertyContactDeleted,
 		EntityType: auditdomain.EntityPropertyContact,
 		EntityID:   &contactID,
@@ -283,6 +373,29 @@ func (s *PropertyContactService) DeletePropertyContact(ctx context.Context, acto
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
+// propertyForUpdate fetches the property inside a write transaction. With the
+// policy wired the fetch is unscoped (the role gate has already authorized the
+// actor); without it the historical owner-scoped fetch is kept.
+func (s *PropertyContactService) propertyForUpdate(ctx context.Context, repo PropertyRepository, actor, propertyID uuid.UUID) (domain.Property, error) {
+	if s.policy != nil {
+		return repo.GetByIDForUpdate(ctx, propertyID)
+	}
+	return repo.GetByIDAndOwnerForUpdate(ctx, propertyID, actor)
+}
+
+// propertyContactWriteGate maps a resolved role to the write-gate outcome for
+// property contacts (Property Sharing follow-up): none/suspended map to
+// ErrNotFound (object privacy), a view-only role to ErrForbidden.
+func propertyContactWriteGate(role sharedpolicy.Role) error {
+	if role == sharedpolicy.RoleNone || role == sharedpolicy.RoleSuspended {
+		return ErrNotFound
+	}
+	if !sharedpolicy.CanEdit(role) {
+		return ErrForbidden
 	}
 	return nil
 }

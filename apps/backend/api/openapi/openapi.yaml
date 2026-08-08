@@ -1478,6 +1478,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
   /finance/report:
@@ -4419,7 +4421,7 @@ components:
           nullable: true
         actorRole:
           type: string
-          enum: [owner, admin, system, anonymous]
+          enum: [owner, admin, system, anonymous, full_access, viewer]
         action:
           type: string
         entityType:
@@ -4903,6 +4905,16 @@ components:
           type: string
         comment:
           type: string
+        property_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Optional property context. When set, the contact is created in the
+            account of the property's data owner and requires the edit
+            capability on that property (shared access); a viewer gets 403 and
+            an actor without access gets 404. When absent, the contact is
+            created in the actor's own account.
 
     TenantContactUpdateRequest:
       type: object
@@ -5204,6 +5216,16 @@ components:
           $ref: '#/components/schemas/OperationType'
         name:
           type: string
+        property_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Optional property context. When set, the category is created in the
+            account of the property's data owner and requires the edit
+            capability on that property (shared access); a viewer gets 403 and
+            an actor without access gets 404. When absent, the category is
+            created in the actor's own account.
 
     OperationStatus:
       type: string

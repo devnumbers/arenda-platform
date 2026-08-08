@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,17 +27,29 @@ func NewLeasePresenter(tenantContactSvc *leasesapp.TenantContactService) *LeaseP
 	return &LeasePresenter{tenantContactSvc: tenantContactSvc}
 }
 
-func (p *LeasePresenter) tenantContactIDs(ctx context.Context, actor uuid.UUID, leases []leasesdomain.Lease) (map[uuid.UUID]leasesdomain.TenantContact, error) {
-	ids := make([]uuid.UUID, 0, len(leases))
+func (p *LeasePresenter) tenantContactIDs(ctx context.Context, _ uuid.UUID, leases []leasesdomain.Lease) (map[uuid.UUID]leasesdomain.TenantContact, error) {
+	// Group contact ids by the lease's data owner: leases of a shared property
+	// reference the owner's tenant contacts, so scoping the lookup by the actor
+	// would miss them (Property Sharing follow-up). CanView is already enforced
+	// by the calling service for every lease passed here.
+	idsByOwner := make(map[uuid.UUID][]uuid.UUID, len(leases))
 	for _, lease := range leases {
 		if lease.TenantContactID != nil && *lease.TenantContactID != uuid.Nil {
-			ids = append(ids, *lease.TenantContactID)
+			idsByOwner[lease.OwnerID] = append(idsByOwner[lease.OwnerID], *lease.TenantContactID)
 		}
 	}
-	if len(ids) == 0 {
+	if len(idsByOwner) == 0 {
 		return map[uuid.UUID]leasesdomain.TenantContact{}, nil
 	}
-	return p.tenantContactSvc.ListTenantContactsByIDs(ctx, actor, ids)
+	result := make(map[uuid.UUID]leasesdomain.TenantContact, len(idsByOwner))
+	for owner, ids := range idsByOwner {
+		contacts, err := p.tenantContactSvc.ListTenantContactsByIDs(ctx, owner, ids)
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(result, contacts)
+	}
+	return result, nil
 }
 
 // TenantContactIDs resolves the distinct tenant contacts referenced by the

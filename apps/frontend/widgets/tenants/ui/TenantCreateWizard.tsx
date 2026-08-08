@@ -1,6 +1,6 @@
 'use client';
 
-import {type JSX, useCallback, useState} from 'react';
+import {type JSX, useCallback, useMemo, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {useCreateTenantContact} from '@/features/tenant-contacts/api';
 import {notify} from '@/shared/lib/notifications';
@@ -18,12 +18,24 @@ export type TenantCreateWizardProps = {
     readonly returnTo?: string;
 };
 
+const UUID_REGEX = /^[0-9a-fA-F-]{36}$/;
+
 export function TenantCreateWizard({returnTo}: TenantCreateWizardProps): JSX.Element {
     const router = useRouter();
     const {draft, isLoaded, setDraft, clearDraft} = useTenantCreateDraft();
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const createTenantContact = useCreateTenantContact();
+
+    // The lease create wizard links here with returnTo=/leases/new?propertyId=<id>.
+    // In that property context the contact is created in the account of the
+    // property's data owner (shared-access follow-up); without the context the
+    // historical own-account behaviour is kept.
+    const propertyId = useMemo(() => {
+        const query = returnTo?.split('?')[1];
+        const value = query ? new URLSearchParams(query).get('propertyId') : null;
+        return value && UUID_REGEX.test(value) ? value : undefined;
+    }, [returnTo]);
 
     const handleClose = () => {
         clearDraft();
@@ -58,6 +70,7 @@ export function TenantCreateWizard({returnTo}: TenantCreateWizardProps): JSX.Ele
                 phone: data.phone.trim() || undefined,
                 email: data.email.trim() || undefined,
                 comment: data.comment.trim() || undefined,
+                ...(propertyId ? { property_id: propertyId } : {}),
             });
 
             if (returnTo) {

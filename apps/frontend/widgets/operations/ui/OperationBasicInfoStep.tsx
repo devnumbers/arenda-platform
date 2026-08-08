@@ -79,6 +79,7 @@ export function OperationBasicInfoStep({
           onChange={(category) => onChange({ ...data, category })}
           error={errors?.category}
           disabled={readonly}
+          propertyId={data.propertyId}
         />
         <PropertySelect
           value={data.propertyId}

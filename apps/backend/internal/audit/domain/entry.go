@@ -15,6 +15,14 @@ const (
 	ActorRoleAdmin     ActorRole = "admin"
 	ActorRoleSystem    ActorRole = "system"
 	ActorRoleAnonymous ActorRole = "anonymous"
+	// ActorRoleFullAccess and ActorRoleViewer attribute property-scoped actions
+	// to a shared-access member instead of masking them as the owner's own
+	// (Property Sharing follow-up, issue #166). The strings are identical to
+	// the shared/policy Role values; the mapping lives in each calling module
+	// because audit must not depend on shared/policy. Suspended/none actors
+	// never reach a write path, so they have no ActorRole.
+	ActorRoleFullAccess ActorRole = "full_access"
+	ActorRoleViewer     ActorRole = "viewer"
 )
 
 // Action is a dotted "<module>.<verb>" identifier of an auditable action.

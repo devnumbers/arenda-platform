@@ -345,6 +345,21 @@ func (r *TenantContactRepository) GetByIDAndOwner(ctx context.Context, id, scope
 	return tenantContactFromRow(row), nil
 }
 
+// GetByID returns a tenant contact by id without owner scoping. Used to
+// resolve the entity's owner (scope) before applying the policy gate
+// (Property Sharing follow-up); callers must not expose the result without a
+// role check.
+func (r *TenantContactRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.TenantContact, error) {
+	row, err := r.q().GetTenantContactByID(ctx, pgconv.UUIDToPgtype(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.TenantContact{}, application.ErrNotFound
+		}
+		return domain.TenantContact{}, err
+	}
+	return tenantContactFromRow(row), nil
+}
+
 func (r *TenantContactRepository) ListByOwner(ctx context.Context, scope uuid.UUID) ([]domain.TenantContact, error) {
 	rows, err := r.q().ListTenantContactsByOwner(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {

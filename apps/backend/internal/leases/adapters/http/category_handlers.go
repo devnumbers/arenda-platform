@@ -49,6 +49,8 @@ func (h *CategoryHandlers) handleCategoryError(w http.ResponseWriter, r *http.Re
 		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
 		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Категория не найдена"))
+	case errors.Is(err, leasesapp.ErrForbidden):
+		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для создания категории"))
 	case errors.Is(err, leasesapp.ErrDuplicateCategoryName):
 		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Категория с таким названием уже существует"))
 	default:
@@ -105,8 +107,9 @@ func (h *CategoryHandlers) CreateOperationCategory(w http.ResponseWriter, r *htt
 	}
 
 	category, err := h.svc.CreateCategory(r.Context(), actor, leasesapp.CreateOperationCategoryCommand{
-		Type: string(body.Type),
-		Name: body.Name,
+		Type:       string(body.Type),
+		Name:       body.Name,
+		PropertyID: body.PropertyId,
 	})
 	if err != nil {
 		h.handleCategoryError(w, r, err)

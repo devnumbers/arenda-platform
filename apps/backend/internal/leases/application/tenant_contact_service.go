@@ -22,6 +22,10 @@ type CreateTenantContactCommand struct {
 	Phone      *string
 	Email      *string
 	Comment    *string
+	// PropertyID carries the optional property context: when set, the contact
+	// is created in the account of the property's data owner after the
+	// shared-access write gate (issue #157 follow-up).
+	PropertyID *uuid.UUID
 }
 
 // UpdateTenantContactCommand carries the optional updates for a tenant contact.
@@ -47,6 +51,10 @@ type TenantContactService struct {
 	// scopes is optionally injected (see SetAccessibleScopes); when nil only the
 	// actor's own contacts are listed.
 	scopes AccessibleScopes
+	// properties resolves the data owner of a property for owner-wide writes
+	// issued in a property context (Property Sharing follow-up). Injected via
+	// SetProperties; when nil a property context cannot be resolved.
+	properties PropertyRepository
 }
 
 // NewTenantContactService creates a new tenant contact service.
@@ -75,7 +83,16 @@ func (s *TenantContactService) SetAccessibleScopes(scopes AccessibleScopes) {
 	s.scopes = scopes
 }
 
-// CreateTenantContact creates a tenant contact for the given owner.
+// SetProperties injects the property repository used to resolve the data
+// owner of a property context on writes (Property Sharing follow-up).
+func (s *TenantContactService) SetProperties(properties PropertyRepository) {
+	s.properties = properties
+}
+
+// CreateTenantContact creates a tenant contact. Without a property context
+// the contact is created in the actor's own account; with cmd.PropertyID set
+// it is created in the account of the property's data owner after the
+// shared-access write gate (issue #157 follow-up, card #145 decision).
 func (s *TenantContactService) CreateTenantContact(ctx context.Context, actor uuid.UUID, cmd CreateTenantContactCommand) (domain.TenantContact, error) {
 	if strings.TrimSpace(cmd.Name) == "" {
 		return domain.TenantContact{}, ErrInvalidInput
@@ -95,6 +112,11 @@ func (s *TenantContactService) CreateTenantContact(ctx context.Context, actor uu
 		}
 	}
 
+	role, scope, err := resolveOwnerWideWriteScope(ctx, s.policy, s.properties, actor, cmd.PropertyID)
+	if err != nil {
+		return domain.TenantContact{}, err
+	}
+
 	id, err := uuid.NewV7()
 	if err != nil {
 		return domain.TenantContact{}, fmt.Errorf("generate tenant contact id: %w", err)
@@ -102,7 +124,7 @@ func (s *TenantContactService) CreateTenantContact(ctx context.Context, actor uu
 
 	contact := domain.TenantContact{
 		ID:         id,
-		OwnerID:    actor,
+		OwnerID:    scope,
 		Name:       cmd.Name,
 		Surname:    cmd.Surname,
 		Patronymic: cmd.Patronymic,
@@ -111,7 +133,7 @@ func (s *TenantContactService) CreateTenantContact(ctx context.Context, actor uu
 		Comment:    cmd.Comment,
 	}
 
-	created, err := s.repo.Create(ctx, actor, contact)
+	created, err := s.repo.Create(ctx, scope, contact)
 	if err != nil {
 		return domain.TenantContact{}, fmt.Errorf("create tenant contact: %w", err)
 	}
@@ -122,7 +144,7 @@ func (s *TenantContactService) CreateTenantContact(ctx context.Context, actor uu
 	// Tenant PII (name, phone, email) is never written to the audit context.
 	if err := s.audit.Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionTenantContactCreated,
 		EntityType: auditdomain.EntityTenantContact,
 		EntityID:   &created.ID,
@@ -132,27 +154,66 @@ func (s *TenantContactService) CreateTenantContact(ctx context.Context, actor uu
 	return created, nil
 }
 
-// GetTenantContact returns a tenant contact owned by the given owner.
+// GetTenantContact returns a tenant contact. The contact's data owner is
+// resolved unscoped, then the actor's owner-wide role is gated by the policy
+// port (Property Sharing follow-up): any member with the view capability reads
+// the owner's contacts, anyone without access gets ErrNotFound. Without the
+// policy wired the historical owner-only behaviour is kept.
 func (s *TenantContactService) GetTenantContact(ctx context.Context, actor, id uuid.UUID) (domain.TenantContact, error) {
-	contact, err := s.repo.GetByIDAndOwner(ctx, id, actor)
+	contact, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.TenantContact{}, ErrNotFound
 		}
 		return domain.TenantContact{}, fmt.Errorf("get tenant contact: %w", err)
+	}
+
+	if s.policy == nil {
+		if actor != contact.OwnerID {
+			return domain.TenantContact{}, ErrNotFound
+		}
+		return contact, nil
+	}
+	role, err := s.policy.Role(ctx, actor, contact.OwnerID)
+	if err != nil {
+		return domain.TenantContact{}, fmt.Errorf("resolve role: %w", err)
+	}
+	if !sharedpolicy.CanView(role) {
+		return domain.TenantContact{}, ErrNotFound
 	}
 	return contact, nil
 }
 
-// UpdateTenantContact updates a tenant contact owned by the given owner.
+// UpdateTenantContact updates a tenant contact. The contact's data owner is
+// resolved unscoped, then the actor's owner-wide role is gated by the policy
+// port (Property Sharing follow-up): a full-access member edits the owner's
+// contacts, a viewer gets ErrForbidden, and anyone without access gets
+// ErrNotFound. Without the policy wired the historical owner-only behaviour
+// is kept.
 func (s *TenantContactService) UpdateTenantContact(ctx context.Context, actor, id uuid.UUID, cmd UpdateTenantContactCommand) (domain.TenantContact, error) {
-	contact, err := s.repo.GetByIDAndOwner(ctx, id, actor)
+	contact, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.TenantContact{}, ErrNotFound
 		}
 		return domain.TenantContact{}, fmt.Errorf("get tenant contact: %w", err)
 	}
+
+	role := sharedpolicy.RoleOwner
+	if s.policy == nil {
+		if actor != contact.OwnerID {
+			return domain.TenantContact{}, ErrNotFound
+		}
+	} else {
+		role, err = s.policy.Role(ctx, actor, contact.OwnerID)
+		if err != nil {
+			return domain.TenantContact{}, fmt.Errorf("resolve role: %w", err)
+		}
+		if err := writeRoleGate(role); err != nil {
+			return domain.TenantContact{}, err
+		}
+	}
+	scope := contact.OwnerID
 
 	if cmd.Name != nil {
 		name := strings.TrimSpace(*cmd.Name)
@@ -209,7 +270,7 @@ func (s *TenantContactService) UpdateTenantContact(ctx context.Context, actor, i
 		}
 	}
 
-	updated, err := s.repo.Update(ctx, actor, contact)
+	updated, err := s.repo.Update(ctx, scope, contact)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.TenantContact{}, ErrNotFound
@@ -221,7 +282,7 @@ func (s *TenantContactService) UpdateTenantContact(ctx context.Context, actor, i
 	// error is returned deliberately to surface audit gaps. Retries are safe.
 	if err := s.audit.Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionTenantContactUpdated,
 		EntityType: auditdomain.EntityTenantContact,
 		EntityID:   &id,

@@ -1,6 +1,7 @@
 package application
 
 import (
+	"errors"
 	"slices"
 	"testing"
 
@@ -211,4 +212,77 @@ func TestTenantContactService_ListTenantContacts_NilSafe_OnlyScopes(t *testing.T
 	if len(got) != 1 {
 		t.Fatalf("got %d contacts, want 1 (nil policy -> own only): %+v", len(got), got)
 	}
+}
+
+// TestTenantContactService_GetTenantContact_DerivedAccess verifies the
+// owner-wide read gate on get-by-id (Property Sharing follow-up): members with
+// the view capability read the owner's contact, a stranger gets ErrNotFound,
+// and without the policy wired the historical owner-only behaviour is kept.
+func TestTenantContactService_GetTenantContact_DerivedAccess(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	owner := uuid.New()
+	memberFull := uuid.New()
+	memberViewer := uuid.New()
+	stranger := uuid.New()
+
+	ownerContact := domain.TenantContact{ID: uuid.New(), OwnerID: owner, Name: "Owner Contact"}
+	repo := &fakeTenantContactRepo{contacts: []domain.TenantContact{ownerContact}}
+
+	policy := fakePolicy{
+		roles: map[[2]uuid.UUID]sharedpolicy.Role{
+			{memberFull, owner}:   sharedpolicy.RoleFullAccess,
+			{memberViewer, owner}: sharedpolicy.RoleViewer,
+			// stranger has no entry -> RoleNone.
+		},
+	}
+
+	tests := []struct {
+		name    string
+		actor   uuid.UUID
+		wantErr bool
+	}{
+		{"owner reads own", owner, false},
+		{"member with full access reads owner contact", memberFull, false},
+		{"member with viewer reads owner contact", memberViewer, false},
+		{"stranger gets not found (none)", stranger, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			svc := NewTenantContactService(repo, nil, nil)
+			svc.SetPolicy(policy)
+
+			got, err := svc.GetTenantContact(ctx, tt.actor, ownerContact.ID)
+			if tt.wantErr {
+				if !errors.Is(err, ErrNotFound) {
+					t.Fatalf("expected ErrNotFound, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got.ID != ownerContact.ID {
+				t.Fatalf("got contact %v, want %v", got.ID, ownerContact.ID)
+			}
+		})
+	}
+
+	t.Run("nil policy keeps owner-only behaviour", func(t *testing.T) {
+		t.Parallel()
+		svc := NewTenantContactService(repo, nil, nil) // no SetPolicy
+
+		if _, err := svc.GetTenantContact(ctx, stranger, ownerContact.ID); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+		got, err := svc.GetTenantContact(ctx, owner, ownerContact.ID)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.ID != ownerContact.ID {
+			t.Fatalf("got contact %v, want %v", got.ID, ownerContact.ID)
+		}
+	})
 }

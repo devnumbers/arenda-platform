@@ -21,6 +21,10 @@ type CategoryService struct {
 	// scopes is optionally injected (see SetAccessibleScopes); when nil only the
 	// actor's own categories are listed.
 	scopes AccessibleScopes
+	// properties resolves the data owner of a property for owner-wide writes
+	// issued in a property context (Property Sharing follow-up). Injected via
+	// SetProperties; when nil a property context cannot be resolved.
+	properties PropertyRepository
 }
 
 func NewCategoryService(categories OperationCategoryRepository, audit auditapp.Recorder) *CategoryService {
@@ -47,6 +51,16 @@ func (s *CategoryService) SetAccessibleScopes(scopes AccessibleScopes) {
 	s.scopes = scopes
 }
 
+// SetProperties injects the property repository used to resolve the data
+// owner of a property context on writes (Property Sharing follow-up).
+func (s *CategoryService) SetProperties(properties PropertyRepository) {
+	s.properties = properties
+}
+
+// CreateCategory creates a custom category. Without a property context the
+// category is created in the actor's own account; with cmd.PropertyID set it
+// is created in the account of the property's data owner after the
+// shared-access write gate (issue #157 follow-up, card #145 decision).
 func (s *CategoryService) CreateCategory(ctx context.Context, actor uuid.UUID, cmd CreateOperationCategoryCommand) (domain.OperationCategory, error) {
 	if err := cmd.validate(); err != nil {
 		return domain.OperationCategory{}, err
@@ -55,7 +69,11 @@ func (s *CategoryService) CreateCategory(ctx context.Context, actor uuid.UUID, c
 	if err != nil {
 		return domain.OperationCategory{}, newInvalidInputError(err.Error())
 	}
-	created, err := s.categories.Create(ctx, actor, opType, cmd.Name)
+	role, scope, err := resolveOwnerWideWriteScope(ctx, s.policy, s.properties, actor, cmd.PropertyID)
+	if err != nil {
+		return domain.OperationCategory{}, err
+	}
+	created, err := s.categories.Create(ctx, scope, opType, cmd.Name)
 	if err != nil {
 		return domain.OperationCategory{}, err
 	}
@@ -64,7 +82,7 @@ func (s *CategoryService) CreateCategory(ctx context.Context, actor uuid.UUID, c
 	// duplicate the category — acceptable for this entity.
 	if err := s.audit.Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionOperationCategoryCreated,
 		EntityType: auditdomain.EntityOperationCategory,
 		EntityID:   &created.ID,
@@ -138,6 +156,10 @@ func (s *CategoryService) SeedDefaultCategories(ctx context.Context, actor uuid.
 type CreateOperationCategoryCommand struct {
 	Type string
 	Name string
+	// PropertyID carries the optional property context: when set, the category
+	// is created in the account of the property's data owner after the
+	// shared-access write gate (issue #157 follow-up).
+	PropertyID *uuid.UUID
 }
 
 func (c CreateOperationCategoryCommand) validate() error {

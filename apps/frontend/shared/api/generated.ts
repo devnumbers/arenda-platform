@@ -529,6 +529,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/{id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["moveOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operation-categories": {
         parameters: {
             query?: never;
@@ -1762,7 +1778,7 @@ export interface components {
             /** Format: uuid */
             actorId?: string | null;
             /** @enum {string} */
-            actorRole: "owner" | "admin" | "system" | "anonymous";
+            actorRole: "owner" | "admin" | "system" | "anonymous" | "full_access" | "viewer";
             action: string;
             entityType?: string | null;
             /** Format: uuid */
@@ -1993,6 +2009,11 @@ export interface components {
             phone?: string;
             email?: string;
             comment?: string;
+            /**
+             * Format: uuid
+             * @description Optional property context. When set, the contact is created in the account of the property's data owner and requires the edit capability on that property (shared access); a viewer gets 403 and an actor without access gets 404. When absent, the contact is created in the actor's own account.
+             */
+            property_id?: string | null;
         };
         TenantContactUpdateRequest: {
             name?: string;
@@ -2150,6 +2171,11 @@ export interface components {
         OperationCategoryCreateRequest: {
             type: components["schemas"]["OperationType"];
             name: string;
+            /**
+             * Format: uuid
+             * @description Optional property context. When set, the category is created in the account of the property's data owner and requires the edit capability on that property (shared access); a viewer gets 403 and an actor without access gets 404. When absent, the category is created in the actor's own account.
+             */
+            property_id?: string | null;
         };
         /** @enum {string} */
         OperationStatus: "pending" | "overdue" | "paid" | "received" | "unconfirmed";
@@ -2174,6 +2200,13 @@ export interface components {
              * @enum {integer|null}
              */
             reminder_offset_days?: 0 | 1 | 3 | 7 | null;
+        };
+        OperationMoveRequest: {
+            /**
+             * Format: uuid
+             * @description Target property. Must belong to the same owner as the operation's current property.
+             */
+            property_id: string;
         };
         OperationUpdateRequest: {
             type?: components["schemas"]["OperationType"];
@@ -3904,6 +3937,36 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    moveOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperationMoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Operation moved to another property of the same owner */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     listOperationCategories: {
         parameters: {
             query?: {
@@ -3951,6 +4014,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
         };
     };

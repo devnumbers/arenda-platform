@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // This file covers the archived-property rules of the membership use cases
@@ -124,5 +126,119 @@ func TestAccessService_DisplayName(t *testing.T) {
 	}
 	if _, err := svc.DisplayName(t.Context(), missingID); err == nil {
 		t.Errorf("missing user: expected an error, got nil")
+	}
+}
+
+// fakeAuditRecorder captures recorded audit entries (issue #166 follow-up:
+// actor-role attribution tests).
+type fakeAuditRecorder struct {
+	entries []auditdomain.Entry
+}
+
+func (f *fakeAuditRecorder) Record(_ context.Context, entry auditdomain.Entry) error {
+	f.entries = append(f.entries, entry)
+	return nil
+}
+
+func (f *fakeAuditRecorder) WithTx(_ transaction.Tx) auditapp.Recorder { return f }
+
+var _ auditapp.Recorder = (*fakeAuditRecorder)(nil)
+
+// TestAccessService_LeavePropertyAuditActorRole verifies that a member's
+// self-exit is attributed with the member's real role instead of being masked
+// as the owner's own (issue #166 follow-up). Self-exit is the only write a
+// viewer may perform, so it is where ActorRoleViewer enters the journal.
+func TestAccessService_LeavePropertyAuditActorRole(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		role domain.Role
+		want auditdomain.ActorRole
+	}{
+		{name: "viewer", role: domain.RoleViewer, want: auditdomain.ActorRoleViewer},
+		{name: "full access", role: domain.RoleFullAccess, want: auditdomain.ActorRoleFullAccess},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			owner := uuid.New()
+			member := uuid.New()
+			property := uuid.New()
+
+			repo := newMemRepo()
+			resolver := staticResolver{property: owner}
+			policy := NewMembershipPolicy(resolver, repo)
+			audit := &fakeAuditRecorder{}
+			svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, noopBeginner{}, audit, nil)
+
+			if _, err := svc.AddMember(t.Context(), owner, property, member, tc.role); err != nil {
+				t.Fatalf("AddMember: %v", err)
+			}
+			// Drop the property_member.added entry; only the self-exit matters.
+			audit.entries = nil
+
+			if err := svc.LeaveProperty(t.Context(), member, property); err != nil {
+				t.Fatalf("LeaveProperty: %v", err)
+			}
+			if len(audit.entries) != 1 {
+				t.Fatalf("audit entries: want 1, got %d", len(audit.entries))
+			}
+			entry := audit.entries[0]
+			if entry.Action != auditdomain.ActionPropertyMemberLeft {
+				t.Errorf("audit action: want %q, got %q", auditdomain.ActionPropertyMemberLeft, entry.Action)
+			}
+			if entry.ActorRole != tc.want {
+				t.Errorf("audit actor role: want %q, got %q", tc.want, entry.ActorRole)
+			}
+		})
+	}
+}
+
+// TestAccessService_ManageAuditActorRole verifies that member-management
+// actions performed by a full-access member are attributed with the full
+// role, while the owner's own actions stay attributed as owner (issue #166
+// follow-up).
+func TestAccessService_ManageAuditActorRole(t *testing.T) {
+	owner := uuid.New()
+	full := uuid.New()
+	member := uuid.New()
+	property := uuid.New()
+
+	repo := newMemRepo()
+	resolver := staticResolver{property: owner}
+	policy := NewMembershipPolicy(resolver, repo)
+	audit := &fakeAuditRecorder{}
+	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, noopBeginner{}, audit, nil)
+
+	// The owner grants full access; this entry must stay owner-attributed.
+	if _, err := svc.AddMember(t.Context(), owner, property, full, domain.RoleFullAccess); err != nil {
+		t.Fatalf("AddMember full: %v", err)
+	}
+	audit.entries = nil
+
+	created, err := svc.AddMember(t.Context(), full, property, member, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("AddMember by full: %v", err)
+	}
+	if _, err := svc.ChangeMemberRole(t.Context(), full, property, created.ID, domain.RoleFullAccess); err != nil {
+		t.Fatalf("ChangeMemberRole by full: %v", err)
+	}
+	if err := svc.RevokeMember(t.Context(), full, property, created.ID); err != nil {
+		t.Fatalf("RevokeMember by full: %v", err)
+	}
+
+	wantActions := []auditdomain.Action{
+		auditdomain.ActionPropertyMemberAdded,
+		auditdomain.ActionPropertyMemberUpdated,
+		auditdomain.ActionPropertyMemberRemoved,
+	}
+	if len(audit.entries) != len(wantActions) {
+		t.Fatalf("audit entries: want %d, got %d", len(wantActions), len(audit.entries))
+	}
+	for i, want := range wantActions {
+		entry := audit.entries[i]
+		if entry.Action != want {
+			t.Errorf("entry %d action: want %q, got %q", i, want, entry.Action)
+		}
+		if entry.ActorRole != auditdomain.ActorRoleFullAccess {
+			t.Errorf("entry %d actor role: want %q, got %q", i, auditdomain.ActorRoleFullAccess, entry.ActorRole)
+		}
 	}
 }

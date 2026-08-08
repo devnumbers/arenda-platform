@@ -159,6 +159,10 @@ func run() error {
 	// actor may read via property memberships (issue #157, T2a).
 	leasesMod.TenantContactService.SetPolicy(accessMod.Policy)
 	leasesMod.TenantContactService.SetAccessibleScopes(accessMod.AccessibleScopes)
+	// Wire the membership-aware policy into the property contact service so
+	// members with the view/edit capability read and write the contacts of the
+	// property's data owner (Property Sharing follow-up).
+	propertiesMod.PropertyContactService.SetPolicy(accessMod.Policy)
 	// Wire the shared-property-ids adapter into the operation service so the
 	// finance report includes the actor's own operations plus operations of
 	// properties shared with the actor via property membership (issue #157, T3).

@@ -137,7 +137,7 @@ func (s *OperationService) SetSharedPropertyIDs(ids SharedPropertyIDs) {
 
 // CreateOperation creates a manual operation for the given owner and property.
 func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID, cmd CreateOperationCommand) (domain.Operation, error) {
-	scope, err := resolveWriteScope(ctx, s.policy, s.properties, actor, cmd.PropertyID)
+	role, scope, err := resolveWriteScope(ctx, s.policy, s.properties, actor, cmd.PropertyID)
 	if err != nil {
 		return domain.Operation{}, err
 	}
@@ -251,7 +251,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID,
 	}
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionOperationCreated,
 		EntityType: auditdomain.EntityOperation,
 		EntityID:   &created.ID,
@@ -524,7 +524,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionOperationUpdated,
 		EntityType: auditdomain.EntityOperation,
 		EntityID:   &id,
@@ -615,7 +615,7 @@ func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOp
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &cmd.Actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionOperationCompleted,
 		EntityType: auditdomain.EntityOperation,
 		EntityID:   &cmd.OperationID,
@@ -731,7 +731,7 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &cmd.Actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionOperationMarkedIncomplete,
 		EntityType: auditdomain.EntityOperation,
 		EntityID:   &cmd.OperationID,
@@ -899,7 +899,7 @@ func (s *OperationService) DeleteOperation(ctx context.Context, actor, id uuid.U
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionOperationDeleted,
 		EntityType: auditdomain.EntityOperation,
 		EntityID:   &id,
@@ -1027,7 +1027,7 @@ func (s *OperationService) MoveOperation(ctx context.Context, actor, id uuid.UUI
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionOperationMoved,
 		EntityType: auditdomain.EntityOperation,
 		EntityID:   &id,

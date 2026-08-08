@@ -117,7 +117,7 @@ func (s *InvitationService) InviteByEmail(ctx context.Context, actor, propertyID
 	if err != nil {
 		return InviteOutcome{}, err
 	}
-	owner, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
+	owner, actorRole, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
 	if err != nil {
 		return InviteOutcome{}, err
 	}
@@ -184,7 +184,7 @@ func (s *InvitationService) InviteByEmail(ctx context.Context, actor, propertyID
 	// invitee email is PII and must never appear in context (ADR 0020).
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(actorRole),
 		Action:     auditdomain.ActionPropertyMemberInvitationInvited,
 		EntityType: auditdomain.EntityPropertyMemberInvitation,
 		EntityID:   &created.ID,
@@ -216,7 +216,8 @@ func (s *InvitationService) InviteByEmail(ctx context.Context, actor, propertyID
 // sent before last_sent_at is updated, so a send failure does not burn the
 // cooldown window.
 func (s *InvitationService) ResendInvitation(ctx context.Context, actor, propertyID, invitationID uuid.UUID) error {
-	if _, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID); err != nil {
+	_, actorRole, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
+	if err != nil {
 		return err
 	}
 
@@ -246,7 +247,7 @@ func (s *InvitationService) ResendInvitation(ctx context.Context, actor, propert
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(actorRole),
 		Action:     auditdomain.ActionPropertyMemberInvitationResent,
 		EntityType: auditdomain.EntityPropertyMemberInvitation,
 		EntityID:   &invitation.ID,
@@ -266,7 +267,8 @@ func (s *InvitationService) ResendInvitation(ctx context.Context, actor, propert
 // ChangeInvitationRole changes the role of a pending invitation. No new email
 // is sent; the role current at registration time is applied on activation.
 func (s *InvitationService) ChangeInvitationRole(ctx context.Context, actor, propertyID, invitationID uuid.UUID, role domain.Role) (domain.Invitation, error) {
-	if _, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID); err != nil {
+	_, actorRole, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
+	if err != nil {
 		return domain.Invitation{}, err
 	}
 
@@ -290,7 +292,7 @@ func (s *InvitationService) ChangeInvitationRole(ctx context.Context, actor, pro
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(actorRole),
 		Action:     auditdomain.ActionPropertyMemberInvitationRoleChanged,
 		EntityType: auditdomain.EntityPropertyMemberInvitation,
 		EntityID:   &updated.ID,
@@ -311,7 +313,8 @@ func (s *InvitationService) ChangeInvitationRole(ctx context.Context, actor, pro
 // CancelInvitation silently cancels a pending invitation: the row is deleted
 // and no email is sent, so the same email can be invited again freely.
 func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propertyID, invitationID uuid.UUID) error {
-	if _, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID); err != nil {
+	_, actorRole, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
+	if err != nil {
 		return err
 	}
 
@@ -332,7 +335,7 @@ func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propert
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(actorRole),
 		Action:     auditdomain.ActionPropertyMemberInvitationCancelled,
 		EntityType: auditdomain.EntityPropertyMemberInvitation,
 		EntityID:   &invitationID,

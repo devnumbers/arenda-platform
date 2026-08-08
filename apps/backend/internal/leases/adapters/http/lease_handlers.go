@@ -298,6 +298,7 @@ func (h *LeaseHandlers) CreateTenantContact(w http.ResponseWriter, r *http.Reque
 		Phone:      body.Phone,
 		Email:      body.Email,
 		Comment:    body.Comment,
+		PropertyID: body.PropertyId,
 	}
 
 	contact, err := h.tenantContactSvc.CreateTenantContact(r.Context(), actor, cmd)
@@ -415,6 +416,8 @@ func handleTenantContactError(w http.ResponseWriter, r *http.Request, err error)
 		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
 		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Арендатор не найден"))
+	case errors.Is(err, leasesapp.ErrForbidden):
+		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для изменения арендатора"))
 	case errors.Is(err, leasesapp.ErrDuplicatePhone):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {

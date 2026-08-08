@@ -541,3 +541,73 @@ func TestPolicyIntegration_MoveOperation(t *testing.T) {
 		t.Errorf("recurring-child move: want ErrInvalidInput, got %v", err)
 	}
 }
+
+// TestPolicyIntegration_TenantContactsOwnerWideAccess exercises the owner-wide
+// enforcement on tenant contacts (Property Sharing follow-up) end-to-end: a
+// full-access member creates and updates contacts in the owner's scope, a
+// viewer reads but cannot write, and an outsider gets ErrNotFound.
+func TestPolicyIntegration_TenantContactsOwnerWideAccess(t *testing.T) {
+	pool := setupPolicyDB(t)
+	ctx, tx, cleanup := beginPolicyTx(t, pool)
+	defer cleanup()
+
+	f := newPolicyFixture(tx)
+	owner := createPolicyTestUser(t, ctx, f.q)
+	member := createPolicyTestUser(t, ctx, f.q)
+	viewer := createPolicyTestUser(t, ctx, f.q)
+	outsider := createPolicyTestUser(t, ctx, f.q)
+	property := createPolicyTestProperty(t, ctx, f.q, owner)
+	addPolicyMembership(t, ctx, f.members, property, member, owner, accessdomain.RoleFullAccess)
+	addPolicyMembership(t, ctx, f.members, property, viewer, owner, accessdomain.RoleViewer)
+
+	contactRepo := NewTenantContactRepository(tx)
+	contactService := func() *application.TenantContactService {
+		svc := application.NewTenantContactService(contactRepo, nil, nil)
+		svc.SetPolicy(f.policy)
+		svc.SetProperties(f.props)
+		return svc
+	}
+
+	// The member creates a contact in the property context: it lands on the
+	// owner's scope.
+	phone := "+79160000011"
+	memberCreated, err := contactService().CreateTenantContact(ctx, member, application.CreateTenantContactCommand{
+		Name: "Member Contact", Phone: &phone, PropertyID: &property,
+	})
+	if err != nil {
+		t.Fatalf("CreateTenantContact as member: %v", err)
+	}
+	if memberCreated.OwnerID != owner {
+		t.Errorf("created OwnerID: want owner %s, got %s", owner, memberCreated.OwnerID)
+	}
+
+	// Reads: member and viewer resolve the owner's contact by id; the outsider
+	// gets ErrNotFound.
+	for name, actor := range map[string]uuid.UUID{"owner": owner, "member": member, "viewer": viewer} {
+		if _, err := contactService().GetTenantContact(ctx, actor, memberCreated.ID); err != nil {
+			t.Errorf("GetTenantContact as %s: %v", name, err)
+		}
+	}
+	if _, err := contactService().GetTenantContact(ctx, outsider, memberCreated.ID); !errors.Is(err, application.ErrNotFound) {
+		t.Errorf("GetTenantContact as outsider: want ErrNotFound, got %v", err)
+	}
+
+	// Writes: the member updates the owner's contact; the viewer gets
+	// ErrForbidden, the outsider ErrNotFound.
+	newName := "Member Contact Renamed"
+	updated, err := contactService().UpdateTenantContact(ctx, member, memberCreated.ID, application.UpdateTenantContactCommand{Name: &newName})
+	if err != nil {
+		t.Fatalf("UpdateTenantContact as member: %v", err)
+	}
+	if updated.OwnerID != owner {
+		t.Errorf("updated OwnerID: want owner %s, got %s", owner, updated.OwnerID)
+	}
+	viewerName := "Viewer Rename"
+	if _, err := contactService().UpdateTenantContact(ctx, viewer, memberCreated.ID, application.UpdateTenantContactCommand{Name: &viewerName}); !errors.Is(err, application.ErrForbidden) {
+		t.Errorf("UpdateTenantContact as viewer: want ErrForbidden, got %v", err)
+	}
+	outsiderName := "Outsider Rename"
+	if _, err := contactService().UpdateTenantContact(ctx, outsider, memberCreated.ID, application.UpdateTenantContactCommand{Name: &outsiderName}); !errors.Is(err, application.ErrNotFound) {
+		t.Errorf("UpdateTenantContact as outsider: want ErrNotFound, got %v", err)
+	}
+}

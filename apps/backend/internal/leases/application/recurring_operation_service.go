@@ -128,7 +128,7 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 	actor uuid.UUID,
 	cmd CreateRecurringOperationCommand,
 ) (domain.RecurringOperation, error) {
-	scope, err := resolveWriteScope(ctx, s.policy, s.properties, actor, cmd.PropertyID)
+	role, scope, err := resolveWriteScope(ctx, s.policy, s.properties, actor, cmd.PropertyID)
 	if err != nil {
 		return domain.RecurringOperation{}, err
 	}
@@ -235,7 +235,7 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionRecurringOperationCreated,
 		EntityType: auditdomain.EntityRecurringOperation,
 		EntityID:   &created.ID,
@@ -381,7 +381,7 @@ func (s *RecurringOperationService) DeleteRecurringOperation(
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionRecurringOperationDeleted,
 		EntityType: auditdomain.EntityRecurringOperation,
 		EntityID:   &id,
@@ -463,7 +463,7 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 		}
 		if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
-			ActorRole:  auditdomain.ActorRoleOwner,
+			ActorRole:  actorRoleFromPolicyRole(role),
 			Action:     auditdomain.ActionRecurringOperationUpdated,
 			EntityType: auditdomain.EntityRecurringOperation,
 			EntityID:   &id,
@@ -600,7 +600,7 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionRecurringOperationUpdated,
 		EntityType: auditdomain.EntityRecurringOperation,
 		EntityID:   &id,
@@ -863,7 +863,7 @@ func (s *RecurringOperationService) PauseRecurringOperation(
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionRecurringOperationPaused,
 		EntityType: auditdomain.EntityRecurringOperation,
 		EntityID:   &id,
@@ -967,7 +967,7 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 
 	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
+		ActorRole:  actorRoleFromPolicyRole(role),
 		Action:     auditdomain.ActionRecurringOperationResumed,
 		EntityType: auditdomain.EntityRecurringOperation,
 		EntityID:   &id,

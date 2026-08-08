@@ -75,6 +75,32 @@ func (q *Queries) CreateTenantContact(ctx context.Context, arg CreateTenantConta
 	return i, err
 }
 
+const getTenantContactByID = `-- name: GetTenantContactByID :one
+SELECT id, owner_id, name, surname, patronymic, phone, email, comment, created_at, updated_at FROM tenant_contacts
+WHERE id = $1
+`
+
+// GetTenantContactByID is intentionally unscoped: it resolves the contact's
+// data owner before the policy gate authorizes the actor (Property Sharing
+// follow-up). Callers must not expose the result without a role check.
+func (q *Queries) GetTenantContactByID(ctx context.Context, id pgtype.UUID) (TenantContact, error) {
+	row := q.db.QueryRow(ctx, getTenantContactByID, id)
+	var i TenantContact
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Surname,
+		&i.Patronymic,
+		&i.Phone,
+		&i.Email,
+		&i.Comment,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getTenantContactByIDAdmin = `-- name: GetTenantContactByIDAdmin :one
 SELECT tc.id, tc.owner_id, tc.name, tc.surname, tc.patronymic, tc.phone, tc.email, tc.comment, tc.created_at, tc.updated_at, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
 FROM tenant_contacts tc

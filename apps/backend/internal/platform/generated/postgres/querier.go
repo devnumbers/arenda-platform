@@ -181,6 +181,10 @@ type Querier interface {
 	GetSubscriptionPaymentsStatsLast30dAdmin(ctx context.Context) (GetSubscriptionPaymentsStatsLast30dAdminRow, error)
 	GetTariffByID(ctx context.Context, id pgtype.UUID) (Tariff, error)
 	GetTariffByName(ctx context.Context, name string) (Tariff, error)
+	// GetTenantContactByID is intentionally unscoped: it resolves the contact's
+	// data owner before the policy gate authorizes the actor (Property Sharing
+	// follow-up). Callers must not expose the result without a role check.
+	GetTenantContactByID(ctx context.Context, id pgtype.UUID) (TenantContact, error)
 	GetTenantContactByIDAdmin(ctx context.Context, id pgtype.UUID) (GetTenantContactByIDAdminRow, error)
 	GetTenantContactByIDAndOwner(ctx context.Context, arg GetTenantContactByIDAndOwnerParams) (TenantContact, error)
 	GetUserByEmail(ctx context.Context, dollar_1 string) (User, error)
