@@ -2,6 +2,7 @@
 
 import type { JSX, ReactNode } from 'react';
 import { RemindersOnboardingModal } from '@/widgets/reminders-onboarding/ui/RemindersOnboardingModal';
+import { ServiceWorkerRegister } from '@/shared/lib/pwa/ServiceWorkerRegister';
 import { BottomNav } from './BottomNav';
 import { Sidebar } from './Sidebar';
 import styles from './CabinetLayout.module.css';
@@ -19,6 +20,7 @@ export function CabinetLayout({ children }: CabinetLayoutProps): JSX.Element {
       </main>
       <RemindersOnboardingModal />
       <BottomNav />
+      <ServiceWorkerRegister />
     </div>
   );
 }

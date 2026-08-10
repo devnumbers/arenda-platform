@@ -15,7 +15,10 @@
 .content {
   width: 100%;
   max-width: 560px;
-  padding: 24px 20px 100px;
+  /* 100px reserves space for the fixed BottomNav (48px items + 16px top/bottom
+     padding = 80px) plus headroom; safe-area-inset-bottom extends it on notch
+     devices so content never hides behind the system home indicator. */
+  padding: 24px 20px calc(100px + env(safe-area-inset-bottom));
 }
 
 @media (min-width: 1200px) {

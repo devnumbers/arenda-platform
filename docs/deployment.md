@@ -140,6 +140,16 @@ Push в GHCR из workflow идёт под встроенным `GITHUB_TOKEN` (
 - `PHOTO_STORAGE_PROVIDER=s3` включает REG.RU S3 и требует заполненные
   `REGRU_S3_*` значения. `REGRU_S3_*` также используются пайплайном для
   off-site копии дампов БД (endpoint/bucket/access/secret key).
+- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — пара P-256 ключей (RFC 8292,
+  base64url без padding) для идентификации application-сервера в Web Push.
+  У stage и prod свои пары (проставляются в `ENV_FILE` соответствующего
+  GitHub Environment). **Смена ключей ломает все живые push-подписки**
+  (RFC 8292 §4.2: подписка привязана к ключу), поэтому ротация — только
+  вместе с клиентским переподписным флоу. `VAPID_SUBJECT` — контактный URI
+  (`mailto:` или `https:`) для push-сервисов, единый для окружений
+  (`mailto:smirnowwwivan@mail.ru`). Публичный ключ отдаётся фронту в рантайме
+  через `GET /push/vapid-public-key` (BFF-прокси `app/api/[...path]/route.ts`),
+  приватный — серверный секрет; никуда кроме `ENV_FILE` не кладётся.
 
 ## Миграции и бэкапы
 
@@ -247,7 +257,7 @@ rentlee.ru {
 		reverse_proxy 127.0.0.1:18080
 	}
 
-	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /calendar* /reminders* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png
+	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /calendar* /reminders* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png /manifest.webmanifest /sw.js /offline.html /icons/* /apple-icon.png
 	handle @frontend {
 		reverse_proxy 127.0.0.1:13000
 	}
@@ -280,7 +290,7 @@ dev.rentlee.ru {
 		reverse_proxy 127.0.0.1:28080
 	}
 
-	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /calendar* /reminders* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png
+	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /calendar* /reminders* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png /manifest.webmanifest /sw.js /offline.html /icons/* /apple-icon.png
 	handle @frontend {
 		reverse_proxy 127.0.0.1:23000
 	}
@@ -305,6 +315,23 @@ admin.dev.rentlee.ru {
 
 При добавлении нового top-level роута в Next.js-фронт его нужно добавить в
 `@frontend path` и перечитать Caddy: `sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy`.
+
+### PWA-ассеты в Caddyfile
+
+PWA-оболочка кабинета (тикет #179) добавляет четыре новых path в `@frontend`:
+
+- `/manifest.webmanifest` — Web App Manifest (`app/manifest.ts`);
+- `/sw.js` — service worker (`public/sw.js`, scope `/`);
+- `/offline.html` — брендированный офлайн-экран, precache'ится SW;
+- `/icons/*` — PWA-иконки 192/512 (`public/icons/`).
+
+`/sw.js` должен отдаваться без агрессивного кеширования, иначе браузер не
+подтянет обновление SW (byte-compare update check). Next.js ставит
+`Cache-Control: no-store` через `headers()` в `next.config.ts`; убедиться, что
+Caddy не переписывает этот заголовок на path `/sw.js` (проверить на stage:
+`curl -I https://dev.rentlee.ru/sw.js`). `Content-Type` ответа обязан быть
+`text/javascript`/`application/javascript`, иначе регистрация SW упадёт
+(требование спецификации — JS MIME).
 
 Проверка и применение:
 

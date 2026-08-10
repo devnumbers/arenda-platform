@@ -25,12 +25,20 @@ const manrope = Manrope({
 export const metadata: Metadata = {
     title: 'Рентли',
     description: 'Управление арендной недвижимостью',
+    appleWebApp: {
+        capable: true,
+        title: 'Рентли',
+        statusBarStyle: 'default',
+    },
 };
 
 export const viewport: Viewport = {
     width: 'device-width',
     initialScale: 1,
-    maximumScale: 1,
+    // maximumScale is intentionally omitted: capping zoom breaks accessibility
+    // (WCAG 1.4.4 Resize text). PWA standalone mode does not require it.
+    themeColor: '#2b7fff',
+    viewportFit: 'cover',
 };
 
 export default function RootLayout({
