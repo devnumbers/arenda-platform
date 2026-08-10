@@ -127,7 +127,11 @@ func (c *SlotCoordinator) enforceRecipient(
 	recipientID uuid.UUID,
 	trigger string,
 ) error {
-	pool, err := c.buildRecipientPool(ctx, txMembers, recipientID)
+	txOwned, err := c.ownedProps.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind owned-props tx: %w", err)
+	}
+	pool, err := c.buildRecipientPool(ctx, txOwned, txMembers, recipientID)
 	if err != nil {
 		return err
 	}
@@ -188,7 +192,11 @@ func (c *SlotCoordinator) EnforceOnActivation(ctx context.Context, tx transactio
 		return false, fmt.Errorf("recipient limit: %w", err)
 	}
 
-	used, err := c.usedSlots(ctx, txMembers, recipientID)
+	txOwned, err := c.ownedProps.WithTx(tx)
+	if err != nil {
+		return false, fmt.Errorf("bind owned-props tx: %w", err)
+	}
+	used, err := c.usedSlots(ctx, txOwned, txMembers, recipientID)
 	if err != nil {
 		return false, err
 	}
@@ -210,7 +218,11 @@ func (c *SlotCoordinator) poolOverLimit(ctx context.Context, tx transaction.Tx, 
 		return false, fmt.Errorf("recipient limit: %w", err)
 	}
 
-	used, err := c.usedSlots(ctx, txMembers, recipientID)
+	txOwned, err := c.ownedProps.WithTx(tx)
+	if err != nil {
+		return false, fmt.Errorf("bind owned-props tx: %w", err)
+	}
+	used, err := c.usedSlots(ctx, txOwned, txMembers, recipientID)
 	if err != nil {
 		return false, err
 	}
@@ -248,7 +260,12 @@ func (c *SlotCoordinator) recoverSuspendedForRecipient(ctx context.Context, tx t
 		return fmt.Errorf("recipient limit: %w", err)
 	}
 
-	used, err := c.usedSlots(ctx, txMembers, recipientID)
+	txOwned, err := c.ownedProps.WithTx(tx)
+	if err != nil {
+		return fmt.Errorf("bind owned-props tx: %w", err)
+	}
+
+	used, err := c.usedSlots(ctx, txOwned, txMembers, recipientID)
 	if err != nil {
 		return err
 	}
@@ -418,9 +435,9 @@ func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx 
 // properties (IsShared=false) plus all active shared memberships (IsShared=true)
 // across every owner, each annotated with whether it has an open lease. The pool
 // is the input to SelectForEviction.
-func (c *SlotCoordinator) buildRecipientPool(ctx context.Context, txMembers MembershipRepository, recipientID uuid.UUID) ([]SlotCandidate, error) {
+func (c *SlotCoordinator) buildRecipientPool(ctx context.Context, txOwned OwnedActivePropertiesPort, txMembers MembershipRepository, recipientID uuid.UUID) ([]SlotCandidate, error) {
 	// Own active properties.
-	owned, err := c.ownedProps.ListActiveWithMeta(ctx, recipientID)
+	owned, err := txOwned.ListActiveWithMeta(ctx, recipientID)
 	if err != nil {
 		return nil, fmt.Errorf("list owned active properties: %w", err)
 	}
@@ -463,8 +480,8 @@ func (c *SlotCoordinator) buildRecipientPool(ctx context.Context, txMembers Memb
 
 // usedSlots returns the number of tariff slots the recipient currently occupies:
 // own active properties plus active shared memberships.
-func (c *SlotCoordinator) usedSlots(ctx context.Context, txMembers MembershipRepository, recipientID uuid.UUID) (int, error) {
-	owned, err := c.ownedProps.ListActiveWithMeta(ctx, recipientID)
+func (c *SlotCoordinator) usedSlots(ctx context.Context, txOwned OwnedActivePropertiesPort, txMembers MembershipRepository, recipientID uuid.UUID) (int, error) {
+	owned, err := txOwned.ListActiveWithMeta(ctx, recipientID)
 	if err != nil {
 		return 0, fmt.Errorf("list owned active properties: %w", err)
 	}

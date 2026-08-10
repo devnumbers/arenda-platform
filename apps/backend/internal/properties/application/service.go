@@ -656,6 +656,13 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 		if err := s.slots.RecoverSuspendedForProperty(ctx, tx, id); err != nil {
 			return domain.Property{}, fmt.Errorf("recover suspended memberships after archive: %w", err)
 		}
+		// Archiving one of the owner's OWN objects also freed one of the owner's
+		// own tariff slots: the owner is never a member row of their own object,
+		// so RecoverSuspendedForProperty above did not visit them. Recover their
+		// own suspended shared queue FIFO in the same transaction.
+		if err := s.slots.RecoverSuspended(ctx, tx, actor); err != nil {
+			return domain.Property{}, fmt.Errorf("recover owner suspended memberships after archive: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -763,6 +770,13 @@ func (s *PropertyService) DeleteProperty(
 	if s.slots != nil {
 		if err := s.slots.RecoverAfterPropertyDelete(ctx, tx, id); err != nil {
 			return fmt.Errorf("recover suspended memberships before delete: %w", err)
+		}
+		// Deleting one of the owner's OWN objects also freed one of the owner's
+		// own tariff slots: the owner is never a member row of their own object,
+		// so RecoverAfterPropertyDelete above did not visit them. Recover their
+		// own suspended shared queue FIFO in the same transaction.
+		if err := s.slots.RecoverSuspended(ctx, tx, actor); err != nil {
+			return fmt.Errorf("recover owner suspended memberships after delete: %w", err)
 		}
 	}
 
@@ -939,6 +953,12 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 		if s.slots != nil {
 			if err := s.slots.RecoverSuspendedForProperty(ctx, tx, p.ID); err != nil {
 				return fmt.Errorf("recover suspended memberships after auto-archive: %w", err)
+			}
+			// Same as a manual archive: archiving one of the owner's OWN objects
+			// also freed one of the owner's own tariff slots, so recover their own
+			// suspended shared queue FIFO in the same transaction.
+			if err := s.slots.RecoverSuspended(ctx, tx, scope); err != nil {
+				return fmt.Errorf("recover owner suspended memberships after auto-archive: %w", err)
 			}
 		}
 	}

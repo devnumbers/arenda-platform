@@ -111,6 +111,10 @@ func (lifecycleNoOwnedProps) ListActiveWithMeta(context.Context, uuid.UUID) ([]a
 	return nil, nil
 }
 
+func (lifecycleNoOwnedProps) WithTx(_ transaction.Tx) (accessapp.OwnedActivePropertiesPort, error) {
+	return lifecycleNoOwnedProps{}, nil
+}
+
 var (
 	_ accessapp.RecipientLimiter          = (*lifecycleFakeLimiter)(nil)
 	_ accessapp.OccupancyPort             = lifecycleNoOccupancy{}

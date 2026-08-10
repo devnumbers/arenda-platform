@@ -118,6 +118,14 @@ type OwnedActivePropertiesPort interface {
 	// ListActiveWithMeta returns ids of active+maintenance properties of the
 	// owner, each paired with its UpdatedAt (used by the eviction comparator).
 	ListActiveWithMeta(ctx context.Context, ownerID uuid.UUID) ([]OwnedPropertyMeta, error)
+	// WithTx binds the port to the caller's transaction. Required so the slot
+	// coordinator reads the recipient's own-property pool from the same snapshot
+	// as the operation in progress: when a recovery/enforce runs inside the
+	// ArchiveProperty/DeleteProperty/UnarchiveProperty transaction, the
+	// already-applied status change (e.g. own object just archived) must be
+	// visible to usedSlots/buildRecipientPool. Without WithTx the read goes to a
+	// separate connection in Read Committed and sees the pre-transaction state.
+	WithTx(tx transaction.Tx) (OwnedActivePropertiesPort, error)
 }
 
 // OwnedPropertyMeta is a property id + UpdatedAt pair from the owner's active

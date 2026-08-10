@@ -102,5 +102,12 @@ func (a *OwnedActivePropertiesAdapter) ListActiveWithMeta(ctx context.Context, o
 	return out, nil
 }
 
+// WithTx binds the adapter to the caller's transaction so the coordinator reads
+// the recipient's own-property pool from the same snapshot as the operation in
+// progress (e.g. an own object just archived inside the ArchiveProperty tx).
+func (a *OwnedActivePropertiesAdapter) WithTx(tx transaction.Tx) (application.OwnedActivePropertiesPort, error) {
+	return &OwnedActivePropertiesAdapter{repo: a.repo.WithTx(tx)}, nil
+}
+
 // Compile-time check that OwnedActivePropertiesAdapter implements the access port.
 var _ application.OwnedActivePropertiesPort = (*OwnedActivePropertiesAdapter)(nil)

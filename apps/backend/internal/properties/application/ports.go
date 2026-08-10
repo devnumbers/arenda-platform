@@ -61,11 +61,17 @@ type SuspendedSharedCounter interface {
 // EnforceOnUnarchiveForProperty is called when the owner unarchives a shared
 // object (the object re-enters the recipients' pool); RecoverAfterPropertyDelete
 // is called before the owner deletes a shared object (the memberships are
-// dropped and the freed slots recovered FIFO). See issue #158 (T4).
+// dropped and the freed slots recovered FIFO). RecoverSuspended is called when
+// an owner frees one of their OWN tariff slots (archive/delete of an own object,
+// or the billing auto-archive): the owner is never a member row of their own
+// object, so the per-property entries above do not visit them as a recipient —
+// this per-recipient entry reactivates the owner's own suspended shared queue
+// FIFO. See issue #158 (T4).
 type RecipientSlotPolicy interface {
 	RecoverSuspendedForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error
 	EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error
 	RecoverAfterPropertyDelete(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error
+	RecoverSuspended(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) error
 }
 
 // SharedMembersDeleteMailer bridges the property deletion flow to the access

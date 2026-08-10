@@ -40,6 +40,10 @@ func (f *fakeSharedDeleteFlow) RecoverAfterPropertyDelete(context.Context, trans
 	return nil
 }
 
+func (f *fakeSharedDeleteFlow) RecoverSuspended(context.Context, transaction.Tx, uuid.UUID) error {
+	return nil
+}
+
 func (f *fakeSharedDeleteFlow) CollectFormerMemberEmails(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) ([]string, error) {
 	f.events = append(f.events, "collect")
 	return f.emails, nil

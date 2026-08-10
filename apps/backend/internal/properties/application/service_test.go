@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1096,7 +1097,8 @@ func TestGetProperty_AccessOutcomes(t *testing.T) {
 // recordingSlotPolicy records the RecipientSlotPolicy calls so tests can assert
 // which properties triggered a suspended-membership recovery.
 type recordingSlotPolicy struct {
-	recovered []uuid.UUID
+	recovered           []uuid.UUID
+	recoveredRecipients []uuid.UUID
 }
 
 func (p *recordingSlotPolicy) RecoverSuspendedForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) error {
@@ -1109,6 +1111,11 @@ func (p *recordingSlotPolicy) EnforceOnUnarchiveForProperty(context.Context, tra
 }
 
 func (p *recordingSlotPolicy) RecoverAfterPropertyDelete(context.Context, transaction.Tx, uuid.UUID) error {
+	return nil
+}
+
+func (p *recordingSlotPolicy) RecoverSuspended(_ context.Context, _ transaction.Tx, recipientID uuid.UUID) error {
+	p.recoveredRecipients = append(p.recoveredRecipients, recipientID)
 	return nil
 }
 
@@ -1415,4 +1422,91 @@ func TestGetProperty_AccessContext(t *testing.T) {
 			t.Errorf("OwnerName = %q, want empty on resolver error", p.OwnerName)
 		}
 	})
+}
+
+// TestPropertyService_ArchiveProperty_RecoversSuspendedForOwnerRecipient
+// verifies that archiving one's OWN object frees one of the owner's tariff
+// slots and triggers a per-recipient recovery of the owner's own suspended
+// shared memberships. The owner is never a member row of their own object, so
+// the per-property recovery (RecoverSuspendedForProperty) does not visit them;
+// ArchiveProperty must additionally call RecoverSuspended(ownerID). See issue
+// #158 (T4).
+func TestPropertyService_ArchiveProperty_RecoversSuspendedForOwnerRecipient(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	repo := newFakePropertyRepo(
+		domain.Property{ID: propertyID, OwnerID: ownerID, Name: "Своя квартира", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+	)
+	slots := &recordingSlotPolicy{}
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{}},
+		nil,
+		&recordingBillingLifecycle{},
+		stubLeaseRepo{},
+		fakePropertyTxBeginner{},
+		nil,
+		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
+		fakeTzResolver{},
+		testOwnerPolicy{},
+		nil,
+	)
+	svc.SetRecipientSlotPolicy(slots)
+
+	if _, err := svc.ArchiveProperty(ctx, ownerID, propertyID); err != nil {
+		t.Fatalf("ArchiveProperty: %v", err)
+	}
+
+	// The per-property recovery runs (for the archived object's members)...
+	if len(slots.recovered) == 0 {
+		t.Errorf("expected RecoverSuspendedForProperty to run for the archived object, got %v", slots.recovered)
+	}
+	// ...AND the owner's own suspended queue is recovered, because archiving an
+	// own object freed one of the owner's tariff slots.
+	if !slices.Contains(slots.recoveredRecipients, ownerID) {
+		t.Errorf("expected RecoverSuspended(ownerID) for the archiving owner, got recoveredRecipients = %v", slots.recoveredRecipients)
+	}
+}
+
+// TestPropertyService_DeleteProperty_RecoversSuspendedForOwnerRecipient is the
+// delete-side counterpart: deleting one's OWN object frees one of the owner's
+// tariff slots, so DeleteProperty must call RecoverSuspended(ownerID) in
+// addition to the per-property RecoverAfterPropertyDelete.
+func TestPropertyService_DeleteProperty_RecoversSuspendedForOwnerRecipient(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	repo := newFakePropertyRepo(
+		domain.Property{ID: propertyID, OwnerID: ownerID, Name: "Своя квартира", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+	)
+	slots := &recordingSlotPolicy{}
+	svc := NewPropertyService(
+		repo,
+		fakePropertyPhotoRepo{},
+		fakePropertyPhotoStorage{},
+		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{}},
+		nil,
+		&recordingBillingLifecycle{},
+		stubLeaseRepo{},
+		fakePropertyTxBeginner{},
+		nil,
+		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
+		fakeTzResolver{},
+		testOwnerPolicy{},
+		nil,
+	)
+	svc.SetRecipientSlotPolicy(slots)
+
+	if err := svc.DeleteProperty(ctx, ownerID, propertyID, domain.DeletePropertyModeCascade); err != nil {
+		t.Fatalf("DeleteProperty: %v", err)
+	}
+
+	if !slices.Contains(slots.recoveredRecipients, ownerID) {
+		t.Errorf("expected RecoverSuspended(ownerID) for the deleting owner, got recoveredRecipients = %v", slots.recoveredRecipients)
+	}
 }

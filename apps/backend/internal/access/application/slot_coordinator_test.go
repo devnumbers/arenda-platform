@@ -99,6 +99,10 @@ func (f *fakeOwnedProps) ListActiveWithMeta(_ context.Context, ownerID uuid.UUID
 	return slices.Clone(f.byOwner[ownerID]), nil
 }
 
+func (f *fakeOwnedProps) WithTx(_ transaction.Tx) (OwnedActivePropertiesPort, error) {
+	return f, nil
+}
+
 // Compile-time interface checks for the in-memory stubs.
 var (
 	_ RecipientLimiter          = (*fakeRecipientLimiter)(nil)
@@ -768,4 +772,45 @@ func TestSlotCoordinator_EnforceOnUnarchiveForProperty_StaysActiveAtLimit(t *tes
 
 	f.assertStatus(t, mUnarchived, pUnarchived, domain.MemberStatusActive, "unarchived member stays active at exactly the limit")
 	f.assertStatus(t, mOther, pOther, domain.MemberStatusActive, "other member untouched at exactly the limit")
+}
+
+// Scenario N: RecoverSuspended reactivates the recipient's oldest suspended
+// membership when the recipient frees a slot by archiving/deleting one of their
+// OWN objects. This is the characterization of the recovery engine that the
+// properties ArchiveProperty/DeleteProperty/ArchiveExcessProperties paths must
+// invoke with the owner's id as recipientID: the owner is never a member row of
+// their own object, so per-property recovery does not visit them — only a direct
+// per-recipient RecoverSuspended(ownerID) reactivates their suspended shared
+// queue. See issue #158 (T4).
+func TestSlotCoordinator_RecoverSuspended_RecipientFreesOwnSlot(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	// owner has a property shared with recipient; recipient holds it suspended.
+	owner := uuid.New()
+	pShared := uuid.New()
+	pOwn := uuid.New()
+	recipient := uuid.New()
+	mShared := uuid.New() // suspended shared membership on owner's object
+
+	// Recipient's tariff pool was full (limit 1, own property occupying the slot)
+	// so the shared membership was created suspended.
+	f.addSuspendedMember(t, mShared, pShared, owner, recipient, t1Old, t1Old)
+	f.ownedProps.add(recipient, pOwn, t2New) // recipient's own active property
+	f.limiter.set(recipient, 1)              // pool = 1 own, used = 1, freeSlots = 0
+
+	// Sanity: with the own slot still occupied, recovery does nothing.
+	if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
+		t.Fatalf("RecoverSuspended (slot still full): %v", err)
+	}
+	f.assertStatus(t, mShared, pShared, domain.MemberStatusSuspended, "stays suspended while own slot occupied")
+
+	// Recipient archives their own object: the own property leaves the pool, so
+	// used drops to 0 and one slot frees.
+	f.ownedProps.byOwner[recipient] = nil
+
+	if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
+		t.Fatalf("RecoverSuspended (slot freed): %v", err)
+	}
+	f.assertStatus(t, mShared, pShared, domain.MemberStatusActive, "suspended reactivated once own slot freed")
 }
