@@ -70,6 +70,9 @@ type Config struct {
 	OTelEnabled                         bool
 	OTelTraceSampler                    float64
 	OTelOTLPEndpoint                    string
+	VAPIDPublicKey                      string
+	VAPIDPrivateKey                     string
+	VAPIDSubject                        string
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -124,6 +127,9 @@ func Load() (Config, error) {
 		OTelEnabled: (os.Getenv("OTEL_TRACES_EXPORTER") != "" && os.Getenv("OTEL_TRACES_EXPORTER") != "none") ||
 			(os.Getenv("OTEL_METRICS_EXPORTER") != "" && os.Getenv("OTEL_METRICS_EXPORTER") != "none"),
 		OTelOTLPEndpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		VAPIDPublicKey:   os.Getenv("VAPID_PUBLIC_KEY"),
+		VAPIDPrivateKey:  os.Getenv("VAPID_PRIVATE_KEY"),
+		VAPIDSubject:     os.Getenv("VAPID_SUBJECT"),
 	}
 
 	sampler, err := parseFloatEnv("OTEL_TRACES_SAMPLER_ARG", 1.0)
@@ -656,6 +662,20 @@ func Load() (Config, error) {
 			return Config{}, errors.New("TARIFF_CACHE_TTL must be positive")
 		}
 		cfg.TariffCacheTTL = d
+	}
+
+	// Web Push (VAPID) keys are optional in this infrastructure ticket: the
+	// public key is served to the frontend when set, and the private key +
+	// subject are required only by the push sender (a later ticket). When a key
+	// is set the pair must be complete so the push sender can run later without
+	// a partial-config surprise.
+	if cfg.VAPIDPublicKey != "" || cfg.VAPIDPrivateKey != "" {
+		if cfg.VAPIDPublicKey == "" {
+			return Config{}, errors.New("VAPID_PUBLIC_KEY is required when VAPID_PRIVATE_KEY is set")
+		}
+		if cfg.VAPIDPrivateKey == "" {
+			return Config{}, errors.New("VAPID_PRIVATE_KEY is required when VAPID_PUBLIC_KEY is set")
+		}
 	}
 
 	return cfg, nil

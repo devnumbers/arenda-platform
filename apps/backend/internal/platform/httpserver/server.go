@@ -62,6 +62,8 @@ type Deps struct {
 	Calendar                 *notificationsapp.CalendarService
 	FreeReminders            *notificationsapp.FreeReminderService
 	NotificationPreferences  *notificationsapp.PreferenceService
+	PushSubscriptions        *notificationsapp.PushSubscriptionService
+	VAPIDPublicKey           string
 	Popups                   *popupsapp.PopupService
 	AppBaseURL               string
 	CookieSecure             bool
@@ -145,6 +147,7 @@ func New(deps Deps) http.Handler {
 	reminderHandlers := notificationshttp.NewReminderHandlers(deps.Reminders, deps.Calendar, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
 	freeReminderHandlers := notificationshttp.NewFreeReminderHandlers(deps.FreeReminders, deps.Reminders, deps.Properties, deps.Clock, deps.Logger)
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
+	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
 	subscriptionHandlers := billinghttp.NewSubscriptionHandlers(deps.Tariffs, deps.Subscriptions, deps.PaymentMethods, deps.Payments, deps.Webhooks, deps.Logger, deps.DevMode)
 	financeHandlers := leaseshttp.NewFinanceHandlers(deps.Operations)
@@ -162,6 +165,7 @@ func New(deps Deps) http.Handler {
 		ReminderHandlers:               reminderHandlers,
 		FreeReminderHandlers:           freeReminderHandlers,
 		NotificationPreferenceHandlers: notificationPreferenceHandlers,
+		PushSubscriptionHandlers:       pushSubscriptionHandlers,
 		PopupHandlers:                  popupHandlers,
 		SubscriptionHandlers:           subscriptionHandlers,
 		FinanceHandlers:                financeHandlers,
@@ -278,6 +282,7 @@ type composedHandler struct {
 	*notificationshttp.ReminderHandlers
 	*notificationshttp.FreeReminderHandlers
 	*notificationshttp.NotificationPreferenceHandlers
+	*notificationshttp.PushSubscriptionHandlers
 	*popupshttp.PopupHandlers
 	*billinghttp.SubscriptionHandlers
 	*leaseshttp.FinanceHandlers

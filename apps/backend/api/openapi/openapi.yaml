@@ -2202,6 +2202,59 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /push/vapid-public-key:
+    get:
+      operationId: getVapidPublicKey
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The application server's VAPID public key (base64url, RFC 8292)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VapidPublicKeyResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /push/subscriptions:
+    post:
+      operationId: createPushSubscription
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushSubscriptionCreateRequest'
+      responses:
+        '201':
+          description: Push subscription stored (upserted by endpoint)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushSubscriptionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      operationId: deletePushSubscription
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushSubscriptionDeleteRequest'
+      responses:
+        '204':
+          description: Push subscription deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /popups/pending:
     get:
       operationId: getPendingPopups
@@ -5814,6 +5867,61 @@ components:
           maxItems: 5
           items:
             $ref: '#/components/schemas/NotificationPreference'
+
+    VapidPublicKeyResponse:
+      type: object
+      required: [public_key]
+      properties:
+        public_key:
+          type: string
+          description: The application server's VAPID P-256 public key, base64url without padding (RFC 8292). Pass this to `pushManager.subscribe({ applicationServerKey })`.
+
+    PushSubscriptionCreateRequest:
+      type: object
+      required: [endpoint, p256dh, auth]
+      properties:
+        endpoint:
+          type: string
+          description: The push endpoint URL issued by the browser push service.
+          maxLength: 2048
+        p256dh:
+          type: string
+          description: The client ECDH P-256 public key, base64url (RFC 8291).
+          maxLength: 512
+        auth:
+          type: string
+          description: The per-subscription auth secret, base64url (RFC 8291).
+          maxLength: 512
+        expiration_time:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional subscription expiration instant reported by the browser (RFC 8030).
+
+    PushSubscriptionDeleteRequest:
+      type: object
+      required: [endpoint]
+      properties:
+        endpoint:
+          type: string
+          description: The push endpoint URL to unregister (same value sent on subscribe).
+          maxLength: 2048
+
+    PushSubscriptionResponse:
+      type: object
+      required: [id, endpoint, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        endpoint:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
     PendingPopupsResponse:
       type: object

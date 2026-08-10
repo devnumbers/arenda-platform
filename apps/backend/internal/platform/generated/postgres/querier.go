@@ -92,6 +92,9 @@ type Querier interface {
 	DeletePropertyMember(ctx context.Context, arg DeletePropertyMemberParams) error
 	DeletePropertyMemberInvitation(ctx context.Context, arg DeletePropertyMemberInvitationParams) error
 	DeletePropertyPhoto(ctx context.Context, id pgtype.UUID) error
+	// Delete a push subscription by endpoint scoped to a user. Returns 0 rows when
+	// the subscription does not exist or belongs to another user (404 in the API).
+	DeletePushSubscriptionByEndpointAndUser(ctx context.Context, arg DeletePushSubscriptionByEndpointAndUserParams) (int64, error)
 	DeleteRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) error
 	DeleteRecurringOperationsByProperty(ctx context.Context, arg DeleteRecurringOperationsByPropertyParams) error
 	DeleteSentEmailReminder(ctx context.Context, arg DeleteSentEmailReminderParams) error
@@ -262,6 +265,7 @@ type Querier interface {
 	ListPropertyMembersByUser(ctx context.Context, userID pgtype.UUID) ([]ListPropertyMembersByUserRow, error)
 	ListPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) ([]PropertyPhoto, error)
 	ListPropertyPhotosByPropertyIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]PropertyPhoto, error)
+	ListPushSubscriptionsByUser(ctx context.Context, userID pgtype.UUID) ([]PushSubscription, error)
 	ListRecentSubscriptionPaymentsAdmin(ctx context.Context) ([]ListRecentSubscriptionPaymentsAdminRow, error)
 	ListRecentUsersAdmin(ctx context.Context) ([]ListRecentUsersAdminRow, error)
 	ListRecurringOperationsByOwner(ctx context.Context, arg ListRecurringOperationsByOwnerParams) ([]RecurringOperation, error)
@@ -358,6 +362,11 @@ type Querier interface {
 	UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error
 	UpsertNotificationPreference(ctx context.Context, arg UpsertNotificationPreferenceParams) error
 	UpsertPaymentMethodByTokenHash(ctx context.Context, arg UpsertPaymentMethodByTokenHashParams) (PaymentMethod, error)
+	// Insert a push subscription keyed by endpoint, or update its mutable fields
+	// (user_id, p256dh, auth, expiration_time) when the endpoint already exists.
+	// This makes re-subscribing on the same device idempotent and also re-binds an
+	// endpoint that moved between accounts (rare) to the latest user.
+	UpsertPushSubscription(ctx context.Context, arg UpsertPushSubscriptionParams) (PushSubscription, error)
 }
 
 var _ Querier = (*Queries)(nil)

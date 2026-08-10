@@ -249,6 +249,8 @@ func run() error {
 		Calendar:                 notificationsMod.CalendarService,
 		FreeReminders:            notificationsMod.FreeReminderService,
 		NotificationPreferences:  notificationsMod.PreferenceService,
+		PushSubscriptions:        notificationsMod.PushSubscriptionService,
+		VAPIDPublicKey:           p.Cfg.VAPIDPublicKey,
 		Popups:                   popupsMod.Service,
 		AppBaseURL:               p.Cfg.AppBaseURL,
 		CookieSecure:             p.Cfg.CookieSecure,

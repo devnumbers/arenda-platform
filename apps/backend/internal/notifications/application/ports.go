@@ -113,6 +113,19 @@ type FreeReminderRepository interface {
 	WithTx(tx transaction.Tx) FreeReminderRepository
 }
 
+// PushSubscriptionRepository persists Web Push subscriptions keyed by their
+// browser-issued endpoint URL.
+type PushSubscriptionRepository interface {
+	// Upsert inserts a subscription keyed by endpoint, or updates its mutable
+	// fields when the endpoint already exists (idempotent re-subscribe).
+	Upsert(ctx context.Context, sub domain.PushSubscription) (domain.PushSubscription, error)
+	// Delete removes a subscription by endpoint scoped to a user. It returns
+	// ErrNotFound when no row matched.
+	Delete(ctx context.Context, userID uuid.UUID, endpoint string) error
+	// ListByUser returns all stored subscriptions for a user.
+	ListByUser(ctx context.Context, userID uuid.UUID) ([]domain.PushSubscription, error)
+}
+
 // SharedPropertyIDs returns the ids of properties shared with a user via
 // property membership (issue #157). It mirrors
 // leases/application.SharedPropertyIDs locally to avoid a cross-context import;

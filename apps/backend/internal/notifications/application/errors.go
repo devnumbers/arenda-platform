@@ -17,4 +17,7 @@ var (
 	ErrNoContact                = errors.New("no contact found")
 	ErrInvalidPreferences       = errors.New("invalid notification preferences")
 	ErrInvalidFreeReminderInput = errors.New("invalid free reminder input")
+	// ErrInvalidPushSubscription is returned when a push subscription field
+	// fails validation.
+	ErrInvalidPushSubscription = errors.New("invalid push subscription")
 )

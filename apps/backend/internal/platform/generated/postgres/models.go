@@ -308,6 +308,17 @@ type PropertyPhoto struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
+type PushSubscription struct {
+	ID             pgtype.UUID        `json:"id"`
+	UserID         pgtype.UUID        `json:"user_id"`
+	Endpoint       string             `json:"endpoint"`
+	P256dh         string             `json:"p256dh"`
+	Auth           string             `json:"auth"`
+	ExpirationTime pgtype.Timestamptz `json:"expiration_time"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type RecurringOperation struct {
 	ID                 pgtype.UUID        `json:"id"`
 	OwnerID            pgtype.UUID        `json:"owner_id"`
