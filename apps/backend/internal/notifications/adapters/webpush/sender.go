@@ -105,7 +105,7 @@ func (s *Sender) Send(ctx context.Context, sub domain.PushSubscription, payload 
 	if topic := validTopic(payload.Tag); topic != "" {
 		req.Header.Set("Topic", topic)
 	}
-	req.Header.Set("Urgency", "normal")
+	req.Header.Set("Urgency", urgencyForEventType(payload.EventType))
 
 	resp, err := s.http.Do(req)
 	if err != nil {
@@ -153,6 +153,20 @@ func (s *Sender) mapResponse(ctx context.Context, resp *http.Response) error {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseRead))
 		return fmt.Errorf("webpush: push service returned status %d: %s",
 			resp.StatusCode, sanitize.String(string(body)))
+	}
+}
+
+// urgencyForEventType maps the reminder event type to a Web Push Urgency header
+// value (RFC 8030 §5.3). Overdue and requires-action events are time-critical
+// (the user is already late) and get "high" so the device wakes immediately;
+// upcoming reminders and free reminders get "normal" to save battery (research
+// #174 §4).
+func urgencyForEventType(eventType domain.EventType) string {
+	switch eventType {
+	case domain.EventOperationOverdue, domain.EventLeaseRequiresAction:
+		return "high"
+	default:
+		return "normal"
 	}
 }
 

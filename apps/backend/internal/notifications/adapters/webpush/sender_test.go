@@ -266,3 +266,23 @@ func TestParseRetryAfter(t *testing.T) {
 		})
 	}
 }
+
+func TestUrgencyForEventType(t *testing.T) {
+	cases := []struct {
+		eventType domain.EventType
+		want      string
+	}{
+		{domain.EventOperationDue, "normal"},
+		{domain.EventOperationOverdue, "high"},
+		{domain.EventLeaseExpiring, "normal"},
+		{domain.EventLeaseRequiresAction, "high"},
+		{domain.EventFreeReminder, "normal"},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.eventType), func(t *testing.T) {
+			if got := urgencyForEventType(tc.eventType); got != tc.want {
+				t.Errorf("urgencyForEventType(%q) = %q, want %q", tc.eventType, got, tc.want)
+			}
+		})
+	}
+}

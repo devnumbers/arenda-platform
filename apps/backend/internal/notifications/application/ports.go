@@ -246,6 +246,7 @@ type Channel string
 const (
 	ChannelSMS   Channel = "sms"
 	ChannelEmail Channel = "email"
+	ChannelPush  Channel = "push"
 )
 
 // ReminderScheduler is the port used by other bounded contexts to create and cancel reminders transactionally.

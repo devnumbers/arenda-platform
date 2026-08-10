@@ -257,7 +257,7 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 		// reached at least one device: mark the reminder as sent so it is not
 		// retried (push is deduplicated via sent_push_reminders).
 		w.logger.InfoContext(dispatchCtx, "reminder delivered via push only", "reminder_id", r.ID, "event_type", r.EventType)
-		return w.finalizeSuccess(dispatchCtx, r, now, "", application.ChannelEmail)
+		return w.finalizeSuccess(dispatchCtx, r, now, "", application.ChannelPush)
 	case skippedByPrefs == len(recipientIDs):
 		// skipped = every recipient revoked permission for the event type.
 		return w.finalizeSkipped(dispatchCtx, r)
