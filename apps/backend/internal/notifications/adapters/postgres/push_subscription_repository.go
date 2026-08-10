@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -38,8 +37,8 @@ func (r *PushSubscriptionRepository) Upsert(ctx context.Context, sub domain.Push
 		P256dh:         sub.P256dh,
 		Auth:           sub.Auth,
 		ExpirationTime: pgconv.TimePtrToPgtype(sub.ExpirationTime),
-		CreatedAt:      pgtypeTimestamptz(sub.CreatedAt),
-		UpdatedAt:      pgtypeTimestamptz(sub.UpdatedAt),
+		CreatedAt:      pgtype.Timestamptz{Time: sub.CreatedAt, Valid: true},
+		UpdatedAt:      pgtype.Timestamptz{Time: sub.UpdatedAt, Valid: true},
 	})
 	if err != nil {
 		return domain.PushSubscription{}, fmt.Errorf("upsert push subscription: %w", err)
@@ -87,14 +86,4 @@ func pushSubscriptionToDomain(row postgres.PushSubscription) domain.PushSubscrip
 		CreatedAt:      pgconv.TimestamptzToTime(row.CreatedAt),
 		UpdatedAt:      pgconv.TimestamptzToTime(row.UpdatedAt),
 	}
-}
-
-// pgtypeTimestamptz builds a valid pgtype.Timestamptz from a non-zero time, or
-// an invalid one for the zero value. It mirrors the inline literal used across
-// the reminder repositories.
-func pgtypeTimestamptz(t time.Time) pgtype.Timestamptz {
-	if t.IsZero() {
-		return pgtype.Timestamptz{Valid: false}
-	}
-	return pgtype.Timestamptz{Time: t, Valid: true}
 }

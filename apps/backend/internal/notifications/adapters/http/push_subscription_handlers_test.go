@@ -59,14 +59,14 @@ func (r *fakePushRepo) ListByUser(_ context.Context, userID uuid.UUID) ([]domain
 	return out, nil
 }
 
-// pushFakeClock is a fixed clock.Clock for push handler tests.
-type pushFakeClock struct{}
+// pushFakeClock is a deterministic clock.Clock for push handler tests.
+type pushFakeClock struct{ now time.Time }
 
-func (pushFakeClock) Now() time.Time { return time.Now() }
+func (c pushFakeClock) Now() time.Time { return c.now }
 
 func newPushTestHandlers(vapidKey string) (*PushSubscriptionHandlers, *fakePushRepo) {
 	repo := &fakePushRepo{}
-	svc := notificationsapp.NewPushSubscriptionService(repo, pushFakeClock{})
+	svc := notificationsapp.NewPushSubscriptionService(repo, pushFakeClock{now: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)})
 	return NewPushSubscriptionHandlers(svc, vapidKey, slog.Default()), repo
 }
 
