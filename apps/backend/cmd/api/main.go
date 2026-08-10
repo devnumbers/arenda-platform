@@ -12,6 +12,8 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/cmd/api/wire"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
+	webpush "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/webpush"
+	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
@@ -195,7 +197,20 @@ func run() error {
 	popupsMod := wire.WirePopups(p)
 
 	// 13. Background workers (6 goroutines). Started before the HTTP server so
-	//     they are live while serving.
+	//     they are live while serving. The Web Push sender is constructed when
+	//     VAPID keys are configured (RFC 8292); without them the reminder worker
+	//     runs email-only and push dispatch is skipped (guard in reminder_worker).
+	var pushSender notificationsapp.PushSender
+	if p.Cfg.VAPIDPublicKey != "" && p.Cfg.VAPIDPrivateKey != "" {
+		s, err := webpush.NewSender(p.Cfg.VAPIDSubject, p.Cfg.VAPIDPublicKey, p.Cfg.VAPIDPrivateKey, p.Logger)
+		if err != nil {
+			return fmt.Errorf("wire webpush sender: %w", err)
+		}
+		pushSender = s
+		p.Logger.InfoContext(ctx, "web push delivery enabled")
+	} else {
+		p.Logger.WarnContext(ctx, "VAPID keys not configured; web push delivery disabled (email-only)")
+	}
 	workers := wire.NewWorkers(
 		ctx, p,
 		leasesMod.LeaseService,
@@ -209,7 +224,7 @@ func run() error {
 		billingMod.Services.ScheduledChanges,
 		billingMod.Services.Payments,
 		notificationsMod.PushSubscriptionRepo,
-		nil, // pushSender — Web Push adapter (RFC 8030/8291/8292) is implemented in a follow-up ticket.
+		pushSender,
 	)
 
 	// 14. HTTP rate limiters.
