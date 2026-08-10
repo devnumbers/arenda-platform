@@ -303,7 +303,6 @@ func newWorkerForTest(t *testing.T, repo *fakeReminderRepoForWorker, notifier *f
 		recipients,
 		nil, // pushSender — disabled in email-only unit tests
 		nil, // pushSubRepo
-		nil, // pushMetrics
 		fakeBeginnerForWorker{},
 		fakeClockForWorker{now: workerTestNow},
 		fakeBackoff{},

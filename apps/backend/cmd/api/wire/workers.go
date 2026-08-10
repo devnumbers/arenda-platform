@@ -2,7 +2,6 @@ package wire
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -56,7 +55,7 @@ func NewWorkers(
 	billingPayments billingapp.PaymentProcessor,
 	pushSubRepo *notificationspg.PushSubscriptionRepository,
 	pushSender notificationsapp.PushSender,
-) (*Workers, error) {
+) *Workers {
 	queries := platformgenerated.New(p.DB)
 	contactResolver := notificationspg.NewContactResolver(queries)
 	emailNotifier := emailnotifier.NewNotifier(emailMailer, p.Renderer)
@@ -66,11 +65,7 @@ func NewWorkers(
 	// The membership repository is stateless, so the recipient lister is built
 	// here directly instead of being exported from WireAccess (issue #159).
 	recipientLister := accesspg.NewMemberRecipientAdapter(accesspg.NewMembershipRepository(p.DB))
-	pushMetrics, err := scheduler.NewPushMetrics()
-	if err != nil {
-		return nil, fmt.Errorf("build push metrics: %w", err)
-	}
-	reminderWorker := scheduler.NewReminderWorker(reminderRepo, p.Renderer, notifiers, contactResolver, recipientLister, pushSender, pushSubRepo, pushMetrics, p.Beginner, p.Clock, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, p.Logger)
+	reminderWorker := scheduler.NewReminderWorker(reminderRepo, p.Renderer, notifiers, contactResolver, recipientLister, pushSender, pushSubRepo, p.Beginner, p.Clock, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, p.Logger)
 	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, p.Clock, 1*time.Hour, 100, p.Logger, p.TZResolver)
 	billingWorker := scheduler.NewBillingWorker(billingRenewals, billingScheduledChanges, p.Pool, p.Clock, p.Cfg.BillingWorkerInterval, p.Logger)
 	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(billingPayments, p.Pool, p.Clock, p.Cfg.PaymentReconciliationWorkerInterval, p.Logger)
@@ -87,7 +82,7 @@ func NewWorkers(
 	go func() { defer w.wg.Done(); paymentReconciliationWorker.Run(ctx) }()
 	go func() { defer w.wg.Done(); operationOverdueWorker.Run(ctx) }()
 
-	return w, nil
+	return w
 }
 
 // Wait blocks until all six worker goroutines have exited.

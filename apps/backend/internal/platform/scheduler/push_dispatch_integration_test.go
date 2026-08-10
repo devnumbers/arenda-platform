@@ -138,7 +138,6 @@ func newPushDispatchFixture(t *testing.T, ctx context.Context, tx pgx.Tx) pushDi
 		accesspg.NewMemberRecipientAdapter(memberRepo),
 		pushSender,
 		pushSubRepo,
-		nil, // pushMetrics — disabled in integration tests (no meter provider)
 		beginnerOverTx{tx: tx},
 		fakeClockForWorker{now: workerTestNow},
 		fakeBackoff{},

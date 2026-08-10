@@ -37,10 +37,7 @@ type ReminderWorker struct {
 	// email and manages the reminder lifecycle.
 	pushSender application.PushSender
 	// pushSubRepo reads per-user push subscriptions for fan-out to all devices.
-	pushSubRepo application.PushSubscriptionRepository
-	// pushMetrics records push delivery outcomes (sent/gone/rate_limited/
-	// failed) to OpenTelemetry. Nil-safe: disabled when nil (local dev, tests).
-	pushMetrics     *PushMetrics
+	pushSubRepo     application.PushSubscriptionRepository
 	db              transaction.Beginner
 	clock           clock.Clock
 	backoff         Backoff
@@ -59,7 +56,6 @@ func NewReminderWorker(
 	recipients application.PropertyRecipientLister,
 	pushSender application.PushSender,
 	pushSubRepo application.PushSubscriptionRepository,
-	pushMetrics *PushMetrics,
 	db transaction.Beginner,
 	clock clock.Clock,
 	backoff Backoff,
@@ -79,7 +75,6 @@ func NewReminderWorker(
 		recipients:      recipients,
 		pushSender:      pushSender,
 		pushSubRepo:     pushSubRepo,
-		pushMetrics:     pushMetrics,
 		db:              db,
 		clock:           clock,
 		backoff:         backoff,
@@ -415,16 +410,16 @@ func (w *ReminderWorker) dispatchPushReminder(ctx context.Context, r domain.Remi
 	}
 
 	delivered := 0
+pushSubs:
 	for _, sub := range subs {
 		sendErr := w.pushSender.Send(ctx, sub, payload)
 		switch {
 		case sendErr == nil:
 			delivered++
-			w.pushMetrics.RecordDispatch(ctx, pushOutcomeSent)
 		case errors.Is(sendErr, application.ErrSubscriptionGone):
 			// The push service reports the subscription is dead (RFC 8030
 			// §7.3): delete it so future dispatches do not waste attempts.
-			w.pushMetrics.RecordDispatch(ctx, pushOutcomeGone)
+			// The adapter already recorded the "gone" outcome metric.
 			if delErr := w.pushSubRepo.Delete(ctx, sub.UserID, sub.Endpoint); delErr != nil {
 				w.logger.ErrorContext(ctx, "delete dead push subscription failed", "reminder_id", r.ID, "recipient_id", recipientID, "error", sanitize.Error(delErr))
 			} else {
@@ -432,19 +427,19 @@ func (w *ReminderWorker) dispatchPushReminder(ctx context.Context, r domain.Remi
 			}
 		case errors.Is(sendErr, application.ErrRateLimited):
 			// RFC 8030 §8.4: the push service throttled the request and may
-			// carry a Retry-After (logged by the adapter). Push services rate
-			// limit per endpoint, so the remaining devices for this recipient
-			// would almost certainly be throttled too — stop sending to avoid
-			// burning the quota further. The push audit row is rolled back
-			// below so the recipient is retried on the next poll cycle (the
-			// worker's natural ~1-min backoff for best-effort side channels).
-			w.pushMetrics.RecordDispatch(ctx, pushOutcomeRateLimited)
+			// carry a Retry-After (parsed and logged by the adapter). Push
+			// services rate-limit per endpoint, so the remaining devices for
+			// this recipient would almost certainly be throttled too — stop
+			// sending to honour the Retry-After and avoid burning the quota.
+			// The push audit row is rolled back below so the recipient is
+			// retried on the next poll cycle (the worker's natural ~1-min
+			// backoff for best-effort side channels).
 			w.logger.WarnContext(ctx, "push rate limited, skipping remaining devices for recipient", "reminder_id", r.ID, "recipient_id", recipientID, "error", sanitize.Error(sendErr))
+			break pushSubs
 		default:
 			// Transient (5xx) or fatal (400/403) failure. Fatal errors are not
 			// retried per push; transient ones are retried on the next poll
 			// cycle via the audit rollback below.
-			w.pushMetrics.RecordDispatch(ctx, pushOutcomeFailed)
 			w.logger.ErrorContext(ctx, "send push failed", "reminder_id", r.ID, "recipient_id", recipientID, "error", sanitize.Error(sendErr))
 		}
 	}

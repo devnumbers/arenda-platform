@@ -42,17 +42,20 @@ const maxTopicLen = 32
 // and POSTs to the push service endpoint (RFC 8030), mapping the response code
 // to domain errors.
 type Sender struct {
-	vapid  *vapidSigner
-	http   *http.Client
-	ttl    int
-	logger *slog.Logger
+	vapid   *vapidSigner
+	http    *http.Client
+	ttl     int
+	metrics *Metrics
+	logger  *slog.Logger
 }
 
 // NewSender parses the VAPID keys and builds a Sender with a keep-alive HTTP
 // client. The keys are base64url-encoded: publicKey is the 65-byte uncompressed
 // P-256 key, privateKey is the 32-byte scalar. Returns an error if the keys are
 // inconsistent (the public key must match the one derived from the private key).
-func NewSender(subject, publicKey, privateKey string, logger *slog.Logger) (*Sender, error) {
+// metrics records push delivery outcomes (sent/gone/rate_limited/failed); nil
+// is safe (recording becomes a no-op).
+func NewSender(subject, publicKey, privateKey string, metrics *Metrics, logger *slog.Logger) (*Sender, error) {
 	signer, err := newVAPIDSigner(subject, publicKey, privateKey)
 	if err != nil {
 		return nil, err
@@ -61,10 +64,11 @@ func NewSender(subject, publicKey, privateKey string, logger *slog.Logger) (*Sen
 		logger = slog.Default()
 	}
 	return &Sender{
-		vapid:  signer,
-		http:   &http.Client{Timeout: httpTimeout},
-		ttl:    int(defaultTTL.Seconds()),
-		logger: logger,
+		vapid:   signer,
+		http:    &http.Client{Timeout: httpTimeout},
+		ttl:     int(defaultTTL.Seconds()),
+		metrics: metrics,
+		logger:  logger,
 	}, nil
 }
 
@@ -121,16 +125,20 @@ func (s *Sender) Send(ctx context.Context, sub domain.PushSubscription, payload 
 func (s *Sender) mapResponse(ctx context.Context, resp *http.Response) error {
 	switch resp.StatusCode {
 	case http.StatusCreated, http.StatusOK:
+		s.metrics.RecordDispatch(ctx, outcomeSent)
 		return nil
 	case http.StatusNotFound, http.StatusGone:
 		// RFC 8030 §7.3: the subscription is no longer valid and must be deleted.
+		s.metrics.RecordDispatch(ctx, outcomeGone)
 		return application.ErrSubscriptionGone
 	case http.StatusRequestEntityTooLarge:
 		// RFC 8030 §7.2: the encrypted body exceeded the service's limit.
+		s.metrics.RecordDispatch(ctx, outcomeFailed)
 		return application.ErrPushPayloadTooLarge
 	case http.StatusTooManyRequests:
-		// RFC 8030 §8.4: honour Retry-After. The reminder worker checks for
-		// RateLimitedError to back off at least that long before retrying.
+		// RFC 8030 §8.4: honour Retry-After. The reminder worker stops sending
+		// to this recipient's remaining devices when it sees ErrRateLimited.
+		s.metrics.RecordDispatch(ctx, outcomeRateLimited)
 		retryAfter, ok := parseRetryAfter(resp.Header.Get("Retry-After"))
 		if ok {
 			s.logger.WarnContext(ctx, "webpush rate limited",
@@ -141,6 +149,7 @@ func (s *Sender) mapResponse(ctx context.Context, resp *http.Response) error {
 			"endpoint", sanitize.String(resp.Request.URL.String()))
 		return application.ErrRateLimited
 	default:
+		s.metrics.RecordDispatch(ctx, outcomeFailed)
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseRead))
 		return fmt.Errorf("webpush: push service returned status %d: %s",
 			resp.StatusCode, sanitize.String(string(body)))

@@ -21,7 +21,7 @@ import (
 func newTestSender(t *testing.T) *Sender {
 	t.Helper()
 	privB64, pubB64 := generateTestVAPIDKeys(t)
-	s, err := NewSender("mailto:test@example.com", pubB64, privB64, nil)
+	s, err := NewSender("mailto:test@example.com", pubB64, privB64, nil, nil)
 	if err != nil {
 		t.Fatalf("new sender: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestSend_ContextCancellation(t *testing.T) {
 
 func TestNewSender_NilLoggerDefaultsToDefault(t *testing.T) {
 	privB64, pubB64 := generateTestVAPIDKeys(t)
-	s, err := NewSender("mailto:test@example.com", pubB64, privB64, nil)
+	s, err := NewSender("mailto:test@example.com", pubB64, privB64, nil, nil)
 	if err != nil {
 		t.Fatalf("new sender: %v", err)
 	}

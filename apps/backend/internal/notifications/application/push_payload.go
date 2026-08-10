@@ -16,13 +16,15 @@ const MaxPayloadBytes = 3993
 
 // PushPayload is the JSON body sent to the service worker: the SW reads these
 // fields and calls showNotification. It is intentionally minimal so the
-// encrypted payload stays well under the 3993-byte ceiling.
+// encrypted payload stays well under the 3993-byte ceiling. JSON field tags
+// are defined once in marshalPushPayload (MarshalJSON overrides default
+// encoding, so tags on this struct would be dead weight).
 type PushPayload struct {
-	Title     string           `json:"title"`
-	Body      string           `json:"body"`
-	Tag       string           `json:"tag,omitempty"`
-	URL       string           `json:"url,omitempty"`
-	EventType domain.EventType `json:"eventType"`
+	Title     string
+	Body      string
+	Tag       string
+	URL       string
+	EventType domain.EventType
 }
 
 // NewPushPayload builds a push payload from a reminder. The tag collapses
