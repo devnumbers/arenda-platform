@@ -22,9 +22,11 @@ EXECUTE FUNCTION set_updated_at();
 -- Data migration (#172, point 7): for every legacy per-event-type row, create
 -- an email row with the same value and a push row mirroring it, so existing
 -- users keep their current email behaviour and gain push matched to it.
+-- The ::notification_channel casts are required: PostgreSQL does not implicitly
+-- coerce a text literal to an enum in INSERT ... SELECT.
 INSERT INTO user_notification_channel_preferences (user_id, event_type, channel, allowed, created_at, updated_at)
-SELECT user_id, event_type, 'email', allowed, created_at, updated_at
+SELECT user_id, event_type, 'email'::notification_channel, allowed, created_at, updated_at
 FROM user_notification_preferences
 UNION ALL
-SELECT user_id, event_type, 'push', allowed, created_at, updated_at
+SELECT user_id, event_type, 'push'::notification_channel, allowed, created_at, updated_at
 FROM user_notification_preferences;
