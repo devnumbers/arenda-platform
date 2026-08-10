@@ -211,7 +211,7 @@ func run() error {
 	} else {
 		p.Logger.WarnContext(ctx, "VAPID keys not configured; web push delivery disabled (email-only)")
 	}
-	workers := wire.NewWorkers(
+	workers, err := wire.NewWorkers(
 		ctx, p,
 		leasesMod.LeaseService,
 		leasesMod.OperationService,
@@ -226,6 +226,9 @@ func run() error {
 		notificationsMod.PushSubscriptionRepo,
 		pushSender,
 	)
+	if err != nil {
+		return fmt.Errorf("wire workers: %w", err)
+	}
 
 	// 14. HTTP rate limiters.
 	limiters := wire.WireRateLimiters(p.Cfg)
