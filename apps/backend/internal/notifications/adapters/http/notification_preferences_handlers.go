@@ -32,12 +32,12 @@ func (h *NotificationPreferenceHandlers) GetNotificationPreferences(w http.Respo
 		return
 	}
 
-	prefs, err := h.svc.ListPreferences(r.Context(), actor)
+	channelPrefs, err := h.svc.ListChannelPreferences(r.Context(), actor)
 	if err != nil {
 		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, notificationPreferencesResponse(prefs))
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, notificationChannelPreferencesResponse(channelPrefs))
 }
 
 // UpdateNotificationPreferences implements PUT /notification-preferences.
@@ -55,15 +55,9 @@ func (h *NotificationPreferenceHandlers) UpdateNotificationPreferences(w http.Re
 		return
 	}
 
-	prefs := make([]notificationsdomain.NotificationPreference, 0, len(body.Preferences))
-	for _, p := range body.Preferences {
-		prefs = append(prefs, notificationsdomain.NotificationPreference{
-			EventType: notificationsdomain.EventType(p.EventType),
-			Allowed:   p.Allowed,
-		})
-	}
+	prefs := channelPreferencesFromRequest(body.Preferences)
 
-	updated, err := h.svc.ReplacePreferences(r.Context(), actor, prefs)
+	updated, err := h.svc.ReplaceChannelPreferences(r.Context(), actor, prefs)
 	if err != nil {
 		if errors.Is(err, notificationsapp.ErrInvalidPreferences) {
 			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректные настройки уведомлений"))
@@ -72,15 +66,57 @@ func (h *NotificationPreferenceHandlers) UpdateNotificationPreferences(w http.Re
 		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, notificationPreferencesResponse(updated))
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, notificationChannelPreferencesResponse(updated))
 }
 
-func notificationPreferencesResponse(prefs []notificationsdomain.NotificationPreference) openapi.NotificationPreferencesResponse {
-	items := make([]openapi.NotificationPreference, 0, len(prefs))
+// channelPreferencesFromRequest expands the per-event-type request items (each
+// carrying independent email/push flags) into the per-channel domain slice the
+// service expects: one (event_type, channel) entry per flag. The legacy
+// `allowed` field is ignored on writes — clients send `email_allowed`/
+// `push_allowed` directly; `allowed` is kept in the response (= email_allowed)
+// for backward compatibility.
+func channelPreferencesFromRequest(items []openapi.NotificationPreference) []notificationsdomain.NotificationChannelPreference {
+	prefs := make([]notificationsdomain.NotificationChannelPreference, 0, len(items)*2)
+	for _, item := range items {
+		eventType := notificationsdomain.EventType(item.EventType)
+		prefs = append(prefs,
+			notificationsdomain.NotificationChannelPreference{EventType: eventType, Channel: notificationsdomain.ChannelEmail, Allowed: item.EmailAllowed},
+			notificationsdomain.NotificationChannelPreference{EventType: eventType, Channel: notificationsdomain.ChannelPush, Allowed: item.PushAllowed},
+		)
+	}
+	return prefs
+}
+
+// notificationChannelPreferencesResponse collapses the per-channel domain
+// slice back into one response item per event type, carrying emailAllowed,
+// pushAllowed and the backward-compatible allowed (= emailAllowed).
+func notificationChannelPreferencesResponse(prefs []notificationsdomain.NotificationChannelPreference) openapi.NotificationPreferencesResponse {
+	byType := make(map[notificationsdomain.EventType]struct {
+		email bool
+		push  bool
+	}, len(prefs))
 	for _, p := range prefs {
+		entry := byType[p.EventType]
+		switch p.Channel {
+		case notificationsdomain.ChannelEmail:
+			entry.email = p.Allowed
+		case notificationsdomain.ChannelPush:
+			entry.push = p.Allowed
+		}
+		byType[p.EventType] = entry
+	}
+
+	items := make([]openapi.NotificationPreference, 0, len(byType))
+	for _, eventType := range notificationsdomain.AllEventTypes() {
+		entry, ok := byType[eventType]
+		if !ok {
+			continue
+		}
 		items = append(items, openapi.NotificationPreference{
-			EventType: openapi.NotificationPreferenceEventType(p.EventType),
-			Allowed:   p.Allowed,
+			EventType:    openapi.NotificationPreferenceEventType(eventType),
+			Allowed:      entry.email,
+			EmailAllowed: entry.email,
+			PushAllowed:  entry.push,
 		})
 	}
 	return openapi.NotificationPreferencesResponse{Preferences: items}

@@ -180,7 +180,10 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 	var delivered, skippedByPrefs, failures int
 	var providerResponse string
 	for _, recipientID := range recipientIDs {
-		allowed, err := w.repo.IsEventAllowed(dispatchCtx, recipientID, r.EventType)
+		// The current dispatch path always sends email, so the per-channel
+		// preference check (ADR 0030) is against the email channel. When push
+		// dispatch is added, it will check domain.ChannelPush independently.
+		allowed, err := w.repo.IsChannelAllowed(dispatchCtx, recipientID, r.EventType, domain.ChannelEmail)
 		if err != nil {
 			w.logger.ErrorContext(dispatchCtx, "check notification permission failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
 			failures++

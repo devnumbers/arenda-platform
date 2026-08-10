@@ -11,6 +11,7 @@ import {
 } from '@/features/notification-preferences/api/hooks';
 import {
   buildInitialPreferences,
+  buildPreferencePayload,
   NOTIFICATION_OPTIONS,
   type NotificationPreferencesState,
 } from '@/features/notification-preferences/lib/preferences';
@@ -67,11 +68,9 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
         for (;;) {
           // Every save sends the full preference set; there is no submit
           // button and no success toast.
-          const payload: NotificationPreference[] = NOTIFICATION_OPTIONS.map(
-            ({ eventType }) => ({
-              eventType,
-              allowed: current[eventType],
-            }),
+          const payload: NotificationPreference[] = buildPreferencePayload(
+            current,
+            preferences,
           );
 
           try {

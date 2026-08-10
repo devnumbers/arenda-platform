@@ -185,6 +185,18 @@ func (r *fakeReminderRepo) IsEventAllowed(context.Context, uuid.UUID, domain.Eve
 	return true, nil
 }
 
+func (r *fakeReminderRepo) ListChannelPreferences(context.Context, uuid.UUID) ([]domain.NotificationChannelPreference, error) {
+	return nil, nil
+}
+
+func (r *fakeReminderRepo) UpsertChannelPreference(context.Context, uuid.UUID, domain.NotificationChannelPreference) error {
+	return nil
+}
+
+func (r *fakeReminderRepo) IsChannelAllowed(context.Context, uuid.UUID, domain.EventType, domain.NotificationChannel) (bool, error) {
+	return true, nil
+}
+
 func (r *fakeReminderRepo) WithTx(transaction.Tx) ReminderRepository { return r }
 
 var _ ReminderRepository = (*fakeReminderRepo)(nil)

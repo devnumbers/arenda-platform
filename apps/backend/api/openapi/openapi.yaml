@@ -5842,13 +5842,22 @@ components:
 
     NotificationPreference:
       type: object
-      required: [event_type, allowed]
+      required: [event_type, allowed, email_allowed, push_allowed]
       properties:
         event_type:
           type: string
           enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action, free_reminder]
         allowed:
           type: boolean
+          description: >
+            Backward-compatible alias for email_allowed (ADR 0030 expand phase).
+            Kept until all clients migrate to the per-channel fields.
+        email_allowed:
+          type: boolean
+          description: Permission to deliver this event type over email.
+        push_allowed:
+          type: boolean
+          description: Permission to deliver this event type over Web Push.
 
     NotificationPreferencesResponse:
       type: object

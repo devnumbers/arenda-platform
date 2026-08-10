@@ -674,6 +674,52 @@ func (r *ReminderRepository) IsEventAllowed(ctx context.Context, userID uuid.UUI
 	return allowed, nil
 }
 
+// ListChannelPreferences returns the stored per-channel preference rows of a
+// user (ADR 0030). A missing row means the (event type, channel) pair is
+// allowed.
+func (r *ReminderRepository) ListChannelPreferences(ctx context.Context, userID uuid.UUID) ([]domain.NotificationChannelPreference, error) {
+	rows, err := r.q().ListNotificationChannelPreferences(ctx, pgconv.UUIDToPgtype(userID))
+	if err != nil {
+		return nil, fmt.Errorf("list notification channel preferences: %w", err)
+	}
+	out := make([]domain.NotificationChannelPreference, len(rows))
+	for i, row := range rows {
+		out[i] = domain.NotificationChannelPreference{
+			EventType: domain.EventType(row.EventType),
+			Channel:   domain.NotificationChannel(row.Channel),
+			Allowed:   row.Allowed,
+		}
+	}
+	return out, nil
+}
+
+// UpsertChannelPreference inserts or updates one per-channel preference row.
+func (r *ReminderRepository) UpsertChannelPreference(ctx context.Context, userID uuid.UUID, pref domain.NotificationChannelPreference) error {
+	if err := r.q().UpsertNotificationChannelPreference(ctx, postgres.UpsertNotificationChannelPreferenceParams{
+		UserID:    pgconv.UUIDToPgtype(userID),
+		EventType: postgres.NotificationEventType(pref.EventType),
+		Channel:   postgres.NotificationChannel(pref.Channel),
+		Allowed:   pref.Allowed,
+	}); err != nil {
+		return fmt.Errorf("upsert notification channel preference: %w", err)
+	}
+	return nil
+}
+
+// IsChannelAllowed reports whether the user permits sending reminders of the
+// given event type over the given channel. A missing row means allowed.
+func (r *ReminderRepository) IsChannelAllowed(ctx context.Context, userID uuid.UUID, eventType domain.EventType, channel domain.NotificationChannel) (bool, error) {
+	allowed, err := r.q().IsNotificationChannelAllowed(ctx, postgres.IsNotificationChannelAllowedParams{
+		UserID:    pgconv.UUIDToPgtype(userID),
+		EventType: postgres.NotificationEventType(eventType),
+		Channel:   postgres.NotificationChannel(channel),
+	})
+	if err != nil {
+		return false, fmt.Errorf("check notification channel allowed: %w", err)
+	}
+	return allowed, nil
+}
+
 func toDomain(row postgres.Reminder) domain.Reminder {
 	return domain.Reminder{
 		ID:                   pgconv.UUIDFromPgtype(row.ID),

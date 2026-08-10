@@ -75,6 +75,15 @@ type ReminderRepository interface {
 	// IsEventAllowed reports whether the user permits sending reminders of the
 	// given event type. A missing row means allowed.
 	IsEventAllowed(ctx context.Context, userID uuid.UUID, eventType domain.EventType) (bool, error)
+	// ListChannelPreferences returns the stored per-channel preference rows of
+	// a user (ADR 0030). A missing row means the (event type, channel) pair is
+	// allowed.
+	ListChannelPreferences(ctx context.Context, userID uuid.UUID) ([]domain.NotificationChannelPreference, error)
+	// UpsertChannelPreference inserts or updates one per-channel preference row.
+	UpsertChannelPreference(ctx context.Context, userID uuid.UUID, pref domain.NotificationChannelPreference) error
+	// IsChannelAllowed reports whether the user permits sending reminders of the
+	// given event type over the given channel. A missing row means allowed.
+	IsChannelAllowed(ctx context.Context, userID uuid.UUID, eventType domain.EventType, channel domain.NotificationChannel) (bool, error)
 	WithTx(tx transaction.Tx) ReminderRepository
 }
 

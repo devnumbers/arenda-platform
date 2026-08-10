@@ -15,7 +15,7 @@ import {
 } from '@/features/notification-preferences/api/hooks';
 import {
     buildInitialPreferences,
-    NOTIFICATION_OPTIONS,
+    buildPreferencePayload,
     type NotificationPreferencesState,
 } from '@/features/notification-preferences/lib/preferences';
 import {NotificationPreferencesFields} from '@/features/notification-preferences/ui/NotificationPreferencesFields';
@@ -124,11 +124,9 @@ function RemindersOnboardingModalContent({
     );
 
     const handleSave = useCallback(async () => {
-        const payload: NotificationPreference[] = NOTIFICATION_OPTIONS.map(
-            ({eventType}) => ({
-                eventType,
-                allowed: notificationPrefs[eventType],
-            }),
+        const payload: NotificationPreference[] = buildPreferencePayload(
+            notificationPrefs,
+            preferences,
         );
 
         try {

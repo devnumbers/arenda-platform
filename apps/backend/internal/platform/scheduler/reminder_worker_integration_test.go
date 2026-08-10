@@ -218,11 +218,14 @@ func newReminderFanoutFixture(t *testing.T, ctx context.Context, tx pgx.Tx, memb
 
 func (f reminderFanoutFixture) optOut(t *testing.T, ctx context.Context, userID uuid.UUID) {
 	t.Helper()
-	if err := f.repo.UpsertPreference(ctx, userID, domain.NotificationPreference{
+	// The worker checks per-channel preferences (ADR 0030) on the email channel,
+	// so the opt-out must write to the channel preferences table.
+	if err := f.repo.UpsertChannelPreference(ctx, userID, domain.NotificationChannelPreference{
 		EventType: domain.EventFreeReminder,
+		Channel:   domain.ChannelEmail,
 		Allowed:   false,
 	}); err != nil {
-		t.Fatalf("upsert preference: %v", err)
+		t.Fatalf("upsert channel preference: %v", err)
 	}
 }
 

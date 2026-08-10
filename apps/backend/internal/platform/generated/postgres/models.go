@@ -12,6 +12,48 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type NotificationChannel string
+
+const (
+	NotificationChannelEmail NotificationChannel = "email"
+	NotificationChannelPush  NotificationChannel = "push"
+)
+
+func (e *NotificationChannel) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = NotificationChannel(s)
+	case string:
+		*e = NotificationChannel(s)
+	default:
+		return fmt.Errorf("unsupported scan type for NotificationChannel: %T", src)
+	}
+	return nil
+}
+
+type NullNotificationChannel struct {
+	NotificationChannel NotificationChannel `json:"notification_channel"`
+	Valid               bool                `json:"valid"` // Valid is true if NotificationChannel is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullNotificationChannel) Scan(value interface{}) error {
+	if value == nil {
+		ns.NotificationChannel, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.NotificationChannel.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullNotificationChannel) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.NotificationChannel), nil
+}
+
 type NotificationEventType string
 
 const (
@@ -445,6 +487,15 @@ type User struct {
 	PhoneEncrypted  bool               `json:"phone_encrypted"`
 	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
 	Timezone        string             `json:"timezone"`
+}
+
+type UserNotificationChannelPreference struct {
+	UserID    pgtype.UUID           `json:"user_id"`
+	EventType NotificationEventType `json:"event_type"`
+	Channel   NotificationChannel   `json:"channel"`
+	Allowed   bool                  `json:"allowed"`
+	CreatedAt pgtype.Timestamptz    `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz    `json:"updated_at"`
 }
 
 type UserNotificationPreference struct {

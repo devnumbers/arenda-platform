@@ -24,7 +24,7 @@ type fakeReminderRepoForWorker struct {
 	markFailedErr      error
 	getByIDUnscoped    domain.Reminder
 	markSendingPending error
-	eventAllowed       map[uuid.UUID]bool // nil or missing entry means allowed
+	channelAllowed     map[uuid.UUID]bool // nil or missing entry means allowed
 	sentEmailAudit     map[uuid.UUID]bool // recipientID → audit row exists
 	savedEmails        []application.SaveSentEmailReminderParams
 	deletedEmailAudit  []uuid.UUID
@@ -164,9 +164,25 @@ func (r *fakeReminderRepoForWorker) UpsertPreference(context.Context, uuid.UUID,
 	return nil
 }
 
-func (r *fakeReminderRepoForWorker) IsEventAllowed(_ context.Context, userID uuid.UUID, _ domain.EventType) (bool, error) {
-	if r.eventAllowed != nil {
-		if allowed, ok := r.eventAllowed[userID]; ok {
+// IsEventAllowed is the legacy per-event-type stub. The worker dispatches via
+// IsChannelAllowed now; this method is kept only to satisfy the repository
+// interface during the expand phase (ADR 0030) and is not exercised by these
+// tests.
+func (r *fakeReminderRepoForWorker) IsEventAllowed(context.Context, uuid.UUID, domain.EventType) (bool, error) {
+	return true, nil
+}
+
+func (r *fakeReminderRepoForWorker) ListChannelPreferences(context.Context, uuid.UUID) ([]domain.NotificationChannelPreference, error) {
+	return nil, nil
+}
+
+func (r *fakeReminderRepoForWorker) UpsertChannelPreference(context.Context, uuid.UUID, domain.NotificationChannelPreference) error {
+	return nil
+}
+
+func (r *fakeReminderRepoForWorker) IsChannelAllowed(_ context.Context, userID uuid.UUID, _ domain.EventType, _ domain.NotificationChannel) (bool, error) {
+	if r.channelAllowed != nil {
+		if allowed, ok := r.channelAllowed[userID]; ok {
 			return allowed, nil
 		}
 	}
@@ -395,7 +411,7 @@ func TestReminderWorker_DispatchReminder_MemberOptOut(t *testing.T) {
 	propertyID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 
 	repo := &fakeReminderRepoForWorker{
-		eventAllowed: map[uuid.UUID]bool{memberID: false},
+		channelAllowed: map[uuid.UUID]bool{memberID: false},
 	}
 	notifier := &fakeNotifier{}
 	recipients := fakePropertyRecipientLister{members: map[uuid.UUID][]uuid.UUID{
@@ -428,7 +444,7 @@ func TestReminderWorker_DispatchReminder_OwnerOptOutMemberAllowed(t *testing.T) 
 	propertyID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 
 	repo := &fakeReminderRepoForWorker{
-		eventAllowed: map[uuid.UUID]bool{ownerID: false},
+		channelAllowed: map[uuid.UUID]bool{ownerID: false},
 	}
 	notifier := &fakeNotifier{}
 	recipients := fakePropertyRecipientLister{members: map[uuid.UUID][]uuid.UUID{
@@ -461,7 +477,7 @@ func TestReminderWorker_DispatchReminder_AllRecipientsOptOut(t *testing.T) {
 	propertyID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 
 	repo := &fakeReminderRepoForWorker{
-		eventAllowed: map[uuid.UUID]bool{ownerID: false, memberID: false},
+		channelAllowed: map[uuid.UUID]bool{ownerID: false, memberID: false},
 	}
 	notifier := &fakeNotifier{}
 	recipients := fakePropertyRecipientLister{members: map[uuid.UUID][]uuid.UUID{

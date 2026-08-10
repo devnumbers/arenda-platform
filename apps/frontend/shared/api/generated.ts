@@ -865,6 +865,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/push/vapid-public-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getVapidPublicKey"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/push/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createPushSubscription"];
+        delete: operations["deletePushSubscription"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/popups/pending": {
         parameters: {
             query?: never;
@@ -2498,13 +2530,48 @@ export interface components {
         NotificationPreference: {
             /** @enum {string} */
             event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder";
+            /** @description Backward-compatible alias for email_allowed (ADR 0030 expand phase). Kept until all clients migrate to the per-channel fields. */
             allowed: boolean;
+            /** @description Permission to deliver this event type over email. */
+            email_allowed: boolean;
+            /** @description Permission to deliver this event type over Web Push. */
+            push_allowed: boolean;
         };
         NotificationPreferencesResponse: {
             preferences: components["schemas"]["NotificationPreference"][];
         };
         NotificationPreferencesUpdateRequest: {
             preferences: components["schemas"]["NotificationPreference"][];
+        };
+        VapidPublicKeyResponse: {
+            /** @description The application server's VAPID P-256 public key, base64url without padding (RFC 8292). Pass this to `pushManager.subscribe({ applicationServerKey })`. */
+            public_key: string;
+        };
+        PushSubscriptionCreateRequest: {
+            /** @description The push endpoint URL issued by the browser push service. */
+            endpoint: string;
+            /** @description The client ECDH P-256 public key, base64url (RFC 8291). */
+            p256dh: string;
+            /** @description The per-subscription auth secret, base64url (RFC 8291). */
+            auth: string;
+            /**
+             * Format: date-time
+             * @description Optional subscription expiration instant reported by the browser (RFC 8030).
+             */
+            expiration_time?: string | null;
+        };
+        PushSubscriptionDeleteRequest: {
+            /** @description The push endpoint URL to unregister (same value sent on subscribe). */
+            endpoint: string;
+        };
+        PushSubscriptionResponse: {
+            /** Format: uuid */
+            id: string;
+            endpoint: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         PendingPopupsResponse: {
             popups: string[];
@@ -4763,6 +4830,78 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getVapidPublicKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The application server's VAPID public key (base64url, RFC 8292) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VapidPublicKeyResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createPushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushSubscriptionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Push subscription stored (upserted by endpoint) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushSubscriptionResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    deletePushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushSubscriptionDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Push subscription deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     getPendingPopups: {

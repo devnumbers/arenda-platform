@@ -52,3 +52,29 @@ export function buildInitialPreferences(
   }
   return state;
 }
+
+/**
+ * Builds the full per-event-type payload for the PUT endpoint from a UI state.
+ * The expand-phase UI (ADR 0030) exposes a single toggle per event type that
+ * drives the email channel; push settings are carried through from the last
+ * known server preferences so they are not clobbered on save.
+ */
+export function buildPreferencePayload(
+  state: NotificationPreferencesState,
+  preferences: NotificationPreference[],
+): NotificationPreference[] {
+  const pushAllowedByType = new Map<NotificationEventType, boolean>();
+  for (const preference of preferences) {
+    pushAllowedByType.set(preference.eventType, preference.pushAllowed);
+  }
+  return NOTIFICATION_OPTIONS.map(({eventType}) => {
+    const allowed = state[eventType];
+    const pushAllowed = pushAllowedByType.get(eventType) ?? allowed;
+    return {
+      eventType,
+      allowed,
+      emailAllowed: allowed,
+      pushAllowed,
+    };
+  });
+}
