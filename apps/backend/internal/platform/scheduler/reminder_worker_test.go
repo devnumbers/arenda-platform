@@ -143,6 +143,18 @@ func (r *fakeReminderRepoForWorker) DeleteSentEmailReminder(_ context.Context, _
 	return nil
 }
 
+func (r *fakeReminderRepoForWorker) IsPushReminderSent(_ context.Context, _, _ uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+func (r *fakeReminderRepoForWorker) SaveSentPushReminder(_ context.Context, _ application.SaveSentPushReminderParams) error {
+	return nil
+}
+
+func (r *fakeReminderRepoForWorker) DeleteSentPushReminder(_ context.Context, _, _ uuid.UUID) error {
+	return nil
+}
+
 func (r *fakeReminderRepoForWorker) ResetReminderSending(context.Context, uuid.UUID) error {
 	return nil
 }
@@ -289,6 +301,8 @@ func newWorkerForTest(t *testing.T, repo *fakeReminderRepoForWorker, notifier *f
 		},
 		resolver,
 		recipients,
+		nil, // pushSender — disabled in email-only unit tests
+		nil, // pushSubRepo
 		fakeBeginnerForWorker{},
 		fakeClockForWorker{now: workerTestNow},
 		fakeBackoff{},

@@ -413,6 +413,13 @@ type SentEmailReminder struct {
 	SentAt     pgtype.Timestamptz `json:"sent_at"`
 }
 
+type SentPushReminder struct {
+	ID          pgtype.UUID        `json:"id"`
+	ReminderID  pgtype.UUID        `json:"reminder_id"`
+	RecipientID pgtype.UUID        `json:"recipient_id"`
+	SentAt      pgtype.Timestamptz `json:"sent_at"`
+}
+
 type SentSmsReminder struct {
 	ID               pgtype.UUID        `json:"id"`
 	ReminderID       pgtype.UUID        `json:"reminder_id"`

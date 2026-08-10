@@ -144,6 +144,18 @@ func (r *fakeReminderRepo) DeleteSentEmailReminder(context.Context, uuid.UUID, u
 	return nil
 }
 
+func (r *fakeReminderRepo) IsPushReminderSent(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+func (r *fakeReminderRepo) SaveSentPushReminder(context.Context, SaveSentPushReminderParams) error {
+	return nil
+}
+
+func (r *fakeReminderRepo) DeleteSentPushReminder(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+
 func (r *fakeReminderRepo) ResetReminderSending(context.Context, uuid.UUID) error { return nil }
 
 func (r *fakeReminderRepo) MarkSendingReminderPending(context.Context, uuid.UUID, time.Time) error {

@@ -182,6 +182,19 @@ ON CONFLICT (reminder_id, owner_id) DO NOTHING;
 -- name: DeleteSentEmailReminder :exec
 DELETE FROM sent_email_reminders WHERE reminder_id = $1 AND owner_id = $2;
 
+-- name: IsPushReminderSent :one
+SELECT EXISTS (
+    SELECT 1 FROM sent_push_reminders WHERE reminder_id = $1 AND recipient_id = $2
+);
+
+-- name: SaveSentPushReminder :execrows
+INSERT INTO sent_push_reminders (id, reminder_id, recipient_id, sent_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (reminder_id, recipient_id) DO NOTHING;
+
+-- name: DeleteSentPushReminder :exec
+DELETE FROM sent_push_reminders WHERE reminder_id = $1 AND recipient_id = $2;
+
 -- name: MarkReminderSkipped :execrows
 UPDATE reminders
 SET status = 'skipped'

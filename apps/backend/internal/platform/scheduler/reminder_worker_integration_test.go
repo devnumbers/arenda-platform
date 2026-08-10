@@ -197,6 +197,8 @@ func newReminderFanoutFixture(t *testing.T, ctx context.Context, tx pgx.Tx, memb
 		},
 		fakeContactResolver{},
 		accesspg.NewMemberRecipientAdapter(memberRepo),
+		nil, // pushSender — disabled in email-only fan-out tests
+		nil, // pushSubRepo
 		beginnerOverTx{tx: tx},
 		fakeClockForWorker{now: workerTestNow},
 		fakeBackoff{},

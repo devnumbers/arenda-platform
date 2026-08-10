@@ -620,6 +620,52 @@ func (r *ReminderRepository) DeleteSentEmailReminder(ctx context.Context, remind
 	return nil
 }
 
+// IsPushReminderSent reports whether a push audit row already exists for the
+// given reminder and recipient (per-recipient deduplication for the push
+// channel).
+func (r *ReminderRepository) IsPushReminderSent(ctx context.Context, reminderID, recipientID uuid.UUID) (bool, error) {
+	exists, err := r.q().IsPushReminderSent(ctx, postgres.IsPushReminderSentParams{
+		ReminderID:  pgconv.UUIDToPgtype(reminderID),
+		RecipientID: pgconv.UUIDToPgtype(recipientID),
+	})
+	if err != nil {
+		return false, fmt.Errorf("check sent push reminder: %w", err)
+	}
+	return exists, nil
+}
+
+// SaveSentPushReminder records a successfully sent push reminder for audit and
+// per-recipient deduplication. It returns ErrDuplicatePushReminder when an
+// audit row for the same (reminder, recipient) pair already exists.
+func (r *ReminderRepository) SaveSentPushReminder(ctx context.Context, arg application.SaveSentPushReminderParams) error {
+	rows, err := r.q().SaveSentPushReminder(ctx, postgres.SaveSentPushReminderParams{
+		ID:          pgconv.UUIDToPgtype(arg.ID),
+		ReminderID:  pgconv.UUIDToPgtype(arg.ReminderID),
+		RecipientID: pgconv.UUIDToPgtype(arg.RecipientID),
+		SentAt:      pgtype.Timestamptz{Time: arg.SentAt, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("create sent push reminder: %w", err)
+	}
+	if rows == 0 {
+		return application.ErrDuplicatePushReminder
+	}
+	return nil
+}
+
+// DeleteSentPushReminder removes the push audit row for a reminder and
+// recipient. It is used to roll back the audit insert when the external send
+// fails.
+func (r *ReminderRepository) DeleteSentPushReminder(ctx context.Context, reminderID, recipientID uuid.UUID) error {
+	if err := r.q().DeleteSentPushReminder(ctx, postgres.DeleteSentPushReminderParams{
+		ReminderID:  pgconv.UUIDToPgtype(reminderID),
+		RecipientID: pgconv.UUIDToPgtype(recipientID),
+	}); err != nil {
+		return fmt.Errorf("delete sent push reminder: %w", err)
+	}
+	return nil
+}
+
 // MarkReminderSkipped marks a pending or sending reminder as skipped. It is
 // used by the worker when the owner revoked permission for the event type.
 func (r *ReminderRepository) MarkReminderSkipped(ctx context.Context, id uuid.UUID) error {

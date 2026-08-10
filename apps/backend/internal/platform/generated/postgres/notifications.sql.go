@@ -216,6 +216,20 @@ func (q *Queries) DeleteSentEmailReminder(ctx context.Context, arg DeleteSentEma
 	return err
 }
 
+const deleteSentPushReminder = `-- name: DeleteSentPushReminder :exec
+DELETE FROM sent_push_reminders WHERE reminder_id = $1 AND recipient_id = $2
+`
+
+type DeleteSentPushReminderParams struct {
+	ReminderID  pgtype.UUID `json:"reminder_id"`
+	RecipientID pgtype.UUID `json:"recipient_id"`
+}
+
+func (q *Queries) DeleteSentPushReminder(ctx context.Context, arg DeleteSentPushReminderParams) error {
+	_, err := q.db.Exec(ctx, deleteSentPushReminder, arg.ReminderID, arg.RecipientID)
+	return err
+}
+
 const getReminderByIDAndOwner = `-- name: GetReminderByIDAndOwner :one
 SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders WHERE id = $1 AND owner_id = $2
 `
@@ -354,6 +368,24 @@ func (q *Queries) IsNotificationEventAllowed(ctx context.Context, arg IsNotifica
 	var allowed bool
 	err := row.Scan(&allowed)
 	return allowed, err
+}
+
+const isPushReminderSent = `-- name: IsPushReminderSent :one
+SELECT EXISTS (
+    SELECT 1 FROM sent_push_reminders WHERE reminder_id = $1 AND recipient_id = $2
+)
+`
+
+type IsPushReminderSentParams struct {
+	ReminderID  pgtype.UUID `json:"reminder_id"`
+	RecipientID pgtype.UUID `json:"recipient_id"`
+}
+
+func (q *Queries) IsPushReminderSent(ctx context.Context, arg IsPushReminderSentParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isPushReminderSent, arg.ReminderID, arg.RecipientID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const isSMSReminderSent = `-- name: IsSMSReminderSent :one
@@ -1181,6 +1213,32 @@ func (q *Queries) SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailRe
 		arg.Email,
 		arg.Subject,
 		arg.PlainBody,
+		arg.SentAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const saveSentPushReminder = `-- name: SaveSentPushReminder :execrows
+INSERT INTO sent_push_reminders (id, reminder_id, recipient_id, sent_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (reminder_id, recipient_id) DO NOTHING
+`
+
+type SaveSentPushReminderParams struct {
+	ID          pgtype.UUID        `json:"id"`
+	ReminderID  pgtype.UUID        `json:"reminder_id"`
+	RecipientID pgtype.UUID        `json:"recipient_id"`
+	SentAt      pgtype.Timestamptz `json:"sent_at"`
+}
+
+func (q *Queries) SaveSentPushReminder(ctx context.Context, arg SaveSentPushReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, saveSentPushReminder,
+		arg.ID,
+		arg.ReminderID,
+		arg.RecipientID,
 		arg.SentAt,
 	)
 	if err != nil {

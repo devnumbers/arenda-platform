@@ -5,7 +5,7 @@ Arenda Platform — DDD modular monolith (Go, `apps/backend/internal/`). Domain 
 ## Contexts
 
 - [Identity](./apps/backend/internal/identity/CONTEXT.md) — accounts, sessions, user roles (Owner, Admin).
-- [Rental](./apps/backend/internal/properties/CONTEXT.md) — properties, leases, operations, reminders. Super-context: properties + leases + notifications are tightly coupled (bidirectional domain imports); documented as one glossary until cycles are broken (ADR 0029).
+- [Rental](./apps/backend/internal/properties/CONTEXT.md) — properties, leases, operations, reminders. Super-context: properties + leases + notifications are tightly coupled (bidirectional domain imports); documented as one glossary until cycles are broken (ADR 0029). Notifications has its own [CONTEXT.md](./apps/backend/internal/notifications/CONTEXT.md) for the delivery-channel glossary (email/push, subscriptions, per-channel preferences).
 - [Billing](./apps/backend/internal/billing/CONTEXT.md) — tariffs, subscriptions, payment methods, T-Kassa integration.
 - [Access](./apps/backend/internal/access/CONTEXT.md) — property sharing, member roles, derived object access.
 - [Audit](./apps/backend/internal/audit/CONTEXT.md) — audit log of user/admin/system actions.

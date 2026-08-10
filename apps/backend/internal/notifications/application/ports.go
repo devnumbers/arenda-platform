@@ -57,6 +57,18 @@ type ReminderRepository interface {
 	SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) error
 	IsEmailReminderSent(ctx context.Context, reminderID, recipientID uuid.UUID) (bool, error)
 	DeleteSentEmailReminder(ctx context.Context, reminderID, recipientID uuid.UUID) error
+	// IsPushReminderSent reports whether a push audit row already exists for the
+	// given reminder and recipient (per-recipient deduplication for the push
+	// channel).
+	IsPushReminderSent(ctx context.Context, reminderID, recipientID uuid.UUID) (bool, error)
+	// SaveSentPushReminder records a successfully sent push reminder for audit
+	// and deduplication. It returns ErrDuplicatePushReminder when an audit row
+	// for the same (reminder, recipient) pair already exists.
+	SaveSentPushReminder(ctx context.Context, arg SaveSentPushReminderParams) error
+	// DeleteSentPushReminder removes the push audit row for a reminder and
+	// recipient. It is used to roll back the audit insert when the external
+	// send fails.
+	DeleteSentPushReminder(ctx context.Context, reminderID, recipientID uuid.UUID) error
 	ResetReminderSending(ctx context.Context, id uuid.UUID) error
 	MarkSendingReminderPending(ctx context.Context, id uuid.UUID, nextAttemptAt time.Time) error
 	// MarkReminderSkipped marks a pending or sending reminder as skipped. It is
@@ -167,6 +179,19 @@ type SaveSentEmailReminderParams struct {
 	SentAt    time.Time
 }
 
+// SaveSentPushReminderParams contains the data recorded when a push reminder is
+// sent to a recipient. One row per (reminder, recipient) enables per-recipient
+// deduplication across dispatch retries.
+type SaveSentPushReminderParams struct {
+	ID         uuid.UUID
+	ReminderID uuid.UUID
+	// RecipientID is the user_id of the recipient the push was sent to. It is
+	// not necessarily the reminder owner: one audit row is stored per recipient
+	// (mirrors the email per-recipient fan-out, issue #159).
+	RecipientID uuid.UUID
+	SentAt      time.Time
+}
+
 // Notifier dispatches a notification to a recipient.
 type Notifier interface {
 	Notify(ctx context.Context, n Notification) (providerResponse, renderedPlainBody string, err error)
@@ -175,6 +200,16 @@ type Notifier interface {
 // SMSSender sends an SMS message to a phone number.
 type SMSSender interface {
 	Send(ctx context.Context, phone string, message string) (providerResponse string, err error)
+}
+
+// PushSender dispatches a single Web Push message to one browser subscription.
+// It encrypts the payload (RFC 8291) and sends it to the push service endpoint
+// identified by the subscription. Domain errors signal the outcome:
+// ErrSubscriptionGone (404/410) — the subscription is dead and must be deleted;
+// ErrRateLimited (429) — the push service throttled the request; a non-nil
+// error otherwise means the send failed (the caller may retry on 5xx).
+type PushSender interface {
+	Send(ctx context.Context, subscription domain.PushSubscription, payload PushPayload) error
 }
 
 // ContactResolver resolves the delivery channel and address for an owner.

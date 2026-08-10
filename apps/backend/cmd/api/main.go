@@ -208,6 +208,8 @@ func run() error {
 		billingMod.Services.Renewals,
 		billingMod.Services.ScheduledChanges,
 		billingMod.Services.Payments,
+		notificationsMod.PushSubscriptionRepo,
+		nil, // pushSender — Web Push adapter (RFC 8030/8291/8292) is implemented in a follow-up ticket.
 	)
 
 	// 14. HTTP rate limiters.

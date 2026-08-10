@@ -98,6 +98,7 @@ type Querier interface {
 	DeleteRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) error
 	DeleteRecurringOperationsByProperty(ctx context.Context, arg DeleteRecurringOperationsByPropertyParams) error
 	DeleteSentEmailReminder(ctx context.Context, arg DeleteSentEmailReminderParams) error
+	DeleteSentPushReminder(ctx context.Context, arg DeleteSentPushReminderParams) error
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) error
@@ -211,6 +212,7 @@ type Querier interface {
 	IsEmailReminderSent(ctx context.Context, arg IsEmailReminderSentParams) (bool, error)
 	IsNotificationChannelAllowed(ctx context.Context, arg IsNotificationChannelAllowedParams) (bool, error)
 	IsNotificationEventAllowed(ctx context.Context, arg IsNotificationEventAllowedParams) (bool, error)
+	IsPushReminderSent(ctx context.Context, arg IsPushReminderSentParams) (bool, error)
 	IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
 	ListAccessibleOwners(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
@@ -329,6 +331,7 @@ type Querier interface {
 	SaveFreeReminder(ctx context.Context, arg SaveFreeReminderParams) (int64, error)
 	SaveOrReplaceOperationReminder(ctx context.Context, arg SaveOrReplaceOperationReminderParams) (int64, error)
 	SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) (int64, error)
+	SaveSentPushReminder(ctx context.Context, arg SaveSentPushReminderParams) (int64, error)
 	SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperationParams) (Operation, error)
 	SoftDeleteRecurringOperation(ctx context.Context, arg SoftDeleteRecurringOperationParams) (RecurringOperation, error)
 	SuspendPropertyMember(ctx context.Context, arg SuspendPropertyMemberParams) error

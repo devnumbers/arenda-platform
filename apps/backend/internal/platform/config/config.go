@@ -71,6 +71,11 @@ type Config struct {
 	OTelTraceSampler                    float64
 	OTelOTLPEndpoint                    string
 	VAPIDPublicKey                      string
+	// VAPIDPrivateKey and VAPIDSubject are consumed by the Web Push sender
+	// (RFC 8292). They are optional: when VAPIDPublicKey is unset, push
+	// delivery is disabled and the reminder worker runs email-only.
+	VAPIDPrivateKey string
+	VAPIDSubject    string
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -126,6 +131,8 @@ func Load() (Config, error) {
 			(os.Getenv("OTEL_METRICS_EXPORTER") != "" && os.Getenv("OTEL_METRICS_EXPORTER") != "none"),
 		OTelOTLPEndpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		VAPIDPublicKey:   os.Getenv("VAPID_PUBLIC_KEY"),
+		VAPIDPrivateKey:  os.Getenv("VAPID_PRIVATE_KEY"),
+		VAPIDSubject:     os.Getenv("VAPID_SUBJECT"),
 	}
 
 	sampler, err := parseFloatEnv("OTEL_TRACES_SAMPLER_ARG", 1.0)
@@ -660,9 +667,10 @@ func Load() (Config, error) {
 		cfg.TariffCacheTTL = d
 	}
 
-	// VAPIDPublicKey is optional: it is served to the frontend when set, and
-	// the private key + subject are consumed only by the push sender (a later
-	// ticket). Nothing here reads them, so they are not parsed yet.
+	// VAPID keys are optional: the public key is served to the frontend when
+	// set; the private key and subject are consumed by the Web Push sender
+	// (RFC 8292). When the public key is unset, push delivery is disabled and
+	// the reminder worker runs email-only.
 	return cfg, nil
 }
 
