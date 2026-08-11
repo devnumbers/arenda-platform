@@ -20,6 +20,64 @@ const CACHE_VERSION = 'v1';
 const CACHE_NAME = `rentli-offline-${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
+// Standalone-flag persistence — the page writes the flag via
+// `shared/lib/pwa/standalone-store.ts` and the SW reads it here to redirect
+// PWA navigations to `/` back into the app. Constants MUST match
+// standalone-store.ts; the guard test `standalone-store marker sync with
+// service worker` catches drift on all three markers (DB name, store, key).
+var STANDALONE_DB_NAME = 'rentli-pwa';
+var STANDALONE_DB_STORE = 'pwa';
+var STANDALONE_DB_KEY = 'standalone';
+
+// Reads the standalone flag. Resolves `false` on any error / missing DB so a
+// broken IndexedDB never blocks navigation — the worst case is the redirect
+// not firing and the user seeing the landing once.
+function readStandaloneFlag() {
+  return new Promise(function (resolve) {
+    if (!('indexedDB' in self)) {
+      resolve(false);
+      return;
+    }
+    var open;
+    try {
+      open = indexedDB.open(STANDALONE_DB_NAME, 1);
+    } catch (error) {
+      void error;
+      resolve(false);
+      return;
+    }
+    open.onupgradeneeded = function () {
+      var db = open.result;
+      if (!db.objectStoreNames.contains(STANDALONE_DB_STORE)) {
+        db.createObjectStore(STANDALONE_DB_STORE);
+      }
+    };
+    open.onsuccess = function () {
+      var db = open.result;
+      try {
+        var tx = db.transaction(STANDALONE_DB_STORE, 'readonly');
+        var store = tx.objectStore(STANDALONE_DB_STORE);
+        var req = store.get(STANDALONE_DB_KEY);
+        req.onsuccess = function () {
+          db.close();
+          resolve(req.result === true);
+        };
+        req.onerror = function () {
+          db.close();
+          resolve(false);
+        };
+      } catch (error) {
+        void error;
+        db.close();
+        resolve(false);
+      }
+    };
+    open.onerror = function () {
+      resolve(false);
+    };
+  });
+}
+
 // Cabinet route prefixes — keep in sync with shared/lib/pwa/cabinet-routes.ts.
 const CABINET_ROUTE_PREFIXES = [
   '/login',
@@ -77,6 +135,24 @@ self.addEventListener('fetch', function (event) {
   }
 
   const url = new URL(request.url);
+
+  // PWA hard-isolation: when an installed-PWA client lands on `/` (via
+  // history, an external link, or manual URL entry), bounce it back into the
+  // app. The standalone flag is written by the page after SW registration
+  // (see ServiceWorkerRegister.tsx + standalone-store.ts). Non-standalone
+  // (browser) clients fall through and see the landing as normal.
+  if (url.origin === self.location.origin && url.pathname === '/') {
+    event.respondWith(
+      readStandaloneFlag().then(function (isStandalone) {
+        if (isStandalone) {
+          return Response.redirect('/dashboard', 302);
+        }
+        // Not a PWA client — let the request go to the network (landing).
+        return fetch(request);
+      })
+    );
+    return;
+  }
 
   // Only intercept navigations to cabinet routes; landing routes and other
   // origins go straight to the network.

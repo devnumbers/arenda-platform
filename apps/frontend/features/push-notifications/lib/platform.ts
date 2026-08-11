@@ -8,26 +8,16 @@
  * the server during the initial render, so the guards are required.
  */
 
-/** iOS Safari exposes a non-standard `navigator.standalone` boolean. */
-type NavigatorWithStandalone = Navigator & {
-    readonly standalone?: boolean;
-};
+// Standalone-mode detection is a shared-layer concern (used by login UI, the
+// service worker guard, and push). Imported here so existing push feature call
+// sites keep working without crossing FSD layer boundaries.
+import { isStandaloneMode } from '@/shared/lib/pwa/standalone';
+export { isStandaloneMode };
 
 /** `window.MSStream` is the legacy IE/Edge UA spoofing guard for iPadOS. */
 type WindowWithMSStream = Window & {
     readonly MSStream?: unknown;
 };
-
-/**
- * True when the app runs as an installed PWA — either Chrome's
- * `(display-mode: standalone)` media query matches, or iOS Safari reports
- * `navigator.standalone === true`. Web Push on iOS requires standalone mode.
- */
-export function isStandaloneMode(): boolean {
-    if (typeof window === 'undefined') return false;
-    if (window.matchMedia?.('(display-mode: standalone)').matches) return true;
-    return (navigator as NavigatorWithStandalone).standalone === true;
-}
 
 /**
  * Detects iOS / iPadOS devices. iPadOS 13+ spoofs desktop Safari in its UA

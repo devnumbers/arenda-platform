@@ -11,10 +11,13 @@ import {safeInternalPath} from "@/shared/lib/safe-internal-path";
 import {useSendCooldown} from "@/features/auth/lib/use-send-cooldown";
 import {useLoginDraft} from "@/features/auth/lib/use-login-draft";
 import {RESEND_TIMEOUT} from "@/features/auth/lib/constants";
+import {useStandalone} from "@/shared/lib/hooks/useStandalone";
+import {goBack} from "@/shared/lib/navigation";
 import styles from "./LoginPage.module.css";
 
 export default function LoginPage(): JSX.Element {
     const router = useRouter();
+    const isStandalone = useStandalone();
     const {draft, setDraft, clearDraft} = useLoginDraft();
     const {remainingSeconds: resendTimer, recordSendWithRemainingSeconds} = useSendCooldown();
 
@@ -103,7 +106,7 @@ export default function LoginPage(): JSX.Element {
     };
 
     const handleClose = () => {
-        router.push("/");
+        goBack(router, "/");
     };
 
     const handleResend = () => {
@@ -146,6 +149,7 @@ export default function LoginPage(): JSX.Element {
                         onChangeEmail={handleChangeEmail}
                         onResend={handleResend}
                         onClose={handleClose}
+                        hideClose={isStandalone}
                         phone={draft.phone}
                         onPhoneChange={(phone) => setDraft((prev) => ({...prev, phone}))}
                         email={draft.email}

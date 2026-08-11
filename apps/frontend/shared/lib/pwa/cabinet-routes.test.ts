@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { CABINET_ROUTE_PREFIXES, isCabinetRoute } from './cabinet-routes';
+import {
+    STANDALONE_DB_KEY,
+    STANDALONE_DB_NAME,
+    STANDALONE_DB_STORE,
+} from './standalone-store';
 
 describe('isCabinetRoute', () => {
   it('returns true for exact cabinet routes', () => {
@@ -53,6 +58,29 @@ describe('cabinet route list sync with service worker', () => {
 
     for (const prefix of CABINET_ROUTE_PREFIXES) {
       expect(swSource, `public/sw.js missing prefix ${prefix}`).toContain(`'${prefix}'`);
+    }
+  });
+});
+
+describe('standalone-store marker sync with service worker', () => {
+  // The SW keeps its own inline copy of the IndexedDB name/store/key to read
+  // the standalone flag written by standalone-store.ts. This test catches drift
+  // on all three markers, mirroring the prefix-list guard above.
+  it('public/sw.js references the standalone DB name, store, and key', () => {
+    const swPath = resolve(process.cwd(), 'public/sw.js');
+    const swSource = readFileSync(swPath, 'utf8');
+
+    const markers: ReadonlyArray<[string, string]> = [
+      ['DB name', STANDALONE_DB_NAME],
+      ['store', STANDALONE_DB_STORE],
+      ['key', STANDALONE_DB_KEY],
+    ];
+
+    for (const [label, value] of markers) {
+      expect(
+        swSource,
+        `public/sw.js missing standalone ${label} '${value}'`,
+      ).toContain(`'${value}'`);
     }
   });
 });

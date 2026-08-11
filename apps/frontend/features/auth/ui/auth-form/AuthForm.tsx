@@ -22,6 +22,13 @@ export type AuthFormProps = {
     onChangeEmail?: () => void;
     onResend?: () => void;
     onClose?: () => void;
+    /**
+     * Hide the "close" (✕) button on the phone step. Used in PWA standalone
+     * mode, where there is no landing to return to — closing would push the
+     * user out of the app. The back/support buttons on the email/code steps
+     * are unaffected.
+     */
+    hideClose?: boolean;
     phone?: string;
     onPhoneChange?: (value: string) => void;
     email?: string;
@@ -68,6 +75,7 @@ export function AuthForm({
                              onChangeEmail,
                              onResend,
                              onClose,
+                             hideClose = false,
                              phone: controlledPhone,
                              onPhoneChange,
                              email: controlledEmail,
@@ -168,16 +176,18 @@ export function AuthForm({
     return (
         <div className={styles.root}>
             {effectiveStep === "phone" ? (
-                <div className={styles.topBar}>
-                    <IconButton
-                        variant="primary-icon"
-                        size="large"
-                        aria-label="Закрыть"
-                        icon={<Cancel/>}
-                        onClick={onClose}
-                        className={styles.iconButton}
-                    />
-                </div>
+                hideClose ? null : (
+                    <div className={styles.topBar}>
+                        <IconButton
+                            variant="primary-icon"
+                            size="large"
+                            aria-label="Закрыть"
+                            icon={<Cancel/>}
+                            onClick={onClose}
+                            className={styles.iconButton}
+                        />
+                    </div>
+                )
             ) : (
                 <div className={clsx(styles.topBar, styles.topBarCode)}>
                     <IconButton
