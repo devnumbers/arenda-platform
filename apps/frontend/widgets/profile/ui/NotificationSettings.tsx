@@ -31,7 +31,7 @@ type NotificationSettingsViewProps = {
 
 function NotificationSettingsView({ preferences }: NotificationSettingsViewProps): JSX.Element {
   const updateNotificationPreferences = useUpdateNotificationPreferences();
-  const pushStatus = usePushSubscriptionStatus();
+  const { refresh: refreshPushStatus, ...pushStatus } = usePushSubscriptionStatus();
   const { subscribe: subscribePush } = useSubscribePush();
 
   // Push is unavailable when the browser cannot receive push, the user has not
@@ -150,6 +150,8 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
       const outcome = await subscribePush();
       if (outcome.outcome === 'subscribed' || outcome.outcome === 'already-subscribed') {
         notify.scenarios.profile.pushEnabled();
+        // Re-probe so the banner, push column and hint update without a reload.
+        refreshPushStatus();
       } else if (outcome.outcome === 'ios-needs-install') {
         notify.scenarios.profile.pushIosNeedsInstall();
       } else if (outcome.outcome === 'denied') {
@@ -162,7 +164,7 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
     } finally {
       setIsEnablingPush(false);
     }
-  }, [subscribePush]);
+  }, [subscribePush, refreshPushStatus]);
 
   // After the user has changed the permission via browser settings, the only
   // reliable way to pick up the new state is a reload — `Notification.permission`

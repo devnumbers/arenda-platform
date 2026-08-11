@@ -39,6 +39,17 @@ const UNSUPPORTED: PushSubscriptionStatus = {
   isPending: false,
 };
 
+export type PushSubscriptionStatusResult = PushSubscriptionStatus & {
+  /**
+   * Re-probe the browser's push capability, permission, and subscription.
+   * The browser does not emit an event when any of these change, so call this
+   * after an explicit user action that may affect the result (e.g. once the
+   * "Разрешить пуши" button has created a subscription) — otherwise the status
+   * stays stale until a page reload.
+   */
+  readonly refresh: () => void;
+};
+
 /**
  * Inspect the browser push capability and return a coarse-grained status the
  * notification-settings UI can branch on.
@@ -50,7 +61,7 @@ const UNSUPPORTED: PushSubscriptionStatus = {
  * check lives in `.then` callbacks, which the rule treats as legitimate
  * (state settles after an awaited operation, not synchronously on mount).
  */
-export function usePushSubscriptionStatus(): PushSubscriptionStatus {
+export function usePushSubscriptionStatus(): PushSubscriptionStatusResult {
   // Resolve synchronously on the client first render; on SSR `isPending`
   // stays true and the caller renders the neutral UI.
   const getInitial = (): PushSubscriptionStatus => {
@@ -61,20 +72,17 @@ export function usePushSubscriptionStatus(): PushSubscriptionStatus {
   };
   const [status, setStatus] = useState<PushSubscriptionStatus>(getInitial);
 
-  useEffect(() => {
-    // The synchronous-unsupported case was handled by the initializer; bail
-    // out here so no setState is reached for unsupported browsers.
-    if (status.isUnsupported) return;
+  // Re-read the browser push capability/permission/subscription and push the
+  // result into state. Plain function (no useCallback) — React Compiler
+  // memoizes it automatically. `cancelled` is threaded in by the mount effect
+  // so a probe that resolves after unmount does not call setState.
+  const refresh = async (cancelled: () => boolean = () => false): Promise<void> => {
+    if (!isPushSupported()) return;
 
-    let cancelled = false;
-    const resolve = (next: PushSubscriptionStatus): void => {
-      if (!cancelled) setStatus(next);
-    };
-
-    void (async () => {
-      const permission = readNotificationPermission();
-      if (permission !== 'granted') {
-        resolve({
+    const permission = readNotificationPermission();
+    if (permission !== 'granted') {
+      if (!cancelled()) {
+        setStatus({
           isUnsupported: false,
           needsPermission: true,
           permissionDenied: permission === 'denied',
@@ -82,28 +90,39 @@ export function usePushSubscriptionStatus(): PushSubscriptionStatus {
           isReady: false,
           isPending: false,
         });
-        return;
       }
+      return;
+    }
 
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      resolve({
-        isUnsupported: false,
-        needsPermission: false,
-        permissionDenied: false,
-        needsSubscription: subscription === null,
-        isReady: subscription !== null,
-        isPending: false,
-      });
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    if (cancelled()) return;
+    setStatus({
+      isUnsupported: false,
+      needsPermission: false,
+      permissionDenied: false,
+      needsSubscription: subscription === null,
+      isReady: subscription !== null,
+      isPending: false,
+    });
+  };
+
+  useEffect(() => {
+    // The synchronous-unsupported case was handled by the initializer; bail
+    // out here so no setState is reached for unsupported browsers.
+    if (status.isUnsupported) return;
+
+    let cancelled = false;
+    // Run once on mount. The async IIFE keeps the setStatus calls behind an
+    // await so ESLint's react-hooks/set-state-in-effect rule does not fire.
+    void (async () => {
+      await refresh(() => cancelled);
     })();
-
     return () => {
       cancelled = true;
     };
-    // Re-run only on mount; the capability/permission state is stable for the
-    // lifetime of this view and a manual re-check is not needed here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return status;
+  return { ...status, refresh: () => void refresh() };
 }
