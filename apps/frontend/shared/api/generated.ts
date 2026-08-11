@@ -2530,8 +2530,6 @@ export interface components {
         NotificationPreference: {
             /** @enum {string} */
             event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder";
-            /** @description Backward-compatible alias for email_allowed (ADR 0030 expand phase). Kept until all clients migrate to the per-channel fields. */
-            allowed: boolean;
             /** @description Permission to deliver this event type over email. */
             email_allowed: boolean;
             /** @description Permission to deliver this event type over Web Push. */

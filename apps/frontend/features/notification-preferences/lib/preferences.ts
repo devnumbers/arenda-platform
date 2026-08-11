@@ -61,7 +61,7 @@ export function buildInitialPreferences(
     free_reminder: true,
   };
   for (const preference of preferences) {
-    state[preference.eventType] = preference.allowed;
+    state[preference.eventType] = preference.emailAllowed;
   }
   return state;
 }
@@ -91,7 +91,7 @@ export function buildInitialChannelPreferences(
 
 /**
  * Builds the full per-event-type payload for the PUT endpoint from a UI state.
- * The expand-phase UI (ADR 0030) exposes a single toggle per event type that
+ * The onboarding UI (ADR 0030) exposes a single toggle per event type that
  * drives the email channel; push settings are carried through from the last
  * known server preferences so they are not clobbered on save.
  */
@@ -108,7 +108,6 @@ export function buildPreferencePayload(
     const pushAllowed = pushAllowedByType.get(eventType) ?? allowed;
     return {
       eventType,
-      allowed,
       emailAllowed: allowed,
       pushAllowed,
     };
@@ -117,8 +116,7 @@ export function buildPreferencePayload(
 
 /**
  * Build the per-event-type × per-channel payload for the PUT endpoint from a
- * channel-matrix state. `email_allowed` drives the legacy `allowed` field
- * (ADR 0030 §4: `allowed` equals `email_allowed` during the expand phase).
+ * channel-matrix state.
  */
 export function buildChannelPreferencePayload(
   state: NotificationChannelState,
@@ -127,7 +125,6 @@ export function buildChannelPreferencePayload(
     const flags = state[eventType];
     return {
       eventType,
-      allowed: flags.email,
       emailAllowed: flags.email,
       pushAllowed: flags.push,
     };

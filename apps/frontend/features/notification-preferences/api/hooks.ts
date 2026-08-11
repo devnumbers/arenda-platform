@@ -50,7 +50,6 @@ export function useUpdateNotificationPreferences(): UseMutationResult<
       const payload: NotificationPreferencesUpdateRequest = {
         preferences: preferences.map((preference) => ({
           event_type: preference.eventType,
-          allowed: preference.allowed,
           email_allowed: preference.emailAllowed,
           push_allowed: preference.pushAllowed,
         })),

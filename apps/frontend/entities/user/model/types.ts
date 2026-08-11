@@ -42,7 +42,6 @@ export type NotificationEventType =
 
 export type NotificationPreference = {
   readonly eventType: NotificationEventType;
-  readonly allowed: boolean;
   readonly emailAllowed: boolean;
   readonly pushAllowed: boolean;
 };

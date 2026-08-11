@@ -71,10 +71,7 @@ func (h *NotificationPreferenceHandlers) UpdateNotificationPreferences(w http.Re
 
 // channelPreferencesFromRequest expands the per-event-type request items (each
 // carrying independent email/push flags) into the per-channel domain slice the
-// service expects: one (event_type, channel) entry per flag. The legacy
-// `allowed` field is ignored on writes — clients send `email_allowed`/
-// `push_allowed` directly; `allowed` is kept in the response (= email_allowed)
-// for backward compatibility.
+// service expects: one (event_type, channel) entry per flag.
 func channelPreferencesFromRequest(items []openapi.NotificationPreference) []notificationsdomain.NotificationChannelPreference {
 	prefs := make([]notificationsdomain.NotificationChannelPreference, 0, len(items)*2)
 	for _, item := range items {
@@ -88,8 +85,8 @@ func channelPreferencesFromRequest(items []openapi.NotificationPreference) []not
 }
 
 // notificationChannelPreferencesResponse collapses the per-channel domain
-// slice back into one response item per event type, carrying emailAllowed,
-// pushAllowed and the backward-compatible allowed (= emailAllowed).
+// slice back into one response item per event type, carrying emailAllowed and
+// pushAllowed.
 func notificationChannelPreferencesResponse(prefs []notificationsdomain.NotificationChannelPreference) openapi.NotificationPreferencesResponse {
 	byType := make(map[notificationsdomain.EventType]struct {
 		email bool
@@ -114,7 +111,6 @@ func notificationChannelPreferencesResponse(prefs []notificationsdomain.Notifica
 		}
 		items = append(items, openapi.NotificationPreference{
 			EventType:    openapi.NotificationPreferenceEventType(eventType),
-			Allowed:      entry.email,
 			EmailAllowed: entry.email,
 			PushAllowed:  entry.push,
 		})

@@ -70,14 +70,12 @@ default.
 
 ### 4. API backward compatibility
 
-The `GET/PUT /notification-preferences` endpoints serve a new shape: each
-preference carries `emailAllowed` and `pushAllowed`. The legacy `allowed` field
-is preserved in the response (equal to `emailAllowed`) so existing clients that
-read it continue to work. On writes the `allowed` field is ignored — clients
-send `email_allowed`/`push_allowed` directly, and the expand-phase frontend was
-updated in the same change to do so, so there is no legacy writer to support.
-This dual shape lives until the frontend fully migrates to the per-channel UI,
-after which `allowed` is removed (contract phase).
+The `GET/PUT /notification-preferences` endpoints serve a per-channel shape:
+each preference carries `emailAllowed` and `pushAllowed`. During the expand
+phase the legacy `allowed` field was preserved in the response (equal to
+`emailAllowed`) so existing clients kept working; once the frontend migrated to
+the per-channel UI (#183), the contract phase (#184) removed `allowed` from
+both the request and the response. The API now has a single shape.
 
 ### 5. Enforcement in the ReminderWorker
 
@@ -108,8 +106,6 @@ about to deliver on. In the current email-only dispatch path, that is
   one; the codebase carries both `NotificationPreference` and
   `NotificationChannelPreference` domain types and both sets of repository/
   service methods in the interim.
-- (~) The `allowed` response field is a transient alias for `emailAllowed`; it
-  will be removed once the frontend adopts the per-channel shape.
 
 ## See also
 

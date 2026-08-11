@@ -30,7 +30,6 @@ export function mapNotificationPreferencesResponse(
 ): NotificationPreference[] {
   return response.preferences.map((preference) => ({
     eventType: preference.event_type,
-    allowed: preference.allowed,
     emailAllowed: preference.email_allowed,
     pushAllowed: preference.push_allowed,
   }));

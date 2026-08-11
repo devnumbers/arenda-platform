@@ -14,13 +14,11 @@ func TestChannelPreferencesFromRequest(t *testing.T) {
 	items := []openapi.NotificationPreference{
 		{
 			EventType:    openapi.NotificationPreferenceEventType(notificationsdomain.EventOperationDue),
-			Allowed:      false, // legacy field ignored on writes
 			EmailAllowed: true,
 			PushAllowed:  false,
 		},
 		{
 			EventType:    openapi.NotificationPreferenceEventType(notificationsdomain.EventLeaseExpiring),
-			Allowed:      true,
 			EmailAllowed: false,
 			PushAllowed:  true,
 		},
@@ -52,8 +50,8 @@ func TestChannelPreferencesFromRequest(t *testing.T) {
 }
 
 // TestNotificationChannelPreferencesResponse verifies that the per-channel
-// domain slice collapses back into one response item per event type, with
-// allowed == emailAllowed and the push flag carried through.
+// domain slice collapses back into one response item per event type, with the
+// email and push flags carried through.
 func TestNotificationChannelPreferencesResponse(t *testing.T) {
 	// Build a full default set, then flip operation_due/email off and
 	// lease_expiring/push off.
@@ -85,9 +83,6 @@ func TestNotificationChannelPreferencesResponse(t *testing.T) {
 	if !due.PushAllowed {
 		t.Errorf("operation_due pushAllowed: expected true, got false")
 	}
-	if due.Allowed != due.EmailAllowed {
-		t.Errorf("operation_due allowed (%v) must equal emailAllowed (%v)", due.Allowed, due.EmailAllowed)
-	}
 
 	lease := byType[notificationsdomain.EventLeaseExpiring]
 	if !lease.EmailAllowed {
@@ -95,9 +90,6 @@ func TestNotificationChannelPreferencesResponse(t *testing.T) {
 	}
 	if lease.PushAllowed {
 		t.Errorf("lease_expiring pushAllowed: expected false, got true")
-	}
-	if lease.Allowed != lease.EmailAllowed {
-		t.Errorf("lease_expiring allowed (%v) must equal emailAllowed (%v)", lease.Allowed, lease.EmailAllowed)
 	}
 }
 
@@ -113,9 +105,9 @@ func TestNotificationChannelPreferencesResponse_RoundTrip(t *testing.T) {
 	}
 
 	for _, p := range resp.Preferences {
-		if !p.EmailAllowed || !p.PushAllowed || !p.Allowed {
-			t.Errorf("expected all default flags true for %s (email=%v, push=%v, allowed=%v)",
-				p.EventType, p.EmailAllowed, p.PushAllowed, p.Allowed)
+		if !p.EmailAllowed || !p.PushAllowed {
+			t.Errorf("expected all default flags true for %s (email=%v, push=%v)",
+				p.EventType, p.EmailAllowed, p.PushAllowed)
 		}
 	}
 }
