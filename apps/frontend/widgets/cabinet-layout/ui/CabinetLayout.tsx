@@ -3,6 +3,7 @@
 import type { JSX, ReactNode } from 'react';
 import { RemindersOnboardingModal } from '@/widgets/reminders-onboarding/ui/RemindersOnboardingModal';
 import { ServiceWorkerRegister } from '@/shared/lib/pwa/ServiceWorkerRegister';
+import { ServiceWorkerUpdater } from '@/shared/lib/pwa/ServiceWorkerUpdater';
 import { PushPermissionGate } from '@/features/push-notifications/ui/PushPermissionGate';
 import { BottomNav } from './BottomNav';
 import { Sidebar } from './Sidebar';
@@ -22,6 +23,7 @@ export function CabinetLayout({ children }: CabinetLayoutProps): JSX.Element {
       <RemindersOnboardingModal />
       <BottomNav />
       <ServiceWorkerRegister />
+      <ServiceWorkerUpdater />
       <PushPermissionGate />
     </div>
   );

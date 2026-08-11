@@ -137,6 +137,17 @@ SW для installability не нужен (раздел 2), но нужен ка�
 - **Заголовок `Service-Worker-Allowed` нужен для противоположного** — расширения scope шире директории скрипта (например, скрипт в `/pwa/sw.js`, scope `/`); сервер ставит его на ответ SW-скрипта, иначе регистрация падает ([MDN, register()](https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerContainer/register)). Нам он не нужен, если скрипт лежит в корне (`/sw.js`). Раскладка «`/pwa/sw.js` + `Service-Worker-Allowed: /`» эквивалентна по итоговому scope, но добавляет требование заголовка — смысла нет.
 - Не забыть: путь SW-скрипта (и `/offline.html`, и PWA-иконки) добавить в Caddy `@frontend path`, иначе отдача уйдёт на лендинг (см. «Контекст проекта»). Дополнительно проверить, что Caddy не переписывает `Cache-Control` для `/sw.js` (⚠️ проверить на stage).
 
+### UX-триггер обновления: pull-to-refresh в standalone
+
+В standalone-PWA у пользователя нет интуитивного способа перезагрузить приложение: на iOS WebKit **намеренно отключает нативный pull-to-refresh** для `display: standalone`/`fullscreen` ([SO #75972895](https://stackoverflow.com/questions/75972895/ios-pwa-how-to-re-enable-pull-to-refresh), [firt.dev](https://firt.dev/pwa-design-tips/)) — это не баг и не включается CSS/мета-тегом; единственный «нативный» способ — смахнуть PWA из переключателя задач. На Android нативный PTR в standalone тоже не показывается. Решение — **кастомный PTR-жест**, см. [ADR 0031](../adr/0031-pwa-pull-to-refresh.md):
+
+- жест активен **только** при `isStandaloneMode() === true`; в обычном браузере не монтируется, пользователь получает нативное поведение платформы;
+- механика — `touchstart`/`touchmove`/`touchend` на `window`, порог 70px, сопротивление 0.5, старт строго при `scrollTop <= 0` (скролл документовый, вложенных контейнеров нет);
+- по срабатыванию — `window.location.reload()` (не мягкий refresh данных, чтобы честно тянуть новый деплой);
+- индикатор — простой кольцевой CSS-спиннер в `--color-accent`, без текста; реализация — в `apps/frontend/shared/ui/pull-to-refresh/`, монтирование в `CabinetLayout`.
+
+PTR **не заменяет** SW-update-lifecycle (`updatefound`→`SKIP_WAITING`→`controllerchange`→reload) — это два независимых механизма. SW-обновление решает «новый деплой приезжает», PTR даёт пользователю UX-триггер «обновить сейчас». SW-update-lifecycle реализован по [ADR 0032](../adr/0032-pwa-service-worker-silent-update-on-navigation.md): silent-режим, без UI — активация нового SW строго по триггерам смены маршрута (`usePathname`) или скрытия приложения (`visibilitychange → hidden`), reload при смене маршрута или при возврате пользователя; проверка обновлений каждые 30 минут через `registration.update()`. PTR и SW-update остаются независимыми механизмами.
+
 ## 5. Подача manifest/SW из Next.js 16 App Router
 
 ### Манифест
