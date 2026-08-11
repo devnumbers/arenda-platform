@@ -3,7 +3,7 @@
 import type {JSX} from 'react';
 import NextLink from 'next/link';
 import {Icon} from '@/shared/ui/icon';
-import {ArrowRight, UserSmall} from '@/shared/assets/icons';
+import {UserSmall} from '@/shared/assets/icons';
 import {ROUTES} from '@/shared/config/routes';
 import {RETURN_TO_PARAM} from '@/shared/lib/navigation';
 import type {Lease} from '@/entities/lease/model/types';

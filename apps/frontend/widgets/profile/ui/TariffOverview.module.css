@@ -91,11 +91,6 @@
   color: var(--color-text-muted);
 }
 
-.hintLink {
-  padding-left: 0;
-  padding-right: 0;
-}
-
 .banner {
   padding: 12px 16px;
   border-radius: 16px;

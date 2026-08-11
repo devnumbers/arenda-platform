@@ -195,7 +195,6 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
           submitLabel="Сохранить изменения"
           isLoading={updateTenantContact.isPending}
           onSubmit={handleSubmit}
-          backHref={ROUTES.tenant(tenantId)}
         />
       )}
     </>

@@ -30,9 +30,8 @@ export function FinanceSection({properties, isLoading}: FinanceSectionProps): JS
         ...response,
         items: response.items.filter((op) => op.operation_date.slice(0, 7) === currentYM),
     }));
-    const {actual, pending} = aggregateOperations(monthOperationsList);
+    const {actual} = aggregateOperations(monthOperationsList);
     const {incomeKopecks, expenseKopecks, profitKopecks} = actual;
-    const hasPending = pending.incomeKopecks !== 0 || pending.expenseKopecks !== 0;
 
     if (showLoading) {
         return (
