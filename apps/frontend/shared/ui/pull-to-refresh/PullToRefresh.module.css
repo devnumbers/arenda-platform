@@ -47,3 +47,12 @@
         transform: translate(-50%, 0) rotate(360deg) scale(1);
     }
 }
+
+/* Fallback overscroll suppression, applied to <html> while a pull is in
+   flight via the component (see PullToRefresh.tsx). The primary mechanism is
+   `preventDefault()` on `touchmove`; this class covers any residual native
+   bounce that preventDefault does not catch on a given device. Global so it
+   reaches the document scroll container. */
+:global(.ptr-suppress-overscroll) {
+    overscroll-behavior-y: contain;
+}
