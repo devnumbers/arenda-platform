@@ -73,6 +73,14 @@ A property reminder is delivered to the owner and to every active (non-suspended
 
 Push delivery is best-effort: push failures (429, 5xx, no subscription) are logged but never block email delivery or the reminder lifecycle. When push succeeds for at least one recipient but email does not, the reminder is finalized as `sent` (push deduplication via `sent_push_reminders` prevents redelivery). The authoritative finalize decision is driven by email outcome; push is additive.
 
+### Push delivery observability
+
+`webpush.Metrics` exposes a single counter `notifications.push.dispatched` with an `outcome` attribute (`sent`/`gone`/`rate_limited`/`failed`). The cleanup rate of dead subscriptions — the volume of subscriptions the worker deletes because the push service returned 404/410 (`ErrSubscriptionGone`) — is observable as `notifications.push.dispatched{outcome=gone}` in Uptrace. The deletion itself happens in `ReminderWorker.dispatchPush` on the `ErrSubscriptionGone` branch; the metric is recorded by the adapter before the domain error is returned, so every gone outcome is counted even if the DB delete fails. To monitor cleanup on prod, alert on a sustained non-zero `gone` rate (indicates subscription churn — devices uninstalled, ITP purges, OS token expiry).
+
+### Declarative Web Push — decision (iOS)
+
+**Decision: classic service-worker Web Push only for v1; Declarative Web Push (iOS/iPadOS 18.4+) deferred.** All reminders carry a visible notification (`showNotification` mandatory — iOS revokes the subscription on silent push), so the declarative format's main draw — silent/navigate-only messages without a `push` handler — adds nothing the v1 reminders need. The classic SW-push path (`public/sw.js` push-handler, research `docs/research/ios-pwa-push.md` §1.4) works on Android Chrome and iOS 16.4+ installed PWA alike. Declarative Web Push would primarily help if (a) we shipped silent/technical pushes, or (b) ITP purges of SW registrations started killing subscriptions at scale (the declarative format decouples the subscription from the SW). Neither applies to v1. Re-evaluate when a silent-push use case lands.
+
 ## ADRs
 
 - ADR 0030 — per-channel notification preferences (email/push independent). Supersedes point 1 of ADR 0022; the expand→contract transition is complete (legacy `user_notification_preferences` table dropped in migration `000102`).

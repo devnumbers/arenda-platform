@@ -323,7 +323,7 @@ PWA-оболочка кабинета (тикет #179) добавляет че�
 - `/manifest.webmanifest` — Web App Manifest (`app/manifest.ts`);
 - `/sw.js` — service worker (`public/sw.js`, scope `/`);
 - `/offline.html` — брендированный офлайн-экран, precache'ится SW;
-- `/icons/*` — PWA-иконки 192/512 (`public/icons/`).
+- `/icons/*` — PWA-иконки 192/512 (`public/icons/`) и iOS splash-изображения (`public/icons/splash/`, тикет #185); glob `/icons/*` уже покрывает оба подкаталога, отдельных правил не требуется.
 
 `/sw.js` должен отдаваться без агрессивного кеширования, иначе браузер не
 подтянет обновление SW (byte-compare update check). Next.js ставит
