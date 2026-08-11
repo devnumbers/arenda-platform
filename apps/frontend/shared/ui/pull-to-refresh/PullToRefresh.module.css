@@ -15,10 +15,7 @@
     transform: translate(-50%, var(--pull-y, -100%));
     transition: transform 0.2s ease;
     pointer-events: none;
-    /* The accent color is the PWA theme color (see app/manifest.ts) — kept
-       inline rather than as a CSS variable because the project does not expose
-       design tokens as CSS custom properties. */
-    color: #2b7fff;
+    color: var(--color-primary);
     opacity: 0;
     will-change: transform, opacity;
 }
