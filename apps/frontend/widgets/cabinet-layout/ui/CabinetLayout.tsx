@@ -1,6 +1,6 @@
 'use client';
 
-import type { JSX, ReactNode } from 'react';
+import { useRef, type JSX, type ReactNode } from 'react';
 import { RemindersOnboardingModal } from '@/widgets/reminders-onboarding/ui/RemindersOnboardingModal';
 import { ServiceWorkerRegister } from '@/shared/lib/pwa/ServiceWorkerRegister';
 import { ServiceWorkerUpdater } from '@/shared/lib/pwa/ServiceWorkerUpdater';
@@ -15,19 +15,22 @@ export type CabinetLayoutProps = {
 };
 
 export function CabinetLayout({ children }: CabinetLayoutProps): JSX.Element {
+  // PullToRefresh drives `transform` on the content node during the gesture,
+  // so the layout shares its ref with the component.
+  const contentRef = useRef<HTMLDivElement>(null);
+
   return (
     <div className={styles.root}>
       <Sidebar />
       <main className={styles.main}>
-        <div className={styles.content}>{children}</div>
+        <div className={styles.content} ref={contentRef}>{children}</div>
       </main>
       <RemindersOnboardingModal />
       <BottomNav />
       <ServiceWorkerRegister />
       <ServiceWorkerUpdater />
-      <PullToRefresh />
+      <PullToRefresh contentRef={contentRef} />
       <PushPermissionGate />
     </div>
   );
 }
-

@@ -1,54 +1,49 @@
-.indicator {
+.spinner {
     position: fixed;
-    top: 0;
+    top: 8px;
     left: 50%;
     z-index: 9999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    margin-top: 8px;
-    /* translateX(-50%) keeps the indicator horizontally centered; the inline
-       transform on the element drives the vertical pull offset and must
-       preserve this centering via `translate(-50%, var(--pull-y))`. */
-    transform: translate(-50%, var(--pull-y, -100%));
-    transition: transform 0.2s ease;
-    pointer-events: none;
-    color: var(--color-primary);
-    opacity: 0;
-    will-change: transform, opacity;
-}
-
-.active {
-    opacity: 1;
-}
-
-.refreshing {
-    opacity: 1;
-    /* Pin the spinner at its resting position while requests are in flight. */
-    transform: translate(-50%, 0);
-}
-
-.spinner {
     width: 24px;
     height: 24px;
+    margin: 0 auto;
     border-radius: 50%;
-    border: 2.5px solid currentColor;
+    border: 2.5px solid var(--color-text-muted);
     border-top-color: transparent;
-    /* `spin` only animates after the pull threshold is crossed (the `active`
-       and `refreshing` modifiers add the class); while the user is still
-       pulling below the threshold, the ring is static to signal "not yet". */
-    animation: spin 0.8s linear infinite paused;
+    /* Transform is driven inline by the component during the pull (scale +
+       accumulated rotation — see PullToRefresh.tsx). The `translateX(-50%)`
+       base keeps the spinner horizontally centered and is preserved by the
+       inline transform via `translate(-50%, 0) rotate(...) scale(...)`. */
+    transform: translate(-50%, 0) rotate(0deg) scale(0);
+    opacity: 0;
+    will-change: transform, opacity;
+    pointer-events: none;
 }
 
-.active .spinner,
-.refreshing .spinner {
-    animation-play-state: running;
+/* Pulling: spinner is visible and follows the finger (scale + rotation set
+   inline). Opacity ramps to 1 as the pull grows. */
+.pulling {
+    opacity: 1;
+    transition: opacity 0.15s ease;
 }
 
-@keyframes spin {
+/* Armed: pull crossed the threshold; spinner is at full scale, about to start
+   spinning continuously on release. */
+.armed {
+    opacity: 1;
+}
+
+/* Refreshing: spinner pinned, spinning continuously. Scale fixed at 1; the
+   keyframe drives rotation. */
+.refreshing {
+    opacity: 1;
+    transform: translate(-50%, 0) rotate(0deg) scale(1);
+    animation: ptr-spin 0.8s linear infinite;
+}
+
+@keyframes ptr-spin {
     to {
-        transform: rotate(360deg);
+        /* The base transform (translate + scale) must be preserved — only the
+           rotation is animated. */
+        transform: translate(-50%, 0) rotate(360deg) scale(1);
     }
 }
