@@ -175,6 +175,19 @@ const profile = {
   phoneSendCodeError: errorScenario('Не удалось отправить код'),
   phoneChangeError: errorScenario('Не удалось изменить номер телефона'),
   logoutError: errorScenario('Не удалось выйти'),
+  pushEnabled: ((options?) =>
+    notify.success('Пуши включены', options)) satisfies ScenarioFn,
+  pushEnableError: errorScenario('Не удалось включить пуши'),
+  pushPermissionDenied: ((options?) =>
+    notify.info(
+      'Уведомления отключены в браузере. Включить можно в настройках сайта.',
+      options,
+    )) satisfies ScenarioFn,
+  pushIosNeedsInstall: ((options?) =>
+    notify.info(
+      'На iPhone для пушей добавьте приложение на экран «Домой» через Поделиться в Safari.',
+      options,
+    )) satisfies ScenarioFn,
 } as const;
 
 const tariff = {

@@ -100,16 +100,107 @@ self.addEventListener('fetch', function (event) {
 });
 
 /*
- * Push and notificationclick handlers are stubs for the Web Push ticket (#7).
- * They are intentionally no-ops here so the SW stays forward-compatible with
- * the push feature without implementing it prematurely.
+ * Web Push handlers (push + notificationclick).
+ *
+ * The payload parsing, option building, and click-target resolution logic
+ * below is an inline copy of the pure functions in
+ * `apps/frontend/shared/lib/pwa/push-payload.ts`. The SW is a static script
+ * served from /sw.js and cannot import TypeScript at runtime, so it keeps its
+ * own copy; the guard test in `push-payload.test.ts` ("service worker handlers
+ * stay in sync") fails if the two drift on the key markers (showNotification,
+ * clients.openWindow, default click url, branded icon). Keep the logic in sync
+ * when changing behaviour.
  */
+
+// Fallbacks — must mirror DEFAULT_PUSH_TITLE / DEFAULT_PUSH_CLICK_URL in
+// shared/lib/pwa/push-payload.ts.
+var DEFAULT_PUSH_TITLE = 'Рентли';
+var DEFAULT_PUSH_CLICK_URL = '/dashboard';
+var DEFAULT_PUSH_TAG = 'rentli-reminder';
+var PUSH_ICON_PATH = '/icons/icon-192.png';
+
+// Inline copy of resolveClickTarget: only same-origin absolute paths are kept,
+// everything else falls back to the default. Stops a hostile or malformed
+// payload from opening an arbitrary page on tap.
+function resolveClickTarget(url) {
+  if (typeof url !== 'string' || url.length === 0) {
+    return DEFAULT_PUSH_CLICK_URL;
+  }
+  if (url[0] !== '/' || url[1] === '/' || url[1] === '\\') {
+    return DEFAULT_PUSH_CLICK_URL;
+  }
+  return url;
+}
+
+// Inline copy of parsePushPayload + buildShowNotificationOptions.
+function parsePushPayload(eventData) {
+  if (eventData == null || eventData === '') {
+    return null;
+  }
+  var parsed;
+  try {
+    parsed = JSON.parse(eventData);
+  } catch (error) {
+    // Invalid JSON — caller (push handler) shows a default notification.
+    void error;
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
+  var title = typeof parsed.title === 'string' ? parsed.title : DEFAULT_PUSH_TITLE;
+  var body = typeof parsed.body === 'string' ? parsed.body : '';
+  var tag =
+    typeof parsed.tag === 'string' && parsed.tag.length > 0
+      ? parsed.tag
+      : DEFAULT_PUSH_TAG;
+  var url = resolveClickTarget(parsed.url);
+  return { title: title, body: body, tag: tag, url: url };
+}
+
 self.addEventListener('push', function (event) {
-  // Implemented in the Web Push ticket.
+  // A visible notification is mandatory on every push event: Chrome otherwise
+  // shows a generic "updated in background" system notice, and Safari revokes
+  // the push permission after a silent push.
+  var payload = parsePushPayload(event.data ? event.data.text() : null);
+  var title = payload ? payload.title : DEFAULT_PUSH_TITLE;
+  var options = {
+    body: payload ? payload.body : '',
+    tag: payload ? payload.tag : DEFAULT_PUSH_TAG,
+    icon: PUSH_ICON_PATH,
+    badge: PUSH_ICON_PATH,
+    data: { url: payload ? payload.url : DEFAULT_PUSH_CLICK_URL },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
 });
 
+// Focus an existing same-origin client that shows the cabinet, or open one.
+// postMessage lets the React app perform client-side navigation when a window
+// is already open on a different cabinet route.
+function focusOrOpenClient(url) {
+  return self.clients
+    .matchAll({ type: 'window', includeUncontrolled: true })
+    .then(function (clientList) {
+      for (var i = 0; i < clientList.length; i += 1) {
+        var client = clientList[i];
+        if (client.url.indexOf(self.location.origin) === 0 && 'focus' in client) {
+          client.postMessage({ type: 'PUSH_NOTIFICATION_CLICK', url: url });
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(url);
+      }
+      return undefined;
+    });
+}
+
 self.addEventListener('notificationclick', function (event) {
-  // Implemented in the Web Push ticket.
+  event.notification.close();
+  var url = resolveClickTarget(
+    event.notification && event.notification.data ? event.notification.data.url : undefined,
+  );
+  event.waitUntil(focusOrOpenClient(url));
 });
 
 self.addEventListener('message', function (event) {

@@ -73,6 +73,13 @@
   margin-top: 24px;
 }
 
+/* Two-button stack on the push step: primary action on top, "Пропустить" below */
+.footerButtons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 @media (max-width: 767px) {
   .header {
     gap: 8px;

@@ -37,6 +37,19 @@ export const NOTIFICATION_OPTIONS: {
 
 export type NotificationPreferencesState = Record<NotificationEventType, boolean>;
 
+/**
+ * Per-event-type × per-channel state used by the two-column matrix in
+ * Профиль → Уведомления (ADR 0030). Each event type carries independent
+ * `email` and `push` flags.
+ */
+export type NotificationChannelState = Record<
+  NotificationEventType,
+  { readonly email: boolean; readonly push: boolean }
+>;
+
+/** Default opt-in state for both channels (ADR 0030 §1: opt-out default). */
+const DEFAULT_CHANNEL_FLAGS = { email: true, push: true } as const;
+
 export function buildInitialPreferences(
   preferences: NotificationPreference[],
 ): NotificationPreferencesState {
@@ -49,6 +62,29 @@ export function buildInitialPreferences(
   };
   for (const preference of preferences) {
     state[preference.eventType] = preference.allowed;
+  }
+  return state;
+}
+
+/**
+ * Build the channel-matrix state from the server preferences. Missing types
+ * default to allowed on both channels.
+ */
+export function buildInitialChannelPreferences(
+  preferences: NotificationPreference[],
+): NotificationChannelState {
+  const state: NotificationChannelState = {
+    operation_due: { ...DEFAULT_CHANNEL_FLAGS },
+    operation_overdue: { ...DEFAULT_CHANNEL_FLAGS },
+    lease_expiring: { ...DEFAULT_CHANNEL_FLAGS },
+    lease_requires_action: { ...DEFAULT_CHANNEL_FLAGS },
+    free_reminder: { ...DEFAULT_CHANNEL_FLAGS },
+  };
+  for (const preference of preferences) {
+    state[preference.eventType] = {
+      email: preference.emailAllowed,
+      push: preference.pushAllowed,
+    };
   }
   return state;
 }
@@ -77,4 +113,35 @@ export function buildPreferencePayload(
       pushAllowed,
     };
   });
+}
+
+/**
+ * Build the per-event-type × per-channel payload for the PUT endpoint from a
+ * channel-matrix state. `email_allowed` drives the legacy `allowed` field
+ * (ADR 0030 §4: `allowed` equals `email_allowed` during the expand phase).
+ */
+export function buildChannelPreferencePayload(
+  state: NotificationChannelState,
+): NotificationPreference[] {
+  return NOTIFICATION_OPTIONS.map(({eventType}) => {
+    const flags = state[eventType];
+    return {
+      eventType,
+      allowed: flags.email,
+      emailAllowed: flags.email,
+      pushAllowed: flags.push,
+    };
+  });
+}
+
+/** Structural equality over the fixed event-type set (both channels). */
+export function channelPreferencesEqual(
+  a: NotificationChannelState,
+  b: NotificationChannelState,
+): boolean {
+  return NOTIFICATION_OPTIONS.every(
+    (option) =>
+      a[option.eventType].email === b[option.eventType].email &&
+      a[option.eventType].push === b[option.eventType].push,
+  );
 }
