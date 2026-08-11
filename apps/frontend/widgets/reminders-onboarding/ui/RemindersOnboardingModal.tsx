@@ -19,8 +19,7 @@ import {
     type NotificationPreferencesState,
 } from '@/features/notification-preferences/lib/preferences';
 import {NotificationPreferencesFields} from '@/features/notification-preferences/ui/NotificationPreferencesFields';
-import {useEnsureSubscriptionTools} from '@/features/push-notifications/lib/subscription-sync';
-import {requestPushPermissionAndSubscribe} from '@/features/push-notifications/lib/request-push';
+import {useSubscribePush} from '@/features/push-notifications/api/use-subscribe-push';
 import {isPushSupported} from '@/features/push-notifications/lib/platform';
 import type {NotificationEventType, NotificationPreference,} from '@/entities/user/model/types';
 import styles from './RemindersOnboardingModal.module.css';
@@ -160,7 +159,7 @@ function RemindersOnboardingModalContent({
                                          }: RemindersOnboardingModalContentProps): JSX.Element | null {
     const updateNotificationPreferences = useUpdateNotificationPreferences();
     const markPopupSeen = useMarkPopupSeen();
-    const {vapidKey, postSubscription} = useEnsureSubscriptionTools();
+    const {subscribe: subscribePush} = useSubscribePush();
 
     const [isOpen, setIsOpen] = useState(true);
     const [step, setStep] = useState<Step>('types');
@@ -221,7 +220,7 @@ function RemindersOnboardingModalContent({
     const handleAllowPush = useCallback(async () => {
         setIsPushBusy(true);
         try {
-            const outcome = await requestPushPermissionAndSubscribe(vapidKey, postSubscription);
+            const outcome = await subscribePush();
             if (outcome.outcome === 'subscribed' || outcome.outcome === 'already-subscribed') {
                 notify.scenarios.profile.pushEnabled();
             } else if (outcome.outcome === 'ios-needs-install') {
@@ -239,7 +238,7 @@ function RemindersOnboardingModalContent({
             setIsPushBusy(false);
             await closeWithPopupSeen();
         }
-    }, [closeWithPopupSeen, postSubscription, vapidKey]);
+    }, [closeWithPopupSeen, subscribePush]);
 
     const handleSkipPush = useCallback(() => {
         void closeWithPopupSeen();

@@ -107,11 +107,38 @@ export function resolveClickTarget(url: unknown): string {
     if (typeof url !== 'string' || url.length === 0) {
         return DEFAULT_PUSH_CLICK_URL;
     }
-    // Reject anything that is not a same-origin absolute path. A leading slash
+    // Reject anything which is not a same-origin absolute path. A leading slash
     // followed by a non-slash character rules out `//host`, `/\\host`, and
     // scheme-relative URLs while allowing real routes.
     if (url[0] !== '/' || url[1] === '/' || url[1] === '\\') {
         return DEFAULT_PUSH_CLICK_URL;
     }
     return url;
+}
+
+/** Minimal view of a service-worker `Client` consumed by the click helper. */
+export type SwClientLike = {
+    readonly url: string;
+    readonly focus: () => Promise<unknown>;
+    readonly postMessage: (message: unknown) => void;
+};
+
+/**
+ * Pick the best same-origin client to focus for a notification click, or
+ * `null` when none exists (the SW then calls `clients.openWindow`).
+ *
+ * Pure/testable: takes the candidate list + origin and returns the action the
+ * caller should take. The SW keeps the inline copy (it cannot import TS at
+ * runtime); the guard test in `push-payload.test.ts` keeps the two in sync.
+ */
+export function pickClickTargetClient(
+    clients: ReadonlyArray<SwClientLike>,
+    origin: string,
+): { client: SwClientLike } | null {
+    for (const client of clients) {
+        if (typeof client.url === 'string' && client.url.indexOf(origin) === 0) {
+            return { client };
+        }
+    }
+    return null;
 }

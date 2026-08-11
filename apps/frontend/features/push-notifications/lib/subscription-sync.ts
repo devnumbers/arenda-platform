@@ -24,12 +24,8 @@ import { isPushSupported, readNotificationPermission } from './platform';
  */
 
 export type EnsureSubscriptionResult =
-  | { readonly outcome: 'active'; readonly subscription: PushSubscription; readonly isNew: boolean }
-  | {
-      readonly outcome: 'created';
-      readonly subscription: PushSubscription;
-      readonly isNew: true;
-    }
+  | { readonly outcome: 'active'; readonly subscription: PushSubscription }
+  | { readonly outcome: 'created'; readonly subscription: PushSubscription }
   | { readonly outcome: 'reason'; readonly reason: EnsureSubscriptionReason };
 
 export type EnsureSubscriptionReason =
@@ -87,7 +83,7 @@ export async function ensureActiveSubscription(
   let subscription = await registration.pushManager.getSubscription();
 
   if (subscription) {
-    return { outcome: 'active', subscription, isNew: false };
+    return { outcome: 'active', subscription };
   }
 
   // No active subscription — create one and register it with the backend.
@@ -109,5 +105,5 @@ export async function ensureActiveSubscription(
     return { outcome: 'reason', reason: 'network-error' };
   }
 
-  return { outcome: 'created', subscription, isNew: true };
+  return { outcome: 'created', subscription };
 }

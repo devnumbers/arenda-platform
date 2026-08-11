@@ -11,6 +11,8 @@ export type PushSubscriptionStatus = {
   readonly isUnsupported: boolean;
   /** Notification permission has not been granted. */
   readonly needsPermission: boolean;
+  /** The user explicitly denied notification permission — the system prompt cannot be re-shown. */
+  readonly permissionDenied: boolean;
   /** Permission granted but no active subscription on this device. */
   readonly needsSubscription: boolean;
   /** Push is supported, permission granted, and an active subscription exists. */
@@ -22,6 +24,7 @@ export type PushSubscriptionStatus = {
 const PENDING: PushSubscriptionStatus = {
   isUnsupported: false,
   needsPermission: false,
+  permissionDenied: false,
   needsSubscription: false,
   isReady: false,
   isPending: true,
@@ -30,6 +33,7 @@ const PENDING: PushSubscriptionStatus = {
 const UNSUPPORTED: PushSubscriptionStatus = {
   isUnsupported: true,
   needsPermission: false,
+  permissionDenied: false,
   needsSubscription: false,
   isReady: false,
   isPending: false,
@@ -73,6 +77,7 @@ export function usePushSubscriptionStatus(): PushSubscriptionStatus {
         resolve({
           isUnsupported: false,
           needsPermission: true,
+          permissionDenied: permission === 'denied',
           needsSubscription: false,
           isReady: false,
           isPending: false,
@@ -85,6 +90,7 @@ export function usePushSubscriptionStatus(): PushSubscriptionStatus {
       resolve({
         isUnsupported: false,
         needsPermission: false,
+        permissionDenied: false,
         needsSubscription: subscription === null,
         isReady: subscription !== null,
         isPending: false,

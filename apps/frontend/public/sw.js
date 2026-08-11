@@ -176,14 +176,20 @@ self.addEventListener('push', function (event) {
 
 // Focus an existing same-origin client that shows the cabinet, or open one.
 // postMessage lets the React app perform client-side navigation when a window
-// is already open on a different cabinet route.
+// is already open on a different cabinet route. Mirrors pickClickTargetClient
+// in shared/lib/pwa/push-payload.ts.
 function focusOrOpenClient(url) {
   return self.clients
     .matchAll({ type: 'window', includeUncontrolled: true })
     .then(function (clientList) {
       for (var i = 0; i < clientList.length; i += 1) {
         var client = clientList[i];
-        if (client.url.indexOf(self.location.origin) === 0 && 'focus' in client) {
+        if (
+          typeof client.url === 'string' &&
+          client.url.indexOf(self.location.origin) === 0 &&
+          'focus' in client
+        ) {
+          // Ask the page to navigate; the SW itself cannot use the router.
           client.postMessage({ type: 'PUSH_NOTIFICATION_CLICK', url: url });
           return client.focus();
         }

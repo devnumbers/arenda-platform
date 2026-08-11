@@ -6,7 +6,9 @@ import {
     DEFAULT_PUSH_CLICK_URL,
     DEFAULT_PUSH_TITLE,
     parsePushPayload,
+    pickClickTargetClient,
     resolveClickTarget,
+    type SwClientLike,
 } from './push-payload';
 
 describe('parsePushPayload', () => {
@@ -141,6 +143,40 @@ describe('resolveClickTarget', () => {
     it('rejects relative paths without a leading slash', () => {
         expect(resolveClickTarget('dashboard')).toBe(DEFAULT_PUSH_CLICK_URL);
         expect(resolveClickTarget('./dashboard')).toBe(DEFAULT_PUSH_CLICK_URL);
+    });
+});
+
+describe('pickClickTargetClient', () => {
+    const origin = 'https://app.rentli.ru';
+    const makeClient = (url: string): SwClientLike => ({
+        url,
+        focus: async () => undefined,
+        postMessage: () => undefined,
+    });
+
+    it('returns the first same-origin client', () => {
+        const clients = [
+            makeClient('https://other.example.com/foo'),
+            makeClient('https://app.rentli.ru/dashboard'),
+            makeClient('https://app.rentli.ru/profile'),
+        ];
+        const result = pickClickTargetClient(clients, origin);
+        expect(result?.client.url).toBe('https://app.rentli.ru/dashboard');
+    });
+
+    it('returns null when no client matches the origin', () => {
+        const clients = [makeClient('https://other.example.com/foo')];
+        expect(pickClickTargetClient(clients, origin)).toBeNull();
+    });
+
+    it('returns null for an empty client list', () => {
+        expect(pickClickTargetClient([], origin)).toBeNull();
+    });
+
+    it('matches a same-origin client with a path', () => {
+        const clients = [makeClient(`${origin}/properties/123`)];
+        const result = pickClickTargetClient(clients, origin);
+        expect(result?.client.url).toBe(`${origin}/properties/123`);
     });
 });
 

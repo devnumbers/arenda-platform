@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, type JSX } from 'react';
+import { resolveClickTarget } from './push-payload';
 
 /**
  * Registers the cabinet service worker (`/sw.js`) with scope `/`.
@@ -14,6 +15,11 @@ import { useEffect, type JSX } from 'react';
  * updates are picked up promptly. `public/` is already served with
  * `max-age=0, must-revalidate` by Next.js; the no-cache header is reinforced
  * for `/sw.js` in `next.config.ts` and at the Caddy layer.
+ *
+ * A `message` listener forwards push-notification click targets (posted by the
+ * SW `notificationclick` handler when an existing cabinet window is already
+ * open) to Next.js App Router, so tapping a notification navigates the focused
+ * tab instead of opening a duplicate.
  */
 export function ServiceWorkerRegister(): JSX.Element | null {
     useEffect(() => {
@@ -37,6 +43,30 @@ export function ServiceWorkerRegister(): JSX.Element | null {
             window.addEventListener('load', register, { once: true });
             return () => window.removeEventListener('load', register);
         }
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        if (!('serviceWorker' in navigator)) return;
+
+        const onMessage = (event: MessageEvent): void => {
+            const data = event.data;
+            if (!data || typeof data !== 'object') return;
+            if (data.type !== 'PUSH_NOTIFICATION_CLICK') return;
+            // `resolveClickTarget` re-validates the URL the SW sent — same-origin
+            // absolute path only, fallback to /dashboard otherwise.
+            const url = resolveClickTarget(data.url);
+            // Client-side navigation via the History API. The SW already focused
+            // this window; we only need to move it to the click target.
+            if (url !== window.location.pathname + window.location.search) {
+                window.location.assign(url);
+            }
+        };
+
+        navigator.serviceWorker.addEventListener('message', onMessage);
+        return () => {
+            navigator.serviceWorker.removeEventListener('message', onMessage);
+        };
     }, []);
 
     return null;

@@ -17,8 +17,7 @@ import {
 } from '@/features/notification-preferences/lib/preferences';
 import { NotificationChannelMatrix } from '@/features/notification-preferences/ui/NotificationChannelMatrix';
 import { usePushSubscriptionStatus } from '@/features/push-notifications/api/use-push-subscription-status';
-import { useEnsureSubscriptionTools } from '@/features/push-notifications/lib/subscription-sync';
-import { requestPushPermissionAndSubscribe } from '@/features/push-notifications/lib/request-push';
+import { useSubscribePush } from '@/features/push-notifications/api/use-subscribe-push';
 import { isPushSupported } from '@/features/push-notifications/lib/platform';
 import type {
   NotificationEventType,
@@ -33,7 +32,7 @@ type NotificationSettingsViewProps = {
 function NotificationSettingsView({ preferences }: NotificationSettingsViewProps): JSX.Element {
   const updateNotificationPreferences = useUpdateNotificationPreferences();
   const pushStatus = usePushSubscriptionStatus();
-  const { vapidKey, postSubscription } = useEnsureSubscriptionTools();
+  const { subscribe: subscribePush } = useSubscribePush();
 
   // Push is unavailable when the browser cannot receive push, the user has not
   // granted permission, or no subscription exists yet. The matrix disables the
@@ -148,7 +147,7 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
     if (!isPushSupported()) return;
     setIsEnablingPush(true);
     try {
-      const outcome = await requestPushPermissionAndSubscribe(vapidKey, postSubscription);
+      const outcome = await subscribePush();
       if (outcome.outcome === 'subscribed' || outcome.outcome === 'already-subscribed') {
         notify.scenarios.profile.pushEnabled();
       } else if (outcome.outcome === 'ios-needs-install') {
@@ -163,7 +162,17 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
     } finally {
       setIsEnablingPush(false);
     }
-  }, [postSubscription, vapidKey]);
+  }, [subscribePush]);
+
+  // After the user has changed the permission via browser settings, the only
+  // reliable way to pick up the new state is a reload — `Notification.permission`
+  // is cached for the lifetime of the document. Browsers do not expose an API
+  // to open site settings directly.
+  const handleRecheckPermission = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+  }, []);
 
   return (
     <div className={styles.container}>
@@ -175,20 +184,27 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
           <p className={styles.pushWarningText}>
             {pushStatus.isUnsupported
               ? 'Пуши не поддерживаются этим браузером.'
-              : pushStatus.needsPermission
-                ? 'Разрешите уведомления в браузере, чтобы получать пуши.'
-                : 'Подпишитесь на пуши, чтобы получать напоминания на устройство.'}
+              : pushStatus.permissionDenied
+                ? 'Уведомления отключены в настройках браузера. Включите их для сайта, затем нажмите «Проверить разрешение».'
+                : pushStatus.needsPermission
+                  ? 'Разрешите уведомления в браузере, чтобы получать пуши.'
+                  : 'Подпишитесь на пуши, чтобы получать напоминания на устройство.'}
           </p>
-          {!pushStatus.isUnsupported && (
-            <Button
-              variant="secondary"
-              size="medium"
-              loading={isEnablingPush}
-              onClick={handleEnablePush}
-            >
-              Разрешить пуши
-            </Button>
-          )}
+          {!pushStatus.isUnsupported &&
+            (pushStatus.permissionDenied ? (
+              <Button variant="secondary" size="medium" onClick={handleRecheckPermission}>
+                Проверить разрешение
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                size="medium"
+                loading={isEnablingPush}
+                onClick={handleEnablePush}
+              >
+                Разрешить пуши
+              </Button>
+            ))}
         </div>
       )}
       <NotificationChannelMatrix
