@@ -47,7 +47,9 @@ export const viewport: Viewport = {
     width: 'device-width',
     initialScale: 1,
     // maximumScale is intentionally omitted: capping zoom breaks accessibility
-    // (WCAG 1.4.4 Resize text). PWA standalone mode does not require it.
+    // (WCAG 1.4.4 Resize text). iOS auto-zoom-on-focus is prevented instead by
+    // keeping native form controls at font-size ≥ 16px (see --font-size-input in
+    // shared/styles/tokens.css). Do NOT re-add maximumScale — it is not needed.
     themeColor: '#2b7fff',
     viewportFit: 'cover',
 };
