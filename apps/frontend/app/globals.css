@@ -481,3 +481,76 @@ a {
     transition: opacity 300ms cubic-bezier(0.4, 0, 0.2, 1),
     transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/*
+ * Boot screen — branded splash rendered inline in layout.tsx so it is present
+ * in the first server-rendered HTML and visible during the gap between native
+ * PWA splash / first paint and React hydration (otherwise a white screen).
+ *
+ * Hidden synchronously with hydration via a `hydrated` class on <body> set by
+ * the BootScreen client component's useLayoutEffect (runs before paint, after
+ * hydration). This is the canonical Next.js "preventing flash before
+ * hydration" pattern — CSS hides the overlay, React never has to reconcile it.
+ *
+ * Marked `display: none !important` once hydrated so no JS state can re-show
+ * it; the markup stays in the DOM (kept stable for hydration via
+ * suppressHydrationWarning on the node in layout.tsx).
+ */
+#boot-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 24px;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    background: #ffffff;
+    color: #1e1e1e;
+    text-align: center;
+    -webkit-font-smoothing: antialiased;
+}
+
+#boot-screen .boot-icon {
+    width: 72px;
+    height: 72px;
+    flex-shrink: 0;
+    filter: drop-shadow(0 4px 12px rgba(43, 127, 255, 0.18));
+}
+
+#boot-screen .boot-title {
+    width: 130px;
+    height: auto;
+    flex-shrink: 0;
+    /* Gap below the wordmark separates brand block from the spinner. */
+    margin-bottom: 12px;
+}
+
+/* Minimal brand-tinted spinner — no external dependency, GPU-friendly. */
+#boot-screen .boot-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid rgba(43, 127, 255, 0.18);
+    border-top-color: #2b7fff;
+    border-radius: 50%;
+    animation: boot-spin 0.8s linear infinite;
+}
+
+@keyframes boot-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+body.hydrated #boot-screen {
+    display: none !important;
+}
+
+/* Respect reduced-motion: the spinner is purely decorative. */
+@media (prefers-reduced-motion: reduce) {
+    #boot-screen .boot-spinner {
+        animation: none;
+    }
+}

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import type { JSX, ReactNode } from 'react';
 import { Inter, Manrope } from 'next/font/google';
+import { BootScreen } from '@/shared/lib/pwa/BootScreen';
 import { ErrorReporter } from '@/shared/lib/error-reporting/ErrorReporter';
 import { ScrollToTop } from '@/shared/lib/scroll/ScrollToTop';
 import { I18nProvider } from '@/shared/providers/i18n-provider';
@@ -62,6 +63,32 @@ export default function RootLayout({
     return (
         <html lang="ru" className={`${inter.variable} ${manrope.variable}`}>
             <body>
+                {/*
+                  Boot screen — branded splash present in the first server HTML
+                  so the user never sees a white screen during the gap between
+                  first paint and React hydration (especially visible on PWA
+                  launch after the native splash is dismissed). Hidden via CSS
+                  by BootScreen's useLayoutEffect adding `hydrated` to <body>;
+                  suppressHydrationWarning tolerates the node being removed by
+                  side effect. See shared/lib/pwa/BootScreen.tsx.
+                */}
+                <div id="boot-screen" suppressHydrationWarning>
+                    <img
+                        className="boot-icon"
+                        src="/images/boot-icon.png"
+                        alt=""
+                        width={72}
+                        height={72}
+                    />
+                    <img
+                        className="boot-title"
+                        src="/images/rentle-title.svg"
+                        alt="Rentle"
+                        width={130}
+                    />
+                    <div className="boot-spinner" aria-hidden="true" />
+                </div>
+                <BootScreen />
                 <ErrorReporter />
                 <ScrollToTop />
                 <I18nProvider locale="ru-RU">
