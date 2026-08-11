@@ -185,18 +185,6 @@ func (r *fakeReminderRepo) HasReminderForOperationEvent(context.Context, uuid.UU
 	return false, nil
 }
 
-func (r *fakeReminderRepo) ListPreferences(context.Context, uuid.UUID) ([]domain.NotificationPreference, error) {
-	return nil, nil
-}
-
-func (r *fakeReminderRepo) UpsertPreference(context.Context, uuid.UUID, domain.NotificationPreference) error {
-	return nil
-}
-
-func (r *fakeReminderRepo) IsEventAllowed(context.Context, uuid.UUID, domain.EventType) (bool, error) {
-	return true, nil
-}
-
 func (r *fakeReminderRepo) ListChannelPreferences(context.Context, uuid.UUID) ([]domain.NotificationChannelPreference, error) {
 	return nil, nil
 }

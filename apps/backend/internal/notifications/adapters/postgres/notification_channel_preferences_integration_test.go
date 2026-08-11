@@ -14,8 +14,7 @@ import (
 // These integration tests run against a real Postgres via TEST_DATABASE_URL and
 // are skipped when it is unset. They cover the per-channel preference repository
 // (ADR 0030, issue #181): list defaults (missing rows = allowed), upsert +
-// list, IsChannelAllowed semantics, and the data-migration defaults (push
-// mirrors email for rows carried over from the legacy table).
+// list, and IsChannelAllowed semantics.
 
 func setupChannelPrefDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -132,51 +131,5 @@ func TestNotificationChannelPreferences_UpsertAndList(t *testing.T) {
 	}
 	if !emailDueAllowed {
 		t.Errorf("expected operation_due/email re-enabled, got disabled")
-	}
-}
-
-func TestNotificationChannelPreferences_MigrationMirrorsEmailToPush(t *testing.T) {
-	pool := setupChannelPrefDB(t)
-	ctx := context.Background()
-	q := genpostgres.New(pool)
-	userID := createPushTestUser(t, ctx, q)
-	repo := NewReminderRepository(pool)
-	_ = q
-
-	// Simulate the data-migration outcome (migration 000100): a legacy
-	// per-event-type row mirrored into both channels with the same value. We
-	// write through the repositories (the same code paths the migration's
-	// INSERT targets) and verify both channels read back identically.
-	if err := repo.UpsertPreference(ctx, userID, domain.NotificationPreference{
-		EventType: domain.EventFreeReminder,
-		Allowed:   false,
-	}); err != nil {
-		t.Fatalf("seed legacy preference: %v", err)
-	}
-	if err := repo.UpsertChannelPreference(ctx, userID, domain.NotificationChannelPreference{
-		EventType: domain.EventFreeReminder,
-		Channel:   domain.ChannelEmail,
-		Allowed:   false,
-	}); err != nil {
-		t.Fatalf("mirror to email channel: %v", err)
-	}
-	if err := repo.UpsertChannelPreference(ctx, userID, domain.NotificationChannelPreference{
-		EventType: domain.EventFreeReminder,
-		Channel:   domain.ChannelPush,
-		Allowed:   false,
-	}); err != nil {
-		t.Fatalf("mirror to push channel: %v", err)
-	}
-
-	emailAllowed, err := repo.IsChannelAllowed(ctx, userID, domain.EventFreeReminder, domain.ChannelEmail)
-	if err != nil {
-		t.Fatalf("IsChannelAllowed free_reminder/email: %v", err)
-	}
-	pushAllowed, err := repo.IsChannelAllowed(ctx, userID, domain.EventFreeReminder, domain.ChannelPush)
-	if err != nil {
-		t.Fatalf("IsChannelAllowed free_reminder/push: %v", err)
-	}
-	if emailAllowed || pushAllowed {
-		t.Errorf("expected both channels mirrored to false (email=%v, push=%v)", emailAllowed, pushAllowed)
 	}
 }

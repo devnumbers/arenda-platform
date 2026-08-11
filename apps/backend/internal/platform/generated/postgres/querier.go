@@ -211,7 +211,6 @@ type Querier interface {
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
 	IsEmailReminderSent(ctx context.Context, arg IsEmailReminderSentParams) (bool, error)
 	IsNotificationChannelAllowed(ctx context.Context, arg IsNotificationChannelAllowedParams) (bool, error)
-	IsNotificationEventAllowed(ctx context.Context, arg IsNotificationEventAllowedParams) (bool, error)
 	IsPushReminderSent(ctx context.Context, arg IsPushReminderSentParams) (bool, error)
 	IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
 	ListAccessibleOwners(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
@@ -239,7 +238,6 @@ type Querier interface {
 	ListLeasesWithTenantForExport(ctx context.Context, arg ListLeasesWithTenantForExportParams) ([]ListLeasesWithTenantForExportRow, error)
 	ListNextRentPaymentsByOwner(ctx context.Context, arg ListNextRentPaymentsByOwnerParams) ([]ListNextRentPaymentsByOwnerRow, error)
 	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
-	ListNotificationPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationPreference, error)
 	ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
 	ListOpenLeasesWithPastEndDate(ctx context.Context, arg ListOpenLeasesWithPastEndDateParams) ([]Lease, error)
 	ListOperationCategoriesByOwner(ctx context.Context, arg ListOperationCategoriesByOwnerParams) ([]OperationCategory, error)
@@ -366,7 +364,6 @@ type Querier interface {
 	UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error)
 	UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error
 	UpsertNotificationChannelPreference(ctx context.Context, arg UpsertNotificationChannelPreferenceParams) error
-	UpsertNotificationPreference(ctx context.Context, arg UpsertNotificationPreferenceParams) error
 	UpsertPaymentMethodByTokenHash(ctx context.Context, arg UpsertPaymentMethodByTokenHashParams) (PaymentMethod, error)
 	// Insert a push subscription keyed by endpoint, or update its mutable fields
 	// (user_id, p256dh, auth, expiration_time) when the endpoint already exists.

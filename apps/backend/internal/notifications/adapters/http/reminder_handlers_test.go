@@ -309,18 +309,6 @@ func (r *handlerFakeReminderRepo) HasReminderForOperationEvent(context.Context, 
 	return false, nil
 }
 
-func (r *handlerFakeReminderRepo) ListPreferences(context.Context, uuid.UUID) ([]notificationsdomain.NotificationPreference, error) {
-	return nil, nil
-}
-
-func (r *handlerFakeReminderRepo) UpsertPreference(context.Context, uuid.UUID, notificationsdomain.NotificationPreference) error {
-	return nil
-}
-
-func (r *handlerFakeReminderRepo) IsEventAllowed(context.Context, uuid.UUID, notificationsdomain.EventType) (bool, error) {
-	return true, nil
-}
-
 func (r *handlerFakeReminderRepo) ListChannelPreferences(context.Context, uuid.UUID) ([]notificationsdomain.NotificationChannelPreference, error) {
 	return nil, nil
 }

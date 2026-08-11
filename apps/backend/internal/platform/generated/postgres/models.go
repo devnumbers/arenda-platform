@@ -505,14 +505,6 @@ type UserNotificationChannelPreference struct {
 	UpdatedAt pgtype.Timestamptz    `json:"updated_at"`
 }
 
-type UserNotificationPreference struct {
-	UserID    pgtype.UUID           `json:"user_id"`
-	EventType NotificationEventType `json:"event_type"`
-	Allowed   bool                  `json:"allowed"`
-	CreatedAt pgtype.Timestamptz    `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz    `json:"updated_at"`
-}
-
 type UserPopupView struct {
 	UserID   pgtype.UUID        `json:"user_id"`
 	PopupKey string             `json:"popup_key"`

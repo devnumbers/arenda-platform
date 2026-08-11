@@ -168,22 +168,6 @@ func (r *fakeReminderRepoForWorker) MarkReminderSkipped(context.Context, uuid.UU
 	return nil
 }
 
-func (r *fakeReminderRepoForWorker) ListPreferences(context.Context, uuid.UUID) ([]domain.NotificationPreference, error) {
-	return nil, nil
-}
-
-func (r *fakeReminderRepoForWorker) UpsertPreference(context.Context, uuid.UUID, domain.NotificationPreference) error {
-	return nil
-}
-
-// IsEventAllowed is the legacy per-event-type stub. The worker dispatches via
-// IsChannelAllowed now; this method is kept only to satisfy the repository
-// interface during the expand phase (ADR 0030) and is not exercised by these
-// tests.
-func (r *fakeReminderRepoForWorker) IsEventAllowed(context.Context, uuid.UUID, domain.EventType) (bool, error) {
-	return true, nil
-}
-
 func (r *fakeReminderRepoForWorker) ListChannelPreferences(context.Context, uuid.UUID) ([]domain.NotificationChannelPreference, error) {
 	return nil, nil
 }

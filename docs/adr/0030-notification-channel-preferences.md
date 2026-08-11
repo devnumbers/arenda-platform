@@ -2,10 +2,11 @@
 
 The notification preference model moves from one `allowed` flag per event type
 (ADR 0022) to a separate flag per delivery channel: each event type now carries
-independent `emailAllowed` and `pushAllowed` settings. This is an expand-phase
-change — the new per-channel table lives alongside the legacy
-`user_notification_preferences`, nothing breaks, and the old table is removed in
-a later contract phase once all callers migrate.
+independent `emailAllowed` and `pushAllowed` settings. The expand phase
+(#181/#183) introduced the per-channel table alongside the legacy
+`user_notification_preferences`; the contract phase (#184 + migration 000102)
+removed the legacy API field and dropped the legacy table once all callers
+migrated.
 
 ## Status
 
@@ -13,7 +14,9 @@ Accepted. Supersedes point 1 of [ADR 0022](./0022-notification-preferences.md)
 ("Permissions are bound to the event type, not to the delivery channel"). All
 other points of ADR 0022 — opt-out default, soft revocation in the
 ReminderWorker, bulk API, per-recipient enforcement, audit — remain in force,
-generalised from event type to (event type, channel).
+generalised from event type to (event type, channel). The expand→contract
+transition is complete: the legacy table and its code paths were removed in
+migration `000102`.
 
 ## Context
 
@@ -50,15 +53,14 @@ Each of the five event types carries two independent flags: `emailAllowed` and
 ### 2. New table (expand → contract)
 
 A new `user_notification_channel_preferences` table holds the per-channel rows,
-keyed by `(user_id, event_type, channel)`. The legacy
-`user_notification_preferences` table is frozen — new code reads and writes only
-the new table. The old table is dropped in a subsequent contract-phase
-migration once all reads (the legacy `ListPreferences`/`IsEventAllowed` methods)
-are removed.
+keyed by `(user_id, event_type, channel)`. During the expand phase the legacy
+`user_notification_preferences` table was frozen alongside the new one; once all
+readers migrated, the contract phase (migration `000102`) dropped the legacy
+table and removed the `ListPreferences`/`IsEventAllowed` repository methods.
 
-This avoids an in-place `ALTER TABLE ... ADD COLUMN` + primary-key change on a
-table with existing rows, which is riskier than a parallel table plus a one-shot
-data migration. Both tables coexist; the expand-phase API serves the new shape.
+This avoided an in-place `ALTER TABLE ... ADD COLUMN` + primary-key change on a
+table with existing rows, which would have been riskier than a parallel table
+plus a one-shot data migration.
 
 ### 3. Data migration: push mirrors email
 
@@ -79,10 +81,10 @@ both the request and the response. The API now has a single shape.
 
 ### 5. Enforcement in the ReminderWorker
 
-The single dispatch-time check generalises from `IsEventAllowed(eventType)` to
+The single dispatch-time check generalised from `IsEventAllowed(eventType)` to
 `IsChannelAllowed(eventType, channel)`. The worker checks the channel it is
-about to deliver on. In the current email-only dispatch path, that is
-`ChannelEmail`; the upcoming push sender will check `ChannelPush`.
+about to deliver on — `ChannelEmail` on the email path, `ChannelPush` on the
+push dispatch path.
 
 ## Considered Options
 
@@ -96,16 +98,13 @@ about to deliver on. In the current email-only dispatch path, that is
 - (+) Owners can independently enable or disable email and push per event type,
   matching the product's two-section UI and the asymmetric semantics of push
   (requires permission/subscription) vs email (does not).
-- (+) The expand-phase keeps the old table and API shape alive, so existing
-  clients and the current email dispatch path continue to work unchanged during
-  the transition.
-- (+) Defaults preserve user intent: existing users keep their current email
-  behaviour and gain push mirrored to the same setting, so no one is surprised
-  by a new channel they did not ask for.
-- (~) Two preference tables coexist until the contract phase removes the legacy
-  one; the codebase carries both `NotificationPreference` and
-  `NotificationChannelPreference` domain types and both sets of repository/
-  service methods in the interim.
+- (+) The expand→contract transition kept the old table and API shape alive
+  while clients migrated, so existing clients and the email dispatch path
+  continued to work unchanged during the transition. Once migration was
+  complete, the contract phase removed the legacy surface cleanly.
+- (+) Defaults preserved user intent: existing users kept their current email
+  behaviour and gained push mirrored to the same setting, so no one was
+  surprised by a new channel they did not ask for.
 
 ## See also
 

@@ -79,14 +79,6 @@ type ReminderRepository interface {
 	CancelByRecurringOperationID(ctx context.Context, scope, recID uuid.UUID) error
 	HasReminderForLeaseEvent(ctx context.Context, scope, leaseID uuid.UUID, eventType domain.EventType) (bool, error)
 	HasReminderForOperationEvent(ctx context.Context, scope, operationID uuid.UUID, eventType domain.EventType) (bool, error)
-	// ListPreferences returns the stored notification preference rows of a
-	// user. A missing row means the event type is allowed (opt-out model).
-	ListPreferences(ctx context.Context, userID uuid.UUID) ([]domain.NotificationPreference, error)
-	// UpsertPreference inserts or updates one notification preference row.
-	UpsertPreference(ctx context.Context, userID uuid.UUID, pref domain.NotificationPreference) error
-	// IsEventAllowed reports whether the user permits sending reminders of the
-	// given event type. A missing row means allowed.
-	IsEventAllowed(ctx context.Context, userID uuid.UUID, eventType domain.EventType) (bool, error)
 	// ListChannelPreferences returns the stored per-channel preference rows of
 	// a user (ADR 0030). A missing row means the (event type, channel) pair is
 	// allowed.

@@ -39,9 +39,6 @@ _Avoid_: тип доставки
 Разрешение пользователю отправлять напоминания данного event type по данному каналу. Opt-out модель: отсутствующая строка = разрешено. Таблица `user_notification_channel_preferences(user_id, event_type, channel, allowed)` (ADR 0030).
 _Avoid_: prefs, настройки уведомлений
 
-**NotificationPreference / Per-event-type настройка (legacy)**:
-Разрешение пользователю отправлять напоминания данного event type (без учёта канала). Таблица `user_notification_preferences(user_id, event_type, allowed)` (ADR 0022). Заморожена после ADR 0030, будет удалена в contract-phase миграции.
-
 ### Web Push
 
 **PushSubscription / Push-подписка**:
@@ -78,6 +75,6 @@ Push delivery is best-effort: push failures (429, 5xx, no subscription) are logg
 
 ## ADRs
 
-- ADR 0022 — per-event-type notification preferences (legacy, frozen).
-- ADR 0030 — per-channel notification preferences (email/push independent).
+- ADR 0030 — per-channel notification preferences (email/push independent). Supersedes point 1 of ADR 0022; the expand→contract transition is complete (legacy `user_notification_preferences` table dropped in migration `000102`).
+- ADR 0022 — per-event-type notification preferences. Points 2–6 still apply, generalised to (event type, channel); point 1 superseded by ADR 0030.
 - ADR 0029 — rental super-context (notifications + properties + leases tightly coupled).
