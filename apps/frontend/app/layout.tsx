@@ -50,7 +50,11 @@ export const viewport: Viewport = {
     // (WCAG 1.4.4 Resize text). iOS auto-zoom-on-focus is prevented instead by
     // keeping native form controls at font-size ≥ 16px (see --font-size-input in
     // shared/styles/tokens.css). Do NOT re-add maximumScale — it is not needed.
-    themeColor: '#2b7fff',
+    // White so the macOS title-bar strip behind the traffic-light buttons and
+    // the Android Chrome address bar / iOS status bar render white instead of
+    // the brand blue. Pairs with apple-mobile-web-app-status-bar-style 'default'
+    // below, which makes iOS pick dark status-bar text on the light background.
+    themeColor: '#ffffff',
     viewportFit: 'cover',
 };
 

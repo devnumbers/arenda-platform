@@ -20,7 +20,11 @@ export default function manifest(): MetadataRoute.Manifest {
         start_url: '/dashboard',
         scope: '/',
         display: 'standalone',
-        theme_color: '#2b7fff',
+        // White so the macOS PWA title-bar strip behind the traffic-light
+        // buttons renders white instead of the brand blue. Pairs with the
+        // theme-color meta (app/layout.tsx viewport.themeColor) and
+        // background_color below. Android/iOS also pick this up.
+        theme_color: '#ffffff',
         background_color: '#ffffff',
         icons: [
             {
