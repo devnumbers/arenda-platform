@@ -4,9 +4,9 @@ import { type ChangeEvent, type JSX } from 'react';
 import { TextField } from '@/shared/ui/text-field';
 import { LinkButton } from '@/shared/ui/link-button';
 import { type OperationType } from '@/entities/operation/model/types';
+import { PropertySelect } from '@/features/properties';
 import { type BasicInfoData, type BasicInfoErrors } from '../model/types';
 import { CategorySelect } from './CategorySelect';
-import { PropertySelect } from './PropertySelect';
 import { TypeSelect } from './TypeSelect';
 import styles from './OperationBasicInfoStep.module.css';
 
@@ -79,6 +79,7 @@ export function OperationBasicInfoStep({
           onChange={(category) => onChange({ ...data, category })}
           error={errors?.category}
           disabled={readonly}
+          propertyId={data.propertyId}
         />
         <PropertySelect
           value={data.propertyId}

@@ -9,6 +9,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 )
 
 type RentService struct {
@@ -16,9 +17,10 @@ type RentService struct {
 	recurringOps RecurringOperationRepository
 	categories   OperationCategoryRepository
 	clock        clock.Clock
+	tzResolver   sharedtz.OwnerTimezoneResolver
 }
 
-func NewRentService(ops OperationRepository, recurringOps RecurringOperationRepository, categories OperationCategoryRepository, clock clock.Clock) *RentService {
+func NewRentService(ops OperationRepository, recurringOps RecurringOperationRepository, categories OperationCategoryRepository, clock clock.Clock, tzResolver sharedtz.OwnerTimezoneResolver) *RentService {
 	if categories == nil {
 		panic("categories repository is required")
 	}
@@ -27,6 +29,7 @@ func NewRentService(ops OperationRepository, recurringOps RecurringOperationRepo
 		recurringOps: recurringOps,
 		categories:   categories,
 		clock:        clock,
+		tzResolver:   tzResolver,
 	}
 }
 
@@ -36,7 +39,7 @@ func (r *RentService) GenerateRentOperations(
 	ctx context.Context,
 	lease domain.Lease,
 	recurringOpID uuid.UUID,
-	ownerID uuid.UUID,
+	scope uuid.UUID,
 	rentCategoryID uuid.UUID,
 ) ([]domain.Operation, error) {
 	dates := domain.GenerateDates(lease.StartDate, lease.PaymentDay, lease.EndDate, r.clock.Now(), domain.RecurringOperationPeriodicityMonthly)
@@ -45,7 +48,11 @@ func (r *RentService) GenerateRentOperations(
 	}
 
 	now := r.clock.Now()
-	today := timeutil.Date(now)
+	loc, err := r.tzResolver.Resolve(ctx, scope)
+	if err != nil {
+		return nil, fmt.Errorf("resolve owner timezone: %w", err)
+	}
+	today := timeutil.DateIn(now, loc)
 	ops := make([]domain.Operation, 0, len(dates))
 
 	for _, d := range dates {
@@ -56,7 +63,7 @@ func (r *RentService) GenerateRentOperations(
 		sourceDate := d
 		ops = append(ops, domain.Operation{
 			ID:                   opID,
-			OwnerID:              ownerID,
+			OwnerID:              scope,
 			PropertyID:           lease.PropertyID,
 			LeaseID:              lease.ID,
 			RecurringOperationID: recurringOpID,
@@ -80,7 +87,7 @@ func (r *RentService) GenerateRentOperations(
 // past-dated operations start as unconfirmed and must be completed explicitly,
 // operations dated today or later start as pending.
 func rentOperationStatus(operationDate, today time.Time) domain.OperationStatus {
-	if timeutil.Date(operationDate).Before(timeutil.Date(today)) {
+	if timeutil.BeforeDay(operationDate, today) {
 		return domain.OperationStatusUnconfirmed
 	}
 	return domain.OperationStatusPending

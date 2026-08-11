@@ -184,7 +184,7 @@ func (r *fakeOperationRepo) GetPropertyOperationsSummary(_ context.Context, owne
 	}, nil
 }
 
-func (r *fakeOperationRepo) ListOverdueRentOperations(_ context.Context, ownerID uuid.UUID) ([]OverdueRentOperation, error) {
+func (r *fakeOperationRepo) ListOverdueRentOperations(_ context.Context, ownerID uuid.UUID, _ []uuid.UUID) ([]OverdueRentOperation, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []OverdueRentOperation
@@ -202,7 +202,7 @@ func (r *fakeOperationRepo) ListOverdueRentOperations(_ context.Context, ownerID
 	return out, nil
 }
 
-func (r *fakeOperationRepo) ListNextRentPayments(_ context.Context, ownerID uuid.UUID, asOf time.Time) ([]NextRentPayment, error) {
+func (r *fakeOperationRepo) ListNextRentPayments(_ context.Context, ownerID uuid.UUID, _ []uuid.UUID, asOf time.Time) ([]NextRentPayment, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	minByLease := make(map[uuid.UUID]time.Time)
@@ -228,6 +228,30 @@ func (r *fakeOperationRepo) ListNextRentPayments(_ context.Context, ownerID uuid
 		out = append(out, NextRentPayment{LeaseID: leaseID, NextPaymentDate: d})
 	}
 	return out, nil
+}
+
+func (r *fakeOperationRepo) GetByID(_ context.Context, id uuid.UUID) (domain.Operation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, op := range r.ops {
+		if op.ID == id && op.DeletedAt == nil {
+			return op, nil
+		}
+	}
+	return domain.Operation{}, ErrNotFound
+}
+
+func (r *fakeOperationRepo) MoveToProperty(_ context.Context, id, scope, propertyID uuid.UUID, updatedAt time.Time) (domain.Operation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.ops {
+		if r.ops[i].ID == id && r.ops[i].OwnerID == scope && r.ops[i].DeletedAt == nil {
+			r.ops[i].PropertyID = propertyID
+			r.ops[i].UpdatedAt = updatedAt
+			return r.ops[i], nil
+		}
+	}
+	return domain.Operation{}, ErrNotFound
 }
 
 func (r *fakeOperationRepo) GetByIDAndOwner(_ context.Context, id, _ uuid.UUID) (domain.Operation, error) {
@@ -413,19 +437,19 @@ func (r *fakeOperationRepo) MarkOverdue(_ context.Context, ownerID, id uuid.UUID
 	return domain.Operation{}, false, ErrNotFound
 }
 
-func (r *fakeOperationRepo) GetFinanceReportTotals(_ context.Context, _ uuid.UUID, _, _ *time.Time) (FinanceReportTotals, error) {
+func (r *fakeOperationRepo) GetFinanceReportTotals(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) (FinanceReportTotals, error) {
 	return FinanceReportTotals{}, nil
 }
 
-func (r *fakeOperationRepo) GetFinanceReportByProperty(_ context.Context, _ uuid.UUID, _, _ *time.Time) ([]FinanceReportPropertyRow, error) {
+func (r *fakeOperationRepo) GetFinanceReportByProperty(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportPropertyRow, error) {
 	return nil, nil
 }
 
-func (r *fakeOperationRepo) GetFinanceReportByCategory(_ context.Context, _ uuid.UUID, _, _ *time.Time) ([]FinanceReportCategoryRow, error) {
+func (r *fakeOperationRepo) GetFinanceReportByCategory(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportCategoryRow, error) {
 	return nil, nil
 }
 
-func (r *fakeOperationRepo) GetFinanceReportByMonth(_ context.Context, _ uuid.UUID, _, _ *time.Time) ([]FinanceReportMonthRow, error) {
+func (r *fakeOperationRepo) GetFinanceReportByMonth(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportMonthRow, error) {
 	return nil, nil
 }
 
@@ -471,6 +495,16 @@ func (r *fakeRecurringOperationRepo) Create(_ context.Context, rec domain.Recurr
 	return rec, nil
 }
 
+func (r *fakeRecurringOperationRepo) GetByID(_ context.Context, id uuid.UUID) (domain.RecurringOperation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rec, ok := r.recs[id]
+	if !ok || rec.DeletedAt != nil {
+		return domain.RecurringOperation{}, ErrNotFound
+	}
+	return rec, nil
+}
+
 func (r *fakeRecurringOperationRepo) GetByLeaseID(_ context.Context, _, leaseID uuid.UUID) (domain.RecurringOperation, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -496,7 +530,7 @@ func (r *fakeRecurringOperationRepo) GetByIDAndOwnerForUpdate(ctx context.Contex
 	return r.GetByIDAndOwner(ctx, id, ownerID)
 }
 
-func (r *fakeRecurringOperationRepo) ListByOwner(_ context.Context, _ uuid.UUID) ([]domain.RecurringOperation, error) {
+func (r *fakeRecurringOperationRepo) ListByOwner(_ context.Context, _ uuid.UUID, _ []uuid.UUID) ([]domain.RecurringOperation, error) {
 	return nil, nil
 }
 
@@ -572,7 +606,7 @@ func TestGenerateRentOperations_BackdatedLeaseMarksPastPeriodsUnconfirmed(t *tes
 		PaymentDay:        1,
 	}
 
-	svc := NewRentService(&fakeOperationRepo{}, &fakeRecurringOperationRepo{}, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: date(2024, 6, 30)})
+	svc := NewRentService(&fakeOperationRepo{}, &fakeRecurringOperationRepo{}, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: date(2024, 6, 30)}, fakeTzResolver{})
 	ops, err := svc.GenerateRentOperations(ctx, lease, recID, ownerID, testRentCategoryID)
 	if err != nil {
 		t.Fatalf("generate rent operations: %v", err)
@@ -639,7 +673,7 @@ func TestRebuildSchedule_DeletedManualLeaseOperationDoesNotBlockGeneratedRent(t 
 		DeletedAt:     &deletedAt,
 	})
 
-	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: date(2024, 6, 1)})
+	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: date(2024, 6, 1)}, fakeTzResolver{})
 	if err := svc.RebuildSchedule(ctx, lease, start); err != nil {
 		t.Fatalf("RebuildSchedule failed: %v", err)
 	}
@@ -714,7 +748,7 @@ func TestRebuildSchedule_MovedGeneratedRentOperationBlocksOriginalScheduleDate(t
 		IsException:          true,
 	})
 
-	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: now})
+	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: now}, fakeTzResolver{})
 	if err := svc.RebuildSchedule(ctx, lease, start); err != nil {
 		t.Fatalf("RebuildSchedule failed: %v", err)
 	}
@@ -809,7 +843,7 @@ func TestRebuildSchedule_EarlierStartDatePreservesPastOperations(t *testing.T) {
 		IsException:   true,
 	})
 
-	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: now})
+	svc := NewRentService(opsRepo, recRepo, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: now}, fakeTzResolver{})
 	if err := svc.RebuildSchedule(ctx, lease, originalStart); err != nil {
 		t.Fatalf("RebuildSchedule failed: %v", err)
 	}

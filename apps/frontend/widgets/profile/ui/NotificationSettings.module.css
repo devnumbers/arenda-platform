@@ -28,3 +28,19 @@
   line-height: var(--line-height-text-m);
   color: var(--color-text);
 }
+
+.pushWarning {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--color-clear-hover);
+}
+
+.pushWarningText {
+  margin: 0;
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+  color: var(--color-text);
+}

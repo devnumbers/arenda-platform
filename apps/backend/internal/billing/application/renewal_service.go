@@ -185,9 +185,10 @@ func (r *RenewalService) prepareRenewalPayment(
 	// Free tariff changes (e.g. downgrade to basic) do not require a charge.
 	if amount <= 0 {
 		if err := applyFreeRenewalOrDowngrade(ctx, freeRenewalDeps{
-			subscriptions:    r.deps.subscriptions,
-			tariffs:          r.deps.tariffs,
-			propertyArchiver: r.deps.propertyArchiver,
+			subscriptions:         r.deps.subscriptions,
+			tariffs:               r.deps.tariffs,
+			propertyArchiver:      r.deps.propertyArchiver,
+			recipientSlotEnforcer: r.deps.recipientSlotEnforcer,
 		}, tx, &sub, renewalTariff, period, uuid.Nil, now); err != nil {
 			return domain.SubscriptionPayment{}, domain.PaymentMethod{}, 0, "", domain.Tariff{}, err
 		}
@@ -467,10 +468,11 @@ func (r *RenewalService) finalizeRenewalCharge(
 		}, sub.ID, payment, now)
 		if ok && oldTariffID != sub.TariffID {
 			archiveExcessPropertiesBestEffort(ctx, archiveDeps{
-				propertyArchiver: r.deps.propertyArchiver,
-				beginner:         r.deps.beginner,
-				log:              r.deps.log,
-			}, sub.UserID, renewalTariff.ActivePropertyLimit)
+				propertyArchiver:      r.deps.propertyArchiver,
+				recipientSlotEnforcer: r.deps.recipientSlotEnforcer,
+				beginner:              r.deps.beginner,
+				log:                   r.deps.log,
+			}, sub.UserID, renewalTariff.ActivePropertyLimit, "renewal_downgrade")
 		}
 		return nil
 	case domain.PaymentStatusFailed:
@@ -706,10 +708,11 @@ func (r *RenewalService) markRenewalSucceededAndApply(ctx context.Context, payme
 	}, subscriptionID, payment, now)
 	if ok && oldTariffID != sub.TariffID {
 		archiveExcessPropertiesBestEffort(ctx, archiveDeps{
-			propertyArchiver: r.deps.propertyArchiver,
-			beginner:         r.deps.beginner,
-			log:              r.deps.log,
-		}, sub.UserID, renewalTariff.ActivePropertyLimit)
+			propertyArchiver:      r.deps.propertyArchiver,
+			recipientSlotEnforcer: r.deps.recipientSlotEnforcer,
+			beginner:              r.deps.beginner,
+			log:                   r.deps.log,
+		}, sub.UserID, renewalTariff.ActivePropertyLimit, "renewal_downgrade")
 	}
 	return nil
 }
@@ -864,6 +867,11 @@ func (r *RenewalService) downgradeToBasic(ctx context.Context, sub domain.Subscr
 			return fmt.Errorf("archive excess properties after grace downgrade: %w", err)
 		}
 	}
+	if r.deps.recipientSlotEnforcer != nil {
+		if err := r.deps.recipientSlotEnforcer.EnforceRecipientLimit(ctx, tx, sub.UserID, "grace_expired"); err != nil {
+			return fmt.Errorf("enforce recipient slot limit after grace downgrade: %w", err)
+		}
+	}
 
 	return tx.Commit(ctx)
 }
@@ -906,6 +914,11 @@ func (r *RenewalService) expireNonRenewingSubscription(ctx context.Context, sub 
 	if r.deps.propertyArchiver != nil {
 		if err := r.deps.propertyArchiver.ArchiveExcessProperties(ctx, tx, sub.UserID, basicTariff.ActivePropertyLimit); err != nil {
 			return fmt.Errorf("archive excess properties after non-renewing expiry: %w", err)
+		}
+	}
+	if r.deps.recipientSlotEnforcer != nil {
+		if err := r.deps.recipientSlotEnforcer.EnforceRecipientLimit(ctx, tx, sub.UserID, "non_renewing_expired"); err != nil {
+			return fmt.Errorf("enforce recipient slot limit after non-renewing expiry: %w", err)
 		}
 	}
 

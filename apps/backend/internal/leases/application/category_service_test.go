@@ -24,8 +24,18 @@ func (f *fakeCategoryRepo) Create(ctx context.Context, ownerID uuid.UUID, catego
 	return c, nil
 }
 
-func (f *fakeCategoryRepo) ListByOwner(ctx context.Context, ownerID uuid.UUID, categoryType *domain.OperationType) ([]domain.OperationCategory, error) {
-	return f.categories, nil
+func (f *fakeCategoryRepo) ListByOwner(_ context.Context, ownerID uuid.UUID, categoryType *domain.OperationType) ([]domain.OperationCategory, error) {
+	var out []domain.OperationCategory
+	for _, c := range f.categories {
+		if c.OwnerID != ownerID {
+			continue
+		}
+		if categoryType != nil && c.Type != *categoryType {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 func (f *fakeCategoryRepo) GetByIDAndOwner(ctx context.Context, id, ownerID uuid.UUID) (domain.OperationCategory, error) {

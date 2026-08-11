@@ -89,8 +89,9 @@
   color: inherit;
   font-family: inherit;
   border-radius: var(--radius-input);
-  font-size: var(--font-size-text-m);
-  line-height: var(--line-height-text-m);
+  /* ≥16px: prevents iOS Safari from auto-zooming on focus. */
+  font-size: var(--font-size-input);
+  line-height: var(--line-height-input);
   outline: none;
 }
 

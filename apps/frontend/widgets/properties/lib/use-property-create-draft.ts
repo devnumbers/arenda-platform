@@ -2,15 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { PropertyType } from '@/entities/property/model/types';
+import type { PropertyAttributes, PropertyType } from '@/entities/property/model/types';
+import { coerceAttributes } from '@/entities/property/model/attributes';
 import { propertyTypeOptions } from '@/features/properties/lib/property-types';
 
-export type CreateStep = 1 | 2 | 3 | 4;
+// Step 1 — Тип, 2 — Адрес, 3 — Характеристики, 4 — Информация, 5 — Success.
+export type CreateStep = 1 | 2 | 3 | 4 | 5;
 
 export type CreateDraft = {
   step: CreateStep;
   type?: PropertyType;
   address?: string;
+  attributes?: PropertyAttributes;
   name?: string;
   description?: string;
 };
@@ -41,7 +44,7 @@ export function usePropertyCreateDraft(): {
   }, []);
 
   useEffect(() => {
-    if (draft.step === 4) {
+    if (draft.step === 5) {
       clearPropertyCreateDraft();
       return;
     }
@@ -78,7 +81,7 @@ function validateDraft(parsed: unknown): CreateDraft {
   const record = parsed as Record<string, unknown>;
 
   const step = Number(record.step);
-  if (!Number.isInteger(step) || step < 1 || step > 4) return DEFAULT_DRAFT;
+  if (!Number.isInteger(step) || step < 1 || step > 5) return DEFAULT_DRAFT;
 
   if (
     'type' in record &&
@@ -88,6 +91,7 @@ function validateDraft(parsed: unknown): CreateDraft {
     return DEFAULT_DRAFT;
   }
   if (!isOptionalString(record.address)) return DEFAULT_DRAFT;
+  const attributesPresent = 'attributes' in record && record.attributes !== undefined;
   if (!isOptionalString(record.name)) return DEFAULT_DRAFT;
   if (!isOptionalString(record.description)) return DEFAULT_DRAFT;
 
@@ -95,6 +99,7 @@ function validateDraft(parsed: unknown): CreateDraft {
     step: step as CreateStep,
     ...(record.type !== undefined && { type: record.type as PropertyType }),
     ...(record.address !== undefined && { address: record.address }),
+    ...(attributesPresent && { attributes: coerceAttributes(record.attributes) }),
     ...(record.name !== undefined && { name: record.name }),
     ...(record.description !== undefined && {
       description: record.description,

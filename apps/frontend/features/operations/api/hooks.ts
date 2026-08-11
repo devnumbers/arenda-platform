@@ -61,10 +61,17 @@ function shouldInvalidateLeaseKeys(
   if (!incomeCategories) {
     return true;
   }
-  const rentCategoryId = incomeCategories.find(
-    (category) => category.code === 'rent',
-  )?.id;
-  return rentCategoryId !== undefined && operation.category_id === rentCategoryId;
+  // Rent operations affect lease state. A member may have multiple rent
+  // categories (own + each shared-access owner's), so check membership across
+  // all of them rather than the first find() — otherwise a rent operation on a
+  // shared object (owner's rent category) would not invalidate lease keys.
+  const rentCategoryIds = incomeCategories
+    .filter((category) => category.code === 'rent')
+    .map((category) => category.id);
+  return (
+    rentCategoryIds.length > 0 &&
+    rentCategoryIds.includes(operation.category_id)
+  );
 }
 
 function normalizeOperationsFilters(

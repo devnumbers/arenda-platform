@@ -224,6 +224,7 @@ function OperationEditFormContent({
           value={form.category}
           onChange={(category) => setForm((prev) => ({ ...prev, category }))}
           error={errors.category}
+          propertyId={operation.property_id ?? undefined}
         />
         <TextField
           label="Название операции"

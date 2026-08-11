@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { BrowserRouter, Routes, Route } from "react-router";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { Header } from "./components/header";
 import { Footer } from "./components/footer";
 import { ContactModal } from "./components/contact-modal";
@@ -30,6 +30,9 @@ export default function App() {
           <Route path="/" element={<LandingPage onContact={openModal} onLogin={handleLogin} />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
+          {/* Catch-all: если Caddy случайно отправит cabinet-роут на landing,
+              пользователь увидит редирект на главную, а не ошибку react-router. */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <Footer onContact={openModal} onCopyEmail={copyEmail} />
         <ContactModal open={modalOpen} onClose={() => setModalOpen(false)} />

@@ -130,9 +130,6 @@ concurrently. The earlier pre-check remains as a fast path.
 
 ## See also
 
-- [`docs/plans/2026-07-29-property-deletion-design.md`](../plans/2026-07-29-property-deletion-design.md)
-  — the approved feature design (including the soft-delete rejection) and
-  the post-review amendments.
 - [`docs/adr/0020-audit-log.md`](./0020-audit-log.md) — the audit entries
   written for `property.deleted`; the `SET NULL` precedent for references
   that outlive their target.

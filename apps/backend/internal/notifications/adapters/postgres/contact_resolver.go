@@ -24,8 +24,8 @@ func NewContactResolver(queries *postgres.Queries) *ContactResolver {
 
 // Resolve returns the owner's contact.
 // Currently returns email if verified; otherwise an error.
-func (r *ContactResolver) Resolve(ctx context.Context, ownerID uuid.UUID) (application.Contact, error) {
-	email, err := r.queries.GetVerifiedEmailByUserID(ctx, pgconv.UUIDToPgtype(ownerID))
+func (r *ContactResolver) Resolve(ctx context.Context, scope uuid.UUID) (application.Contact, error) {
+	email, err := r.queries.GetVerifiedEmailByUserID(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return application.Contact{}, application.ErrNoContact

@@ -22,7 +22,6 @@ import {isPaidTariff} from '@/entities/user/lib/is-paid-tariff';
 import {PAYMENT_PERIOD_LABELS} from '@/entities/billing/model/types';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {formatDate} from '@/shared/lib/format-date';
-import type {Subscription} from '@/entities/billing/model/types';
 import styles from './TariffOverview.module.css';
 
 const STATUS_LABELS: Record<
@@ -33,14 +32,6 @@ const STATUS_LABELS: Record<
     grace: 'Льготный период',
     cancelled: 'Отменена',
 };
-
-function getAutoRenewState(
-    subscription: Subscription,
-): 'enabled' | 'disabled' | 'no-card' {
-    if (!subscription.autoRenewEnabled) return 'disabled';
-    if (!subscription.activePaymentMethod) return 'no-card';
-    return 'enabled';
-}
 
 function isExpiringSoon(validUntil?: string): boolean {
     if (!validUntil) return false;
@@ -184,20 +175,6 @@ export function TariffOverview(): JSX.Element {
                     </div>
                 </dl>
 
-                {/*{getAutoRenewState(subscription) === 'no-card' &&
-                    (subscription.status === 'active' || subscription.status === 'grace') && (
-                        <p className={styles.hint}>
-                            Для автопродления нужна основная карта.{" "}
-                            <LinkButton
-                                href={ROUTES.profilePaymentMethods}
-                                variant="clear"
-                                size="tiny"
-                                className={styles.hintLink}
-                            >
-                                Добавить
-                            </LinkButton>
-                        </p>
-                    )}*/}
             </Card>
 
             {pendingPayment && (

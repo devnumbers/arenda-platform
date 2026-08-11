@@ -14,6 +14,7 @@ export function mapMeResponse(response: MeResponse): User {
     surname: response.surname ?? null,
     patronymic: response.patronymic ?? null,
     email: response.email ?? null,
+    timezone: response.timezone ?? null,
     subscription: response.subscription
       ? {
           tariff: {
@@ -29,6 +30,7 @@ export function mapNotificationPreferencesResponse(
 ): NotificationPreference[] {
   return response.preferences.map((preference) => ({
     eventType: preference.event_type,
-    allowed: preference.allowed,
+    emailAllowed: preference.email_allowed,
+    pushAllowed: preference.push_allowed,
   }));
 }

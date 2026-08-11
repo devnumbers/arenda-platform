@@ -43,6 +43,32 @@ export function useProperties(
   });
 }
 
+export type PropertiesListResult = {
+  readonly items: Property[];
+  readonly hiddenSharedCount: number;
+};
+
+// Same /properties endpoint as useProperties, but also surfaces
+// hidden_shared_count (shared objects hidden from the recipient due to a
+// tariff slot shortage). Use this only where the count is needed — the rest
+// of the app keeps useProperties for the plain list. Shares the
+// propertyKeys.list prefix so mutations invalidate both queries together.
+export function usePropertiesWithMeta(
+  options: { enabled?: boolean } = {},
+): UseQueryResult<PropertiesListResult, ApiError> {
+  return useQuery({
+    queryKey: [...propertyKeys.list, 'meta'],
+    queryFn: async () => {
+      const response = await apiClient<PropertiesResponse>('/properties');
+      return {
+        items: response.items.map(mapPropertyResponse),
+        hiddenSharedCount: response.hidden_shared_count ?? 0,
+      };
+    },
+    enabled: options.enabled,
+  });
+}
+
 export function useArchivedProperties(
   options: { enabled?: boolean } = {},
 ): UseQueryResult<Property[], ApiError> {

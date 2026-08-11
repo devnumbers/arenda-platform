@@ -152,12 +152,13 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 		if result.Status != domain.PaymentStatusRefunded && result.Status != domain.PaymentStatusPartialRefunded {
 			if payment.Status == domain.PaymentStatusSucceeded {
 				applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
-					beginner:         s.deps.beginner,
-					subscriptions:    s.deps.subscriptions,
-					tariffs:          s.deps.tariffs,
-					propertyArchiver: s.deps.propertyArchiver,
-					clock:            s.deps.clock,
-					log:              s.deps.log,
+					beginner:              s.deps.beginner,
+					subscriptions:         s.deps.subscriptions,
+					tariffs:               s.deps.tariffs,
+					propertyArchiver:      s.deps.propertyArchiver,
+					recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
+					clock:                 s.deps.clock,
+					log:                   s.deps.log,
 				}, payment)
 				return nil
 			}
@@ -238,9 +239,10 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 			// payment leaves the subscription untouched.
 			if !alreadyRefunded {
 				if err := applyRefundToSubscription(ctx, refundDeps{
-					subscriptions:    s.deps.subscriptions,
-					tariffs:          s.deps.tariffs,
-					propertyArchiver: s.deps.propertyArchiver,
+					subscriptions:         s.deps.subscriptions,
+					tariffs:               s.deps.tariffs,
+					propertyArchiver:      s.deps.propertyArchiver,
+					recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
 				}, tx, payment.SubscriptionID); err != nil {
 					return err
 				}
@@ -286,12 +288,13 @@ func (s *WebhookService) HandleWebhook(ctx context.Context, providerName string,
 
 		if result.Status == domain.PaymentStatusSucceeded {
 			applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
-				beginner:         s.deps.beginner,
-				subscriptions:    s.deps.subscriptions,
-				tariffs:          s.deps.tariffs,
-				propertyArchiver: s.deps.propertyArchiver,
-				clock:            s.deps.clock,
-				log:              s.deps.log,
+				beginner:              s.deps.beginner,
+				subscriptions:         s.deps.subscriptions,
+				tariffs:               s.deps.tariffs,
+				propertyArchiver:      s.deps.propertyArchiver,
+				recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
+				clock:                 s.deps.clock,
+				log:                   s.deps.log,
 			}, payment)
 		}
 		return nil
@@ -375,9 +378,10 @@ func (s *WebhookService) reconcileFailedPayment(ctx context.Context, payment dom
 	// logs and ignores, so only a full refund downgrades the subscription.
 	if status == domain.PaymentStatusRefunded {
 		if err := applyRefundToSubscription(ctx, refundDeps{
-			subscriptions:    s.deps.subscriptions,
-			tariffs:          s.deps.tariffs,
-			propertyArchiver: s.deps.propertyArchiver,
+			subscriptions:         s.deps.subscriptions,
+			tariffs:               s.deps.tariffs,
+			propertyArchiver:      s.deps.propertyArchiver,
+			recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
 		}, tx, payment.SubscriptionID); err != nil {
 			return err
 		}
@@ -413,12 +417,13 @@ func (s *WebhookService) reconcileFailedPayment(ctx context.Context, payment dom
 
 	if status == domain.PaymentStatusSucceeded {
 		applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
-			beginner:         s.deps.beginner,
-			subscriptions:    s.deps.subscriptions,
-			tariffs:          s.deps.tariffs,
-			propertyArchiver: s.deps.propertyArchiver,
-			clock:            s.deps.clock,
-			log:              s.deps.log,
+			beginner:              s.deps.beginner,
+			subscriptions:         s.deps.subscriptions,
+			tariffs:               s.deps.tariffs,
+			propertyArchiver:      s.deps.propertyArchiver,
+			recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
+			clock:                 s.deps.clock,
+			log:                   s.deps.log,
 		}, payment)
 	}
 	return nil

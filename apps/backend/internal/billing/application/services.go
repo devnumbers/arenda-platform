@@ -61,49 +61,53 @@ type paymentMethodServiceDeps struct {
 
 // paymentServiceDeps is the narrow dependency bundle for PaymentService.
 type paymentServiceDeps struct {
-	subscriptionPayments SubscriptionPaymentRepository
-	subscriptions        SubscriptionRepository
-	paymentMethods       PaymentMethodRepository
-	tariffs              TariffRepository
-	propertyArchiver     PropertyArchiver
-	beginner             transaction.Beginner
-	audit                auditapp.Recorder
-	clock                clock.Clock
-	log                  *slog.Logger
+	subscriptionPayments  SubscriptionPaymentRepository
+	subscriptions         SubscriptionRepository
+	paymentMethods        PaymentMethodRepository
+	tariffs               TariffRepository
+	propertyArchiver      PropertyArchiver
+	recipientSlotEnforcer RecipientSlotEnforcer
+	beginner              transaction.Beginner
+	audit                 auditapp.Recorder
+	clock                 clock.Clock
+	log                   *slog.Logger
 }
 
 // renewalServiceDeps is the narrow dependency bundle for RenewalService.
 type renewalServiceDeps struct {
-	tariffs              TariffRepository
-	subscriptions        SubscriptionRepository
-	subscriptionPayments SubscriptionPaymentRepository
-	paymentMethods       PaymentMethodRepository
-	propertyArchiver     PropertyArchiver
-	beginner             transaction.Beginner
-	log                  *slog.Logger
-	callbackBaseURL      string
+	tariffs               TariffRepository
+	subscriptions         SubscriptionRepository
+	subscriptionPayments  SubscriptionPaymentRepository
+	paymentMethods        PaymentMethodRepository
+	propertyArchiver      PropertyArchiver
+	recipientSlotEnforcer RecipientSlotEnforcer
+	beginner              transaction.Beginner
+	log                   *slog.Logger
+	callbackBaseURL       string
 }
 
 // webhookServiceDeps is the narrow dependency bundle for WebhookService.
 type webhookServiceDeps struct {
-	subscriptionPayments SubscriptionPaymentRepository
-	subscriptions        SubscriptionRepository
-	paymentMethods       PaymentMethodRepository
-	tariffs              TariffRepository
-	propertyArchiver     PropertyArchiver
-	beginner             transaction.Beginner
-	audit                auditapp.Recorder
-	clock                clock.Clock
-	log                  *slog.Logger
+	subscriptionPayments  SubscriptionPaymentRepository
+	subscriptions         SubscriptionRepository
+	paymentMethods        PaymentMethodRepository
+	tariffs               TariffRepository
+	propertyArchiver      PropertyArchiver
+	recipientSlotEnforcer RecipientSlotEnforcer
+	beginner              transaction.Beginner
+	audit                 auditapp.Recorder
+	clock                 clock.Clock
+	log                   *slog.Logger
 }
 
 // scheduledChangeServiceDeps is the narrow dependency bundle for ScheduledChangeService.
 type scheduledChangeServiceDeps struct {
-	tariffs          TariffRepository
-	subscriptions    SubscriptionRepository
-	propertyArchiver PropertyArchiver
-	beginner         transaction.Beginner
-	log              *slog.Logger
+	tariffs               TariffRepository
+	subscriptions         SubscriptionRepository
+	propertyArchiver      PropertyArchiver
+	recipientSlotEnforcer RecipientSlotEnforcer
+	beginner              transaction.Beginner
+	log                   *slog.Logger
 }
 
 // NewServices builds the billing sub-services from the shared repository and
@@ -121,6 +125,7 @@ func NewServices(
 	log *slog.Logger,
 	callbackBaseURL string,
 	propertyArchiver PropertyArchiver,
+	recipientSlotEnforcer RecipientSlotEnforcer,
 	onboarding OnboardingService,
 	paymentMethodInUseChecker PaymentMethodInUseChecker,
 ) Services {
@@ -153,43 +158,47 @@ func NewServices(
 			callbackBaseURL: callbackBaseURL,
 		}, paymentMethodInUseChecker, provider),
 		Payments: NewPaymentService(paymentServiceDeps{
-			subscriptionPayments: subscriptionPayments,
-			subscriptions:        subscriptions,
-			paymentMethods:       paymentMethods,
-			tariffs:              tariffs,
-			propertyArchiver:     propertyArchiver,
-			beginner:             beginner,
-			audit:                audit,
-			clock:                clk,
-			log:                  log,
+			subscriptionPayments:  subscriptionPayments,
+			subscriptions:         subscriptions,
+			paymentMethods:        paymentMethods,
+			tariffs:               tariffs,
+			propertyArchiver:      propertyArchiver,
+			recipientSlotEnforcer: recipientSlotEnforcer,
+			beginner:              beginner,
+			audit:                 audit,
+			clock:                 clk,
+			log:                   log,
 		}, provider),
 		Webhooks: NewWebhookService(webhookServiceDeps{
-			subscriptionPayments: subscriptionPayments,
-			subscriptions:        subscriptions,
-			paymentMethods:       paymentMethods,
-			tariffs:              tariffs,
-			propertyArchiver:     propertyArchiver,
-			beginner:             beginner,
-			audit:                audit,
-			clock:                clk,
-			log:                  log,
+			subscriptionPayments:  subscriptionPayments,
+			subscriptions:         subscriptions,
+			paymentMethods:        paymentMethods,
+			tariffs:               tariffs,
+			propertyArchiver:      propertyArchiver,
+			recipientSlotEnforcer: recipientSlotEnforcer,
+			beginner:              beginner,
+			audit:                 audit,
+			clock:                 clk,
+			log:                   log,
 		}, provider),
 		Renewals: NewRenewalService(renewalServiceDeps{
-			tariffs:              tariffs,
-			subscriptions:        subscriptions,
-			subscriptionPayments: subscriptionPayments,
-			paymentMethods:       paymentMethods,
-			propertyArchiver:     propertyArchiver,
-			beginner:             beginner,
-			log:                  log,
-			callbackBaseURL:      callbackBaseURL,
+			tariffs:               tariffs,
+			subscriptions:         subscriptions,
+			subscriptionPayments:  subscriptionPayments,
+			paymentMethods:        paymentMethods,
+			propertyArchiver:      propertyArchiver,
+			recipientSlotEnforcer: recipientSlotEnforcer,
+			beginner:              beginner,
+			log:                   log,
+			callbackBaseURL:       callbackBaseURL,
 		}, provider),
 		ScheduledChanges: NewScheduledChangeService(scheduledChangeServiceDeps{
-			tariffs:          tariffs,
-			subscriptions:    subscriptions,
-			propertyArchiver: propertyArchiver,
-			beginner:         beginner,
-			log:              log,
+			tariffs:               tariffs,
+			subscriptions:         subscriptions,
+			propertyArchiver:      propertyArchiver,
+			recipientSlotEnforcer: recipientSlotEnforcer,
+			beginner:              beginner,
+			log:                   log,
 		}),
 		Onboarding: onboarding,
 	}

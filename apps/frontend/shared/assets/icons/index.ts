@@ -1,4 +1,5 @@
 export { default as Bell } from './bell.svg';
+export { default as BellOff } from './bell-off.svg';
 export { default as Clock } from './clock.svg';
 export { default as Loading } from './loading.svg';
 export { default as Logo } from './logo.svg';

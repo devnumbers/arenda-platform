@@ -1,23 +1,26 @@
 -- name: GetUserByID :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE id = $1;
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE id = $1;
 
 -- name: GetUserByIDForUpdate :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE id = $1 FOR UPDATE;
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE id = $1 FOR UPDATE;
 
 -- name: GetUserByPhone :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE phone = $1;
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE phone = $1;
 
 -- name: GetUserByPhoneForUpdate :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE phone = $1 FOR UPDATE;
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE phone = $1 FOR UPDATE;
 
 -- name: GetUserByEmail :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE LOWER(email) = LOWER($1::text);
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE LOWER(email) = LOWER($1::text);
+
+-- name: GetUserTimezone :one
+SELECT timezone FROM users WHERE id = $1;
 
 -- name: CreateUser :one
 INSERT INTO users (id, phone, role, phone_encrypted, email, email_verified_at)
 VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT DO NOTHING
-RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted;
+RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted, timezone;
 
 -- name: GetLatestLoginCodeByPhoneAndEmailAndPurpose :one
 SELECT id, user_id, phone, email, code_hash, expires_at, used, created_at, purpose, phone_encrypted FROM login_codes
@@ -110,7 +113,7 @@ DELETE FROM sessions t WHERE t.ctid IN (
 
 -- name: GetSessionByTokenHash :one
 SELECT s.id, s.token_hash, s.expires_at, s.created_at, s.last_used_at,
-       u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.email_verified_at, u.phone_encrypted
+       u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.email_verified_at, u.phone_encrypted, u.timezone
 FROM sessions s
 JOIN users u ON s.user_id = u.id
 WHERE s.token_hash = $1 AND s.expires_at > $2;
@@ -127,9 +130,10 @@ SET name = $2,
     patronymic = $4,
     email = $5,
     email_verified_at = $6,
+    timezone = $7,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at;
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone;
 
 -- name: UpdateUserPhone :one
 UPDATE users
@@ -137,7 +141,7 @@ SET phone = $2,
     phone_encrypted = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at;
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone;
 
 -- name: UpdateUserEmailVerified :one
 UPDATE users
@@ -145,7 +149,7 @@ SET email = $2,
     email_verified_at = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted;
+RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted, timezone;
 
 -- name: ListUsersAdmin :many
 SELECT u.*, us.status AS subscription_status

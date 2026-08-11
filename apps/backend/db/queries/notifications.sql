@@ -15,7 +15,10 @@ SELECT * FROM reminders WHERE id = $1;
 
 -- name: ListRemindersByOwner :many
 SELECT * FROM reminders
-WHERE owner_id = sqlc.arg('owner_id')
+WHERE (owner_id = sqlc.arg('owner_id')::uuid
+       OR (property_id IS NOT NULL
+           AND property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = reminders.property_id AND p.status = 'archived')))
   AND CASE
         WHEN sqlc.arg('filter_by_status')::boolean THEN status::text = sqlc.arg('status')::text
         ELSE true
@@ -62,6 +65,11 @@ FOR UPDATE SKIP LOCKED;
 UPDATE reminders
 SET scheduled_at = $1
 WHERE id = $2 AND owner_id = $3 AND status = 'pending';
+
+-- name: ReschedulePendingRemindersByOwner :execrows
+UPDATE reminders
+SET scheduled_at = ((scheduled_at AT TIME ZONE sqlc.arg('old_tz')::text) AT TIME ZONE sqlc.arg('new_tz')::text)
+WHERE owner_id = sqlc.arg('owner_id') AND status = 'pending';
 
 -- name: MarkReminderSending :one
 UPDATE reminders
@@ -162,36 +170,72 @@ WHERE reminder_id = $2;
 
 -- name: IsEmailReminderSent :one
 SELECT EXISTS (
-    SELECT 1 FROM sent_email_reminders WHERE reminder_id = $1
+    SELECT 1 FROM sent_email_reminders WHERE reminder_id = $1 AND owner_id = $2
 );
 
 -- name: SaveSentEmailReminder :execrows
 INSERT INTO sent_email_reminders (
     id, reminder_id, owner_id, email, subject, plain_body, sent_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (reminder_id) DO NOTHING;
+ON CONFLICT (reminder_id, owner_id) DO NOTHING;
 
 -- name: DeleteSentEmailReminder :exec
-DELETE FROM sent_email_reminders WHERE reminder_id = $1;
+DELETE FROM sent_email_reminders WHERE reminder_id = $1 AND owner_id = $2;
+
+-- name: IsPushReminderSent :one
+SELECT EXISTS (
+    SELECT 1 FROM sent_push_reminders WHERE reminder_id = $1 AND recipient_id = $2
+);
+
+-- name: SaveSentPushReminder :execrows
+INSERT INTO sent_push_reminders (id, reminder_id, recipient_id, sent_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (reminder_id, recipient_id) DO NOTHING;
+
+-- name: DeleteSentPushReminder :exec
+DELETE FROM sent_push_reminders WHERE reminder_id = $1 AND recipient_id = $2;
 
 -- name: MarkReminderSkipped :execrows
 UPDATE reminders
 SET status = 'skipped'
 WHERE id = $1 AND status IN ('pending', 'sending');
 
--- name: ListNotificationPreferences :many
-SELECT * FROM user_notification_preferences
-WHERE user_id = $1
-ORDER BY event_type ASC;
+-- name: SaveFreeReminder :execrows
+INSERT INTO reminders (
+    id, owner_id, target_type, operation_id, recurring_operation_id, lease_id,
+    property_id, free_reminder_id, event_type, status, scheduled_at,
+    message_title, message_body, created_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+);
 
--- name: UpsertNotificationPreference :exec
-INSERT INTO user_notification_preferences (user_id, event_type, allowed)
-VALUES ($1, $2, $3)
-ON CONFLICT (user_id, event_type)
-DO UPDATE SET allowed = EXCLUDED.allowed;
+-- name: CancelRemindersByFreeReminderID :execrows
+UPDATE reminders
+SET status = 'cancelled'
+WHERE free_reminder_id = $1 AND owner_id = $2 AND status IN ('pending', 'sending');
 
--- name: IsNotificationEventAllowed :one
-SELECT COALESCE((
-    SELECT allowed FROM user_notification_preferences
-    WHERE user_id = $1 AND event_type = $2
-), true)::boolean AS allowed;
+-- name: ListUpcomingFreeRemindersByProperty :many
+SELECT sqlc.embed(r), fr.periodicity AS free_reminder_periodicity
+FROM reminders r
+JOIN free_reminders fr ON fr.id = r.free_reminder_id
+WHERE r.owner_id = $1
+  AND r.property_id = $2
+  AND r.target_type = 'free'
+  AND r.status = 'pending'
+  AND r.scheduled_at >= $3
+ORDER BY r.scheduled_at ASC
+LIMIT $4;
+
+-- name: ListCalendarRemindersByOwner :many
+SELECT sqlc.embed(r), p.name AS property_name
+FROM reminders r
+LEFT JOIN properties p ON p.id = r.property_id
+WHERE (r.owner_id = sqlc.arg('owner_id')::uuid
+       OR (r.property_id IS NOT NULL
+           AND r.property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[])
+           AND p.status IN ('active', 'maintenance')))
+  AND r.target_type IN ('operation', 'recurring_operation', 'lease')
+  AND r.status NOT IN ('cancelled', 'skipped')
+  AND r.scheduled_at >= sqlc.arg('from_time')
+  AND r.scheduled_at < sqlc.arg('to_time')
+ORDER BY r.scheduled_at ASC;

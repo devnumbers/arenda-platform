@@ -142,7 +142,7 @@ const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, phone, role, phone_encrypted, email, email_verified_at)
 VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT DO NOTHING
-RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted
+RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted, timezone
 `
 
 type CreateUserParams struct {
@@ -166,6 +166,7 @@ type CreateUserRow struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	PhoneEncrypted  bool               `json:"phone_encrypted"`
+	Timezone        string             `json:"timezone"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
@@ -190,6 +191,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PhoneEncrypted,
+		&i.Timezone,
 	)
 	return i, err
 }
@@ -448,7 +450,7 @@ func (q *Queries) GetLoginAttemptByPhoneForUpdate(ctx context.Context, phone str
 
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
 SELECT s.id, s.token_hash, s.expires_at, s.created_at, s.last_used_at,
-       u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.email_verified_at, u.phone_encrypted
+       u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.email_verified_at, u.phone_encrypted, u.timezone
 FROM sessions s
 JOIN users u ON s.user_id = u.id
 WHERE s.token_hash = $1 AND s.expires_at > $2
@@ -474,6 +476,7 @@ type GetSessionByTokenHashRow struct {
 	Email           pgtype.Text        `json:"email"`
 	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
 	PhoneEncrypted  bool               `json:"phone_encrypted"`
+	Timezone        string             `json:"timezone"`
 }
 
 func (q *Queries) GetSessionByTokenHash(ctx context.Context, arg GetSessionByTokenHashParams) (GetSessionByTokenHashRow, error) {
@@ -494,12 +497,13 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, arg GetSessionByTok
 		&i.Email,
 		&i.EmailVerifiedAt,
 		&i.PhoneEncrypted,
+		&i.Timezone,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE LOWER(email) = LOWER($1::text)
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE LOWER(email) = LOWER($1::text)
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, dollar_1 string) (User, error) {
@@ -517,12 +521,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, dollar_1 string) (User, er
 		&i.UpdatedAt,
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
+		&i.Timezone,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE id = $1
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -540,12 +545,13 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.UpdatedAt,
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
+		&i.Timezone,
 	)
 	return i, err
 }
 
 const getUserByIDForUpdate = `-- name: GetUserByIDForUpdate :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE id = $1 FOR UPDATE
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -563,12 +569,13 @@ func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (Use
 		&i.UpdatedAt,
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
+		&i.Timezone,
 	)
 	return i, err
 }
 
 const getUserByPhone = `-- name: GetUserByPhone :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE phone = $1
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE phone = $1
 `
 
 func (q *Queries) GetUserByPhone(ctx context.Context, phone string) (User, error) {
@@ -586,12 +593,13 @@ func (q *Queries) GetUserByPhone(ctx context.Context, phone string) (User, error
 		&i.UpdatedAt,
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
+		&i.Timezone,
 	)
 	return i, err
 }
 
 const getUserByPhoneForUpdate = `-- name: GetUserByPhoneForUpdate :one
-SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at FROM users WHERE phone = $1 FOR UPDATE
+SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE phone = $1 FOR UPDATE
 `
 
 func (q *Queries) GetUserByPhoneForUpdate(ctx context.Context, phone string) (User, error) {
@@ -609,8 +617,20 @@ func (q *Queries) GetUserByPhoneForUpdate(ctx context.Context, phone string) (Us
 		&i.UpdatedAt,
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
+		&i.Timezone,
 	)
 	return i, err
+}
+
+const getUserTimezone = `-- name: GetUserTimezone :one
+SELECT timezone FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUserTimezone(ctx context.Context, id pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getUserTimezone, id)
+	var timezone string
+	err := row.Scan(&timezone)
+	return timezone, err
 }
 
 const getVerifiedEmailByUserID = `-- name: GetVerifiedEmailByUserID :one
@@ -670,7 +690,7 @@ func (q *Queries) ListRecentUsersAdmin(ctx context.Context) ([]ListRecentUsersAd
 }
 
 const listUsersAdmin = `-- name: ListUsersAdmin :many
-SELECT u.id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.created_at, u.updated_at, u.phone_encrypted, u.email_verified_at, us.status AS subscription_status
+SELECT u.id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.created_at, u.updated_at, u.phone_encrypted, u.email_verified_at, u.timezone, us.status AS subscription_status
 FROM users u
 LEFT JOIN user_subscriptions us ON us.user_id = u.id
 WHERE ($1::text = '' OR u.phone = $2::text OR (u.phone = $1::text AND u.phone_encrypted = false))
@@ -711,6 +731,7 @@ type ListUsersAdminRow struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	PhoneEncrypted     bool               `json:"phone_encrypted"`
 	EmailVerifiedAt    pgtype.Timestamptz `json:"email_verified_at"`
+	Timezone           string             `json:"timezone"`
 	SubscriptionStatus pgtype.Text        `json:"subscription_status"`
 }
 
@@ -745,6 +766,7 @@ func (q *Queries) ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) 
 			&i.UpdatedAt,
 			&i.PhoneEncrypted,
 			&i.EmailVerifiedAt,
+			&i.Timezone,
 			&i.SubscriptionStatus,
 		); err != nil {
 			return nil, err
@@ -788,9 +810,10 @@ SET name = $2,
     patronymic = $4,
     email = $5,
     email_verified_at = $6,
+    timezone = $7,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone
 `
 
 type UpdateUserParams struct {
@@ -800,6 +823,7 @@ type UpdateUserParams struct {
 	Patronymic      pgtype.Text        `json:"patronymic"`
 	Email           pgtype.Text        `json:"email"`
 	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
+	Timezone        string             `json:"timezone"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
@@ -810,6 +834,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		arg.Patronymic,
 		arg.Email,
 		arg.EmailVerifiedAt,
+		arg.Timezone,
 	)
 	var i User
 	err := row.Scan(
@@ -824,6 +849,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
+		&i.Timezone,
 	)
 	return i, err
 }
@@ -834,7 +860,7 @@ SET email = $2,
     email_verified_at = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted
+RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted, timezone
 `
 
 type UpdateUserEmailVerifiedParams struct {
@@ -855,6 +881,7 @@ type UpdateUserEmailVerifiedRow struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	PhoneEncrypted  bool               `json:"phone_encrypted"`
+	Timezone        string             `json:"timezone"`
 }
 
 func (q *Queries) UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error) {
@@ -872,6 +899,7 @@ func (q *Queries) UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEma
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PhoneEncrypted,
+		&i.Timezone,
 	)
 	return i, err
 }
@@ -882,7 +910,7 @@ SET phone = $2,
     phone_encrypted = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at
+RETURNING id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone
 `
 
 type UpdateUserPhoneParams struct {
@@ -906,6 +934,7 @@ func (q *Queries) UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams
 		&i.UpdatedAt,
 		&i.PhoneEncrypted,
 		&i.EmailVerifiedAt,
+		&i.Timezone,
 	)
 	return i, err
 }

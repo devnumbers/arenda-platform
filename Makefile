@@ -1,14 +1,14 @@
 COMPOSE_LOCAL := docker compose -f docker-compose.local.yml
-COMPOSE_OBS := docker compose -f docker-compose.obs.yml --env-file .env.obs
 BACKEND_DIR := apps/backend
 ADMIN_DIR := apps/admin
 LANDING_DIR := apps/landing
 GOLANGCI_LINT_VERSION := v2.12.2
 
-.PHONY: local-infra-up local-infra-down local-infra-reset obs-up obs-down obs-ps obs-logs backend-run backend-lint backend-tkassa-spec-check check-bruno-coverage check-backend-env check-migrate-env migrate-up migrate-down \
+.PHONY: local-infra-up local-infra-down local-infra-reset backend-run backend-lint backend-tkassa-spec-check check-bruno-coverage check-backend-env check-migrate-env migrate-up migrate-down \
         perf-db-up perf-db-down perf-db-reset perf-backend-run perf-seed perf-sustainable perf-breakdown \
         admin-install admin-dev admin-build admin-typecheck \
-        landing-install landing-dev landing-build
+        landing-install landing-dev landing-build \
+        attributes-install attributes-gen attributes-check
 
 local-infra-up:
 	$(COMPOSE_LOCAL) up -d
@@ -18,21 +18,6 @@ local-infra-down:
 
 local-infra-reset:
 	$(COMPOSE_LOCAL) down -v --remove-orphans
-
-# Observability stack (Uptrace). Runs on the stage/prod server, not locally.
-# Requires .env.obs (see .env.obs.example) and observability/uptrace.yml
-# (see observability/uptrace.yml.example). Setup: observability/README.md.
-obs-up:
-	$(COMPOSE_OBS) up -d
-
-obs-down:
-	$(COMPOSE_OBS) down
-
-obs-ps:
-	$(COMPOSE_OBS) ps
-
-obs-logs:
-	$(COMPOSE_OBS) logs -f
 
 backend-run:
 	@test -f .env || (echo "Missing .env" && exit 1)
@@ -58,6 +43,18 @@ backend-lint:
 # git status so the check also works on a dirty tree with in-flight spec work;
 # on CI's clean checkout a hash change is exactly a git status change.
 TKASSA_SPEC_DIR := $(BACKEND_DIR)/internal/billing/adapters/payment/tkassa/spec
+ATTRIBUTES_DIR := tools/property-attributes
+ATTRIBUTES_ARTIFACTS := \
+	apps/backend/internal/properties/domain/zz_catalog.gen.go \
+	apps/frontend/features/property-attributes/lib/generated/attr-keys.ts \
+	apps/frontend/features/property-attributes/lib/generated/catalog.ts \
+	apps/frontend/features/property-attributes/lib/generated/labels.ts \
+	apps/frontend/features/property-attributes/lib/generated/validate.ts \
+	apps/admin/src/lib/generated/types.ts \
+	apps/admin/src/lib/generated/attr-keys.ts \
+	apps/admin/src/lib/generated/catalog.ts \
+	apps/admin/src/lib/generated/labels.ts \
+	apps/admin/src/lib/generated/format.ts
 
 backend-tkassa-spec-check:
 	@cd $(TKASSA_SPEC_DIR) && \
@@ -70,7 +67,38 @@ backend-tkassa-spec-check:
 		echo "Run 'cd $(TKASSA_SPEC_DIR) && ./patch.sh && go generate ./...' and commit the regenerated files (openapi.patched.yaml, spec.gen.go)."; \
 		exit 1; \
 	fi && \
-	echo "backend-tkassa-spec-check: spec generated files are fresh"
+		echo "backend-tkassa-spec-check: spec generated files are fresh"
+
+attributes-install:
+	cd $(ATTRIBUTES_DIR) && npm install
+
+# Regenerates the property-attributes catalog artifacts (validate catalog.json
+# then emit Go + frontend TS + admin TS). `npm run generate` validates the
+# catalog against the schema before writing anything, so the target is
+# self-sufficient: validation + generation in one pass.
+attributes-gen:
+	cd $(ATTRIBUTES_DIR) && npm run generate
+
+# Regenerates the property-attributes catalog artifacts and fails if
+# regenerating changed them, so CI catches a catalog.json change whose
+# generated files were not committed. Content hashes (git hash-object) are
+# compared instead of git status so the check also works on a dirty tree;
+# on CI's clean checkout a hash change is exactly a git status change.
+# `npm install` runs only when node_modules is missing so the gate stays fast.
+# Runs from the repo root (no `cd`) so $(ATTRIBUTES_ARTIFACTS) paths resolve
+# correctly; npm is invoked via `--prefix` to target the generator package.
+attributes-check:
+	@before=$$(git hash-object $(ATTRIBUTES_ARTIFACTS)) && \
+	{ [ -d $(ATTRIBUTES_DIR)/node_modules ] || npm --prefix $(ATTRIBUTES_DIR) install; } && \
+	npm --prefix $(ATTRIBUTES_DIR) run generate && \
+	after=$$(git hash-object $(ATTRIBUTES_ARTIFACTS)) && \
+	if [ "$$before" != "$$after" ]; then \
+		echo "ERROR: property-attributes catalog generated files are stale — regenerating changed them:"; \
+		git status --porcelain -- $(ATTRIBUTES_ARTIFACTS); \
+		echo "Run 'make attributes-gen' (or 'cd $(ATTRIBUTES_DIR) && npm run generate') and commit the regenerated files."; \
+		exit 1; \
+	fi && \
+	echo "attributes-check: catalog generated files are fresh"
 
 admin-install:
 	cd $(ADMIN_DIR) && npm install

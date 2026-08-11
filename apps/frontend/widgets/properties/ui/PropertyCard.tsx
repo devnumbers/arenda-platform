@@ -6,6 +6,7 @@ import {LinkButton} from '@/shared/ui/link-button';
 import {ROUTES} from '@/shared/config/routes';
 import {LeaseInfo} from '@/widgets/lease-card/ui/LeaseInfo';
 import {getDisplayStatus} from '@/features/properties/lib/property-statuses';
+import {AccessRoleBadge} from '@/entities/access/ui/AccessRoleBadge';
 import type {PropertyWithLease} from '../lib/use-property-list-data';
 import {PropertyStatusBadge} from './PropertyStatusBadge';
 import {PropertyThumbnail} from './PropertyThumbnail';
@@ -108,6 +109,9 @@ export function PropertyCard({property}: PropertyCardProps): JSX.Element {
                 <div className={styles.meta}>
                     <h3 className={styles.title}>{property.name}</h3>
                     {displayStatus && <PropertyStatusBadge status={displayStatus} overdueCount={property.overdue_rent_count}/>}
+                    {property.access && property.access.role !== 'owner' && (
+                        <AccessRoleBadge role={property.access.role}/>
+                    )}
                 </div>
                 <PropertyThumbnail size="small"/>
             </div>

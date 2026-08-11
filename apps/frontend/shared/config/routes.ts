@@ -6,6 +6,9 @@ export const ROUTES = {
   propertyArchive: '/properties/archive',
   propertyNew: '/properties/new',
   propertyEdit: (id: string) => `/properties/${id}/edit`,
+  propertyContactsNew: (id: string) => `/properties/${id}/contacts/new`,
+  propertyContactEdit: (propertyId: string, contactId: string) =>
+    `/properties/${propertyId}/contacts/${contactId}/edit`,
   propertyLeases: (id: string) => `/properties/${id}/leases`,
   leaseNew: '/leases/new',
   lease: (id: string) => `/leases/${id}`,
@@ -38,4 +41,7 @@ export const ROUTES = {
   profileInfo: '/profile/info',
   profilePrivacy: '/profile/info/privacy',
   profileTerms: '/profile/info/terms',
+  calendar: '/calendar',
+  freeReminderNew: '/reminders/new',
+  freeReminder: (id: string) => `/reminders/${id}`,
 } as const;

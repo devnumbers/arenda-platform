@@ -1,12 +1,7 @@
 'use client';
 
 import {useMemo, type JSX} from 'react';
-import {DateField} from '@heroui/react/date-field';
-import {DateRangePicker} from '@heroui/react/date-range-picker';
-import {Label} from '@heroui/react/label';
-import {RangeCalendar} from '@heroui/react/range-calendar';
-import {parseDate} from '@internationalized/date';
-import {ArrowLeft, ArrowRight} from '@/shared/assets/icons';
+import {ArrowRight} from '@/shared/assets/icons';
 import {Button} from '@/shared/ui/button';
 import {Icon} from '@/shared/ui/icon';
 import {
@@ -284,10 +279,6 @@ export function OperationFilters({
                                      onChange,
                                      onReset,
                                  }: OperationFiltersProps): JSX.Element {
-    const selectedRange = getSelectedRange(filters);
-    const dateRangeValue = selectedRange
-        ? {start: parseDate(selectedRange.from), end: parseDate(selectedRange.to)}
-        : null;
     const canMovePeriod = filters.period !== 'all';
 
     const propertyOptions = useMemo(
@@ -366,72 +357,6 @@ export function OperationFilters({
                         </Icon>
                     </Button>
                 </div>
-
-            {/*    <DateRangePicker*/}
-            {/*        aria-label="Выбрать даты операций"*/}
-            {/*        className={styles.dateRangePicker}*/}
-            {/*        value={dateRangeValue}*/}
-            {/*        onChange={(value) => {*/}
-            {/*            if (!value) return;*/}
-            {/*            onChange({*/}
-            {/*                ...filters,*/}
-            {/*                period: 'custom',*/}
-            {/*                from: value.start.toString(),*/}
-            {/*                to: value.end.toString(),*/}
-            {/*            });*/}
-            {/*        }}*/}
-            {/*    >*/}
-            {/*        <Label className={styles.srOnly}>Даты операций</Label>*/}
-            {/*        <DateField.Group className={styles.dateFieldGroup}>*/}
-            {/*<span className={styles.dateHiddenFields} aria-hidden="true">*/}
-            {/*  <DateField.Input slot="start">*/}
-            {/*    {(segment) => <DateField.Segment segment={segment}/>}*/}
-            {/*  </DateField.Input>*/}
-            {/*  <DateRangePicker.RangeSeparator/>*/}
-            {/*  <DateField.Input slot="end">*/}
-            {/*    {(segment) => <DateField.Segment segment={segment}/>}*/}
-            {/*  </DateField.Input>*/}
-            {/*</span>*/}
-            {/*            <DateField.Suffix>*/}
-            {/*                <DateRangePicker.Trigger className={styles.dateButton}>*/}
-            {/*                    <span>Даты</span>*/}
-            {/*                    <DateRangePicker.TriggerIndicator className={styles.dateButtonIcon}/>*/}
-            {/*                </DateRangePicker.Trigger>*/}
-            {/*            </DateField.Suffix>*/}
-            {/*        </DateField.Group>*/}
-            {/*        <DateRangePicker.Popover className={styles.datePopover}>*/}
-            {/*            <div className={styles.datePopoverContent}>*/}
-            {/*                <RangeCalendar*/}
-            {/*                    aria-label="Выбрать период операций"*/}
-            {/*                    visibleDuration={{months: 2}}*/}
-            {/*                >*/}
-            {/*                    <RangeCalendar.Header>*/}
-            {/*                        <RangeCalendar.NavButton slot="previous"/>*/}
-            {/*                        <RangeCalendar.Heading/>*/}
-            {/*                        <RangeCalendar.NavButton slot="next"/>*/}
-            {/*                    </RangeCalendar.Header>*/}
-            {/*                    <div className={styles.calendarGrids}>*/}
-            {/*                        <RangeCalendar.Grid>*/}
-            {/*                            <RangeCalendar.GridHeader>*/}
-            {/*                                {(day) => <RangeCalendar.HeaderCell>{day}</RangeCalendar.HeaderCell>}*/}
-            {/*                            </RangeCalendar.GridHeader>*/}
-            {/*                            <RangeCalendar.GridBody>*/}
-            {/*                                {(date) => <RangeCalendar.Cell date={date}/>}*/}
-            {/*                            </RangeCalendar.GridBody>*/}
-            {/*                        </RangeCalendar.Grid>*/}
-            {/*                        <RangeCalendar.Grid offset={{months: 1}}>*/}
-            {/*                            <RangeCalendar.GridHeader>*/}
-            {/*                                {(day) => <RangeCalendar.HeaderCell>{day}</RangeCalendar.HeaderCell>}*/}
-            {/*                            </RangeCalendar.GridHeader>*/}
-            {/*                            <RangeCalendar.GridBody>*/}
-            {/*                                {(date) => <RangeCalendar.Cell date={date}/>}*/}
-            {/*                            </RangeCalendar.GridBody>*/}
-            {/*                        </RangeCalendar.Grid>*/}
-            {/*                    </div>*/}
-            {/*                </RangeCalendar>*/}
-            {/*            </div>*/}
-            {/*        </DateRangePicker.Popover>*/}
-            {/*    </DateRangePicker>*/}
             </div>
 
             <div className={styles.row}>

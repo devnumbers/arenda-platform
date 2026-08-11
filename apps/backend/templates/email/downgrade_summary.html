@@ -1,0 +1,14 @@
+<h1 class="title">Часть доступов приостановлена</h1>
+<p class="body">Ваш тариф в Рентли изменился, и свободных слотов не хватает на все объекты.</p>
+{{if .PropertyTitles}}
+<p class="body" style="margin-bottom: 8px;">Доступ к этим объектам ждёт свободного слота:</p>
+<ul style="margin: 0 0 16px; padding-left: 20px; color: #1e1e1e; font-size: 16px; line-height: 1.5;">
+  {{range .PropertyTitles}}<li style="margin-bottom: 4px;">{{.}}</li>{{end}}
+</ul>
+{{else}}
+<p class="body">Доступ к части объектов ждёт свободного слота.</p>
+{{end}}
+<p class="body">Как только слот освободится, доступ восстановится автоматически — мы пришлём письмо.</p>
+<p class="body" style="font-size: 14px; color: rgba(30, 30, 30, 0.4); margin-bottom: 0;">
+  Если вы не ожидали это письмо, просто проигнорируйте его.
+</p>

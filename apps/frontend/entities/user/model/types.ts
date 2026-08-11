@@ -6,6 +6,7 @@ export type User = {
   readonly surname: string | null;
   readonly patronymic: string | null;
   readonly email: string | null;
+  readonly timezone: string | null;
   readonly subscription: {
     readonly tariff: {
       readonly name: string;
@@ -18,6 +19,7 @@ export type UserUpdateCommand = {
   surname?: string | null;
   patronymic?: string | null;
   email?: string | null;
+  timezone?: string | null;
 };
 
 export type SendPhoneChangeCodeCommand = {
@@ -35,9 +37,11 @@ export type NotificationEventType =
   | 'operation_due'
   | 'operation_overdue'
   | 'lease_expiring'
-  | 'lease_requires_action';
+  | 'lease_requires_action'
+  | 'free_reminder';
 
 export type NotificationPreference = {
   readonly eventType: NotificationEventType;
-  readonly allowed: boolean;
+  readonly emailAllowed: boolean;
+  readonly pushAllowed: boolean;
 };

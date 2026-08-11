@@ -411,6 +411,7 @@ function RecurringOperationEditPageContent({
           onChange={(category) => setForm((prev) => ({ ...prev, category }))}
           error={errors.category}
           disabled={readonly}
+          propertyId={operation.property_id ?? undefined}
         />
         <TextField
           label="Название операции"

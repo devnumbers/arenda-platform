@@ -28,10 +28,12 @@ const (
 
 // Defines values for AdminAuditLogActorRole.
 const (
-	AdminAuditLogActorRoleAdmin     AdminAuditLogActorRole = "admin"
-	AdminAuditLogActorRoleAnonymous AdminAuditLogActorRole = "anonymous"
-	AdminAuditLogActorRoleOwner     AdminAuditLogActorRole = "owner"
-	AdminAuditLogActorRoleSystem    AdminAuditLogActorRole = "system"
+	AdminAuditLogActorRoleAdmin      AdminAuditLogActorRole = "admin"
+	AdminAuditLogActorRoleAnonymous  AdminAuditLogActorRole = "anonymous"
+	AdminAuditLogActorRoleFullAccess AdminAuditLogActorRole = "full_access"
+	AdminAuditLogActorRoleOwner      AdminAuditLogActorRole = "owner"
+	AdminAuditLogActorRoleSystem     AdminAuditLogActorRole = "system"
+	AdminAuditLogActorRoleViewer     AdminAuditLogActorRole = "viewer"
 )
 
 // Valid indicates whether the value is a known member of the AdminAuditLogActorRole enum.
@@ -41,9 +43,13 @@ func (e AdminAuditLogActorRole) Valid() bool {
 		return true
 	case AdminAuditLogActorRoleAnonymous:
 		return true
+	case AdminAuditLogActorRoleFullAccess:
+		return true
 	case AdminAuditLogActorRoleOwner:
 		return true
 	case AdminAuditLogActorRoleSystem:
+		return true
+	case AdminAuditLogActorRoleViewer:
 		return true
 	default:
 		return false
@@ -125,6 +131,99 @@ func (e AdminUserRole) Valid() bool {
 	}
 }
 
+// Defines values for CalendarReminderItemEventType.
+const (
+	CalendarReminderItemEventTypeFreeReminder        CalendarReminderItemEventType = "free_reminder"
+	CalendarReminderItemEventTypeLeaseExpiring       CalendarReminderItemEventType = "lease_expiring"
+	CalendarReminderItemEventTypeLeaseRequiresAction CalendarReminderItemEventType = "lease_requires_action"
+	CalendarReminderItemEventTypeOperationDue        CalendarReminderItemEventType = "operation_due"
+	CalendarReminderItemEventTypeOperationOverdue    CalendarReminderItemEventType = "operation_overdue"
+)
+
+// Valid indicates whether the value is a known member of the CalendarReminderItemEventType enum.
+func (e CalendarReminderItemEventType) Valid() bool {
+	switch e {
+	case CalendarReminderItemEventTypeFreeReminder:
+		return true
+	case CalendarReminderItemEventTypeLeaseExpiring:
+		return true
+	case CalendarReminderItemEventTypeLeaseRequiresAction:
+		return true
+	case CalendarReminderItemEventTypeOperationDue:
+		return true
+	case CalendarReminderItemEventTypeOperationOverdue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CalendarReminderItemPeriodicity.
+const (
+	CalendarReminderItemPeriodicityDaily   CalendarReminderItemPeriodicity = "daily"
+	CalendarReminderItemPeriodicityMonthly CalendarReminderItemPeriodicity = "monthly"
+	CalendarReminderItemPeriodicityOnce    CalendarReminderItemPeriodicity = "once"
+	CalendarReminderItemPeriodicityWeekly  CalendarReminderItemPeriodicity = "weekly"
+	CalendarReminderItemPeriodicityYearly  CalendarReminderItemPeriodicity = "yearly"
+)
+
+// Valid indicates whether the value is a known member of the CalendarReminderItemPeriodicity enum.
+func (e CalendarReminderItemPeriodicity) Valid() bool {
+	switch e {
+	case CalendarReminderItemPeriodicityDaily:
+		return true
+	case CalendarReminderItemPeriodicityMonthly:
+		return true
+	case CalendarReminderItemPeriodicityOnce:
+		return true
+	case CalendarReminderItemPeriodicityWeekly:
+		return true
+	case CalendarReminderItemPeriodicityYearly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CalendarReminderItemStatus.
+const (
+	CalendarReminderItemStatusPending CalendarReminderItemStatus = "pending"
+	CalendarReminderItemStatusSent    CalendarReminderItemStatus = "sent"
+)
+
+// Valid indicates whether the value is a known member of the CalendarReminderItemStatus enum.
+func (e CalendarReminderItemStatus) Valid() bool {
+	switch e {
+	case CalendarReminderItemStatusPending:
+		return true
+	case CalendarReminderItemStatusSent:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CalendarReminderItemType.
+const (
+	CalendarReminderItemTypeFree      CalendarReminderItemType = "free"
+	CalendarReminderItemTypeOperation CalendarReminderItemType = "operation"
+	CalendarReminderItemTypeSystem    CalendarReminderItemType = "system"
+)
+
+// Valid indicates whether the value is a known member of the CalendarReminderItemType enum.
+func (e CalendarReminderItemType) Valid() bool {
+	switch e {
+	case CalendarReminderItemTypeFree:
+		return true
+	case CalendarReminderItemTypeOperation:
+		return true
+	case CalendarReminderItemTypeSystem:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ClientErrorReportApp.
 const (
 	ClientErrorReportAppAdmin    ClientErrorReportApp = "admin"
@@ -140,6 +239,87 @@ func (e ClientErrorReportApp) Valid() bool {
 	case ClientErrorReportAppFrontend:
 		return true
 	case ClientErrorReportAppLanding:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FreeReminderCreateRequestPeriodicity.
+const (
+	FreeReminderCreateRequestPeriodicityDaily   FreeReminderCreateRequestPeriodicity = "daily"
+	FreeReminderCreateRequestPeriodicityMonthly FreeReminderCreateRequestPeriodicity = "monthly"
+	FreeReminderCreateRequestPeriodicityOnce    FreeReminderCreateRequestPeriodicity = "once"
+	FreeReminderCreateRequestPeriodicityWeekly  FreeReminderCreateRequestPeriodicity = "weekly"
+	FreeReminderCreateRequestPeriodicityYearly  FreeReminderCreateRequestPeriodicity = "yearly"
+)
+
+// Valid indicates whether the value is a known member of the FreeReminderCreateRequestPeriodicity enum.
+func (e FreeReminderCreateRequestPeriodicity) Valid() bool {
+	switch e {
+	case FreeReminderCreateRequestPeriodicityDaily:
+		return true
+	case FreeReminderCreateRequestPeriodicityMonthly:
+		return true
+	case FreeReminderCreateRequestPeriodicityOnce:
+		return true
+	case FreeReminderCreateRequestPeriodicityWeekly:
+		return true
+	case FreeReminderCreateRequestPeriodicityYearly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FreeReminderResponsePeriodicity.
+const (
+	FreeReminderResponsePeriodicityDaily   FreeReminderResponsePeriodicity = "daily"
+	FreeReminderResponsePeriodicityMonthly FreeReminderResponsePeriodicity = "monthly"
+	FreeReminderResponsePeriodicityOnce    FreeReminderResponsePeriodicity = "once"
+	FreeReminderResponsePeriodicityWeekly  FreeReminderResponsePeriodicity = "weekly"
+	FreeReminderResponsePeriodicityYearly  FreeReminderResponsePeriodicity = "yearly"
+)
+
+// Valid indicates whether the value is a known member of the FreeReminderResponsePeriodicity enum.
+func (e FreeReminderResponsePeriodicity) Valid() bool {
+	switch e {
+	case FreeReminderResponsePeriodicityDaily:
+		return true
+	case FreeReminderResponsePeriodicityMonthly:
+		return true
+	case FreeReminderResponsePeriodicityOnce:
+		return true
+	case FreeReminderResponsePeriodicityWeekly:
+		return true
+	case FreeReminderResponsePeriodicityYearly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FreeReminderUpdateRequestPeriodicity.
+const (
+	FreeReminderUpdateRequestPeriodicityDaily   FreeReminderUpdateRequestPeriodicity = "daily"
+	FreeReminderUpdateRequestPeriodicityMonthly FreeReminderUpdateRequestPeriodicity = "monthly"
+	FreeReminderUpdateRequestPeriodicityOnce    FreeReminderUpdateRequestPeriodicity = "once"
+	FreeReminderUpdateRequestPeriodicityWeekly  FreeReminderUpdateRequestPeriodicity = "weekly"
+	FreeReminderUpdateRequestPeriodicityYearly  FreeReminderUpdateRequestPeriodicity = "yearly"
+)
+
+// Valid indicates whether the value is a known member of the FreeReminderUpdateRequestPeriodicity enum.
+func (e FreeReminderUpdateRequestPeriodicity) Valid() bool {
+	switch e {
+	case FreeReminderUpdateRequestPeriodicityDaily:
+		return true
+	case FreeReminderUpdateRequestPeriodicityMonthly:
+		return true
+	case FreeReminderUpdateRequestPeriodicityOnce:
+		return true
+	case FreeReminderUpdateRequestPeriodicityWeekly:
+		return true
+	case FreeReminderUpdateRequestPeriodicityYearly:
 		return true
 	default:
 		return false
@@ -193,6 +373,7 @@ func (e MeResponseRole) Valid() bool {
 
 // Defines values for NotificationPreferenceEventType.
 const (
+	NotificationPreferenceEventTypeFreeReminder        NotificationPreferenceEventType = "free_reminder"
 	NotificationPreferenceEventTypeLeaseExpiring       NotificationPreferenceEventType = "lease_expiring"
 	NotificationPreferenceEventTypeLeaseRequiresAction NotificationPreferenceEventType = "lease_requires_action"
 	NotificationPreferenceEventTypeOperationDue        NotificationPreferenceEventType = "operation_due"
@@ -202,6 +383,8 @@ const (
 // Valid indicates whether the value is a known member of the NotificationPreferenceEventType enum.
 func (e NotificationPreferenceEventType) Valid() bool {
 	switch e {
+	case NotificationPreferenceEventTypeFreeReminder:
+		return true
 	case NotificationPreferenceEventTypeLeaseExpiring:
 		return true
 	case NotificationPreferenceEventTypeLeaseRequiresAction:
@@ -341,6 +524,123 @@ func (e OperationUpdateRequestReminderOffsetDays) Valid() bool {
 	case OperationUpdateRequestReminderOffsetDaysN3:
 		return true
 	case OperationUpdateRequestReminderOffsetDaysN7:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PropertyAccessContextRole.
+const (
+	PropertyAccessContextRoleFullAccess PropertyAccessContextRole = "full_access"
+	PropertyAccessContextRoleOwner      PropertyAccessContextRole = "owner"
+	PropertyAccessContextRoleViewer     PropertyAccessContextRole = "viewer"
+)
+
+// Valid indicates whether the value is a known member of the PropertyAccessContextRole enum.
+func (e PropertyAccessContextRole) Valid() bool {
+	switch e {
+	case PropertyAccessContextRoleFullAccess:
+		return true
+	case PropertyAccessContextRoleOwner:
+		return true
+	case PropertyAccessContextRoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PropertyAccessInvitationCreateRequestRole.
+const (
+	PropertyAccessInvitationCreateRequestRoleFullAccess PropertyAccessInvitationCreateRequestRole = "full_access"
+	PropertyAccessInvitationCreateRequestRoleViewer     PropertyAccessInvitationCreateRequestRole = "viewer"
+)
+
+// Valid indicates whether the value is a known member of the PropertyAccessInvitationCreateRequestRole enum.
+func (e PropertyAccessInvitationCreateRequestRole) Valid() bool {
+	switch e {
+	case PropertyAccessInvitationCreateRequestRoleFullAccess:
+		return true
+	case PropertyAccessInvitationCreateRequestRoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PropertyAccessMemberCreateRequestRole.
+const (
+	PropertyAccessMemberCreateRequestRoleFullAccess PropertyAccessMemberCreateRequestRole = "full_access"
+	PropertyAccessMemberCreateRequestRoleViewer     PropertyAccessMemberCreateRequestRole = "viewer"
+)
+
+// Valid indicates whether the value is a known member of the PropertyAccessMemberCreateRequestRole enum.
+func (e PropertyAccessMemberCreateRequestRole) Valid() bool {
+	switch e {
+	case PropertyAccessMemberCreateRequestRoleFullAccess:
+		return true
+	case PropertyAccessMemberCreateRequestRoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PropertyAccessMemberResponseStatus.
+const (
+	PropertyAccessMemberResponseStatusActive    PropertyAccessMemberResponseStatus = "active"
+	PropertyAccessMemberResponseStatusPending   PropertyAccessMemberResponseStatus = "pending"
+	PropertyAccessMemberResponseStatusSuspended PropertyAccessMemberResponseStatus = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the PropertyAccessMemberResponseStatus enum.
+func (e PropertyAccessMemberResponseStatus) Valid() bool {
+	switch e {
+	case PropertyAccessMemberResponseStatusActive:
+		return true
+	case PropertyAccessMemberResponseStatusPending:
+		return true
+	case PropertyAccessMemberResponseStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PropertyAccessMemberRole.
+const (
+	PropertyAccessMemberRoleFullAccess PropertyAccessMemberRole = "full_access"
+	PropertyAccessMemberRoleOwner      PropertyAccessMemberRole = "owner"
+	PropertyAccessMemberRoleViewer     PropertyAccessMemberRole = "viewer"
+)
+
+// Valid indicates whether the value is a known member of the PropertyAccessMemberRole enum.
+func (e PropertyAccessMemberRole) Valid() bool {
+	switch e {
+	case PropertyAccessMemberRoleFullAccess:
+		return true
+	case PropertyAccessMemberRoleOwner:
+		return true
+	case PropertyAccessMemberRoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PropertyAccessMemberUpdateRequestRole.
+const (
+	FullAccess PropertyAccessMemberUpdateRequestRole = "full_access"
+	Viewer     PropertyAccessMemberUpdateRequestRole = "viewer"
+)
+
+// Valid indicates whether the value is a known member of the PropertyAccessMemberUpdateRequestRole enum.
+func (e PropertyAccessMemberUpdateRequestRole) Valid() bool {
+	switch e {
+	case FullAccess:
+		return true
+	case Viewer:
 		return true
 	default:
 		return false
@@ -529,16 +829,16 @@ func (e RecurringOperationResponseStatus) Valid() bool {
 
 // Defines values for RecurringOperationUpdateRequestPeriodicity.
 const (
-	Monthly RecurringOperationUpdateRequestPeriodicity = "monthly"
-	Yearly  RecurringOperationUpdateRequestPeriodicity = "yearly"
+	RecurringOperationUpdateRequestPeriodicityMonthly RecurringOperationUpdateRequestPeriodicity = "monthly"
+	RecurringOperationUpdateRequestPeriodicityYearly  RecurringOperationUpdateRequestPeriodicity = "yearly"
 )
 
 // Valid indicates whether the value is a known member of the RecurringOperationUpdateRequestPeriodicity enum.
 func (e RecurringOperationUpdateRequestPeriodicity) Valid() bool {
 	switch e {
-	case Monthly:
+	case RecurringOperationUpdateRequestPeriodicityMonthly:
 		return true
-	case Yearly:
+	case RecurringOperationUpdateRequestPeriodicityYearly:
 		return true
 	default:
 		return false
@@ -571,22 +871,25 @@ func (e RecurringOperationUpdateRequestReminderOffsetDays) Valid() bool {
 
 // Defines values for ReminderResponseEventType.
 const (
-	ReminderResponseEventTypeLeaseExpiring       ReminderResponseEventType = "lease_expiring"
-	ReminderResponseEventTypeLeaseRequiresAction ReminderResponseEventType = "lease_requires_action"
-	ReminderResponseEventTypeOperationDue        ReminderResponseEventType = "operation_due"
-	ReminderResponseEventTypeOperationOverdue    ReminderResponseEventType = "operation_overdue"
+	FreeReminder        ReminderResponseEventType = "free_reminder"
+	LeaseExpiring       ReminderResponseEventType = "lease_expiring"
+	LeaseRequiresAction ReminderResponseEventType = "lease_requires_action"
+	OperationDue        ReminderResponseEventType = "operation_due"
+	OperationOverdue    ReminderResponseEventType = "operation_overdue"
 )
 
 // Valid indicates whether the value is a known member of the ReminderResponseEventType enum.
 func (e ReminderResponseEventType) Valid() bool {
 	switch e {
-	case ReminderResponseEventTypeLeaseExpiring:
+	case FreeReminder:
 		return true
-	case ReminderResponseEventTypeLeaseRequiresAction:
+	case LeaseExpiring:
 		return true
-	case ReminderResponseEventTypeOperationDue:
+	case LeaseRequiresAction:
 		return true
-	case ReminderResponseEventTypeOperationOverdue:
+	case OperationDue:
+		return true
+	case OperationOverdue:
 		return true
 	default:
 		return false
@@ -622,19 +925,22 @@ func (e ReminderResponseStatus) Valid() bool {
 
 // Defines values for ReminderResponseTargetType.
 const (
-	Lease              ReminderResponseTargetType = "lease"
-	Operation          ReminderResponseTargetType = "operation"
-	RecurringOperation ReminderResponseTargetType = "recurring_operation"
+	ReminderResponseTargetTypeFree               ReminderResponseTargetType = "free"
+	ReminderResponseTargetTypeLease              ReminderResponseTargetType = "lease"
+	ReminderResponseTargetTypeOperation          ReminderResponseTargetType = "operation"
+	ReminderResponseTargetTypeRecurringOperation ReminderResponseTargetType = "recurring_operation"
 )
 
 // Valid indicates whether the value is a known member of the ReminderResponseTargetType enum.
 func (e ReminderResponseTargetType) Valid() bool {
 	switch e {
-	case Lease:
+	case ReminderResponseTargetTypeFree:
 		return true
-	case Operation:
+	case ReminderResponseTargetTypeLease:
 		return true
-	case RecurringOperation:
+	case ReminderResponseTargetTypeOperation:
+		return true
+	case ReminderResponseTargetTypeRecurringOperation:
 		return true
 	default:
 		return false
@@ -643,28 +949,28 @@ func (e ReminderResponseTargetType) Valid() bool {
 
 // Defines values for SubscriptionPaymentStatus.
 const (
-	Failed          SubscriptionPaymentStatus = "failed"
-	PartialRefunded SubscriptionPaymentStatus = "partial_refunded"
-	Pending         SubscriptionPaymentStatus = "pending"
-	Refunded        SubscriptionPaymentStatus = "refunded"
-	Refunding       SubscriptionPaymentStatus = "refunding"
-	Succeeded       SubscriptionPaymentStatus = "succeeded"
+	SubscriptionPaymentStatusFailed          SubscriptionPaymentStatus = "failed"
+	SubscriptionPaymentStatusPartialRefunded SubscriptionPaymentStatus = "partial_refunded"
+	SubscriptionPaymentStatusPending         SubscriptionPaymentStatus = "pending"
+	SubscriptionPaymentStatusRefunded        SubscriptionPaymentStatus = "refunded"
+	SubscriptionPaymentStatusRefunding       SubscriptionPaymentStatus = "refunding"
+	SubscriptionPaymentStatusSucceeded       SubscriptionPaymentStatus = "succeeded"
 )
 
 // Valid indicates whether the value is a known member of the SubscriptionPaymentStatus enum.
 func (e SubscriptionPaymentStatus) Valid() bool {
 	switch e {
-	case Failed:
+	case SubscriptionPaymentStatusFailed:
 		return true
-	case PartialRefunded:
+	case SubscriptionPaymentStatusPartialRefunded:
 		return true
-	case Pending:
+	case SubscriptionPaymentStatusPending:
 		return true
-	case Refunded:
+	case SubscriptionPaymentStatusRefunded:
 		return true
-	case Refunding:
+	case SubscriptionPaymentStatusRefunding:
 		return true
-	case Succeeded:
+	case SubscriptionPaymentStatusSucceeded:
 		return true
 	default:
 		return false
@@ -707,6 +1013,33 @@ func (e TariffName) Valid() bool {
 	case Business:
 		return true
 	case Pro:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpcomingFreeReminderResponsePeriodicity.
+const (
+	UpcomingFreeReminderResponsePeriodicityDaily   UpcomingFreeReminderResponsePeriodicity = "daily"
+	UpcomingFreeReminderResponsePeriodicityMonthly UpcomingFreeReminderResponsePeriodicity = "monthly"
+	UpcomingFreeReminderResponsePeriodicityOnce    UpcomingFreeReminderResponsePeriodicity = "once"
+	UpcomingFreeReminderResponsePeriodicityWeekly  UpcomingFreeReminderResponsePeriodicity = "weekly"
+	UpcomingFreeReminderResponsePeriodicityYearly  UpcomingFreeReminderResponsePeriodicity = "yearly"
+)
+
+// Valid indicates whether the value is a known member of the UpcomingFreeReminderResponsePeriodicity enum.
+func (e UpcomingFreeReminderResponsePeriodicity) Valid() bool {
+	switch e {
+	case UpcomingFreeReminderResponsePeriodicityDaily:
+		return true
+	case UpcomingFreeReminderResponsePeriodicityMonthly:
+		return true
+	case UpcomingFreeReminderResponsePeriodicityOnce:
+		return true
+	case UpcomingFreeReminderResponsePeriodicityWeekly:
+		return true
+	case UpcomingFreeReminderResponsePeriodicityYearly:
 		return true
 	default:
 		return false
@@ -934,19 +1267,19 @@ func (e ListAdminUserOperationsParamsOrder) Valid() bool {
 
 // Defines values for ListAdminUserPropertiesParamsStatus.
 const (
-	ListAdminUserPropertiesParamsStatusActive   ListAdminUserPropertiesParamsStatus = "active"
-	ListAdminUserPropertiesParamsStatusAll      ListAdminUserPropertiesParamsStatus = "all"
-	ListAdminUserPropertiesParamsStatusArchived ListAdminUserPropertiesParamsStatus = "archived"
+	Active   ListAdminUserPropertiesParamsStatus = "active"
+	All      ListAdminUserPropertiesParamsStatus = "all"
+	Archived ListAdminUserPropertiesParamsStatus = "archived"
 )
 
 // Valid indicates whether the value is a known member of the ListAdminUserPropertiesParamsStatus enum.
 func (e ListAdminUserPropertiesParamsStatus) Valid() bool {
 	switch e {
-	case ListAdminUserPropertiesParamsStatusActive:
+	case Active:
 		return true
-	case ListAdminUserPropertiesParamsStatusAll:
+	case All:
 		return true
-	case ListAdminUserPropertiesParamsStatusArchived:
+	case Archived:
 		return true
 	default:
 		return false
@@ -1132,7 +1465,10 @@ type AdminPropertiesResponse struct {
 
 // AdminProperty defines model for AdminProperty.
 type AdminProperty struct {
-	Address     string                 `json:"address"`
+	Address string `json:"address"`
+
+	// Attributes Per-type typed property characteristics. Keys and values are in English snake_case; Russian labels are a frontend/admin concern. The set of valid keys depends on the property type and is validated by the backend catalog (see issue #125). An empty object means "no characteristics". Only filled keys are stored; null values are never written.
+	Attributes  PropertyAttributes     `json:"attributes"`
 	CreatedAt   time.Time              `json:"createdAt"`
 	Description *string                `json:"description,omitempty"`
 	Id          openapi_types.UUID     `json:"id"`
@@ -1148,6 +1484,22 @@ type AdminProperty struct {
 
 // AdminPropertyOccupancy defines model for AdminProperty.Occupancy.
 type AdminPropertyOccupancy string
+
+// AdminPropertyContact defines model for AdminPropertyContact.
+type AdminPropertyContact struct {
+	CreatedAt  time.Time          `json:"createdAt"`
+	Id         openapi_types.UUID `json:"id"`
+	Name       string             `json:"name"`
+	Phone      string             `json:"phone"`
+	PropertyId openapi_types.UUID `json:"propertyId"`
+	UpdatedAt  time.Time          `json:"updatedAt"`
+}
+
+// AdminPropertyContactsResponse defines model for AdminPropertyContactsResponse.
+type AdminPropertyContactsResponse struct {
+	Items []AdminPropertyContact `json:"items"`
+	Total int                    `json:"total"`
+}
 
 // AdminPropertyResponse defines model for AdminPropertyResponse.
 type AdminPropertyResponse struct {
@@ -1285,6 +1637,48 @@ type AutoRenewRequest struct {
 	Enabled bool `json:"enabled"`
 }
 
+// CalendarReminderItem One calendar entry — a free, operation, or system reminder projected into the requested date range. Free reminders are expanded from their template on read (independent of materialization horizon) and carry no status; operation/lease reminders come from the reminders table with a status. Orphan reminders (property deleted in detach mode) have property_id = null and has_property = false.
+type CalendarReminderItem struct {
+	EventType      *CalendarReminderItemEventType `json:"event_type,omitempty"`
+	FreeReminderId *openapi_types.UUID            `json:"free_reminder_id,omitempty"`
+	HasProperty    bool                           `json:"has_property"`
+
+	// Id For free reminders — the free_reminder template id (same id repeats for each occurrence of a periodic reminder). For operation/system — the concrete reminder row id.
+	Id          openapi_types.UUID  `json:"id"`
+	LeaseId     *openapi_types.UUID `json:"lease_id,omitempty"`
+	OperationId *openapi_types.UUID `json:"operation_id,omitempty"`
+
+	// Periodicity Present only for free reminders.
+	Periodicity *CalendarReminderItemPeriodicity `json:"periodicity,omitempty"`
+	PropertyId  *openapi_types.UUID              `json:"property_id,omitempty"`
+
+	// PropertyName Resolved property name; null means "Без объекта" (orphan).
+	PropertyName *string   `json:"property_name,omitempty"`
+	ScheduledAt  time.Time `json:"scheduled_at"`
+
+	// Status Present only for operation/system; null for free.
+	Status *CalendarReminderItemStatus `json:"status,omitempty"`
+	Title  string                      `json:"title"`
+	Type   CalendarReminderItemType    `json:"type"`
+}
+
+// CalendarReminderItemEventType defines model for CalendarReminderItem.EventType.
+type CalendarReminderItemEventType string
+
+// CalendarReminderItemPeriodicity Present only for free reminders.
+type CalendarReminderItemPeriodicity string
+
+// CalendarReminderItemStatus Present only for operation/system; null for free.
+type CalendarReminderItemStatus string
+
+// CalendarReminderItemType defines model for CalendarReminderItem.Type.
+type CalendarReminderItemType string
+
+// CalendarRemindersResponse defines model for CalendarRemindersResponse.
+type CalendarRemindersResponse struct {
+	Items []CalendarReminderItem `json:"items"`
+}
+
 // ChangePhoneRequest defines model for ChangePhoneRequest.
 type ChangePhoneRequest struct {
 	Code  string `json:"code"`
@@ -1369,6 +1763,46 @@ type FinanceReportTotals struct {
 	ProfitKopecks  int `json:"profit_kopecks"`
 }
 
+// FreeReminderCreateRequest defines model for FreeReminderCreateRequest.
+type FreeReminderCreateRequest struct {
+	Periodicity FreeReminderCreateRequestPeriodicity `json:"periodicity"`
+	Title       string                               `json:"title"`
+	TriggerAt   time.Time                            `json:"trigger_at"`
+}
+
+// FreeReminderCreateRequestPeriodicity defines model for FreeReminderCreateRequest.Periodicity.
+type FreeReminderCreateRequestPeriodicity string
+
+// FreeReminderResponse defines model for FreeReminderResponse.
+type FreeReminderResponse struct {
+	CreatedAt   time.Time                       `json:"created_at"`
+	Id          openapi_types.UUID              `json:"id"`
+	OwnerId     openapi_types.UUID              `json:"owner_id"`
+	Periodicity FreeReminderResponsePeriodicity `json:"periodicity"`
+	PropertyId  openapi_types.UUID              `json:"property_id"`
+	Title       string                          `json:"title"`
+	TriggerAt   time.Time                       `json:"trigger_at"`
+	UpdatedAt   time.Time                       `json:"updated_at"`
+}
+
+// FreeReminderResponsePeriodicity defines model for FreeReminderResponse.Periodicity.
+type FreeReminderResponsePeriodicity string
+
+// FreeReminderUpdateRequest defines model for FreeReminderUpdateRequest.
+type FreeReminderUpdateRequest struct {
+	Periodicity *FreeReminderUpdateRequestPeriodicity `json:"periodicity,omitempty"`
+	Title       *string                               `json:"title,omitempty"`
+	TriggerAt   *time.Time                            `json:"trigger_at,omitempty"`
+}
+
+// FreeReminderUpdateRequestPeriodicity defines model for FreeReminderUpdateRequest.Periodicity.
+type FreeReminderUpdateRequestPeriodicity string
+
+// FreeRemindersResponse defines model for FreeRemindersResponse.
+type FreeRemindersResponse struct {
+	Items []FreeReminderResponse `json:"items"`
+}
+
 // LeaseCreateRequest defines model for LeaseCreateRequest.
 type LeaseCreateRequest struct {
 	Comment              *string             `json:"comment,omitempty"`
@@ -1442,6 +1876,9 @@ type MeResponse struct {
 	Role         MeResponseRole     `json:"role"`
 	Subscription *Subscription      `json:"subscription,omitempty"`
 	Surname      *string            `json:"surname,omitempty"`
+
+	// Timezone IANA timezone identifier, e.g. Europe/Moscow.
+	Timezone *string `json:"timezone,omitempty"`
 }
 
 // MeResponseRole defines model for MeResponse.Role.
@@ -1449,8 +1886,12 @@ type MeResponseRole string
 
 // NotificationPreference defines model for NotificationPreference.
 type NotificationPreference struct {
-	Allowed   bool                            `json:"allowed"`
-	EventType NotificationPreferenceEventType `json:"event_type"`
+	// EmailAllowed Permission to deliver this event type over email.
+	EmailAllowed bool                            `json:"email_allowed"`
+	EventType    NotificationPreferenceEventType `json:"event_type"`
+
+	// PushAllowed Permission to deliver this event type over Web Push.
+	PushAllowed bool `json:"push_allowed"`
 }
 
 // NotificationPreferenceEventType defines model for NotificationPreference.EventType.
@@ -1477,8 +1918,11 @@ type OperationCategory struct {
 
 // OperationCategoryCreateRequest defines model for OperationCategoryCreateRequest.
 type OperationCategoryCreateRequest struct {
-	Name string        `json:"name"`
-	Type OperationType `json:"type"`
+	Name string `json:"name"`
+
+	// PropertyId Optional property context. When set, the category is created in the account of the property's data owner and requires the edit capability on that property (shared access); a viewer gets 403 and an actor without access gets 404. When absent, the category is created in the actor's own account.
+	PropertyId *openapi_types.UUID `json:"property_id,omitempty"`
+	Type       OperationType       `json:"type"`
 }
 
 // OperationCreateRequest defines model for OperationCreateRequest.
@@ -1500,6 +1944,12 @@ type OperationCreateRequestReminderOffsetDays int
 
 // OperationListSort defines model for OperationListSort.
 type OperationListSort string
+
+// OperationMoveRequest defines model for OperationMoveRequest.
+type OperationMoveRequest struct {
+	// PropertyId Target property. Must belong to the same owner as the operation's current property.
+	PropertyId openapi_types.UUID `json:"property_id"`
+}
 
 // OperationResponse defines model for OperationResponse.
 type OperationResponse struct {
@@ -1581,25 +2031,153 @@ type PendingPopupsResponse struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	Detail    *string `json:"detail,omitempty"`
-	Instance  *string `json:"instance,omitempty"`
-	RequestId *string `json:"requestId,omitempty"`
-	Status    int     `json:"status"`
-	Title     string  `json:"title"`
-	Type      string  `json:"type"`
+	// Code Machine-readable error code for failures the client must distinguish from the generic HTTP status (e.g. `membership_suspended`).
+	Code      *string         `json:"code,omitempty"`
+	Detail    *string         `json:"detail,omitempty"`
+	Errors    *[]ProblemError `json:"errors,omitempty"`
+	Instance  *string         `json:"instance,omitempty"`
+	RequestId *string         `json:"requestId,omitempty"`
+	Status    int             `json:"status"`
+	Title     string          `json:"title"`
+	Type      string          `json:"type"`
+}
+
+// ProblemError defines model for ProblemError.
+type ProblemError struct {
+	// Detail Human-readable explanation of the validation failure.
+	Detail string `json:"detail"`
+
+	// Field JSON key of the invalid field (e.g. "floor").
+	Field string `json:"field"`
 }
 
 // PropertiesResponse defines model for PropertiesResponse.
 type PropertiesResponse struct {
-	Items []PropertyResponse `json:"items"`
+	// HiddenSharedCount Number of shared properties hidden from the recipient due to a tariff slot shortage (suspended memberships). Zero for owners and when the recipient is within their limit.
+	HiddenSharedCount *int               `json:"hidden_shared_count,omitempty"`
+	Items             []PropertyResponse `json:"items"`
+}
+
+// PropertyAccessContext defines model for PropertyAccessContext.
+type PropertyAccessContext struct {
+	// OwnerName Owner display name ("Name Surname" or masked phone, never email). Present only in the detail response when the actor is not the owner.
+	OwnerName *string `json:"owner_name,omitempty"`
+
+	// Role Actor's role on this property: owner for own properties, full_access/viewer for shared ones. Suspended memberships never appear here — the detail endpoint answers 403 membership_suspended.
+	Role PropertyAccessContextRole `json:"role"`
+}
+
+// PropertyAccessContextRole Actor's role on this property: owner for own properties, full_access/viewer for shared ones. Suspended memberships never appear here — the detail endpoint answers 403 membership_suspended.
+type PropertyAccessContextRole string
+
+// PropertyAccessInvitationCreateRequest defines model for PropertyAccessInvitationCreateRequest.
+type PropertyAccessInvitationCreateRequest struct {
+	// Email Invitee email. A registered email activates the membership instantly; an unregistered email becomes a pending invitation.
+	Email openapi_types.Email                       `json:"email"`
+	Role  PropertyAccessInvitationCreateRequestRole `json:"role"`
+}
+
+// PropertyAccessInvitationCreateRequestRole defines model for PropertyAccessInvitationCreateRequest.Role.
+type PropertyAccessInvitationCreateRequestRole string
+
+// PropertyAccessMemberCreateRequest defines model for PropertyAccessMemberCreateRequest.
+type PropertyAccessMemberCreateRequest struct {
+	Role PropertyAccessMemberCreateRequestRole `json:"role"`
+
+	// UserId Registered user to grant access to.
+	UserId openapi_types.UUID `json:"user_id"`
+}
+
+// PropertyAccessMemberCreateRequestRole defines model for PropertyAccessMemberCreateRequest.Role.
+type PropertyAccessMemberCreateRequestRole string
+
+// PropertyAccessMemberResponse defines model for PropertyAccessMemberResponse.
+type PropertyAccessMemberResponse struct {
+	// DisplayName Participant display name (name and surname, or a masked phone). Never the raw phone or email.
+	DisplayName *string `json:"display_name,omitempty"`
+
+	// Email Invitee email; filled only on pending invitation rows, null for registered participants.
+	Email    *openapi_types.Email `json:"email,omitempty"`
+	HasEmail *bool                `json:"has_email,omitempty"`
+
+	// Id Membership id; null for the synthesized owner row. For a pending invitation row this is the invitation id.
+	Id      *openapi_types.UUID `json:"id,omitempty"`
+	IsOwner bool                `json:"is_owner"`
+
+	// LastSentAt When the invite email was last sent; filled only on pending invitation rows.
+	LastSentAt *time.Time `json:"last_sent_at,omitempty"`
+
+	// Role The participant's role on a property. `owner` is the object owner (synthesized, never stored as a membership); `full_access` and `viewer` are granted memberships.
+	Role PropertyAccessMemberRole `json:"role"`
+
+	// Status Membership lifecycle status. "suspended" means the recipient's tariff slot was exceeded, so the object is hidden from the recipient's list and grants no access until a slot frees up. "pending" is an email invitation waiting for the invitee to register.
+	Status PropertyAccessMemberResponseStatus `json:"status"`
+
+	// SuspendedAt When the membership was suspended; null when active.
+	SuspendedAt *time.Time `json:"suspended_at,omitempty"`
+
+	// UserId Participant user id; null for a pending invitation row.
+	UserId *openapi_types.UUID `json:"user_id"`
+}
+
+// PropertyAccessMemberResponseStatus Membership lifecycle status. "suspended" means the recipient's tariff slot was exceeded, so the object is hidden from the recipient's list and grants no access until a slot frees up. "pending" is an email invitation waiting for the invitee to register.
+type PropertyAccessMemberResponseStatus string
+
+// PropertyAccessMemberRole The participant's role on a property. `owner` is the object owner (synthesized, never stored as a membership); `full_access` and `viewer` are granted memberships.
+type PropertyAccessMemberRole string
+
+// PropertyAccessMemberUpdateRequest defines model for PropertyAccessMemberUpdateRequest.
+type PropertyAccessMemberUpdateRequest struct {
+	Role PropertyAccessMemberUpdateRequestRole `json:"role"`
+}
+
+// PropertyAccessMemberUpdateRequestRole defines model for PropertyAccessMemberUpdateRequest.Role.
+type PropertyAccessMemberUpdateRequestRole string
+
+// PropertyAccessMembersResponse defines model for PropertyAccessMembersResponse.
+type PropertyAccessMembersResponse struct {
+	Items []PropertyAccessMemberResponse `json:"items"`
+}
+
+// PropertyAttributes Per-type typed property characteristics. Keys and values are in English snake_case; Russian labels are a frontend/admin concern. The set of valid keys depends on the property type and is validated by the backend catalog (see issue #125). An empty object means "no characteristics". Only filled keys are stored; null values are never written.
+type PropertyAttributes map[string]interface{}
+
+// PropertyContactCreateRequest defines model for PropertyContactCreateRequest.
+type PropertyContactCreateRequest struct {
+	Name  string `json:"name"`
+	Phone string `json:"phone"`
+}
+
+// PropertyContactResponse defines model for PropertyContactResponse.
+type PropertyContactResponse struct {
+	CreatedAt  time.Time          `json:"created_at"`
+	Id         openapi_types.UUID `json:"id"`
+	Name       string             `json:"name"`
+	Phone      string             `json:"phone"`
+	PropertyId openapi_types.UUID `json:"property_id"`
+	UpdatedAt  time.Time          `json:"updated_at"`
+}
+
+// PropertyContactUpdateRequest defines model for PropertyContactUpdateRequest.
+type PropertyContactUpdateRequest struct {
+	Name  *string `json:"name,omitempty"`
+	Phone *string `json:"phone,omitempty"`
+}
+
+// PropertyContactsResponse defines model for PropertyContactsResponse.
+type PropertyContactsResponse struct {
+	Items []PropertyContactResponse `json:"items"`
 }
 
 // PropertyCreateRequest defines model for PropertyCreateRequest.
 type PropertyCreateRequest struct {
-	Address     string       `json:"address"`
-	Description *string      `json:"description,omitempty"`
-	Name        string       `json:"name"`
-	Type        PropertyType `json:"type"`
+	Address string `json:"address"`
+
+	// Attributes Per-type typed property characteristics. Keys and values are in English snake_case; Russian labels are a frontend/admin concern. The set of valid keys depends on the property type and is validated by the backend catalog (see issue #125). An empty object means "no characteristics". Only filled keys are stored; null values are never written.
+	Attributes  *PropertyAttributes `json:"attributes,omitempty"`
+	Description *string             `json:"description,omitempty"`
+	Name        string              `json:"name"`
+	Type        PropertyType        `json:"type"`
 }
 
 // PropertyLeasesResponse defines model for PropertyLeasesResponse.
@@ -1626,11 +2204,18 @@ type PropertyPhoto struct {
 
 // PropertyResponse defines model for PropertyResponse.
 type PropertyResponse struct {
-	ActiveLease      *LeaseResponse            `json:"active_lease"`
-	Address          string                    `json:"address"`
-	CreatedAt        time.Time                 `json:"created_at"`
-	Description      *string                   `json:"description,omitempty"`
-	Id               openapi_types.UUID        `json:"id"`
+	Access      *PropertyAccessContext `json:"access,omitempty"`
+	ActiveLease *LeaseResponse         `json:"active_lease"`
+	Address     string                 `json:"address"`
+
+	// Attributes Per-type typed property characteristics. Keys and values are in English snake_case; Russian labels are a frontend/admin concern. The set of valid keys depends on the property type and is validated by the backend catalog (see issue #125). An empty object means "no characteristics". Only filled keys are stored; null values are never written.
+	Attributes  PropertyAttributes `json:"attributes"`
+	CreatedAt   time.Time          `json:"created_at"`
+	Description *string            `json:"description,omitempty"`
+	Id          openapi_types.UUID `json:"id"`
+
+	// MembersCount Shared-access participants of the property: membership rows (any status, owner excluded — the owner is never a membership row) plus pending email invitations.
+	MembersCount     int                       `json:"members_count"`
 	Name             string                    `json:"name"`
 	Occupancy        PropertyResponseOccupancy `json:"occupancy"`
 	OverdueRentCount int                       `json:"overdue_rent_count"`
@@ -1651,11 +2236,43 @@ type PropertyType string
 
 // PropertyUpdateRequest defines model for PropertyUpdateRequest.
 type PropertyUpdateRequest struct {
-	Address     *string         `json:"address,omitempty"`
-	Description *string         `json:"description,omitempty"`
-	Name        *string         `json:"name,omitempty"`
-	Status      *PropertyStatus `json:"status,omitempty"`
-	Type        *PropertyType   `json:"type,omitempty"`
+	Address *string `json:"address,omitempty"`
+
+	// Attributes Full replacement (idempotent). Omit the field to leave attributes unchanged; send an empty object to clear all characteristics.
+	Attributes  *PropertyAttributes `json:"attributes,omitempty"`
+	Description *string             `json:"description,omitempty"`
+	Name        *string             `json:"name,omitempty"`
+	Status      *PropertyStatus     `json:"status,omitempty"`
+	Type        *PropertyType       `json:"type,omitempty"`
+}
+
+// PushSubscriptionCreateRequest defines model for PushSubscriptionCreateRequest.
+type PushSubscriptionCreateRequest struct {
+	// Auth The per-subscription auth secret, base64url (RFC 8291).
+	Auth string `json:"auth"`
+
+	// Endpoint The push endpoint URL issued by the browser push service.
+	Endpoint string `json:"endpoint"`
+
+	// ExpirationTime Optional subscription expiration instant reported by the browser (RFC 8030).
+	ExpirationTime *time.Time `json:"expiration_time,omitempty"`
+
+	// P256dh The client ECDH P-256 public key, base64url (RFC 8291).
+	P256dh string `json:"p256dh"`
+}
+
+// PushSubscriptionDeleteRequest defines model for PushSubscriptionDeleteRequest.
+type PushSubscriptionDeleteRequest struct {
+	// Endpoint The push endpoint URL to unregister (same value sent on subscribe).
+	Endpoint string `json:"endpoint"`
+}
+
+// PushSubscriptionResponse defines model for PushSubscriptionResponse.
+type PushSubscriptionResponse struct {
+	CreatedAt time.Time          `json:"created_at"`
+	Endpoint  string             `json:"endpoint"`
+	Id        openapi_types.UUID `json:"id"`
+	UpdatedAt time.Time          `json:"updated_at"`
 }
 
 // RecurringOperationCreateRequest defines model for RecurringOperationCreateRequest.
@@ -1746,6 +2363,7 @@ type ReminderResponse struct {
 	CreatedAt            time.Time                  `json:"created_at"`
 	EventType            ReminderResponseEventType  `json:"event_type"`
 	FailedAttempts       int                        `json:"failed_attempts"`
+	FreeReminderId       *openapi_types.UUID        `json:"free_reminder_id,omitempty"`
 	Id                   openapi_types.UUID         `json:"id"`
 	LeaseId              *openapi_types.UUID        `json:"lease_id,omitempty"`
 	MessageBody          string                     `json:"message_body"`
@@ -1860,7 +2478,10 @@ type TenantContactCreateRequest struct {
 	Name       string  `json:"name"`
 	Patronymic *string `json:"patronymic,omitempty"`
 	Phone      *string `json:"phone,omitempty"`
-	Surname    *string `json:"surname,omitempty"`
+
+	// PropertyId Optional property context. When set, the contact is created in the account of the property's data owner and requires the edit capability on that property (shared access); a viewer gets 403 and an actor without access gets 404. When absent, the contact is created in the actor's own account.
+	PropertyId *openapi_types.UUID `json:"property_id,omitempty"`
+	Surname    *string             `json:"surname,omitempty"`
 }
 
 // TenantContactResponse defines model for TenantContactResponse.
@@ -1895,6 +2516,23 @@ type TenantContactsResponse struct {
 	Items []TenantContactResponse `json:"items"`
 }
 
+// UpcomingFreeReminderResponse A single nearest upcoming occurrence of a periodic (or one-shot) free reminder. Unlike FreeReminderResponse (a template), this represents one projected fire time — trigger_at is the instant of this occurrence.
+type UpcomingFreeReminderResponse struct {
+	FreeReminderId openapi_types.UUID                      `json:"free_reminder_id"`
+	Periodicity    UpcomingFreeReminderResponsePeriodicity `json:"periodicity"`
+	PropertyId     openapi_types.UUID                      `json:"property_id"`
+	Title          string                                  `json:"title"`
+	TriggerAt      time.Time                               `json:"trigger_at"`
+}
+
+// UpcomingFreeReminderResponsePeriodicity defines model for UpcomingFreeReminderResponse.Periodicity.
+type UpcomingFreeReminderResponsePeriodicity string
+
+// UpcomingFreeRemindersResponse defines model for UpcomingFreeRemindersResponse.
+type UpcomingFreeRemindersResponse struct {
+	Items []UpcomingFreeReminderResponse `json:"items"`
+}
+
 // UserUpdateRequest defines model for UserUpdateRequest.
 type UserUpdateRequest struct {
 	// Email Email is stored in lowercase.
@@ -1902,6 +2540,15 @@ type UserUpdateRequest struct {
 	Name       *string `json:"name,omitempty"`
 	Patronymic *string `json:"patronymic,omitempty"`
 	Surname    *string `json:"surname,omitempty"`
+
+	// Timezone IANA timezone identifier, e.g. Europe/Moscow.
+	Timezone *string `json:"timezone,omitempty"`
+}
+
+// VapidPublicKeyResponse defines model for VapidPublicKeyResponse.
+type VapidPublicKeyResponse struct {
+	// PublicKey The application server's VAPID P-256 public key, base64url without padding (RFC 8292). Pass this to `pushManager.subscribe({ applicationServerKey })`.
+	PublicKey string `json:"public_key"`
 }
 
 // VerifyCodeRequest defines model for VerifyCodeRequest.
@@ -1910,6 +2557,9 @@ type VerifyCodeRequest struct {
 	Email *string `json:"email,omitempty"`
 	Phone string  `json:"phone"`
 }
+
+// PropertyId defines model for PropertyId.
+type PropertyId = openapi_types.UUID
 
 // BadRequest defines model for BadRequest.
 type BadRequest = Problem
@@ -1922,6 +2572,9 @@ type Forbidden = Problem
 
 // InternalServerError defines model for InternalServerError.
 type InternalServerError = Problem
+
+// MembershipSuspended defines model for MembershipSuspended.
+type MembershipSuspended = Problem
 
 // NotFound defines model for NotFound.
 type NotFound = Problem
@@ -2031,6 +2684,14 @@ type ListAdminPropertiesParamsStatus string
 
 // ListAdminPropertiesParamsOrder defines parameters for ListAdminProperties.
 type ListAdminPropertiesParamsOrder string
+
+// ListAdminPropertyContactsParams defines parameters for ListAdminPropertyContacts.
+type ListAdminPropertyContactsParams struct {
+	// PropertyId Filter contacts by property (always passed by the admin property page tab).
+	PropertyId *openapi_types.UUID `form:"property_id,omitempty" json:"property_id,omitempty"`
+	Limit      *int                `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset     *int                `form:"offset,omitempty" json:"offset,omitempty"`
+}
 
 // ListAdminSubscriptionPaymentsParams defines parameters for ListAdminSubscriptionPayments.
 type ListAdminSubscriptionPaymentsParams struct {
@@ -2199,6 +2860,12 @@ type GetFinanceReportParams struct {
 	To   *openapi_types.Date `form:"to,omitempty" json:"to,omitempty"`
 }
 
+// ListFreeRemindersParams defines parameters for ListFreeReminders.
+type ListFreeRemindersParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // ListOperationCategoriesParams defines parameters for ListOperationCategories.
 type ListOperationCategoriesParams struct {
 	Type *OperationType `form:"type,omitempty" json:"type,omitempty"`
@@ -2235,6 +2902,16 @@ type DeletePropertyParams struct {
 // DeletePropertyParamsMode defines parameters for DeleteProperty.
 type DeletePropertyParamsMode string
 
+// ListPropertyFreeRemindersParams defines parameters for ListPropertyFreeReminders.
+type ListPropertyFreeRemindersParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListUpcomingFreeRemindersParams defines parameters for ListUpcomingFreeReminders.
+type ListUpcomingFreeRemindersParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ListOperationsByPropertyParams defines parameters for ListOperationsByProperty.
 type ListOperationsByPropertyParams struct {
 	Status     *[]OperationStatus    `form:"status,omitempty" json:"status,omitempty"`
@@ -2258,6 +2935,12 @@ type ListRemindersParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// ListCalendarRemindersParams defines parameters for ListCalendarReminders.
+type ListCalendarRemindersParams struct {
+	From openapi_types.Date `form:"from" json:"from"`
+	To   openapi_types.Date `form:"to" json:"to"`
+}
+
 // HandlePaymentWebhookJSONBody defines parameters for HandlePaymentWebhook.
 type HandlePaymentWebhookJSONBody map[string]interface{}
 
@@ -2269,6 +2952,9 @@ type VerifyCodeJSONRequestBody = VerifyCodeRequest
 
 // ReportClientErrorJSONRequestBody defines body for ReportClientError for application/json ContentType.
 type ReportClientErrorJSONRequestBody = ClientErrorReport
+
+// UpdateFreeReminderJSONRequestBody defines body for UpdateFreeReminder for application/json ContentType.
+type UpdateFreeReminderJSONRequestBody = FreeReminderUpdateRequest
 
 // CreateLeaseJSONRequestBody defines body for CreateLease for application/json ContentType.
 type CreateLeaseJSONRequestBody = LeaseCreateRequest
@@ -2300,11 +2986,35 @@ type CompleteOperationJSONRequestBody = CompleteOperationJSONBody
 // MarkOperationIncompleteJSONRequestBody defines body for MarkOperationIncomplete for application/json ContentType.
 type MarkOperationIncompleteJSONRequestBody = MarkOperationIncompleteJSONBody
 
+// MoveOperationJSONRequestBody defines body for MoveOperation for application/json ContentType.
+type MoveOperationJSONRequestBody = OperationMoveRequest
+
 // CreatePropertyJSONRequestBody defines body for CreateProperty for application/json ContentType.
 type CreatePropertyJSONRequestBody = PropertyCreateRequest
 
 // UpdatePropertyJSONRequestBody defines body for UpdateProperty for application/json ContentType.
 type UpdatePropertyJSONRequestBody = PropertyUpdateRequest
+
+// CreatePropertyAccessInvitationJSONRequestBody defines body for CreatePropertyAccessInvitation for application/json ContentType.
+type CreatePropertyAccessInvitationJSONRequestBody = PropertyAccessInvitationCreateRequest
+
+// UpdatePropertyAccessInvitationJSONRequestBody defines body for UpdatePropertyAccessInvitation for application/json ContentType.
+type UpdatePropertyAccessInvitationJSONRequestBody = PropertyAccessMemberUpdateRequest
+
+// CreatePropertyAccessMemberJSONRequestBody defines body for CreatePropertyAccessMember for application/json ContentType.
+type CreatePropertyAccessMemberJSONRequestBody = PropertyAccessMemberCreateRequest
+
+// UpdatePropertyAccessMemberJSONRequestBody defines body for UpdatePropertyAccessMember for application/json ContentType.
+type UpdatePropertyAccessMemberJSONRequestBody = PropertyAccessMemberUpdateRequest
+
+// CreatePropertyContactJSONRequestBody defines body for CreatePropertyContact for application/json ContentType.
+type CreatePropertyContactJSONRequestBody = PropertyContactCreateRequest
+
+// UpdatePropertyContactJSONRequestBody defines body for UpdatePropertyContact for application/json ContentType.
+type UpdatePropertyContactJSONRequestBody = PropertyContactUpdateRequest
+
+// CreateFreeReminderJSONRequestBody defines body for CreateFreeReminder for application/json ContentType.
+type CreateFreeReminderJSONRequestBody = FreeReminderCreateRequest
 
 // CreateOperationJSONRequestBody defines body for CreateOperation for application/json ContentType.
 type CreateOperationJSONRequestBody = OperationCreateRequest
@@ -2314,6 +3024,12 @@ type UploadPropertyPhotoMultipartRequestBody UploadPropertyPhotoMultipartBody
 
 // CreateRecurringOperationJSONRequestBody defines body for CreateRecurringOperation for application/json ContentType.
 type CreateRecurringOperationJSONRequestBody = RecurringOperationCreateRequest
+
+// DeletePushSubscriptionJSONRequestBody defines body for DeletePushSubscription for application/json ContentType.
+type DeletePushSubscriptionJSONRequestBody = PushSubscriptionDeleteRequest
+
+// CreatePushSubscriptionJSONRequestBody defines body for CreatePushSubscription for application/json ContentType.
+type CreatePushSubscriptionJSONRequestBody = PushSubscriptionCreateRequest
 
 // UpdateRecurringOperationJSONRequestBody defines body for UpdateRecurringOperation for application/json ContentType.
 type UpdateRecurringOperationJSONRequestBody = RecurringOperationUpdateRequest
@@ -2365,6 +3081,9 @@ type ServerInterface interface {
 
 	// (GET /admin/properties/{id})
 	GetAdminProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /admin/property-contacts)
+	ListAdminPropertyContacts(w http.ResponseWriter, r *http.Request, params ListAdminPropertyContactsParams)
 
 	// (GET /admin/stats)
 	GetAdminStats(w http.ResponseWriter, r *http.Request)
@@ -2429,6 +3148,18 @@ type ServerInterface interface {
 	// (GET /finance/report)
 	GetFinanceReport(w http.ResponseWriter, r *http.Request, params GetFinanceReportParams)
 
+	// (GET /free-reminders)
+	ListFreeReminders(w http.ResponseWriter, r *http.Request, params ListFreeRemindersParams)
+
+	// (DELETE /free-reminders/{freeReminderId})
+	DeleteFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderId openapi_types.UUID)
+
+	// (GET /free-reminders/{freeReminderId})
+	GetFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderId openapi_types.UUID)
+
+	// (PATCH /free-reminders/{freeReminderId})
+	UpdateFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderId openapi_types.UUID)
+
 	// (POST /internal/fake-subscription-payment/{id}/confirm)
 	ConfirmFakeSubscriptionPayment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
@@ -2492,6 +3223,9 @@ type ServerInterface interface {
 	// (POST /operations/{id}/mark-incomplete)
 	MarkOperationIncomplete(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
+	// (POST /operations/{id}/move)
+	MoveOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
 	// (GET /popups/pending)
 	GetPendingPopups(w http.ResponseWriter, r *http.Request)
 
@@ -2530,6 +3264,57 @@ type ServerInterface interface {
 
 	// (POST /properties/{id}/unarchive)
 	UnarchiveProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Invite a user by email to shared access to the property
+	// (POST /properties/{propertyId}/access/invitations)
+	CreatePropertyAccessInvitation(w http.ResponseWriter, r *http.Request, propertyId PropertyId)
+	// Cancel a pending invitation silently (no email is sent)
+	// (DELETE /properties/{propertyId}/access/invitations/{invitationId})
+	DeletePropertyAccessInvitation(w http.ResponseWriter, r *http.Request, propertyId PropertyId, invitationId openapi_types.UUID)
+	// Change a pending invitation's role (no new email is sent)
+	// (PATCH /properties/{propertyId}/access/invitations/{invitationId})
+	UpdatePropertyAccessInvitation(w http.ResponseWriter, r *http.Request, propertyId PropertyId, invitationId openapi_types.UUID)
+	// Resend the invite email (24-hour cooldown)
+	// (POST /properties/{propertyId}/access/invitations/{invitationId}/resend)
+	ResendPropertyAccessInvitation(w http.ResponseWriter, r *http.Request, propertyId PropertyId, invitationId openapi_types.UUID)
+	// List property participants (owner first, then members)
+	// (GET /properties/{propertyId}/access/members)
+	ListPropertyAccessMembers(w http.ResponseWriter, r *http.Request, propertyId PropertyId)
+	// Grant a registered user shared access to the property
+	// (POST /properties/{propertyId}/access/members)
+	CreatePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyId PropertyId)
+	// Self-exit from a shared property
+	// (DELETE /properties/{propertyId}/access/members/self)
+	LeaveProperty(w http.ResponseWriter, r *http.Request, propertyId PropertyId)
+	// Revoke a member's access
+	// (DELETE /properties/{propertyId}/access/members/{memberId})
+	DeletePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyId PropertyId, memberId openapi_types.UUID)
+	// Change a member's role
+	// (PATCH /properties/{propertyId}/access/members/{memberId})
+	UpdatePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyId PropertyId, memberId openapi_types.UUID)
+
+	// (GET /properties/{propertyId}/contacts)
+	ListPropertyContacts(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+
+	// (POST /properties/{propertyId}/contacts)
+	CreatePropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+
+	// (DELETE /properties/{propertyId}/contacts/{contactId})
+	DeletePropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, contactId openapi_types.UUID)
+
+	// (GET /properties/{propertyId}/contacts/{contactId})
+	GetPropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, contactId openapi_types.UUID)
+
+	// (PATCH /properties/{propertyId}/contacts/{contactId})
+	UpdatePropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, contactId openapi_types.UUID)
+
+	// (GET /properties/{propertyId}/free-reminders)
+	ListPropertyFreeReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListPropertyFreeRemindersParams)
+
+	// (POST /properties/{propertyId}/free-reminders)
+	CreateFreeReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+
+	// (GET /properties/{propertyId}/free-reminders/upcoming)
+	ListUpcomingFreeReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListUpcomingFreeRemindersParams)
 
 	// (GET /properties/{propertyId}/operations)
 	ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListOperationsByPropertyParams)
@@ -2548,6 +3333,15 @@ type ServerInterface interface {
 
 	// (POST /properties/{propertyId}/recurring-operations)
 	CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+
+	// (DELETE /push/subscriptions)
+	DeletePushSubscription(w http.ResponseWriter, r *http.Request)
+
+	// (POST /push/subscriptions)
+	CreatePushSubscription(w http.ResponseWriter, r *http.Request)
+
+	// (GET /push/vapid-public-key)
+	GetVapidPublicKey(w http.ResponseWriter, r *http.Request)
 
 	// (GET /recurring-operations)
 	ListRecurringOperations(w http.ResponseWriter, r *http.Request)
@@ -2569,6 +3363,9 @@ type ServerInterface interface {
 
 	// (GET /reminders)
 	ListReminders(w http.ResponseWriter, r *http.Request, params ListRemindersParams)
+
+	// (GET /reminders/calendar)
+	ListCalendarReminders(w http.ResponseWriter, r *http.Request, params ListCalendarRemindersParams)
 
 	// (DELETE /reminders/{reminderId})
 	DeleteReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID)
@@ -2666,6 +3463,11 @@ func (_ Unimplemented) ListAdminProperties(w http.ResponseWriter, r *http.Reques
 
 // (GET /admin/properties/{id})
 func (_ Unimplemented) GetAdminProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/property-contacts)
+func (_ Unimplemented) ListAdminPropertyContacts(w http.ResponseWriter, r *http.Request, params ListAdminPropertyContactsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2774,6 +3576,26 @@ func (_ Unimplemented) GetFinanceReport(w http.ResponseWriter, r *http.Request, 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /free-reminders)
+func (_ Unimplemented) ListFreeReminders(w http.ResponseWriter, r *http.Request, params ListFreeRemindersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /free-reminders/{freeReminderId})
+func (_ Unimplemented) DeleteFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /free-reminders/{freeReminderId})
+func (_ Unimplemented) GetFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /free-reminders/{freeReminderId})
+func (_ Unimplemented) UpdateFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (POST /internal/fake-subscription-payment/{id}/confirm)
 func (_ Unimplemented) ConfirmFakeSubscriptionPayment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -2879,6 +3701,11 @@ func (_ Unimplemented) MarkOperationIncomplete(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (POST /operations/{id}/move)
+func (_ Unimplemented) MoveOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /popups/pending)
 func (_ Unimplemented) GetPendingPopups(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -2944,6 +3771,100 @@ func (_ Unimplemented) UnarchiveProperty(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Invite a user by email to shared access to the property
+// (POST /properties/{propertyId}/access/invitations)
+func (_ Unimplemented) CreatePropertyAccessInvitation(w http.ResponseWriter, r *http.Request, propertyId PropertyId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Cancel a pending invitation silently (no email is sent)
+// (DELETE /properties/{propertyId}/access/invitations/{invitationId})
+func (_ Unimplemented) DeletePropertyAccessInvitation(w http.ResponseWriter, r *http.Request, propertyId PropertyId, invitationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Change a pending invitation's role (no new email is sent)
+// (PATCH /properties/{propertyId}/access/invitations/{invitationId})
+func (_ Unimplemented) UpdatePropertyAccessInvitation(w http.ResponseWriter, r *http.Request, propertyId PropertyId, invitationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Resend the invite email (24-hour cooldown)
+// (POST /properties/{propertyId}/access/invitations/{invitationId}/resend)
+func (_ Unimplemented) ResendPropertyAccessInvitation(w http.ResponseWriter, r *http.Request, propertyId PropertyId, invitationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List property participants (owner first, then members)
+// (GET /properties/{propertyId}/access/members)
+func (_ Unimplemented) ListPropertyAccessMembers(w http.ResponseWriter, r *http.Request, propertyId PropertyId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Grant a registered user shared access to the property
+// (POST /properties/{propertyId}/access/members)
+func (_ Unimplemented) CreatePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyId PropertyId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Self-exit from a shared property
+// (DELETE /properties/{propertyId}/access/members/self)
+func (_ Unimplemented) LeaveProperty(w http.ResponseWriter, r *http.Request, propertyId PropertyId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Revoke a member's access
+// (DELETE /properties/{propertyId}/access/members/{memberId})
+func (_ Unimplemented) DeletePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyId PropertyId, memberId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Change a member's role
+// (PATCH /properties/{propertyId}/access/members/{memberId})
+func (_ Unimplemented) UpdatePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyId PropertyId, memberId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/contacts)
+func (_ Unimplemented) ListPropertyContacts(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{propertyId}/contacts)
+func (_ Unimplemented) CreatePropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /properties/{propertyId}/contacts/{contactId})
+func (_ Unimplemented) DeletePropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, contactId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/contacts/{contactId})
+func (_ Unimplemented) GetPropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, contactId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /properties/{propertyId}/contacts/{contactId})
+func (_ Unimplemented) UpdatePropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, contactId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/free-reminders)
+func (_ Unimplemented) ListPropertyFreeReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListPropertyFreeRemindersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{propertyId}/free-reminders)
+func (_ Unimplemented) CreateFreeReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/free-reminders/upcoming)
+func (_ Unimplemented) ListUpcomingFreeReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListUpcomingFreeRemindersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /properties/{propertyId}/operations)
 func (_ Unimplemented) ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListOperationsByPropertyParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -2971,6 +3892,21 @@ func (_ Unimplemented) ListRecurringOperationsByProperty(w http.ResponseWriter, 
 
 // (POST /properties/{propertyId}/recurring-operations)
 func (_ Unimplemented) CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /push/subscriptions)
+func (_ Unimplemented) DeletePushSubscription(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /push/subscriptions)
+func (_ Unimplemented) CreatePushSubscription(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /push/vapid-public-key)
+func (_ Unimplemented) GetVapidPublicKey(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3006,6 +3942,11 @@ func (_ Unimplemented) ResumeRecurringOperation(w http.ResponseWriter, r *http.R
 
 // (GET /reminders)
 func (_ Unimplemented) ListReminders(w http.ResponseWriter, r *http.Request, params ListRemindersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /reminders/calendar)
+func (_ Unimplemented) ListCalendarReminders(w http.ResponseWriter, r *http.Request, params ListCalendarRemindersParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3760,6 +4701,71 @@ func (siw *ServerInterfaceWrapper) GetAdminProperty(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdminProperty(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAdminPropertyContacts operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminPropertyContacts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminPropertyContactsParams
+
+	// ------------- Optional query parameter "property_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "property_id", r.URL.Query(), &params.PropertyId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "property_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "property_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminPropertyContacts(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5025,6 +6031,154 @@ func (siw *ServerInterfaceWrapper) GetFinanceReport(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// ListFreeReminders operation middleware
+func (siw *ServerInterfaceWrapper) ListFreeReminders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListFreeRemindersParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListFreeReminders(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteFreeReminder operation middleware
+func (siw *ServerInterfaceWrapper) DeleteFreeReminder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "freeReminderId" -------------
+	var freeReminderId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "freeReminderId", chi.URLParam(r, "freeReminderId"), &freeReminderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "freeReminderId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteFreeReminder(w, r, freeReminderId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFreeReminder operation middleware
+func (siw *ServerInterfaceWrapper) GetFreeReminder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "freeReminderId" -------------
+	var freeReminderId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "freeReminderId", chi.URLParam(r, "freeReminderId"), &freeReminderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "freeReminderId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFreeReminder(w, r, freeReminderId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateFreeReminder operation middleware
+func (siw *ServerInterfaceWrapper) UpdateFreeReminder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "freeReminderId" -------------
+	var freeReminderId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "freeReminderId", chi.URLParam(r, "freeReminderId"), &freeReminderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "freeReminderId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateFreeReminder(w, r, freeReminderId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ConfirmFakeSubscriptionPayment operation middleware
 func (siw *ServerInterfaceWrapper) ConfirmFakeSubscriptionPayment(w http.ResponseWriter, r *http.Request) {
 
@@ -5728,6 +6882,38 @@ func (siw *ServerInterfaceWrapper) MarkOperationIncomplete(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
+// MoveOperation operation middleware
+func (siw *ServerInterfaceWrapper) MoveOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MoveOperation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetPendingPopups operation middleware
 func (siw *ServerInterfaceWrapper) GetPendingPopups(w http.ResponseWriter, r *http.Request) {
 
@@ -6112,6 +7298,654 @@ func (siw *ServerInterfaceWrapper) UnarchiveProperty(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// CreatePropertyAccessInvitation operation middleware
+func (siw *ServerInterfaceWrapper) CreatePropertyAccessInvitation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePropertyAccessInvitation(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePropertyAccessInvitation operation middleware
+func (siw *ServerInterfaceWrapper) DeletePropertyAccessInvitation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "invitationId" -------------
+	var invitationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "invitationId", chi.URLParam(r, "invitationId"), &invitationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "invitationId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePropertyAccessInvitation(w, r, propertyId, invitationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePropertyAccessInvitation operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePropertyAccessInvitation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "invitationId" -------------
+	var invitationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "invitationId", chi.URLParam(r, "invitationId"), &invitationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "invitationId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePropertyAccessInvitation(w, r, propertyId, invitationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResendPropertyAccessInvitation operation middleware
+func (siw *ServerInterfaceWrapper) ResendPropertyAccessInvitation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "invitationId" -------------
+	var invitationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "invitationId", chi.URLParam(r, "invitationId"), &invitationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "invitationId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResendPropertyAccessInvitation(w, r, propertyId, invitationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPropertyAccessMembers operation middleware
+func (siw *ServerInterfaceWrapper) ListPropertyAccessMembers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPropertyAccessMembers(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePropertyAccessMember operation middleware
+func (siw *ServerInterfaceWrapper) CreatePropertyAccessMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePropertyAccessMember(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LeaveProperty operation middleware
+func (siw *ServerInterfaceWrapper) LeaveProperty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LeaveProperty(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePropertyAccessMember operation middleware
+func (siw *ServerInterfaceWrapper) DeletePropertyAccessMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "memberId" -------------
+	var memberId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "memberId", chi.URLParam(r, "memberId"), &memberId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "memberId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePropertyAccessMember(w, r, propertyId, memberId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePropertyAccessMember operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePropertyAccessMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "memberId" -------------
+	var memberId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "memberId", chi.URLParam(r, "memberId"), &memberId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "memberId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePropertyAccessMember(w, r, propertyId, memberId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPropertyContacts operation middleware
+func (siw *ServerInterfaceWrapper) ListPropertyContacts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPropertyContacts(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePropertyContact operation middleware
+func (siw *ServerInterfaceWrapper) CreatePropertyContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePropertyContact(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePropertyContact operation middleware
+func (siw *ServerInterfaceWrapper) DeletePropertyContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "contactId" -------------
+	var contactId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "contactId", chi.URLParam(r, "contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePropertyContact(w, r, propertyId, contactId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPropertyContact operation middleware
+func (siw *ServerInterfaceWrapper) GetPropertyContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "contactId" -------------
+	var contactId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "contactId", chi.URLParam(r, "contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPropertyContact(w, r, propertyId, contactId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePropertyContact operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePropertyContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "contactId" -------------
+	var contactId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "contactId", chi.URLParam(r, "contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePropertyContact(w, r, propertyId, contactId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPropertyFreeReminders operation middleware
+func (siw *ServerInterfaceWrapper) ListPropertyFreeReminders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPropertyFreeRemindersParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPropertyFreeReminders(w, r, propertyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateFreeReminder operation middleware
+func (siw *ServerInterfaceWrapper) CreateFreeReminder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateFreeReminder(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListUpcomingFreeReminders operation middleware
+func (siw *ServerInterfaceWrapper) ListUpcomingFreeReminders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListUpcomingFreeRemindersParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListUpcomingFreeReminders(w, r, propertyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListOperationsByProperty operation middleware
 func (siw *ServerInterfaceWrapper) ListOperationsByProperty(w http.ResponseWriter, r *http.Request) {
 
@@ -6420,6 +8254,66 @@ func (siw *ServerInterfaceWrapper) CreateRecurringOperation(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
+// DeletePushSubscription operation middleware
+func (siw *ServerInterfaceWrapper) DeletePushSubscription(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePushSubscription(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePushSubscription operation middleware
+func (siw *ServerInterfaceWrapper) CreatePushSubscription(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePushSubscription(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetVapidPublicKey operation middleware
+func (siw *ServerInterfaceWrapper) GetVapidPublicKey(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetVapidPublicKey(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRecurringOperations operation middleware
 func (siw *ServerInterfaceWrapper) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
 
@@ -6643,6 +8537,58 @@ func (siw *ServerInterfaceWrapper) ListReminders(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListReminders(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCalendarReminders operation middleware
+func (siw *ServerInterfaceWrapper) ListCalendarReminders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListCalendarRemindersParams
+
+	// ------------- Required query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCalendarReminders(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7228,6 +9174,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/admin/properties/{id}", wrapper.GetAdminProperty)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/property-contacts", wrapper.ListAdminPropertyContacts)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/stats", wrapper.GetAdminStats)
 	})
 	r.Group(func(r chi.Router) {
@@ -7289,6 +9238,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/finance/report", wrapper.GetFinanceReport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/free-reminders", wrapper.ListFreeReminders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/free-reminders/{freeReminderId}", wrapper.DeleteFreeReminder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/free-reminders/{freeReminderId}", wrapper.GetFreeReminder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/free-reminders/{freeReminderId}", wrapper.UpdateFreeReminder)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/internal/fake-subscription-payment/{id}/confirm", wrapper.ConfirmFakeSubscriptionPayment)
@@ -7354,6 +9315,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/operations/{id}/mark-incomplete", wrapper.MarkOperationIncomplete)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/operations/{id}/move", wrapper.MoveOperation)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/popups/pending", wrapper.GetPendingPopups)
 	})
 	r.Group(func(r chi.Router) {
@@ -7393,6 +9357,57 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/properties/{id}/unarchive", wrapper.UnarchiveProperty)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/access/invitations", wrapper.CreatePropertyAccessInvitation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/properties/{propertyId}/access/invitations/{invitationId}", wrapper.DeletePropertyAccessInvitation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/properties/{propertyId}/access/invitations/{invitationId}", wrapper.UpdatePropertyAccessInvitation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/access/invitations/{invitationId}/resend", wrapper.ResendPropertyAccessInvitation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/access/members", wrapper.ListPropertyAccessMembers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/access/members", wrapper.CreatePropertyAccessMember)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/properties/{propertyId}/access/members/self", wrapper.LeaveProperty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/properties/{propertyId}/access/members/{memberId}", wrapper.DeletePropertyAccessMember)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/properties/{propertyId}/access/members/{memberId}", wrapper.UpdatePropertyAccessMember)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/contacts", wrapper.ListPropertyContacts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/contacts", wrapper.CreatePropertyContact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/properties/{propertyId}/contacts/{contactId}", wrapper.DeletePropertyContact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/contacts/{contactId}", wrapper.GetPropertyContact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/properties/{propertyId}/contacts/{contactId}", wrapper.UpdatePropertyContact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/free-reminders", wrapper.ListPropertyFreeReminders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/free-reminders", wrapper.CreateFreeReminder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/free-reminders/upcoming", wrapper.ListUpcomingFreeReminders)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/properties/{propertyId}/operations", wrapper.ListOperationsByProperty)
 	})
 	r.Group(func(r chi.Router) {
@@ -7409,6 +9424,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/properties/{propertyId}/recurring-operations", wrapper.CreateRecurringOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/push/subscriptions", wrapper.DeletePushSubscription)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/push/subscriptions", wrapper.CreatePushSubscription)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/push/vapid-public-key", wrapper.GetVapidPublicKey)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/recurring-operations", wrapper.ListRecurringOperations)
@@ -7430,6 +9454,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/reminders", wrapper.ListReminders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/reminders/calendar", wrapper.ListCalendarReminders)
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/reminders/{reminderId}", wrapper.DeleteReminder)
@@ -7494,153 +9521,227 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"JkzIk18d/+q4d/vx9v8FAAD//w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

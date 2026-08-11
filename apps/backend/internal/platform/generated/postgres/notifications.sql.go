@@ -64,6 +64,25 @@ func (q *Queries) CancelReminderByTarget(ctx context.Context, arg CancelReminder
 	return result.RowsAffected(), nil
 }
 
+const cancelRemindersByFreeReminderID = `-- name: CancelRemindersByFreeReminderID :execrows
+UPDATE reminders
+SET status = 'cancelled'
+WHERE free_reminder_id = $1 AND owner_id = $2 AND status IN ('pending', 'sending')
+`
+
+type CancelRemindersByFreeReminderIDParams struct {
+	FreeReminderID pgtype.UUID `json:"free_reminder_id"`
+	OwnerID        pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) CancelRemindersByFreeReminderID(ctx context.Context, arg CancelRemindersByFreeReminderIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelRemindersByFreeReminderID, arg.FreeReminderID, arg.OwnerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const cancelRemindersByRecurringOperationID = `-- name: CancelRemindersByRecurringOperationID :execrows
 UPDATE reminders
 SET status = 'cancelled'
@@ -92,7 +111,7 @@ INSERT INTO reminders (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
-RETURNING id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at
+RETURNING id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id
 `
 
 type CreateReminderParams struct {
@@ -146,6 +165,7 @@ func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) 
 		&i.MessageBody,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FreeReminderID,
 	)
 	return i, err
 }
@@ -183,16 +203,35 @@ func (q *Queries) CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSRe
 }
 
 const deleteSentEmailReminder = `-- name: DeleteSentEmailReminder :exec
-DELETE FROM sent_email_reminders WHERE reminder_id = $1
+DELETE FROM sent_email_reminders WHERE reminder_id = $1 AND owner_id = $2
 `
 
-func (q *Queries) DeleteSentEmailReminder(ctx context.Context, reminderID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteSentEmailReminder, reminderID)
+type DeleteSentEmailReminderParams struct {
+	ReminderID pgtype.UUID `json:"reminder_id"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) DeleteSentEmailReminder(ctx context.Context, arg DeleteSentEmailReminderParams) error {
+	_, err := q.db.Exec(ctx, deleteSentEmailReminder, arg.ReminderID, arg.OwnerID)
+	return err
+}
+
+const deleteSentPushReminder = `-- name: DeleteSentPushReminder :exec
+DELETE FROM sent_push_reminders WHERE reminder_id = $1 AND recipient_id = $2
+`
+
+type DeleteSentPushReminderParams struct {
+	ReminderID  pgtype.UUID `json:"reminder_id"`
+	RecipientID pgtype.UUID `json:"recipient_id"`
+}
+
+func (q *Queries) DeleteSentPushReminder(ctx context.Context, arg DeleteSentPushReminderParams) error {
+	_, err := q.db.Exec(ctx, deleteSentPushReminder, arg.ReminderID, arg.RecipientID)
 	return err
 }
 
 const getReminderByIDAndOwner = `-- name: GetReminderByIDAndOwner :one
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders WHERE id = $1 AND owner_id = $2
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders WHERE id = $1 AND owner_id = $2
 `
 
 type GetReminderByIDAndOwnerParams struct {
@@ -221,12 +260,13 @@ func (q *Queries) GetReminderByIDAndOwner(ctx context.Context, arg GetReminderBy
 		&i.MessageBody,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FreeReminderID,
 	)
 	return i, err
 }
 
 const getReminderByIDUnscoped = `-- name: GetReminderByIDUnscoped :one
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders WHERE id = $1
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders WHERE id = $1
 `
 
 func (q *Queries) GetReminderByIDUnscoped(ctx context.Context, id pgtype.UUID) (Reminder, error) {
@@ -250,6 +290,7 @@ func (q *Queries) GetReminderByIDUnscoped(ctx context.Context, id pgtype.UUID) (
 		&i.MessageBody,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FreeReminderID,
 	)
 	return i, err
 }
@@ -294,34 +335,38 @@ func (q *Queries) HasReminderForOperationEvent(ctx context.Context, arg HasRemin
 
 const isEmailReminderSent = `-- name: IsEmailReminderSent :one
 SELECT EXISTS (
-    SELECT 1 FROM sent_email_reminders WHERE reminder_id = $1
+    SELECT 1 FROM sent_email_reminders WHERE reminder_id = $1 AND owner_id = $2
 )
 `
 
-func (q *Queries) IsEmailReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, isEmailReminderSent, reminderID)
+type IsEmailReminderSentParams struct {
+	ReminderID pgtype.UUID `json:"reminder_id"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) IsEmailReminderSent(ctx context.Context, arg IsEmailReminderSentParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isEmailReminderSent, arg.ReminderID, arg.OwnerID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
 }
 
-const isNotificationEventAllowed = `-- name: IsNotificationEventAllowed :one
-SELECT COALESCE((
-    SELECT allowed FROM user_notification_preferences
-    WHERE user_id = $1 AND event_type = $2
-), true)::boolean AS allowed
+const isPushReminderSent = `-- name: IsPushReminderSent :one
+SELECT EXISTS (
+    SELECT 1 FROM sent_push_reminders WHERE reminder_id = $1 AND recipient_id = $2
+)
 `
 
-type IsNotificationEventAllowedParams struct {
-	UserID    pgtype.UUID           `json:"user_id"`
-	EventType NotificationEventType `json:"event_type"`
+type IsPushReminderSentParams struct {
+	ReminderID  pgtype.UUID `json:"reminder_id"`
+	RecipientID pgtype.UUID `json:"recipient_id"`
 }
 
-func (q *Queries) IsNotificationEventAllowed(ctx context.Context, arg IsNotificationEventAllowedParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isNotificationEventAllowed, arg.UserID, arg.EventType)
-	var allowed bool
-	err := row.Scan(&allowed)
-	return allowed, err
+func (q *Queries) IsPushReminderSent(ctx context.Context, arg IsPushReminderSentParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isPushReminderSent, arg.ReminderID, arg.RecipientID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const isSMSReminderSent = `-- name: IsSMSReminderSent :one
@@ -335,8 +380,80 @@ func (q *Queries) IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID)
 	return exists, err
 }
 
+const listCalendarRemindersByOwner = `-- name: ListCalendarRemindersByOwner :many
+SELECT r.id, r.owner_id, r.target_type, r.operation_id, r.recurring_operation_id, r.lease_id, r.property_id, r.event_type, r.status, r.scheduled_at, r.sent_at, r.failed_attempts, r.next_attempt_at, r.message_title, r.message_body, r.created_at, r.updated_at, r.free_reminder_id, p.name AS property_name
+FROM reminders r
+LEFT JOIN properties p ON p.id = r.property_id
+WHERE (r.owner_id = $1::uuid
+       OR (r.property_id IS NOT NULL
+           AND r.property_id = ANY($2::uuid[])
+           AND p.status IN ('active', 'maintenance')))
+  AND r.target_type IN ('operation', 'recurring_operation', 'lease')
+  AND r.status NOT IN ('cancelled', 'skipped')
+  AND r.scheduled_at >= $3
+  AND r.scheduled_at < $4
+ORDER BY r.scheduled_at ASC
+`
+
+type ListCalendarRemindersByOwnerParams struct {
+	OwnerID               pgtype.UUID        `json:"owner_id"`
+	AccessiblePropertyIds []pgtype.UUID      `json:"accessible_property_ids"`
+	FromTime              pgtype.Timestamptz `json:"from_time"`
+	ToTime                pgtype.Timestamptz `json:"to_time"`
+}
+
+type ListCalendarRemindersByOwnerRow struct {
+	Reminder     Reminder    `json:"reminder"`
+	PropertyName pgtype.Text `json:"property_name"`
+}
+
+func (q *Queries) ListCalendarRemindersByOwner(ctx context.Context, arg ListCalendarRemindersByOwnerParams) ([]ListCalendarRemindersByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, listCalendarRemindersByOwner,
+		arg.OwnerID,
+		arg.AccessiblePropertyIds,
+		arg.FromTime,
+		arg.ToTime,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCalendarRemindersByOwnerRow{}
+	for rows.Next() {
+		var i ListCalendarRemindersByOwnerRow
+		if err := rows.Scan(
+			&i.Reminder.ID,
+			&i.Reminder.OwnerID,
+			&i.Reminder.TargetType,
+			&i.Reminder.OperationID,
+			&i.Reminder.RecurringOperationID,
+			&i.Reminder.LeaseID,
+			&i.Reminder.PropertyID,
+			&i.Reminder.EventType,
+			&i.Reminder.Status,
+			&i.Reminder.ScheduledAt,
+			&i.Reminder.SentAt,
+			&i.Reminder.FailedAttempts,
+			&i.Reminder.NextAttemptAt,
+			&i.Reminder.MessageTitle,
+			&i.Reminder.MessageBody,
+			&i.Reminder.CreatedAt,
+			&i.Reminder.UpdatedAt,
+			&i.Reminder.FreeReminderID,
+			&i.PropertyName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDueReminders = `-- name: ListDueReminders :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
 WHERE status = 'pending'
   AND scheduled_at <= $1
   AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
@@ -377,38 +494,7 @@ func (q *Queries) ListDueReminders(ctx context.Context, arg ListDueRemindersPara
 			&i.MessageBody,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listNotificationPreferences = `-- name: ListNotificationPreferences :many
-SELECT user_id, event_type, allowed, created_at, updated_at FROM user_notification_preferences
-WHERE user_id = $1
-ORDER BY event_type ASC
-`
-
-func (q *Queries) ListNotificationPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationPreference, error) {
-	rows, err := q.db.Query(ctx, listNotificationPreferences, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []UserNotificationPreference{}
-	for rows.Next() {
-		var i UserNotificationPreference
-		if err := rows.Scan(
-			&i.UserID,
-			&i.EventType,
-			&i.Allowed,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.FreeReminderID,
 		); err != nil {
 			return nil, err
 		}
@@ -421,7 +507,7 @@ func (q *Queries) ListNotificationPreferences(ctx context.Context, userID pgtype
 }
 
 const listRemindersByLease = `-- name: ListRemindersByLease :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
 WHERE owner_id = $1 AND lease_id = $2 AND status != 'cancelled'
 ORDER BY scheduled_at ASC
 LIMIT $3 OFFSET $4
@@ -466,6 +552,7 @@ func (q *Queries) ListRemindersByLease(ctx context.Context, arg ListRemindersByL
 			&i.MessageBody,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.FreeReminderID,
 		); err != nil {
 			return nil, err
 		}
@@ -478,7 +565,7 @@ func (q *Queries) ListRemindersByLease(ctx context.Context, arg ListRemindersByL
 }
 
 const listRemindersByOperation = `-- name: ListRemindersByOperation :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
 WHERE owner_id = $1 AND operation_id = $2 AND status != 'cancelled'
 ORDER BY scheduled_at ASC
 LIMIT $3 OFFSET $4
@@ -523,6 +610,7 @@ func (q *Queries) ListRemindersByOperation(ctx context.Context, arg ListReminder
 			&i.MessageBody,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.FreeReminderID,
 		); err != nil {
 			return nil, err
 		}
@@ -535,27 +623,32 @@ func (q *Queries) ListRemindersByOperation(ctx context.Context, arg ListReminder
 }
 
 const listRemindersByOwner = `-- name: ListRemindersByOwner :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
-WHERE owner_id = $1
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
+WHERE (owner_id = $1::uuid
+       OR (property_id IS NOT NULL
+           AND property_id = ANY($2::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = reminders.property_id AND p.status = 'archived')))
   AND CASE
-        WHEN $2::boolean THEN status::text = $3::text
+        WHEN $3::boolean THEN status::text = $4::text
         ELSE true
       END
 ORDER BY scheduled_at ASC
-LIMIT $5 OFFSET $4
+LIMIT $6 OFFSET $5
 `
 
 type ListRemindersByOwnerParams struct {
-	OwnerID        pgtype.UUID `json:"owner_id"`
-	FilterByStatus bool        `json:"filter_by_status"`
-	Status         string      `json:"status"`
-	Offset         int32       `json:"offset"`
-	Limit          int32       `json:"limit"`
+	OwnerID               pgtype.UUID   `json:"owner_id"`
+	AccessiblePropertyIds []pgtype.UUID `json:"accessible_property_ids"`
+	FilterByStatus        bool          `json:"filter_by_status"`
+	Status                string        `json:"status"`
+	Offset                int32         `json:"offset"`
+	Limit                 int32         `json:"limit"`
 }
 
 func (q *Queries) ListRemindersByOwner(ctx context.Context, arg ListRemindersByOwnerParams) ([]Reminder, error) {
 	rows, err := q.db.Query(ctx, listRemindersByOwner,
 		arg.OwnerID,
+		arg.AccessiblePropertyIds,
 		arg.FilterByStatus,
 		arg.Status,
 		arg.Offset,
@@ -586,6 +679,7 @@ func (q *Queries) ListRemindersByOwner(ctx context.Context, arg ListRemindersByO
 			&i.MessageBody,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.FreeReminderID,
 		); err != nil {
 			return nil, err
 		}
@@ -598,7 +692,7 @@ func (q *Queries) ListRemindersByOwner(ctx context.Context, arg ListRemindersByO
 }
 
 const listRemindersByRecurringOperation = `-- name: ListRemindersByRecurringOperation :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
 WHERE owner_id = $1 AND recurring_operation_id = $2 AND status != 'cancelled'
 ORDER BY scheduled_at ASC
 LIMIT $3 OFFSET $4
@@ -643,6 +737,7 @@ func (q *Queries) ListRemindersByRecurringOperation(ctx context.Context, arg Lis
 			&i.MessageBody,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.FreeReminderID,
 		); err != nil {
 			return nil, err
 		}
@@ -655,7 +750,7 @@ func (q *Queries) ListRemindersByRecurringOperation(ctx context.Context, arg Lis
 }
 
 const listStaleSendingReminders = `-- name: ListStaleSendingReminders :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at FROM reminders
+SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
 WHERE status = 'sending'
   AND updated_at < $1
 ORDER BY updated_at ASC
@@ -695,6 +790,77 @@ func (q *Queries) ListStaleSendingReminders(ctx context.Context, arg ListStaleSe
 			&i.MessageBody,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.FreeReminderID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUpcomingFreeRemindersByProperty = `-- name: ListUpcomingFreeRemindersByProperty :many
+SELECT r.id, r.owner_id, r.target_type, r.operation_id, r.recurring_operation_id, r.lease_id, r.property_id, r.event_type, r.status, r.scheduled_at, r.sent_at, r.failed_attempts, r.next_attempt_at, r.message_title, r.message_body, r.created_at, r.updated_at, r.free_reminder_id, fr.periodicity AS free_reminder_periodicity
+FROM reminders r
+JOIN free_reminders fr ON fr.id = r.free_reminder_id
+WHERE r.owner_id = $1
+  AND r.property_id = $2
+  AND r.target_type = 'free'
+  AND r.status = 'pending'
+  AND r.scheduled_at >= $3
+ORDER BY r.scheduled_at ASC
+LIMIT $4
+`
+
+type ListUpcomingFreeRemindersByPropertyParams struct {
+	OwnerID     pgtype.UUID        `json:"owner_id"`
+	PropertyID  pgtype.UUID        `json:"property_id"`
+	ScheduledAt pgtype.Timestamptz `json:"scheduled_at"`
+	Limit       int32              `json:"limit"`
+}
+
+type ListUpcomingFreeRemindersByPropertyRow struct {
+	Reminder                Reminder `json:"reminder"`
+	FreeReminderPeriodicity string   `json:"free_reminder_periodicity"`
+}
+
+func (q *Queries) ListUpcomingFreeRemindersByProperty(ctx context.Context, arg ListUpcomingFreeRemindersByPropertyParams) ([]ListUpcomingFreeRemindersByPropertyRow, error) {
+	rows, err := q.db.Query(ctx, listUpcomingFreeRemindersByProperty,
+		arg.OwnerID,
+		arg.PropertyID,
+		arg.ScheduledAt,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUpcomingFreeRemindersByPropertyRow{}
+	for rows.Next() {
+		var i ListUpcomingFreeRemindersByPropertyRow
+		if err := rows.Scan(
+			&i.Reminder.ID,
+			&i.Reminder.OwnerID,
+			&i.Reminder.TargetType,
+			&i.Reminder.OperationID,
+			&i.Reminder.RecurringOperationID,
+			&i.Reminder.LeaseID,
+			&i.Reminder.PropertyID,
+			&i.Reminder.EventType,
+			&i.Reminder.Status,
+			&i.Reminder.ScheduledAt,
+			&i.Reminder.SentAt,
+			&i.Reminder.FailedAttempts,
+			&i.Reminder.NextAttemptAt,
+			&i.Reminder.MessageTitle,
+			&i.Reminder.MessageBody,
+			&i.Reminder.CreatedAt,
+			&i.Reminder.UpdatedAt,
+			&i.Reminder.FreeReminderID,
+			&i.FreeReminderPeriodicity,
 		); err != nil {
 			return nil, err
 		}
@@ -732,7 +898,7 @@ const markReminderSending = `-- name: MarkReminderSending :one
 UPDATE reminders
 SET status = 'sending'
 WHERE id = $1 AND status = 'pending'
-RETURNING id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at
+RETURNING id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id
 `
 
 func (q *Queries) MarkReminderSending(ctx context.Context, id pgtype.UUID) (Reminder, error) {
@@ -756,6 +922,7 @@ func (q *Queries) MarkReminderSending(ctx context.Context, id pgtype.UUID) (Remi
 		&i.MessageBody,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FreeReminderID,
 	)
 	return i, err
 }
@@ -833,6 +1000,26 @@ func (q *Queries) MarkSendingReminderSent(ctx context.Context, arg MarkSendingRe
 	return result.RowsAffected(), nil
 }
 
+const reschedulePendingRemindersByOwner = `-- name: ReschedulePendingRemindersByOwner :execrows
+UPDATE reminders
+SET scheduled_at = ((scheduled_at AT TIME ZONE $2::text) AT TIME ZONE $1::text)
+WHERE owner_id = $3 AND status = 'pending'
+`
+
+type ReschedulePendingRemindersByOwnerParams struct {
+	NewTz   string      `json:"new_tz"`
+	OldTz   string      `json:"old_tz"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+func (q *Queries) ReschedulePendingRemindersByOwner(ctx context.Context, arg ReschedulePendingRemindersByOwnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reschedulePendingRemindersByOwner, arg.NewTz, arg.OldTz, arg.OwnerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const resetReminderSending = `-- name: ResetReminderSending :execrows
 UPDATE reminders
 SET status = 'pending'
@@ -841,6 +1028,56 @@ WHERE id = $1 AND status = 'sending'
 
 func (q *Queries) ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, resetReminderSending, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const saveFreeReminder = `-- name: SaveFreeReminder :execrows
+INSERT INTO reminders (
+    id, owner_id, target_type, operation_id, recurring_operation_id, lease_id,
+    property_id, free_reminder_id, event_type, status, scheduled_at,
+    message_title, message_body, created_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+)
+`
+
+type SaveFreeReminderParams struct {
+	ID                   pgtype.UUID            `json:"id"`
+	OwnerID              pgtype.UUID            `json:"owner_id"`
+	TargetType           NotificationTargetType `json:"target_type"`
+	OperationID          pgtype.UUID            `json:"operation_id"`
+	RecurringOperationID pgtype.UUID            `json:"recurring_operation_id"`
+	LeaseID              pgtype.UUID            `json:"lease_id"`
+	PropertyID           pgtype.UUID            `json:"property_id"`
+	FreeReminderID       pgtype.UUID            `json:"free_reminder_id"`
+	EventType            NotificationEventType  `json:"event_type"`
+	Status               NotificationStatus     `json:"status"`
+	ScheduledAt          pgtype.Timestamptz     `json:"scheduled_at"`
+	MessageTitle         string                 `json:"message_title"`
+	MessageBody          string                 `json:"message_body"`
+	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
+}
+
+func (q *Queries) SaveFreeReminder(ctx context.Context, arg SaveFreeReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, saveFreeReminder,
+		arg.ID,
+		arg.OwnerID,
+		arg.TargetType,
+		arg.OperationID,
+		arg.RecurringOperationID,
+		arg.LeaseID,
+		arg.PropertyID,
+		arg.FreeReminderID,
+		arg.EventType,
+		arg.Status,
+		arg.ScheduledAt,
+		arg.MessageTitle,
+		arg.MessageBody,
+		arg.CreatedAt,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -904,7 +1141,7 @@ const saveSentEmailReminder = `-- name: SaveSentEmailReminder :execrows
 INSERT INTO sent_email_reminders (
     id, reminder_id, owner_id, email, subject, plain_body, sent_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (reminder_id) DO NOTHING
+ON CONFLICT (reminder_id, owner_id) DO NOTHING
 `
 
 type SaveSentEmailReminderParams struct {
@@ -925,6 +1162,32 @@ func (q *Queries) SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailRe
 		arg.Email,
 		arg.Subject,
 		arg.PlainBody,
+		arg.SentAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const saveSentPushReminder = `-- name: SaveSentPushReminder :execrows
+INSERT INTO sent_push_reminders (id, reminder_id, recipient_id, sent_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (reminder_id, recipient_id) DO NOTHING
+`
+
+type SaveSentPushReminderParams struct {
+	ID          pgtype.UUID        `json:"id"`
+	ReminderID  pgtype.UUID        `json:"reminder_id"`
+	RecipientID pgtype.UUID        `json:"recipient_id"`
+	SentAt      pgtype.Timestamptz `json:"sent_at"`
+}
+
+func (q *Queries) SaveSentPushReminder(ctx context.Context, arg SaveSentPushReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, saveSentPushReminder,
+		arg.ID,
+		arg.ReminderID,
+		arg.RecipientID,
 		arg.SentAt,
 	)
 	if err != nil {
@@ -970,22 +1233,4 @@ func (q *Queries) UpdateSentSMSReminderProviderResponse(ctx context.Context, arg
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const upsertNotificationPreference = `-- name: UpsertNotificationPreference :exec
-INSERT INTO user_notification_preferences (user_id, event_type, allowed)
-VALUES ($1, $2, $3)
-ON CONFLICT (user_id, event_type)
-DO UPDATE SET allowed = EXCLUDED.allowed
-`
-
-type UpsertNotificationPreferenceParams struct {
-	UserID    pgtype.UUID           `json:"user_id"`
-	EventType NotificationEventType `json:"event_type"`
-	Allowed   bool                  `json:"allowed"`
-}
-
-func (q *Queries) UpsertNotificationPreference(ctx context.Context, arg UpsertNotificationPreferenceParams) error {
-	_, err := q.db.Exec(ctx, upsertNotificationPreference, arg.UserID, arg.EventType, arg.Allowed)
-	return err
 }

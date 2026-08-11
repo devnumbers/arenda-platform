@@ -4,16 +4,13 @@ import {
     type ChangeEvent,
     type FormEvent,
     type JSX,
-    type MouseEvent,
     useCallback,
     useEffect,
     useMemo,
     useState
 } from 'react';
 import {Button} from '@/shared/ui/button';
-import {LinkButton} from '@/shared/ui/link-button';
 import {TextField} from '@/shared/ui/text-field';
-import {ArrowLeft} from '@/shared/assets/icons';
 import {formatPhoneInput, normalizePhone} from '@/shared/lib/phone';
 import styles from './TenantForm.module.css';
 
@@ -33,8 +30,6 @@ export interface TenantFormProps {
     disabled?: boolean;
     onSubmit: (data: TenantContactFormData) => void;
     onChange?: (data: TenantContactFormData) => void;
-    onCancel?: () => void;
-    backHref: string;
 }
 
 const MAX_COMMENT_LENGTH = 500;
@@ -48,8 +43,6 @@ export function TenantForm({
                                disabled = false,
                                onSubmit,
                                onChange,
-                               onCancel,
-                               backHref,
                            }: TenantFormProps): JSX.Element {
     const [name, setName] = useState(initialData?.name?.trim() ?? '');
     const [surname, setSurname] = useState(initialData?.surname?.trim() ?? '');
@@ -129,16 +122,6 @@ export function TenantForm({
             });
         },
         [canSubmit, comment, email, name, onSubmit, patronymic, phone, surname],
-    );
-
-    const handleCancelClick = useCallback(
-        (event: MouseEvent<HTMLAnchorElement>) => {
-            if (onCancel) {
-                event.preventDefault();
-                onCancel();
-            }
-        },
-        [onCancel],
     );
 
     return (

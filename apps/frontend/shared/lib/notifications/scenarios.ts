@@ -66,6 +66,38 @@ const tenants = {
   tenantCreateError: errorScenario('Не удалось создать арендатора'),
 } as const;
 
+const propertyContacts = {
+  created: ((options?) =>
+    notify.success('Контакт добавлен', options)) satisfies ScenarioFn,
+  createError: errorScenario('Не удалось добавить контакт'),
+  updated: ((options?) =>
+    notify.success('Контакт обновлён', options)) satisfies ScenarioFn,
+  updateError: errorScenario('Не удалось обновить контакт'),
+  deleted: ((options?) =>
+    notify.success('Контакт удалён', options)) satisfies ScenarioFn,
+  deleteError: errorScenario('Не удалось удалить контакт'),
+} as const;
+
+const access = {
+  memberAdded: ((options?) =>
+    notify.success('Участник добавлен', options)) satisfies ScenarioFn,
+  invited: ((options?) =>
+    notify.success('Приглашение отправлено', options)) satisfies ScenarioFn,
+  inviteError: errorScenario('Не удалось отправить приглашение'),
+  roleChanged: ((options?) =>
+    notify.success('Роль изменена', options)) satisfies ScenarioFn,
+  roleChangeError: errorScenario('Не удалось изменить роль'),
+  revoked: ((options?) =>
+    notify.success('Доступ отозван', options)) satisfies ScenarioFn,
+  revokeError: errorScenario('Не удалось отозвать доступ'),
+  invitationResent: ((options?) =>
+    notify.success('Приглашение отправлено повторно', options)) satisfies ScenarioFn,
+  resendError: errorScenario('Не удалось переотправить приглашение'),
+  invitationCancelled: ((options?) =>
+    notify.success('Приглашение отменено', options)) satisfies ScenarioFn,
+  cancelInvitationError: errorScenario('Не удалось отменить приглашение'),
+} as const;
+
 const property = {
   detailError: ((options?) =>
     notify.error('Не удалось загрузить объект', options)) satisfies ScenarioFn,
@@ -143,6 +175,19 @@ const profile = {
   phoneSendCodeError: errorScenario('Не удалось отправить код'),
   phoneChangeError: errorScenario('Не удалось изменить номер телефона'),
   logoutError: errorScenario('Не удалось выйти'),
+  pushEnabled: ((options?) =>
+    notify.success('Пуши включены', options)) satisfies ScenarioFn,
+  pushEnableError: errorScenario('Не удалось включить пуши'),
+  pushPermissionDenied: ((options?) =>
+    notify.info(
+      'Уведомления отключены в браузере. Включить можно в настройках сайта.',
+      options,
+    )) satisfies ScenarioFn,
+  pushIosNeedsInstall: ((options?) =>
+    notify.info(
+      'На iPhone для пушей добавьте приложение на экран «Домой» через Поделиться в Safari.',
+      options,
+    )) satisfies ScenarioFn,
 } as const;
 
 const tariff = {
@@ -201,26 +246,40 @@ const demo = {
     }, options)) satisfies PromiseScenarioFn,
 } as const;
 
+const freeReminders = {
+  createError: errorScenario('Не удалось создать напоминание'),
+  updateError: errorScenario('Не удалось сохранить напоминание'),
+  deleted: ((options?) =>
+    notify.success('Напоминание удалено', options)) satisfies ScenarioFn,
+  deleteError: errorScenario('Не удалось удалить напоминание'),
+} as const;
+
 export type Scenarios = {
   readonly auth: typeof auth;
   readonly tenants: typeof tenants;
+  readonly propertyContacts: typeof propertyContacts;
   readonly property: typeof property;
+  readonly access: typeof access;
   readonly leases: typeof leases;
   readonly operations: typeof operations;
   readonly profile: typeof profile;
   readonly tariff: typeof tariff;
   readonly paymentMethods: typeof paymentMethods;
   readonly demo: typeof demo;
+  readonly freeReminders: typeof freeReminders;
 };
 
 export const scenarios: Scenarios = {
   auth,
   tenants,
+  propertyContacts,
   property,
+  access,
   leases,
   operations,
   profile,
   tariff,
   paymentMethods,
   demo,
+  freeReminders,
 };

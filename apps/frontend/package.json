@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "generate:api": "openapi-typescript ../backend/api/openapi/openapi.yaml -o shared/api/generated.ts"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "generate:api": "openapi-typescript ../backend/api/openapi/openapi.yaml -o shared/api/generated.ts",
+    "generate:icons": "node scripts/generate-icons.mjs",
+    "generate:splash": "node scripts/generate-splash.mjs"
   },
   "dependencies": {
     "@heroui/react": "^3.2.1",
@@ -39,6 +43,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "openapi-typescript": "^7.4.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }

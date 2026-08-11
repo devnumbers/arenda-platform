@@ -1,7 +1,6 @@
 'use client';
 
 import type {JSX} from 'react';
-import {ROUTES} from '@/shared/config/routes';
 import type {TenantContactFormData} from './TenantForm';
 import {TenantForm} from './TenantForm';
 
@@ -26,7 +25,6 @@ export function TenantFormStep({
                 isLoading={isLoading}
                 onSubmit={onSubmit}
                 onChange={onChange}
-                backHref={ROUTES.tenants}
             />
         </div>
     );

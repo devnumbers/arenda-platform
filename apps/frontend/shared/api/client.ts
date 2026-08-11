@@ -1,4 +1,4 @@
-import { ApiError } from './errors';
+import { ApiError, type FieldError } from './errors';
 
 export async function apiClient<T>(
   path: string,
@@ -29,12 +29,21 @@ export async function apiClient<T>(
     let code = 'unknown';
     let detail = `Ошибка сервера (код ${response.status})`;
 
+    let fieldErrors: readonly FieldError[] | undefined;
+
     const contentType = response.headers.get('Content-Type');
     if (contentType?.includes('application/problem+json')) {
       try {
         const problem = (await response.json()) as Record<string, unknown>;
         code = String(problem.code ?? problem.type ?? code);
         detail = String(problem.detail ?? problem.title ?? detail);
+        if (Array.isArray(problem.errors)) {
+          fieldErrors = problem.errors
+            .map((e) => (e && typeof e === 'object' ? (e as unknown) : null))
+            .filter((e): e is Record<string, unknown> => e !== null)
+            .map((e) => ({ field: String(e.field ?? ''), detail: String(e.detail ?? '') }))
+            .filter((e) => e.field !== '');
+        }
       } catch {
         detail = `Ошибка сервера (код ${response.status})`;
       }
@@ -52,6 +61,7 @@ export async function apiClient<T>(
       response.status,
       undefined,
       validRetryAfter,
+      fieldErrors,
     );
   }
 

@@ -116,6 +116,11 @@ WHERE owner_id = $1 AND property_id = $2
   AND deleted_at IS NULL
 ORDER BY operation_date DESC;
 
+-- name: GetOperationByID :one
+SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
+WHERE id = $1
+  AND deleted_at IS NULL;
+
 -- name: GetOperationByIDAndOwner :one
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
 WHERE id = $1 AND owner_id = $2
@@ -150,6 +155,14 @@ WHERE id = $1
   AND owner_id = $2
   AND status = 'pending'
   AND operation_date < sqlc.arg('as_of')::date
+  AND deleted_at IS NULL
+RETURNING *;
+
+-- name: MoveOperationToProperty :one
+UPDATE operations
+SET property_id = $3,
+    updated_at = $4
+WHERE id = $1 AND owner_id = $2
   AND deleted_at IS NULL
 RETURNING *;
 
@@ -220,7 +233,9 @@ WHERE op.owner_id = $1 AND op.property_id = $2 AND op.deleted_at IS NULL;
 SELECT op.lease_id, op.operation_date
 FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
-WHERE op.owner_id = sqlc.arg('owner_id')::uuid
+WHERE (op.owner_id = sqlc.arg('owner_id')::uuid
+       OR (op.property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = op.property_id AND p.status = 'archived')))
   AND op.status = 'overdue'
   AND op.type = 'income'
   AND cat.code = 'rent'
@@ -232,7 +247,9 @@ ORDER BY op.lease_id, op.operation_date;
 SELECT op.lease_id, MIN(op.operation_date)::date AS next_payment_date
 FROM operations op
 JOIN operation_categories cat ON cat.id = op.category_id
-WHERE op.owner_id = sqlc.arg('owner_id')::uuid
+WHERE (op.owner_id = sqlc.arg('owner_id')::uuid
+       OR (op.property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = op.property_id AND p.status = 'archived')))
   AND op.status = 'pending'
   AND op.operation_date >= sqlc.arg('as_of')::date
   AND op.type = 'income'
@@ -243,7 +260,9 @@ GROUP BY op.lease_id;
 
 -- name: ListOperationsByOwner :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
-WHERE operations.owner_id = $1
+WHERE (operations.owner_id = $1
+       OR (property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = operations.property_id AND p.status = 'archived')))
   AND deleted_at IS NULL
   AND (COALESCE(sqlc.arg('types')::text[], '{}') = '{}'::text[] OR type = ANY(COALESCE(sqlc.arg('types')::text[], '{}')))
   AND (COALESCE(sqlc.arg('statuses')::text[], '{}') = '{}'::text[] OR status = ANY(COALESCE(sqlc.arg('statuses')::text[], '{}')))
@@ -259,7 +278,9 @@ LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 
 -- name: ListOperationsByOwnerAsc :many
 SELECT id, owner_id, property_id, lease_id, recurring_operation_id, type, category_id, amount_kopecks, operation_date, comment, is_exception, created_at, updated_at, deleted_at, status, name, reminder_offset_days, source_operation_date FROM operations
-WHERE operations.owner_id = $1
+WHERE (operations.owner_id = $1
+       OR (property_id = ANY(sqlc.arg('accessible_property_ids')::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = operations.property_id AND p.status = 'archived')))
   AND deleted_at IS NULL
   AND (COALESCE(sqlc.arg('types')::text[], '{}') = '{}'::text[] OR type = ANY(COALESCE(sqlc.arg('types')::text[], '{}')))
   AND (COALESCE(sqlc.arg('statuses')::text[], '{}') = '{}'::text[] OR status = ANY(COALESCE(sqlc.arg('statuses')::text[], '{}')))

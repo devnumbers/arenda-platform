@@ -33,9 +33,10 @@ type upsertPaymentMethodDeps struct {
 
 // refundDeps is the narrow dependency bundle used by applyRefundToSubscription.
 type refundDeps struct {
-	subscriptions    SubscriptionRepository
-	tariffs          TariffRepository
-	propertyArchiver PropertyArchiver
+	subscriptions         SubscriptionRepository
+	tariffs               TariffRepository
+	propertyArchiver      PropertyArchiver
+	recipientSlotEnforcer RecipientSlotEnforcer
 }
 
 // renewalBestEffortDeps is the narrow dependency bundle used by
@@ -56,28 +57,31 @@ type renewalChangeDeps struct {
 // renewalAndArchiveDeps is the narrow dependency bundle used by
 // applySubscriptionRenewalAndArchive.
 type renewalAndArchiveDeps struct {
-	beginner         transaction.Beginner
-	subscriptions    SubscriptionRepository
-	tariffs          TariffRepository
-	propertyArchiver PropertyArchiver
-	clock            clock.Clock
-	log              *slog.Logger
+	beginner              transaction.Beginner
+	subscriptions         SubscriptionRepository
+	tariffs               TariffRepository
+	propertyArchiver      PropertyArchiver
+	recipientSlotEnforcer RecipientSlotEnforcer
+	clock                 clock.Clock
+	log                   *slog.Logger
 }
 
 // freeRenewalDeps is the narrow dependency bundle used by
 // applyFreeRenewalOrDowngrade.
 type freeRenewalDeps struct {
-	subscriptions    SubscriptionRepository
-	tariffs          TariffRepository
-	propertyArchiver PropertyArchiver
+	subscriptions         SubscriptionRepository
+	tariffs               TariffRepository
+	propertyArchiver      PropertyArchiver
+	recipientSlotEnforcer RecipientSlotEnforcer
 }
 
 // archiveDeps is the narrow dependency bundle used by
 // archiveExcessPropertiesBestEffort.
 type archiveDeps struct {
-	propertyArchiver PropertyArchiver
-	beginner         transaction.Beginner
-	log              *slog.Logger
+	propertyArchiver      PropertyArchiver
+	recipientSlotEnforcer RecipientSlotEnforcer
+	beginner              transaction.Beginner
+	log                   *slog.Logger
 }
 
 // saveProviderInitDeps is the narrow dependency bundle used by
@@ -351,6 +355,11 @@ func applyRefundToSubscription(ctx context.Context, d refundDeps, tx transaction
 			return fmt.Errorf("archive excess properties after refund: %w", err)
 		}
 	}
+	if d.recipientSlotEnforcer != nil {
+		if err := d.recipientSlotEnforcer.EnforceRecipientLimit(ctx, tx, sub.UserID, "refund_downgrade"); err != nil {
+			return fmt.Errorf("enforce recipient slot limit after refund: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -373,10 +382,11 @@ func applySubscriptionRenewalAndArchive(ctx context.Context, d renewalAndArchive
 		return
 	}
 	archiveExcessPropertiesBestEffort(ctx, archiveDeps{
-		propertyArchiver: d.propertyArchiver,
-		beginner:         d.beginner,
-		log:              d.log,
-	}, sub.UserID, renewalTariff.ActivePropertyLimit)
+		propertyArchiver:      d.propertyArchiver,
+		recipientSlotEnforcer: d.recipientSlotEnforcer,
+		beginner:              d.beginner,
+		log:                   d.log,
+	}, sub.UserID, renewalTariff.ActivePropertyLimit, "renewal_downgrade")
 }
 
 // applySubscriptionRenewalBestEffort applies the subscription side of a
@@ -510,6 +520,11 @@ func applyFreeRenewalOrDowngrade(ctx context.Context, d freeRenewalDeps, tx tran
 				return fmt.Errorf("archive excess properties after free downgrade to basic: %w", err)
 			}
 		}
+		if d.recipientSlotEnforcer != nil {
+			if err := d.recipientSlotEnforcer.EnforceRecipientLimit(ctx, tx, sub.UserID, "free_downgrade"); err != nil {
+				return fmt.Errorf("enforce recipient slot limit after free downgrade to basic: %w", err)
+			}
+		}
 		return nil
 	}
 
@@ -530,6 +545,11 @@ func applyFreeRenewalOrDowngrade(ctx context.Context, d freeRenewalDeps, tx tran
 				return fmt.Errorf("archive excess properties after free downgrade: %w", err)
 			}
 		}
+		if d.recipientSlotEnforcer != nil {
+			if err := d.recipientSlotEnforcer.EnforceRecipientLimit(ctx, tx, sub.UserID, "free_downgrade"); err != nil {
+				return fmt.Errorf("enforce recipient slot limit after free downgrade: %w", err)
+			}
+		}
 	}
 	if err := txSubscriptions.Update(ctx, *sub); err != nil {
 		return fmt.Errorf("update subscription after free renewal: %w", err)
@@ -537,8 +557,8 @@ func applyFreeRenewalOrDowngrade(ctx context.Context, d freeRenewalDeps, tx tran
 	return nil
 }
 
-func archiveExcessPropertiesBestEffort(ctx context.Context, d archiveDeps, userID uuid.UUID, limit int) {
-	if d.propertyArchiver == nil {
+func archiveExcessPropertiesBestEffort(ctx context.Context, d archiveDeps, userID uuid.UUID, limit int, trigger string) {
+	if d.propertyArchiver == nil && d.recipientSlotEnforcer == nil {
 		return
 	}
 
@@ -551,11 +571,23 @@ func archiveExcessPropertiesBestEffort(ctx context.Context, d archiveDeps, userI
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err := d.propertyArchiver.ArchiveExcessProperties(ctx, tx, userID, limit); err != nil {
-		d.log.ErrorContext(ctx, "best-effort property archiving failed",
-			slog.String("user_id", userID.String()),
-			slog.String("error", sanitize.Error(err)))
-		return
+	if d.propertyArchiver != nil {
+		if err := d.propertyArchiver.ArchiveExcessProperties(ctx, tx, userID, limit); err != nil {
+			d.log.ErrorContext(ctx, "best-effort property archiving failed",
+				slog.String("user_id", userID.String()),
+				slog.String("error", sanitize.Error(err)))
+			return
+		}
+	}
+
+	if d.recipientSlotEnforcer != nil {
+		if err := d.recipientSlotEnforcer.EnforceRecipientLimit(ctx, tx, userID, trigger); err != nil {
+			d.log.ErrorContext(ctx, "best-effort recipient slot enforcement failed",
+				slog.String("user_id", userID.String()),
+				slog.String("trigger", trigger),
+				slog.String("error", sanitize.Error(err)))
+			return
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {

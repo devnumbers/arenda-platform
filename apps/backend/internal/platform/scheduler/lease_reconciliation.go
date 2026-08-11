@@ -11,6 +11,8 @@ import (
 	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 )
 
 // maxReconciliationBatches limits the number of batches processed per tick to
@@ -33,6 +35,7 @@ type LeaseReconciliationWorker struct {
 	interval     time.Duration
 	batchSize    int
 	logger       *slog.Logger
+	tzResolver   sharedtz.OwnerTimezoneResolver
 }
 
 // NewLeaseReconciliationWorker creates a new lease reconciliation worker.
@@ -42,6 +45,7 @@ func NewLeaseReconciliationWorker(
 	interval time.Duration,
 	batchSize int,
 	logger *slog.Logger,
+	tzResolver sharedtz.OwnerTimezoneResolver,
 ) *LeaseReconciliationWorker {
 	if logger == nil {
 		logger = slog.Default()
@@ -52,6 +56,7 @@ func NewLeaseReconciliationWorker(
 		interval:     interval,
 		batchSize:    batchSize,
 		logger:       logger,
+		tzResolver:   tzResolver,
 	}
 }
 
@@ -77,7 +82,7 @@ func (w *LeaseReconciliationWorker) Run(ctx context.Context) {
 }
 
 func (w *LeaseReconciliationWorker) tick(ctx context.Context) error {
-	asOf := w.clock.Now()
+	asOf := timeutil.Date(w.clock.Now())
 	for range maxReconciliationBatches {
 		leases, err := w.leaseService.ListOpenLeasesWithPastEndDate(ctx, asOf, w.batchSize)
 		if err != nil {
@@ -88,7 +93,7 @@ func (w *LeaseReconciliationWorker) tick(ctx context.Context) error {
 		}
 
 		for _, lease := range leases {
-			if err := w.reconcile(ctx, lease.ID, asOf); err != nil {
+			if err := w.reconcile(ctx, lease); err != nil {
 				w.logger.ErrorContext(ctx, "reconcile lease failed", "lease_id", lease.ID, "error", sanitize.Error(err))
 			}
 		}
@@ -100,6 +105,11 @@ func (w *LeaseReconciliationWorker) tick(ctx context.Context) error {
 	return nil
 }
 
-func (w *LeaseReconciliationWorker) reconcile(ctx context.Context, leaseID uuid.UUID, asOf time.Time) error {
-	return w.leaseService.ReconcileRequiresAction(ctx, leaseID, asOf)
+func (w *LeaseReconciliationWorker) reconcile(ctx context.Context, lease leasesdomain.Lease) error {
+	loc, err := w.tzResolver.Resolve(ctx, lease.OwnerID)
+	if err != nil {
+		return fmt.Errorf("resolve owner timezone: %w", err)
+	}
+	asOf := timeutil.DateIn(w.clock.Now(), loc)
+	return w.leaseService.ReconcileRequiresAction(ctx, lease.ID, asOf)
 }

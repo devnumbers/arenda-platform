@@ -165,11 +165,9 @@ compensating controls:
 
 ## See also
 
-- [`docs/plans/2026-07-28-deploy-pipeline-redesign-design.md`](../plans/2026-07-28-deploy-pipeline-redesign-design.md)
-  — the approved design (goals, architecture, differences from the
-  byron-menu reference).
 - [`docs/deployment.md`](../deployment.md) — operational procedures:
   bootstrap, secrets map, backup/restore, rollback.
 - [`docs/adr/0021-centralized-observability-uptrace.md`](./0021-centralized-observability-uptrace.md)
-  — the observability stack on the same VPS; deploy markers are exported via
-  `OTEL_RESOURCE_ATTRIBUTES` `service.version`.
+  — superseded; the observability stack moved to the devnumbers/observability
+  repo. Deploy markers are still exported via `OTEL_RESOURCE_ATTRIBUTES`
+  `service.version` (see `docs/deployment.md`, section "Observability").

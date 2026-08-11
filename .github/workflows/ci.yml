@@ -10,7 +10,7 @@ permissions:
 jobs:
   backend:
     name: Backend
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -27,9 +27,9 @@ jobs:
       - name: T-Kassa spec freshness
         run: make backend-tkassa-spec-check
 
-      # -race требует cgo/gcc, которого нет на хосте раннера — гоняем тесты
-      # в контейнере golang (образ как в apps/backend/Dockerfile). GOCACHE/GOMODCACHE
-      # в /tmp контейнера, чтобы не оставлять root-файлы в workspace self-hosted раннера.
+      # -race гоняем в контейнере golang (тот же образ, что в apps/backend/Dockerfile),
+      # чтобы CI и прод-сборка тестировались на идентичной toolchain. GOCACHE/GOMODCACHE
+      # в /tmp контейнера, чтобы кэш не мешал setup-go на хосте.
       - name: Test
         run: |
           docker run --rm --user "$(id -u):$(id -g)" \
@@ -48,7 +48,7 @@ jobs:
 
   backend-migrations:
     name: Backend migrations
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgres://test:test@localhost:55432/test?sslmode=disable
       MIGRATIONS_DIR: apps/backend/db/migrations
@@ -60,7 +60,9 @@ jobs:
           POSTGRES_PASSWORD: test
           POSTGRES_DB: test
         ports:
-          # 55432, а не 5432: на self-hosted раннере 127.0.0.1:5432 занят supabase-pooler.
+          # 55432 (а не 5432): исторически на self-hosted раннере 5432 был занят
+          # supabase-pooler. На ubuntu-latest 5432 свободен, но нестандартный порт
+          # безвреден и страхует от коллизий, если job когда-либо вернётся на self-hosted.
           - 55432:5432
         options: >-
           --health-cmd pg_isready
@@ -88,7 +90,7 @@ jobs:
 
   frontend:
     name: Frontend
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -100,9 +102,21 @@ jobs:
           cache: npm
           cache-dependency-path: apps/frontend/package-lock.json
 
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/backend/go.mod
+
       - name: Install
         working-directory: apps/frontend
         run: npm ci
+
+      # Каталог атрибутов (tools/property-attributes) — единый источник для
+      # Go/frontend/admin. Проверяем свежесть сгенерированных артефактов:
+      # если catalog.json изменён, но артефакты не закоммичены — падаем.
+      # Нужен Node (ставит ajv в tools/property-attributes при отсутствии node_modules).
+      - name: Property attributes catalog freshness
+        run: make attributes-check
 
       - name: Build
         working-directory: apps/frontend
@@ -118,7 +132,7 @@ jobs:
 
   admin:
     name: Admin
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -144,7 +158,7 @@ jobs:
 
   landing:
     name: Landing
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -166,7 +180,7 @@ jobs:
 
   gitleaks:
     name: Gitleaks
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -184,7 +198,7 @@ jobs:
 
   docker:
     name: Docker (${{ matrix.service }})
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       max-parallel: 2

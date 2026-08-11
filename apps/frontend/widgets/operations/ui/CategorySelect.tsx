@@ -28,6 +28,13 @@ export type CategorySelectProps = {
     readonly onChange: (categoryId: string) => void;
     readonly error?: string;
     readonly disabled?: boolean;
+    /**
+     * Property context of the enclosing operation form. When set, a category
+     * created inline is stored in the account of the property's data owner
+     * (shared-access members included); when absent, in the actor's own
+     * account.
+     */
+    readonly propertyId?: string;
 };
 
 export function CategorySelect({
@@ -36,6 +43,7 @@ export function CategorySelect({
     onChange,
     error,
     disabled,
+    propertyId,
 }: CategorySelectProps): JSX.Element {
     const categoriesQuery = useOperationCategories(type);
     const createCategory = useCreateOperationCategory();
@@ -71,7 +79,7 @@ export function CategorySelect({
             return;
         }
         createCategory.mutate(
-            { type, name },
+            { type, name, ...(propertyId ? { property_id: propertyId } : {}) },
             {
                 onSuccess: (category) => {
                     cancelCreating();

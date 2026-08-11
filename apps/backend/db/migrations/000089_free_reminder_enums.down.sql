@@ -1,0 +1,2 @@
+-- PostgreSQL does not support removing values from an enum type.
+-- The 'free' and 'free_reminder' values cannot be rolled back without recreating the types.

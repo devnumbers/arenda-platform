@@ -6,4 +6,5 @@ type UpdateProfileCommand struct {
 	Surname    *string
 	Patronymic *string
 	Email      *string
+	Timezone   *string
 }

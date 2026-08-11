@@ -53,6 +53,7 @@ type userRow struct {
 	Patronymic      pgtype.Text
 	Email           pgtype.Text
 	EmailVerifiedAt pgtype.Timestamptz
+	Timezone        string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	PhoneEncrypted  bool
@@ -68,6 +69,7 @@ func userRowFromGeneratedUser(u pgen.User) userRow {
 		Patronymic:      u.Patronymic,
 		Email:           u.Email,
 		EmailVerifiedAt: u.EmailVerifiedAt,
+		Timezone:        u.Timezone,
 		CreatedAt:       u.CreatedAt,
 		UpdatedAt:       u.UpdatedAt,
 		PhoneEncrypted:  u.PhoneEncrypted,
@@ -84,6 +86,7 @@ func userRowFromCreateUserRow(row pgen.CreateUserRow) userRow {
 		Patronymic:      row.Patronymic,
 		Email:           row.Email,
 		EmailVerifiedAt: row.EmailVerifiedAt,
+		Timezone:        row.Timezone,
 		CreatedAt:       row.CreatedAt,
 		UpdatedAt:       row.UpdatedAt,
 		PhoneEncrypted:  row.PhoneEncrypted,
@@ -100,6 +103,7 @@ func userRowFromUpdateUserEmailVerifiedRow(row pgen.UpdateUserEmailVerifiedRow) 
 		Patronymic:      row.Patronymic,
 		Email:           row.Email,
 		EmailVerifiedAt: row.EmailVerifiedAt,
+		Timezone:        row.Timezone,
 		CreatedAt:       row.CreatedAt,
 		UpdatedAt:       row.UpdatedAt,
 		PhoneEncrypted:  row.PhoneEncrypted,
@@ -116,6 +120,7 @@ func userRowFromGetSessionByTokenHashRow(row pgen.GetSessionByTokenHashRow) user
 		Patronymic:      row.Patronymic,
 		Email:           row.Email,
 		EmailVerifiedAt: row.EmailVerifiedAt,
+		Timezone:        row.Timezone,
 		PhoneEncrypted:  row.PhoneEncrypted,
 	}
 }
@@ -240,6 +245,7 @@ func (r *UserRepository) Update(ctx context.Context, user domain.User) (domain.U
 		Patronymic:      pgconv.StringPtrToPgtype(user.Patronymic),
 		Email:           emailPtrToPgtype(user.Email),
 		EmailVerifiedAt: pgconv.TimePtrToPgtype(user.EmailVerifiedAt),
+		Timezone:        user.Timezone.String(),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -313,6 +319,13 @@ func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain
 		}
 		email = &e
 	}
+	if row.Timezone == "" {
+		return domain.User{}, fmt.Errorf("invalid timezone in DB: %w", domain.ErrInvalidTimezone)
+	}
+	tz, err := domain.TimezoneFrom(row.Timezone)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("invalid timezone in DB: %w", err)
+	}
 	return domain.User{
 		ID:              pgconv.UUIDFromPgtype(row.ID),
 		Phone:           parsedPhone,
@@ -322,6 +335,7 @@ func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain
 		Patronymic:      pgconv.TextToPtrString(row.Patronymic),
 		Email:           email,
 		EmailVerifiedAt: pgconv.TimestamptzToPtrTime(row.EmailVerifiedAt),
+		Timezone:        tz,
 	}, nil
 }
 

@@ -8,7 +8,11 @@ import (
 )
 
 var (
-	ErrNotFound                       = errors.New("not found")
+	ErrNotFound = errors.New("not found")
+	// ErrForbidden is returned when an actor can view a property but lacks the
+	// capability for the requested operation (e.g. a viewer editing) — T3,
+	// issue #156. RoleNone is mapped to ErrNotFound to preserve object privacy.
+	ErrForbidden                      = errors.New("forbidden")
 	ErrInvalidInput                   = errors.New("invalid input")
 	ErrPropertyNotAvailable           = errors.New("property is not available for a lease")
 	ErrOpenLeaseExists                = errors.New("property already has an open lease")

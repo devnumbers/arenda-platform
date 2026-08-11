@@ -4,7 +4,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Scope
 
-Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.md`, `CONTEXT.md`, relevant product docs, and ADRs.
+Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.md`, the relevant per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`), relevant product docs, and ADRs.
 
 ## Stack & References
 
@@ -14,8 +14,6 @@ Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.
 - For non-obvious third-party behavior, use `context7` for current docs.
 
 ## Required Skills
-
-Invoke skills through the Kimi `Skill` tool using the exact skill name.
 
 - For all frontend work, invoke `next-best-practices` and `vercel-react-best-practices`.
 - For component composition and design patterns, invoke `vercel-composition-patterns`.
@@ -28,7 +26,6 @@ Invoke skills through the Kimi `Skill` tool using the exact skill name.
 - `playwright` — use for browser automation and UI verification when the `mcp__playwright__*` tools are available. Check desktop and mobile layouts, visible interaction states, loading/error states, and that text does not overlap or overflow. If they are unavailable, fall back to manual inspection, build logs, and native browser tools.
 - `heroui-react` — mandatory documentation source for HeroUI v3: `@heroui/react` v3 is beta and not covered by model training data. Before writing HeroUI code, verify the component with `list_components`, then read `get_component_docs`; never mix v2 APIs or BEM classes from `@heroui/styles` into React components.
 - `lean-ctx` — use for broad exploration, large generated files, repeated reads, and noisy build or lint output. Before editing exact TypeScript, component, route, or config code, read the target source in raw/full form.
-- `context7` — use for current official docs on third-party libraries when needed.
 - If a TypeScript LSP or MCP server is added later, use it for semantic navigation, references, diagnostics, and impact checks. Do not use it as a replacement for `npm run lint`, `npm run build`, or direct code review.
 
 Before adding components, hooks, helpers, entity types, feature state, or API wrappers, search existing FSD slices and call sites with `Grep`/`lean-ctx` to avoid duplicate patterns.
@@ -59,6 +56,7 @@ Before adding components, hooks, helpers, entity types, feature state, or API wr
 - Map backend DTOs to entity models at the API boundary; do not leak generated DTOs into widgets or features.
 - Reuse backend types from OpenAPI where possible; keep frontend entity types explicit and minimal.
 - Do not edit generated API client files by hand; update the backend OpenAPI contract and regenerate the frontend client.
+- The property attributes catalog (`features/property-attributes/lib/generated/`) is generated from `tools/property-attributes/catalog.json`. Regenerate with `make attributes-gen` (or `cd tools/property-attributes && npm run generate`); the gate `make attributes-check` fails in CI if a `catalog.json` change was not committed with its regenerated artifacts. Do not hand-edit `generated/`.
 
 ## Components & State
 
@@ -78,7 +76,6 @@ Before adding components, hooks, helpers, entity types, feature state, or API wr
 
 ## Quality Gates
 
-- Do not write new tests unless the user explicitly asks for them.
 - Run before claiming frontend work complete:
 
 ```bash

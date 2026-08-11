@@ -41,13 +41,14 @@ func (r *AdminRepository) q() *postgres.Queries {
 
 // Compile-time interface checks.
 var (
-	_ adminapp.UserRepository          = (*AdminRepository)(nil)
-	_ adminapp.PropertyRepository      = (*AdminRepository)(nil)
-	_ adminapp.LeaseRepository         = (*AdminRepository)(nil)
-	_ adminapp.TenantContactRepository = (*AdminRepository)(nil)
-	_ adminapp.OperationRepository     = (*AdminRepository)(nil)
-	_ adminapp.StatsRepository         = (*AdminRepository)(nil)
-	_ adminapp.AuditLogRepository      = (*AdminRepository)(nil)
+	_ adminapp.UserRepository            = (*AdminRepository)(nil)
+	_ adminapp.PropertyRepository        = (*AdminRepository)(nil)
+	_ adminapp.LeaseRepository           = (*AdminRepository)(nil)
+	_ adminapp.TenantContactRepository   = (*AdminRepository)(nil)
+	_ adminapp.PropertyContactRepository = (*AdminRepository)(nil)
+	_ adminapp.OperationRepository       = (*AdminRepository)(nil)
+	_ adminapp.StatsRepository           = (*AdminRepository)(nil)
+	_ adminapp.AuditLogRepository        = (*AdminRepository)(nil)
 )
 
 // ListUsers implements UserRepository.ListUsers.
@@ -269,6 +270,16 @@ func (r *AdminRepository) propertyViewFromRow(ctx context.Context, row postgres.
 		description = &row.Description.String
 	}
 
+	attrs := propertiesdomain.Attributes{}
+	if len(row.Attributes) > 0 {
+		if err := json.Unmarshal(row.Attributes, &attrs); err != nil {
+			return adminapp.AdminPropertyView{}, fmt.Errorf("decode property attributes: %w", err)
+		}
+		if attrs == nil {
+			attrs = propertiesdomain.Attributes{}
+		}
+	}
+
 	return adminapp.AdminPropertyView{
 		ID:          propertyID,
 		OwnerID:     ownerID,
@@ -277,6 +288,7 @@ func (r *AdminRepository) propertyViewFromRow(ctx context.Context, row postgres.
 		Type:        propType,
 		Address:     row.Address,
 		Description: description,
+		Attributes:  attrs,
 		Status:      status,
 		Occupancy:   occupancy,
 		CreatedAt:   row.CreatedAt.Time,
@@ -476,6 +488,41 @@ func (r *AdminRepository) tenantContactViewFromRow(ctx context.Context, row post
 		},
 		OwnerPhone: ownerPhone,
 	}, nil
+}
+
+// ListPropertyContacts implements PropertyContactRepository.ListPropertyContacts.
+// property_contacts.phone is plaintext, so no decryption is needed.
+func (r *AdminRepository) ListPropertyContacts(ctx context.Context, filters adminapp.AdminPropertyContactFilters) ([]adminapp.AdminPropertyContactView, int64, error) {
+	total, err := r.q().CountPropertyContactsAdmin(ctx, pgconv.UUIDToPgtype(filters.PropertyID))
+	if err != nil {
+		return nil, 0, fmt.Errorf("count property contacts: %w", err)
+	}
+
+	rows, err := r.q().ListPropertyContactsAdmin(ctx, postgres.ListPropertyContactsAdminParams{
+		PropertyID: pgconv.UUIDToPgtype(filters.PropertyID),
+		Limit:      toInt32(filters.Limit),
+		Offset:     toInt32(filters.Offset),
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("list property contacts: %w", err)
+	}
+
+	views := make([]adminapp.AdminPropertyContactView, 0, len(rows))
+	for _, row := range rows {
+		views = append(views, adminapp.AdminPropertyContactView{
+			PropertyContact: propertiesdomain.PropertyContact{
+				ID:         pgconv.UUIDFromPgtype(row.ID),
+				PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
+				OwnerID:    pgconv.UUIDFromPgtype(row.OwnerID),
+				Name:       row.Name,
+				Phone:      row.Phone,
+				CreatedAt:  row.CreatedAt.Time,
+				UpdatedAt:  row.UpdatedAt.Time,
+			},
+		})
+	}
+
+	return views, total, nil
 }
 
 // ListOperations implements OperationRepository.ListOperations.

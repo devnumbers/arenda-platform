@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arenda-planform.local/tools/property-attributes/catalog.schema.json",
+  "title": "Property attributes catalog",
+  "description": "Single source of truth for the property attributes catalog (10 property types).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "version", "types", "groups", "rules"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "types": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "apartment",
+        "room",
+        "apartments",
+        "house",
+        "office",
+        "commercial",
+        "warehouse",
+        "garage",
+        "parking",
+        "land"
+      ],
+      "properties": {
+        "apartment": { "$ref": "#/$defs/typeDef" },
+        "room": { "$ref": "#/$defs/typeDef" },
+        "apartments": { "$ref": "#/$defs/typeDef" },
+        "house": { "$ref": "#/$defs/typeDef" },
+        "office": { "$ref": "#/$defs/typeDef" },
+        "commercial": { "$ref": "#/$defs/typeDef" },
+        "warehouse": { "$ref": "#/$defs/typeDef" },
+        "garage": { "$ref": "#/$defs/typeDef" },
+        "parking": { "$ref": "#/$defs/typeDef" },
+        "land": { "$ref": "#/$defs/typeDef" }
+      }
+    },
+    "groups": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["about_object", "about_building", "about_house", "about_land"],
+      "properties": {
+        "about_object": { "$ref": "#/$defs/groupDef" },
+        "about_building": { "$ref": "#/$defs/groupDef" },
+        "about_house": { "$ref": "#/$defs/groupDef" },
+        "about_land": { "$ref": "#/$defs/groupDef" }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ruleDef" }
+    }
+  },
+  "$defs": {
+    "typeKey": {
+      "type": "string",
+      "enum": [
+        "apartment",
+        "room",
+        "apartments",
+        "house",
+        "office",
+        "commercial",
+        "warehouse",
+        "garage",
+        "parking",
+        "land"
+      ]
+    },
+    "fieldKey": {
+      "type": "string",
+      "enum": [
+        "rooms",
+        "area_total",
+        "area_living",
+        "area_kitchen",
+        "floor",
+        "floors_total",
+        "bathroom",
+        "balcony",
+        "renovation",
+        "year_built",
+        "ceiling_height",
+        "parking_type",
+        "land_area",
+        "land_type",
+        "house_type",
+        "material",
+        "shower",
+        "building_type",
+        "entrance",
+        "parking_location",
+        "parking_level",
+        "spot_number"
+      ]
+    },
+    "groupKey": {
+      "type": ["string", "null"],
+      "enum": ["about_object", "about_building", "about_house", "about_land", null]
+    },
+    "typeDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "fields"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "fields": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/fieldKey" },
+          "additionalProperties": { "$ref": "#/$defs/fieldDef" }
+        }
+      }
+    },
+    "groupDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1 }
+      }
+    },
+    "ruleDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["types", "field", "lte"],
+      "properties": {
+        "types": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/typeKey" },
+          "uniqueItems": true
+        },
+        "field": { "$ref": "#/$defs/fieldKey" },
+        "lte": { "$ref": "#/$defs/fieldKey" }
+      }
+    },
+    "fieldDef": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "label", "options", "group"],
+          "properties": {
+            "kind": { "const": "enum" },
+            "label": { "type": "string", "minLength": 1 },
+            "options": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["key", "label"],
+                "properties": {
+                  "key": { "type": "string", "minLength": 1 },
+                  "label": { "type": "string", "minLength": 1 }
+                },
+                "additionalProperties": false
+              }
+            },
+            "group": { "$ref": "#/$defs/groupKey" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "label", "unit", "min", "max", "decimals", "group"],
+          "properties": {
+            "kind": { "const": "number" },
+            "label": { "type": "string", "minLength": 1 },
+            "unit": { "type": "string", "enum": ["м²", "сотки", "м"] },
+            "min": { "type": "number" },
+            "max": { "type": "number" },
+            "decimals": { "type": "integer", "minimum": 0 },
+            "group": { "$ref": "#/$defs/groupKey" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "label", "min", "max", "group"],
+          "properties": {
+            "kind": { "const": "integer" },
+            "label": { "type": "string", "minLength": 1 },
+            "min": { "type": "integer" },
+            "max": { "type": "integer" },
+            "yearBuiltMaxDynamic": {
+              "type": "boolean",
+              "const": true,
+              "description": "Marks the max bound as dynamic: it should be recomputed at generation/runtime as current_year + 5 (matches Go maxYearBuilt() and TS yearBuiltMax)."
+            },
+            "group": { "$ref": "#/$defs/groupKey" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "label", "maxLen", "group"],
+          "properties": {
+            "kind": { "const": "string" },
+            "label": { "type": "string", "minLength": 1 },
+            "maxLen": { "type": "integer", "minimum": 1 },
+            "group": { "$ref": "#/$defs/groupKey" }
+          }
+        }
+      ]
+    }
+  }
+}

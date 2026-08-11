@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
 type PropertyType string
@@ -119,12 +120,28 @@ type Property struct {
 	Type             PropertyType
 	Address          string
 	Description      string
+	Attributes       Attributes
 	Status           PropertyStatus
 	Occupancy        PropertyOccupancy
 	Photos           []Photo
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	OverdueRentCount int
+	// MembersCount is the shared-access participant count: membership rows
+	// (any status; the owner is never a membership row) plus pending email
+	// invitations (issue #163). Filled by the read queries that carry the
+	// members_count projection; zero on write-path responses (create/update),
+	// mirroring OverdueRentCount.
+	MembersCount int
+	// AccessRole is the role of the requesting actor on this property
+	// (issue T11): RoleOwner for own properties, the membership role for
+	// shared ones. Empty when not populated (internal use). Filled by the
+	// read/write service paths that resolve the actor's role.
+	AccessRole sharedpolicy.Role
+	// OwnerName is the public display name of the property owner ("Name
+	// Surname" or a masked phone, never an email), filled only by the detail
+	// read path when the actor is not the owner (issue T11); empty otherwise.
+	OwnerName string
 }
 
 // Photo is a photo attached to a property.
@@ -141,10 +158,14 @@ var (
 	ErrPropertyDescriptionTooLong = errors.New("property description exceeds 2000 characters")
 )
 
-func NewProperty(ownerID uuid.UUID, name, address, description string, propertyType PropertyType) (Property, error) {
+func NewProperty(ownerID uuid.UUID, name, address, description string, propertyType PropertyType, attrs Attributes) (Property, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return Property{}, fmt.Errorf("generate property id: %w", err)
+	}
+
+	if attrs == nil {
+		attrs = Attributes{}
 	}
 
 	p := Property{
@@ -154,6 +175,7 @@ func NewProperty(ownerID uuid.UUID, name, address, description string, propertyT
 		Type:        propertyType,
 		Address:     address,
 		Description: description,
+		Attributes:  attrs,
 		Status:      PropertyStatusActive,
 	}
 

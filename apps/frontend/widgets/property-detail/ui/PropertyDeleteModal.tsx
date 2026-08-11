@@ -4,6 +4,7 @@ import type { JSX } from 'react';
 import { useState } from 'react';
 import { Modal } from '@heroui/react';
 import { Button } from '@/shared/ui/button';
+import { pluralize } from '@/shared/lib/pluralize';
 import type { components } from '@/shared/api/generated';
 import type { DeletePropertyMode } from '@/features/properties/api/hooks';
 import styles from './PropertyDeleteModal.module.css';
@@ -14,6 +15,7 @@ export type PropertyDeleteModalProps = {
     readonly onDelete: (mode: DeletePropertyMode) => void;
     readonly onEndLease: () => void;
     readonly currentLease: components['schemas']['LeaseResponse'] | null | undefined;
+    readonly membersCount?: number;
     readonly deletingMode?: DeletePropertyMode | null;
     readonly isCompletingLease?: boolean;
 };
@@ -24,6 +26,7 @@ export function PropertyDeleteModal({
     onDelete,
     onEndLease,
     currentLease,
+    membersCount = 0,
     deletingMode = null,
     isCompletingLease = false,
 }: PropertyDeleteModalProps): JSX.Element {
@@ -66,6 +69,11 @@ export function PropertyDeleteModal({
                                         ? 'Объект и все связанные данные — аренды, операции, напоминания и фотографии — будут удалены безвозвратно. Это действие нельзя отменить.'
                                         : 'Вы хотите удалить все данные, связанные с объектом (аренды, операции) или только сам объект?'}
                             </p>
+                            {membersCount > 0 && (
+                                <p className={styles.notice}>
+                                    {`С объектом ${pluralize(membersCount, 'работает', 'работают', 'работают')} ${membersCount} ${pluralize(membersCount, 'участник', 'участника', 'участников')}.`}
+                                </p>
+                            )}
                         </Modal.Body>
                         <Modal.Footer>
                             <div className={styles.footer}>

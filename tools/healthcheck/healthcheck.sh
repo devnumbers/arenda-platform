@@ -2,8 +2,8 @@
 # Arenda Platform: HTTP healthcheck for stage/prod targets.
 #
 # On every failed check a JSON line is appended to
-# /var/log/arenda/healthcheck.log; Vector ships it to Uptrace where the
-# HealthcheckFailed monitor fires (see observability/README.md).
+# /var/log/arenda/healthcheck.log; Vector (devnumbers/observability)
+# ships it to Uptrace where the HealthcheckFailed monitor fires.
 #
 # Always exits 0: this is a monitoring probe, it must never fail cron.
 set -u

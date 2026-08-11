@@ -104,6 +104,8 @@ export const auditActorRoleChoices: Choice[] = [
   { id: 'admin', name: 'Админ' },
   { id: 'system', name: 'Система' },
   { id: 'anonymous', name: 'Аноним' },
+  { id: 'full_access', name: 'Полный доступ' },
+  { id: 'viewer', name: 'Просмотр' },
 ];
 
 export const auditEntityTypeChoices: Choice[] = [

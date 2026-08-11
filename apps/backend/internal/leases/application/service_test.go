@@ -15,6 +15,7 @@ type fakePropertyRepo struct {
 	existsActiveByOwner map[uuid.UUID]bool
 	hasOpenLease        map[uuid.UUID]bool
 	statuses            map[uuid.UUID]string
+	owners              map[uuid.UUID]uuid.UUID
 }
 
 func (r *fakePropertyRepo) ExistsByOwner(_ context.Context, id, _ uuid.UUID) (bool, error) {
@@ -43,8 +44,24 @@ func (r *fakePropertyRepo) GetNameByOwner(_ context.Context, _, _ uuid.UUID) (st
 	return "", nil
 }
 
+// GetForExport is required to satisfy PropertyRepository but is unused by the
+// lease service tests; it reports not found.
+func (r *fakePropertyRepo) GetForExport(_ context.Context, _, _ uuid.UUID) (ExportPropertyRow, error) {
+	return ExportPropertyRow{}, ErrNotFound
+}
+
 func (r *fakePropertyRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (string, error) {
 	return r.GetStatusByOwner(ctx, id, ownerID)
+}
+
+func (r *fakePropertyRepo) GetOwnerByID(_ context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if owner, ok := r.owners[id]; ok {
+		return owner, nil
+	}
+	if _, ok := r.statuses[id]; ok {
+		return id, nil
+	}
+	return uuid.Nil, ErrNotFound
 }
 
 func (r *fakePropertyRepo) WithTx(_ transaction.Tx) PropertyRepository { return r }
@@ -57,12 +74,16 @@ func (r *fakeLeaseRepo) Create(_ context.Context, _ uuid.UUID, lease domain.Leas
 	return lease, nil
 }
 
-func (r *fakeLeaseRepo) GetByID(_ context.Context, _ uuid.UUID) (domain.Lease, error) {
-	return domain.Lease{}, ErrNotFound
+func (r *fakeLeaseRepo) GetByID(_ context.Context, id uuid.UUID) (domain.Lease, error) {
+	l, ok := r.leases[id]
+	if !ok {
+		return domain.Lease{}, ErrNotFound
+	}
+	return l, nil
 }
 
-func (r *fakeLeaseRepo) GetByIDForUpdate(_ context.Context, _ uuid.UUID) (domain.Lease, error) {
-	return domain.Lease{}, ErrNotFound
+func (r *fakeLeaseRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Lease, error) {
+	return r.GetByID(ctx, id)
 }
 
 func (r *fakeLeaseRepo) GetByIDAndOwner(_ context.Context, id, _ uuid.UUID) (domain.Lease, error) {
@@ -77,7 +98,7 @@ func (r *fakeLeaseRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerI
 	return r.GetByIDAndOwner(ctx, id, ownerID)
 }
 
-func (r *fakeLeaseRepo) ListByOwner(_ context.Context, _ uuid.UUID) ([]domain.Lease, error) {
+func (r *fakeLeaseRepo) ListByOwner(_ context.Context, _ uuid.UUID, _ []uuid.UUID) ([]domain.Lease, error) {
 	return nil, nil
 }
 
@@ -118,7 +139,7 @@ func TestOperationService_GetPropertyOperationsSummary(t *testing.T) {
 	leaseID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 	now := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
 
-	propertyRepo := &fakePropertyRepo{existsByOwner: map[uuid.UUID]bool{propertyID: true}}
+	propertyRepo := &fakePropertyRepo{existsByOwner: map[uuid.UUID]bool{propertyID: true}, owners: map[uuid.UUID]uuid.UUID{propertyID: ownerID}}
 	opRepo := &fakeOperationRepo{}
 
 	incomeOp := domain.Operation{
@@ -146,7 +167,7 @@ func TestOperationService_GetPropertyOperationsSummary(t *testing.T) {
 	_, _ = opRepo.Create(ctx, incomeOp)
 	_, _ = opRepo.Create(ctx, expenseOp)
 
-	svc := NewOperationService(opRepo, propertyRepo, nil, nil, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, nil, fakeClock{now: now}, nil)
+	svc := NewOperationService(opRepo, propertyRepo, nil, nil, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, nil, fakeClock{now: now}, fakeTzResolver{}, fakePolicy{}, nil)
 
 	summary, err := svc.GetPropertyOperationsSummary(ctx, ownerID, propertyID)
 	if err != nil {

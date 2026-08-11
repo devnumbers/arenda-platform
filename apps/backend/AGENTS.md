@@ -2,13 +2,13 @@
 
 ## Scope
 
-Rules for the Go backend in `apps/backend`. Also follow the root `AGENTS.md`, `CONTEXT.md`, relevant product docs, and ADRs.
+Rules for the Go backend in `apps/backend`. Also follow the root `AGENTS.md`, the relevant per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`), relevant product docs, and ADRs.
 
 ## Mandatory Backend Tools
 
-The following skill and MCP server are mandatory for every backend task. The Orchestrator must verify them before dispatching implementation subagents.
+Verify the following skill and MCP server before any backend work.
 
-- **`use-modern-go` skill** — must be invoked through the Kimi `Skill` tool before any backend planning or implementation. It detects the project's Go version from `go.mod` and instructs subagents to use modern Go idioms up to and including that version. Do not write Go code without first invoking this skill.
+- **`use-modern-go` skill** — must be invoked before any backend planning or implementation. It detects the project's Go version from `go.mod` and instructs to use modern Go idioms up to and including that version. Do not write Go code without first invoking this skill.
 - **`gopls` MCP server** — must be active, with its `mcp__gopls__*` tools present in the agent tool set, before any backend implementation or verification. It provides semantic navigation, diagnostics, definitions, references, and workspace analysis.
 
 If the `mcp__gopls__*` tools are not available:
@@ -26,7 +26,7 @@ If the `mcp__gopls__*` tools are not available:
 
 ## Required Skills
 
-Invoke skills through the Kimi `Skill` tool using the exact skill name.
+Invoke skills by their exact name through the harness's native skill mechanism.
 
 - For all Go backend work, invoke `go`. Use it for idiomatic Go, clean architecture, context propagation, error handling, and review of package boundaries.
 - Before writing or reviewing any Go code, invoke `use-modern-go` to detect the target Go version from `go.mod` and apply modern idioms up to that version.
@@ -37,22 +37,16 @@ Invoke skills through the Kimi `Skill` tool using the exact skill name.
 
 ## MCP Servers
 
-- `gopls` — **mandatory** for every backend task. Use it for Go semantic navigation, definitions, references, diagnostics, package APIs, and impact checks. Treat `gopls` as a navigation and diagnostics tool, not as the source of truth. The source of truth is the repository code plus `go test`, `go vet`, `make backend-lint`, generated code checks, and relevant official docs.
-  - Before starting backend implementation, verify the `mcp__gopls__*` tools are available in the agent tool set.
-  - If the `mcp__gopls__*` tools are not available, stop and tell the user. Do not continue implementation, lint, or tests until `gopls` is running.
-  - Use `gopls` diagnostics as a required quality gate before claiming backend work complete.
+- `gopls` — mandatory for every backend task (see stop-procedure in Mandatory Backend Tools above). Treat it as navigation and diagnostics, not as the source of truth — the source of truth is the repository code plus `go test`, `go vet`, `make backend-lint`, and relevant official docs. Use `gopls` diagnostics as a required quality gate before claiming backend work complete.
 - `lean-ctx` — use for broad package exploration, generated code maps, large SQL/OpenAPI files, and noisy command output. Before editing exact Go code, migrations, SQL, or OpenAPI, read the target ranges in raw/full form.
-- `context7` — use for current official docs on third-party libraries when needed.
-
-Before adding new interfaces, repositories, DTO mappings, application services, domain services, or use cases, search existing backend patterns with `Grep`/`lean-ctx` and inspect semantic references with `gopls`.
 
 ## Backend Workflow
 
-Follow the Orchestrator Mode from the root `AGENTS.md`. For backend tasks, the Orchestrator additionally:
+Follow the workflow from the root `AGENTS.md`. For backend tasks, additionally:
 
-1. **Before exploration** — invoke `use-modern-go` so the target Go version and modern idioms are known to all subagents.
-2. **Before implementation** — verify the `mcp__gopls__*` tools are available. If they are not, stop and report to the user.
-3. **During implementation** — ensure the coder subagent applies modern idioms from `use-modern-go` to every new or changed Go file.
+1. **Before exploration** — invoke `use-modern-go` so the target Go version and modern idioms are known.
+2. **Before implementation** — verify the `mcp__gopls__*` tools are available (see Mandatory Backend Tools for the stop-procedure).
+3. **During implementation** — apply modern idioms from `use-modern-go` to every new or changed Go file.
 4. **Before final verification** — run `gopls` diagnostics on changed packages and fix reported issues before running `make backend-lint`, `go test`, or `go vet`.
 
 ## Architecture Rules
@@ -78,10 +72,13 @@ go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate
 go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1 -config api/openapi/oapi-codegen.yaml api/openapi/openapi.yaml
 ```
 
-- Do not hand-edit generated files; change the OpenAPI contract, SQL, migrations, or generator configuration, then regenerate.
+- The property attributes catalog (`internal/properties/domain` field maps, `ValidateAttributes`, `crossFieldErrors`, …) is generated from `tools/property-attributes/catalog.json`. Regenerate with `make attributes-gen` (or `cd tools/property-attributes && npm run generate`); the gate `make attributes-check` fails in CI if a `catalog.json` change was not committed with its regenerated artifacts.
+- Do not hand-edit generated files (`spec.gen.go`, sqlc output, `zz_catalog.gen.go.txt`); change the OpenAPI contract, SQL, migrations, `catalog.json`, or generator configuration, then regenerate.
 - Use explicit PostgreSQL SQL with `sqlc`; do not introduce ORM models.
 - Schema changes require versioned migrations in `db/migrations` and matching queries in `db/queries`.
 - Keep database invariants in PostgreSQL with `NOT NULL`, foreign keys, `CHECK` constraints, indexes, and triggers where they protect durable rules.
+- Authorization goes through the policy port (`internal/shared/policy.Policy`), the single point that maps an actor and a data owner (scope) to a role. Owner-scoped repository queries filter by the data owner (`scope`), not by the actor; membership is resolved by the policy port, not in SQL. See ADR 0028 (`docs/adr/0028-object-data-access-model.md`).
+- Application-layer services receive `actor` (the operation initiator) and thread `scope` (the data owner) into repository calls. For the owner's own data `actor == scope`. Do not reintroduce a bare `ownerID` parameter that conflates the two; the split is the seam for property sharing (T3).
 - Use `date` for domain dates, `timestamptz` for system timestamps, and `BIGINT` (kopecks) for money.
 - Identifiers are UUIDv7, generated in the application via `uuid.NewV7()`; `id` columns have no `DEFAULT` in the database. Set `id` explicitly in new migrations and seeds (in SQL, use PostgreSQL 18 `uuidv7()`). See `docs/adr/0019-uuid-v7-app-generated-ids.md`.
 - Browser auth uses opaque server-side sessions with `HttpOnly` cookies. Do not replace this with browser-readable JWT/session storage without a new ADR.
@@ -89,23 +86,10 @@ go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1 -config a
 
 ## Observability
 
-- Use standard-library `log/slog` with JSON output for backend logs. Prefer `InfoContext`, `WarnContext`, and `ErrorContext` so request-scoped context can carry correlation fields.
-- Keep logging middleware, request IDs, OpenTelemetry setup, exporters, and metrics in `cmd/api` or `internal/platform`. Domain packages must not import loggers, OpenTelemetry, HTTP middleware, or platform observability helpers.
-- Every HTTP request must have an `X-Request-ID`. Preserve an incoming request ID when present; otherwise generate one. Include the same value in `Problem.requestId`, the response `X-Request-ID` header, and request outcome logs.
-- Request outcome logs must include low-cardinality operational fields: `request_id`, method, route or operation, status, duration, and problem/error code when available.
-- Do not log session tokens, cookies, authorization headers, S3 secrets, raw DaData payloads, raw request/response bodies, or other PII/secrets. Do not log SMS codes or full phone numbers in production integrations. The local/dev fake SMS sender is the only exception: it may log the SMS code and phone number so developers can complete manual login without a real SMS provider.
-- OpenTelemetry is the tracing/metrics foundation. The telemetry backend is Uptrace (self-hosted) per `docs/adr/0021-centralized-observability-uptrace.md`: the OTel SDK in `internal/platform/observability` exports traces and metrics over OTLP to `http://uptrace:14317`, enabled by the `OTEL_*` environment block in stage/prod. Keep exporters vendor-neutral through OTLP-compatible configuration; changes to the telemetry backend, Collector topology, production alerts, or SLO policy require amending ADR 0021 or a new ADR.
-- Name HTTP server spans by the chi route pattern (set after routing), never by raw `r.URL.Path`: entity IDs in span names create high cardinality.
-- With a valid OTel span context, slog records carry the real OpenTelemetry `trace_id`/`span_id`, so Uptrace correlates logs with traces.
-- Keep metric labels low-cardinality. Do not use user IDs, property IDs, phone numbers, addresses, object storage keys, or raw paths as labels.
-- OpenTelemetry Logs are intentionally not a backend signal: structured `slog` stdout remains the logging source of truth and reaches Uptrace through Vector (ADR 0021).
-- `POST /client-errors` is a public, rate-limited endpoint for browser JS errors: sanitized and truncated payload, no PII, nothing written to the DB; errors are logged to stdout and flow into the observability pipeline.
-- Panics are logged structurally by the platform recovery middleware (`level=error` with stack trace and `request_id`, sanitized) and answered with an RFC 7807 problem via `writeProblem`; do not reintroduce the plain chi `Recoverer`.
-- The audit log is not an observability log: business-audit records (who did what) persist to the `audit_log` table via `internal/audit` and are viewed in the admin panel, while structured `slog` stdout logs remain the source of truth for technical/operational logging. See `docs/adr/0020-audit-log.md`.
+Backend observability code conventions (slog, OpenTelemetry, request IDs, span naming, low-cardinality labels, PII redaction) — see `docs/backend-observability.md`. Infrastructure (Uptrace, Vector) — see `docs/deployment.md`, section "Observability".
 
 ## Quality Gates
 
-- Do not write new tests or use TDD unless the user explicitly asks for them.
 - Code must be gofumpt-clean with gci import order (enforced by `make backend-lint`); autofix with `cd apps/backend && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 fmt --config ../../.golangci.yml`.
 - Before claiming backend work is complete, run `gopls` diagnostics on changed packages and resolve reported issues.
 - If the `mcp__jetbrains__*` tools are available (GoLand's built-in MCP server, IDE running with this project open), run `get_file_problems` on every changed Go file before reporting completion: errors must be 0; warnings must be fixed or explicitly justified in the report. If the server is unavailable (IDE closed), note that the JetBrains inspection gate was skipped.

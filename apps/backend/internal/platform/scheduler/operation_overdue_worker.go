@@ -12,6 +12,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 )
 
 // maxOverdueBatches caps the number of batches processed per tick to bound the
@@ -34,6 +35,7 @@ type OperationOverdueWorker struct {
 	interval         time.Duration
 	batchSize        int
 	logger           *slog.Logger
+	tzResolver       sharedtz.OwnerTimezoneResolver
 }
 
 // NewOperationOverdueWorker creates a new operation overdue worker.
@@ -43,6 +45,7 @@ func NewOperationOverdueWorker(
 	interval time.Duration,
 	batchSize int,
 	logger *slog.Logger,
+	tzResolver sharedtz.OwnerTimezoneResolver,
 ) *OperationOverdueWorker {
 	if interval <= 0 {
 		interval = 24 * time.Hour
@@ -59,6 +62,7 @@ func NewOperationOverdueWorker(
 		interval:         interval,
 		batchSize:        batchSize,
 		logger:           logger,
+		tzResolver:       tzResolver,
 	}
 }
 
@@ -97,7 +101,7 @@ func (w *OperationOverdueWorker) tick(ctx context.Context) error {
 		}
 
 		for _, op := range ops {
-			if err := w.process(ctx, op, asOf); err != nil {
+			if err := w.process(ctx, op); err != nil {
 				w.logger.ErrorContext(ctx, "process overdue operation failed",
 					"operation_id", op.ID,
 					"owner_id", op.OwnerID,
@@ -113,7 +117,12 @@ func (w *OperationOverdueWorker) tick(ctx context.Context) error {
 	return nil
 }
 
-func (w *OperationOverdueWorker) process(ctx context.Context, op leasesdomain.Operation, asOf time.Time) error {
+func (w *OperationOverdueWorker) process(ctx context.Context, op leasesdomain.Operation) error {
+	loc, err := w.tzResolver.Resolve(ctx, op.OwnerID)
+	if err != nil {
+		return fmt.Errorf("resolve owner timezone: %w", err)
+	}
+	asOf := timeutil.DateIn(w.clock.Now(), loc)
 	changed, err := w.operationService.ProcessOverdueOperation(ctx, op.OwnerID, op.ID, asOf)
 	if err != nil {
 		return fmt.Errorf("process overdue operation: %w", err)

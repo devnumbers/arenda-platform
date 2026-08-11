@@ -245,6 +245,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["exportPropertyData"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/photos": {
         parameters: {
             query?: never;
@@ -272,6 +288,178 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["deletePropertyPhoto"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPropertyContacts"];
+        put?: never;
+        post: operations["createPropertyContact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/contacts/{contactId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPropertyContact"];
+        put?: never;
+        post?: never;
+        delete: operations["deletePropertyContact"];
+        options?: never;
+        head?: never;
+        patch: operations["updatePropertyContact"];
+        trace?: never;
+    };
+    "/properties/{propertyId}/access/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List property participants (owner first, then members) */
+        get: operations["listPropertyAccessMembers"];
+        put?: never;
+        /** Grant a registered user shared access to the property */
+        post: operations["createPropertyAccessMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/access/members/{memberId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke a member's access */
+        delete: operations["deletePropertyAccessMember"];
+        options?: never;
+        head?: never;
+        /** Change a member's role */
+        patch: operations["updatePropertyAccessMember"];
+        trace?: never;
+    };
+    "/properties/{propertyId}/access/members/self": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Self-exit from a shared property */
+        delete: operations["leaveProperty"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/free-reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPropertyFreeReminders"];
+        put?: never;
+        post: operations["createFreeReminder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/access/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invite a user by email to shared access to the property
+         * @description Invites a user by email. When the email belongs to a registered user, the membership is activated instantly (equivalent to adding a member, no invite email is sent); otherwise a pending invitation is stored and a single invite email is sent. A pending invitation never expires and activates automatically when a user registers with the same email. The response uses the shared member shape: status "active"/"suspended" for an instant membership, "pending" for a stored invitation.
+         */
+        post: operations["createPropertyAccessInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/access/invitations/{invitationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Cancel a pending invitation silently (no email is sent) */
+        delete: operations["deletePropertyAccessInvitation"];
+        options?: never;
+        head?: never;
+        /** Change a pending invitation's role (no new email is sent) */
+        patch: operations["updatePropertyAccessInvitation"];
+        trace?: never;
+    };
+    "/properties/{propertyId}/access/invitations/{invitationId}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resend the invite email (24-hour cooldown) */
+        post: operations["resendPropertyAccessInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/free-reminders/upcoming": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listUpcomingFreeReminders"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -351,6 +539,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["markOperationIncomplete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/{id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["moveOperation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -581,6 +785,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reminders/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCalendarReminders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reminders/{reminderId}": {
         parameters: {
             query?: never;
@@ -597,6 +817,38 @@ export interface paths {
         patch: operations["updateReminder"];
         trace?: never;
     };
+    "/free-reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listFreeReminders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/free-reminders/{freeReminderId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getFreeReminder"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteFreeReminder"];
+        options?: never;
+        head?: never;
+        patch: operations["updateFreeReminder"];
+        trace?: never;
+    };
     "/notification-preferences": {
         parameters: {
             query?: never;
@@ -608,6 +860,38 @@ export interface paths {
         put: operations["updateNotificationPreferences"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/push/vapid-public-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getVapidPublicKey"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/push/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createPushSubscription"];
+        delete: operations["deletePushSubscription"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1061,6 +1345,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/property-contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminPropertyContacts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/operations": {
         parameters: {
             query?: never;
@@ -1234,6 +1534,8 @@ export interface components {
             surname?: string | null;
             patronymic?: string | null;
             email?: string | null;
+            /** @description IANA timezone identifier, e.g. Europe/Moscow. */
+            timezone?: string | null;
             subscription?: components["schemas"]["Subscription"];
         };
         UserUpdateRequest: {
@@ -1242,6 +1544,8 @@ export interface components {
             patronymic?: string | null;
             /** @description Email is stored in lowercase. */
             email?: string | null;
+            /** @description IANA timezone identifier, e.g. Europe/Moscow. */
+            timezone?: string | null;
         };
         SendPhoneChangeCodeRequest: {
             /** @example +79990001122 */
@@ -1392,6 +1696,7 @@ export interface components {
             type: components["schemas"]["PropertyType"];
             address: string;
             description?: string | null;
+            attributes: components["schemas"]["PropertyAttributes"];
             status: components["schemas"]["PropertyStatus"];
             /** @enum {string} */
             occupancy: "free" | "occupied";
@@ -1453,6 +1758,22 @@ export interface components {
             items: components["schemas"]["AdminTenantContact"][];
             total: number;
         };
+        AdminPropertyContact: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            name: string;
+            phone: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AdminPropertyContactsResponse: {
+            items: components["schemas"]["AdminPropertyContact"][];
+            total: number;
+        };
         AdminOperation: {
             /** Format: uuid */
             id: string;
@@ -1505,7 +1826,7 @@ export interface components {
             /** Format: uuid */
             actorId?: string | null;
             /** @enum {string} */
-            actorRole: "owner" | "admin" | "system" | "anonymous";
+            actorRole: "owner" | "admin" | "system" | "anonymous" | "full_access" | "viewer";
             action: string;
             entityType?: string | null;
             /** Format: uuid */
@@ -1568,6 +1889,15 @@ export interface components {
             detail?: string;
             instance?: string;
             requestId?: string;
+            /** @description Machine-readable error code for failures the client must distinguish from the generic HTTP status (e.g. `membership_suspended`). */
+            code?: string;
+            errors?: components["schemas"]["ProblemError"][];
+        };
+        ProblemError: {
+            /** @description JSON key of the invalid field (e.g. "floor"). */
+            field: string;
+            /** @description Human-readable explanation of the validation failure. */
+            detail: string;
         };
         AddressSuggestionsResponse: {
             suggestions: components["schemas"]["AddressSuggestion"][];
@@ -1576,18 +1906,34 @@ export interface components {
             value: string;
             city?: string;
         };
+        /** @description Per-type typed property characteristics. Keys and values are in English snake_case; Russian labels are a frontend/admin concern. The set of valid keys depends on the property type and is validated by the backend catalog (see issue #125). An empty object means "no characteristics". Only filled keys are stored; null values are never written. */
+        PropertyAttributes: {
+            [key: string]: unknown;
+        };
         PropertyCreateRequest: {
             name: string;
             type: components["schemas"]["PropertyType"];
             address: string;
             description?: string;
+            attributes?: components["schemas"]["PropertyAttributes"];
         };
         PropertyUpdateRequest: {
             name?: string;
             type?: components["schemas"]["PropertyType"];
             address?: string;
             description?: string;
+            /** @description Full replacement (idempotent). Omit the field to leave attributes unchanged; send an empty object to clear all characteristics. */
+            attributes?: components["schemas"]["PropertyAttributes"];
             status?: components["schemas"]["PropertyStatus"];
+        };
+        PropertyAccessContext: {
+            /**
+             * @description Actor's role on this property: owner for own properties, full_access/viewer for shared ones. Suspended memberships never appear here — the detail endpoint answers 403 membership_suspended.
+             * @enum {string}
+             */
+            role: "owner" | "full_access" | "viewer";
+            /** @description Owner display name ("Name Surname" or masked phone, never email). Present only in the detail response when the actor is not the owner. */
+            owner_name?: string;
         };
         PropertyResponse: {
             /** Format: uuid */
@@ -1596,12 +1942,16 @@ export interface components {
             type: components["schemas"]["PropertyType"];
             address: string;
             description?: string;
+            attributes: components["schemas"]["PropertyAttributes"];
             status: components["schemas"]["PropertyStatus"];
             /** @enum {string} */
             occupancy: "free" | "occupied";
+            access?: components["schemas"]["PropertyAccessContext"];
             photos?: components["schemas"]["PropertyPhoto"][];
             active_lease: components["schemas"]["LeaseResponse"] | null;
             overdue_rent_count: number;
+            /** @description Shared-access participants of the property: membership rows (any status, owner excluded — the owner is never a membership row) plus pending email invitations. */
+            members_count: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1707,6 +2057,11 @@ export interface components {
             phone?: string;
             email?: string;
             comment?: string;
+            /**
+             * Format: uuid
+             * @description Optional property context. When set, the contact is created in the account of the property's data owner and requires the edit capability on that property (shared access); a viewer gets 403 and an actor without access gets 404. When absent, the contact is created in the actor's own account.
+             */
+            property_id?: string | null;
         };
         TenantContactUpdateRequest: {
             name?: string;
@@ -1738,8 +2093,103 @@ export interface components {
         TenantContactsResponse: {
             items: components["schemas"]["TenantContactResponse"][];
         };
+        PropertyContactCreateRequest: {
+            name: string;
+            phone: string;
+        };
+        PropertyContactUpdateRequest: {
+            name?: string;
+            phone?: string;
+        };
+        PropertyContactResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            property_id: string;
+            name: string;
+            phone: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        PropertyContactsResponse: {
+            items: components["schemas"]["PropertyContactResponse"][];
+        };
+        /**
+         * @description The participant's role on a property. `owner` is the object owner (synthesized, never stored as a membership); `full_access` and `viewer` are granted memberships.
+         * @enum {string}
+         */
+        PropertyAccessMemberRole: "owner" | "full_access" | "viewer";
+        PropertyAccessMemberResponse: {
+            /**
+             * Format: uuid
+             * @description Membership id; null for the synthesized owner row. For a pending invitation row this is the invitation id.
+             */
+            id?: string | null;
+            /**
+             * Format: uuid
+             * @description Participant user id; null for a pending invitation row.
+             */
+            user_id: string | null;
+            /**
+             * Format: email
+             * @description Invitee email; filled only on pending invitation rows, null for registered participants.
+             */
+            email?: string | null;
+            role: components["schemas"]["PropertyAccessMemberRole"];
+            is_owner: boolean;
+            /** @description Participant display name (name and surname, or a masked phone). Never the raw phone or email. */
+            display_name?: string;
+            has_email?: boolean;
+            /**
+             * @description Membership lifecycle status. "suspended" means the recipient's tariff slot was exceeded, so the object is hidden from the recipient's list and grants no access until a slot frees up. "pending" is an email invitation waiting for the invitee to register.
+             * @enum {string}
+             */
+            status: "active" | "suspended" | "pending";
+            /**
+             * Format: date-time
+             * @description When the membership was suspended; null when active.
+             */
+            suspended_at?: string | null;
+            /**
+             * Format: date-time
+             * @description When the invite email was last sent; filled only on pending invitation rows.
+             */
+            last_sent_at?: string | null;
+        };
+        PropertyAccessMembersResponse: {
+            items: components["schemas"]["PropertyAccessMemberResponse"][];
+        };
+        PropertyAccessMemberCreateRequest: {
+            /**
+             * Format: uuid
+             * @description Registered user to grant access to.
+             */
+            user_id: string;
+            /** @enum {string} */
+            role: "full_access" | "viewer";
+        };
+        PropertyAccessInvitationCreateRequest: {
+            /**
+             * Format: email
+             * @description Invitee email. A registered email activates the membership instantly; an unregistered email becomes a pending invitation.
+             */
+            email: string;
+            /** @enum {string} */
+            role: "full_access" | "viewer";
+        };
+        PropertyAccessMemberUpdateRequest: {
+            /** @enum {string} */
+            role: "full_access" | "viewer";
+        };
         PropertiesResponse: {
             items: components["schemas"]["PropertyResponse"][];
+            /**
+             * @description Number of shared properties hidden from the recipient due to a tariff slot shortage (suspended memberships). Zero for owners and when the recipient is within their limit.
+             * @default 0
+             */
+            hidden_shared_count: number;
         };
         /** @enum {string} */
         PropertyType: "apartment" | "room" | "apartments" | "house" | "commercial" | "office" | "warehouse" | "garage" | "parking" | "land";
@@ -1769,6 +2219,11 @@ export interface components {
         OperationCategoryCreateRequest: {
             type: components["schemas"]["OperationType"];
             name: string;
+            /**
+             * Format: uuid
+             * @description Optional property context. When set, the category is created in the account of the property's data owner and requires the edit capability on that property (shared access); a viewer gets 403 and an actor without access gets 404. When absent, the category is created in the actor's own account.
+             */
+            property_id?: string | null;
         };
         /** @enum {string} */
         OperationStatus: "pending" | "overdue" | "paid" | "received" | "unconfirmed";
@@ -1793,6 +2248,13 @@ export interface components {
              * @enum {integer|null}
              */
             reminder_offset_days?: 0 | 1 | 3 | 7 | null;
+        };
+        OperationMoveRequest: {
+            /**
+             * Format: uuid
+             * @description Target property. Must belong to the same owner as the operation's current property.
+             */
+            property_id: string;
         };
         OperationUpdateRequest: {
             type?: components["schemas"]["OperationType"];
@@ -1937,7 +2399,7 @@ export interface components {
             /** Format: uuid */
             owner_id: string;
             /** @enum {string} */
-            target_type: "operation" | "recurring_operation" | "lease";
+            target_type: "operation" | "recurring_operation" | "lease" | "free";
             /** Format: uuid */
             operation_id?: string | null;
             /** Format: uuid */
@@ -1945,9 +2407,11 @@ export interface components {
             /** Format: uuid */
             lease_id?: string | null;
             /** Format: uuid */
+            free_reminder_id?: string | null;
+            /** Format: uuid */
             property_id?: string | null;
             /** @enum {string} */
-            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action";
+            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder";
             /** @enum {string} */
             status: "pending" | "sent" | "failed" | "cancelled" | "skipped";
             /** Format: date-time */
@@ -1964,6 +2428,45 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        CalendarRemindersResponse: {
+            items: components["schemas"]["CalendarReminderItem"][];
+        };
+        /** @description One calendar entry — a free, operation, or system reminder projected into the requested date range. Free reminders are expanded from their template on read (independent of materialization horizon) and carry no status; operation/lease reminders come from the reminders table with a status. Orphan reminders (property deleted in detach mode) have property_id = null and has_property = false. */
+        CalendarReminderItem: {
+            /**
+             * Format: uuid
+             * @description For free reminders — the free_reminder template id (same id repeats for each occurrence of a periodic reminder). For operation/system — the concrete reminder row id.
+             */
+            id: string;
+            /** @enum {string} */
+            type: "free" | "operation" | "system";
+            /** Format: date-time */
+            scheduled_at: string;
+            title: string;
+            /** Format: uuid */
+            property_id?: string | null;
+            /** @description Resolved property name; null means "Без объекта" (orphan). */
+            property_name?: string | null;
+            has_property: boolean;
+            /**
+             * @description Present only for operation/system; null for free.
+             * @enum {string|null}
+             */
+            status?: "pending" | "sent" | null;
+            /** @enum {string|null} */
+            event_type?: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder" | null;
+            /** Format: uuid */
+            operation_id?: string | null;
+            /** Format: uuid */
+            lease_id?: string | null;
+            /** Format: uuid */
+            free_reminder_id?: string | null;
+            /**
+             * @description Present only for free reminders.
+             * @enum {string|null}
+             */
+            periodicity?: "once" | "daily" | "weekly" | "monthly" | "yearly" | null;
+        };
         ReminderCreateRequest: {
             /** Format: date */
             reminder_date: string;
@@ -1975,16 +2478,98 @@ export interface components {
         RemindersResponse: {
             items: components["schemas"]["ReminderResponse"][];
         };
+        FreeReminderResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            owner_id: string;
+            /** Format: uuid */
+            property_id: string;
+            title: string;
+            /** Format: date-time */
+            trigger_at: string;
+            /** @enum {string} */
+            periodicity: "once" | "daily" | "weekly" | "monthly" | "yearly";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        FreeReminderCreateRequest: {
+            title: string;
+            /** Format: date-time */
+            trigger_at: string;
+            /** @enum {string} */
+            periodicity: "once" | "daily" | "weekly" | "monthly" | "yearly";
+        };
+        FreeReminderUpdateRequest: {
+            title?: string;
+            /** Format: date-time */
+            trigger_at?: string;
+            /** @enum {string} */
+            periodicity?: "once" | "daily" | "weekly" | "monthly" | "yearly";
+        };
+        FreeRemindersResponse: {
+            items: components["schemas"]["FreeReminderResponse"][];
+        };
+        /** @description A single nearest upcoming occurrence of a periodic (or one-shot) free reminder. Unlike FreeReminderResponse (a template), this represents one projected fire time — trigger_at is the instant of this occurrence. */
+        UpcomingFreeReminderResponse: {
+            /** Format: uuid */
+            free_reminder_id: string;
+            title: string;
+            /** Format: uuid */
+            property_id: string;
+            /** Format: date-time */
+            trigger_at: string;
+            /** @enum {string} */
+            periodicity: "once" | "daily" | "weekly" | "monthly" | "yearly";
+        };
+        UpcomingFreeRemindersResponse: {
+            items: components["schemas"]["UpcomingFreeReminderResponse"][];
+        };
         NotificationPreference: {
             /** @enum {string} */
-            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action";
-            allowed: boolean;
+            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder";
+            /** @description Permission to deliver this event type over email. */
+            email_allowed: boolean;
+            /** @description Permission to deliver this event type over Web Push. */
+            push_allowed: boolean;
         };
         NotificationPreferencesResponse: {
             preferences: components["schemas"]["NotificationPreference"][];
         };
         NotificationPreferencesUpdateRequest: {
             preferences: components["schemas"]["NotificationPreference"][];
+        };
+        VapidPublicKeyResponse: {
+            /** @description The application server's VAPID P-256 public key, base64url without padding (RFC 8292). Pass this to `pushManager.subscribe({ applicationServerKey })`. */
+            public_key: string;
+        };
+        PushSubscriptionCreateRequest: {
+            /** @description The push endpoint URL issued by the browser push service. */
+            endpoint: string;
+            /** @description The client ECDH P-256 public key, base64url (RFC 8291). */
+            p256dh: string;
+            /** @description The per-subscription auth secret, base64url (RFC 8291). */
+            auth: string;
+            /**
+             * Format: date-time
+             * @description Optional subscription expiration instant reported by the browser (RFC 8030).
+             */
+            expiration_time?: string | null;
+        };
+        PushSubscriptionDeleteRequest: {
+            /** @description The push endpoint URL to unregister (same value sent on subscribe). */
+            endpoint: string;
+        };
+        PushSubscriptionResponse: {
+            /** Format: uuid */
+            id: string;
+            endpoint: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         PendingPopupsResponse: {
             popups: string[];
@@ -2120,6 +2705,24 @@ export interface components {
                 "application/json": components["schemas"]["Problem"];
             };
         };
+        /** @description Access to the property is suspended because the recipient's tariff active-property limit is exceeded */
+        MembershipSuspended: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "about:blank",
+                 *       "title": "Forbidden",
+                 *       "status": 403,
+                 *       "detail": "Доступ к объекту приостановлен: превышен лимит объектов по тарифу",
+                 *       "code": "membership_suspended"
+                 *     }
+                 */
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Internal server error */
         InternalServerError: {
             headers: {
@@ -2130,7 +2733,9 @@ export interface components {
             };
         };
     };
-    parameters: never;
+    parameters: {
+        PropertyId: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -2457,6 +3062,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["MembershipSuspended"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -2624,6 +3230,32 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    exportPropertyData: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property data export workbook */
+            200: {
+                headers: {
+                    /** @description Attachment header with the xlsx filename */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     uploadPropertyPhoto: {
         parameters: {
             query?: never;
@@ -2677,6 +3309,478 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listPropertyContacts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property contacts list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyContactsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createPropertyContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyContactCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Property contact created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyContactResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getPropertyContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property contact */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyContactResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deletePropertyContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property contact deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updatePropertyContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyContactUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Property contact updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyContactResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listPropertyAccessMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property access members list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAccessMembersResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createPropertyAccessMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyAccessMemberCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Member added */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAccessMemberResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deletePropertyAccessMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Member removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updatePropertyAccessMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyAccessMemberUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Member role updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAccessMemberResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    leaveProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Left the property */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listPropertyFreeReminders: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Up to limit upcoming free reminders for the property */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreeRemindersResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createFreeReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FreeReminderCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Free reminder created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreeReminderResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createPropertyAccessInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyAccessInvitationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Member added instantly or pending invitation created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAccessMemberResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deletePropertyAccessInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                invitationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Invitation cancelled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updatePropertyAccessInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                invitationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyAccessMemberUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Invitation role updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAccessMemberResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    resendPropertyAccessInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                invitationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Invite email resent */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Resend cooldown has not elapsed yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listUpcomingFreeReminders: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Up to limit nearest upcoming free reminder occurrences for the property */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpcomingFreeRemindersResponse"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
@@ -2914,6 +4018,36 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    moveOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperationMoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Operation moved to another property of the same owner */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     listOperationCategories: {
         parameters: {
             query?: {
@@ -2961,6 +4095,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
         };
     };
@@ -3469,6 +4604,31 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    listCalendarReminders: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Calendar reminders in range */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarRemindersResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     deleteReminder: {
         parameters: {
             query?: never;
@@ -3523,6 +4683,106 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    listFreeReminders: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Free reminders list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreeRemindersResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getFreeReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                freeReminderId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Free reminder */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreeReminderResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteFreeReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                freeReminderId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Free reminder deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateFreeReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                freeReminderId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FreeReminderUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Free reminder updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreeReminderResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     getNotificationPreferences: {
         parameters: {
             query?: never;
@@ -3568,6 +4828,78 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getVapidPublicKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The application server's VAPID public key (base64url, RFC 8292) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VapidPublicKeyResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createPushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushSubscriptionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Push subscription stored (upserted by endpoint) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushSubscriptionResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    deletePushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushSubscriptionDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Push subscription deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     getPendingPopups: {
@@ -4374,6 +5706,35 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAdminPropertyContacts: {
+        parameters: {
+            query?: {
+                /** @description Filter contacts by property (always passed by the admin property page tab). */
+                property_id?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin property contacts list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPropertyContactsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalServerError"];
         };
     };

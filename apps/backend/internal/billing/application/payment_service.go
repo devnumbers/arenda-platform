@@ -167,12 +167,13 @@ func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 	if payment.Status == domain.PaymentStatusSucceeded || payment.Status == domain.PaymentStatusFailed {
 		if payment.Status == domain.PaymentStatusSucceeded {
 			applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
-				beginner:         s.deps.beginner,
-				subscriptions:    s.deps.subscriptions,
-				tariffs:          s.deps.tariffs,
-				propertyArchiver: s.deps.propertyArchiver,
-				clock:            s.deps.clock,
-				log:              s.deps.log,
+				beginner:              s.deps.beginner,
+				subscriptions:         s.deps.subscriptions,
+				tariffs:               s.deps.tariffs,
+				propertyArchiver:      s.deps.propertyArchiver,
+				recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
+				clock:                 s.deps.clock,
+				log:                   s.deps.log,
 			}, payment)
 		}
 		return nil
@@ -203,12 +204,13 @@ func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.
 	}
 
 	applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
-		beginner:         s.deps.beginner,
-		subscriptions:    s.deps.subscriptions,
-		tariffs:          s.deps.tariffs,
-		propertyArchiver: s.deps.propertyArchiver,
-		clock:            s.deps.clock,
-		log:              s.deps.log,
+		beginner:              s.deps.beginner,
+		subscriptions:         s.deps.subscriptions,
+		tariffs:               s.deps.tariffs,
+		propertyArchiver:      s.deps.propertyArchiver,
+		recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
+		clock:                 s.deps.clock,
+		log:                   s.deps.log,
 	}, payment)
 	return nil
 }
@@ -374,9 +376,10 @@ func (s *PaymentService) RefundPayment(ctx context.Context, actorID uuid.UUID, p
 	}
 
 	if err := applyRefundToSubscription(ctx, refundDeps{
-		subscriptions:    s.deps.subscriptions,
-		tariffs:          s.deps.tariffs,
-		propertyArchiver: s.deps.propertyArchiver,
+		subscriptions:         s.deps.subscriptions,
+		tariffs:               s.deps.tariffs,
+		propertyArchiver:      s.deps.propertyArchiver,
+		recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
 	}, resultTx, payment.SubscriptionID); err != nil {
 		return err
 	}
@@ -568,9 +571,10 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, actorID uuid
 		// A partial-refund provider status is an anomaly that applyPaymentResult
 		// logs and ignores, so only a full refund downgrades the subscription.
 		if err := applyRefundToSubscription(ctx, refundDeps{
-			subscriptions:    s.deps.subscriptions,
-			tariffs:          s.deps.tariffs,
-			propertyArchiver: s.deps.propertyArchiver,
+			subscriptions:         s.deps.subscriptions,
+			tariffs:               s.deps.tariffs,
+			propertyArchiver:      s.deps.propertyArchiver,
+			recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
 		}, tx, payment.SubscriptionID); err != nil {
 			return err
 		}
@@ -597,12 +601,13 @@ func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, actorID uuid
 
 	if statusResult.Status == domain.PaymentStatusSucceeded {
 		applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
-			beginner:         s.deps.beginner,
-			subscriptions:    s.deps.subscriptions,
-			tariffs:          s.deps.tariffs,
-			propertyArchiver: s.deps.propertyArchiver,
-			clock:            s.deps.clock,
-			log:              s.deps.log,
+			beginner:              s.deps.beginner,
+			subscriptions:         s.deps.subscriptions,
+			tariffs:               s.deps.tariffs,
+			propertyArchiver:      s.deps.propertyArchiver,
+			recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
+			clock:                 s.deps.clock,
+			log:                   s.deps.log,
 		}, payment)
 	}
 
@@ -787,9 +792,10 @@ func (s *PaymentService) finalizeStuckRefund(ctx context.Context, payment domain
 	}
 
 	if err := applyRefundToSubscription(ctx, refundDeps{
-		subscriptions:    s.deps.subscriptions,
-		tariffs:          s.deps.tariffs,
-		propertyArchiver: s.deps.propertyArchiver,
+		subscriptions:         s.deps.subscriptions,
+		tariffs:               s.deps.tariffs,
+		propertyArchiver:      s.deps.propertyArchiver,
+		recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
 	}, tx, payment.SubscriptionID); err != nil {
 		return err
 	}

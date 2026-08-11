@@ -283,6 +283,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/MembershipSuspended'
     patch:
       operationId: updateProperty
       security:
@@ -546,6 +548,504 @@ paths:
           description: Photo deleted
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/contacts:
+    post:
+      operationId: createPropertyContact
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyContactCreateRequest'
+      responses:
+        '201':
+          description: Property contact created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyContactResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      operationId: listPropertyContacts
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Property contacts list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyContactsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/contacts/{contactId}:
+    get:
+      operationId: getPropertyContact
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: contactId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Property contact
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyContactResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updatePropertyContact
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: contactId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyContactUpdateRequest'
+      responses:
+        '200':
+          description: Property contact updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyContactResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      operationId: deletePropertyContact
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: contactId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Property contact deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/access/members:
+    post:
+      operationId: createPropertyAccessMember
+      summary: Grant a registered user shared access to the property
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyAccessMemberCreateRequest'
+      responses:
+        '201':
+          description: Member added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAccessMemberResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      operationId: listPropertyAccessMembers
+      summary: List property participants (owner first, then members)
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      responses:
+        '200':
+          description: Property access members list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAccessMembersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/access/members/{memberId}:
+    patch:
+      operationId: updatePropertyAccessMember
+      summary: Change a member's role
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyAccessMemberUpdateRequest'
+      responses:
+        '200':
+          description: Member role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAccessMemberResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deletePropertyAccessMember
+      summary: Revoke a member's access
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Member removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/access/members/self:
+    delete:
+      operationId: leaveProperty
+      summary: Self-exit from a shared property
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      responses:
+        '204':
+          description: Left the property
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/free-reminders:
+    post:
+      operationId: createFreeReminder
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FreeReminderCreateRequest'
+      responses:
+        '201':
+          description: Free reminder created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FreeReminderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    get:
+      operationId: listPropertyFreeReminders
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 3
+      responses:
+        '200':
+          description: Up to limit upcoming free reminders for the property
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FreeRemindersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/access/invitations:
+    post:
+      operationId: createPropertyAccessInvitation
+      summary: Invite a user by email to shared access to the property
+      description: >
+        Invites a user by email. When the email belongs to a registered user,
+        the membership is activated instantly (equivalent to adding a member,
+        no invite email is sent); otherwise a pending invitation is stored and
+        a single invite email is sent. A pending invitation never expires and
+        activates automatically when a user registers with the same email.
+        The response uses the shared member shape: status "active"/"suspended"
+        for an instant membership, "pending" for a stored invitation.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyAccessInvitationCreateRequest'
+      responses:
+        '201':
+          description: Member added instantly or pending invitation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAccessMemberResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/access/invitations/{invitationId}:
+    patch:
+      operationId: updatePropertyAccessInvitation
+      summary: Change a pending invitation's role (no new email is sent)
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyAccessMemberUpdateRequest'
+      responses:
+        '200':
+          description: Invitation role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAccessMemberResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deletePropertyAccessInvitation
+      summary: Cancel a pending invitation silently (no email is sent)
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Invitation cancelled
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/access/invitations/{invitationId}/resend:
+    post:
+      operationId: resendPropertyAccessInvitation
+      summary: Resend the invite email (24-hour cooldown)
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Invite email resent
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Resend cooldown has not elapsed yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /properties/{propertyId}/free-reminders/upcoming:
+    get:
+      operationId: listUpcomingFreeReminders
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 3
+      responses:
+        '200':
+          description: Up to limit nearest upcoming free reminder occurrences for the property
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpcomingFreeRemindersResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -905,6 +1405,39 @@ paths:
           $ref: '#/components/responses/SubscriptionBlocked'
         '404':
           $ref: '#/components/responses/NotFound'
+  /operations/{id}/move:
+    post:
+      operationId: moveOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationMoveRequest'
+      responses:
+        '200':
+          description: Operation moved to another property of the same owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /operation-categories:
     get:
       operationId: listOperationCategories
@@ -946,6 +1479,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
   /finance/report:
@@ -1444,6 +1979,36 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /reminders/calendar:
+    get:
+      operationId: listCalendarReminders
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Calendar reminders in range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarRemindersResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /reminders/{reminderId}:
     patch:
       operationId: updateReminder
@@ -1499,6 +2064,109 @@ paths:
           $ref: '#/components/responses/NotFound'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
+  /free-reminders:
+    get:
+      operationId: listFreeReminders
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Free reminders list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FreeRemindersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /free-reminders/{freeReminderId}:
+    get:
+      operationId: getFreeReminder
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: freeReminderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Free reminder
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FreeReminderResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateFreeReminder
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: freeReminderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FreeReminderUpdateRequest'
+      responses:
+        '200':
+          description: Free reminder updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FreeReminderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/SubscriptionBlocked'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteFreeReminder
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: freeReminderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Free reminder deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /notification-preferences:
     get:
       operationId: getNotificationPreferences
@@ -1534,6 +2202,61 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /push/vapid-public-key:
+    get:
+      operationId: getVapidPublicKey
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The application server's VAPID public key (base64url, RFC 8292)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VapidPublicKeyResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /push/subscriptions:
+    post:
+      operationId: createPushSubscription
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushSubscriptionCreateRequest'
+      responses:
+        '201':
+          description: Push subscription stored (upserted by endpoint)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushSubscriptionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      operationId: deletePushSubscription
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushSubscriptionDeleteRequest'
+      responses:
+        '204':
+          description: Push subscription deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /popups/pending:
     get:
       operationId: getPendingPopups
@@ -2595,6 +3318,50 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /admin/property-contacts:
+    get:
+      operationId: listAdminPropertyContacts
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: property_id
+          in: query
+          required: false
+          description: Filter contacts by property (always passed by the admin property page tab).
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Admin property contacts list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPropertyContactsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /admin/operations:
     get:
       operationId: listAdminOperations
@@ -3002,6 +3769,15 @@ components:
         The actual cookie name depends on the `cookieSecure` setting:
         `session_id` when insecure and `__Host-session_id` when secure.
 
+  parameters:
+    PropertyId:
+      name: propertyId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
   schemas:
 
     SendCodeRequest:
@@ -3066,6 +3842,10 @@ components:
         email:
           type: string
           nullable: true
+        timezone:
+          type: string
+          nullable: true
+          description: IANA timezone identifier, e.g. Europe/Moscow.
         subscription:
           $ref: '#/components/schemas/Subscription'
           nullable: true
@@ -3090,6 +3870,11 @@ components:
           nullable: true
           maxLength: 255
           description: Email is stored in lowercase.
+        timezone:
+          type: string
+          nullable: true
+          maxLength: 64
+          description: IANA timezone identifier, e.g. Europe/Moscow.
 
     SendPhoneChangeCodeRequest:
       type: object
@@ -3398,7 +4183,7 @@ components:
 
     AdminProperty:
       type: object
-      required: [id, ownerId, ownerPhone, name, type, address, status, occupancy, createdAt, updatedAt]
+      required: [id, ownerId, ownerPhone, name, type, address, attributes, status, occupancy, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -3417,6 +4202,8 @@ components:
         description:
           type: string
           nullable: true
+        attributes:
+          $ref: '#/components/schemas/PropertyAttributes'
         status:
           $ref: '#/components/schemas/PropertyStatus'
         occupancy:
@@ -3549,6 +4336,38 @@ components:
         total:
           type: integer
 
+    AdminPropertyContact:
+      type: object
+      required: [id, propertyId, name, phone, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        propertyId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminPropertyContactsResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminPropertyContact'
+        total:
+          type: integer
+
     AdminOperation:
       type: object
       required: [id, ownerId, type, categoryId, categoryName, name, amountKopecks, operationDate, status, isException, createdAt, updatedAt]
@@ -3658,7 +4477,7 @@ components:
           nullable: true
         actorRole:
           type: string
-          enum: [owner, admin, system, anonymous]
+          enum: [owner, admin, system, anonymous, full_access, viewer]
         action:
           type: string
         entityType:
@@ -3789,6 +4608,27 @@ components:
           type: string
         requestId:
           type: string
+        code:
+          type: string
+          description: >-
+            Machine-readable error code for failures the client must
+            distinguish from the generic HTTP status (e.g.
+            `membership_suspended`).
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProblemError'
+
+    ProblemError:
+      type: object
+      required: [field, detail]
+      properties:
+        field:
+          type: string
+          description: JSON key of the invalid field (e.g. "floor").
+        detail:
+          type: string
+          description: Human-readable explanation of the validation failure.
 
     AddressSuggestionsResponse:
       type: object
@@ -3808,6 +4648,16 @@ components:
         city:
           type: string
 
+    PropertyAttributes:
+      type: object
+      additionalProperties: true
+      description: >
+        Per-type typed property characteristics. Keys and values are in English
+        snake_case; Russian labels are a frontend/admin concern. The set of
+        valid keys depends on the property type and is validated by the backend
+        catalog (see issue #125). An empty object means "no characteristics".
+        Only filled keys are stored; null values are never written.
+
     PropertyCreateRequest:
       type: object
       required: [name, type, address]
@@ -3823,6 +4673,8 @@ components:
         description:
           type: string
           maxLength: 2000
+        attributes:
+          $ref: '#/components/schemas/PropertyAttributes'
 
     PropertyUpdateRequest:
       type: object
@@ -3838,12 +4690,35 @@ components:
         description:
           type: string
           maxLength: 2000
+        attributes:
+          allOf:
+            - $ref: '#/components/schemas/PropertyAttributes'
+          description: >
+            Full replacement (idempotent). Omit the field to leave attributes
+            unchanged; send an empty object to clear all characteristics.
         status:
           $ref: '#/components/schemas/PropertyStatus'
 
+    PropertyAccessContext:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [owner, full_access, viewer]
+          description: >
+            Actor's role on this property: owner for own properties,
+            full_access/viewer for shared ones. Suspended memberships never
+            appear here — the detail endpoint answers 403 membership_suspended.
+        owner_name:
+          type: string
+          description: >
+            Owner display name ("Name Surname" or masked phone, never email).
+            Present only in the detail response when the actor is not the owner.
+
     PropertyResponse:
       type: object
-      required: [id, name, type, address, status, occupancy, active_lease, overdue_rent_count, created_at, updated_at]
+      required: [id, name, type, address, status, occupancy, active_lease, overdue_rent_count, members_count, attributes, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3856,11 +4731,16 @@ components:
           type: string
         description:
           type: string
+        attributes:
+          $ref: '#/components/schemas/PropertyAttributes'
         status:
           $ref: '#/components/schemas/PropertyStatus'
         occupancy:
           type: string
           enum: [free, occupied]
+        access:
+          allOf:
+            - $ref: '#/components/schemas/PropertyAccessContext'
         photos:
           type: array
           items:
@@ -3872,6 +4752,13 @@ components:
         overdue_rent_count:
           type: integer
           minimum: 0
+        members_count:
+          type: integer
+          minimum: 0
+          description: >
+            Shared-access participants of the property: membership rows (any
+            status, owner excluded — the owner is never a membership row) plus
+            pending email invitations.
         created_at:
           type: string
           format: date-time
@@ -4074,6 +4961,16 @@ components:
           type: string
         comment:
           type: string
+        property_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Optional property context. When set, the contact is created in the
+            account of the property's data owner and requires the edit
+            capability on that property (shared access); a viewer gets 403 and
+            an actor without access gets 404. When absent, the contact is
+            created in the actor's own account.
 
     TenantContactUpdateRequest:
       type: object
@@ -4145,6 +5042,162 @@ components:
           items:
             $ref: '#/components/schemas/TenantContactResponse'
 
+    PropertyContactCreateRequest:
+      type: object
+      required: [name, phone]
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        phone:
+          type: string
+
+    PropertyContactUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        phone:
+          type: string
+
+    PropertyContactResponse:
+      type: object
+      required: [id, property_id, name, phone, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        property_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PropertyContactsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyContactResponse'
+
+    PropertyAccessMemberRole:
+      type: string
+      enum: [owner, full_access, viewer]
+      description: >
+        The participant's role on a property. `owner` is the object owner
+        (synthesized, never stored as a membership); `full_access` and
+        `viewer` are granted memberships.
+
+    PropertyAccessMemberResponse:
+      type: object
+      required: [user_id, role, is_owner, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Membership id; null for the synthesized owner row. For a pending
+            invitation row this is the invitation id.
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Participant user id; null for a pending invitation row.
+        email:
+          type: string
+          format: email
+          nullable: true
+          description: >
+            Invitee email; filled only on pending invitation rows, null for
+            registered participants.
+        role:
+          $ref: '#/components/schemas/PropertyAccessMemberRole'
+        is_owner:
+          type: boolean
+        display_name:
+          type: string
+          description: >
+            Participant display name (name and surname, or a masked phone).
+            Never the raw phone or email.
+        has_email:
+          type: boolean
+        status:
+          type: string
+          enum: [active, suspended, pending]
+          description: >
+            Membership lifecycle status. "suspended" means the recipient's
+            tariff slot was exceeded, so the object is hidden from the
+            recipient's list and grants no access until a slot frees up.
+            "pending" is an email invitation waiting for the invitee to
+            register.
+        suspended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the membership was suspended; null when active.
+        last_sent_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            When the invite email was last sent; filled only on pending
+            invitation rows.
+
+    PropertyAccessMembersResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyAccessMemberResponse'
+
+    PropertyAccessMemberCreateRequest:
+      type: object
+      required: [user_id, role]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: Registered user to grant access to.
+        role:
+          type: string
+          enum: [full_access, viewer]
+
+    PropertyAccessInvitationCreateRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+          description: >
+            Invitee email. A registered email activates the membership
+            instantly; an unregistered email becomes a pending invitation.
+        role:
+          type: string
+          enum: [full_access, viewer]
+
+    PropertyAccessMemberUpdateRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [full_access, viewer]
+
     PropertiesResponse:
       type: object
       required: [items]
@@ -4153,6 +5206,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PropertyResponse'
+        hidden_shared_count:
+          type: integer
+          description: >
+            Number of shared properties hidden from the recipient due to a
+            tariff slot shortage (suspended memberships). Zero for owners and
+            when the recipient is within their limit.
+          default: 0
 
     PropertyType:
       type: string
@@ -4212,6 +5272,16 @@ components:
           $ref: '#/components/schemas/OperationType'
         name:
           type: string
+        property_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Optional property context. When set, the category is created in the
+            account of the property's data owner and requires the edit
+            capability on that property (shared access); a viewer gets 403 and
+            an actor without access gets 404. When absent, the category is
+            created in the actor's own account.
 
     OperationStatus:
       type: string
@@ -4251,6 +5321,15 @@ components:
           nullable: true
           enum: [0, 1, 3, 7]
           description: 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before the operation date.
+
+    OperationMoveRequest:
+      type: object
+      required: [property_id]
+      properties:
+        property_id:
+          type: string
+          format: uuid
+          description: Target property. Must belong to the same owner as the operation's current property.
 
     OperationUpdateRequest:
       type: object
@@ -4514,7 +5593,7 @@ components:
           format: uuid
         target_type:
           type: string
-          enum: [operation, recurring_operation, lease]
+          enum: [operation, recurring_operation, lease, free]
         operation_id:
           type: string
           format: uuid
@@ -4527,13 +5606,17 @@ components:
           type: string
           format: uuid
           nullable: true
+        free_reminder_id:
+          type: string
+          format: uuid
+          nullable: true
         property_id:
           type: string
           format: uuid
           nullable: true
         event_type:
           type: string
-          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action]
+          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action, free_reminder]
         status:
           type: string
           enum: [pending, sent, failed, cancelled, skipped]
@@ -4562,6 +5645,78 @@ components:
           type: string
           format: date-time
 
+    CalendarRemindersResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarReminderItem'
+
+    CalendarReminderItem:
+      type: object
+      description: >
+        One calendar entry — a free, operation, or system reminder projected
+        into the requested date range. Free reminders are expanded from their
+        template on read (independent of materialization horizon) and carry no
+        status; operation/lease reminders come from the reminders table with a
+        status. Orphan reminders (property deleted in detach mode) have
+        property_id = null and has_property = false.
+      required: [id, type, scheduled_at, title, has_property]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: >
+            For free reminders — the free_reminder template id (same id repeats
+            for each occurrence of a periodic reminder). For operation/system —
+            the concrete reminder row id.
+        type:
+          type: string
+          enum: [free, operation, system]
+        scheduled_at:
+          type: string
+          format: date-time
+        title:
+          type: string
+        property_id:
+          type: string
+          format: uuid
+          nullable: true
+        property_name:
+          type: string
+          nullable: true
+          description: Resolved property name; null means "Без объекта" (orphan).
+        has_property:
+          type: boolean
+        status:
+          type: string
+          enum: [pending, sent]
+          nullable: true
+          description: Present only for operation/system; null for free.
+        event_type:
+          type: string
+          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action, free_reminder]
+          nullable: true
+        operation_id:
+          type: string
+          format: uuid
+          nullable: true
+        lease_id:
+          type: string
+          format: uuid
+          nullable: true
+        free_reminder_id:
+          type: string
+          format: uuid
+          nullable: true
+        periodicity:
+          type: string
+          enum: [once, daily, weekly, monthly, yearly]
+          nullable: true
+          description: Present only for free reminders.
+
     ReminderCreateRequest:
       type: object
       required: [reminder_date]
@@ -4587,15 +5742,117 @@ components:
           items:
             $ref: '#/components/schemas/ReminderResponse'
 
+    FreeReminderResponse:
+      type: object
+      required: [id, owner_id, property_id, title, trigger_at, periodicity, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        owner_id:
+          type: string
+          format: uuid
+        property_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        trigger_at:
+          type: string
+          format: date-time
+        periodicity:
+          type: string
+          enum: [once, daily, weekly, monthly, yearly]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    FreeReminderCreateRequest:
+      type: object
+      required: [title, trigger_at, periodicity]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 50
+        trigger_at:
+          type: string
+          format: date-time
+        periodicity:
+          type: string
+          enum: [once, daily, weekly, monthly, yearly]
+
+    FreeReminderUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 50
+        trigger_at:
+          type: string
+          format: date-time
+        periodicity:
+          type: string
+          enum: [once, daily, weekly, monthly, yearly]
+
+    FreeRemindersResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FreeReminderResponse'
+
+    UpcomingFreeReminderResponse:
+      type: object
+      description: >
+        A single nearest upcoming occurrence of a periodic (or one-shot) free
+        reminder. Unlike FreeReminderResponse (a template), this represents one
+        projected fire time — trigger_at is the instant of this occurrence.
+      required: [free_reminder_id, title, property_id, trigger_at, periodicity]
+      properties:
+        free_reminder_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        property_id:
+          type: string
+          format: uuid
+        trigger_at:
+          type: string
+          format: date-time
+        periodicity:
+          type: string
+          enum: [once, daily, weekly, monthly, yearly]
+
+    UpcomingFreeRemindersResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpcomingFreeReminderResponse'
+
     NotificationPreference:
       type: object
-      required: [event_type, allowed]
+      required: [event_type, email_allowed, push_allowed]
       properties:
         event_type:
           type: string
-          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action]
-        allowed:
+          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action, free_reminder]
+        email_allowed:
           type: boolean
+          description: Permission to deliver this event type over email.
+        push_allowed:
+          type: boolean
+          description: Permission to deliver this event type over Web Push.
 
     NotificationPreferencesResponse:
       type: object
@@ -4612,10 +5869,65 @@ components:
       properties:
         preferences:
           type: array
-          minItems: 4
-          maxItems: 4
+          minItems: 5
+          maxItems: 5
           items:
             $ref: '#/components/schemas/NotificationPreference'
+
+    VapidPublicKeyResponse:
+      type: object
+      required: [public_key]
+      properties:
+        public_key:
+          type: string
+          description: The application server's VAPID P-256 public key, base64url without padding (RFC 8292). Pass this to `pushManager.subscribe({ applicationServerKey })`.
+
+    PushSubscriptionCreateRequest:
+      type: object
+      required: [endpoint, p256dh, auth]
+      properties:
+        endpoint:
+          type: string
+          description: The push endpoint URL issued by the browser push service.
+          maxLength: 2048
+        p256dh:
+          type: string
+          description: The client ECDH P-256 public key, base64url (RFC 8291).
+          maxLength: 512
+        auth:
+          type: string
+          description: The per-subscription auth secret, base64url (RFC 8291).
+          maxLength: 512
+        expiration_time:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional subscription expiration instant reported by the browser (RFC 8030).
+
+    PushSubscriptionDeleteRequest:
+      type: object
+      required: [endpoint]
+      properties:
+        endpoint:
+          type: string
+          description: The push endpoint URL to unregister (same value sent on subscribe).
+          maxLength: 2048
+
+    PushSubscriptionResponse:
+      type: object
+      required: [id, endpoint, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        endpoint:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
     PendingPopupsResponse:
       type: object
@@ -4783,6 +6095,20 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Problem'
+    MembershipSuspended:
+      description: >-
+        Access to the property is suspended because the recipient's tariff
+        active-property limit is exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: about:blank
+            title: Forbidden
+            status: 403
+            detail: "Доступ к объекту приостановлен: превышен лимит объектов по тарифу"
+            code: membership_suspended
     InternalServerError:
       description: Internal server error
       content:

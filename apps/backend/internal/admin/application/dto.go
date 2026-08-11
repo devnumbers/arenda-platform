@@ -48,6 +48,7 @@ type AdminPropertyView struct {
 	Type        propertiesdomain.PropertyType
 	Address     string
 	Description *string
+	Attributes  propertiesdomain.Attributes
 	Status      propertiesdomain.PropertyStatus
 	Occupancy   propertiesdomain.PropertyOccupancy
 	Photos      []propertiesdomain.Photo
@@ -80,6 +81,11 @@ type AdminLeaseView struct {
 type AdminTenantContactView struct {
 	leasesdomain.TenantContact
 	OwnerPhone string
+}
+
+// AdminPropertyContactView is a read-only view of a property contact for admin operations.
+type AdminPropertyContactView struct {
+	propertiesdomain.PropertyContact
 }
 
 // AdminOperationView is a read-only view of a financial operation for admin operations.
@@ -149,6 +155,14 @@ type AdminTenantContactFilters struct {
 	Offset  int
 	Sort    string
 	Order   string
+}
+
+// AdminPropertyContactFilters carries filters for the admin property contacts list.
+// Sort is fixed (created_at ASC) and not configurable.
+type AdminPropertyContactFilters struct {
+	PropertyID uuid.UUID
+	Limit      int
+	Offset     int
 }
 
 // AdminOperationFilters carries optional filters for the admin operations list.

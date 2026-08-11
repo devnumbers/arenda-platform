@@ -110,6 +110,38 @@ func (q *Queries) DeleteRecurringOperationsByProperty(ctx context.Context, arg D
 	return err
 }
 
+const getRecurringOperationByID = `-- name: GetRecurringOperationByID :one
+SELECT id, owner_id, property_id, lease_id, type, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name, deleted_at, category_id FROM recurring_operations
+WHERE id = $1
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) GetRecurringOperationByID(ctx context.Context, id pgtype.UUID) (RecurringOperation, error) {
+	row := q.db.QueryRow(ctx, getRecurringOperationByID, id)
+	var i RecurringOperation
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.LeaseID,
+		&i.Type,
+		&i.AmountKopecks,
+		&i.StartDate,
+		&i.PaymentDay,
+		&i.EndDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Periodicity,
+		&i.Comment,
+		&i.Status,
+		&i.ReminderOffsetDays,
+		&i.Name,
+		&i.DeletedAt,
+		&i.CategoryID,
+	)
+	return i, err
+}
+
 const getRecurringOperationByIDAndOwner = `-- name: GetRecurringOperationByIDAndOwner :one
 SELECT id, owner_id, property_id, lease_id, type, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name, deleted_at, category_id FROM recurring_operations
 WHERE id = $1 AND owner_id = $2
@@ -272,13 +304,21 @@ func (q *Queries) GetRecurringOperationByLeaseIDAndOwner(ctx context.Context, ar
 
 const listRecurringOperationsByOwner = `-- name: ListRecurringOperationsByOwner :many
 SELECT id, owner_id, property_id, lease_id, type, amount_kopecks, start_date, payment_day, end_date, created_at, updated_at, periodicity, comment, status, reminder_offset_days, name, deleted_at, category_id FROM recurring_operations
-WHERE owner_id = $1
-  AND deleted_at IS NULL
-ORDER BY created_at DESC
+WHERE (recurring_operations.owner_id = $1
+       OR (recurring_operations.property_id IS NOT NULL
+           AND recurring_operations.property_id = ANY($2::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = recurring_operations.property_id AND p.status = 'archived')))
+  AND recurring_operations.deleted_at IS NULL
+ORDER BY recurring_operations.created_at DESC
 `
 
-func (q *Queries) ListRecurringOperationsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]RecurringOperation, error) {
-	rows, err := q.db.Query(ctx, listRecurringOperationsByOwner, ownerID)
+type ListRecurringOperationsByOwnerParams struct {
+	OwnerID               pgtype.UUID   `json:"owner_id"`
+	AccessiblePropertyIds []pgtype.UUID `json:"accessible_property_ids"`
+}
+
+func (q *Queries) ListRecurringOperationsByOwner(ctx context.Context, arg ListRecurringOperationsByOwnerParams) ([]RecurringOperation, error) {
+	rows, err := q.db.Query(ctx, listRecurringOperationsByOwner, arg.OwnerID, arg.AccessiblePropertyIds)
 	if err != nil {
 		return nil, err
 	}

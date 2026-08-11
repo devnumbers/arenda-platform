@@ -1,0 +1,73 @@
+package application
+
+import (
+	"context"
+
+	"github.com/google/uuid"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
+)
+
+// testOwnerPolicy is the policy used by property service tests that pre-date
+// the membership-aware policy. It treats the actor as the owner of every
+// property (RoleOwner) so tests exercising owner-scoped behaviour keep working
+// without wiring a real policy. It is intentionally test-only: production
+// always injects the membership-aware policy from the access context.
+type testOwnerPolicy struct{}
+
+func (testOwnerPolicy) Role(_ context.Context, actor, scope uuid.UUID) (sharedpolicy.Role, error) {
+	if actor == scope {
+		return sharedpolicy.RoleOwner, nil
+	}
+	return sharedpolicy.RoleNone, nil
+}
+
+func (testOwnerPolicy) RoleForProperty(_ context.Context, _, _ uuid.UUID) (sharedpolicy.Role, error) {
+	return sharedpolicy.RoleOwner, nil
+}
+
+// staticRolePolicy returns a fixed role for every RoleForProperty lookup. It
+// backs privacy/outcome tests of the property service: how a given policy
+// outcome (owner, member, none, suspended) maps to service errors (T9).
+type staticRolePolicy struct {
+	role sharedpolicy.Role
+}
+
+func (p staticRolePolicy) Role(_ context.Context, actor, scope uuid.UUID) (sharedpolicy.Role, error) {
+	if actor == scope {
+		return sharedpolicy.RoleOwner, nil
+	}
+	return sharedpolicy.RoleNone, nil
+}
+
+func (p staticRolePolicy) RoleForProperty(_ context.Context, _, _ uuid.UUID) (sharedpolicy.Role, error) {
+	return p.role, nil
+}
+
+// fakeSharedMemberships returns a fixed set of active shared-access
+// memberships (issue T11).
+type fakeSharedMemberships struct {
+	memberships []SharedMembership
+}
+
+func (f fakeSharedMemberships) MembershipsWith(_ context.Context, _ uuid.UUID) ([]SharedMembership, error) {
+	return f.memberships, nil
+}
+
+// fakeOwnerNames resolves fixed owner display names, or fails when err is set
+// (issue T11).
+type fakeOwnerNames struct {
+	names map[uuid.UUID]string
+	err   error
+}
+
+func (f fakeOwnerNames) DisplayName(_ context.Context, userID uuid.UUID) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.names[userID], nil
+}
+
+var (
+	_ SharedMemberships        = fakeSharedMemberships{}
+	_ OwnerDisplayNameResolver = fakeOwnerNames{}
+)

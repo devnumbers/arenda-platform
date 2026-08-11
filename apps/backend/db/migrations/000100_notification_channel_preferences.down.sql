@@ -1,0 +1,3 @@
+DROP TRIGGER IF EXISTS trg_user_notification_channel_preferences_updated_at ON user_notification_channel_preferences;
+DROP TABLE IF EXISTS user_notification_channel_preferences;
+DROP TYPE IF EXISTS notification_channel;

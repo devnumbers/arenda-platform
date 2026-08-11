@@ -15,6 +15,23 @@ import type { components } from '@/shared/api/generated';
 type ReminderResponse = components['schemas']['ReminderResponse'];
 type ReminderUpdateRequest = components['schemas']['ReminderUpdateRequest'];
 type RemindersResponse = components['schemas']['RemindersResponse'];
+type CalendarRemindersResponse = components['schemas']['CalendarRemindersResponse'];
+
+// Календарь напоминаний — первый потребитель «существующего хука напоминаний».
+// from/to — локальные даты 'YYYY-MM-DD' (полуоткрытый диапазон [from, to)).
+export function useCalendarReminders(
+  from: string,
+  to: string,
+): UseQueryResult<CalendarRemindersResponse, ApiError> {
+  return useQuery({
+    queryKey: reminderKeys.calendar(from, to),
+    queryFn: () =>
+      apiClient<CalendarRemindersResponse>(
+        `/reminders/calendar?from=${from}&to=${to}`,
+      ),
+    enabled: Boolean(from && to),
+  });
+}
 
 export function useReminders(
   limit = 100,

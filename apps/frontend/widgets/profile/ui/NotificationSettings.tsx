@@ -10,11 +10,15 @@ import {
   useUpdateNotificationPreferences,
 } from '@/features/notification-preferences/api/hooks';
 import {
-  buildInitialPreferences,
-  NOTIFICATION_OPTIONS,
-  type NotificationPreferencesState,
+  buildChannelPreferencePayload,
+  buildInitialChannelPreferences,
+  channelPreferencesEqual,
+  type NotificationChannelState,
 } from '@/features/notification-preferences/lib/preferences';
-import { NotificationPreferencesFields } from '@/features/notification-preferences/ui/NotificationPreferencesFields';
+import { NotificationChannelMatrix } from '@/features/notification-preferences/ui/NotificationChannelMatrix';
+import { usePushSubscriptionStatus } from '@/features/push-notifications/api/use-push-subscription-status';
+import { useSubscribePush } from '@/features/push-notifications/api/use-subscribe-push';
+import { isPushSupported } from '@/features/push-notifications/lib/platform';
 import type {
   NotificationEventType,
   NotificationPreference,
@@ -25,32 +29,30 @@ type NotificationSettingsViewProps = {
   readonly preferences: NotificationPreference[];
 };
 
-// Equality over the fixed option set; used to tell whether the desired state
-// moved on while a save was in flight.
-function preferencesEqual(
-  a: NotificationPreferencesState,
-  b: NotificationPreferencesState,
-): boolean {
-  return NOTIFICATION_OPTIONS.every(
-    (option) => a[option.eventType] === b[option.eventType],
-  );
-}
-
 function NotificationSettingsView({ preferences }: NotificationSettingsViewProps): JSX.Element {
   const updateNotificationPreferences = useUpdateNotificationPreferences();
+  const { refresh: refreshPushStatus, ...pushStatus } = usePushSubscriptionStatus();
+  const { subscribe: subscribePush } = useSubscribePush();
+
+  // Push is unavailable when the browser cannot receive push, the user has not
+  // granted permission, or no subscription exists yet. The matrix disables the
+  // push column and the warning block surfaces a one-tap enable action.
+  const pushUnavailable =
+    !pushStatus.isPending &&
+    (pushStatus.isUnsupported || pushStatus.needsPermission || pushStatus.needsSubscription);
 
   // Checkbox edits live only as an override layer over the server state:
   // while null, the view follows fresh query data (e.g. the onboarding modal
   // saved over this open page); once the user touches a checkbox the override
   // wins until that save settles.
-  const [editedPrefs, setEditedPrefs] = useState<NotificationPreferencesState | null>(null);
-  const serverPrefs = useMemo(() => buildInitialPreferences(preferences), [preferences]);
+  const [editedPrefs, setEditedPrefs] = useState<NotificationChannelState | null>(null);
+  const serverPrefs = useMemo(() => buildInitialChannelPreferences(preferences), [preferences]);
   const notificationPrefs = editedPrefs ?? serverPrefs;
 
   // Ref mirrors for the async settle callbacks, which would otherwise see
   // stale closures: latestPrefsRef holds the newest desired state,
   // inFlightRef marks that a PUT is in the air.
-  const latestPrefsRef = useRef<NotificationPreferencesState | null>(null);
+  const latestPrefsRef = useRef<NotificationChannelState | null>(null);
   const inFlightRef = useRef(false);
 
   // Single-flight save: at most one PUT in the air, so the server never gets
@@ -59,7 +61,7 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
   // latestPrefsRef; the loop keeps re-sending the newest snapshot until the
   // desired state stops moving (trailing sync after each settle).
   const sync = useCallback(
-    (snapshot: NotificationPreferencesState) => {
+    (snapshot: NotificationChannelState) => {
       inFlightRef.current = true;
 
       const run = async (): Promise<void> => {
@@ -67,12 +69,7 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
         for (;;) {
           // Every save sends the full preference set; there is no submit
           // button and no success toast.
-          const payload: NotificationPreference[] = NOTIFICATION_OPTIONS.map(
-            ({ eventType }) => ({
-              eventType,
-              allowed: current[eventType],
-            }),
-          );
+          const payload: NotificationPreference[] = buildChannelPreferencePayload(current);
 
           try {
             await updateNotificationPreferences.mutateAsync(payload);
@@ -82,7 +79,7 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
             // iteration below owns it now.
             if (
               latestPrefsRef.current &&
-              preferencesEqual(latestPrefsRef.current, current)
+              channelPreferencesEqual(latestPrefsRef.current, current)
             ) {
               latestPrefsRef.current = null;
               setEditedPrefs(null);
@@ -98,7 +95,7 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
           }
 
           const latest = latestPrefsRef.current;
-          if (!latest || preferencesEqual(latest, current)) {
+          if (!latest || channelPreferencesEqual(latest, current)) {
             break;
           }
           current = latest;
@@ -111,11 +108,16 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
     [updateNotificationPreferences],
   );
 
-  const handleNotificationChange = useCallback(
-    (eventType: NotificationEventType, allowed: boolean) => {
-      const next: NotificationPreferencesState = {
-        ...(editedPrefs ?? serverPrefs),
-        [eventType]: allowed,
+  const updateChannel = useCallback(
+    (
+      eventType: NotificationEventType,
+      channel: 'email' | 'push',
+      allowed: boolean,
+    ) => {
+      const base = editedPrefs ?? serverPrefs;
+      const next: NotificationChannelState = {
+        ...base,
+        [eventType]: { ...base[eventType], [channel]: allowed },
       };
       latestPrefsRef.current = next;
       setEditedPrefs(next);
@@ -127,14 +129,91 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
     [editedPrefs, serverPrefs, sync],
   );
 
+  const handleEmailChange = useCallback(
+    (eventType: NotificationEventType, allowed: boolean) =>
+      updateChannel(eventType, 'email', allowed),
+    [updateChannel],
+  );
+
+  const handlePushChange = useCallback(
+    (eventType: NotificationEventType, allowed: boolean) =>
+      updateChannel(eventType, 'push', allowed),
+    [updateChannel],
+  );
+
+  const [isEnablingPush, setIsEnablingPush] = useState(false);
+
+  const handleEnablePush = useCallback(async () => {
+    if (!isPushSupported()) return;
+    setIsEnablingPush(true);
+    try {
+      const outcome = await subscribePush();
+      if (outcome.outcome === 'subscribed' || outcome.outcome === 'already-subscribed') {
+        notify.scenarios.profile.pushEnabled();
+        // Re-probe so the banner, push column and hint update without a reload.
+        refreshPushStatus();
+      } else if (outcome.outcome === 'ios-needs-install') {
+        notify.scenarios.profile.pushIosNeedsInstall();
+      } else if (outcome.outcome === 'denied') {
+        notify.scenarios.profile.pushPermissionDenied();
+      } else if (outcome.outcome !== 'unsupported') {
+        notify.scenarios.profile.pushEnableError(new Error(outcome.reason));
+      }
+    } catch (error) {
+      notify.scenarios.profile.pushEnableError(error);
+    } finally {
+      setIsEnablingPush(false);
+    }
+  }, [subscribePush, refreshPushStatus]);
+
+  // After the user has changed the permission via browser settings, the only
+  // reliable way to pick up the new state is a reload — `Notification.permission`
+  // is cached for the lifetime of the document. Browsers do not expose an API
+  // to open site settings directly.
+  const handleRecheckPermission = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+  }, []);
+
   return (
     <div className={styles.container}>
       <p className={styles.notificationsHint}>
-        Напоминания приходят на вашу почту.
+        Напоминания приходят на вашу почту{pushStatus.isReady ? ' и устройство' : ''}.
       </p>
-      <NotificationPreferencesFields
+      {pushUnavailable && (
+        <div className={styles.pushWarning}>
+          <p className={styles.pushWarningText}>
+            {pushStatus.isUnsupported
+              ? 'Пуши не поддерживаются этим браузером.'
+              : pushStatus.permissionDenied
+                ? 'Уведомления отключены в настройках браузера. Включите их для сайта, затем нажмите «Проверить разрешение».'
+                : pushStatus.needsPermission
+                  ? 'Разрешите уведомления в браузере, чтобы получать пуши.'
+                  : 'Подпишитесь на пуши, чтобы получать напоминания на устройство.'}
+          </p>
+          {!pushStatus.isUnsupported &&
+            (pushStatus.permissionDenied ? (
+              <Button variant="secondary" size="medium" onClick={handleRecheckPermission}>
+                Проверить разрешение
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                size="medium"
+                loading={isEnablingPush}
+                onClick={handleEnablePush}
+              >
+                Разрешить пуши
+              </Button>
+            ))}
+        </div>
+      )}
+      <NotificationChannelMatrix
         value={notificationPrefs}
-        onChange={handleNotificationChange}
+        onChangeEmail={handleEmailChange}
+        onChangePush={handlePushChange}
+        pushUnavailable={pushUnavailable}
       />
     </div>
   );
@@ -159,7 +238,7 @@ export function NotificationSettings(): JSX.Element {
           <p className={styles.notificationsHint}>
             Напоминания приходят на вашу почту.
           </p>
-          <NotificationPreferencesFields disabled />
+          <NotificationChannelMatrix disabled />
         </div>
       )}
       {!isError && !isPending && preferences && (

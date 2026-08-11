@@ -49,6 +49,7 @@ export default function App() {
       <Resource name="properties" list={PropertyList} show={PropertyShow} icon={HomeWorkIcon} recordRepresentation="name" />
       <Resource name="leases" list={LeaseList} show={LeaseShow} icon={DescriptionIcon} recordRepresentation={leaseRepresentation} />
       <Resource name="tenantContacts" list={TenantContactList} show={TenantContactShow} icon={ContactPageIcon} recordRepresentation={tenantContactRepresentation} />
+      <Resource name="propertyContacts" recordRepresentation="name" />
       <Resource name="operations" list={OperationList} show={OperationShow} icon={ReceiptLongIcon} recordRepresentation="name" />
       <Resource name="auditLogs" list={AuditLogList} show={AuditLogShow} icon={HistoryIcon} recordRepresentation={auditLogRepresentation} />
     </Admin>

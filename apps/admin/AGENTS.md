@@ -2,7 +2,7 @@
 
 ## Scope
 
-Rules for the react-admin back-office SPA in `apps/admin`. Also follow the root `AGENTS.md`, `CONTEXT.md`, relevant product docs, and ADRs.
+Rules for the react-admin back-office SPA in `apps/admin`. Also follow the root `AGENTS.md`, the relevant per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`), relevant product docs, and ADRs.
 
 ## Stack & References
 
@@ -14,8 +14,6 @@ Rules for the react-admin back-office SPA in `apps/admin`. Also follow the root 
 
 ## Required Skills
 
-Invoke skills through the Kimi `Skill` tool using the exact skill name.
-
 - For all admin UI work, invoke `vercel-react-best-practices`.
 - For TypeScript questions and type design, invoke `typescript`.
 - For current library docs before relying on non-obvious APIs, use `context7`.
@@ -24,7 +22,6 @@ Invoke skills through the Kimi `Skill` tool using the exact skill name.
 
 - `playwright` — use for browser automation and UI verification when the `mcp__playwright__*` tools are available. Check desktop and mobile layouts, visible interaction states, loading/error states, and that text does not overlap or overflow. If unavailable, fall back to manual inspection and build logs.
 - `lean-ctx` — use for broad exploration, large generated files, repeated reads, and noisy build or typecheck output. Before editing exact TypeScript, component, or config code, read the target source in raw/full form.
-- `context7` — use for current official docs on third-party libraries when needed.
 
 Before adding resources, fields, inputs, helpers, or API wrappers, search existing resources and call sites with `Grep`/`lean-ctx` to avoid duplicate patterns.
 
@@ -34,6 +31,7 @@ Before adding resources, fields, inputs, helpers, or API wrappers, search existi
 - Follow react-admin conventions: declare resources on the `<Admin>` component, keep list/edit/create/show views colocated per resource, and route all backend calls through `dataProvider` and all auth state through `authProvider`.
 - Keep components small and explicit; prefer react-admin and MUI building blocks over custom widgets.
 - Map backend DTOs at the `dataProvider` boundary; do not leak API response shapes into resource components.
+- The property attributes catalog (`src/lib/generated/`) is generated from `tools/property-attributes/catalog.json`. Regenerate with `make attributes-gen` (or `cd tools/property-attributes && npm run generate`); the gate `make attributes-check` fails in CI if a `catalog.json` change was not committed with its regenerated artifacts. Do not hand-edit `generated/`.
 - Runtime configuration comes from Vite env vars (see `.env.example`); never hardcode backend URLs or secrets.
 
 ## TypeScript
@@ -43,7 +41,6 @@ Before adding resources, fields, inputs, helpers, or API wrappers, search existi
 
 ## Quality Gates
 
-- Do not write new tests unless the user explicitly asks for them.
 - Run before claiming admin work complete:
 
 ```bash
