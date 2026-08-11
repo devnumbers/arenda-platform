@@ -35,6 +35,24 @@ export default function manifest(): MetadataRoute.Manifest {
                 type: 'image/png',
                 purpose: 'any',
             },
+            {
+                // Android Adaptive Icons — opaque square, content in the 80%
+                // safe zone. Generated from the glass master; see
+                // scripts/generate-icons.mjs.
+                src: '/icons/icon-maskable-512.png',
+                sizes: '512x512',
+                type: 'image/png',
+                purpose: 'maskable',
+            },
+            {
+                // Android 13+ Material You themed icons — house silhouette only,
+                // system tints it with the wallpaper color. Glass effects cannot
+                // survive the tint, so this is a separate source.
+                src: '/icons/icon-monochrome-512.png',
+                sizes: '512x512',
+                type: 'image/png',
+                purpose: 'monochrome',
+            },
         ],
     };
 }

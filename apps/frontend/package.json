@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "generate:api": "openapi-typescript ../backend/api/openapi/openapi.yaml -o shared/api/generated.ts",
+    "generate:icons": "node scripts/generate-icons.mjs",
     "generate:splash": "node scripts/generate-splash.mjs"
   },
   "dependencies": {
