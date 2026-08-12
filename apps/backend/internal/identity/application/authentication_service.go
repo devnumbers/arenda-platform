@@ -25,17 +25,13 @@ const (
 
 // AuthenticationService handles login code issuance and verification.
 type AuthenticationService struct {
-	users      UserRepository
-	codes      LoginCodeRepository
-	attempts   AttemptRepository
-	sessions   SessionRepository
+	txStoreFactory
 	codeSender LoginCodeSender
 	clock      clock.Clock
 	publisher  EventPublisher
 	db         transaction.Beginner
 	logger     *slog.Logger
 	hasher     TokenHasher
-	audit      auditapp.Recorder
 }
 
 // AuthenticationServiceConfig carries optional dependencies for AuthenticationService.
@@ -44,9 +40,13 @@ type AuthenticationServiceConfig struct {
 	Clock      clock.Clock
 	Publisher  EventPublisher
 	DB         transaction.Beginner
-	Logger     *slog.Logger
-	Hasher     TokenHasher
-	Audit      auditapp.Recorder
+	// UoW is the Unit-of-Work seam used by runInTx once use cases migrate to
+	// the transactional-stores pattern (ADR 0033). It is optional during the
+	// transition; Beginner remains valid until migration completes.
+	UoW    transaction.UoW
+	Logger *slog.Logger
+	Hasher TokenHasher
+	Audit  auditapp.Recorder
 }
 
 // NewAuthenticationService creates an AuthenticationService.
@@ -63,17 +63,20 @@ func NewAuthenticationService(users UserRepository, codes LoginCodeRepository, a
 		audit = auditapp.Noop{}
 	}
 	return &AuthenticationService{
-		users:      users,
-		codes:      codes,
-		attempts:   attempts,
-		sessions:   sessions,
+		txStoreFactory: txStoreFactory{
+			users:    users,
+			codes:    codes,
+			attempts: attempts,
+			sessions: sessions,
+			audit:    audit,
+			uow:      cfg.UoW,
+		},
 		codeSender: cfg.CodeSender,
 		clock:      cfg.Clock,
 		publisher:  cfg.Publisher,
 		db:         cfg.DB,
 		logger:     logger,
 		hasher:     cfg.Hasher,
-		audit:      audit,
 	}
 }
 

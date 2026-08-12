@@ -90,6 +90,7 @@ func WireIdentity(
 			Clock:      p.Clock,
 			Publisher:  eventPublisher,
 			DB:         p.Beginner,
+			UoW:        p.UoW,
 			Logger:     p.Logger,
 			Hasher:     p.Encryptor,
 			Audit:      p.AuditRecorder,
@@ -105,6 +106,7 @@ func WireIdentity(
 			Sender: emailSender,
 			Clock:  p.Clock,
 			DB:     p.Beginner,
+			UoW:    p.UoW,
 			Hasher: p.Encryptor,
 			Audit:  p.AuditRecorder,
 		},
@@ -114,12 +116,14 @@ func WireIdentity(
 		userRepo,
 		p.AuditRecorder,
 		p.Beginner,
+		p.UoW,
 		reminderService,
 	)
 
 	logoutService := identityapp.NewLogoutService(
 		sessionRepo,
 		p.Encryptor,
+		p.UoW,
 	)
 
 	return &Identity{

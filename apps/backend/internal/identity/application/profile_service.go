@@ -17,19 +17,22 @@ type ProfileService struct {
 	users               UserRepository
 	audit               auditapp.Recorder
 	db                  transaction.Beginner
+	uow                 transaction.UoW
 	reminderRescheduler sharedtz.ReminderRescheduler
 }
 
 // NewProfileService creates a ProfileService. A nil reminderRescheduler is
-// replaced with a no-op implementation.
-func NewProfileService(users UserRepository, audit auditapp.Recorder, db transaction.Beginner, reminderRescheduler sharedtz.ReminderRescheduler) *ProfileService {
+// replaced with a no-op implementation. uow is the Unit-of-Work seam used by
+// runInTx once the service migrates to the transactional-stores pattern
+// (ADR 0033); it is optional during the transition.
+func NewProfileService(users UserRepository, audit auditapp.Recorder, db transaction.Beginner, uow transaction.UoW, reminderRescheduler sharedtz.ReminderRescheduler) *ProfileService {
 	if audit == nil {
 		audit = auditapp.Noop{}
 	}
 	if reminderRescheduler == nil {
 		reminderRescheduler = noopReminderRescheduler{}
 	}
-	return &ProfileService{users: users, audit: audit, db: db, reminderRescheduler: reminderRescheduler}
+	return &ProfileService{users: users, audit: audit, db: db, uow: uow, reminderRescheduler: reminderRescheduler}
 }
 
 type noopReminderRescheduler struct{}

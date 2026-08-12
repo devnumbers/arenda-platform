@@ -15,15 +15,11 @@ import (
 
 // PhoneChangeService handles phone number change for authenticated users.
 type PhoneChangeService struct {
-	users    UserRepository
-	codes    LoginCodeRepository
-	attempts AttemptRepository
-	sessions SessionRepository
-	sender   LoginCodeSender
-	clock    clock.Clock
-	db       transaction.Beginner
-	hasher   TokenHasher
-	audit    auditapp.Recorder
+	txStoreFactory
+	sender LoginCodeSender
+	clock  clock.Clock
+	db     transaction.Beginner
+	hasher TokenHasher
 }
 
 // PhoneChangeServiceConfig carries optional dependencies for PhoneChangeService.
@@ -31,6 +27,9 @@ type PhoneChangeServiceConfig struct {
 	Sender LoginCodeSender
 	Clock  clock.Clock
 	DB     transaction.Beginner
+	// UoW is the Unit-of-Work seam used by runInTx once use cases migrate to
+	// the transactional-stores pattern (ADR 0033). Optional during transition.
+	UoW    transaction.UoW
 	Hasher TokenHasher
 	Audit  auditapp.Recorder
 }
@@ -45,15 +44,18 @@ func NewPhoneChangeService(users UserRepository, codes LoginCodeRepository, atte
 		audit = auditapp.Noop{}
 	}
 	return &PhoneChangeService{
-		users:    users,
-		codes:    codes,
-		attempts: attempts,
-		sessions: sessions,
-		sender:   cfg.Sender,
-		clock:    cfg.Clock,
-		db:       cfg.DB,
-		hasher:   cfg.Hasher,
-		audit:    audit,
+		txStoreFactory: txStoreFactory{
+			users:    users,
+			codes:    codes,
+			attempts: attempts,
+			sessions: sessions,
+			audit:    audit,
+			uow:      cfg.UoW,
+		},
+		sender: cfg.Sender,
+		clock:  cfg.Clock,
+		db:     cfg.DB,
+		hasher: cfg.Hasher,
 	}
 }
 
