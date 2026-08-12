@@ -135,7 +135,11 @@ func decryptPhoneField(ctx context.Context, enc encryption.Encryptor, phone stri
 	if err != nil {
 		return domain.Phone{}, err
 	}
-	return domain.NewPhone(decrypted)
+	parsed, err := domain.NewPhone(decrypted)
+	if err != nil {
+		return domain.Phone{}, fmt.Errorf("invalid phone from DB: %w", err)
+	}
+	return parsed, nil
 }
 
 // parseEmailField parses a nullable stored email into a domain.Email value and
@@ -148,7 +152,7 @@ func parseEmailField(email pgtype.Text) (domain.Email, bool, error) {
 	}
 	e, err := domain.EmailFrom(email.String)
 	if err != nil {
-		return domain.Email{}, false, fmt.Errorf("invalid email in DB: %w", err)
+		return domain.Email{}, false, fmt.Errorf("invalid email from DB: %w", err)
 	}
 	return e, true, nil
 }

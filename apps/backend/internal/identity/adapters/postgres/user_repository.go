@@ -211,7 +211,7 @@ func (r *UserRepository) UpdateEmailVerified(ctx context.Context, id uuid.UUID, 
 func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain.User, error) {
 	phone, err := decryptPhoneField(ctx, enc, row.Phone, row.PhoneEncrypted)
 	if err != nil {
-		return domain.User{}, fmt.Errorf("invalid phone from DB: %w", err)
+		return domain.User{}, err
 	}
 	role, err := domain.NewRole(row.Role)
 	if err != nil {
@@ -219,7 +219,7 @@ func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain
 	}
 	emailValue, present, err := parseEmailField(row.Email)
 	if err != nil {
-		return domain.User{}, fmt.Errorf("invalid email from DB: %w", err)
+		return domain.User{}, err
 	}
 	var email *domain.Email
 	if present {
