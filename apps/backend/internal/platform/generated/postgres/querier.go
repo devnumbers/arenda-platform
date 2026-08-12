@@ -116,6 +116,15 @@ type Querier interface {
 	GetFreeReminderByIDAndOwner(ctx context.Context, arg GetFreeReminderByIDAndOwnerParams) (FreeReminder, error)
 	GetFreeReminderByIDUnscoped(ctx context.Context, id pgtype.UUID) (FreeReminder, error)
 	GetLastSucceededSubscriptionPaymentBySubscriptionID(ctx context.Context, subscriptionID pgtype.UUID) (SubscriptionPayment, error)
+	// GetLatestLoginCodeByPhoneAndEmailAndPurpose reads the newest non-expired unused
+	// login code for a (phone, email, purpose) tuple. It is served by the partial unique
+	// index idx_login_codes_unique_unused (phone, COALESCE(email, empty-string), purpose)
+	// WHERE used=false created by migration 000063 — the same index that backs
+	// CreateLoginCode's ON CONFLICT upsert. The index serves both writes and reads; no
+	// separate read index is needed (issue #224, EXPLAIN-verified: at production scale
+	// the planner chooses an index scan over this index; email falls into Filter, not
+	// Index Cond, because the index column is COALESCE(email, ...) and cannot match a raw
+	// email=$2 equality, but the phone+purpose prefix narrows the scan efficiently).
 	GetLatestLoginCodeByPhoneAndEmailAndPurpose(ctx context.Context, arg GetLatestLoginCodeByPhoneAndEmailAndPurposeParams) (GetLatestLoginCodeByPhoneAndEmailAndPurposeRow, error)
 	GetLeaseByID(ctx context.Context, id pgtype.UUID) (Lease, error)
 	GetLeaseByIDAdmin(ctx context.Context, id pgtype.UUID) (GetLeaseByIDAdminRow, error)
