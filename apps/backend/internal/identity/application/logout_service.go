@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // LogoutService terminates sessions.
@@ -23,37 +21,23 @@ type LogoutService struct {
 	hasher TokenHasher
 }
 
-// LogoutServiceConfig carries the non-repository dependencies for LogoutService.
+// LogoutServiceConfig carries the non-transactional dependencies for
+// LogoutService. The transactional repositories, audit recorder, and UoW
+// live in the shared txStoreFactory passed to NewLogoutService.
 type LogoutServiceConfig struct {
 	Hasher TokenHasher
-	Audit  auditapp.Recorder
-	UoW    transaction.UoW
 }
 
-// NewLogoutService creates a LogoutService. It embeds the identity
+// NewLogoutService creates a LogoutService. It embeds the shared identity
 // txStoreFactory so Logout/LogoutAll run through runInTx; the repositories and
 // audit recorder are shared by every identity service (ADR 0033 γ-factory).
 func NewLogoutService(
-	users UserRepository,
-	codes LoginCodeRepository,
-	attempts AttemptRepository,
-	sessions SessionRepository,
+	factory txStoreFactory,
 	cfg LogoutServiceConfig,
 ) *LogoutService {
-	audit := cfg.Audit
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	return &LogoutService{
-		txStoreFactory: txStoreFactory{
-			users:    users,
-			codes:    codes,
-			attempts: attempts,
-			sessions: sessions,
-			audit:    audit,
-			uow:      cfg.UoW,
-		},
-		hasher: cfg.Hasher,
+		txStoreFactory: factory,
+		hasher:         cfg.Hasher,
 	}
 }
 

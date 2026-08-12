@@ -5,11 +5,9 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // ProfileService provides read and update operations for the user's own profile.
@@ -23,41 +21,27 @@ type ProfileService struct {
 	reminderRescheduler sharedtz.ReminderRescheduler
 }
 
-// ProfileServiceConfig carries the non-repository dependencies for ProfileService.
+// ProfileServiceConfig carries the non-transactional dependencies for
+// ProfileService. The transactional repositories, audit recorder, and UoW
+// live in the shared txStoreFactory passed to NewProfileService.
 type ProfileServiceConfig struct {
-	Audit               auditapp.Recorder
-	UoW                 transaction.UoW
 	ReminderRescheduler sharedtz.ReminderRescheduler
 }
 
-// NewProfileService creates a ProfileService. It embeds the identity
+// NewProfileService creates a ProfileService. It embeds the shared identity
 // txStoreFactory so UpdateProfile runs through runInTx; the repositories and
 // audit recorder are shared by every identity service (ADR 0033 γ-factory). A
 // nil ReminderRescheduler is replaced with a no-op implementation.
 func NewProfileService(
-	users UserRepository,
-	codes LoginCodeRepository,
-	attempts AttemptRepository,
-	sessions SessionRepository,
+	factory txStoreFactory,
 	cfg ProfileServiceConfig,
 ) *ProfileService {
-	audit := cfg.Audit
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	reminderRescheduler := cfg.ReminderRescheduler
 	if reminderRescheduler == nil {
 		reminderRescheduler = noopReminderRescheduler{}
 	}
 	return &ProfileService{
-		txStoreFactory: txStoreFactory{
-			users:    users,
-			codes:    codes,
-			attempts: attempts,
-			sessions: sessions,
-			audit:    audit,
-			uow:      cfg.UoW,
-		},
+		txStoreFactory:      factory,
 		reminderRescheduler: reminderRescheduler,
 	}
 }

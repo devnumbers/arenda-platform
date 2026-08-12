@@ -10,12 +10,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 const (
@@ -55,24 +53,21 @@ type LoginCodeService struct {
 	logger *slog.Logger
 }
 
-// LoginCodeServiceConfig carries the non-repository dependencies for LoginCodeService.
+// LoginCodeServiceConfig carries the non-transactional dependencies for
+// LoginCodeService. The transactional repositories, audit recorder, and UoW
+// live in the shared txStoreFactory passed to NewLoginCodeService.
 type LoginCodeServiceConfig struct {
 	CodeSender LoginCodeSender
 	Clock      clock.Clock
 	Hasher     TokenHasher
 	Logger     *slog.Logger
-	Audit      auditapp.Recorder
-	UoW        transaction.UoW
 }
 
-// NewLoginCodeService creates a LoginCodeService. It embeds the identity
+// NewLoginCodeService creates a LoginCodeService. It embeds the shared identity
 // txStoreFactory so Send runs through runInTx; Verify and RecordFailure receive
 // their stores from the calling orchestrator's runInTx (ADR 0033 γ-factory).
 func NewLoginCodeService(
-	users UserRepository,
-	codes LoginCodeRepository,
-	attempts AttemptRepository,
-	sessions SessionRepository,
+	factory txStoreFactory,
 	cfg LoginCodeServiceConfig,
 ) *LoginCodeService {
 	if cfg.Clock == nil {
@@ -82,23 +77,12 @@ func NewLoginCodeService(
 	if logger == nil {
 		logger = slog.Default()
 	}
-	audit := cfg.Audit
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	return &LoginCodeService{
-		txStoreFactory: txStoreFactory{
-			users:    users,
-			codes:    codes,
-			attempts: attempts,
-			sessions: sessions,
-			audit:    audit,
-			uow:      cfg.UoW,
-		},
-		sender: cfg.CodeSender,
-		clock:  cfg.Clock,
-		hasher: cfg.Hasher,
-		logger: logger,
+		txStoreFactory: factory,
+		sender:         cfg.CodeSender,
+		clock:          cfg.Clock,
+		hasher:         cfg.Hasher,
+		logger:         logger,
 	}
 }
 

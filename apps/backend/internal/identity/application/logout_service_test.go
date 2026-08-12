@@ -19,11 +19,11 @@ func newLogoutHarness() (*LogoutService, *fakeBeginner, *fakeSessionRepo) {
 	attempts := newFakeAttemptRepo()
 	sessions := newFakeSessionRepo()
 	beginner := &fakeBeginner{}
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, nil, &fakeUoW{beginner: beginner})
 	svc := NewLogoutService(
-		users, codes, attempts, sessions,
+		factory,
 		LogoutServiceConfig{
 			Hasher: fakeHasher{},
-			UoW:    &fakeUoW{beginner: beginner},
 		},
 	)
 	return svc, beginner, sessions
@@ -63,11 +63,11 @@ func TestLogoutService_Logout_WrapsDeleteError(t *testing.T) {
 	attempts := newFakeAttemptRepo()
 	sessions := &errorSessionRepo{err: errors.New("db down")}
 	beginner := &fakeBeginner{}
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, nil, &fakeUoW{beginner: beginner})
 	svc := NewLogoutService(
-		users, codes, attempts, sessions,
+		factory,
 		LogoutServiceConfig{
 			Hasher: fakeHasher{},
-			UoW:    &fakeUoW{beginner: beginner},
 		},
 	)
 
@@ -124,11 +124,11 @@ func TestLogoutService_UsesRunInTx(t *testing.T) {
 	attempts := newFakeAttemptRepo()
 	sessions := &countingSessionRepo{fakeSessionRepo: newFakeSessionRepo()}
 	beginner := &fakeBeginner{}
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, nil, &fakeUoW{beginner: beginner})
 	svc := NewLogoutService(
-		users, codes, attempts, sessions,
+		factory,
 		LogoutServiceConfig{
 			Hasher: fakeHasher{},
-			UoW:    &fakeUoW{beginner: beginner},
 		},
 	)
 

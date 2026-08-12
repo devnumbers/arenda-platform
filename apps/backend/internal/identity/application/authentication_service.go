@@ -7,12 +7,10 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // AuthenticationService is a thin orchestrator over LoginCodeService and
@@ -34,27 +32,23 @@ type AuthenticationService struct {
 	logger     *slog.Logger
 }
 
-// AuthenticationServiceConfig carries the deep-module dependencies plus the
-// shared audit recorder and UoW for the orchestrator's own runInTx calls.
+// AuthenticationServiceConfig carries the deep-module dependencies the
+// orchestrator composes. The transactional repositories, audit recorder, and
+// UoW live in the shared txStoreFactory passed to NewAuthenticationService.
 type AuthenticationServiceConfig struct {
 	LoginCodes *LoginCodeService
 	Sessions   SessionService
 	Publisher  EventPublisher
 	Clock      clock.Clock
 	Logger     *slog.Logger
-	Audit      auditapp.Recorder
-	UoW        transaction.UoW
 }
 
 // NewAuthenticationService creates an AuthenticationService. It embeds the
-// identity txStoreFactory so its runInTx calls bind the repositories and audit
-// recorder to the transaction; the login-code and session deep modules are
+// shared identity txStoreFactory so its runInTx calls bind the repositories and
+// audit recorder to the transaction; the login-code and session deep modules are
 // passed in already constructed (ADR 0033 γ-factory).
 func NewAuthenticationService(
-	users UserRepository,
-	codes LoginCodeRepository,
-	attempts AttemptRepository,
-	sessions SessionRepository,
+	factory txStoreFactory,
 	cfg AuthenticationServiceConfig,
 ) *AuthenticationService {
 	if cfg.Clock == nil {
@@ -64,24 +58,13 @@ func NewAuthenticationService(
 	if logger == nil {
 		logger = slog.Default()
 	}
-	audit := cfg.Audit
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	return &AuthenticationService{
-		txStoreFactory: txStoreFactory{
-			users:    users,
-			codes:    codes,
-			attempts: attempts,
-			sessions: sessions,
-			audit:    audit,
-			uow:      cfg.UoW,
-		},
-		loginCodes: cfg.LoginCodes,
-		sessions:   cfg.Sessions,
-		publisher:  cfg.Publisher,
-		clock:      cfg.Clock,
-		logger:     logger,
+		txStoreFactory: factory,
+		loginCodes:     cfg.LoginCodes,
+		sessions:       cfg.Sessions,
+		publisher:      cfg.Publisher,
+		clock:          cfg.Clock,
+		logger:         logger,
 	}
 }
 

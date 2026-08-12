@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // SessionService is the application-layer facade for session lookups, updates,
@@ -33,38 +31,25 @@ type sessionService struct {
 }
 
 // NewSessionService creates a SessionService backed by the provided repository.
-// The hasher is used to look up sessions by the hashed value of the raw token
-// and to hash freshly issued tokens before persisting them. It embeds the
-// identity txStoreFactory so Issue can run inside the caller's runInTx.
+// The hasher (used to look up sessions by the hashed value of the raw token and
+// to hash freshly issued tokens before persisting them) is carried in cfg for
+// uniformity with the other identity constructors. The shared identity
+// txStoreFactory is embedded so Issue can run inside the caller's runInTx.
 func NewSessionService(
-	users UserRepository,
-	codes LoginCodeRepository,
-	attempts AttemptRepository,
-	sessions SessionRepository,
-	hasher TokenHasher,
+	factory txStoreFactory,
 	cfg SessionServiceConfig,
 ) *sessionService {
-	audit := cfg.Audit
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	return &sessionService{
-		txStoreFactory: txStoreFactory{
-			users:    users,
-			codes:    codes,
-			attempts: attempts,
-			sessions: sessions,
-			audit:    audit,
-			uow:      cfg.UoW,
-		},
-		hasher: hasher,
+		txStoreFactory: factory,
+		hasher:         cfg.Hasher,
 	}
 }
 
-// SessionServiceConfig carries the non-repository dependencies for sessionService.
+// SessionServiceConfig carries the non-transactional dependencies for
+// sessionService. The transactional repositories, audit recorder, and UoW
+// live in the shared txStoreFactory passed to NewSessionService.
 type SessionServiceConfig struct {
-	Audit auditapp.Recorder
-	UoW   transaction.UoW
+	Hasher TokenHasher
 }
 
 func (s *sessionService) Load(ctx context.Context, rawToken string, now time.Time) (domain.Session, domain.User, error) {

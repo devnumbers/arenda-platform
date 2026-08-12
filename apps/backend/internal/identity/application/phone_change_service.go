@@ -7,12 +7,10 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // PhoneChangeService handles phone number change for authenticated users. It
@@ -29,24 +27,22 @@ type PhoneChangeService struct {
 	logger     *slog.Logger
 }
 
-// PhoneChangeServiceConfig carries the non-repository dependencies for PhoneChangeService.
+// PhoneChangeServiceConfig carries the non-transactional dependencies for
+// PhoneChangeService. The transactional repositories, audit recorder, and UoW
+// live in the shared txStoreFactory passed to NewPhoneChangeService.
 type PhoneChangeServiceConfig struct {
 	LoginCodes *LoginCodeService
 	Clock      clock.Clock
 	Hasher     TokenHasher
 	Logger     *slog.Logger
-	Audit      auditapp.Recorder
-	UoW        transaction.UoW
 }
 
-// NewPhoneChangeService creates a PhoneChangeService. It embeds the identity
-// txStoreFactory so ChangePhone runs through runInTx; login-code issuance and
-// verification delegate to the shared LoginCodeService (ADR 0033 γ-factory).
+// NewPhoneChangeService creates a PhoneChangeService. It embeds the shared
+// identity txStoreFactory so ChangePhone runs through runInTx; login-code
+// issuance and verification delegate to the shared LoginCodeService
+// (ADR 0033 γ-factory).
 func NewPhoneChangeService(
-	users UserRepository,
-	codes LoginCodeRepository,
-	attempts AttemptRepository,
-	sessions SessionRepository,
+	factory txStoreFactory,
 	cfg PhoneChangeServiceConfig,
 ) *PhoneChangeService {
 	if cfg.Clock == nil {
@@ -56,23 +52,12 @@ func NewPhoneChangeService(
 	if logger == nil {
 		logger = slog.Default()
 	}
-	audit := cfg.Audit
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	return &PhoneChangeService{
-		txStoreFactory: txStoreFactory{
-			users:    users,
-			codes:    codes,
-			attempts: attempts,
-			sessions: sessions,
-			audit:    audit,
-			uow:      cfg.UoW,
-		},
-		loginCodes: cfg.LoginCodes,
-		clock:      cfg.Clock,
-		hasher:     cfg.Hasher,
-		logger:     logger,
+		txStoreFactory: factory,
+		loginCodes:     cfg.LoginCodes,
+		clock:          cfg.Clock,
+		hasher:         cfg.Hasher,
+		logger:         logger,
 	}
 }
 

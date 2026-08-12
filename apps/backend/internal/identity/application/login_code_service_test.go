@@ -31,12 +31,12 @@ func newLoginCodeHarness() *loginCodeHarness {
 		sender:   &fakeCodeSender{},
 		beginner: &fakeBeginner{},
 	}
-	h.svc = NewLoginCodeService(h.users, h.codes, h.attempts, h.sessions, LoginCodeServiceConfig{
+	factory := NewTxStoreFactory(h.users, h.codes, h.attempts, h.sessions, nil, &fakeUoW{beginner: h.beginner})
+	h.svc = NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: h.sender,
 		Clock:      &fakeClock{now: testNow},
 		Hasher:     fakeHasher{},
 		Logger:     discardLogger(),
-		UoW:        &fakeUoW{beginner: h.beginner},
 	})
 	return h
 }

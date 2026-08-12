@@ -24,9 +24,8 @@ func newSessionHarness() *sessionHarness {
 		sessions: newFakeSessionRepo(),
 		beginner: &fakeBeginner{},
 	}
-	h.svc = NewSessionService(h.users, h.codes, h.attempts, h.sessions, fakeHasher{}, SessionServiceConfig{
-		UoW: &fakeUoW{beginner: h.beginner},
-	})
+	factory := NewTxStoreFactory(h.users, h.codes, h.attempts, h.sessions, nil, &fakeUoW{beginner: h.beginner})
+	h.svc = NewSessionService(factory, SessionServiceConfig{Hasher: fakeHasher{}})
 	return h
 }
 

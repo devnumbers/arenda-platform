@@ -70,11 +70,10 @@ func newProfileHarness(t *testing.T) *profileHarness {
 	beginner := &fakeBeginner{}
 	audit := &recordingRecorder{}
 	rescheduler := &fakeReminderRescheduler{}
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, audit, &fakeUoW{beginner: beginner})
 	svc := NewProfileService(
-		users, codes, attempts, sessions,
+		factory,
 		ProfileServiceConfig{
-			Audit:               audit,
-			UoW:                 &fakeUoW{beginner: beginner},
 			ReminderRescheduler: rescheduler,
 		},
 	)
@@ -299,11 +298,10 @@ func TestProfileService_UsesRunInTx(t *testing.T) {
 	attempts := newFakeAttemptRepo()
 	sessions := newFakeSessionRepo()
 	beginner := &fakeBeginner{}
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, &recordingRecorder{}, &fakeUoW{beginner: beginner})
 	svc := NewProfileService(
-		users, codes, attempts, sessions,
+		factory,
 		ProfileServiceConfig{
-			Audit:               &recordingRecorder{},
-			UoW:                 &fakeUoW{beginner: beginner},
 			ReminderRescheduler: &fakeReminderRescheduler{},
 		},
 	)

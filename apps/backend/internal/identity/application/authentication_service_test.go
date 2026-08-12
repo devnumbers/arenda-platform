@@ -377,21 +377,20 @@ func newAuthServiceHarness() *authServiceHarness {
 		beginner:  &fakeBeginner{},
 	}
 	uow := &fakeUoW{beginner: h.beginner}
-	loginCodes := NewLoginCodeService(h.users, h.codes, h.attempts, h.sessions, LoginCodeServiceConfig{
+	factory := NewTxStoreFactory(h.users, h.codes, h.attempts, h.sessions, nil, uow)
+	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: h.sender,
 		Clock:      &fakeClock{now: testNow},
 		Hasher:     fakeHasher{},
 		Logger:     discardLogger(),
-		UoW:        uow,
 	})
-	sessionSvc := NewSessionService(h.users, h.codes, h.attempts, h.sessions, fakeHasher{}, SessionServiceConfig{UoW: uow})
-	h.svc = NewAuthenticationService(h.users, h.codes, h.attempts, h.sessions, AuthenticationServiceConfig{
+	sessionSvc := NewSessionService(factory, SessionServiceConfig{Hasher: fakeHasher{}})
+	h.svc = NewAuthenticationService(factory, AuthenticationServiceConfig{
 		LoginCodes: loginCodes,
 		Sessions:   sessionSvc,
 		Clock:      &fakeClock{now: testNow},
 		Publisher:  h.publisher,
 		Logger:     discardLogger(),
-		UoW:        uow,
 	})
 	return h
 }

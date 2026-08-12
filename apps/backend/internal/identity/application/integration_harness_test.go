@@ -143,17 +143,16 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	auditWriter := auditpg.NewWriter(pool)
 	audit := auditapp.NewService(auditWriter, clk)
 
-	loginCodes := identityapp.NewLoginCodeService(users, codes, attempts, sessions, identityapp.LoginCodeServiceConfig{
+	factory := identityapp.NewTxStoreFactory(users, codes, attempts, sessions, audit, uow)
+
+	loginCodes := identityapp.NewLoginCodeService(factory, identityapp.LoginCodeServiceConfig{
 		CodeSender: sender,
 		Clock:      clk,
 		Hasher:     enc,
 		Logger:     logger,
-		Audit:      audit,
-		UoW:        uow,
 	})
-	sessionSvc := identityapp.NewSessionService(users, codes, attempts, sessions, enc, identityapp.SessionServiceConfig{
-		Audit: audit,
-		UoW:   uow,
+	sessionSvc := identityapp.NewSessionService(factory, identityapp.SessionServiceConfig{
+		Hasher: enc,
 	})
 
 	return &integrationHarness{
@@ -170,32 +169,24 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 		sessions:    sessions,
 		uow:         uow,
 		audit:       audit,
-		auth: identityapp.NewAuthenticationService(users, codes, attempts, sessions, identityapp.AuthenticationServiceConfig{
+		auth: identityapp.NewAuthenticationService(factory, identityapp.AuthenticationServiceConfig{
 			LoginCodes: loginCodes,
 			Sessions:   sessionSvc,
 			Publisher:  publisher,
 			Clock:      clk,
 			Logger:     logger,
-			Audit:      audit,
-			UoW:        uow,
 		}),
-		phone: identityapp.NewPhoneChangeService(users, codes, attempts, sessions, identityapp.PhoneChangeServiceConfig{
+		phone: identityapp.NewPhoneChangeService(factory, identityapp.PhoneChangeServiceConfig{
 			LoginCodes: loginCodes,
 			Clock:      clk,
 			Hasher:     enc,
 			Logger:     logger,
-			Audit:      audit,
-			UoW:        uow,
 		}),
-		profile: identityapp.NewProfileService(users, codes, attempts, sessions, identityapp.ProfileServiceConfig{
-			Audit:               audit,
-			UoW:                 uow,
+		profile: identityapp.NewProfileService(factory, identityapp.ProfileServiceConfig{
 			ReminderRescheduler: rescheduler,
 		}),
-		logout: identityapp.NewLogoutService(users, codes, attempts, sessions, identityapp.LogoutServiceConfig{
+		logout: identityapp.NewLogoutService(factory, identityapp.LogoutServiceConfig{
 			Hasher: enc,
-			Audit:  audit,
-			UoW:    uow,
 		}),
 		sessionsvc: sessionSvc,
 	}

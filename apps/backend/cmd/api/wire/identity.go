@@ -54,9 +54,19 @@ func WireIdentity(
 	codeRepo := identitypg.NewLoginCodeRepository(p.DB, p.Encryptor)
 	attemptRepo := identitypg.NewAttemptRepository(p.DB, p.Encryptor)
 	sessionRepo := identitypg.NewSessionRepository(p.DB, p.Encryptor)
+
+	// factory is the single canonical txStoreFactory bundling the four identity
+	// repositories, the audit recorder, and the UoW (ADR 0033 γ-factory). It is
+	// passed to every identity service so adding an Nth repository is a change
+	// here, not in six constructors.
+	factory := identityapp.NewTxStoreFactory(
+		userRepo, codeRepo, attemptRepo, sessionRepo,
+		p.AuditRecorder, p.UoW,
+	)
+
 	sessionService := identityapp.NewSessionService(
-		userRepo, codeRepo, attemptRepo, sessionRepo, p.Encryptor,
-		identityapp.SessionServiceConfig{Audit: p.AuditRecorder, UoW: p.UoW},
+		factory,
+		identityapp.SessionServiceConfig{Hasher: p.Encryptor},
 	)
 	sessionLoader := identityhttp.NewSessionLoader(sessionService)
 
@@ -85,69 +95,47 @@ func WireIdentity(
 	// loginCodeService is the deep module for login-code issuance/verification
 	// shared by AuthenticationService and PhoneChangeService (ADR 0033, step 4).
 	loginCodeService := identityapp.NewLoginCodeService(
-		userRepo, codeRepo, attemptRepo, sessionRepo,
+		factory,
 		identityapp.LoginCodeServiceConfig{
 			CodeSender: emailSender,
 			Clock:      p.Clock,
 			Hasher:     p.Encryptor,
 			Logger:     p.Logger,
-			Audit:      p.AuditRecorder,
-			UoW:        p.UoW,
 		},
 	)
 
 	authenticationService := identityapp.NewAuthenticationService(
-		userRepo,
-		codeRepo,
-		attemptRepo,
-		sessionRepo,
+		factory,
 		identityapp.AuthenticationServiceConfig{
 			LoginCodes: loginCodeService,
 			Sessions:   sessionService,
 			Publisher:  eventPublisher,
 			Clock:      p.Clock,
 			Logger:     p.Logger,
-			Audit:      p.AuditRecorder,
-			UoW:        p.UoW,
 		},
 	)
 
 	phoneChangeService := identityapp.NewPhoneChangeService(
-		userRepo,
-		codeRepo,
-		attemptRepo,
-		sessionRepo,
+		factory,
 		identityapp.PhoneChangeServiceConfig{
 			LoginCodes: loginCodeService,
 			Clock:      p.Clock,
 			Hasher:     p.Encryptor,
 			Logger:     p.Logger,
-			Audit:      p.AuditRecorder,
-			UoW:        p.UoW,
 		},
 	)
 
 	profileService := identityapp.NewProfileService(
-		userRepo,
-		codeRepo,
-		attemptRepo,
-		sessionRepo,
+		factory,
 		identityapp.ProfileServiceConfig{
-			Audit:               p.AuditRecorder,
-			UoW:                 p.UoW,
 			ReminderRescheduler: reminderService,
 		},
 	)
 
 	logoutService := identityapp.NewLogoutService(
-		userRepo,
-		codeRepo,
-		attemptRepo,
-		sessionRepo,
+		factory,
 		identityapp.LogoutServiceConfig{
 			Hasher: p.Encryptor,
-			Audit:  p.AuditRecorder,
-			UoW:    p.UoW,
 		},
 	)
 

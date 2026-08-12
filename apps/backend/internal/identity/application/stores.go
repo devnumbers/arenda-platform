@@ -26,6 +26,10 @@ type txStores struct {
 // runInTx call. It is embedded anonymously by every identity service so they
 // share one canonical transactional shape (ADR 0033 γ-factory): a use case only
 // sees runInTx(ctx, work) and the *txStores it hands out.
+//
+// Build it once with NewTxStoreFactory at the wire layer and pass the same value
+// to every identity service constructor, so adding an Nth repository is a change
+// to one constructor call, not six.
 type txStoreFactory struct {
 	users    UserRepository
 	codes    LoginCodeRepository
@@ -33,6 +37,33 @@ type txStoreFactory struct {
 	sessions SessionRepository
 	audit    auditapp.Recorder
 	uow      transaction.UoW
+}
+
+// NewTxStoreFactory bundles the four identity repositories, the audit recorder,
+// and the Unit-of-Work into the single txStoreFactory every identity service
+// embeds (ADR 0033 γ-factory). A nil audit defaults to a Noop recorder so a
+// caller that does not care about audit still gets a safe factory. The type
+// stays unexported; callers use := to hold it (standard Go pattern for a factory
+// returning an unexported type).
+func NewTxStoreFactory(
+	users UserRepository,
+	codes LoginCodeRepository,
+	attempts AttemptRepository,
+	sessions SessionRepository,
+	audit auditapp.Recorder,
+	uow transaction.UoW,
+) txStoreFactory {
+	if audit == nil {
+		audit = auditapp.Noop{}
+	}
+	return txStoreFactory{
+		users:    users,
+		codes:    codes,
+		attempts: attempts,
+		sessions: sessions,
+		audit:    audit,
+		uow:      uow,
+	}
 }
 
 // runInTx opens a Unit-of-Work, builds the identity transactional stores from
