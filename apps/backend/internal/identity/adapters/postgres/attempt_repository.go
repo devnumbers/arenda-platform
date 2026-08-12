@@ -2,13 +2,11 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
@@ -20,24 +18,19 @@ import (
 
 // AttemptRepository persists login attempt windows.
 type AttemptRepository struct {
-	db  pgen.DBTX
-	enc encryption.Encryptor
+	repoBase
 }
 
 // NewAttemptRepository creates a new attempt repository.
 func NewAttemptRepository(db pgen.DBTX, enc encryption.Encryptor) *AttemptRepository {
-	return &AttemptRepository{db: db, enc: enc}
-}
-
-func (r *AttemptRepository) q() *pgen.Queries {
-	return pgen.New(r.db)
+	return &AttemptRepository{repoBase{db: db, enc: enc}}
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *AttemptRepository) WithTx(tx transaction.Tx) (application.AttemptRepository, error) {
-	dbtx, ok := tx.(pgen.DBTX)
-	if !ok {
-		return nil, fmt.Errorf("identity.AttemptRepository.WithTx: %T is not a postgres.DBTX", tx)
+	dbtx, err := assertTxDB(tx)
+	if err != nil {
+		return nil, fmt.Errorf("identity.AttemptRepository.WithTx: %w", err)
 	}
 	return NewAttemptRepository(dbtx, r.enc), nil
 }
@@ -49,7 +42,7 @@ func (r *AttemptRepository) GetByPhone(ctx context.Context, phone domain.Phone) 
 	}
 	row, err := r.q().GetLoginAttemptByPhone(ctx, encryptedPhone)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if notFound(err) {
 			return domain.AttemptWindow{}, application.ErrNotFound
 		}
 		return domain.AttemptWindow{}, fmt.Errorf("get login attempt by phone: %w", err)
@@ -68,7 +61,7 @@ func (r *AttemptRepository) GetByPhoneForUpdate(ctx context.Context, phone domai
 	}
 	row, err := r.q().GetLoginAttemptByPhoneForUpdate(ctx, encryptedPhone)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if notFound(err) {
 			return domain.AttemptWindow{}, application.ErrNotFound
 		}
 		return domain.AttemptWindow{}, fmt.Errorf("get login attempt by phone for update: %w", err)

@@ -2,12 +2,10 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
@@ -20,24 +18,19 @@ import (
 
 // LoginCodeRepository persists login codes.
 type LoginCodeRepository struct {
-	db  pgen.DBTX
-	enc encryption.Encryptor
+	repoBase
 }
 
 // NewLoginCodeRepository creates a new login code repository.
 func NewLoginCodeRepository(db pgen.DBTX, enc encryption.Encryptor) *LoginCodeRepository {
-	return &LoginCodeRepository{db: db, enc: enc}
-}
-
-func (r *LoginCodeRepository) q() *pgen.Queries {
-	return pgen.New(r.db)
+	return &LoginCodeRepository{repoBase{db: db, enc: enc}}
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *LoginCodeRepository) WithTx(tx transaction.Tx) (application.LoginCodeRepository, error) {
-	dbtx, ok := tx.(pgen.DBTX)
-	if !ok {
-		return nil, fmt.Errorf("identity.LoginCodeRepository.WithTx: %T is not a postgres.DBTX", tx)
+	dbtx, err := assertTxDB(tx)
+	if err != nil {
+		return nil, fmt.Errorf("identity.LoginCodeRepository.WithTx: %w", err)
 	}
 	return NewLoginCodeRepository(dbtx, r.enc), nil
 }
@@ -77,7 +70,7 @@ func (r *LoginCodeRepository) GetLatestByPhoneAndEmail(ctx context.Context, phon
 		ExpiresAt: pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if notFound(err) {
 			return domain.LoginCode{}, application.ErrNotFound
 		}
 		return domain.LoginCode{}, fmt.Errorf("get latest login code: %w", err)
@@ -177,21 +170,13 @@ func toLoginCodeRowPhoneEmail(row pgen.GetLatestLoginCodeByPhoneAndEmailAndPurpo
 }
 
 func (r *LoginCodeRepository) mapLoginCode(ctx context.Context, row loginCodeRow) (domain.LoginCode, error) {
-	phone, err := decryptPhone(ctx, r.enc, row.phone.String, row.phoneEncrypted)
+	phone, err := decryptPhoneField(ctx, r.enc, row.phone.String, row.phoneEncrypted)
 	if err != nil {
 		return domain.LoginCode{}, err
 	}
-	parsedPhone, err := domain.NewPhone(phone)
+	email, _, err := parseEmailField(row.email)
 	if err != nil {
 		return domain.LoginCode{}, err
-	}
-	var email domain.Email
-	if row.email.Valid && row.email.String != "" {
-		e, err := domain.EmailFrom(row.email.String)
-		if err != nil {
-			return domain.LoginCode{}, fmt.Errorf("invalid email in DB: %w", err)
-		}
-		email = e
 	}
 	purpose, err := domain.NewLoginCodePurpose(row.purpose)
 	if err != nil {
@@ -200,7 +185,7 @@ func (r *LoginCodeRepository) mapLoginCode(ctx context.Context, row loginCodeRow
 	return domain.LoginCode{
 		ID:        pgconv.UUIDFromPgtype(row.id),
 		UserID:    pgconv.UUIDFromPgtypePtr(row.userID),
-		Phone:     parsedPhone,
+		Phone:     phone,
 		Email:     email,
 		Purpose:   purpose,
 		CodeHash:  row.codeHash,

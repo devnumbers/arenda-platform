@@ -2,12 +2,10 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
@@ -19,24 +17,19 @@ import (
 
 // SessionRepository persists sessions.
 type SessionRepository struct {
-	db  pgen.DBTX
-	enc encryption.Encryptor
+	repoBase
 }
 
 // NewSessionRepository creates a new session repository.
 func NewSessionRepository(db pgen.DBTX, enc encryption.Encryptor) *SessionRepository {
-	return &SessionRepository{db: db, enc: enc}
-}
-
-func (r *SessionRepository) q() *pgen.Queries {
-	return pgen.New(r.db)
+	return &SessionRepository{repoBase{db: db, enc: enc}}
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *SessionRepository) WithTx(tx transaction.Tx) (application.SessionRepository, error) {
-	dbtx, ok := tx.(pgen.DBTX)
-	if !ok {
-		return nil, fmt.Errorf("identity.SessionRepository.WithTx: %T is not a postgres.DBTX", tx)
+	dbtx, err := assertTxDB(tx)
+	if err != nil {
+		return nil, fmt.Errorf("identity.SessionRepository.WithTx: %w", err)
 	}
 	return NewSessionRepository(dbtx, r.enc), nil
 }
@@ -107,13 +100,13 @@ func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string
 		ExpiresAt: pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if notFound(err) {
 			return domain.Session{}, domain.User{}, application.ErrNotFound
 		}
 		return domain.Session{}, domain.User{}, fmt.Errorf("get session by token hash: %w", err)
 	}
 
-	user, err := mapUser(ctx, r.enc, userRowFromGetSessionByTokenHashRow(row))
+	user, err := mapUser(ctx, r.enc, userSourceFromSession(row).toUserRow())
 	if err != nil {
 		return domain.Session{}, domain.User{}, err
 	}
