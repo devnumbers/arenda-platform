@@ -112,10 +112,7 @@ func (h *AuthHandlers) SendCode(w http.ResponseWriter, r *http.Request) {
 	if email == nil {
 		sent, err := h.auth.SendCodeByPhone(r.Context(), phone)
 		if err != nil {
-			switch {
-			case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
-				httpsupport.WriteTooManyRequests(w, r, userFacingDetailOrDefault(err, "Превышен лимит запросов"))
-			default:
+			if !writeSharedIdentityError(w, r, err, "") {
 				httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			}
 			return
@@ -129,14 +126,7 @@ func (h *AuthHandlers) SendCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.auth.SendCode(r.Context(), phone, *email, domain.LoginCodePurposeLogin); err != nil {
-		switch {
-		case errors.Is(err, application.ErrUserBlocked), errors.Is(err, application.ErrCodeSentTooRecently):
-			httpsupport.WriteTooManyRequests(w, r, userFacingDetailOrDefault(err, "Превышен лимит запросов"))
-		case errors.Is(err, application.ErrEmailDoesNotMatch):
-			httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Некорректные учётные данные")))
-		case errors.Is(err, application.ErrEmailAlreadyTaken):
-			httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Этот email уже используется")))
-		default:
+		if !writeSharedIdentityError(w, r, err, "") {
 			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		}
 		return
@@ -179,17 +169,12 @@ func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
 
 	raw, user, err := h.auth.VerifyCode(r.Context(), phone, email, body.Code)
 	if err != nil {
+		if writeSharedIdentityError(w, r, err, "Неверный телефон, почта или код") {
+			return
+		}
 		switch {
-		case errors.Is(err, application.ErrUserBlocked),
-			errors.Is(err, domain.ErrTooManyAttempts):
-			httpsupport.WriteTooManyRequests(w, r, userFacingDetailOrDefault(err, "Превышен лимит запросов"))
-		case errors.Is(err, domain.ErrLoginCodeInvalid),
-			errors.Is(err, application.ErrNotFound):
+		case errors.Is(err, domain.ErrLoginCodeInvalid):
 			httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Неверный телефон, почта или код"))
-		case errors.Is(err, application.ErrEmailDoesNotMatch):
-			httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Некорректные учётные данные")))
-		case errors.Is(err, application.ErrEmailAlreadyTaken):
-			httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Этот email уже используется")))
 		default:
 			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		}
@@ -327,15 +312,14 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.profile.UpdateProfile(r.Context(), userID, cmd)
 	if err != nil {
+		if writeSharedIdentityError(w, r, err, "Сессия недействительна") {
+			return
+		}
 		switch {
 		case errors.Is(err, domain.ErrInvalidEmail):
 			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid email", "Некорректный формат email"))
 		case errors.Is(err, domain.ErrInvalidTimezone):
 			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid timezone", "Некорректный часовой пояс"))
-		case errors.Is(err, application.ErrEmailAlreadyTaken):
-			httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Этот email уже используется")))
-		case errors.Is(err, application.ErrNotFound):
-			httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Сессия недействительна"))
 		default:
 			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		}
@@ -381,15 +365,14 @@ func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := h.phoneChange.SendChangeCode(r.Context(), userID, phone); err != nil {
+		if writeSharedIdentityError(w, r, err, "") {
+			return
+		}
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
 			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", userFacingDetailOrDefault(err, "Новый номер должен отличаться от текущего")))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
 			httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Этот номер телефона уже используется")))
-		case errors.Is(err, application.ErrUserBlocked):
-			httpsupport.WriteTooManyRequests(w, r, userFacingDetailOrDefault(err, "Слишком много попыток"))
-		case errors.Is(err, application.ErrCodeSentTooRecently):
-			httpsupport.WriteTooManyRequests(w, r, userFacingDetailOrDefault(err, "Код отправлен слишком недавно"))
 		default:
 			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		}
@@ -434,16 +417,15 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.phoneChange.ChangePhone(r.Context(), userID, phone, body.Code, token)
 	if err != nil {
+		if writeSharedIdentityError(w, r, err, "Неверный код") {
+			return
+		}
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
 			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", userFacingDetailOrDefault(err, "Новый номер должен отличаться от текущего")))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
 			httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Этот номер телефона уже используется")))
-		case errors.Is(err, application.ErrUserBlocked),
-			errors.Is(err, domain.ErrTooManyAttempts):
-			httpsupport.WriteTooManyRequests(w, r, userFacingDetailOrDefault(err, "Слишком много попыток"))
-		case errors.Is(err, domain.ErrLoginCodeInvalid),
-			errors.Is(err, application.ErrNotFound):
+		case errors.Is(err, domain.ErrLoginCodeInvalid):
 			httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Неверный код"))
 		default:
 			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))

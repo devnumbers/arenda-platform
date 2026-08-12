@@ -2,10 +2,47 @@ package http
 
 import (
 	"errors"
+	"net/http"
 
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 )
+
+// writeSharedIdentityError maps the cross-cutting identity errors that recur
+// across the auth handlers to their RFC 7807 responses and reports whether it
+// wrote one. When it returns true the caller must stop handling the error.
+//
+// It collapses the ~5 duplicated switch arms (ErrUserBlocked ×5, ErrNotFound ×5,
+// ErrEmailAlreadyTaken ×3, ErrCodeSentTooRecently ×3, ErrEmailDoesNotMatch ×2)
+// that previously appeared in every auth handler (issue #222, grilling E2):
+//
+//   - ErrUserBlocked / domain.ErrTooManyAttempts / ErrCodeSentTooRecently → 429
+//   - ErrEmailAlreadyTaken / ErrEmailDoesNotMatch → 409
+//   - ErrNotFound → 401
+//
+// ErrNotFound is cross-cutting only in status code (401): each handler still
+// owns its detail text, so notFoundDetail is threaded in rather than fixed
+// here. Handler-specific errors (ErrInvalidEmail, ErrLoginCodeInvalid,
+// ErrPhoneUnchanged, ErrPhoneAlreadyTaken, …) stay in each handler's local
+// switch so the set of errors a handler can return stays readable.
+func writeSharedIdentityError(w http.ResponseWriter, r *http.Request, err error, notFoundDetail string) bool {
+	switch {
+	case errors.Is(err, application.ErrUserBlocked),
+		errors.Is(err, domain.ErrTooManyAttempts),
+		errors.Is(err, application.ErrCodeSentTooRecently):
+		httpsupport.WriteTooManyRequests(w, r, userFacingDetailOrDefault(err, "Превышен лимит запросов"))
+		return true
+	case errors.Is(err, application.ErrEmailAlreadyTaken),
+		errors.Is(err, application.ErrEmailDoesNotMatch):
+		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Некорректные учётные данные")))
+		return true
+	case errors.Is(err, application.ErrNotFound):
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", notFoundDetail))
+		return true
+	}
+	return false
+}
 
 // userFacingDetail maps known identity domain/application errors to fixed,
 // non-sensitive messages suitable for RFC 7807 problem details. It is the
