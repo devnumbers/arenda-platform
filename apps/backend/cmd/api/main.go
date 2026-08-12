@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/nambers/arenda-planform/apps/backend/cmd/api/wire"
-	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	webpush "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/webpush"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
@@ -248,7 +247,7 @@ func run() error {
 		Logout:                   identityMod.Logout,
 		Sessions:                 identityMod.SessionLoader,
 		Audit:                    p.AuditRecorder,
-		MeEnricher:               identityhttp.BillingMeEnricher(billingMod.Services.Subscriptions),
+		MeEnricher:               wire.BillingMeEnricher(billingMod.Services.Subscriptions),
 		Tariffs:                  billingMod.Services.Tariffs,
 		Subscriptions:            billingMod.Services.Subscriptions,
 		PaymentMethods:           billingMod.Services.PaymentMethods,

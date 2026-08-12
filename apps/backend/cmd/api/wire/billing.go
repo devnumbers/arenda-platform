@@ -2,14 +2,19 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
 	paymentfake "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/fake"
 	paymenttkassa "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/tkassa"
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
+	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 )
 
@@ -108,4 +113,26 @@ func BuildBillingServices(
 		repos.PaymentMethodInUseChecker,
 	)
 	return &Billing{Services: services}
+}
+
+// BillingMeEnricher returns an identity MeEnricher that adds the current billing
+// subscription to a MeResponse. It is the composition-root glue between the
+// billing application layer (Subscriber) and the identity HTTP layer
+// (MeEnricher); keeping it here means identity does not import billing.
+func BillingMeEnricher(billing billingapp.Subscriber) identityhttp.MeEnricher {
+	return func(ctx context.Context, userID uuid.UUID, resp *openapi.MeResponse) error {
+		if billing == nil {
+			return nil
+		}
+		view, err := billing.GetSubscription(ctx, userID)
+		if err != nil {
+			if errors.Is(err, billingapp.ErrSubscriptionNotFound) {
+				return nil
+			}
+			return err
+		}
+		sub := httpsupport.SubscriptionResponse(view)
+		resp.Subscription = &sub
+		return nil
+	}
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
@@ -475,25 +474,4 @@ func meResponse(user domain.User) openapi.MeResponse {
 
 func timezonePtrFromUser(tz domain.Timezone) *string {
 	return new(tz.String())
-}
-
-// BillingMeEnricher returns a MeEnricher that adds the current billing
-// subscription to a MeResponse. It keeps the billing-to-OpenAPI mapping in the
-// HTTP layer so the application layer does not depend on openapi types.
-func BillingMeEnricher(billing billingapp.Subscriber) MeEnricher {
-	return func(ctx context.Context, userID uuid.UUID, resp *openapi.MeResponse) error {
-		if billing == nil {
-			return nil
-		}
-		view, err := billing.GetSubscription(ctx, userID)
-		if err != nil {
-			if errors.Is(err, billingapp.ErrSubscriptionNotFound) {
-				return nil
-			}
-			return err
-		}
-		sub := httpsupport.SubscriptionResponse(view)
-		resp.Subscription = &sub
-		return nil
-	}
 }
