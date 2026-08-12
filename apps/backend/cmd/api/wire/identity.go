@@ -128,9 +128,15 @@ func WireIdentity(
 	)
 
 	logoutService := identityapp.NewLogoutService(
+		userRepo,
+		codeRepo,
+		attemptRepo,
 		sessionRepo,
-		p.Encryptor,
-		p.UoW,
+		identityapp.LogoutServiceConfig{
+			Hasher: p.Encryptor,
+			Audit:  p.AuditRecorder,
+			UoW:    p.UoW,
+		},
 	)
 
 	return &Identity{

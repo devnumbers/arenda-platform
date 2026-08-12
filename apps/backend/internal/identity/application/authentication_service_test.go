@@ -291,9 +291,23 @@ func (r *fakeSessionRepo) DeleteByTokenHash(_ context.Context, tokenHash string)
 	return nil
 }
 
-func (r *fakeSessionRepo) DeleteByUserID(context.Context, uuid.UUID) error { return nil }
+func (r *fakeSessionRepo) DeleteByUserID(_ context.Context, userID uuid.UUID) error {
+	for hash, s := range r.sessions {
+		if s.UserID == userID {
+			delete(r.sessions, hash)
+		}
+	}
+	return nil
+}
 
-func (r *fakeSessionRepo) DeleteByUserIDExcept(context.Context, uuid.UUID, string) error { return nil }
+func (r *fakeSessionRepo) DeleteByUserIDExcept(_ context.Context, userID uuid.UUID, tokenHash string) error {
+	for hash, s := range r.sessions {
+		if s.UserID == userID && hash != tokenHash {
+			delete(r.sessions, hash)
+		}
+	}
+	return nil
+}
 
 func (r *fakeSessionRepo) DeleteExpiredBeforeBatch(context.Context, time.Time, int32) (int64, error) {
 	return 0, nil
