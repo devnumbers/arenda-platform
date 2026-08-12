@@ -183,7 +183,7 @@ func (r *fakeCodeRepo) MarkUsedByID(_ context.Context, id uuid.UUID) error {
 	if !ok {
 		return ErrNotFound
 	}
-	c.MarkUsed()
+	c.Used = true
 	r.codes[id] = c
 	return nil
 }
