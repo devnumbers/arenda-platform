@@ -40,12 +40,12 @@ type Identity struct {
 }
 
 // WireIdentity constructs the identity repositories, session service, event
-// publisher, runs the phone-encryption backfill when a key is set, selects the
-// email mailer based on config, and builds the authentication, phone-change,
-// profile and logout services. It takes the event dispatcher (for the publisher)
-// and the reminder service (notifications module) that profile depends on.
+// publisher, selects the email mailer based on config, and builds the
+// authentication, phone-change, profile and logout services. It takes the event
+// dispatcher (for the publisher) and the reminder service (notifications module)
+// that profile depends on.
 func WireIdentity(
-	ctx context.Context,
+	_ context.Context,
 	p platformDeps,
 	eventDispatcher *events.InProcessDispatcher,
 	reminderService *notificationsapp.ReminderService,
@@ -61,14 +61,6 @@ func WireIdentity(
 	sessionLoader := identityhttp.NewSessionLoader(sessionService)
 
 	eventPublisher := identityevents.NewPublisher(eventDispatcher)
-
-	if p.Cfg.EncryptionKey != "" {
-		if err := BackfillPhoneEncryption(ctx, p.DB, p.Encryptor, p.Logger); err != nil {
-			return nil, fmt.Errorf("backfill phone encryption: %w", err)
-		}
-	} else {
-		p.Logger.WarnContext(ctx, "skipping phone encryption backfill: ENCRYPTION_KEY is empty")
-	}
 
 	var emailMailer mailer.Sender
 	switch p.Cfg.EmailSender {

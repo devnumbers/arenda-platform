@@ -59,8 +59,8 @@ func run() error {
 	//    feeds the property billing lifecycle and lease/operation services.
 	notificationsMod := wire.WireNotifications(p)
 
-	// 4. Identity: repos, session service, event publisher, phone backfill,
-	//    email mailer switch, auth/phone-change/profile/logout services.
+	// 4. Identity: repos, session service, event publisher, email mailer
+	//    switch, auth/phone-change/profile/logout services.
 	identityMod, err := wire.WireIdentity(ctx, p, eventDispatcher, notificationsMod.ReminderService)
 	if err != nil {
 		return err
