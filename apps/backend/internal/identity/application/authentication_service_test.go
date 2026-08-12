@@ -246,7 +246,15 @@ func (r *fakeAttemptRepo) GetByPhoneForUpdate(ctx context.Context, phone domain.
 	return r.GetByPhone(ctx, phone)
 }
 
-func (r *fakeAttemptRepo) Save(_ context.Context, phone domain.Phone, _ uuid.UUID, window domain.AttemptWindow) error {
+func (r *fakeAttemptRepo) Save(_ context.Context, phone domain.Phone, _ uuid.UUID, window domain.AttemptWindow, delta int) error {
+	if delta <= 0 {
+		// Reset path: write the absolute counter.
+		r.windows[phone.String()] = window
+		return nil
+	}
+	// Increment path: add the delta to the previously stored absolute.
+	prev := r.windows[phone.String()]
+	window.Failures = prev.Failures + delta
 	r.windows[phone.String()] = window
 	return nil
 }

@@ -80,26 +80,45 @@ func (r *AttemptRepository) GetByPhoneForUpdate(ctx context.Context, phone domai
 	}, nil
 }
 
-func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow) error {
+// Save persists the attempt window for phone. When delta > 0 the failure counter
+// is incremented atomically by the database (IncrementLoginAttempt) so that
+// concurrent upserts on the same phone cannot lose an increment even without a
+// preceding ForUpdate lock — the protection lives at the data layer, not only
+// in the transactional locking convention (issue #215). When delta <= 0 the
+// counter is set to the absolute window.Failures value (ResetLoginAttempt) — the
+// reset path taken when the window is new or has expired past its TTL.
+//
+// The window's first_failure_at, last_failure_at, user_id, and phone_encrypted
+// fields are always written as absolutes; only failures follows the
+// delta/absolute split.
+func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow, delta int) error {
 	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
 	if err != nil {
 		return err
 	}
-	failures := min(window.Failures, math.MaxInt32)
 	id, err := uuid.NewV7()
 	if err != nil {
 		return fmt.Errorf("generate login attempt id: %w", err)
 	}
-	if err := r.q().UpsertLoginAttempt(ctx, pgen.UpsertLoginAttemptParams{
+	params := pgen.ResetLoginAttemptParams{
 		ID:             pgconv.UUIDToPgtype(id),
 		Phone:          encryptedPhone,
-		Failures:       int32(failures), //nolint:gosec // clamped to math.MaxInt32 by min above
 		FirstFailureAt: pgtype.Timestamptz{Time: window.FirstFailureAt, Valid: true},
 		LastFailureAt:  pgtype.Timestamptz{Time: window.LastFailureAt, Valid: true},
 		UserID:         pgconv.UUIDToPgtype(userID),
 		PhoneEncrypted: !r.enc.IsNoop(),
-	}); err != nil {
-		return fmt.Errorf("upsert login attempt: %w", err)
+	}
+	if delta <= 0 {
+		params.Failures = int32(min(window.Failures, math.MaxInt32)) //nolint:gosec // clamped to math.MaxInt32 by min above
+		if err := r.q().ResetLoginAttempt(ctx, params); err != nil {
+			return fmt.Errorf("reset login attempt: %w", err)
+		}
+		return nil
+	}
+	// Increment path: failures carries the delta, not the absolute value.
+	params.Failures = int32(min(delta, math.MaxInt32)) //nolint:gosec // clamped to math.MaxInt32 by min above
+	if err := r.q().IncrementLoginAttempt(ctx, pgen.IncrementLoginAttemptParams(params)); err != nil {
+		return fmt.Errorf("increment login attempt: %w", err)
 	}
 	return nil
 }

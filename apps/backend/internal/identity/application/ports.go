@@ -50,7 +50,13 @@ type AttemptRepository interface {
 	GetByPhone(ctx context.Context, phone domain.Phone) (domain.AttemptWindow, error)
 	// GetByPhoneForUpdate acquires a row-level pessimistic lock and must only be called inside a transaction.
 	GetByPhoneForUpdate(ctx context.Context, phone domain.Phone) (domain.AttemptWindow, error)
-	Save(ctx context.Context, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow) error
+	// Save persists the attempt window for phone. When delta > 0 the failure
+	// counter is atomically incremented by delta on the database side so
+	// concurrent upserts cannot lose an increment (issue #215); the window's
+	// timestamps are written as absolutes. When delta <= 0 the counter is set
+	// to the absolute window.Failures value — the reset path used when the
+	// window is new or has expired (TTL reset).
+	Save(ctx context.Context, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow, delta int) error
 	DeleteByPhone(ctx context.Context, phone domain.Phone) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 	DeleteStaleBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)

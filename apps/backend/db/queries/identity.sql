@@ -69,7 +69,10 @@ SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_en
 -- name: GetLoginAttemptByPhoneForUpdate :one
 SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted FROM login_attempts WHERE phone = $1 FOR UPDATE;
 
--- name: UpsertLoginAttempt :exec
+-- ResetLoginAttempt writes the absolute attempt-window state, used when the
+-- window is new or has expired (TTL reset) and the failure counter must be set
+-- to an absolute value rather than incremented.
+-- name: ResetLoginAttempt :exec
 INSERT INTO login_attempts (id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (phone) DO UPDATE SET
@@ -78,6 +81,18 @@ ON CONFLICT (phone) DO UPDATE SET
     last_failure_at = EXCLUDED.last_failure_at,
     user_id = EXCLUDED.user_id,
     phone_encrypted = EXCLUDED.phone_encrypted;
+
+-- IncrementLoginAttempt atomically increments the failure counter on the
+-- existing row, so concurrent upserts cannot lose an increment (issue #215).
+-- failures carries the delta to add; first_failure_at is intentionally left
+-- untouched on the conflict branch because the window is not being reset.
+-- name: IncrementLoginAttempt :exec
+INSERT INTO login_attempts (id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (phone) DO UPDATE SET
+    failures = login_attempts.failures + EXCLUDED.failures,
+    last_failure_at = EXCLUDED.last_failure_at,
+    user_id = EXCLUDED.user_id;
 
 -- name: DeleteLoginAttemptByPhone :exec
 DELETE FROM login_attempts WHERE phone = $1;

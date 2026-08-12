@@ -646,6 +646,42 @@ func (q *Queries) GetVerifiedEmailByUserID(ctx context.Context, id pgtype.UUID) 
 	return email, err
 }
 
+const incrementLoginAttempt = `-- name: IncrementLoginAttempt :exec
+INSERT INTO login_attempts (id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (phone) DO UPDATE SET
+    failures = login_attempts.failures + EXCLUDED.failures,
+    last_failure_at = EXCLUDED.last_failure_at,
+    user_id = EXCLUDED.user_id
+`
+
+type IncrementLoginAttemptParams struct {
+	ID             pgtype.UUID        `json:"id"`
+	Phone          string             `json:"phone"`
+	Failures       int32              `json:"failures"`
+	FirstFailureAt pgtype.Timestamptz `json:"first_failure_at"`
+	LastFailureAt  pgtype.Timestamptz `json:"last_failure_at"`
+	UserID         pgtype.UUID        `json:"user_id"`
+	PhoneEncrypted bool               `json:"phone_encrypted"`
+}
+
+// IncrementLoginAttempt atomically increments the failure counter on the
+// existing row, so concurrent upserts cannot lose an increment (issue #215).
+// failures carries the delta to add; first_failure_at is intentionally left
+// untouched on the conflict branch because the window is not being reset.
+func (q *Queries) IncrementLoginAttempt(ctx context.Context, arg IncrementLoginAttemptParams) error {
+	_, err := q.db.Exec(ctx, incrementLoginAttempt,
+		arg.ID,
+		arg.Phone,
+		arg.Failures,
+		arg.FirstFailureAt,
+		arg.LastFailureAt,
+		arg.UserID,
+		arg.PhoneEncrypted,
+	)
+	return err
+}
+
 const listRecentUsersAdmin = `-- name: ListRecentUsersAdmin :many
 SELECT id, phone, phone_encrypted, name, surname, created_at
 FROM users
@@ -785,6 +821,43 @@ UPDATE login_codes SET used = true WHERE id = $1
 
 func (q *Queries) MarkLoginCodeUsed(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, markLoginCodeUsed, id)
+	return err
+}
+
+const resetLoginAttempt = `-- name: ResetLoginAttempt :exec
+INSERT INTO login_attempts (id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (phone) DO UPDATE SET
+    failures = EXCLUDED.failures,
+    first_failure_at = EXCLUDED.first_failure_at,
+    last_failure_at = EXCLUDED.last_failure_at,
+    user_id = EXCLUDED.user_id,
+    phone_encrypted = EXCLUDED.phone_encrypted
+`
+
+type ResetLoginAttemptParams struct {
+	ID             pgtype.UUID        `json:"id"`
+	Phone          string             `json:"phone"`
+	Failures       int32              `json:"failures"`
+	FirstFailureAt pgtype.Timestamptz `json:"first_failure_at"`
+	LastFailureAt  pgtype.Timestamptz `json:"last_failure_at"`
+	UserID         pgtype.UUID        `json:"user_id"`
+	PhoneEncrypted bool               `json:"phone_encrypted"`
+}
+
+// ResetLoginAttempt writes the absolute attempt-window state, used when the
+// window is new or has expired (TTL reset) and the failure counter must be set
+// to an absolute value rather than incremented.
+func (q *Queries) ResetLoginAttempt(ctx context.Context, arg ResetLoginAttemptParams) error {
+	_, err := q.db.Exec(ctx, resetLoginAttempt,
+		arg.ID,
+		arg.Phone,
+		arg.Failures,
+		arg.FirstFailureAt,
+		arg.LastFailureAt,
+		arg.UserID,
+		arg.PhoneEncrypted,
+	)
 	return err
 }
 
@@ -937,38 +1010,4 @@ func (q *Queries) UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams
 		&i.Timezone,
 	)
 	return i, err
-}
-
-const upsertLoginAttempt = `-- name: UpsertLoginAttempt :exec
-INSERT INTO login_attempts (id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (phone) DO UPDATE SET
-    failures = EXCLUDED.failures,
-    first_failure_at = EXCLUDED.first_failure_at,
-    last_failure_at = EXCLUDED.last_failure_at,
-    user_id = EXCLUDED.user_id,
-    phone_encrypted = EXCLUDED.phone_encrypted
-`
-
-type UpsertLoginAttemptParams struct {
-	ID             pgtype.UUID        `json:"id"`
-	Phone          string             `json:"phone"`
-	Failures       int32              `json:"failures"`
-	FirstFailureAt pgtype.Timestamptz `json:"first_failure_at"`
-	LastFailureAt  pgtype.Timestamptz `json:"last_failure_at"`
-	UserID         pgtype.UUID        `json:"user_id"`
-	PhoneEncrypted bool               `json:"phone_encrypted"`
-}
-
-func (q *Queries) UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error {
-	_, err := q.db.Exec(ctx, upsertLoginAttempt,
-		arg.ID,
-		arg.Phone,
-		arg.Failures,
-		arg.FirstFailureAt,
-		arg.LastFailureAt,
-		arg.UserID,
-		arg.PhoneEncrypted,
-	)
-	return err
 }

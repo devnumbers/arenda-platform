@@ -208,6 +208,12 @@ func (s *LoginCodeService) Verify(ctx context.Context, stores *txStores, phone d
 // survives the rollback (ADR 0033). Returns domain.ErrTooManyAttempts once the
 // window threshold is reached; otherwise returns nil. Callers treat both as
 // expected outcomes and only surface infrastructure errors.
+//
+// The failure counter is persisted atomically: a plain increment delegates to
+// an atomic database-side add (Issue #215), and a TTL reset writes the absolute
+// counter. The ForUpdate lock acquired here is retained for correctness of the
+// read-modify-write of the window's timestamps, but the counter itself no
+// longer depends on it to avoid a lost update.
 func (s *LoginCodeService) RecordFailure(ctx context.Context, stores *txStores, phone domain.Phone, userID uuid.UUID) error {
 	now := s.clock.Now()
 	window, err := stores.attempts.GetByPhoneForUpdate(ctx, phone)
@@ -218,18 +224,36 @@ func (s *LoginCodeService) RecordFailure(ctx context.Context, stores *txStores, 
 		window = domain.NewAttemptWindow(now)
 	}
 
+	// Snapshot the pre-mutation window so the repository can tell a TTL reset
+	// (FirstFailureAt changed, counter restarted at 1) from a plain increment.
+	// On a reset the counter must be written as an absolute; otherwise it is
+	// atomically incremented by the delta, which survives concurrent upserts
+	// even without a ForUpdate lock (issue #215).
+	prev := window
 	if recErr := window.RecordFailure(now); recErr != nil {
 		// Persist the threshold-reaching failure before returning so the block
 		// takes effect even though the caller treats this as an expected error.
-		if saveErr := stores.attempts.Save(ctx, phone, userID, window); saveErr != nil {
+		if saveErr := stores.attempts.Save(ctx, phone, userID, window, attemptDelta(prev, window)); saveErr != nil {
 			return fmt.Errorf("save attempts: %w", saveErr)
 		}
 		return recErr
 	}
-	if err := stores.attempts.Save(ctx, phone, userID, window); err != nil {
+	if err := stores.attempts.Save(ctx, phone, userID, window, attemptDelta(prev, window)); err != nil {
 		return fmt.Errorf("save attempts: %w", err)
 	}
 	return nil
+}
+
+// attemptDelta derives the persistence hint for AttemptRepository.Save from the
+// pre- and post-mutation windows. It returns 0 (reset: write the absolute
+// counter) when the window was just created or restarted after its TTL, and a
+// positive delta (increment the existing counter) otherwise.
+func attemptDelta(prev, next domain.AttemptWindow) int {
+	if !next.FirstFailureAt.Equal(prev.FirstFailureAt) {
+		// A fresh or TTL-reset window writes an absolute counter.
+		return 0
+	}
+	return next.Failures - prev.Failures
 }
 
 // userEmail returns the email of a user, or ErrEmailDoesNotMatch when the user

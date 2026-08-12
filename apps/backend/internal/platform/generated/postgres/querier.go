@@ -204,6 +204,11 @@ type Querier interface {
 	GetVerifiedEmailByUserID(ctx context.Context, id pgtype.UUID) (pgtype.Text, error)
 	HasReminderForLeaseEvent(ctx context.Context, arg HasReminderForLeaseEventParams) (bool, error)
 	HasReminderForOperationEvent(ctx context.Context, arg HasReminderForOperationEventParams) (bool, error)
+	// IncrementLoginAttempt atomically increments the failure counter on the
+	// existing row, so concurrent upserts cannot lose an increment (issue #215).
+	// failures carries the delta to add; first_failure_at is intentionally left
+	// untouched on the conflict branch because the window is not being reset.
+	IncrementLoginAttempt(ctx context.Context, arg IncrementLoginAttemptParams) error
 	// Atomically increment the renewal charge attempt counter and return the new
 	// value so the renewal job can cap retries on persistent charge failures.
 	// updated_at is maintained by the trg_subscription_payments_updated_at trigger.
@@ -322,6 +327,10 @@ type Querier interface {
 	MoveOperationToProperty(ctx context.Context, arg MoveOperationToPropertyParams) (Operation, error)
 	ReactivatePropertyMember(ctx context.Context, arg ReactivatePropertyMemberParams) (PropertyMember, error)
 	ReschedulePendingRemindersByOwner(ctx context.Context, arg ReschedulePendingRemindersByOwnerParams) (int64, error)
+	// ResetLoginAttempt writes the absolute attempt-window state, used when the
+	// window is new or has expired (TTL reset) and the failure counter must be set
+	// to an absolute value rather than incremented.
+	ResetLoginAttempt(ctx context.Context, arg ResetLoginAttemptParams) error
 	ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Roll back an in-flight refund reservation to the previous status ($2).
 	// updated_at is maintained by the trg_subscription_payments_updated_at trigger.
@@ -362,7 +371,6 @@ type Querier interface {
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error)
 	UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error)
-	UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error
 	UpsertNotificationChannelPreference(ctx context.Context, arg UpsertNotificationChannelPreferenceParams) error
 	UpsertPaymentMethodByTokenHash(ctx context.Context, arg UpsertPaymentMethodByTokenHashParams) (PaymentMethod, error)
 	// Insert a push subscription keyed by endpoint, or update its mutable fields
