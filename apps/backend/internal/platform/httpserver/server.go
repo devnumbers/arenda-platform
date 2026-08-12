@@ -38,7 +38,7 @@ type Deps struct {
 	PhoneChange              identityapp.PhoneChanger
 	Profile                  identityapp.Profiler
 	Logout                   identityapp.Logout
-	Sessions                 identityapp.SessionService
+	Sessions                 httpsupport.SessionLoader
 	Audit                    auditapp.Recorder
 	MeEnricher               identityhttp.MeEnricher
 	Tariffs                  billingapp.Tariffer

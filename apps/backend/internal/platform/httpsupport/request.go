@@ -6,9 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
-
-	identitydomain "github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 )
 
 const MaxRequestBodySize = 16 << 10 // 16 KiB
@@ -37,22 +34,6 @@ func WriteJSON(ctx context.Context, w http.ResponseWriter, status int, v any) {
 func WriteTooManyRequests(w http.ResponseWriter, r *http.Request, detail string) {
 	w.Header().Set("Retry-After", strconv.Itoa(RetryAfterSeconds))
 	WriteProblem(w, http.StatusTooManyRequests, Problem(r.Context(), "Too many requests", detail))
-}
-
-// ParseOptionalEmail parses an optional request email. It returns ok=false
-// after writing a 400 problem response when the provided email is invalid.
-// A nil or blank email is treated as absent and yields (nil, true).
-func ParseOptionalEmail(w http.ResponseWriter, r *http.Request, raw *string) (*identitydomain.Email, bool) {
-	if raw == nil || strings.TrimSpace(*raw) == "" {
-		return nil, true
-	}
-	parsed, err := identitydomain.NewEmail(*raw)
-	if err != nil {
-		LoggerFromContext(r.Context()).WarnContext(r.Context(), "invalid email in request body", slog.String("error", SanitizeError(err)))
-		WriteProblem(w, http.StatusBadRequest, Problem(r.Context(), "Invalid email", "Некорректная почта"))
-		return nil, false
-	}
-	return &parsed, true
 }
 
 // UserFacingDetailOrDefault returns a user-facing message for err if one is

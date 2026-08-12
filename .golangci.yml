@@ -144,6 +144,24 @@ linters:
               desc: application layer must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters
               desc: application layer must not depend on adapters
+        # platform-clean (ADR 0034): platform infrastructure must depend on the
+        # shared actor kernel, never on a bounded context's domain. httpserver is
+        # the composition root that legitimately wires identity handlers and
+        # services, so its identity imports are allow-listed; the deny keeps every
+        # other platform package (notably httpsupport) identity-free.
+        platform-clean:
+          list-mode: lax
+          files:
+            - "**/internal/platform/**/*.go"
+            - "!**/*_test.go"
+          allow:
+            # httpserver is the composition root: it wires identity HTTP handlers
+            # and the session service into the server.
+            - github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http
+            - github.com/nambers/arenda-planform/apps/backend/internal/identity/application
+          deny:
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/identity
+              desc: platform infrastructure must not depend on a bounded context; use shared/actor
     govet:
       enable:
         - nilness          # SSA-анализ nil-дерефов; shadow НЕ включать (139 шумовых срабатываний)

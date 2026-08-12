@@ -246,7 +246,7 @@ func run() error {
 		PhoneChange:              identityMod.PhoneChange,
 		Profile:                  identityMod.Profile,
 		Logout:                   identityMod.Logout,
-		Sessions:                 identityMod.SessionService,
+		Sessions:                 identityMod.SessionLoader,
 		Audit:                    p.AuditRecorder,
 		MeEnricher:               identityhttp.BillingMeEnricher(billingMod.Services.Subscriptions),
 		Tariffs:                  billingMod.Services.Tariffs,

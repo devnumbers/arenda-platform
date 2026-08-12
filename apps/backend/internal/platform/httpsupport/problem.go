@@ -10,8 +10,6 @@ import (
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	billingdomain "github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
-	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
-	identitydomain "github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
@@ -64,22 +62,6 @@ func InternalError(ctx context.Context, err error) openapi.Problem {
 // is not a recognized domain error.
 func UserFacingDetail(err error) (string, bool) {
 	switch {
-	// Identity / auth.
-	case errors.Is(err, identityapp.ErrUserBlocked):
-		return "Пользователь временно заблокирован", true
-	case errors.Is(err, identityapp.ErrCodeSentTooRecently):
-		return "Код отправлен слишком недавно", true
-	case errors.Is(err, identityapp.ErrPhoneAlreadyTaken):
-		return "Этот номер телефона уже используется", true
-	case errors.Is(err, identityapp.ErrPhoneUnchanged):
-		return "Новый номер должен отличаться от текущего", true
-	case errors.Is(err, identitydomain.ErrTooManyAttempts):
-		return "Слишком много попыток", true
-	case errors.Is(err, identityapp.ErrEmailDoesNotMatch):
-		return "Некорректные учётные данные", true
-	case errors.Is(err, identityapp.ErrEmailAlreadyTaken):
-		return "Эта почта уже используется", true
-
 	// Properties.
 	case errors.Is(err, propertiesapp.ErrInvalidInput):
 		return "Некорректные данные объекта", true

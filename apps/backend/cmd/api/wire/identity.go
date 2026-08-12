@@ -6,10 +6,12 @@ import (
 
 	identityemail "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/email"
 	identityevents "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/events"
+	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	mailerfake "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/fake"
 	mailersmtp "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/smtp"
@@ -23,6 +25,10 @@ type Identity struct {
 	AttemptRepo    *identitypg.AttemptRepository
 	SessionRepo    *identitypg.SessionRepository
 	SessionService identityapp.SessionService
+	// SessionLoader is the platform-neutral adapter over SessionService that the
+	// HTTP session middleware consumes. It keeps platform/httpsupport free of any
+	// identity/domain import (ADR 0034).
+	SessionLoader  httpsupport.SessionLoader
 	EventPublisher *identityevents.Publisher
 	Authentication *identityapp.AuthenticationService
 	PhoneChange    *identityapp.PhoneChangeService
@@ -49,6 +55,7 @@ func WireIdentity(
 	attemptRepo := identitypg.NewAttemptRepository(p.DB, p.Encryptor)
 	sessionRepo := identitypg.NewSessionRepository(p.DB, p.Encryptor)
 	sessionService := identityapp.NewSessionService(sessionRepo, p.Encryptor)
+	sessionLoader := identityhttp.NewSessionLoader(sessionService)
 
 	eventPublisher := identityevents.NewPublisher(eventDispatcher)
 
@@ -132,6 +139,7 @@ func WireIdentity(
 		AttemptRepo:    attemptRepo,
 		SessionRepo:    sessionRepo,
 		SessionService: sessionService,
+		SessionLoader:  sessionLoader,
 		EventPublisher: eventPublisher,
 		Authentication: authenticationService,
 		PhoneChange:    phoneChangeService,
