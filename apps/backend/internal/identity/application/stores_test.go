@@ -119,6 +119,22 @@ func newCountingFactory(t *testing.T) (*txStoreFactory, *fakeBeginner, *counting
 	return f, b, users, codes, attempts, sessions, audit
 }
 
+// newFakeFactory builds a txStoreFactory from fresh shared fake repositories and
+// a fakeUoW, returning every piece so a test harness can assert against the
+// repos. audit defaults to nil (NewTxStoreFactory substitutes Noop); pass a
+// non-nil recorder (e.g. *recordingRecorder) when the test checks audit output.
+func newFakeFactory(audit auditapp.Recorder) (
+	txStoreFactory, *fakeBeginner, *fakeUserRepo, *fakeCodeRepo, *fakeAttemptRepo, *fakeSessionRepo,
+) {
+	users := newFakeUserRepo()
+	codes := newFakeCodeRepo()
+	attempts := newFakeAttemptRepo()
+	sessions := newFakeSessionRepo()
+	beginner := &fakeBeginner{}
+	f := NewTxStoreFactory(users, codes, attempts, sessions, audit, &fakeUoW{beginner: beginner})
+	return f, beginner, users, codes, attempts, sessions
+}
+
 // TestRunInTx_BuildsStoresFromTxAndCommits proves runInTx binds every
 // repository and the audit recorder to the same transaction, runs work, and the
 // UoW commits on a nil error.

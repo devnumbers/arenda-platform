@@ -17,14 +17,14 @@ type sessionHarness struct {
 }
 
 func newSessionHarness() *sessionHarness {
+	factory, beginner, users, codes, attempts, sessions := newFakeFactory(nil)
 	h := &sessionHarness{
-		users:    newFakeUserRepo(),
-		codes:    newFakeCodeRepo(),
-		attempts: newFakeAttemptRepo(),
-		sessions: newFakeSessionRepo(),
-		beginner: &fakeBeginner{},
+		users:    users,
+		codes:    codes,
+		attempts: attempts,
+		sessions: sessions,
+		beginner: beginner,
 	}
-	factory := NewTxStoreFactory(h.users, h.codes, h.attempts, h.sessions, nil, &fakeUoW{beginner: h.beginner})
 	h.svc = NewSessionService(factory, SessionServiceConfig{Hasher: fakeHasher{}})
 	return h
 }

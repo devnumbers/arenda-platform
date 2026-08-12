@@ -14,12 +14,7 @@ import (
 // newLogoutHarness wires a LogoutService to a fakeUoW + the shared identity
 // fakes, returning every piece the tests need to assert behavior.
 func newLogoutHarness() (*LogoutService, *fakeBeginner, *fakeSessionRepo) {
-	users := newFakeUserRepo()
-	codes := newFakeCodeRepo()
-	attempts := newFakeAttemptRepo()
-	sessions := newFakeSessionRepo()
-	beginner := &fakeBeginner{}
-	factory := NewTxStoreFactory(users, codes, attempts, sessions, nil, &fakeUoW{beginner: beginner})
+	factory, beginner, _, _, _, sessions := newFakeFactory(nil)
 	svc := NewLogoutService(
 		factory,
 		LogoutServiceConfig{

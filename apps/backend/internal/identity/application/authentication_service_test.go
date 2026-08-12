@@ -367,17 +367,16 @@ type authServiceHarness struct {
 }
 
 func newAuthServiceHarness() *authServiceHarness {
+	factory, beginner, users, codes, attempts, sessions := newFakeFactory(nil)
 	h := &authServiceHarness{
-		users:     newFakeUserRepo(),
-		codes:     newFakeCodeRepo(),
-		attempts:  newFakeAttemptRepo(),
-		sessions:  newFakeSessionRepo(),
+		users:     users,
+		codes:     codes,
+		attempts:  attempts,
+		sessions:  sessions,
 		sender:    &fakeCodeSender{},
 		publisher: &fakePublisher{},
-		beginner:  &fakeBeginner{},
+		beginner:  beginner,
 	}
-	uow := &fakeUoW{beginner: h.beginner}
-	factory := NewTxStoreFactory(h.users, h.codes, h.attempts, h.sessions, nil, uow)
 	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: h.sender,
 		Clock:      &fakeClock{now: testNow},

@@ -63,14 +63,9 @@ type profileHarness struct {
 
 func newProfileHarness(t *testing.T) *profileHarness {
 	t.Helper()
-	users := newFakeUserRepo()
-	codes := newFakeCodeRepo()
-	attempts := newFakeAttemptRepo()
-	sessions := newFakeSessionRepo()
-	beginner := &fakeBeginner{}
 	audit := &recordingRecorder{}
+	factory, beginner, users, _, _, _ := newFakeFactory(audit)
 	rescheduler := &fakeReminderRescheduler{}
-	factory := NewTxStoreFactory(users, codes, attempts, sessions, audit, &fakeUoW{beginner: beginner})
 	svc := NewProfileService(
 		factory,
 		ProfileServiceConfig{

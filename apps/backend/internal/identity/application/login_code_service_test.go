@@ -23,15 +23,15 @@ type loginCodeHarness struct {
 }
 
 func newLoginCodeHarness() *loginCodeHarness {
+	factory, beginner, users, codes, attempts, sessions := newFakeFactory(nil)
 	h := &loginCodeHarness{
-		users:    newFakeUserRepo(),
-		codes:    newFakeCodeRepo(),
-		attempts: newFakeAttemptRepo(),
-		sessions: newFakeSessionRepo(),
+		users:    users,
+		codes:    codes,
+		attempts: attempts,
+		sessions: sessions,
 		sender:   &fakeCodeSender{},
-		beginner: &fakeBeginner{},
+		beginner: beginner,
 	}
-	factory := NewTxStoreFactory(h.users, h.codes, h.attempts, h.sessions, nil, &fakeUoW{beginner: h.beginner})
 	h.svc = NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: h.sender,
 		Clock:      &fakeClock{now: testNow},
