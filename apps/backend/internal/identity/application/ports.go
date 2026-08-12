@@ -15,6 +15,10 @@ type TokenHasher interface {
 	HashToken(plaintext string) string
 }
 
+// LoginCodeSender delivers a login code for the phone+email triple. Phone
+// identifies the recipient (the code is bound to the triple via
+// LoginCodeService.hashCode) and is reserved for a future SMS channel
+// (ADR 0006); the email implementation only uses email and code.
 type LoginCodeSender interface {
 	Send(ctx context.Context, phone domain.Phone, email domain.Email, code string) error
 }

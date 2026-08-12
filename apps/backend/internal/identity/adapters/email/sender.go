@@ -44,8 +44,8 @@ func NewSender(sender mailer.Sender, renderer *mailer.Renderer) *Sender {
 
 var _ application.LoginCodeSender = (*Sender)(nil)
 
-// Send renders and sends a login code email.
-// Phone is received for logging/context parity with the generic port but is not used in the email body.
+// Send renders and sends a login code email. See LoginCodeSender for why phone
+// is part of the signature though this channel only uses email and code.
 func (s *Sender) Send(ctx context.Context, phone domain.Phone, email domain.Email, code string) error {
 	plain, html, err := s.renderer.Render("login_code", map[string]any{
 		"Code": code,
