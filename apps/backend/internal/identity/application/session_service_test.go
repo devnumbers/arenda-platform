@@ -8,24 +8,16 @@ import (
 )
 
 type sessionHarness struct {
-	svc      *sessionService
-	users    *fakeUserRepo
-	codes    *fakeCodeRepo
-	attempts *fakeAttemptRepo
-	sessions *fakeSessionRepo
-	beginner *fakeBeginner
+	*fakeStores
+	svc *sessionService
 }
 
 func newSessionHarness() *sessionHarness {
-	factory, beginner, users, codes, attempts, sessions := newFakeFactory(nil)
+	stores := newFakeStores()
 	h := &sessionHarness{
-		users:    users,
-		codes:    codes,
-		attempts: attempts,
-		sessions: sessions,
-		beginner: beginner,
+		fakeStores: stores,
 	}
-	h.svc = NewSessionService(factory, SessionServiceConfig{Hasher: fakeHasher{}})
+	h.svc = NewSessionService(stores.factory(nil), SessionServiceConfig{Hasher: fakeHasher{}})
 	return h
 }
 

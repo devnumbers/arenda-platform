@@ -13,26 +13,18 @@ import (
 // so Send can run through runInTx while Verify/RecordFailure receive stores from
 // the caller's runInTx (ADR 0033).
 type loginCodeHarness struct {
-	svc      *LoginCodeService
-	users    *fakeUserRepo
-	codes    *fakeCodeRepo
-	attempts *fakeAttemptRepo
-	sessions *fakeSessionRepo
-	sender   *fakeCodeSender
-	beginner *fakeBeginner
+	*fakeStores
+	svc    *LoginCodeService
+	sender *fakeCodeSender
 }
 
 func newLoginCodeHarness() *loginCodeHarness {
-	factory, beginner, users, codes, attempts, sessions := newFakeFactory(nil)
+	stores := newFakeStores()
 	h := &loginCodeHarness{
-		users:    users,
-		codes:    codes,
-		attempts: attempts,
-		sessions: sessions,
-		sender:   &fakeCodeSender{},
-		beginner: beginner,
+		fakeStores: stores,
+		sender:     &fakeCodeSender{},
 	}
-	h.svc = NewLoginCodeService(factory, LoginCodeServiceConfig{
+	h.svc = NewLoginCodeService(stores.factory(nil), LoginCodeServiceConfig{
 		CodeSender: h.sender,
 		Clock:      &fakeClock{now: testNow},
 		Hasher:     fakeHasher{},

@@ -12,41 +12,41 @@ import (
 )
 
 // newLogoutHarness wires a LogoutService to a fakeUoW + the shared identity
-// fakes, returning every piece the tests need to assert behavior.
-func newLogoutHarness() (*LogoutService, *fakeBeginner, *fakeSessionRepo) {
-	factory, beginner, _, _, _, sessions := newFakeFactory(nil)
+// fakes, returning the service and fakeStores for assertions.
+func newLogoutHarness() (*LogoutService, *fakeStores) {
+	stores := newFakeStores()
 	svc := NewLogoutService(
-		factory,
+		stores.factory(nil),
 		LogoutServiceConfig{
 			Hasher: fakeHasher{},
 		},
 	)
-	return svc, beginner, sessions
+	return svc, stores
 }
 
 // TestLogoutService_Logout_DeletesSessionByTokenHash proves Logout hashes the
 // raw token, deletes the matching session through the transactional store, and
 // the UoW commits.
 func TestLogoutService_Logout_DeletesSessionByTokenHash(t *testing.T) {
-	svc, beginner, sessions := newLogoutHarness()
+	svc, stores := newLogoutHarness()
 
 	rawToken := "plain-test-value"
 	tokenHash := fakeHasher{}.HashToken(rawToken)
 	userID := uuid.New()
-	sessions.sessions[tokenHash] = domain.Session{UserID: userID, TokenHash: tokenHash}
+	stores.sessions.sessions[tokenHash] = domain.Session{UserID: userID, TokenHash: tokenHash}
 
 	if err := svc.Logout(context.Background(), rawToken); err != nil {
 		t.Fatalf("Logout error = %v, want nil", err)
 	}
 
-	if _, ok := sessions.sessions[tokenHash]; ok {
+	if _, ok := stores.sessions.sessions[tokenHash]; ok {
 		t.Fatal("session still present after Logout, want deleted")
 	}
-	if beginner.committed != 1 {
-		t.Errorf("committed = %d, want 1", beginner.committed)
+	if stores.beginner.committed != 1 {
+		t.Errorf("committed = %d, want 1", stores.beginner.committed)
 	}
-	if beginner.rolledBack != 0 {
-		t.Errorf("rolledBack = %d, want 0", beginner.rolledBack)
+	if stores.beginner.rolledBack != 0 {
+		t.Errorf("rolledBack = %d, want 0", stores.beginner.rolledBack)
 	}
 }
 
@@ -84,29 +84,29 @@ func TestLogoutService_Logout_WrapsDeleteError(t *testing.T) {
 // TestLogoutService_LogoutAll_DeletesSessionsByUserID proves LogoutAll removes
 // every session belonging to the user and commits.
 func TestLogoutService_LogoutAll_DeletesSessionsByUserID(t *testing.T) {
-	svc, beginner, sessions := newLogoutHarness()
+	svc, stores := newLogoutHarness()
 
 	userID := uuid.New()
 	otherUserID := uuid.New()
-	sessions.sessions["hash-a"] = domain.Session{UserID: userID, TokenHash: "hash-a"}
-	sessions.sessions["hash-b"] = domain.Session{UserID: userID, TokenHash: "hash-b"}
-	sessions.sessions["hash-c"] = domain.Session{UserID: otherUserID, TokenHash: "hash-c"}
+	stores.sessions.sessions["hash-a"] = domain.Session{UserID: userID, TokenHash: "hash-a"}
+	stores.sessions.sessions["hash-b"] = domain.Session{UserID: userID, TokenHash: "hash-b"}
+	stores.sessions.sessions["hash-c"] = domain.Session{UserID: otherUserID, TokenHash: "hash-c"}
 
 	if err := svc.LogoutAll(context.Background(), userID); err != nil {
 		t.Fatalf("LogoutAll error = %v, want nil", err)
 	}
 
-	if _, ok := sessions.sessions["hash-a"]; ok {
+	if _, ok := stores.sessions.sessions["hash-a"]; ok {
 		t.Error("session hash-a still present, want deleted")
 	}
-	if _, ok := sessions.sessions["hash-b"]; ok {
+	if _, ok := stores.sessions.sessions["hash-b"]; ok {
 		t.Error("session hash-b still present, want deleted")
 	}
-	if _, ok := sessions.sessions["hash-c"]; !ok {
+	if _, ok := stores.sessions.sessions["hash-c"]; !ok {
 		t.Error("session hash-c was deleted, want retained (different user)")
 	}
-	if beginner.committed != 1 {
-		t.Errorf("committed = %d, want 1", beginner.committed)
+	if stores.beginner.committed != 1 {
+		t.Errorf("committed = %d, want 1", stores.beginner.committed)
 	}
 }
 

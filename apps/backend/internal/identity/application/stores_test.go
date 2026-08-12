@@ -119,20 +119,34 @@ func newCountingFactory(t *testing.T) (*txStoreFactory, *fakeBeginner, *counting
 	return f, b, users, codes, attempts, sessions, audit
 }
 
-// newFakeFactory builds a txStoreFactory from fresh shared fake repositories and
-// a fakeUoW, returning every piece so a test harness can assert against the
-// repos. audit defaults to nil (NewTxStoreFactory substitutes Noop); pass a
-// non-nil recorder (e.g. *recordingRecorder) when the test checks audit output.
-func newFakeFactory(audit auditapp.Recorder) (
-	txStoreFactory, *fakeBeginner, *fakeUserRepo, *fakeCodeRepo, *fakeAttemptRepo, *fakeSessionRepo,
-) {
-	users := newFakeUserRepo()
-	codes := newFakeCodeRepo()
-	attempts := newFakeAttemptRepo()
-	sessions := newFakeSessionRepo()
-	beginner := &fakeBeginner{}
-	f := NewTxStoreFactory(users, codes, attempts, sessions, audit, &fakeUoW{beginner: beginner})
-	return f, beginner, users, codes, attempts, sessions
+// fakeStores bundles the shared identity fake repositories and a fakeBeginner so
+// every unit-test harness can construct a txStoreFactory and assert against the
+// repos without repeating five field declarations. Harness structs embed it
+// anonymously, so h.users, h.beginner, etc. work directly.
+type fakeStores struct {
+	users    *fakeUserRepo
+	codes    *fakeCodeRepo
+	attempts *fakeAttemptRepo
+	sessions *fakeSessionRepo
+	beginner *fakeBeginner
+}
+
+// newFakeStores builds a fresh set of shared identity fakes plus a fakeBeginner.
+func newFakeStores() *fakeStores {
+	return &fakeStores{
+		users:    newFakeUserRepo(),
+		codes:    newFakeCodeRepo(),
+		attempts: newFakeAttemptRepo(),
+		sessions: newFakeSessionRepo(),
+		beginner: &fakeBeginner{},
+	}
+}
+
+// factory builds a txStoreFactory from the fakes plus a fakeUoW. audit defaults
+// to nil (NewTxStoreFactory substitutes Noop); pass a non-nil recorder (e.g.
+// *recordingRecorder) when the test checks audit output.
+func (s *fakeStores) factory(audit auditapp.Recorder) txStoreFactory {
+	return NewTxStoreFactory(s.users, s.codes, s.attempts, s.sessions, audit, &fakeUoW{beginner: s.beginner})
 }
 
 // TestRunInTx_BuildsStoresFromTxAndCommits proves runInTx binds every

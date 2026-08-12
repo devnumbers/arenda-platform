@@ -356,27 +356,20 @@ func (p *fakePublisher) PublishUserRegistered(_ context.Context, event UserRegis
 // --- harness ---
 
 type authServiceHarness struct {
+	*fakeStores
 	svc       *AuthenticationService
-	users     *fakeUserRepo
-	codes     *fakeCodeRepo
-	attempts  *fakeAttemptRepo
-	sessions  *fakeSessionRepo
 	sender    *fakeCodeSender
 	publisher *fakePublisher
-	beginner  *fakeBeginner
 }
 
 func newAuthServiceHarness() *authServiceHarness {
-	factory, beginner, users, codes, attempts, sessions := newFakeFactory(nil)
+	stores := newFakeStores()
 	h := &authServiceHarness{
-		users:     users,
-		codes:     codes,
-		attempts:  attempts,
-		sessions:  sessions,
-		sender:    &fakeCodeSender{},
-		publisher: &fakePublisher{},
-		beginner:  beginner,
+		fakeStores: stores,
+		sender:     &fakeCodeSender{},
+		publisher:  &fakePublisher{},
 	}
+	factory := stores.factory(nil)
 	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
 		CodeSender: h.sender,
 		Clock:      &fakeClock{now: testNow},

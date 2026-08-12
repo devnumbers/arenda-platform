@@ -54,25 +54,24 @@ func (r *fakeReminderRescheduler) RescheduleForTimezoneChange(_ context.Context,
 // profileHarness wires a ProfileService to a fakeUoW + the shared identity
 // fakes, returning every piece the tests need to assert behavior.
 type profileHarness struct {
+	*fakeStores
 	svc         *ProfileService
-	users       *fakeUserRepo
 	audit       *recordingRecorder
 	rescheduler *fakeReminderRescheduler
-	beginner    *fakeBeginner
 }
 
 func newProfileHarness(t *testing.T) *profileHarness {
 	t.Helper()
+	stores := newFakeStores()
 	audit := &recordingRecorder{}
-	factory, beginner, users, _, _, _ := newFakeFactory(audit)
 	rescheduler := &fakeReminderRescheduler{}
 	svc := NewProfileService(
-		factory,
+		stores.factory(audit),
 		ProfileServiceConfig{
 			ReminderRescheduler: rescheduler,
 		},
 	)
-	return &profileHarness{svc: svc, users: users, audit: audit, rescheduler: rescheduler, beginner: beginner}
+	return &profileHarness{fakeStores: stores, svc: svc, audit: audit, rescheduler: rescheduler}
 }
 
 // seedProfileUser creates a verified owner in the fake user repo and returns it.
