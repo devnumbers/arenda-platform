@@ -121,10 +121,14 @@ func WireIdentity(
 
 	profileService := identityapp.NewProfileService(
 		userRepo,
-		p.AuditRecorder,
-		p.Beginner,
-		p.UoW,
-		reminderService,
+		codeRepo,
+		attemptRepo,
+		sessionRepo,
+		identityapp.ProfileServiceConfig{
+			Audit:               p.AuditRecorder,
+			UoW:                 p.UoW,
+			ReminderRescheduler: reminderService,
+		},
 	)
 
 	logoutService := identityapp.NewLogoutService(
