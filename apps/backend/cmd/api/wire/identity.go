@@ -54,7 +54,10 @@ func WireIdentity(
 	codeRepo := identitypg.NewLoginCodeRepository(p.DB, p.Encryptor)
 	attemptRepo := identitypg.NewAttemptRepository(p.DB, p.Encryptor)
 	sessionRepo := identitypg.NewSessionRepository(p.DB, p.Encryptor)
-	sessionService := identityapp.NewSessionService(sessionRepo, p.Encryptor)
+	sessionService := identityapp.NewSessionService(
+		userRepo, codeRepo, attemptRepo, sessionRepo, p.Encryptor,
+		identityapp.SessionServiceConfig{Audit: p.AuditRecorder, UoW: p.UoW},
+	)
 	sessionLoader := identityhttp.NewSessionLoader(sessionService)
 
 	eventPublisher := identityevents.NewPublisher(eventDispatcher)
@@ -87,20 +90,33 @@ func WireIdentity(
 
 	emailSender := identityemail.NewSender(emailMailer, p.Renderer)
 
+	// loginCodeService is the deep module for login-code issuance/verification
+	// shared by AuthenticationService and PhoneChangeService (ADR 0033, step 4).
+	loginCodeService := identityapp.NewLoginCodeService(
+		userRepo, codeRepo, attemptRepo, sessionRepo,
+		identityapp.LoginCodeServiceConfig{
+			CodeSender: emailSender,
+			Clock:      p.Clock,
+			Hasher:     p.Encryptor,
+			Logger:     p.Logger,
+			Audit:      p.AuditRecorder,
+			UoW:        p.UoW,
+		},
+	)
+
 	authenticationService := identityapp.NewAuthenticationService(
 		userRepo,
 		codeRepo,
 		attemptRepo,
 		sessionRepo,
 		identityapp.AuthenticationServiceConfig{
-			CodeSender: emailSender,
-			Clock:      p.Clock,
+			LoginCodes: loginCodeService,
+			Sessions:   sessionService,
 			Publisher:  eventPublisher,
-			DB:         p.Beginner,
-			UoW:        p.UoW,
+			Clock:      p.Clock,
 			Logger:     p.Logger,
-			Hasher:     p.Encryptor,
 			Audit:      p.AuditRecorder,
+			UoW:        p.UoW,
 		},
 	)
 
@@ -110,12 +126,12 @@ func WireIdentity(
 		attemptRepo,
 		sessionRepo,
 		identityapp.PhoneChangeServiceConfig{
-			Sender: emailSender,
-			Clock:  p.Clock,
-			DB:     p.Beginner,
-			UoW:    p.UoW,
-			Hasher: p.Encryptor,
-			Audit:  p.AuditRecorder,
+			LoginCodes: loginCodeService,
+			Clock:      p.Clock,
+			Hasher:     p.Encryptor,
+			Logger:     p.Logger,
+			Audit:      p.AuditRecorder,
+			UoW:        p.UoW,
 		},
 	)
 

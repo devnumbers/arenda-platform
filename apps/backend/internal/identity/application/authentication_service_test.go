@@ -351,26 +351,39 @@ type authServiceHarness struct {
 	svc       *AuthenticationService
 	users     *fakeUserRepo
 	codes     *fakeCodeRepo
+	attempts  *fakeAttemptRepo
 	sessions  *fakeSessionRepo
 	sender    *fakeCodeSender
 	publisher *fakePublisher
+	beginner  *fakeBeginner
 }
 
 func newAuthServiceHarness() *authServiceHarness {
 	h := &authServiceHarness{
 		users:     newFakeUserRepo(),
 		codes:     newFakeCodeRepo(),
+		attempts:  newFakeAttemptRepo(),
 		sessions:  newFakeSessionRepo(),
 		sender:    &fakeCodeSender{},
 		publisher: &fakePublisher{},
+		beginner:  &fakeBeginner{},
 	}
-	h.svc = NewAuthenticationService(h.users, h.codes, newFakeAttemptRepo(), h.sessions, AuthenticationServiceConfig{
+	uow := &fakeUoW{beginner: h.beginner}
+	loginCodes := NewLoginCodeService(h.users, h.codes, h.attempts, h.sessions, LoginCodeServiceConfig{
 		CodeSender: h.sender,
 		Clock:      &fakeClock{now: testNow},
-		Publisher:  h.publisher,
-		DB:         &fakeBeginner{},
-		Logger:     discardLogger(),
 		Hasher:     fakeHasher{},
+		Logger:     discardLogger(),
+		UoW:        uow,
+	})
+	sessionSvc := NewSessionService(h.users, h.codes, h.attempts, h.sessions, fakeHasher{}, SessionServiceConfig{UoW: uow})
+	h.svc = NewAuthenticationService(h.users, h.codes, h.attempts, h.sessions, AuthenticationServiceConfig{
+		LoginCodes: loginCodes,
+		Sessions:   sessionSvc,
+		Clock:      &fakeClock{now: testNow},
+		Publisher:  h.publisher,
+		Logger:     discardLogger(),
+		UoW:        uow,
 	})
 	return h
 }
@@ -593,4 +606,74 @@ func TestAuthenticationService_SendCode_NewPhoneEmailPrecheck(t *testing.T) {
 			t.Fatalf("codes saved = %d, want 1", len(h.codes.codes))
 		}
 	})
+}
+
+// TestAuthenticationService_VerifyCode_InvalidCodeRecordsAttemptAndAudit
+// verifies the post-refactor failed-login behavior (ADR 0033): an invalid code
+// rolls back the success path, then a separate short transaction records the
+// attempt-window failure so rate-limiting survives the rollback. The pre-refactor
+// early-Commit-on-error is gone.
+func TestAuthenticationService_VerifyCode_InvalidCodeRecordsAttemptAndAudit(t *testing.T) {
+	h := newAuthServiceHarness()
+	phone := mustPhone(t, "+79150000020")
+	email := mustEmail(t, "owner@example.com")
+	h.seedUser(t, phone, &email)
+	ctx := context.Background()
+
+	// Issue a real code, then verify with a wrong one.
+	if _, err := h.svc.SendCodeByPhone(ctx, phone); err != nil {
+		t.Fatalf("SendCodeByPhone error = %v", err)
+	}
+
+	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000")
+	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
+		t.Fatalf("VerifyCode error = %v, want ErrLoginCodeInvalid", err)
+	}
+
+	// The attempt-window failure was recorded despite the success-path rollback.
+	window, ok := h.attempts.windows[phone.String()]
+	if !ok {
+		t.Fatal("attempt window not recorded after invalid verify")
+	}
+	if window.Failures != 1 {
+		t.Fatalf("window failures = %d, want 1", window.Failures)
+	}
+
+	// No session was created for the failed verification.
+	if len(h.sessions.sessions) != 0 {
+		t.Fatalf("sessions created = %d, want 0 on invalid verify", len(h.sessions.sessions))
+	}
+	// No registration event was published.
+	if len(h.publisher.registered) != 0 {
+		t.Fatalf("PublishUserRegistered calls = %d, want 0", len(h.publisher.registered))
+	}
+}
+
+// TestAuthenticationService_VerifyCode_TooManyAttemptsBlocks ensures repeated
+// invalid verifications reach the attempt threshold and then block further
+// attempts.
+func TestAuthenticationService_VerifyCode_TooManyAttemptsBlocks(t *testing.T) {
+	h := newAuthServiceHarness()
+	phone := mustPhone(t, "+79150000021")
+	email := mustEmail(t, "owner@example.com")
+	h.seedUser(t, phone, &email)
+	ctx := context.Background()
+
+	if _, err := h.svc.SendCodeByPhone(ctx, phone); err != nil {
+		t.Fatalf("SendCodeByPhone error = %v", err)
+	}
+
+	var lastErr error
+	for range domain.MaxLoginFailures {
+		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000")
+	}
+	if !errors.Is(lastErr, domain.ErrTooManyAttempts) {
+		t.Fatalf("last VerifyCode error = %v, want ErrTooManyAttempts", lastErr)
+	}
+
+	// After hitting the threshold, a subsequent send is blocked.
+	err := h.svc.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin)
+	if !errors.Is(err, ErrUserBlocked) {
+		t.Fatalf("SendCode after block = %v, want ErrUserBlocked", err)
+	}
 }

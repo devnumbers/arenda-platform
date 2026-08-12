@@ -2,12 +2,9 @@ package application
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/big"
-	"time"
 
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
@@ -18,39 +15,48 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-const (
-	minSendInterval = 1 * time.Minute
-	codeSpace       = 1_000_000
-)
-
-// AuthenticationService handles login code issuance and verification.
+// AuthenticationService is a thin orchestrator over LoginCodeService and
+// SessionService.Issue (ADR 0033, migration step 4). It owns no login-code,
+// attempt-window, TTL, or session-creation logic itself: it composes the two
+// deep modules inside a single runInTx so verification, mark-used, session
+// issuance, and audit share one commit.
+//
+// The early-Commit-on-error that the pre-refactor VerifyCode used to record the
+// failed-login audit is gone. On a verification failure the success-path
+// transaction rolls back, and a separate short runInTx records the attempt and
+// the failed-login audit so the rate-limit mutation survives the rollback.
 type AuthenticationService struct {
 	txStoreFactory
-	codeSender LoginCodeSender
-	clock      clock.Clock
+	loginCodes *LoginCodeService
+	sessions   SessionService
 	publisher  EventPublisher
-	db         transaction.Beginner
+	clock      clock.Clock
 	logger     *slog.Logger
-	hasher     TokenHasher
 }
 
-// AuthenticationServiceConfig carries optional dependencies for AuthenticationService.
+// AuthenticationServiceConfig carries the deep-module dependencies plus the
+// shared audit recorder and UoW for the orchestrator's own runInTx calls.
 type AuthenticationServiceConfig struct {
-	CodeSender LoginCodeSender
-	Clock      clock.Clock
+	LoginCodes *LoginCodeService
+	Sessions   SessionService
 	Publisher  EventPublisher
-	DB         transaction.Beginner
-	// UoW is the Unit-of-Work seam used by runInTx once use cases migrate to
-	// the transactional-stores pattern (ADR 0033). It is optional during the
-	// transition; Beginner remains valid until migration completes.
-	UoW    transaction.UoW
-	Logger *slog.Logger
-	Hasher TokenHasher
-	Audit  auditapp.Recorder
+	Clock      clock.Clock
+	Logger     *slog.Logger
+	Audit      auditapp.Recorder
+	UoW        transaction.UoW
 }
 
-// NewAuthenticationService creates an AuthenticationService.
-func NewAuthenticationService(users UserRepository, codes LoginCodeRepository, attempts AttemptRepository, sessions SessionRepository, cfg AuthenticationServiceConfig) *AuthenticationService {
+// NewAuthenticationService creates an AuthenticationService. It embeds the
+// identity txStoreFactory so its runInTx calls bind the repositories and audit
+// recorder to the transaction; the login-code and session deep modules are
+// passed in already constructed (ADR 0033 γ-factory).
+func NewAuthenticationService(
+	users UserRepository,
+	codes LoginCodeRepository,
+	attempts AttemptRepository,
+	sessions SessionRepository,
+	cfg AuthenticationServiceConfig,
+) *AuthenticationService {
 	if cfg.Clock == nil {
 		cfg.Clock = clock.Real{}
 	}
@@ -71,17 +77,17 @@ func NewAuthenticationService(users UserRepository, codes LoginCodeRepository, a
 			audit:    audit,
 			uow:      cfg.UoW,
 		},
-		codeSender: cfg.CodeSender,
-		clock:      cfg.Clock,
+		loginCodes: cfg.LoginCodes,
+		sessions:   cfg.Sessions,
 		publisher:  cfg.Publisher,
-		db:         cfg.DB,
+		clock:      cfg.Clock,
 		logger:     logger,
-		hasher:     cfg.Hasher,
 	}
 }
 
 // SendCode generates a login code, persists it, and sends it by email after the
-// transaction commits.
+// transaction commits. It validates the email preconditions for the phone
+// before delegating issuance to LoginCodeService.
 func (s *AuthenticationService) SendCode(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error {
 	if err := checkNotBlocked(ctx, s.attempts, s.clock, phone); err != nil {
 		return err
@@ -108,8 +114,7 @@ func (s *AuthenticationService) SendCode(ctx context.Context, phone domain.Phone
 		userID = &user.ID
 	}
 
-	flow := newLoginCodeFlow(s.codes, s.attempts, s.codeSender, s.clock, s.db, s.hasher, s.logger)
-	return flow.sendCode(ctx, phone, email, purpose, userID)
+	return s.loginCodes.Send(ctx, phone, email, purpose, userID)
 }
 
 // SendCodeByPhone sends a login code to the email stored for the given
@@ -134,6 +139,12 @@ func (s *AuthenticationService) SendCodeByPhone(ctx context.Context, phone domai
 
 // VerifyCode verifies a login code and creates a session for the user.
 // A nil email is resolved from the stored user record for the phone.
+//
+// The success path runs inside a single runInTx: verify → mark-used →
+// SessionService.Issue → reset attempts → audit. A verification failure rolls
+// that transaction back, then a separate short runInTx records the failed
+// attempt and the failed-login audit so rate-limiting survives the rollback —
+// replacing the pre-refactor early-Commit-on-error (ADR 0033).
 func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Phone, email *domain.Email, code string) (domain.RawSession, domain.User, error) {
 	now := s.clock.Now()
 
@@ -146,77 +157,62 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 		return domain.RawSession{}, domain.User{}, err
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var raw domain.RawSession
+	var user domain.User
+	isNewUser := false
 
-	txAttempts, err := s.attempts.WithTx(tx)
-	if err != nil {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("bind attempt repository to tx: %w", err)
-	}
-	if err := checkNotBlocked(ctx, txAttempts, s.clock, phone); err != nil {
-		return domain.RawSession{}, domain.User{}, err
-	}
-
-	flow := newLoginCodeFlow(s.codes, s.attempts, s.codeSender, s.clock, s.db, s.hasher, s.logger)
-
-	loginCode, err := flow.verifyCode(ctx, tx, phone, resolvedEmail, domain.LoginCodePurposeLogin, code, uuid.Nil)
-	if err != nil {
-		if errors.Is(err, domain.ErrLoginCodeInvalid) || errors.Is(err, domain.ErrTooManyAttempts) {
-			reason := "invalid_code"
-			if errors.Is(err, domain.ErrTooManyAttempts) {
-				reason = "too_many_attempts"
-			}
-			if auditErr := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-				ActorRole: auditdomain.ActorRoleAnonymous,
-				Action:    auditdomain.ActionAuthLoginFailed,
-				Context:   map[string]any{"reason": reason},
-			}); auditErr != nil {
-				return domain.RawSession{}, domain.User{}, errors.Join(err, fmt.Errorf("record audit: %w", auditErr))
-			}
-			if commitErr := tx.Commit(ctx); commitErr != nil {
-				return domain.RawSession{}, domain.User{}, fmt.Errorf("commit attempts: %w", commitErr)
-			}
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		loginCode, vErr := s.loginCodes.Verify(ctx, stores, phone, resolvedEmail, domain.LoginCodePurposeLogin, code)
+		if vErr != nil {
+			return vErr
 		}
+
+		if err := stores.codes.MarkUsedByID(ctx, loginCode.ID); err != nil {
+			return fmt.Errorf("mark code used: %w", err)
+		}
+
+		issued, u, isNew, iErr := s.sessions.Issue(ctx, stores, phone, resolvedEmail, now)
+		if iErr != nil {
+			return iErr
+		}
+		raw, user, isNewUser = issued, u, isNew
+
+		if err := stores.attempts.DeleteByPhone(ctx, phone); err != nil {
+			return fmt.Errorf("reset login attempts: %w", err)
+		}
+
+		action := auditdomain.ActionAuthLogin
+		if isNewUser {
+			action = auditdomain.ActionAuthRegistered
+		}
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &user.ID,
+			ActorRole:  AuditActorRole(user.Role),
+			Action:     action,
+			EntityType: auditdomain.EntityUser,
+			EntityID:   &user.ID,
+			Context:    map[string]any{"method": "email_code"},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+
+	switch {
+	case errors.Is(err, domain.ErrLoginCodeInvalid) || errors.Is(err, domain.ErrTooManyAttempts):
+		// The success path rolled back. Record the failed attempt and the
+		// failed-login audit in a separate transaction so the rate-limit
+		// mutation survives. RecordFailure returns ErrTooManyAttempts once the
+		// threshold is reached; surface it in place of the plain invalid-code
+		// error so callers and tests observe the block. Infrastructure errors
+		// are logged but do not mask the original verification error.
+		finalErr := err
+		if recErr := s.recordFailedLogin(ctx, phone, &finalErr); recErr != nil {
+			s.logger.ErrorContext(ctx, "failed to record failed-login audit", slog.String("error", sanitize.Error(recErr)))
+		}
+		return domain.RawSession{}, domain.User{}, finalErr
+	case err != nil:
 		return domain.RawSession{}, domain.User{}, err
-	}
-
-	txCodes, err := s.codes.WithTx(tx)
-	if err != nil {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("bind login code repository to tx: %w", err)
-	}
-	if err := txCodes.MarkUsedByID(ctx, loginCode.ID); err != nil {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("mark code used: %w", err)
-	}
-
-	raw, user, isNewUser, err := s.authenticate(ctx, tx, phone, resolvedEmail, now)
-	if err != nil {
-		return domain.RawSession{}, domain.User{}, err
-	}
-
-	if err := txAttempts.DeleteByPhone(ctx, phone); err != nil {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("reset login attempts: %w", err)
-	}
-
-	action := auditdomain.ActionAuthLogin
-	if isNewUser {
-		action = auditdomain.ActionAuthRegistered
-	}
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &user.ID,
-		ActorRole:  AuditActorRole(user.Role),
-		Action:     action,
-		EntityType: auditdomain.EntityUser,
-		EntityID:   &user.ID,
-		Context:    map[string]any{"method": "email_code"},
-	}); err != nil {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.RawSession{}, domain.User{}, fmt.Errorf("commit tx: %w", err)
 	}
 
 	if isNewUser {
@@ -226,6 +222,38 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 	}
 
 	return raw, user, nil
+}
+
+// recordFailedLogin records a failed verification attempt and the corresponding
+// audit entry in a single short transaction, so they outlive the rolled-back
+// success path. It runs RecordFailure first so the audit reason reflects the
+// final outcome — "too_many_attempts" once the threshold is reached, otherwise
+// "invalid_code". When RecordFailure returns domain.ErrTooManyAttempts, outErr
+// is updated to it so the caller surfaces the block. Returns only infrastructure
+// errors; domain errors from RecordFailure are captured via outErr.
+func (s *AuthenticationService) recordFailedLogin(ctx context.Context, phone domain.Phone, outErr *error) error {
+	return s.runInTx(ctx, func(stores *txStores) error {
+		if err := s.loginCodes.RecordFailure(ctx, stores, phone, uuid.Nil); err != nil {
+			if errors.Is(err, domain.ErrTooManyAttempts) {
+				*outErr = err
+			} else if !errors.Is(err, domain.ErrLoginCodeInvalid) {
+				return fmt.Errorf("record failed attempt: %w", err)
+			}
+		}
+
+		reason := "invalid_code"
+		if errors.Is(*outErr, domain.ErrTooManyAttempts) {
+			reason = "too_many_attempts"
+		}
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorRole: auditdomain.ActorRoleAnonymous,
+			Action:    auditdomain.ActionAuthLoginFailed,
+			Context:   map[string]any{"reason": reason},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 }
 
 // resolveEmail returns the given email or, when it is nil, the email stored
@@ -242,227 +270,4 @@ func (s *AuthenticationService) resolveEmail(ctx context.Context, phone domain.P
 		return domain.Email{}, ErrNotFound
 	}
 	return *user.Email, nil
-}
-
-func (s *AuthenticationService) authenticate(ctx context.Context, tx transaction.Tx, phone domain.Phone, email domain.Email, now time.Time) (domain.RawSession, domain.User, bool, error) {
-	txUsers, err := s.users.WithTx(tx)
-	if err != nil {
-		return domain.RawSession{}, domain.User{}, false, fmt.Errorf("bind user repository to tx: %w", err)
-	}
-	txSessions, err := s.sessions.WithTx(tx)
-	if err != nil {
-		return domain.RawSession{}, domain.User{}, false, fmt.Errorf("bind session repository to tx: %w", err)
-	}
-
-	user, err := txUsers.GetByPhone(ctx, phone)
-	isNewUser := false
-	if err != nil {
-		if !errors.Is(err, ErrNotFound) {
-			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("get user: %w", err)
-		}
-		isNewUser = true
-		newUser, createErr := domain.NewOwner(phone)
-		if createErr != nil {
-			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("create user: %w", createErr)
-		}
-		newUser.Email = &email
-		newUser.EmailVerifiedAt = &now
-		user, createErr = txUsers.Create(ctx, newUser)
-		if createErr != nil {
-			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("save user: %w", createErr)
-		}
-		if user.ID != newUser.ID {
-			isNewUser = false
-		}
-	} else if user.Email == nil || *user.Email != email || user.EmailVerifiedAt == nil {
-		updated, updateErr := txUsers.UpdateEmailVerified(ctx, user.ID, &email, &now)
-		if updateErr != nil {
-			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("verify user email: %w", updateErr)
-		}
-		user = updated
-	}
-
-	raw, err := domain.NewSession(user.ID, now)
-	if err != nil {
-		return domain.RawSession{}, domain.User{}, false, fmt.Errorf("create session: %w", err)
-	}
-	raw.Session.TokenHash = s.hasher.HashToken(raw.Token)
-
-	if err := txSessions.Create(ctx, raw.Session); err != nil {
-		return domain.RawSession{}, domain.User{}, false, fmt.Errorf("save session: %w", err)
-	}
-
-	return raw, user, isNewUser, nil
-}
-
-// loginCodeFlow contains the shared login-code logic used by AuthenticationService
-// and PhoneChangeService.
-type loginCodeFlow struct {
-	codes    LoginCodeRepository
-	attempts AttemptRepository
-	sender   LoginCodeSender
-	clock    clock.Clock
-	db       transaction.Beginner
-	hasher   TokenHasher
-	logger   *slog.Logger
-}
-
-func newLoginCodeFlow(codes LoginCodeRepository, attempts AttemptRepository, sender LoginCodeSender, clock clock.Clock, db transaction.Beginner, hasher TokenHasher, logger *slog.Logger) loginCodeFlow {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return loginCodeFlow{
-		codes:    codes,
-		attempts: attempts,
-		sender:   sender,
-		clock:    clock,
-		db:       db,
-		hasher:   hasher,
-		logger:   logger,
-	}
-}
-
-func (f *loginCodeFlow) hashCode(purpose domain.LoginCodePurpose, phone domain.Phone, email domain.Email, code string) string {
-	return f.hasher.HashToken("login_code:" + purpose.String() + ":" + phone.String() + ":" + email.String() + ":" + code)
-}
-
-func (f *loginCodeFlow) sendCode(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, userID *uuid.UUID) error {
-	now := f.clock.Now()
-
-	tx, err := f.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txAttempts, err := f.attempts.WithTx(tx)
-	if err != nil {
-		return fmt.Errorf("bind attempt repository to tx: %w", err)
-	}
-	if err := checkNotBlocked(ctx, txAttempts, f.clock, phone); err != nil {
-		return err
-	}
-
-	txCodes, err := f.codes.WithTx(tx)
-	if err != nil {
-		return fmt.Errorf("bind login code repository to tx: %w", err)
-	}
-	if err := txCodes.DeleteExpiredByPhoneAndEmail(ctx, phone, email, purpose, now); err != nil {
-		return fmt.Errorf("delete expired login codes: %w", err)
-	}
-
-	latest, err := txCodes.GetLatestByPhoneAndEmail(ctx, phone, email, purpose, now)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("get latest code: %w", err)
-	}
-	if !errors.Is(err, ErrNotFound) && !latest.Used && latest.ExpiresAt.After(now) && now.Sub(latest.CreatedAt) < minSendInterval {
-		return ErrCodeSentTooRecently
-	}
-
-	if err := txCodes.DeleteUnusedByPhoneAndEmail(ctx, phone, email, purpose); err != nil {
-		return fmt.Errorf("delete unused login codes: %w", err)
-	}
-
-	plaintextCode, err := generateCode()
-	if err != nil {
-		return fmt.Errorf("generate code: %w", err)
-	}
-
-	loginCode, err := domain.NewLoginCode(phone, email, f.hashCode(purpose, phone, email, plaintextCode), purpose, userID, now)
-	if err != nil {
-		return fmt.Errorf("create login code: %w", err)
-	}
-
-	if err := txCodes.Save(ctx, loginCode); err != nil {
-		return fmt.Errorf("save code: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-
-	f.logger.InfoContext(ctx, "sending login code", slog.String("purpose", purpose.String()))
-	if err := f.sender.Send(ctx, phone, email, plaintextCode); err != nil {
-		f.logger.ErrorContext(ctx, "failed to send login code", slog.String("error", sanitize.Error(err)))
-		if delErr := f.codes.DeleteByID(ctx, loginCode.ID); delErr != nil {
-			f.logger.ErrorContext(ctx, "failed to delete unsent login code", slog.String("error", sanitize.Error(delErr)))
-		}
-		return fmt.Errorf("send code: %w", err)
-	}
-
-	f.logger.InfoContext(ctx, "login code sent", slog.String("purpose", purpose.String()))
-	return nil
-}
-
-func (f *loginCodeFlow) verifyCode(ctx context.Context, tx transaction.Tx, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, code string, failureUserID uuid.UUID) (domain.LoginCode, error) {
-	now := f.clock.Now()
-	txCodes, err := f.codes.WithTx(tx)
-	if err != nil {
-		return domain.LoginCode{}, fmt.Errorf("bind login code repository to tx: %w", err)
-	}
-	txAttempts, err := f.attempts.WithTx(tx)
-	if err != nil {
-		return domain.LoginCode{}, fmt.Errorf("bind attempt repository to tx: %w", err)
-	}
-
-	loginCode, err := txCodes.GetLatestByPhoneAndEmail(ctx, phone, email, purpose, now)
-	if errors.Is(err, ErrNotFound) {
-		return domain.LoginCode{}, f.recordVerifyFailure(ctx, txAttempts, phone, failureUserID, now)
-	}
-	if err != nil {
-		return domain.LoginCode{}, fmt.Errorf("get code: %w", err)
-	}
-
-	if err := loginCode.Verify(f.hashCode(purpose, phone, email, code), now); err != nil {
-		return domain.LoginCode{}, f.recordVerifyFailure(ctx, txAttempts, phone, failureUserID, now)
-	}
-
-	return loginCode, nil
-}
-
-func (f *loginCodeFlow) recordVerifyFailure(ctx context.Context, attempts AttemptRepository, phone domain.Phone, userID uuid.UUID, now time.Time) error {
-	window, err := attempts.GetByPhoneForUpdate(ctx, phone)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("get attempts: %w", err)
-	}
-	if errors.Is(err, ErrNotFound) {
-		window = domain.NewAttemptWindow(now)
-	}
-
-	recErr := window.RecordFailure(now)
-	if err := attempts.Save(ctx, phone, userID, window); err != nil {
-		return fmt.Errorf("save attempts: %w", err)
-	}
-	if recErr != nil {
-		return recErr
-	}
-	return domain.ErrLoginCodeInvalid
-}
-
-func checkNotBlocked(ctx context.Context, attempts AttemptRepository, clock clock.Clock, phone domain.Phone) error {
-	now := clock.Now()
-
-	window, err := attempts.GetByPhone(ctx, phone)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("get attempts: %w", err)
-	}
-	if window.Blocked(now) {
-		return ErrUserBlocked
-	}
-	return nil
-}
-
-func userEmail(user domain.User) (domain.Email, error) {
-	if user.Email == nil {
-		return domain.Email{}, ErrEmailDoesNotMatch
-	}
-	return *user.Email, nil
-}
-
-func generateCode() (string, error) {
-	n, err := rand.Int(rand.Reader, big.NewInt(codeSpace))
-	if err != nil {
-		return "", fmt.Errorf("generate random code: %w", err)
-	}
-	return fmt.Sprintf("%06d", n.Int64()), nil
 }
