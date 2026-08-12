@@ -210,6 +210,20 @@ linters:
         - pattern: ^(fmt\.Print(|f|ln)|print|println)$   # дефолтный паттерн, сохранён явно
         - pattern: ^log\.                                 # логируем только через log/slog
           msg: use log/slog instead of stdlib log
+        # ADR 0033: identity use cases open transactions through runInTx/UoW,
+        # not by hand. forbidigo keeps a new use case from silently reintroducing
+        # the manual Begin/WithTx/Commit pattern while UoW is available. Scoped
+        # to identity/application today — the only context fully migrated to UoW
+        # (ADR 0033, тикеты #210–#212). The rule is suppressed everywhere else
+        # via linters.exclusions.rules (path-except) until each remaining context
+        # completes its own UoW migration; then it is added to the except list so
+        # the rule starts protecting it too.
+        #
+        # The pattern matches the selector `.Begin` (forbidigo renders a
+        # SelectorExpr without its arguments, so b.Begin(ctx) is seen as
+        # "b.Begin"); the implicit receiver is always a transaction.Beginner.
+        - pattern: '\.Begin$'
+          msg: "use runInTx/UoW instead of manual Begin (ADR 0033)"
     modernize:
       disable:
         - forvar           # дублирует copyloopvar
@@ -233,7 +247,27 @@ linters:
   exclusions:
     generated: strict      # покрывает sqlc/oapi-codegen целиком (маркер DO NOT EDIT)
     warn-unused: true      # страховка от гнилых паттернов исключений
-    # paths осознанно не задаём: прежние правила были мёртвыми/избыточными.
+    # Поле paths осознанно не задаём: прежние top-level path-исключения были
+    # мёртвыми/избыточными. Ниже — rules (structured exclude rules, не paths):
+    # каждое несёт ADR-обоснование и точечный lint+text+path-фильтр, warn-unused
+    # выше ловит гнилые правила.
+    rules:
+      # ADR 0033 (forbidigo на ручной Begin): identity — единственный контекст,
+      # полностью мигрировавший на UoW. Begin легитимно используется в platform
+      # (реализация transaction layer: postgres/transaction, postgres/uow,
+      # instrumentation, scheduler) и в adapters остальных контекстов — их
+      # миграция на UoW отдельные тикеты. Правило ниже подавляет forbidigo-паттерн
+      # Begin ВЕЗДЕ, кроме identity/application (path-except). Когда новый контекст
+      # мигрирует на UoW, сузьте path-except, добавив его в разрешённые. Правило
+      # для *_test.go подавляет тот же паттерн в тест-фикстурах identity/application
+      # (они легитимно вызывают transaction.Beginner.Begin); text должен совпадать
+      # с msg forbidigo-паттерна выше.
+      - linters: [forbidigo]
+        path-except: internal/identity/application
+        text: 'use runInTx/UoW instead of manual Begin'
+      - linters: [forbidigo]
+        path: internal/identity/application/.*_test\.go
+        text: 'use runInTx/UoW instead of manual Begin'
 
 formatters:
   enable:
