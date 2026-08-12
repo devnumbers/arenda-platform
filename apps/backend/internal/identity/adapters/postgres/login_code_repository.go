@@ -172,15 +172,15 @@ func toLoginCodeRowPhoneEmail(row pgen.GetLatestLoginCodeByPhoneAndEmailAndPurpo
 func (r *LoginCodeRepository) mapLoginCode(ctx context.Context, row loginCodeRow) (domain.LoginCode, error) {
 	phone, err := decryptPhoneField(ctx, r.enc, row.phone.String, row.phoneEncrypted)
 	if err != nil {
-		return domain.LoginCode{}, err
+		return domain.LoginCode{}, fmt.Errorf("invalid phone from DB: %w", err)
 	}
 	email, _, err := parseEmailField(row.email)
 	if err != nil {
-		return domain.LoginCode{}, err
+		return domain.LoginCode{}, fmt.Errorf("invalid email from DB: %w", err)
 	}
 	purpose, err := domain.NewLoginCodePurpose(row.purpose)
 	if err != nil {
-		return domain.LoginCode{}, err
+		return domain.LoginCode{}, fmt.Errorf("invalid login code purpose from DB: %w", err)
 	}
 	return domain.LoginCode{
 		ID:        pgconv.UUIDFromPgtype(row.id),

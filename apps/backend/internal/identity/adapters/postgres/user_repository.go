@@ -132,13 +132,13 @@ func (r *UserRepository) resolveConflictingUser(ctx context.Context, user domain
 	}
 
 	if user.Email == nil {
-		return domain.User{}, errors.New("resolve conflicting user: no user by phone and no email to look up")
+		return domain.User{}, fmt.Errorf("resolve conflicting user: no user by phone and no email to look up: %w", application.ErrNotFound)
 	}
 
 	existing, err = r.GetByEmail(ctx, *user.Email)
 	if err != nil {
 		if errors.Is(err, application.ErrNotFound) {
-			return domain.User{}, errors.New("resolve conflicting user: conflict resolved without finding user")
+			return domain.User{}, fmt.Errorf("resolve conflicting user: conflict resolved without finding user: %w", application.ErrNotFound)
 		}
 		return domain.User{}, fmt.Errorf("resolve conflicting user by email: %w", err)
 	}
@@ -211,26 +211,26 @@ func (r *UserRepository) UpdateEmailVerified(ctx context.Context, id uuid.UUID, 
 func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain.User, error) {
 	phone, err := decryptPhoneField(ctx, enc, row.Phone, row.PhoneEncrypted)
 	if err != nil {
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("invalid phone from DB: %w", err)
 	}
 	role, err := domain.NewRole(row.Role)
 	if err != nil {
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("invalid role from DB: %w", err)
 	}
 	emailValue, present, err := parseEmailField(row.Email)
 	if err != nil {
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("invalid email from DB: %w", err)
 	}
 	var email *domain.Email
 	if present {
 		email = &emailValue
 	}
 	if row.Timezone == "" {
-		return domain.User{}, fmt.Errorf("invalid timezone in DB: %w", domain.ErrInvalidTimezone)
+		return domain.User{}, fmt.Errorf("invalid timezone from DB: %w", domain.ErrInvalidTimezone)
 	}
 	tz, err := domain.TimezoneFrom(row.Timezone)
 	if err != nil {
-		return domain.User{}, fmt.Errorf("invalid timezone in DB: %w", err)
+		return domain.User{}, fmt.Errorf("invalid timezone from DB: %w", err)
 	}
 	return domain.User{
 		ID:              pgconv.UUIDFromPgtype(row.ID),
