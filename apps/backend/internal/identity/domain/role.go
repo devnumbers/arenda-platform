@@ -2,27 +2,35 @@ package domain
 
 import (
 	"fmt"
+
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 )
 
-// Role represents a user's role within the system.
-type Role string
+// Role is a user's role within the system. It is a re-export of the canonical
+// shared-kernel type [actor.Role] (ADR 0034); identity keeps it as part of its
+// ubiquitous language while the canonical home for role values is shared/actor.
+//
+// The type alias means identity/domain consumers (AuditActorRole, the User
+// aggregate, httpsupport role checks) continue to work unchanged.
+type Role = actor.Role
 
+// RoleOwner and RoleAdmin are re-exports of the canonical shared-kernel role
+// constants from [actor], preserved here for identity's ubiquitous language.
 const (
-	RoleOwner Role = "owner"
-	RoleAdmin Role = "admin"
+	RoleOwner = actor.RoleOwner
+	RoleAdmin = actor.RoleAdmin
 )
 
-// NewRole validates and creates a Role from a raw string.
+// NewRole validates and creates a Role from a raw string. It delegates to
+// [actor.NewRole] and wraps the validation error with [ErrInvalidRole] so that
+// identity callers can keep matching on the domain sentinel.
 func NewRole(raw string) (Role, error) {
-	switch Role(raw) {
-	case RoleOwner, RoleAdmin:
-		return Role(raw), nil
-	default:
+	r, err := actor.NewRole(raw)
+	if err != nil {
 		return "", fmt.Errorf("invalid role %q: %w", raw, ErrInvalidRole)
 	}
+	return r, nil
 }
 
-// String returns the string representation of the role.
-func (r Role) String() string {
-	return string(r)
-}
+// String returns the string representation of the role. It is inherited from
+// the underlying [actor.Role] via the type alias.
