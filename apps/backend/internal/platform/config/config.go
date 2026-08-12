@@ -43,6 +43,8 @@ type Config struct {
 	BillingWorkerInterval               time.Duration
 	PaymentReconciliationWorkerInterval time.Duration
 	OverdueOperationWorkerInterval      time.Duration
+	IdentityCleanerInterval             time.Duration
+	IdentityCleanerRetention            time.Duration
 	LogSuccessfulRequests               bool
 	TariffCacheTTL                      time.Duration
 	TrustedProxies                      []string
@@ -640,6 +642,30 @@ func Load() (Config, error) {
 			return Config{}, errors.New("OVERDUE_OPERATION_WORKER_INTERVAL must be positive")
 		}
 		cfg.OverdueOperationWorkerInterval = d
+	}
+
+	cfg.IdentityCleanerInterval = time.Hour
+	if v := os.Getenv("IDENTITY_CLEANER_INTERVAL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid IDENTITY_CLEANER_INTERVAL %q: %w", v, err)
+		}
+		if d <= 0 {
+			return Config{}, errors.New("IDENTITY_CLEANER_INTERVAL must be positive")
+		}
+		cfg.IdentityCleanerInterval = d
+	}
+
+	cfg.IdentityCleanerRetention = 7 * 24 * time.Hour
+	if v := os.Getenv("IDENTITY_CLEANER_RETENTION"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid IDENTITY_CLEANER_RETENTION %q: %w", v, err)
+		}
+		if d <= 0 {
+			return Config{}, errors.New("IDENTITY_CLEANER_RETENTION must be positive")
+		}
+		cfg.IdentityCleanerRetention = d
 	}
 
 	if v := os.Getenv("TRUSTED_PROXIES"); v != "" {

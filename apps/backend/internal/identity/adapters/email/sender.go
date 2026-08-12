@@ -3,6 +3,7 @@ package email
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
@@ -11,8 +12,24 @@ import (
 
 const (
 	loginCodeSubject = "Код для входа в Рентли"
-	loginCodeTTL     = "5 минут"
 )
+
+// formatLoginCodeTTL renders the login-code TTL duration as a human-readable
+// Russian phrase derived from domain.LoginCodeTTL, so the email text always
+// tracks the domain constant. Presentation lives here, not in the domain.
+func formatLoginCodeTTL(d time.Duration) string {
+	minutes := int(d / time.Minute)
+	switch {
+	case minutes%100 >= 11 && minutes%100 <= 14:
+		return fmt.Sprintf("%d минут", minutes)
+	case minutes%10 == 1:
+		return fmt.Sprintf("%d минута", minutes)
+	case minutes%10 >= 2 && minutes%10 <= 4:
+		return fmt.Sprintf("%d минуты", minutes)
+	default:
+		return fmt.Sprintf("%d минут", minutes)
+	}
+}
 
 // Sender renders and sends login code emails through the shared mailer.
 type Sender struct {
@@ -32,7 +49,7 @@ var _ application.LoginCodeSender = (*Sender)(nil)
 func (s *Sender) Send(ctx context.Context, phone domain.Phone, email domain.Email, code string) error {
 	plain, html, err := s.renderer.Render("login_code", map[string]any{
 		"Code": code,
-		"TTL":  loginCodeTTL,
+		"TTL":  formatLoginCodeTTL(domain.LoginCodeTTL),
 	})
 	if err != nil {
 		return fmt.Errorf("render login code email: %w", err)
