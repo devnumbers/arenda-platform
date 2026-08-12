@@ -27,6 +27,11 @@ Terms shared across contexts, documented once here:
 
 **Admin / Админ**: see Identity context — internal support user.
 
+**Owner/Admin roles** (canonical home: `internal/shared/actor`, ADR 0034; mirrored by shared/policy for authorization and identity/domain for the account model):
+
+- **Owner / Собственник** — see Identity context; the user role that owns properties and manages rental data.
+- **Admin / Админ** — see Identity context; internal support user.
+
 **Property access roles** (defined in shared/policy, consumed by Access + Rental + Billing):
 
 - **Property Owner / Владелец объекта** — the user a property belongs to; sole lifecycle control (archive, delete); access cannot be revoked by members.
