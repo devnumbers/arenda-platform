@@ -54,6 +54,7 @@ type platformDeps struct {
 	Policy        sharedpolicy.Policy
 	Clock         clock.Clock
 	Beginner      transaction.Beginner
+	UoW           transaction.UoW
 	OTelShutdown  func(ctx context.Context) error
 	StopSignalCtx context.CancelFunc
 	PoolConfigLog func() // logs the database pool config; nil-safe
@@ -168,6 +169,7 @@ func WirePlatform() (*Platform, error) {
 		Policy:        policy,
 		Clock:         clock.Real{},
 		Beginner:      platformpostgres.NewBeginner(pool, appLogger),
+		UoW:           platformpostgres.NewUoW(pool, appLogger),
 		OTelShutdown:  otelSDK.Shutdown,
 		StopSignalCtx: stop,
 	}

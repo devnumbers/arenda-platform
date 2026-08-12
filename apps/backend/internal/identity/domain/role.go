@@ -22,12 +22,13 @@ const (
 )
 
 // NewRole validates and creates a Role from a raw string. It delegates to
-// [actor.NewRole] and wraps the validation error with [ErrInvalidRole] so that
-// identity callers can keep matching on the domain sentinel.
+// [actor.NewRole] so the canonical validation lives in one place; the error is
+// re-wrapped with [ErrInvalidRole] so identity callers can keep matching on the
+// domain sentinel.
 func NewRole(raw string) (Role, error) {
 	r, err := actor.NewRole(raw)
 	if err != nil {
-		return "", fmt.Errorf("invalid role %q: %w", raw, ErrInvalidRole)
+		return "", fmt.Errorf("%w: %q", ErrInvalidRole, raw)
 	}
 	return r, nil
 }
