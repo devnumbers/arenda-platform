@@ -202,12 +202,17 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 	case errors.Is(err, domain.ErrLoginCodeInvalid) || errors.Is(err, domain.ErrTooManyAttempts):
 		// The success path rolled back. Record the failed attempt and the
 		// failed-login audit in a separate transaction so the rate-limit
-		// mutation survives. RecordFailure returns ErrTooManyAttempts once the
-		// threshold is reached; surface it in place of the plain invalid-code
-		// error so callers and tests observe the block. Infrastructure errors
-		// are logged but do not mask the original verification error.
+		// mutation survives. RecordFailureAndAudit opens its own runInTx,
+		// runs RecordFailure, and records the audit with the failure reason;
+		// it surfaces ErrTooManyAttempts via outErr so callers and tests
+		// observe the block. Infrastructure errors are logged but do not mask
+		// the original verification error.
 		finalErr := err
-		if recErr := s.recordFailedLogin(ctx, phone, &finalErr); recErr != nil {
+		auditEntry := auditdomain.Entry{
+			ActorRole: auditdomain.ActorRoleAnonymous,
+			Action:    auditdomain.ActionAuthLoginFailed,
+		}
+		if recErr := s.loginCodes.RecordFailureAndAudit(ctx, phone, uuid.Nil, auditEntry, &finalErr); recErr != nil {
 			s.logger.ErrorContext(ctx, "failed to record failed-login audit", slog.String("error", sanitize.Error(recErr)))
 		}
 		return domain.RawSession{}, domain.User{}, finalErr
@@ -222,38 +227,6 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 	}
 
 	return raw, user, nil
-}
-
-// recordFailedLogin records a failed verification attempt and the corresponding
-// audit entry in a single short transaction, so they outlive the rolled-back
-// success path. It runs RecordFailure first so the audit reason reflects the
-// final outcome — "too_many_attempts" once the threshold is reached, otherwise
-// "invalid_code". When RecordFailure returns domain.ErrTooManyAttempts, outErr
-// is updated to it so the caller surfaces the block. Returns only infrastructure
-// errors; domain errors from RecordFailure are captured via outErr.
-func (s *AuthenticationService) recordFailedLogin(ctx context.Context, phone domain.Phone, outErr *error) error {
-	return s.runInTx(ctx, func(stores *txStores) error {
-		if err := s.loginCodes.RecordFailure(ctx, stores, phone, uuid.Nil); err != nil {
-			if errors.Is(err, domain.ErrTooManyAttempts) {
-				*outErr = err
-			} else if !errors.Is(err, domain.ErrLoginCodeInvalid) {
-				return fmt.Errorf("record failed attempt: %w", err)
-			}
-		}
-
-		reason := "invalid_code"
-		if errors.Is(*outErr, domain.ErrTooManyAttempts) {
-			reason = "too_many_attempts"
-		}
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorRole: auditdomain.ActorRoleAnonymous,
-			Action:    auditdomain.ActionAuthLoginFailed,
-			Context:   map[string]any{"reason": reason},
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
-		}
-		return nil
-	})
 }
 
 // resolveEmail returns the given email or, when it is nil, the email stored

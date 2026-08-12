@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
@@ -34,16 +35,17 @@ const (
 //
 // Two transactional shapes coexist by design:
 //
-//   - Send opens its own runInTx: code issuance is a self-contained write that
-//     commits before the code is delivered, so a delivery failure can clean up
-//     the unsent code without leaving a dangling row.
+//   - Send and RecordFailureAndAudit open their own runInTx: Send commits a
+//     code before delivery so a delivery failure can clean up the unsent row;
+//     RecordFailureAndAudit commits the rate-limit mutation and the failure
+//     audit in a short transaction that survives the rolled-back success path.
 //   - Verify and RecordFailure operate on a *txStores handed in by the calling
 //     orchestrator (AuthenticationService, PhoneChangeService), so code
 //     verification, mark-used, session issuance, and audit can share one
 //     transaction. A failed verification returns ErrLoginCodeInvalid or
 //     ErrTooManyAttempts after recording the attempt inside the same stores;
-//     the orchestrator then rolls back the success-path writes and records the
-//     failed-login audit in a separate short transaction so the rate-limit
+//     the orchestrator then rolls back the success-path writes and calls
+//     RecordFailureAndAudit in a separate short transaction so the rate-limit
 //     mutation survives the rollback.
 type LoginCodeService struct {
 	txStoreFactory
@@ -242,6 +244,55 @@ func (s *LoginCodeService) RecordFailure(ctx context.Context, stores *txStores, 
 		return fmt.Errorf("save attempts: %w", err)
 	}
 	return nil
+}
+
+// RecordFailureAndAudit records a failed verification attempt and the
+// corresponding audit entry in a single short transaction, so they outlive the
+// rolled-back success path of the calling orchestrator. It is the shared deep
+// method that both AuthenticationService (login) and PhoneChangeService
+// (phone-change) invoke after a verification failure, deduplicating the two
+// previously separate inline copies.
+//
+// It opens its own runInTx (not the caller's stores) so the rate-limit mutation
+// and audit entry survive the rollback of the success-path transaction. Inside,
+// it runs RecordFailure first so the audit reason reflects the final outcome:
+// "too_many_attempts" once the threshold is reached, otherwise "invalid_code".
+// The computed reason is merged into auditEntry.Context before recording.
+//
+// RecordFailure returns domain.ErrTooManyAttempts once the threshold is reached;
+// when that happens, *outErr is updated to it so the caller surfaces the block
+// in place of the plain invalid-code error. Returns only infrastructure errors;
+// domain errors from RecordFailure are captured via outErr.
+func (s *LoginCodeService) RecordFailureAndAudit(
+	ctx context.Context,
+	phone domain.Phone,
+	userID uuid.UUID,
+	auditEntry auditdomain.Entry,
+	outErr *error,
+) error {
+	return s.runInTx(ctx, func(stores *txStores) error {
+		if err := s.RecordFailure(ctx, stores, phone, userID); err != nil {
+			if errors.Is(err, domain.ErrTooManyAttempts) {
+				*outErr = err
+			} else if !errors.Is(err, domain.ErrLoginCodeInvalid) {
+				return fmt.Errorf("record failed attempt: %w", err)
+			}
+		}
+
+		reason := "invalid_code"
+		if errors.Is(*outErr, domain.ErrTooManyAttempts) {
+			reason = "too_many_attempts"
+		}
+		if auditEntry.Context == nil {
+			auditEntry.Context = map[string]any{}
+		}
+		auditEntry.Context["reason"] = reason
+
+		if err := stores.audit.Record(ctx, auditEntry); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 }
 
 // attemptDelta derives the persistence hint for AttemptRepository.Save from the

@@ -112,7 +112,9 @@ func TestPhoneChangeIntegration_ConflictRejected(t *testing.T) {
 
 // TestPhoneChangeIntegration_WrongCodeRecordsAttempt proves an invalid change
 // code rolls back the success path and records the attempt against the new phone
-// in a separate transaction so rate-limiting survives (mirroring login).
+// in a separate transaction so rate-limiting survives (mirroring login). It also
+// verifies the phone-change failure now leaves an audit trail — closing the gap
+// where only the success path was audited.
 func TestPhoneChangeIntegration_WrongCodeRecordsAttempt(t *testing.T) {
 	h := newIntegrationHarness(t)
 	oldPhone := mustPhone(t, "+79160000203")
@@ -138,5 +140,11 @@ func TestPhoneChangeIntegration_WrongCodeRecordsAttempt(t *testing.T) {
 	// The failure was recorded against the new phone.
 	if n := h.countFailedAttempts(t, newPhone); n != 1 {
 		t.Fatalf("failed attempts for new phone = %d, want 1", n)
+	}
+
+	// The phone-change failure now leaves an audit trail, mirroring the
+	// failed-login audit in the login flow.
+	if !h.auditActionExists(t, string(auditdomain.ActionAuthPhoneChangeFailed)) {
+		t.Fatal("audit_log missing auth.phone_change_failed entry")
 	}
 }

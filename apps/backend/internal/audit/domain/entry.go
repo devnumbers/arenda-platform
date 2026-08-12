@@ -35,7 +35,12 @@ const (
 	ActionAuthLogout       Action = "auth.logout"
 	ActionAuthLogoutAll    Action = "auth.logout_all"
 	ActionAuthPhoneChanged Action = "auth.phone_changed"
-	ActionProfileUpdated   Action = "profile.updated"
+	// ActionAuthPhoneChangeFailed records a failed phone-change verification
+	// attempt, mirroring ActionAuthLoginFailed for the login flow. Closes the
+	// audit gap where phone-change failures left no trail while the success
+	// path was fully audited.
+	ActionAuthPhoneChangeFailed Action = "auth.phone_change_failed"
+	ActionProfileUpdated        Action = "profile.updated"
 
 	ActionNotificationPreferencesUpdated Action = "notification_preferences.updated"
 

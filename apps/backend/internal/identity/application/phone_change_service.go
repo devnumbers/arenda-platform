@@ -192,21 +192,17 @@ func (s *PhoneChangeService) ChangePhone(ctx context.Context, userID uuid.UUID, 
 	})
 
 	if errors.Is(err, domain.ErrLoginCodeInvalid) || errors.Is(err, domain.ErrTooManyAttempts) {
-		// Verification failed: record the attempt in a separate transaction so
-		// the rate-limit mutation survives the rolled-back success path.
-		// RecordFailure returns ErrTooManyAttempts at the threshold; surface it
-		// in place of the plain invalid-code error.
+		// Verification failed: record the attempt and the phone-change-failed
+		// audit in a separate transaction so the rate-limit mutation survives
+		// the rolled-back success path. RecordFailureAndAudit surfaces
+		// ErrTooManyAttempts via outErr in place of the plain invalid-code error.
 		finalErr := err
-		if recErr := s.runInTx(ctx, func(stores *txStores) error {
-			if recErr := s.loginCodes.RecordFailure(ctx, stores, newPhone, userID); recErr != nil {
-				if errors.Is(recErr, domain.ErrTooManyAttempts) {
-					finalErr = recErr
-				} else if !errors.Is(recErr, domain.ErrLoginCodeInvalid) {
-					return fmt.Errorf("record failed attempt: %w", recErr)
-				}
-			}
-			return nil
-		}); recErr != nil {
+		auditEntry := auditdomain.Entry{
+			ActorID:   &userID,
+			ActorRole: auditdomain.ActorRoleOwner,
+			Action:    auditdomain.ActionAuthPhoneChangeFailed,
+		}
+		if recErr := s.loginCodes.RecordFailureAndAudit(ctx, newPhone, userID, auditEntry, &finalErr); recErr != nil {
 			s.logger.ErrorContext(ctx, "failed to record phone-change failed attempt", slog.String("error", sanitize.Error(recErr)))
 		}
 		return domain.User{}, finalErr
