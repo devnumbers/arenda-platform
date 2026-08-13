@@ -28,9 +28,7 @@ func NewAttemptWindow(now time.Time) AttemptWindow {
 //
 // Invariant: FirstFailureAt is modified only when the window is created or
 // restarted after its TTL — never on a plain increment within the live window.
-// Callers (notably application.attemptDelta) rely on this to distinguish a
-// reset (write the absolute counter) from an increment (atomic delta). Do not
-// touch FirstFailureAt on the increment path without updating that logic.
+// WasReset encodes that rule so callers can pick the persistence strategy.
 func (w *AttemptWindow) RecordFailure(now time.Time) error {
 	if w.Failures == 0 || now.Sub(w.FirstFailureAt) >= LoginAttemptWindowTTL {
 		w.FirstFailureAt = now
@@ -42,6 +40,14 @@ func (w *AttemptWindow) RecordFailure(now time.Time) error {
 		return ErrTooManyAttempts
 	}
 	return nil
+}
+
+// WasReset reports whether the window was freshly created or restarted after
+// its TTL relative to prev. It is the single read-side authority for the
+// persistence strategy: a reset writes the absolute counter, otherwise the
+// counter is incremented by the delta.
+func (w *AttemptWindow) WasReset(prev AttemptWindow) bool {
+	return !w.FirstFailureAt.Equal(prev.FirstFailureAt)
 }
 
 // Blocked reports whether attempts are currently blocked.

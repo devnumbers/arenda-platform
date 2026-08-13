@@ -89,6 +89,38 @@ func TestAttemptWindow_RecordFailure(t *testing.T) {
 	})
 }
 
+func TestAttemptWindow_WasReset(t *testing.T) {
+	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	t.Run("false on a plain increment within the live window", func(t *testing.T) {
+		prev := AttemptWindow{Failures: 3, FirstFailureAt: start}
+		next := AttemptWindow{Failures: 4, FirstFailureAt: start}
+
+		if next.WasReset(prev) {
+			t.Fatal("WasReset = true, want false for a plain increment")
+		}
+	})
+
+	t.Run("true after a TTL reset", func(t *testing.T) {
+		prev := AttemptWindow{Failures: MaxLoginFailures, FirstFailureAt: start}
+		afterTTL := start.Add(LoginAttemptWindowTTL)
+		next := AttemptWindow{Failures: 1, FirstFailureAt: afterTTL}
+
+		if !next.WasReset(prev) {
+			t.Fatal("WasReset = false, want true after a TTL reset")
+		}
+	})
+
+	t.Run("true for a freshly created window", func(t *testing.T) {
+		var prev AttemptWindow // zero value: Failures == 0, FirstFailureAt zero
+		next := AttemptWindow{Failures: 1, FirstFailureAt: start}
+
+		if !next.WasReset(prev) {
+			t.Fatal("WasReset = false, want true for a freshly created window")
+		}
+	})
+}
+
 func TestAttemptWindow_Blocked(t *testing.T) {
 	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 

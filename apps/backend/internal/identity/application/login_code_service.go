@@ -288,10 +288,11 @@ func (s *LoginCodeService) RecordFailureAndAudit(
 // attemptDelta derives the persistence hint for AttemptRepository.Save from the
 // pre- and post-mutation windows. It returns 0 (reset: write the absolute
 // counter) when the window was just created or restarted after its TTL, and a
-// positive delta (increment the existing counter) otherwise.
+// positive delta (increment the existing counter) otherwise. The reset-vs-
+// increment rule lives in domain.WasReset; this wrapper keeps call sites
+// readable.
 func attemptDelta(prev, next domain.AttemptWindow) int {
-	if !next.FirstFailureAt.Equal(prev.FirstFailureAt) {
-		// A fresh or TTL-reset window writes an absolute counter.
+	if next.WasReset(prev) {
 		return 0
 	}
 	return next.Failures - prev.Failures
