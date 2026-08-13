@@ -72,9 +72,15 @@
 Каждый тикет держит зелёным:
 
 ```bash
-cd apps/backend && go test ./... -race   # -race обязателен — ловит data races в worker-горутинах
+make backend-test                          # go test -race (unit); -race обязателен — ловит data races
 cd apps/backend && go vet ./...
-make backend-lint                         # golangci-lint v2.12.2
+make backend-lint                          # golangci-lint v2.12.2
+```
+
+Полный прогон (unit + integration + frontend + admin, требует Docker):
+
+```bash
+make test                                  # testcontainers поднимает контейнеры, гоняет всё
 ```
 
 Для Фазы 3 (монорепа / admin):
@@ -82,6 +88,8 @@ make backend-lint                         # golangci-lint v2.12.2
 ```bash
 make admin-typecheck
 make admin-build
+make frontend-test
+make admin-test
 ```
 
 ## Acceptance criteria для контракта

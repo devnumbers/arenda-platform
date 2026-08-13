@@ -81,14 +81,19 @@ Before adding components, hooks, helpers, entity types, feature state, or API wr
 ```bash
 cd apps/frontend && npm run lint
 cd apps/frontend && npm run build
+make frontend-test
 ```
 
 ## Commands
 
 ```bash
+# from the repository root
+make frontend-test
+
 # from apps/frontend
 npm install
 npm run dev
 npm run build
 npm run lint
+npm run test
 ```

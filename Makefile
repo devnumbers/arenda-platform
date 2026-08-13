@@ -1,10 +1,16 @@
 COMPOSE_LOCAL := docker compose -f docker-compose.local.yml
+COMPOSE_TEST := docker compose -p arenda-test -f docker-compose.test.yml
 BACKEND_DIR := apps/backend
+FRONTEND_DIR := apps/frontend
 ADMIN_DIR := apps/admin
 LANDING_DIR := apps/landing
 GOLANGCI_LINT_VERSION := v2.12.2
+TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disable
 
-.PHONY: local-infra-up local-infra-down local-infra-reset backend-run backend-lint backend-test-integration backend-tkassa-spec-check check-bruno-coverage check-backend-env check-migrate-env migrate-up migrate-down \
+.PHONY: local-infra-up local-infra-down local-infra-reset \
+        test-infra-up test-infra-down \
+        backend-test backend-test-integration frontend-test admin-test test \
+        backend-run backend-lint backend-tkassa-spec-check check-bruno-coverage check-backend-env check-migrate-env migrate-up migrate-down \
         perf-db-up perf-db-down perf-db-reset perf-backend-run perf-seed perf-sustainable perf-breakdown \
         admin-install admin-dev admin-build admin-typecheck \
         landing-install landing-dev landing-build \
@@ -37,12 +43,51 @@ check-migrate-env:
 backend-lint:
 	cd $(BACKEND_DIR) && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --config ../../.golangci.yml --build-tags=integration ./...
 
-# Integration tests require a running Docker daemon (testcontainers-go starts a
-# PostgreSQL 18 container and applies all migrations from db/migrations). If
-# TEST_DATABASE_URL is set, that database is used instead of a container.
-# -race is mandatory per docs/testing-strategy.md.
+# test-infra-up / test-infra-down manage the isolated test database (port 5435,
+# compose project arenda-test) so tests never touch the developer's local DB.
+# The database starts empty — runtime-skip integration tests and testcontainers
+# both apply migrations themselves via database.MigrateUp; pre-applying here
+# would leave schema_migrations in a dirty state.
+test-infra-up:
+	$(COMPOSE_TEST) up -d --wait
+
+test-infra-down:
+	$(COMPOSE_TEST) down
+
+# backend-test runs unit tests with -race (mandatory per docs/testing-strategy.md).
+# It does not require a database — unit tests use in-memory fakes.
+backend-test:
+	cd $(BACKEND_DIR) && go test -race ./...
+
+# Integration tests: by default testcontainers-go starts a dedicated PostgreSQL
+# 18 container per test binary and applies migrations internally. To use an
+# external database instead, run `make test-infra-up` then
+# `TEST_DATABASE_URL=... make backend-test-integration`. -race is mandatory per
+# docs/testing-strategy.md.
 backend-test-integration:
 	cd $(BACKEND_DIR) && go test -tags=integration -race ./...
+
+# frontend-test runs the Vitest suite (pure-logic tests, no DOM).
+frontend-test:
+	cd $(FRONTEND_DIR) && npm run test
+
+# admin-test runs the Vitest suite.
+admin-test:
+	cd $(ADMIN_DIR) && npm run test
+
+# test runs the full test suite: backend unit + integration + frontend + admin.
+# Unit tests run first for fast fail-fast before the slower testcontainers phase.
+# It requires Docker: integration tests use testcontainers-go, which starts a
+# dedicated PostgreSQL 18 container per test binary and applies migrations
+# internally. The test database (docker-compose.test.yml) is reserved for ad-hoc
+# runs via TEST_DATABASE_URL + make backend-test-integration when testcontainers
+# is unavailable.
+test:
+	@set -e; \
+	$(MAKE) backend-test; \
+	$(MAKE) backend-test-integration; \
+	$(MAKE) frontend-test; \
+	$(MAKE) admin-test
 
 # Regenerates the T-Kassa spec artifacts and fails if regenerating changed
 # them, so CI catches a vendored/patched spec whose generated files were not

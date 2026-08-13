@@ -97,6 +97,16 @@ Backend observability code conventions (slog, OpenTelemetry, request IDs, span n
 
 ```bash
 make backend-lint
-cd apps/backend && go test ./...
+make backend-test
 cd apps/backend && go vet ./...
 ```
+
+For changes that touch adapters, repositories, or DB queries, also run:
+
+```bash
+make backend-test-integration
+```
+
+This uses testcontainers-go (requires Docker) to start a dedicated PostgreSQL 18
+container per test binary. Alternatively, use an external database via
+`make test-infra-up` then `TEST_DATABASE_URL=... make backend-test-integration`.

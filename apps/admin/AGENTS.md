@@ -46,6 +46,7 @@ Before adding resources, fields, inputs, helpers, or API wrappers, search existi
 ```bash
 make admin-typecheck
 make admin-build
+make admin-test
 ```
 
 ## Commands
@@ -56,4 +57,5 @@ make admin-install
 make admin-dev
 make admin-build
 make admin-typecheck
+make admin-test
 ```
