@@ -14,6 +14,8 @@ Arenda Platform — DDD modular monolith (Go, `apps/backend/internal/`). Domain 
 ## Relationships
 
 - **Identity → all**: Owner/Admin roles thread through every context.
+- **Identity → Access**: Identity emits `UserRegistered` when a new account is created; Access consumes it to activate shares issued to a previously-unregistered email.
+- **Identity → Rental**: A profile timezone change triggers rescheduling of the user's pending reminders in Rental (wall-clock semantics).
 - **Rental ↔ Access**: Access governs who can view/edit properties and their derived data (operations, reminders).
 - **Rental → Billing**: Active property count feeds subscription tariff limits.
 - **Billing → Access**: Downgrade/grace-period may suspend shared access when limits shrink.
