@@ -91,7 +91,7 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cm
 			Action:     auditdomain.ActionProfileUpdated,
 			EntityType: auditdomain.EntityUser,
 			EntityID:   &userID,
-			Context:    map[string]any{"fields": updatedProfileFields(cmd)},
+			Context:    map[string]any{"fields": cmd.ChangedFields()},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -114,26 +114,4 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cm
 	}
 
 	return updated, nil
-}
-
-// updatedProfileFields lists the names of the fields a command changes. Only
-// field names are audited, never their values.
-func updatedProfileFields(cmd UpdateProfileCommand) []string {
-	fields := make([]string, 0, 5)
-	if cmd.Name != nil {
-		fields = append(fields, "name")
-	}
-	if cmd.Surname != nil {
-		fields = append(fields, "surname")
-	}
-	if cmd.Patronymic != nil {
-		fields = append(fields, "patronymic")
-	}
-	if cmd.Email != nil {
-		fields = append(fields, "email")
-	}
-	if cmd.Timezone != nil {
-		fields = append(fields, "timezone")
-	}
-	return fields
 }
