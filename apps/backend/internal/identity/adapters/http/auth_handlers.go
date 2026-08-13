@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
@@ -33,7 +32,6 @@ type AuthHandlers struct {
 	phoneChangeSend   *httpsupport.RateLimiter
 	phoneChangeVerify *httpsupport.RateLimiter
 	meEnricher        MeEnricher
-	audit             auditapp.Recorder
 }
 
 // NewAuthHandlers creates HTTP handlers for the auth API.
@@ -49,11 +47,7 @@ func NewAuthHandlers(
 	phoneChangeSend *httpsupport.RateLimiter,
 	phoneChangeVerify *httpsupport.RateLimiter,
 	meEnricher MeEnricher,
-	audit auditapp.Recorder,
 ) *AuthHandlers {
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	return &AuthHandlers{
 		auth:              auth,
 		phoneChange:       phoneChange,
@@ -66,7 +60,6 @@ func NewAuthHandlers(
 		phoneChangeSend:   phoneChangeSend,
 		phoneChangeVerify: phoneChangeVerify,
 		meEnricher:        meEnricher,
-		audit:             audit,
 	}
 }
 
@@ -193,7 +186,7 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.logout.Logout(r.Context(), token); err != nil {
+	if err := h.logout.Logout(r.Context(), token, actorFromContext(r.Context())); err != nil {
 		if !errors.Is(err, application.ErrNotFound) {
 			h.logger.ErrorContext(r.Context(), "logout failed", slog.String("error", httpsupport.SanitizeError(err)))
 			httpsupport.ClearSessionCookie(w, h.cookieSecure)
@@ -201,8 +194,6 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
-	h.recordAuthAudit(r.Context(), auditdomain.ActionAuthLogout)
 
 	httpsupport.ClearSessionCookie(w, h.cookieSecure)
 	w.WriteHeader(http.StatusNoContent)
@@ -216,41 +207,29 @@ func (h *AuthHandlers) LogoutAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.logout.LogoutAll(r.Context(), userID); err != nil {
+	if err := h.logout.LogoutAll(r.Context(), userID, actorFromContext(r.Context())); err != nil {
 		h.logger.ErrorContext(r.Context(), "logout all failed", slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.ClearSessionCookie(w, h.cookieSecure)
 		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
 
-	h.recordAuthAudit(r.Context(), auditdomain.ActionAuthLogoutAll)
-
 	httpsupport.ClearSessionCookie(w, h.cookieSecure)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// recordAuthAudit writes an audit entry for a completed logout. Record errors
-// are logged but never fail the request: the session is already deleted, so
-// the response must not depend on the audit write (the documented fail-open
-// exception to the service-layer fail-safe rule).
-func (h *AuthHandlers) recordAuthAudit(ctx context.Context, action auditdomain.Action) {
-	userID, ok := httpsupport.UserIDFromContext(ctx)
-	if !ok {
-		return
+// actorFromContext builds an audit Actor from the request context. The ID
+// defaults to uuid.Nil and the role to Anonymous when the context carries no
+// authenticated identity; the service records the audit with whatever it gets.
+func actorFromContext(ctx context.Context) auditdomain.Actor {
+	actor := auditdomain.Actor{Role: auditdomain.ActorRoleAnonymous}
+	if uid, ok := httpsupport.UserIDFromContext(ctx); ok {
+		actor.ID = uid
 	}
-	actorRole := auditdomain.ActorRoleOwner
 	if _, role, ok := httpsupport.ActorFromContext(ctx); ok {
-		actorRole = auditdomain.ActorRoleFromRole(role)
+		actor.Role = auditdomain.ActorRoleFromRole(role)
 	}
-	if err := h.audit.Record(ctx, auditdomain.Entry{
-		ActorID:    &userID,
-		ActorRole:  actorRole,
-		Action:     action,
-		EntityType: auditdomain.EntityUser,
-		EntityID:   &userID,
-	}); err != nil {
-		h.logger.ErrorContext(ctx, "failed to record audit entry", slog.String("error", httpsupport.SanitizeError(err)))
-	}
+	return actor
 }
 
 // GetMe implements GET /me.

@@ -166,6 +166,14 @@ type Entry struct {
 	IP         string
 }
 
+// Actor identifies who performed an action, for audit recording. It carries
+// just enough identity (user ID + role) for the application layer to record
+// audit without depending on transport context or the full identity aggregate.
+type Actor struct {
+	ID   uuid.UUID
+	Role ActorRole
+}
+
 // ActorRoleFromRole maps a shared-kernel actor.Role to an audit ActorRole.
 // Unknown or future roles map to Anonymous rather than masking as Owner,
 // so a corrupt or unexpected value stays visible in the audit trail.

@@ -3,10 +3,12 @@ package application
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -19,10 +21,14 @@ func newLogoutHarness() (*LogoutService, *fakeStores) {
 		stores.factory(nil),
 		LogoutServiceConfig{
 			Hasher: fakeHasher{},
+			Logger: slog.New(slog.DiscardHandler),
 		},
 	)
 	return svc, stores
 }
+
+// testLogoutActor is the audit actor used across logout tests.
+var testLogoutActor = auditdomain.Actor{Role: auditdomain.ActorRoleOwner}
 
 // TestLogoutService_Logout_DeletesSessionByTokenHash proves Logout hashes the
 // raw token, deletes the matching session through the transactional store, and
@@ -35,7 +41,7 @@ func TestLogoutService_Logout_DeletesSessionByTokenHash(t *testing.T) {
 	userID := uuid.New()
 	stores.sessions.sessions[tokenHash] = domain.Session{UserID: userID, TokenHash: tokenHash}
 
-	if err := svc.Logout(context.Background(), rawToken); err != nil {
+	if err := svc.Logout(context.Background(), rawToken, testLogoutActor); err != nil {
 		t.Fatalf("Logout error = %v, want nil", err)
 	}
 
@@ -66,7 +72,7 @@ func TestLogoutService_Logout_WrapsDeleteError(t *testing.T) {
 		},
 	)
 
-	err := svc.Logout(context.Background(), "any-token")
+	err := svc.Logout(context.Background(), "any-token", testLogoutActor)
 	if err == nil {
 		t.Fatal("Logout error = nil, want delete error")
 	}
@@ -92,7 +98,7 @@ func TestLogoutService_LogoutAll_DeletesSessionsByUserID(t *testing.T) {
 	stores.sessions.sessions["hash-b"] = domain.Session{UserID: userID, TokenHash: "hash-b"}
 	stores.sessions.sessions["hash-c"] = domain.Session{UserID: otherUserID, TokenHash: "hash-c"}
 
-	if err := svc.LogoutAll(context.Background(), userID); err != nil {
+	if err := svc.LogoutAll(context.Background(), userID, testLogoutActor); err != nil {
 		t.Fatalf("LogoutAll error = %v, want nil", err)
 	}
 
@@ -124,10 +130,11 @@ func TestLogoutService_UsesRunInTx(t *testing.T) {
 		factory,
 		LogoutServiceConfig{
 			Hasher: fakeHasher{},
+			Logger: slog.New(slog.DiscardHandler),
 		},
 	)
 
-	if err := svc.Logout(context.Background(), "token"); err != nil {
+	if err := svc.Logout(context.Background(), "token", testLogoutActor); err != nil {
 		t.Fatalf("Logout error = %v, want nil", err)
 	}
 
@@ -136,6 +143,121 @@ func TestLogoutService_UsesRunInTx(t *testing.T) {
 	}
 	if beginner.committed != 1 {
 		t.Errorf("committed = %d, want 1", beginner.committed)
+	}
+}
+
+// TestLogoutService_RecordsAuditInTx proves Logout records the logout audit
+// entry inside the same transaction that deletes the session.
+func TestLogoutService_RecordsAuditInTx(t *testing.T) {
+	users := newFakeUserRepo()
+	codes := newFakeCodeRepo()
+	attempts := newFakeAttemptRepo()
+	sessions := newFakeSessionRepo()
+	audit := &recordingRecorder{}
+	beginner := &fakeBeginner{}
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, audit, &fakeUoW{beginner: beginner})
+	svc := NewLogoutService(
+		factory,
+		LogoutServiceConfig{
+			Hasher: fakeHasher{},
+			Logger: slog.New(slog.DiscardHandler),
+		},
+	)
+
+	userID := uuid.New()
+	actor := auditdomain.Actor{ID: userID, Role: auditdomain.ActorRoleOwner}
+
+	if err := svc.Logout(context.Background(), "token", actor); err != nil {
+		t.Fatalf("Logout error = %v, want nil", err)
+	}
+
+	if len(audit.entries) != 1 {
+		t.Fatalf("audit entries = %d, want 1", len(audit.entries))
+	}
+	entry := audit.entries[0]
+	if entry.Action != auditdomain.ActionAuthLogout {
+		t.Errorf("audit action = %s, want %s", entry.Action, auditdomain.ActionAuthLogout)
+	}
+	if entry.ActorRole != auditdomain.ActorRoleOwner {
+		t.Errorf("audit actor role = %s, want %s", entry.ActorRole, auditdomain.ActorRoleOwner)
+	}
+	if entry.EntityType != auditdomain.EntityUser {
+		t.Errorf("audit entity type = %s, want %s", entry.EntityType, auditdomain.EntityUser)
+	}
+	if entry.ActorID == nil || *entry.ActorID != userID {
+		t.Errorf("audit actor id = %v, want %v", entry.ActorID, userID)
+	}
+	if entry.EntityID == nil || *entry.EntityID != userID {
+		t.Errorf("audit entity id = %v, want %v", entry.EntityID, userID)
+	}
+	if beginner.committed != 1 {
+		t.Errorf("committed = %d, want 1", beginner.committed)
+	}
+}
+
+// TestLogoutService_LogoutAll_RecordsAuditInTx proves LogoutAll records the
+// logout-all audit entry inside the same transaction.
+func TestLogoutService_LogoutAll_RecordsAuditInTx(t *testing.T) {
+	users := newFakeUserRepo()
+	codes := newFakeCodeRepo()
+	attempts := newFakeAttemptRepo()
+	sessions := newFakeSessionRepo()
+	audit := &recordingRecorder{}
+	beginner := &fakeBeginner{}
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, audit, &fakeUoW{beginner: beginner})
+	svc := NewLogoutService(
+		factory,
+		LogoutServiceConfig{
+			Hasher: fakeHasher{},
+			Logger: slog.New(slog.DiscardHandler),
+		},
+	)
+
+	userID := uuid.New()
+	actor := auditdomain.Actor{ID: userID, Role: auditdomain.ActorRoleOwner}
+
+	if err := svc.LogoutAll(context.Background(), userID, actor); err != nil {
+		t.Fatalf("LogoutAll error = %v, want nil", err)
+	}
+
+	if len(audit.entries) != 1 {
+		t.Fatalf("audit entries = %d, want 1", len(audit.entries))
+	}
+	if audit.entries[0].Action != auditdomain.ActionAuthLogoutAll {
+		t.Errorf("audit action = %s, want %s", audit.entries[0].Action, auditdomain.ActionAuthLogoutAll)
+	}
+}
+
+// TestLogoutService_AuditFailOpen proves an audit failure does not block
+// logout: the session delete still commits. This is the documented fail-open
+// exception — logout must always succeed regardless of the audit write.
+func TestLogoutService_AuditFailOpen(t *testing.T) {
+	users := newFakeUserRepo()
+	codes := newFakeCodeRepo()
+	attempts := newFakeAttemptRepo()
+	sessions := newFakeSessionRepo()
+	audit := &recordingRecorder{err: errors.New("audit db down")}
+	beginner := &fakeBeginner{}
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, audit, &fakeUoW{beginner: beginner})
+	svc := NewLogoutService(
+		factory,
+		LogoutServiceConfig{
+			Hasher: fakeHasher{},
+			Logger: slog.New(slog.DiscardHandler),
+		},
+	)
+
+	userID := uuid.New()
+	actor := auditdomain.Actor{ID: userID, Role: auditdomain.ActorRoleOwner}
+
+	if err := svc.Logout(context.Background(), "token", actor); err != nil {
+		t.Fatalf("Logout error = %v, want nil (fail-open: audit error must not block logout)", err)
+	}
+	if beginner.committed != 1 {
+		t.Errorf("committed = %d, want 1 (fail-open: session delete must commit despite audit error)", beginner.committed)
+	}
+	if beginner.rolledBack != 0 {
+		t.Errorf("rolledBack = %d, want 0 (fail-open: must not roll back on audit error)", beginner.rolledBack)
 	}
 }
 

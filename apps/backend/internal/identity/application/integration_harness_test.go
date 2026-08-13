@@ -187,6 +187,7 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 		}),
 		logout: identityapp.NewLogoutService(factory, identityapp.LogoutServiceConfig{
 			Hasher: enc,
+			Logger: slog.New(slog.DiscardHandler),
 		}),
 		sessionsvc: sessionSvc,
 	}

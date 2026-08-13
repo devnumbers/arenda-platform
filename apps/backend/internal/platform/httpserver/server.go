@@ -135,7 +135,6 @@ func New(deps Deps) http.Handler {
 		deps.PhoneChangeSendLimiter,
 		deps.PhoneChangeVerifyLimiter,
 		deps.MeEnricher,
-		deps.Audit,
 	)
 	propertyHandlers := propertieshttp.NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Export, deps.PropertyContacts, deps.Logger, deps.Clock, deps.TZResolver)
 	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)

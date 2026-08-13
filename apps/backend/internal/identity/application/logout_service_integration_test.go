@@ -5,6 +5,7 @@ package application_test
 import (
 	"testing"
 
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 )
 
@@ -31,7 +32,7 @@ func TestLogoutIntegration_ByToken(t *testing.T) {
 		t.Fatalf("sessions before logout = %d, want 2", n)
 	}
 
-	if err := h.logout.Logout(ctx, token1); err != nil {
+	if err := h.logout.Logout(ctx, token1, auditdomain.Actor{ID: user.ID, Role: auditdomain.ActorRoleOwner}); err != nil {
 		t.Fatalf("Logout: %v", err)
 	}
 
@@ -66,7 +67,7 @@ func TestLogoutIntegration_LogoutAll(t *testing.T) {
 		t.Fatalf("sessions before logout-all = %d, want 2", n)
 	}
 
-	if err := h.logout.LogoutAll(ctx, user.ID); err != nil {
+	if err := h.logout.LogoutAll(ctx, user.ID, auditdomain.Actor{ID: user.ID, Role: auditdomain.ActorRoleOwner}); err != nil {
 		t.Fatalf("LogoutAll: %v", err)
 	}
 

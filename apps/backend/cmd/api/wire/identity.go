@@ -136,6 +136,7 @@ func WireIdentity(
 		factory,
 		identityapp.LogoutServiceConfig{
 			Hasher: p.Encryptor,
+			Logger: p.Logger,
 		},
 	)
 

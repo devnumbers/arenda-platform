@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 )
 
@@ -33,6 +34,6 @@ type Profiler interface {
 
 // Logout terminates sessions.
 type Logout interface {
-	Logout(ctx context.Context, rawToken string) error
-	LogoutAll(ctx context.Context, userID uuid.UUID) error
+	Logout(ctx context.Context, rawToken string, actor auditdomain.Actor) error
+	LogoutAll(ctx context.Context, userID uuid.UUID, actor auditdomain.Actor) error
 }
