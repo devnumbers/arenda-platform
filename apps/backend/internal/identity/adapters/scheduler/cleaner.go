@@ -6,15 +6,38 @@ import (
 	"log/slog"
 	"time"
 
-	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
+// Consumer-side, single-method ports (ADR 0035). The Cleaner is the only
+// caller of these repository methods, so each contract lives here, next to its
+// consumer, instead of coupling the adapter to the full application repository
+// interfaces. The postgres repositories satisfy them through structural typing;
+// conformance is checked at the assignment site in wire/workers.go.
+
+// ExpiredSessionDeleter removes sessions whose expiry falls before the given
+// instant.
+type ExpiredSessionDeleter interface {
+	DeleteExpiredBefore(ctx context.Context, before time.Time) error
+}
+
+// ExpiredLoginCodeDeleter removes login codes whose expiry falls before the
+// given instant.
+type ExpiredLoginCodeDeleter interface {
+	DeleteExpiredBefore(ctx context.Context, before time.Time) error
+}
+
+// StaleAttemptDeleter removes login-attempt windows older than the given
+// instant.
+type StaleAttemptDeleter interface {
+	DeleteStaleBefore(ctx context.Context, before time.Time) error
+}
+
 // Cleaner periodically removes expired identity data.
 type Cleaner struct {
-	sessions  identityapp.SessionRepository
-	codes     identityapp.LoginCodeRepository
-	attempts  identityapp.AttemptRepository
+	sessions  ExpiredSessionDeleter
+	codes     ExpiredLoginCodeDeleter
+	attempts  StaleAttemptDeleter
 	clock     clock.Clock
 	interval  time.Duration
 	retention time.Duration
@@ -23,9 +46,9 @@ type Cleaner struct {
 
 // NewCleaner creates a Cleaner with the given repositories and schedule.
 func NewCleaner(
-	sessions identityapp.SessionRepository,
-	codes identityapp.LoginCodeRepository,
-	attempts identityapp.AttemptRepository,
+	sessions ExpiredSessionDeleter,
+	codes ExpiredLoginCodeDeleter,
+	attempts StaleAttemptDeleter,
 	clock clock.Clock,
 	interval, retention time.Duration,
 	logger *slog.Logger,
