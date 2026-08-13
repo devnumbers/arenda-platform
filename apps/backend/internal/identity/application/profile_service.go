@@ -57,15 +57,14 @@ func (s *ProfileService) Me(ctx context.Context, userID uuid.UUID) (domain.User,
 	return s.users.GetByID(ctx, userID)
 }
 
-// UpdateProfile updates the user's personal data. When the email changes, the
-// new address is marked as unverified until confirmed. The mutation and the
-// audit entry run in a single transaction through runInTx (ADR 0033, ADR 0020);
-// the timezone reschedule stays post-commit because it writes to the
-// notifications context, not the identity transaction.
+// UpdateProfile updates the user's personal data. The email-change →
+// unverified reset is owned by domain.User.UpdatePersonalData; the mutation
+// and the audit entry run in a single transaction through runInTx (ADR 0033,
+// ADR 0020); the timezone reschedule stays post-commit because it writes to
+// the notifications context, not the identity transaction.
 func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cmd UpdateProfileCommand) (domain.User, error) {
 	var updated domain.User
 	oldTimezone := ""
-	var oldEmail string
 
 	err := s.runInTx(ctx, func(stores *txStores) error {
 		user, err := stores.users.GetByIDForUpdate(ctx, userID)
@@ -73,19 +72,12 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cm
 			return fmt.Errorf("get user: %w", err)
 		}
 
-		// Capture old timezone/email before mutation so we can reschedule
-		// reminders and detect an email change after commit.
+		// Capture the old timezone before mutation so we can reschedule
+		// reminders after commit.
 		oldTimezone = user.Timezone.String()
-		if user.Email != nil {
-			oldEmail = user.Email.String()
-		}
 
 		if err := user.UpdatePersonalData(cmd.Name, cmd.Surname, cmd.Patronymic, cmd.Email, cmd.Timezone); err != nil {
 			return fmt.Errorf("update personal data: %w", err)
-		}
-
-		if cmd.Email != nil && user.Email != nil && user.Email.String() != oldEmail {
-			user.EmailVerifiedAt = nil
 		}
 
 		updated, err = stores.users.Update(ctx, user)

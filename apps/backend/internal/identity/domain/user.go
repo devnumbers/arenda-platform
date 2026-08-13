@@ -46,6 +46,13 @@ func (u *User) UpdatePersonalData(name, surname, patronymic, email, timezone *st
 		if err != nil {
 			return err
 		}
+		// Changing the email invalidates verification: a new address must be
+		// confirmed again before it is trusted. Compare the normalized values
+		// before overwriting u.Email so an identical resubmit leaves the
+		// verified flag untouched.
+		if u.Email != nil && u.Email.String() != v.String() {
+			u.EmailVerifiedAt = nil
+		}
 		u.Email = &v
 	}
 	if timezone != nil {
