@@ -17,12 +17,16 @@ func validHexHash(s string) string {
 
 func newValidCode(t *testing.T, codeHash string, now time.Time) LoginCode {
 	t.Helper()
+	phone, err := NewPhone("+79001234567")
+	if err != nil {
+		t.Fatalf("NewPhone: %v", err)
+	}
 	email, err := NewEmail("owner@example.com")
 	if err != nil {
 		t.Fatalf("NewEmail: %v", err)
 	}
 	c, err := NewLoginCode(
-		PhoneFrom("+79001234567"),
+		phone,
 		email,
 		codeHash,
 		LoginCodePurposeLogin,

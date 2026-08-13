@@ -77,15 +77,6 @@ func TestNewPhone(t *testing.T) {
 	})
 }
 
-func TestPhoneFrom(t *testing.T) {
-	// PhoneFrom trusts its input and is intended for already-normalized data
-	// coming from the database.
-	p := PhoneFrom("+79123456789")
-	if got := p.String(); got != "+79123456789" {
-		t.Fatalf("PhoneFrom().String() = %q, want %q", got, "+79123456789")
-	}
-}
-
 func TestValidatePhone(t *testing.T) {
 	tests := []struct {
 		name    string
