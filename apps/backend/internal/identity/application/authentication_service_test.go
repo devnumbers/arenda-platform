@@ -676,3 +676,50 @@ func TestAuthenticationService_VerifyCode_TooManyAttemptsBlocks(t *testing.T) {
 		t.Fatalf("SendCode after block = %v, want ErrUserBlocked", err)
 	}
 }
+
+// TestAuthenticationService_VerifyCode_BlockedPhoneSkipsRecovery proves the
+// recovery-branch narrowing (#239): verifying a code on an already-blocked
+// phone returns ErrUserBlocked — surfaced authoritatively by
+// LoginCodeService.Verify inside the runInTx — without invoking recovery
+// (RecordFailureAndAudit). The attempt that caused the block was recorded when
+// the block took effect, so the recovery-free `case err != nil` branch is
+// correct: the failure counter must not grow beyond MaxLoginFailures.
+func TestAuthenticationService_VerifyCode_BlockedPhoneSkipsRecovery(t *testing.T) {
+	h := newAuthServiceHarness()
+	phone := mustPhone(t, "+79150000022")
+	email := mustEmail(t, "owner@example.com")
+	h.seedUser(t, phone, &email)
+	ctx := context.Background()
+
+	if _, err := h.svc.SendCodeByPhone(ctx, phone); err != nil {
+		t.Fatalf("SendCodeByPhone error = %v", err)
+	}
+
+	// Drive exactly MaxLoginFailures invalid verifications to reach the block.
+	var lastErr error
+	for range domain.MaxLoginFailures {
+		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000")
+	}
+	if !errors.Is(lastErr, domain.ErrTooManyAttempts) {
+		t.Fatalf("last VerifyCode error = %v, want ErrTooManyAttempts", lastErr)
+	}
+
+	// The phone is now blocked. A further verify must return ErrUserBlocked
+	// straight from LoginCodeService.Verify, without recovery.
+	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000")
+	if !errors.Is(err, ErrUserBlocked) {
+		t.Fatalf("VerifyCode on blocked phone error = %v, want ErrUserBlocked", err)
+	}
+
+	// Recovery was not invoked: the failure counter stays at MaxLoginFailures.
+	// A spurious increment would prove RecordFailureAndAudit ran despite the
+	// block, which the contract forbids.
+	window, ok := h.attempts.windows[phone.String()]
+	if !ok {
+		t.Fatal("attempt window missing for blocked phone")
+	}
+	if window.Failures != domain.MaxLoginFailures {
+		t.Fatalf("window failures after blocked verify = %d, want %d (recovery must not run)",
+			window.Failures, domain.MaxLoginFailures)
+	}
+}

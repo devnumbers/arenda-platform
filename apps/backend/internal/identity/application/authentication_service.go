@@ -70,12 +70,9 @@ func NewAuthenticationService(
 
 // SendCode generates a login code, persists it, and sends it by email after the
 // transaction commits. It validates the email preconditions for the phone
-// before delegating issuance to LoginCodeService.
+// before delegating issuance to LoginCodeService, which authoritatively checks
+// the not-blocked rule inside its own transaction (#239).
 func (s *AuthenticationService) SendCode(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error {
-	if err := checkNotBlocked(ctx, s.attempts, s.clock, phone); err != nil {
-		return err
-	}
-
 	user, err := s.users.GetByPhone(ctx, phone)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("get user: %w", err)
@@ -136,10 +133,11 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 		return domain.RawSession{}, domain.User{}, err
 	}
 
-	if err := checkNotBlocked(ctx, s.attempts, s.clock, phone); err != nil {
-		return domain.RawSession{}, domain.User{}, err
-	}
-
+	// The not-blocked check is authoritative inside LoginCodeService.Verify,
+	// which runs within the runInTx below and returns ErrUserBlocked before any
+	// code is read (#237, #239). A blocked phone falls through to the
+	// recovery-free `case err != nil` branch — the attempt was already recorded
+	// when the block took effect, so no recovery is needed.
 	var raw domain.RawSession
 	var user domain.User
 	isNewUser := false
@@ -182,7 +180,7 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 	})
 
 	switch {
-	case errors.Is(err, domain.ErrLoginCodeInvalid) || errors.Is(err, domain.ErrTooManyAttempts):
+	case errors.Is(err, domain.ErrLoginCodeInvalid):
 		// The success path rolled back. Record the failed attempt and the
 		// failed-login audit in a separate transaction so the rate-limit
 		// mutation survives. RecordFailureAndAudit opens its own runInTx,
@@ -190,6 +188,11 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 		// it surfaces ErrTooManyAttempts via outErr so callers and tests
 		// observe the block. Infrastructure errors are logged but do not mask
 		// the original verification error.
+		//
+		// Only an invalid code triggers recovery: ErrUserBlocked (now surfaced
+		// by LoginCodeService.Verify for an already-blocked phone) passes
+		// through the recovery-free branch below, since the attempt that
+		// triggered the block was recorded when the block took effect (#239).
 		finalErr := err
 		auditEntry := auditdomain.Entry{
 			ActorRole: auditdomain.ActorRoleAnonymous,

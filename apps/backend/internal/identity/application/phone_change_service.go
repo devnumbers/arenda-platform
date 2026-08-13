@@ -97,19 +97,15 @@ func (s *PhoneChangeService) SendChangeCode(ctx context.Context, userID uuid.UUI
 // → delete other sessions → clear codes/attempts → audit. A verification failure
 // rolls back, then a separate short runInTx records the failed attempt so
 // rate-limiting survives the rollback — mirroring AuthenticationService.
+//
+// The not-blocked check is not duplicated here: LoginCodeService.Verify runs
+// inside the runInTx below and authoritatively returns ErrUserBlocked for a
+// blocked phone before any code is read (#237, #239).
 func (s *PhoneChangeService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhone domain.Phone, code, currentToken string) (domain.User, error) {
-	if err := checkNotBlocked(ctx, s.attempts, s.clock, newPhone); err != nil {
-		return domain.User{}, err
-	}
-
 	var updated domain.User
 	var oldPhone domain.Phone
 
 	err := s.runInTx(ctx, func(stores *txStores) error {
-		if err := checkNotBlocked(ctx, stores.attempts, s.clock, newPhone); err != nil {
-			return err
-		}
-
 		user, err := stores.users.GetByIDForUpdate(ctx, userID)
 		if err != nil {
 			return fmt.Errorf("get user: %w", err)
@@ -176,11 +172,16 @@ func (s *PhoneChangeService) ChangePhone(ctx context.Context, userID uuid.UUID, 
 		return nil
 	})
 
-	if errors.Is(err, domain.ErrLoginCodeInvalid) || errors.Is(err, domain.ErrTooManyAttempts) {
+	if errors.Is(err, domain.ErrLoginCodeInvalid) {
 		// Verification failed: record the attempt and the phone-change-failed
 		// audit in a separate transaction so the rate-limit mutation survives
 		// the rolled-back success path. RecordFailureAndAudit surfaces
 		// ErrTooManyAttempts via outErr in place of the plain invalid-code error.
+		//
+		// Only an invalid code triggers recovery: ErrUserBlocked (now surfaced by
+		// LoginCodeService.Verify for an already-blocked phone) passes through the
+		// recovery-free branch below, since the attempt that triggered the block
+		// was recorded when the block took effect (#239).
 		finalErr := err
 		auditEntry := auditdomain.Entry{
 			ActorID:   &userID,
