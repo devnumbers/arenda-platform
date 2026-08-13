@@ -193,6 +193,17 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 		// by LoginCodeService.Verify for an already-blocked phone) passes
 		// through the recovery-free branch below, since the attempt that
 		// triggered the block was recorded when the block took effect (#239).
+		//
+		// The 3-line wrapper (finalErr + auditEntry + RecordFailureAndAudit)
+		// is intentionally NOT extracted into a LoginCodeService.OnVerifyFailure
+		// method. The deep logic already lives in RecordFailureAndAudit
+		// (ADR 0033). What remains here is orchestrator-specific data: the
+		// auditEntry carries an anonymous actor and a login-failed action that
+		// differ from PhoneChangeService, the return type is (RawSession, User,
+		// error), and the log message names this context. Folding those into
+		// OnVerifyFailure would move — not concentrate — the duplication, add a
+		// log-message parameter, and widen LoginCodeService's responsibility past
+		// login-code management. See issue #240 (re-evaluated, rejected).
 		finalErr := err
 		auditEntry := auditdomain.Entry{
 			ActorRole: auditdomain.ActorRoleAnonymous,

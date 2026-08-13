@@ -182,6 +182,14 @@ func (s *PhoneChangeService) ChangePhone(ctx context.Context, userID uuid.UUID, 
 		// LoginCodeService.Verify for an already-blocked phone) passes through the
 		// recovery-free branch below, since the attempt that triggered the block
 		// was recorded when the block took effect (#239).
+		//
+		// The 3-line wrapper mirrors AuthenticationService.VerifyCode but is
+		// intentionally NOT extracted into a shared LoginCodeService.OnVerifyFailure.
+		// The deep logic already lives in RecordFailureAndAudit (ADR 0033); what
+		// differs here is orchestrator-specific data — the auditEntry carries the
+		// real userID and an owner role with a phone-change-failed action, the
+		// return type is (User, error), and the log message names this context.
+		// See issue #240 (re-evaluated, rejected).
 		finalErr := err
 		auditEntry := auditdomain.Entry{
 			ActorID:   &userID,
