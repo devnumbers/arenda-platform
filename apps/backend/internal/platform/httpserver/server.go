@@ -16,7 +16,6 @@ import (
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
-	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leaseshttp "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/http"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	notificationshttp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/http"
@@ -34,10 +33,10 @@ import (
 
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
-	Auth                     identityapp.Authenticator
-	PhoneChange              identityapp.PhoneChanger
-	Profile                  identityapp.Profiler
-	Logout                   identityapp.Logout
+	Auth                     identityhttp.Authenticator
+	PhoneChange              identityhttp.PhoneChanger
+	Profile                  identityhttp.Profiler
+	Logout                   identityhttp.Logout
 	Sessions                 httpsupport.SessionLoader
 	Audit                    auditapp.Recorder
 	MeEnricher               identityhttp.MeEnricher

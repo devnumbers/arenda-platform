@@ -73,12 +73,46 @@ func rateLimitKey(phone string, email *domain.Email) string {
 	return phone
 }
 
+// The four service interfaces below are consumed only by this package, so per
+// the Go idiom "accept interfaces at the consumer" (ADR 0035) they live here
+// next to AuthHandlers rather than in the application package.
+
+// Authenticator issues and verifies login codes.
+type Authenticator interface {
+	SendCode(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error
+	// SendCodeByPhone sends a login code to the email stored for the given
+	// phone. It returns sent=false when the user does not exist or has no
+	// email on file; the caller should then ask the user for an email.
+	SendCodeByPhone(ctx context.Context, phone domain.Phone) (sent bool, err error)
+	// VerifyCode accepts an optional email; nil resolves the email from the
+	// stored user record for the phone.
+	VerifyCode(ctx context.Context, phone domain.Phone, email *domain.Email, code string) (domain.RawSession, domain.User, error)
+}
+
+// PhoneChanger handles phone-number change for authenticated users.
+type PhoneChanger interface {
+	SendChangeCode(ctx context.Context, userID uuid.UUID, newPhone domain.Phone) error
+	ChangePhone(ctx context.Context, userID uuid.UUID, newPhone domain.Phone, code, currentToken string) (domain.User, error)
+}
+
+// Profiler provides the current user's profile and updates it.
+type Profiler interface {
+	Me(ctx context.Context, userID uuid.UUID) (domain.User, error)
+	UpdateProfile(ctx context.Context, userID uuid.UUID, cmd application.UpdateProfileCommand) (domain.User, error)
+}
+
+// Logout terminates sessions.
+type Logout interface {
+	Logout(ctx context.Context, rawToken string, actor auditdomain.Actor) error
+	LogoutAll(ctx context.Context, userID uuid.UUID, actor auditdomain.Actor) error
+}
+
 // AuthHandlers implements the generated non-strict ServerInterface.
 type AuthHandlers struct {
-	auth         application.Authenticator
-	phoneChange  application.PhoneChanger
-	profile      application.Profiler
-	logout       application.Logout
+	auth         Authenticator
+	phoneChange  PhoneChanger
+	profile      Profiler
+	logout       Logout
 	cookieSecure bool
 	logger       *slog.Logger
 	limits       AuthRateLimits
@@ -87,10 +121,10 @@ type AuthHandlers struct {
 
 // NewAuthHandlers creates HTTP handlers for the auth API.
 func NewAuthHandlers(
-	auth application.Authenticator,
-	phoneChange application.PhoneChanger,
-	profile application.Profiler,
-	logout application.Logout,
+	auth Authenticator,
+	phoneChange PhoneChanger,
+	profile Profiler,
+	logout Logout,
 	cookieSecure bool,
 	logger *slog.Logger,
 	limits AuthRateLimits,
