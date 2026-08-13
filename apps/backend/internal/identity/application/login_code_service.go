@@ -163,13 +163,19 @@ func (s *LoginCodeService) Send(ctx context.Context, phone domain.Phone, email d
 // Verify checks the code for the phone+email+purpose triple against the latest
 // stored code. It operates inside the caller's transaction via stores and
 // returns the verified code on success, or domain.ErrLoginCodeInvalid when the
-// code is absent, expired, used, or wrong.
+// code is absent, expired, used, or wrong. It returns ErrUserBlocked when the
+// phone is currently blocked by the attempt window — checked first, before any
+// code is read, so a blocked phone cannot be verified.
 //
 // Verify deliberately does NOT record the attempt-window failure: the success
 // path transaction will roll back on this error, and recording inside it would
 // be rolled back with it. The orchestrator records the failure via RecordFailure
 // in a separate transaction so the rate-limit mutation survives (ADR 0033).
 func (s *LoginCodeService) Verify(ctx context.Context, stores *txStores, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, code string) (domain.LoginCode, error) {
+	if err := checkNotBlocked(ctx, stores.attempts, s.clock, phone); err != nil {
+		return domain.LoginCode{}, err
+	}
+
 	now := s.clock.Now()
 
 	loginCode, err := stores.codes.GetLatestByPhoneAndEmail(ctx, phone, email, purpose, now)

@@ -171,6 +171,34 @@ func TestLoginCodeService_Verify_MissingCode(t *testing.T) {
 	}
 }
 
+func TestLoginCodeService_Verify_RejectsWhenBlocked(t *testing.T) {
+	h := newLoginCodeHarness()
+	phone := mustPhone(t, "+79150000007")
+	email := mustEmail(t, "owner@example.com")
+	ctx := context.Background()
+
+	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, nil); err != nil {
+		t.Fatalf("Send error = %v", err)
+	}
+	plaintext := h.sender.sent[0].code
+
+	// Seed a blocked attempt window.
+	window := domain.NewAttemptWindow(testNow)
+	for range domain.MaxLoginFailures {
+		_ = window.RecordFailure(testNow)
+	}
+	h.attempts.windows[phone.String()] = window
+
+	stores, err := h.stores(ctx)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	_, err = h.svc.Verify(ctx, stores, phone, email, domain.LoginCodePurposeLogin, plaintext)
+	if !errors.Is(err, ErrUserBlocked) {
+		t.Fatalf("Verify error = %v, want ErrUserBlocked", err)
+	}
+}
+
 func TestLoginCodeService_RecordFailure_IncrementsWindow(t *testing.T) {
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000008")
