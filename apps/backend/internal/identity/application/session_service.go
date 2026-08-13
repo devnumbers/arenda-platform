@@ -76,8 +76,7 @@ func (s *sessionService) Issue(ctx context.Context, stores *txStores, phone doma
 		if createErr != nil {
 			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("create user: %w", createErr)
 		}
-		newUser.Email = &email
-		newUser.EmailVerifiedAt = &now
+		newUser.VerifyEmail(email, now)
 		user, createErr = stores.users.Create(ctx, newUser)
 		if createErr != nil {
 			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("save user: %w", createErr)
