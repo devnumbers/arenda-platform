@@ -10,8 +10,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
-const defaultDeleteBatchSize = 1000
-
 // Cleaner periodically removes expired identity data.
 type Cleaner struct {
 	sessions  identityapp.SessionRepository
@@ -64,30 +62,26 @@ func (c *Cleaner) Run(ctx context.Context) {
 func (c *Cleaner) clean(ctx context.Context) {
 	before := c.clock.Now().UTC().Add(-c.retention)
 
-	c.deleteInBatches(ctx, "login codes", before, c.codes.DeleteExpiredBeforeBatch)
-	c.deleteInBatches(ctx, "sessions", before, c.sessions.DeleteExpiredBeforeBatch)
-	c.deleteInBatches(ctx, "login attempts", before, c.attempts.DeleteStaleBeforeBatch)
+	c.cleanExpired(ctx, "login codes", before, c.codes.DeleteExpiredBefore)
+	c.cleanExpired(ctx, "sessions", before, c.sessions.DeleteExpiredBefore)
+	c.cleanExpired(ctx, "login attempts", before, c.attempts.DeleteStaleBefore)
 
 	c.logger.InfoContext(ctx, "cleanup completed", slog.Time("before", before))
 }
 
-func (c *Cleaner) deleteInBatches(
+// cleanExpired runs a single DeleteExpiredBefore/DeleteStaleBefore call and logs
+// any non-cancellation error. The adapter loops the SQL batch internally, so
+// the scheduler only speaks the "delete old data" intent.
+func (c *Cleaner) cleanExpired(
 	ctx context.Context,
 	name string,
 	before time.Time,
-	deleteBatch func(context.Context, time.Time, int32) (int64, error),
+	deleteBefore func(context.Context, time.Time) error,
 ) {
-	for {
-		n, err := deleteBatch(ctx, before, defaultDeleteBatchSize)
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return
-			}
-			c.logger.ErrorContext(ctx, "failed to clean expired "+name, slog.String("error", err.Error()))
+	if err := deleteBefore(ctx, before); err != nil {
+		if errors.Is(err, context.Canceled) {
 			return
 		}
-		if n == 0 {
-			return
-		}
+		c.logger.ErrorContext(ctx, "failed to clean expired "+name, slog.String("error", err.Error()))
 	}
 }

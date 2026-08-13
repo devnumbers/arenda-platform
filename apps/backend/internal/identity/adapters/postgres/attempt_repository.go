@@ -134,13 +134,18 @@ func (r *AttemptRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID
 	return nil
 }
 
-func (r *AttemptRepository) DeleteStaleBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error) {
-	n, err := r.q().DeleteStaleLoginAttemptsBatch(ctx, pgen.DeleteStaleLoginAttemptsBatchParams{
-		LastFailureAt: pgtype.Timestamptz{Time: before, Valid: true},
-		Limit:         batchSize,
-	})
-	if err != nil {
-		return 0, fmt.Errorf("delete stale login attempts batch: %w", err)
+func (r *AttemptRepository) DeleteStaleBefore(ctx context.Context, before time.Time) error {
+	if err := deleteBatched(ctx, before, func(ctx context.Context, before time.Time, limit int32) (int64, error) {
+		n, err := r.q().DeleteStaleLoginAttemptsBatch(ctx, pgen.DeleteStaleLoginAttemptsBatchParams{
+			LastFailureAt: pgtype.Timestamptz{Time: before, Valid: true},
+			Limit:         limit,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("delete stale login attempts batch: %w", err)
+		}
+		return n, nil
+	}); err != nil {
+		return fmt.Errorf("delete stale login attempts: %w", err)
 	}
-	return n, nil
+	return nil
 }

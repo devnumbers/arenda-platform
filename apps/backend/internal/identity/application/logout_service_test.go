@@ -154,7 +154,7 @@ func (r *errorSessionRepo) DeleteByUserIDExcept(context.Context, uuid.UUID, stri
 	return r.err
 }
 
-func (r *errorSessionRepo) DeleteExpiredBeforeBatch(context.Context, time.Time, int32) (int64, error) {
-	return 0, nil
+func (r *errorSessionRepo) DeleteExpiredBefore(context.Context, time.Time) error {
+	return nil
 }
 func (r *errorSessionRepo) WithTx(transaction.Tx) (SessionRepository, error) { return r, nil }

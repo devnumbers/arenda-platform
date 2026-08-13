@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -12,6 +13,31 @@ import (
 	pgen "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
+
+// defaultDeleteBatchSize is the row cap of each SQL DELETE ... USING ctid IN
+// (subselect LIMIT) round. The deleteExpiredBefore/deleteStaleBefore helpers
+// loop the batch query until it reports zero rows affected, so the batch size
+// only bounds the work done per statement, not the total rows removed.
+const defaultDeleteBatchSize = 1000
+
+// deleteBatched repeatedly invokes deleteBatch — a sqlc :execrows query that
+// deletes up to defaultDeleteBatchSize rows matching before — until the query
+// reports zero rows affected (completeness). It hides the ctid-batching SQL
+// dialect from the application port: the port says "delete everything older
+// than before", the adapter decides how to chunk the work. Cancellation policy
+// (swallow ctx.Canceled vs. log) is left to the caller, so any error —
+// including context.Canceled — is returned as-is.
+func deleteBatched(ctx context.Context, before time.Time, deleteBatch func(ctx context.Context, before time.Time, limit int32) (int64, error)) error {
+	for {
+		n, err := deleteBatch(ctx, before, defaultDeleteBatchSize)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return nil
+		}
+	}
+}
 
 // notFound reports whether err is a pgx.ErrNoRows. Every repository maps a
 // not-found row to application.ErrNotFound, so the check is shared here instead

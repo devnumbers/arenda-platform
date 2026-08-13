@@ -202,8 +202,8 @@ func (r *fakeCodeRepo) DeleteByUserID(_ context.Context, userID uuid.UUID) error
 	return nil
 }
 
-func (r *fakeCodeRepo) DeleteExpiredBeforeBatch(context.Context, time.Time, int32) (int64, error) {
-	return 0, nil
+func (r *fakeCodeRepo) DeleteExpiredBefore(context.Context, time.Time) error {
+	return nil
 }
 
 func (r *fakeCodeRepo) DeleteExpiredByPhoneAndEmail(_ context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, before time.Time) error {
@@ -266,8 +266,8 @@ func (r *fakeAttemptRepo) DeleteByPhone(_ context.Context, phone domain.Phone) e
 
 func (r *fakeAttemptRepo) DeleteByUserID(context.Context, uuid.UUID) error { return nil }
 
-func (r *fakeAttemptRepo) DeleteStaleBeforeBatch(context.Context, time.Time, int32) (int64, error) {
-	return 0, nil
+func (r *fakeAttemptRepo) DeleteStaleBefore(context.Context, time.Time) error {
+	return nil
 }
 
 func (r *fakeAttemptRepo) WithTx(transaction.Tx) (AttemptRepository, error) { return r, nil }
@@ -317,8 +317,8 @@ func (r *fakeSessionRepo) DeleteByUserIDExcept(_ context.Context, userID uuid.UU
 	return nil
 }
 
-func (r *fakeSessionRepo) DeleteExpiredBeforeBatch(context.Context, time.Time, int32) (int64, error) {
-	return 0, nil
+func (r *fakeSessionRepo) DeleteExpiredBefore(context.Context, time.Time) error {
+	return nil
 }
 
 func (r *fakeSessionRepo) WithTx(transaction.Tx) (SessionRepository, error) { return r, nil }
