@@ -85,7 +85,7 @@ func (r *AttemptRepository) GetByPhoneForUpdate(ctx context.Context, phone domai
 // fields are always written as absolutes; only failures follows the
 // delta/absolute split.
 func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow, delta int) error {
-	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	encryptedPhone, phoneEncrypted, err := phoneToColumns(ctx, r.enc, phone.String())
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, userID
 		FirstFailureAt: pgtype.Timestamptz{Time: window.FirstFailureAt, Valid: true},
 		LastFailureAt:  pgtype.Timestamptz{Time: window.LastFailureAt, Valid: true},
 		UserID:         pgconv.UUIDToPgtype(userID),
-		PhoneEncrypted: !r.enc.IsNoop(),
+		PhoneEncrypted: phoneEncrypted,
 	}
 	if delta <= 0 {
 		params.Failures = int32(min(window.Failures, math.MaxInt32)) //nolint:gosec // clamped to math.MaxInt32 by min above

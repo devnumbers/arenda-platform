@@ -100,7 +100,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email domain.Email) (do
 }
 
 func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.User, error) {
-	encryptedPhone, err := encryptPhone(ctx, r.enc, user.Phone.String())
+	encryptedPhone, phoneEncrypted, err := phoneToColumns(ctx, r.enc, user.Phone.String())
 	if err != nil {
 		return domain.User{}, err
 	}
@@ -108,7 +108,7 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.U
 		ID:              pgconv.UUIDToPgtype(user.ID),
 		Phone:           encryptedPhone,
 		Role:            user.Role.String(),
-		PhoneEncrypted:  !r.enc.IsNoop(),
+		PhoneEncrypted:  phoneEncrypted,
 		Email:           emailPtrToPgtype(user.Email),
 		EmailVerifiedAt: pgconv.TimePtrToPgtype(user.EmailVerifiedAt),
 	})
@@ -172,14 +172,14 @@ func (r *UserRepository) Update(ctx context.Context, user domain.User) (domain.U
 }
 
 func (r *UserRepository) UpdatePhone(ctx context.Context, id uuid.UUID, phone domain.Phone) (domain.User, error) {
-	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
+	encryptedPhone, phoneEncrypted, err := phoneToColumns(ctx, r.enc, phone.String())
 	if err != nil {
 		return domain.User{}, err
 	}
 	row, err := r.q().UpdateUserPhone(ctx, pgen.UpdateUserPhoneParams{
 		ID:             pgconv.UUIDToPgtype(id),
 		Phone:          encryptedPhone,
-		PhoneEncrypted: !r.enc.IsNoop(),
+		PhoneEncrypted: phoneEncrypted,
 	})
 	if err != nil {
 		if notFound(err) {

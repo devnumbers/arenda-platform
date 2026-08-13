@@ -15,6 +15,18 @@ func encryptPhone(ctx context.Context, enc encryption.Encryptor, phone string) (
 	return encrypted, nil
 }
 
+// phoneToColumns encrypts phone for persistence and derives the PhoneEncrypted
+// flag so callers cannot forget it — the two facts are one operation. Symmetric
+// to decryptPhoneField on the read side. Use this on every write site; use
+// encryptPhone only for lookups/deletes where the flag is not persisted.
+func phoneToColumns(ctx context.Context, enc encryption.Encryptor, phone string) (encryptedPhone string, phoneEncrypted bool, err error) {
+	encryptedPhone, err = encryptPhone(ctx, enc, phone)
+	if err != nil {
+		return "", false, err
+	}
+	return encryptedPhone, !enc.IsNoop(), nil
+}
+
 func decryptPhone(ctx context.Context, enc encryption.Encryptor, phone string, encrypted bool) (string, error) {
 	if !encrypted {
 		return phone, nil

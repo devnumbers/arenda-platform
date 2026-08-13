@@ -36,7 +36,7 @@ func (r *LoginCodeRepository) WithTx(tx transaction.Tx) (application.LoginCodeRe
 }
 
 func (r *LoginCodeRepository) Save(ctx context.Context, code domain.LoginCode) error {
-	encryptedPhone, err := encryptPhone(ctx, r.enc, code.Phone.String())
+	encryptedPhone, phoneEncrypted, err := phoneToColumns(ctx, r.enc, code.Phone.String())
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func (r *LoginCodeRepository) Save(ctx context.Context, code domain.LoginCode) e
 		ExpiresAt:      pgtype.Timestamptz{Time: code.ExpiresAt, Valid: true},
 		UserID:         pgconv.UUIDToPgtypePtr(code.UserID),
 		Purpose:        code.Purpose.String(),
-		PhoneEncrypted: !r.enc.IsNoop(),
+		PhoneEncrypted: phoneEncrypted,
 	}); err != nil {
 		if pgerr.IsUniqueViolation(err) {
 			return application.ErrCodeSentTooRecently
