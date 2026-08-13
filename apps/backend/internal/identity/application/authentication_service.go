@@ -170,7 +170,7 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 		}
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &user.ID,
-			ActorRole:  AuditActorRole(user.Role),
+			ActorRole:  auditdomain.ActorRoleFromRole(user.Role),
 			Action:     action,
 			EntityType: auditdomain.EntityUser,
 			EntityID:   &user.ID,

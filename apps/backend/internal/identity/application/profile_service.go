@@ -95,7 +95,7 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cm
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &userID,
-			ActorRole:  AuditActorRole(updated.Role),
+			ActorRole:  auditdomain.ActorRoleFromRole(updated.Role),
 			Action:     auditdomain.ActionProfileUpdated,
 			EntityType: auditdomain.EntityUser,
 			EntityID:   &userID,

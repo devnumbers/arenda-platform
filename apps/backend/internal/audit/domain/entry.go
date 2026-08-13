@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 )
 
 // ActorRole identifies who performed the action.
@@ -163,4 +164,18 @@ type Entry struct {
 	Context    map[string]any // whitelist fields only, never PII/secrets
 	RequestID  string
 	IP         string
+}
+
+// ActorRoleFromRole maps a shared-kernel actor.Role to an audit ActorRole.
+// Unknown or future roles map to Anonymous rather than masking as Owner,
+// so a corrupt or unexpected value stays visible in the audit trail.
+func ActorRoleFromRole(role actor.Role) ActorRole {
+	switch role {
+	case actor.RoleOwner:
+		return ActorRoleOwner
+	case actor.RoleAdmin:
+		return ActorRoleAdmin
+	default:
+		return ActorRoleAnonymous
+	}
 }

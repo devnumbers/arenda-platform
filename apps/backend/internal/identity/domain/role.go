@@ -10,8 +10,9 @@ import (
 // shared-kernel type [actor.Role] (ADR 0034); identity keeps it as part of its
 // ubiquitous language while the canonical home for role values is shared/actor.
 //
-// The type alias means identity/domain consumers (AuditActorRole, the User
-// aggregate, httpsupport role checks) continue to work unchanged.
+// The type alias means identity/domain consumers (the User aggregate,
+// httpsupport role checks) continue to work unchanged; audit consumes
+// actor.Role directly via auditdomain.ActorRoleFromRole.
 type Role = actor.Role
 
 // RoleOwner and RoleAdmin are re-exports of the canonical shared-kernel role

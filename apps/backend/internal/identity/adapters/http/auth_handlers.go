@@ -240,7 +240,7 @@ func (h *AuthHandlers) recordAuthAudit(ctx context.Context, action auditdomain.A
 	}
 	actorRole := auditdomain.ActorRoleOwner
 	if _, role, ok := httpsupport.ActorFromContext(ctx); ok {
-		actorRole = application.AuditActorRole(role)
+		actorRole = auditdomain.ActorRoleFromRole(role)
 	}
 	if err := h.audit.Record(ctx, auditdomain.Entry{
 		ActorID:    &userID,
