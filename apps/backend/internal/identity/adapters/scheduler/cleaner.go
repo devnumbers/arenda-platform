@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
 
 // Consumer-side, single-method ports (ADR 0035). The Cleaner is the only
@@ -105,6 +106,6 @@ func (c *Cleaner) cleanExpired(
 		if errors.Is(err, context.Canceled) {
 			return
 		}
-		c.logger.ErrorContext(ctx, "failed to clean expired "+name, slog.String("error", err.Error()))
+		c.logger.ErrorContext(ctx, "failed to clean expired "+name, slog.String("error", sanitize.Error(err)))
 	}
 }
