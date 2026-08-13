@@ -130,10 +130,12 @@ func New(deps Deps) http.Handler {
 		deps.Logout,
 		deps.CookieSecure,
 		deps.Logger,
-		deps.EmailSendLimiter,
-		deps.EmailVerifyLimiter,
-		deps.PhoneChangeSendLimiter,
-		deps.PhoneChangeVerifyLimiter,
+		identityhttp.AuthRateLimits{
+			Send:              deps.EmailSendLimiter,
+			Verify:            deps.EmailVerifyLimiter,
+			PhoneChangeSend:   deps.PhoneChangeSendLimiter,
+			PhoneChangeVerify: deps.PhoneChangeVerifyLimiter,
+		},
 		deps.MeEnricher,
 	)
 	propertyHandlers := propertieshttp.NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Export, deps.PropertyContacts, deps.Logger, deps.Clock, deps.TZResolver)

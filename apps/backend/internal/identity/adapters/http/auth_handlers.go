@@ -19,19 +19,70 @@ import (
 // required.
 type MeEnricher func(ctx context.Context, userID uuid.UUID, resp *openapi.MeResponse) error
 
+// AuthRateLimits bundles the per-action auth rate limiters. A nil limiter
+// means "allow" (no limit), so the zero-value AuthRateLimits{} permits
+// everything — used by tests.
+type AuthRateLimits struct {
+	Send              *httpsupport.RateLimiter
+	Verify            *httpsupport.RateLimiter
+	PhoneChangeSend   *httpsupport.RateLimiter
+	PhoneChangeVerify *httpsupport.RateLimiter
+}
+
+// AllowSend reports whether a send-code request for key is allowed. A nil
+// Send limiter permits all requests.
+func (l AuthRateLimits) AllowSend(key string) bool {
+	if l.Send == nil {
+		return true
+	}
+	return l.Send.Allow(key)
+}
+
+// AllowVerify reports whether a verify-code request for key is allowed.
+func (l AuthRateLimits) AllowVerify(key string) bool {
+	if l.Verify == nil {
+		return true
+	}
+	return l.Verify.Allow(key)
+}
+
+// AllowPhoneChangeSend reports whether a phone-change send-code request for
+// key is allowed.
+func (l AuthRateLimits) AllowPhoneChangeSend(key string) bool {
+	if l.PhoneChangeSend == nil {
+		return true
+	}
+	return l.PhoneChangeSend.Allow(key)
+}
+
+// AllowPhoneChangeVerify reports whether a phone-change verify request for
+// key is allowed.
+func (l AuthRateLimits) AllowPhoneChangeVerify(key string) bool {
+	if l.PhoneChangeVerify == nil {
+		return true
+	}
+	return l.PhoneChangeVerify.Allow(key)
+}
+
+// rateLimitKey returns the bucket key shared by the send/verify handlers:
+// email wins when present, otherwise phone.
+func rateLimitKey(phone string, email *domain.Email) string {
+	if email != nil {
+		return email.String()
+	}
+	return phone
+}
+
 // AuthHandlers implements the generated non-strict ServerInterface.
 type AuthHandlers struct {
-	auth              application.Authenticator
-	phoneChange       application.PhoneChanger
-	profile           application.Profiler
-	logout            application.Logout
-	cookieSecure      bool
-	logger            *slog.Logger
-	emailSend         *httpsupport.RateLimiter
-	emailVerify       *httpsupport.RateLimiter
-	phoneChangeSend   *httpsupport.RateLimiter
-	phoneChangeVerify *httpsupport.RateLimiter
-	meEnricher        MeEnricher
+	auth         application.Authenticator
+	phoneChange  application.PhoneChanger
+	profile      application.Profiler
+	logout       application.Logout
+	cookieSecure bool
+	logger       *slog.Logger
+	limits       AuthRateLimits
+	meEnricher   MeEnricher
 }
 
 // NewAuthHandlers creates HTTP handlers for the auth API.
@@ -42,24 +93,18 @@ func NewAuthHandlers(
 	logout application.Logout,
 	cookieSecure bool,
 	logger *slog.Logger,
-	emailSend *httpsupport.RateLimiter,
-	emailVerify *httpsupport.RateLimiter,
-	phoneChangeSend *httpsupport.RateLimiter,
-	phoneChangeVerify *httpsupport.RateLimiter,
+	limits AuthRateLimits,
 	meEnricher MeEnricher,
 ) *AuthHandlers {
 	return &AuthHandlers{
-		auth:              auth,
-		phoneChange:       phoneChange,
-		profile:           profile,
-		logout:            logout,
-		cookieSecure:      cookieSecure,
-		logger:            logger,
-		emailSend:         emailSend,
-		emailVerify:       emailVerify,
-		phoneChangeSend:   phoneChangeSend,
-		phoneChangeVerify: phoneChangeVerify,
-		meEnricher:        meEnricher,
+		auth:         auth,
+		phoneChange:  phoneChange,
+		profile:      profile,
+		logout:       logout,
+		cookieSecure: cookieSecure,
+		logger:       logger,
+		limits:       limits,
+		meEnricher:   meEnricher,
 	}
 }
 
@@ -92,11 +137,7 @@ func (h *AuthHandlers) SendCode(w http.ResponseWriter, r *http.Request) {
 
 	// Phone-only and email requests use separate buckets; the service-level
 	// minSendInterval still caps actual code sends.
-	rateLimitKey := phone.String()
-	if email != nil {
-		rateLimitKey = email.String()
-	}
-	if h.emailSend != nil && !h.emailSend.Allow(rateLimitKey) {
+	if !h.limits.AllowSend(rateLimitKey(phone.String(), email)) {
 		httpsupport.WriteTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
@@ -151,11 +192,7 @@ func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
 
 	// Phone-only verify requests are keyed by phone; brute force is
 	// additionally capped by the service-level attempt window.
-	rateLimitKey := phone.String()
-	if email != nil {
-		rateLimitKey = email.String()
-	}
-	if h.emailVerify != nil && !h.emailVerify.Allow(rateLimitKey) {
+	if !h.limits.AllowVerify(rateLimitKey(phone.String(), email)) {
 		httpsupport.WriteTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
@@ -338,7 +375,7 @@ func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if h.phoneChangeSend != nil && !h.phoneChangeSend.Allow(phone.String()) {
+	if !h.limits.AllowPhoneChangeSend(phone.String()) {
 		httpsupport.WriteTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
@@ -389,7 +426,7 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.phoneChangeVerify != nil && !h.phoneChangeVerify.Allow(phone.String()) {
+	if !h.limits.AllowPhoneChangeVerify(phone.String()) {
 		httpsupport.WriteTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
