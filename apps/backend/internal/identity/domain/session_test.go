@@ -147,3 +147,47 @@ func TestSession_Refresh(t *testing.T) {
 		}
 	})
 }
+
+func TestNewSession(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	now := time.Date(2026, 1, 15, 8, 30, 0, 0, time.UTC)
+
+	raw, err := NewSession(userID, now)
+	if err != nil {
+		t.Fatalf("NewSession error = %v", err)
+	}
+
+	// The raw token is a 64-char hex string (32 random bytes → 64 hex chars).
+	if len(raw.Token) != 64 {
+		t.Fatalf("Token length = %d, want 64", len(raw.Token))
+	}
+	// Two consecutive calls must produce different tokens.
+	other, _ := NewSession(userID, now)
+	if other.Token == raw.Token {
+		t.Fatal("two NewSession calls produced identical tokens")
+	}
+
+	sess := raw.Session
+	if sess.ID == (uuid.UUID{}) {
+		t.Fatal("session ID is zero")
+	}
+	if sess.UserID != userID {
+		t.Fatalf("UserID = %s, want %s", sess.UserID, userID)
+	}
+	// TokenHash is deliberately left empty — the caller hashes raw.Token before
+	// persisting.
+	if sess.TokenHash != "" {
+		t.Fatalf("TokenHash = %q, want empty (caller must hash before persisting)", sess.TokenHash)
+	}
+	if !sess.ExpiresAt.Equal(now.Add(SessionBaseTTL)) {
+		t.Fatalf("ExpiresAt = %v, want %v", sess.ExpiresAt, now.Add(SessionBaseTTL))
+	}
+	if !sess.CreatedAt.Equal(now) {
+		t.Fatalf("CreatedAt = %v, want %v", sess.CreatedAt, now)
+	}
+	if !sess.LastUsedAt.Equal(now) {
+		t.Fatalf("LastUsedAt = %v, want %v", sess.LastUsedAt, now)
+	}
+}

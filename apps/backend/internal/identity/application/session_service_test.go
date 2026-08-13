@@ -3,8 +3,11 @@ package application
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 type sessionHarness struct {
@@ -39,7 +42,7 @@ func TestSessionService_Issue_CreatesNewUserAndSession(t *testing.T) {
 	h := newSessionHarness()
 	phone := mustPhone(t, "+79150000001")
 	email := mustEmail(t, "owner@example.com")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stores, err := h.stores(ctx)
 	if err != nil {
@@ -75,7 +78,7 @@ func TestSessionService_Issue_ExistingUserReturnsNewFalse(t *testing.T) {
 	phone := mustPhone(t, "+79150000002")
 	email := mustEmail(t, "owner@example.com")
 	existing := h.seedSessionUser(t, phone, &email)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stores, err := h.stores(ctx)
 	if err != nil {
@@ -112,7 +115,7 @@ func TestSessionService_Issue_VerifiesEmailWhenUnverified(t *testing.T) {
 	user.Email = &email
 	// EmailVerifiedAt left nil on purpose.
 	h.users.byPhone[phone.String()] = user
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stores, err := h.stores(ctx)
 	if err != nil {
@@ -144,3 +147,102 @@ func (h *sessionHarness) seedSessionUser(t *testing.T, phone domain.Phone, email
 	h.users.byPhone[phone.String()] = user
 	return user
 }
+
+func TestSessionService_Load_DelegatesToRepositoryWithHashedToken(t *testing.T) {
+	beginner := &fakeBeginner{}
+	userID := uuid.New()
+	rawToken := "plain-token"
+	tokenHash := fakeHasher{}.HashToken(rawToken)
+
+	wantSession := domain.Session{
+		ID:         uuid.New(),
+		UserID:     userID,
+		TokenHash:  tokenHash,
+		ExpiresAt:  testNow.Add(domain.SessionBaseTTL),
+		CreatedAt:  testNow,
+		LastUsedAt: testNow,
+	}
+	wantUser := domain.User{ID: userID, Role: domain.RoleOwner}
+	repo := &capturingSessionRepo{
+		onGetByTokenHash: func(_ string, _ time.Time) (domain.Session, domain.User, error) {
+			return wantSession, wantUser, nil
+		},
+	}
+	factory := NewTxStoreFactory(
+		newFakeUserRepo(), newFakeCodeRepo(), newFakeAttemptRepo(), repo,
+		nil, &fakeUoW{beginner: beginner},
+	)
+	svc := NewSessionService(factory, SessionServiceConfig{Hasher: fakeHasher{}})
+
+	gotSession, gotUser, err := svc.Load(t.Context(), rawToken, testNow)
+	if err != nil {
+		t.Fatalf("Load error = %v", err)
+	}
+	if gotSession.ID != wantSession.ID {
+		t.Fatalf("session ID = %s, want %s", gotSession.ID, wantSession.ID)
+	}
+	if gotUser.ID != userID {
+		t.Fatalf("user ID = %s, want %s", gotUser.ID, userID)
+	}
+	if repo.lastTokenHash != tokenHash {
+		t.Fatalf("repo received tokenHash = %s, want %s", repo.lastTokenHash, tokenHash)
+	}
+}
+
+func TestSessionService_Update_DelegatesToRepository(t *testing.T) {
+	h := newSessionHarness()
+	sess := domain.Session{
+		ID:        uuid.New(),
+		TokenHash: "hash-update",
+		ExpiresAt: testNow.Add(time.Hour),
+	}
+
+	if err := h.svc.Update(t.Context(), sess); err != nil {
+		t.Fatalf("Update error = %v", err)
+	}
+	stored, ok := h.sessions.sessions["hash-update"]
+	if !ok {
+		t.Fatal("session not persisted by Update")
+	}
+	if !stored.ExpiresAt.Equal(sess.ExpiresAt) {
+		t.Fatalf("stored ExpiresAt = %v, want %v", stored.ExpiresAt, sess.ExpiresAt)
+	}
+}
+
+// capturingSessionRepo is a SessionRepository whose GetByTokenHash delegates to
+// a function stub and captures the token hash, so the Load test can assert the
+// raw token was hashed before the repository call.
+type capturingSessionRepo struct {
+	sessions         map[string]domain.Session
+	onGetByTokenHash func(tokenHash string, now time.Time) (domain.Session, domain.User, error)
+	lastTokenHash    string
+}
+
+func (r *capturingSessionRepo) Create(_ context.Context, s domain.Session) error {
+	r.sessions[s.TokenHash] = s
+	return nil
+}
+
+func (r *capturingSessionRepo) GetByTokenHash(_ context.Context, tokenHash string, now time.Time) (domain.Session, domain.User, error) {
+	r.lastTokenHash = tokenHash
+	if r.onGetByTokenHash != nil {
+		return r.onGetByTokenHash(tokenHash, now)
+	}
+	return domain.Session{}, domain.User{}, ErrNotFound
+}
+
+func (r *capturingSessionRepo) Update(_ context.Context, s domain.Session) error {
+	r.sessions[s.TokenHash] = s
+	return nil
+}
+
+func (r *capturingSessionRepo) DeleteByTokenHash(_ context.Context, hash string) error {
+	delete(r.sessions, hash)
+	return nil
+}
+func (r *capturingSessionRepo) DeleteByUserID(_ context.Context, _ uuid.UUID) error { return nil }
+func (r *capturingSessionRepo) DeleteByUserIDExcept(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
+func (r *capturingSessionRepo) DeleteExpiredBefore(context.Context, time.Time) error { return nil }
+func (r *capturingSessionRepo) WithTx(transaction.Tx) (SessionRepository, error)     { return r, nil }

@@ -31,14 +31,24 @@ func formatLoginCodeTTL(d time.Duration) string {
 	}
 }
 
+// renderer is the consumer-side port for email template rendering (ADR 0035).
+// It lets the email adapter accept any renderer — the production
+// *mailer.Renderer or a test stub — without the platform/mailer package knowing
+// about identity. Only the Render method is needed here.
+type renderer interface {
+	Render(name string, data any) (plain string, html string, err error)
+}
+
 // Sender renders and sends login code emails through the shared mailer.
 type Sender struct {
 	sender   mailer.Sender
-	renderer *mailer.Renderer
+	renderer renderer
 }
 
-// NewSender creates an identity email sender backed by the shared mailer.
-func NewSender(sender mailer.Sender, renderer *mailer.Renderer) *Sender {
+// NewSender creates an identity email sender backed by the shared mailer. The
+// renderer parameter accepts the production *mailer.Renderer (which satisfies
+// the consumer-side renderer interface) or a test stub.
+func NewSender(sender mailer.Sender, renderer renderer) *Sender {
 	return &Sender{sender: sender, renderer: renderer}
 }
 

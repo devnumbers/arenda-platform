@@ -53,7 +53,7 @@ func TestLoginCodeService_Send_IssuesPersistsAndDelivers(t *testing.T) {
 	phone := mustPhone(t, "+79150000001")
 	email := mustEmail(t, "owner@example.com")
 
-	if err := h.svc.Send(context.Background(), phone, email, domain.LoginCodePurposeLogin, nil); err != nil {
+	if err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, nil); err != nil {
 		t.Fatalf("Send error = %v", err)
 	}
 	if len(h.codes.codes) != 1 {
@@ -72,11 +72,11 @@ func TestLoginCodeService_Send_ThrottlesWithinMinInterval(t *testing.T) {
 	phone := mustPhone(t, "+79150000002")
 	email := mustEmail(t, "owner@example.com")
 
-	if err := h.svc.Send(context.Background(), phone, email, domain.LoginCodePurposeLogin, nil); err != nil {
+	if err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, nil); err != nil {
 		t.Fatalf("first Send error = %v", err)
 	}
 	// A second send at the same clock time is throttled.
-	err := h.svc.Send(context.Background(), phone, email, domain.LoginCodePurposeLogin, nil)
+	err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, nil)
 	if !errors.Is(err, ErrCodeSentTooRecently) {
 		t.Fatalf("second Send error = %v, want ErrCodeSentTooRecently", err)
 	}
@@ -97,7 +97,7 @@ func TestLoginCodeService_Send_RejectsWhenBlocked(t *testing.T) {
 	}
 	h.attempts.windows[phone.String()] = window
 
-	err := h.svc.Send(context.Background(), phone, email, domain.LoginCodePurposeLogin, nil)
+	err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, nil)
 	if !errors.Is(err, ErrUserBlocked) {
 		t.Fatalf("Send error = %v, want ErrUserBlocked", err)
 	}
@@ -110,7 +110,7 @@ func TestLoginCodeService_Verify_AcceptsValidCode(t *testing.T) {
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000004")
 	email := mustEmail(t, "owner@example.com")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, nil); err != nil {
 		t.Fatalf("Send error = %v", err)
@@ -134,7 +134,7 @@ func TestLoginCodeService_Verify_RejectsInvalidCode(t *testing.T) {
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000005")
 	email := mustEmail(t, "owner@example.com")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, nil); err != nil {
 		t.Fatalf("Send error = %v", err)
@@ -159,7 +159,7 @@ func TestLoginCodeService_Verify_MissingCode(t *testing.T) {
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000006")
 	email := mustEmail(t, "owner@example.com")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stores, err := h.stores(ctx)
 	if err != nil {
@@ -175,7 +175,7 @@ func TestLoginCodeService_Verify_RejectsWhenBlocked(t *testing.T) {
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000007")
 	email := mustEmail(t, "owner@example.com")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, nil); err != nil {
 		t.Fatalf("Send error = %v", err)
@@ -202,7 +202,7 @@ func TestLoginCodeService_Verify_RejectsWhenBlocked(t *testing.T) {
 func TestLoginCodeService_RecordFailure_IncrementsWindow(t *testing.T) {
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000008")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stores, err := h.stores(ctx)
 	if err != nil {
@@ -223,7 +223,7 @@ func TestLoginCodeService_RecordFailure_IncrementsWindow(t *testing.T) {
 func TestLoginCodeService_RecordFailure_ReachesTooManyAttempts(t *testing.T) {
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000009")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	var lastErr error
 	for range domain.MaxLoginFailures {
@@ -243,4 +243,99 @@ func TestLoginCodeService_RecordFailure_ReachesTooManyAttempts(t *testing.T) {
 	if window.Failures != domain.MaxLoginFailures {
 		t.Fatalf("window failures = %d, want %d", window.Failures, domain.MaxLoginFailures)
 	}
+}
+
+func TestUserEmail(t *testing.T) {
+	t.Parallel()
+
+	email := mustEmail(t, "owner@example.com")
+
+	t.Run("user with email returns it", func(t *testing.T) {
+		t.Parallel()
+		u := domain.User{Email: &email}
+		got, err := userEmail(u)
+		if err != nil {
+			t.Fatalf("userEmail error = %v", err)
+		}
+		if got != email {
+			t.Fatalf("userEmail = %s, want %s", got, email)
+		}
+	})
+
+	t.Run("user without email returns ErrEmailDoesNotMatch", func(t *testing.T) {
+		t.Parallel()
+		u := domain.User{}
+		_, err := userEmail(u)
+		if !errors.Is(err, ErrEmailDoesNotMatch) {
+			t.Fatalf("userEmail error = %v, want ErrEmailDoesNotMatch", err)
+		}
+	})
+}
+
+func TestGenerateCode(t *testing.T) {
+	t.Parallel()
+
+	seen := make(map[string]bool, 1000)
+	for range 1000 {
+		code, err := generateCode()
+		if err != nil {
+			t.Fatalf("generateCode error = %v", err)
+		}
+		if len(code) != 6 {
+			t.Fatalf("code length = %d, want 6", len(code))
+		}
+		// The code must be zero-padded numeric in 000000..999999.
+		n, ok := parseCodeDigits(code)
+		if !ok {
+			t.Fatalf("code %q is not 6 numeric digits", code)
+		}
+		if n < 0 || n > 999999 {
+			t.Fatalf("code value = %d, out of range", n)
+		}
+		seen[code] = true
+	}
+	// A crypto-random generator across 1000 samples in a 10^6 space must
+	// produce a substantial number of distinct values (collisions exist but
+	// should be rare). This guards against a broken constant-output generator.
+	if len(seen) < 500 {
+		t.Fatalf("distinct codes = %d out of 1000, expected high diversity", len(seen))
+	}
+}
+
+// parseCodeDigits returns the integer value of a 6-digit string and true, or
+// (0, false) when the string is not exactly 6 ASCII digits.
+func parseCodeDigits(s string) (int, bool) {
+	var n int
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, true
+}
+
+func TestAttemptDelta(t *testing.T) {
+	t.Parallel()
+	start := testNow
+
+	t.Run("reset path returns zero", func(t *testing.T) {
+		t.Parallel()
+		// prev has a different FirstFailureAt → WasReset is true.
+		prev := domain.AttemptWindow{Failures: 3, FirstFailureAt: start}
+		next := domain.AttemptWindow{Failures: 1, FirstFailureAt: start.Add(domain.LoginAttemptWindowTTL)}
+		if got := attemptDelta(prev, next); got != 0 {
+			t.Fatalf("attemptDelta(reset) = %d, want 0", got)
+		}
+	})
+
+	t.Run("increment path returns positive delta", func(t *testing.T) {
+		t.Parallel()
+		// Same FirstFailureAt → plain increment, delta = next - prev.
+		prev := domain.AttemptWindow{Failures: 3, FirstFailureAt: start}
+		next := domain.AttemptWindow{Failures: 4, FirstFailureAt: start}
+		if got := attemptDelta(prev, next); got != 1 {
+			t.Fatalf("attemptDelta(increment) = %d, want 1", got)
+		}
+	})
 }

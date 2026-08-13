@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -460,7 +461,7 @@ func TestAuthenticationService_SendCodeByPhone(t *testing.T) {
 			h := newAuthServiceHarness()
 			tt.seed(t, h)
 
-			sent, err := h.svc.SendCodeByPhone(context.Background(), phone)
+			sent, err := h.svc.SendCodeByPhone(t.Context(), phone)
 			if err != nil {
 				t.Fatalf("SendCodeByPhone error = %v", err)
 			}
@@ -482,7 +483,7 @@ func TestAuthenticationService_VerifyCode_ResolvesEmailFromUser(t *testing.T) {
 	phone := mustPhone(t, "+79150000001")
 	email := mustEmail(t, "owner@example.com")
 	user := h.seedUser(t, phone, &email)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	sent, err := h.svc.SendCodeByPhone(ctx, phone)
 	if err != nil || !sent {
@@ -512,7 +513,7 @@ func TestAuthenticationService_VerifyCode_UnknownPhoneWithoutEmail(t *testing.T)
 	h := newAuthServiceHarness()
 	phone := mustPhone(t, "+79150000009")
 
-	_, _, err := h.svc.VerifyCode(context.Background(), phone, nil, "123456")
+	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456")
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("VerifyCode error = %v, want ErrNotFound", err)
 	}
@@ -523,7 +524,7 @@ func TestAuthenticationService_VerifyCode_UserWithoutEmailWithoutEmail(t *testin
 	phone := mustPhone(t, "+79150000008")
 	h.seedUser(t, phone, nil)
 
-	_, _, err := h.svc.VerifyCode(context.Background(), phone, nil, "123456")
+	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456")
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("VerifyCode error = %v, want ErrNotFound", err)
 	}
@@ -534,7 +535,7 @@ func TestAuthenticationService_ExplicitEmailFlow(t *testing.T) {
 		h := newAuthServiceHarness()
 		phone := mustPhone(t, "+79150000005")
 		email := mustEmail(t, "new@example.com")
-		ctx := context.Background()
+		ctx := t.Context()
 
 		if err := h.svc.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
 			t.Fatalf("SendCode error = %v", err)
@@ -562,7 +563,7 @@ func TestAuthenticationService_ExplicitEmailFlow(t *testing.T) {
 		stored := mustEmail(t, "stored@example.com")
 		h.seedUser(t, phone, &stored)
 
-		err := h.svc.SendCode(context.Background(), phone, mustEmail(t, "other@example.com"), domain.LoginCodePurposeLogin)
+		err := h.svc.SendCode(t.Context(), phone, mustEmail(t, "other@example.com"), domain.LoginCodePurposeLogin)
 		if !errors.Is(err, ErrEmailDoesNotMatch) {
 			t.Fatalf("SendCode error = %v, want ErrEmailDoesNotMatch", err)
 		}
@@ -575,7 +576,7 @@ func TestAuthenticationService_SendCode_NewPhoneEmailPrecheck(t *testing.T) {
 		takenEmail := mustEmail(t, "taken@example.com")
 		h.seedUser(t, mustPhone(t, "+79150000010"), &takenEmail)
 
-		err := h.svc.SendCode(context.Background(), mustPhone(t, "+79150000011"), takenEmail, domain.LoginCodePurposeLogin)
+		err := h.svc.SendCode(t.Context(), mustPhone(t, "+79150000011"), takenEmail, domain.LoginCodePurposeLogin)
 		if !errors.Is(err, ErrEmailAlreadyTaken) {
 			t.Fatalf("SendCode error = %v, want ErrEmailAlreadyTaken", err)
 		}
@@ -592,7 +593,7 @@ func TestAuthenticationService_SendCode_NewPhoneEmailPrecheck(t *testing.T) {
 		phone := mustPhone(t, "+79150000012")
 		email := mustEmail(t, "free@example.com")
 
-		if err := h.svc.SendCode(context.Background(), phone, email, domain.LoginCodePurposeLogin); err != nil {
+		if err := h.svc.SendCode(t.Context(), phone, email, domain.LoginCodePurposeLogin); err != nil {
 			t.Fatalf("SendCode error = %v", err)
 		}
 		if len(h.sender.sent) != 1 {
@@ -617,7 +618,7 @@ func TestAuthenticationService_VerifyCode_InvalidCodeRecordsAttemptAndAudit(t *t
 	phone := mustPhone(t, "+79150000020")
 	email := mustEmail(t, "owner@example.com")
 	h.seedUser(t, phone, &email)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Issue a real code, then verify with a wrong one.
 	if _, err := h.svc.SendCodeByPhone(ctx, phone); err != nil {
@@ -656,7 +657,7 @@ func TestAuthenticationService_VerifyCode_TooManyAttemptsBlocks(t *testing.T) {
 	phone := mustPhone(t, "+79150000021")
 	email := mustEmail(t, "owner@example.com")
 	h.seedUser(t, phone, &email)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, err := h.svc.SendCodeByPhone(ctx, phone); err != nil {
 		t.Fatalf("SendCodeByPhone error = %v", err)
@@ -689,7 +690,7 @@ func TestAuthenticationService_VerifyCode_BlockedPhoneSkipsRecovery(t *testing.T
 	phone := mustPhone(t, "+79150000022")
 	email := mustEmail(t, "owner@example.com")
 	h.seedUser(t, phone, &email)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, err := h.svc.SendCodeByPhone(ctx, phone); err != nil {
 		t.Fatalf("SendCodeByPhone error = %v", err)
@@ -723,3 +724,159 @@ func TestAuthenticationService_VerifyCode_BlockedPhoneSkipsRecovery(t *testing.T
 			window.Failures, domain.MaxLoginFailures)
 	}
 }
+
+// TestAuthenticationService_SendCode_GetByPhoneError asserts an infrastructure
+// error from GetByPhone (not ErrNotFound) is propagated.
+func TestAuthenticationService_SendCode_GetByPhoneError(t *testing.T) {
+	stores := newFakeStores()
+	sender := &fakeCodeSender{}
+	dbErr := errors.New("db connection lost")
+
+	factory := NewTxStoreFactory(
+		&errorUserRepo{err: dbErr}, stores.codes, stores.attempts, stores.sessions,
+		auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+	)
+	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
+		CodeSender: sender, Clock: &fakeClock{now: testNow},
+		Hasher: fakeHasher{}, Logger: discardLogger(),
+	})
+	svc := NewAuthenticationService(factory, AuthenticationServiceConfig{
+		LoginCodes: loginCodes,
+		Sessions:   NewSessionService(factory, SessionServiceConfig{Hasher: fakeHasher{}}),
+		Clock:      &fakeClock{now: testNow},
+		Publisher:  &fakePublisher{},
+		Logger:     discardLogger(),
+	})
+
+	err := svc.SendCode(t.Context(),
+		mustPhone(t, "+79150000030"),
+		mustEmail(t, "owner@example.com"),
+		domain.LoginCodePurposeLogin,
+	)
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("SendCode error = %v, want wrap of dbErr", err)
+	}
+	if len(sender.sent) != 0 {
+		t.Fatalf("sender calls = %d, want 0 on get error", len(sender.sent))
+	}
+}
+
+// TestAuthenticationService_SendCode_GetByEmailError asserts an infrastructure
+// error from GetByEmail for a new phone (not ErrNotFound/nil) is propagated.
+func TestAuthenticationService_SendCode_GetByEmailError(t *testing.T) {
+	stores := newFakeStores()
+	sender := &fakeCodeSender{}
+	dbErr := errors.New("db connection lost")
+
+	// The user repo returns ErrNotFound for GetByPhone (new phone) but an
+	// infrastructure error for GetByEmail.
+	users := &errorOnGetByEmailRepo{fakeUserRepo: newFakeUserRepo(), err: dbErr}
+	factory := NewTxStoreFactory(
+		users, stores.codes, stores.attempts, stores.sessions,
+		auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+	)
+	loginCodes := NewLoginCodeService(factory, LoginCodeServiceConfig{
+		CodeSender: sender, Clock: &fakeClock{now: testNow},
+		Hasher: fakeHasher{}, Logger: discardLogger(),
+	})
+	svc := NewAuthenticationService(factory, AuthenticationServiceConfig{
+		LoginCodes: loginCodes,
+		Sessions:   NewSessionService(factory, SessionServiceConfig{Hasher: fakeHasher{}}),
+		Clock:      &fakeClock{now: testNow},
+		Publisher:  &fakePublisher{},
+		Logger:     discardLogger(),
+	})
+
+	err := svc.SendCode(t.Context(),
+		mustPhone(t, "+79150000031"), // new phone, not seeded
+		mustEmail(t, "owner@example.com"),
+		domain.LoginCodePurposeLogin,
+	)
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("SendCode error = %v, want wrap of dbErr", err)
+	}
+	if len(sender.sent) != 0 {
+		t.Fatalf("sender calls = %d, want 0 on get-by-email error", len(sender.sent))
+	}
+}
+
+// TestAuthenticationService_SendCodeByPhone_GetByPhoneError asserts an
+// infrastructure error from GetByPhone in SendCodeByPhone is propagated.
+func TestAuthenticationService_SendCodeByPhone_GetByPhoneError(t *testing.T) {
+	stores := newFakeStores()
+	dbErr := errors.New("db connection lost")
+
+	factory := NewTxStoreFactory(
+		&errorUserRepo{err: dbErr}, stores.codes, stores.attempts, stores.sessions,
+		auditapp.Noop{}, &fakeUoW{beginner: stores.beginner},
+	)
+	svc := NewAuthenticationService(factory, AuthenticationServiceConfig{
+		LoginCodes: NewLoginCodeService(factory, LoginCodeServiceConfig{
+			CodeSender: &fakeCodeSender{}, Clock: &fakeClock{now: testNow},
+			Hasher: fakeHasher{}, Logger: discardLogger(),
+		}),
+		Sessions: NewSessionService(factory, SessionServiceConfig{Hasher: fakeHasher{}}),
+		Clock:    &fakeClock{now: testNow},
+		Logger:   discardLogger(),
+	})
+
+	sent, err := svc.SendCodeByPhone(t.Context(), mustPhone(t, "+79150000032"))
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("SendCodeByPhone error = %v, want wrap of dbErr", err)
+	}
+	if sent {
+		t.Fatal("sent = true, want false on error")
+	}
+}
+
+// errorUserRepo is a UserRepository whose GetByPhone always fails with err.
+type errorUserRepo struct{ err error }
+
+func (r *errorUserRepo) GetByID(context.Context, uuid.UUID) (domain.User, error) {
+	return domain.User{}, r.err
+}
+
+func (r *errorUserRepo) GetByIDForUpdate(context.Context, uuid.UUID) (domain.User, error) {
+	return domain.User{}, r.err
+}
+
+func (r *errorUserRepo) GetByPhone(context.Context, domain.Phone) (domain.User, error) {
+	return domain.User{}, r.err
+}
+
+func (r *errorUserRepo) GetByPhoneForUpdate(context.Context, domain.Phone) (domain.User, error) {
+	return domain.User{}, r.err
+}
+
+func (r *errorUserRepo) GetByEmail(context.Context, domain.Email) (domain.User, error) {
+	return domain.User{}, r.err
+}
+
+func (r *errorUserRepo) Create(_ context.Context, user domain.User) (domain.User, error) {
+	return user, nil
+}
+
+func (r *errorUserRepo) Update(_ context.Context, user domain.User) (domain.User, error) {
+	return user, nil
+}
+
+func (r *errorUserRepo) UpdatePhone(context.Context, uuid.UUID, domain.Phone) (domain.User, error) {
+	return domain.User{}, nil
+}
+
+func (r *errorUserRepo) UpdateEmailVerified(context.Context, uuid.UUID, *domain.Email, *time.Time) (domain.User, error) {
+	return domain.User{}, nil
+}
+func (r *errorUserRepo) WithTx(transaction.Tx) (UserRepository, error) { return r, nil }
+
+// errorOnGetByEmailRepo returns ErrNotFound for GetByPhone but a custom error
+// for GetByEmail, so the new-phone email precheck path can be exercised.
+type errorOnGetByEmailRepo struct {
+	*fakeUserRepo
+	err error
+}
+
+func (r *errorOnGetByEmailRepo) GetByEmail(context.Context, domain.Email) (domain.User, error) {
+	return domain.User{}, r.err
+}
+func (r *errorOnGetByEmailRepo) WithTx(transaction.Tx) (UserRepository, error) { return r, nil }

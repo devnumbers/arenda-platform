@@ -155,3 +155,20 @@ func TestAttemptWindow_Blocked(t *testing.T) {
 		}
 	})
 }
+
+func TestNewAttemptWindow(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+	w := NewAttemptWindow(start)
+
+	if w.Failures != 0 {
+		t.Fatalf("Failures = %d, want 0 for a fresh window", w.Failures)
+	}
+	if !w.FirstFailureAt.Equal(start) {
+		t.Fatalf("FirstFailureAt = %v, want %v", w.FirstFailureAt, start)
+	}
+	if !w.LastFailureAt.Equal(start) {
+		t.Fatalf("LastFailureAt = %v, want %v", w.LastFailureAt, start)
+	}
+}
