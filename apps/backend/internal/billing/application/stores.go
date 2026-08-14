@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -18,6 +20,20 @@ type txStores struct {
 	subscriptions SubscriptionRepository
 	transitions   SubscriptionTransitionRepository
 	audit         auditapp.Recorder
+}
+
+// subscriptionForUpdate loads the user's subscription under the row lock and
+// narrows the repository miss to ErrSubscriptionNotFound — the shared first
+// step of every subscription lifecycle mutation (issue #249).
+func (s *txStores) subscriptionForUpdate(ctx context.Context, userID uuid.UUID) (domain.Subscription, error) {
+	sub, err := s.subscriptions.GetByUserIDForUpdate(ctx, userID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Subscription{}, ErrSubscriptionNotFound
+		}
+		return domain.Subscription{}, fmt.Errorf("get subscription: %w", err)
+	}
+	return sub, nil
 }
 
 // txStoreFactory holds the non-transactional billing repositories and audit

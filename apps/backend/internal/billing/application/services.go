@@ -43,7 +43,7 @@ func NewServices(factory txStoreFactory, cfg ServicesConfig) Services {
 	}
 	return Services{
 		Tariffs:       NewTariffService(factory),
-		Subscriptions: NewSubscriptionService(factory),
+		Subscriptions: NewSubscriptionService(factory, SubscriptionServiceConfig{Clock: cfg.Clock}),
 		Onboarding:    NewOnboardingService(factory, OnboardingServiceConfig{Logger: cfg.Logger}),
 		Limiter:       NewSubscriptionPropertyLimiter(factory.subscriptions, factory.tariffs, cfg.Clock),
 		Workers:       Workers{},

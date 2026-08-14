@@ -322,10 +322,17 @@ func (s *Subscription) MarkPaymentApplied(paymentID uuid.UUID) {
 }
 
 // SetAutoRenew toggles automatic subscription renewal. Enabling auto-renew is
-// only allowed when the subscription has a validity period.
+// only allowed when the subscription has a validity period and is not
+// cancelled: a cancelled subscription never renews — restoration goes through
+// paying for a tariff (ADR 0008, billing CONTEXT.md).
 func (s *Subscription) SetAutoRenew(enabled bool) error {
-	if enabled && s.ValidUntil == nil {
-		return ErrCannotEnableAutoRenew
+	if enabled {
+		if s.ValidUntil == nil {
+			return ErrCannotEnableAutoRenew
+		}
+		if s.Status == SubscriptionStatusCancelled {
+			return ErrInvalidSubscriptionState
+		}
 	}
 	s.AutoRenewEnabled = enabled
 	return nil
@@ -333,13 +340,16 @@ func (s *Subscription) SetAutoRenew(enabled bool) error {
 
 // Cancel terminates the paid subscription at the end of the already paid period.
 // The validity date is retained so the worker can downgrade the subscription to
-// basic once the period expires. Auto-renew is disabled immediately.
+// basic once the period expires. Auto-renew is disabled immediately and any
+// scheduled tariff change is dropped: a cancelled subscription no longer
+// switches tariffs, it runs out its paid period and falls to basic.
 func (s *Subscription) Cancel() error {
 	if s.Status != SubscriptionStatusActive && s.Status != SubscriptionStatusGrace {
 		return ErrInvalidSubscriptionState
 	}
 	s.Status = SubscriptionStatusCancelled
 	s.AutoRenewEnabled = false
+	s.ClearPendingChange()
 	return nil
 }
 

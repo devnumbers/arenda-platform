@@ -41,6 +41,7 @@ type Deps struct {
 	MeEnricher               identityhttp.MeEnricher
 	Tariffs                  billinghttp.TariffLister
 	Subscriptions            billinghttp.SubscriptionViewer
+	SubscriptionManagers     billinghttp.SubscriptionManager
 	ReadonlyGate             httpsupport.SubscriptionMutationChecker
 	Admin                    *adminapp.AdminService
 	Properties               *propertiesapp.PropertyService
@@ -145,7 +146,7 @@ func New(deps Deps) http.Handler {
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
-	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.Subscriptions, deps.Logger)
+	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.Subscriptions, deps.SubscriptionManagers, deps.Logger)
 	financeHandlers := leaseshttp.NewFinanceHandlers(deps.Operations)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)

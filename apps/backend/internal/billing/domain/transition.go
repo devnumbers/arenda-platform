@@ -38,6 +38,13 @@ const (
 	// TransitionReasonRegistered marks the creation of the basic subscription
 	// at user registration (issue #245 onboarding).
 	TransitionReasonRegistered TransitionReason = "registered"
+	// TransitionReasonCancelled marks a user-initiated cancellation (issue
+	// #249): the tariff keeps working until the paid period ends.
+	TransitionReasonCancelled TransitionReason = "cancelled"
+	// TransitionReasonDowngradeScheduled marks a user-initiated downgrade
+	// scheduled for the end of the paid period (issue #249); the tariff
+	// transition itself lands when the worker applies the change (#252).
+	TransitionReasonDowngradeScheduled TransitionReason = "downgrade_scheduled"
 )
 
 // Transition is one immutable entry of the subscription transition log: the
@@ -75,20 +82,8 @@ func NewTransition(
 	initiator TransitionInitiator,
 	initiatorID *uuid.UUID,
 ) (Transition, error) {
-	if reason == "" {
-		return Transition{}, ErrInvalidTransition
-	}
-	if _, err := ParseTransitionInitiator(string(initiator)); err != nil {
+	if err := validateTransitionInput(sub.ID, sub.TariffID, sub.Status, reason, initiator, initiatorID); err != nil {
 		return Transition{}, err
-	}
-	if sub.ID == uuid.Nil || sub.TariffID == uuid.Nil {
-		return Transition{}, ErrInvalidTransition
-	}
-	if !validSubscriptionStatus(sub.Status) {
-		return Transition{}, ErrInvalidTransition
-	}
-	if initiator == InitiatorSystem && initiatorID != nil {
-		return Transition{}, ErrInvalidTransition
 	}
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -105,6 +100,74 @@ func NewTransition(
 		Initiator:      initiator,
 		InitiatorID:    initiatorID,
 	}, nil
+}
+
+// NewScheduledTariffTransition builds the log entry for a tariff change that
+// was scheduled for the future (issue #249 downgrade planning) rather than
+// applied. The subscription's own state is unchanged at scheduling time, so
+// to_tariff_id records the scheduled target — the fact an incident review
+// needs — while from_status/to_status and the from-side stay at the current
+// values. The applied transition is logged separately when the change takes
+// effect (#252).
+func NewScheduledTariffTransition(
+	sub Subscription,
+	targetTariffID uuid.UUID,
+	reason TransitionReason,
+	initiator TransitionInitiator,
+	initiatorID *uuid.UUID,
+) (Transition, error) {
+	if err := validateTransitionInput(sub.ID, sub.TariffID, sub.Status, reason, initiator, initiatorID); err != nil {
+		return Transition{}, err
+	}
+	if targetTariffID == uuid.Nil {
+		return Transition{}, ErrInvalidTransition
+	}
+	id, err := uuid.NewV7()
+	if err != nil {
+		return Transition{}, err
+	}
+	fromTariffID := sub.TariffID
+	fromStatus := sub.Status
+	return Transition{
+		ID:             id,
+		SubscriptionID: sub.ID,
+		FromStatus:     &fromStatus,
+		ToStatus:       sub.Status,
+		FromTariffID:   &fromTariffID,
+		ToTariffID:     targetTariffID,
+		Reason:         reason,
+		Initiator:      initiator,
+		InitiatorID:    initiatorID,
+	}, nil
+}
+
+// validateTransitionInput checks the fields every transition constructor
+// shares: non-empty reason and initiator, resolvable subscription identity
+// and status, and no actor id for the system initiator.
+func validateTransitionInput(
+	subscriptionID uuid.UUID,
+	tariffID uuid.UUID,
+	status SubscriptionStatus,
+	reason TransitionReason,
+	initiator TransitionInitiator,
+	initiatorID *uuid.UUID,
+) error {
+	if reason == "" {
+		return ErrInvalidTransition
+	}
+	if _, err := ParseTransitionInitiator(string(initiator)); err != nil {
+		return err
+	}
+	if subscriptionID == uuid.Nil || tariffID == uuid.Nil {
+		return ErrInvalidTransition
+	}
+	if !validSubscriptionStatus(status) {
+		return ErrInvalidTransition
+	}
+	if initiator == InitiatorSystem && initiatorID != nil {
+		return ErrInvalidTransition
+	}
+	return nil
 }
 
 // ReconstituteTransition validates a Transition assembled from persisted state.

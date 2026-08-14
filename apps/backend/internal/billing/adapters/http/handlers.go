@@ -31,17 +31,26 @@ type SubscriptionViewer interface {
 	GetSubscription(ctx context.Context, userID uuid.UUID) (billingapp.SubscriptionView, error)
 }
 
+// SubscriptionManager serves the user's own subscription lifecycle mutations
+// (issue #249): cancellation, auto-renew toggling and tariff change.
+type SubscriptionManager interface {
+	CancelSubscription(ctx context.Context, userID uuid.UUID) error
+	ToggleAutoRenew(ctx context.Context, userID uuid.UUID, enabled bool) error
+	ChangeTariff(ctx context.Context, userID uuid.UUID, req billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error)
+}
+
 // BillingHandlers implements the generated billing endpoints of the
-// OpenAPI contract. In this core slice of the billing rewrite (issue #245)
-// only the view endpoints are live: GET /tariffs, GET /subscription, and the
-// admin tariff listing GET /admin/tariffs (issue #247). The remaining
-// endpoints answer 501 until their flows land — lifecycle mutations in #249,
-// payments and webhooks in #250, payment methods in #251, refunds and admin
-// payment views in #254. The user-facing contract is frozen, so the routes
-// stay mounted.
+// OpenAPI contract. The subscription lifecycle mutations of issue #249 are
+// live — PATCH /subscription/auto-renew, POST /subscription/cancel and POST
+// /subscription/change (downgrade scheduling; upgrades answer with a temporary
+// payment-unavailable error until #250). The remaining endpoints answer 501
+// until their flows land — payments and webhooks in #250, payment methods in
+// #251, refunds and admin payment views in #254. The user-facing contract is
+// frozen, so the routes stay mounted.
 type BillingHandlers struct {
 	tariffs       TariffLister
 	subscriptions SubscriptionViewer
+	managers      SubscriptionManager
 	logger        *slog.Logger
 }
 
@@ -49,6 +58,7 @@ type BillingHandlers struct {
 func NewBillingHandlers(
 	tariffs TariffLister,
 	subscriptions SubscriptionViewer,
+	managers SubscriptionManager,
 	logger *slog.Logger,
 ) *BillingHandlers {
 	if logger == nil {
@@ -57,6 +67,7 @@ func NewBillingHandlers(
 	return &BillingHandlers{
 		tariffs:       tariffs,
 		subscriptions: subscriptions,
+		managers:      managers,
 		logger:        logger,
 	}
 }
@@ -126,17 +137,89 @@ func (h *BillingHandlers) notImplemented(w http.ResponseWriter, r *http.Request)
 
 // ToggleAutoRenew implements PATCH /subscription/auto-renew (issue #249).
 func (h *BillingHandlers) ToggleAutoRenew(w http.ResponseWriter, r *http.Request) {
-	h.notImplemented(w, r)
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	var body openapi.AutoRenewRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode auto-renew request", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	if err := h.managers.ToggleAutoRenew(r.Context(), ownerID, body.Enabled); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // CancelSubscription implements POST /subscription/cancel (issue #249).
 func (h *BillingHandlers) CancelSubscription(w http.ResponseWriter, r *http.Request) {
-	h.notImplemented(w, r)
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	if err := h.managers.CancelSubscription(r.Context(), ownerID); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
-// ChangeTariff implements POST /subscription/change (issue #249).
+// ChangeTariff implements POST /subscription/change (issue #249): downgrade
+// scheduling, same-tariff rejection and the temporary payment-unavailable
+// answer for upgrades until the payment flow lands (#250).
 func (h *BillingHandlers) ChangeTariff(w http.ResponseWriter, r *http.Request) {
-	h.notImplemented(w, r)
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	var body openapi.ChangeTariffRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode change tariff request", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	tariffName, err := domain.ParseTariffName(string(body.TariffName))
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	period, err := domain.ParseSubscriptionPeriod(string(body.Period))
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	result, err := h.managers.ChangeTariff(r.Context(), ownerID, billingapp.ChangeTariffRequest{
+		TariffName: tariffName,
+		Period:     period,
+	})
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	resp := openapi.ChangeTariffResponse{}
+	if result.PaymentID != uuid.Nil {
+		id := result.PaymentID
+		resp.PaymentId = &id
+	}
+	if result.ConfirmURL != "" {
+		resp.ConfirmUrl = &result.ConfirmURL
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, resp)
 }
 
 // ListSubscriptionPayments implements GET /subscription/payments (issue #250).
@@ -217,6 +300,21 @@ func (h *BillingHandlers) handleBillingError(w http.ResponseWriter, r *http.Requ
 		errors.Is(err, billingapp.ErrTariffNotFound),
 		errors.Is(err, billingapp.ErrSubscriptionNotFound):
 		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Ресурс не найден"))
+	case errors.Is(err, billingapp.ErrPaymentUnavailable):
+		// Temporary answer for the flows that need a payment until #250 lands;
+		// deliberately outside the frozen contract's response list because it
+		// disappears with the payment flow.
+		httpsupport.WriteProblem(w, http.StatusServiceUnavailable, httpsupport.Problem(r.Context(), "Payment unavailable", "Оплата временно недоступна, попробуйте позже"))
+	case errors.Is(err, domain.ErrAlreadyOnTariff),
+		errors.Is(err, domain.ErrInvalidTariffChange),
+		errors.Is(err, domain.ErrInvalidSubscriptionState),
+		errors.Is(err, domain.ErrCannotEnableAutoRenew):
+		detail, ok := httpsupport.UserFacingDetail(err)
+		if !ok {
+			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			return
+		}
+		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", detail))
 	case errors.Is(err, domain.ErrInvalidPeriod),
 		errors.Is(err, domain.ErrInvalidTariff):
 		detail, ok := httpsupport.UserFacingDetail(err)

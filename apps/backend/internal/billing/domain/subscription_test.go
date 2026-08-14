@@ -343,6 +343,52 @@ func TestSubscriptionSetAutoRenew(t *testing.T) {
 	if err := subNoValidUntil.SetAutoRenew(true); !errors.Is(err, ErrCannotEnableAutoRenew) {
 		t.Errorf("SetAutoRenew(true) without ValidUntil error = %v, want ErrCannotEnableAutoRenew", err)
 	}
+
+	// A cancelled subscription never renews: restoration goes through paying
+	// for a tariff (ADR 0008).
+	subCancelled := Subscription{Status: SubscriptionStatusCancelled, ValidUntil: &validUntil}
+	if err := subCancelled.SetAutoRenew(true); !errors.Is(err, ErrInvalidSubscriptionState) {
+		t.Errorf("SetAutoRenew(true) on cancelled error = %v, want ErrInvalidSubscriptionState", err)
+	}
+}
+
+func TestSubscriptionCancel(t *testing.T) {
+	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	pendingAt := validUntil
+	period := PeriodMonth
+	pendingID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14")
+
+	sub := Subscription{
+		Status:           SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+		PendingTariffID:  &pendingID,
+		PendingChangeAt:  &pendingAt,
+		PendingPeriod:    &period,
+	}
+
+	if err := sub.Cancel(); err != nil {
+		t.Fatalf("Cancel() error = %v", err)
+	}
+	if sub.Status != SubscriptionStatusCancelled {
+		t.Errorf("Status = %q, want cancelled", sub.Status)
+	}
+	if sub.AutoRenewEnabled {
+		t.Error("expected auto-renew disabled")
+	}
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(validUntil) {
+		t.Errorf("ValidUntil = %v, want retained %v", sub.ValidUntil, validUntil)
+	}
+	// A cancelled subscription no longer switches tariffs: the scheduled
+	// change is dropped and the expiry path moves the user to basic.
+	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
+		t.Error("expected pending change fields cleared on cancel")
+	}
+
+	cancelled := Subscription{Status: SubscriptionStatusCancelled}
+	if err := cancelled.Cancel(); !errors.Is(err, ErrInvalidSubscriptionState) {
+		t.Errorf("second Cancel() error = %v, want ErrInvalidSubscriptionState", err)
+	}
 }
 
 func TestSubscriptionDowngradeToBasic(t *testing.T) {

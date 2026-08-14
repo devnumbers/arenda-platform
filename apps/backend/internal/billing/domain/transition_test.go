@@ -103,6 +103,56 @@ func TestNewTransition_RejectsInvalidInput(t *testing.T) {
 	}
 }
 
+func TestNewScheduledTariffTransition_RecordsTargetTariff(t *testing.T) {
+	sub := validSubscription(t)
+	target := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	actorID := uuid.New()
+
+	transition, err := NewScheduledTariffTransition(sub, target, TransitionReasonDowngradeScheduled, InitiatorUser, &actorID)
+	if err != nil {
+		t.Fatalf("NewScheduledTariffTransition() error = %v", err)
+	}
+	if transition.ToTariffID != target {
+		t.Errorf("ToTariffID = %v, want the scheduled target %v", transition.ToTariffID, target)
+	}
+	if transition.FromTariffID == nil || *transition.FromTariffID != sub.TariffID {
+		t.Errorf("FromTariffID = %v, want the current tariff %v", transition.FromTariffID, sub.TariffID)
+	}
+	if transition.ToStatus != SubscriptionStatusActive || transition.FromStatus == nil || *transition.FromStatus != SubscriptionStatusActive {
+		t.Errorf("status = %v -> %v, want active -> active (scheduling changes no status)", transition.FromStatus, transition.ToStatus)
+	}
+	if transition.Initiator != InitiatorUser || transition.InitiatorID == nil || *transition.InitiatorID != actorID {
+		t.Errorf("initiator = %q/%v, want user/%v", transition.Initiator, transition.InitiatorID, actorID)
+	}
+	if transition.CreatedAt != (time.Time{}) {
+		t.Errorf("CreatedAt = %v, want zero (set by persistence)", transition.CreatedAt)
+	}
+}
+
+func TestNewScheduledTariffTransition_RejectsInvalidInput(t *testing.T) {
+	sub := validSubscription(t)
+
+	cases := []struct {
+		name        string
+		target      uuid.UUID
+		reason      TransitionReason
+		initiator   TransitionInitiator
+		initiatorID *uuid.UUID
+	}{
+		{name: "missing target tariff", reason: TransitionReasonDowngradeScheduled, initiator: InitiatorUser},
+		{name: "empty reason", target: uuid.New(), reason: "", initiator: InitiatorUser},
+		{name: "unknown initiator", target: uuid.New(), reason: TransitionReasonDowngradeScheduled, initiator: "robot"},
+		{name: "system initiator with actor id", target: uuid.New(), reason: TransitionReasonDowngradeScheduled, initiator: InitiatorSystem, initiatorID: new(uuid.New())},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := NewScheduledTariffTransition(sub, tc.target, tc.reason, tc.initiator, tc.initiatorID); err == nil {
+				t.Fatal("NewScheduledTariffTransition() error = nil, want error")
+			}
+		})
+	}
+}
+
 func TestParseTransitionInitiator(t *testing.T) {
 	for _, raw := range []string{"user", "admin", "system"} {
 		if _, err := ParseTransitionInitiator(raw); err != nil {

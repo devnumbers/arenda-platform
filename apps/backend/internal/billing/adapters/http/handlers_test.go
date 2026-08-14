@@ -49,16 +49,48 @@ func (f *fakeSubscriptionViewer) GetSubscription(ctx context.Context, userID uui
 	return billingapp.SubscriptionView{}, errors.New("unexpected GetSubscription call")
 }
 
+// fakeSubscriptionManager is a func-backed SubscriptionManager (the
+// consumer-side port of these handlers, ADR 0035).
+type fakeSubscriptionManager struct {
+	cancel       func(ctx context.Context, userID uuid.UUID) error
+	toggleRenew  func(ctx context.Context, userID uuid.UUID, enabled bool) error
+	changeTariff func(ctx context.Context, userID uuid.UUID, req billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error)
+}
+
+func (f *fakeSubscriptionManager) CancelSubscription(ctx context.Context, userID uuid.UUID) error {
+	if f.cancel != nil {
+		return f.cancel(ctx, userID)
+	}
+	return errors.New("unexpected CancelSubscription call")
+}
+
+func (f *fakeSubscriptionManager) ToggleAutoRenew(ctx context.Context, userID uuid.UUID, enabled bool) error {
+	if f.toggleRenew != nil {
+		return f.toggleRenew(ctx, userID, enabled)
+	}
+	return errors.New("unexpected ToggleAutoRenew call")
+}
+
+func (f *fakeSubscriptionManager) ChangeTariff(ctx context.Context, userID uuid.UUID, req billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error) {
+	if f.changeTariff != nil {
+		return f.changeTariff(ctx, userID, req)
+	}
+	return billingapp.ChangeTariffResult{}, errors.New("unexpected ChangeTariff call")
+}
+
 // newTestHandlers builds handlers over the given fakes; a nil fake is
 // replaced by a stub that fails the test when called.
-func newTestHandlers(tariffs TariffLister, subs SubscriptionViewer) *BillingHandlers {
+func newTestHandlers(tariffs TariffLister, subs SubscriptionViewer, managers SubscriptionManager) *BillingHandlers {
 	if tariffs == nil {
 		tariffs = &fakeTariffLister{}
 	}
 	if subs == nil {
 		subs = &fakeSubscriptionViewer{}
 	}
-	return NewBillingHandlers(tariffs, subs, nil)
+	if managers == nil {
+		managers = &fakeSubscriptionManager{}
+	}
+	return NewBillingHandlers(tariffs, subs, managers, nil)
 }
 
 // ownerRequest builds a request authenticated as the given owner.
@@ -81,7 +113,7 @@ func TestListTariffs_MapsDomainTariffsToContract(t *testing.T) {
 			{Name: domain.TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true},
 			{Name: domain.TariffBusiness, ActivePropertyLimit: -1, MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000, IsActive: true},
 		}, nil
-	}}, nil)
+	}}, nil, nil)
 
 	w := httptest.NewRecorder()
 	h.ListTariffs(w, ownerRequest(t, http.MethodGet, "/tariffs", ownerID))
@@ -112,7 +144,7 @@ func TestListTariffs_MapsDomainTariffsToContract(t *testing.T) {
 // TestListTariffs_RequiresOwner proves the endpoint rejects unauthenticated
 // calls with 401 before touching the service.
 func TestListTariffs_RequiresOwner(t *testing.T) {
-	h := newTestHandlers(nil, nil)
+	h := newTestHandlers(nil, nil, nil)
 
 	w := httptest.NewRecorder()
 	h.ListTariffs(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/tariffs", http.NoBody))
@@ -133,7 +165,7 @@ func TestListAdminTariffs_MapsDomainTariffsToContract(t *testing.T) {
 			{ID: uuid.New(), Name: domain.TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true},
 			{ID: hiddenID, Name: domain.TariffBusiness, ActivePropertyLimit: -1, MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000, IsActive: false},
 		}, nil
-	}}, nil)
+	}}, nil, nil)
 
 	w := httptest.NewRecorder()
 	h.ListAdminTariffs(w, ownerRequest(t, http.MethodGet, "/admin/tariffs", uuid.New()))
@@ -171,7 +203,7 @@ func TestListAdminTariffs_MapsDomainTariffsToContract(t *testing.T) {
 func TestListAdminTariffs_InfrastructureErrorIs500(t *testing.T) {
 	h := newTestHandlers(&fakeTariffLister{listAll: func(context.Context) ([]domain.Tariff, error) {
 		return nil, errors.New("connection reset by peer")
-	}}, nil)
+	}}, nil, nil)
 
 	w := httptest.NewRecorder()
 	h.ListAdminTariffs(w, ownerRequest(t, http.MethodGet, "/admin/tariffs", uuid.New()))
@@ -212,7 +244,7 @@ func TestGetSubscription_MapsViewToContract(t *testing.T) {
 			Tariff:        domain.Tariff{Name: domain.TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000},
 			PendingTariff: &domain.Tariff{Name: domain.TariffBasic, ActivePropertyLimit: 1},
 		}, nil
-	}})
+	}}, nil)
 
 	w := httptest.NewRecorder()
 	h.GetSubscription(w, ownerRequest(t, http.MethodGet, "/subscription", ownerID))
@@ -268,7 +300,7 @@ func TestGetSubscription_MapsViewToContract(t *testing.T) {
 func TestGetSubscription_NotFoundIsProblem(t *testing.T) {
 	h := newTestHandlers(nil, &fakeSubscriptionViewer{get: func(context.Context, uuid.UUID) (billingapp.SubscriptionView, error) {
 		return billingapp.SubscriptionView{}, billingapp.ErrSubscriptionNotFound
-	}})
+	}}, nil)
 
 	w := httptest.NewRecorder()
 	h.GetSubscription(w, ownerRequest(t, http.MethodGet, "/subscription", uuid.New()))
@@ -293,7 +325,7 @@ func TestGetSubscription_NotFoundIsProblem(t *testing.T) {
 func TestGetSubscription_InfrastructureErrorIs500(t *testing.T) {
 	h := newTestHandlers(nil, &fakeSubscriptionViewer{get: func(context.Context, uuid.UUID) (billingapp.SubscriptionView, error) {
 		return billingapp.SubscriptionView{}, errors.New("connection reset by peer")
-	}})
+	}}, nil)
 
 	w := httptest.NewRecorder()
 	h.GetSubscription(w, ownerRequest(t, http.MethodGet, "/subscription", uuid.New()))
@@ -308,9 +340,9 @@ func TestGetSubscription_InfrastructureErrorIs500(t *testing.T) {
 }
 
 // TestDeferredEndpoints_Answer501 proves the endpoints whose flows return with
-// later tickets (#249–#254) answer 501 instead of pretending to work.
+// later tickets (#250–#254) answer 501 instead of pretending to work.
 func TestDeferredEndpoints_Answer501(t *testing.T) {
-	h := newTestHandlers(nil, nil)
+	h := newTestHandlers(nil, nil, nil)
 	ownerID := uuid.New()
 
 	cases := []struct {
@@ -319,9 +351,6 @@ func TestDeferredEndpoints_Answer501(t *testing.T) {
 		method string
 		path   string
 	}{
-		{name: "cancel", call: h.CancelSubscription, method: http.MethodPost, path: "/subscription/cancel"},
-		{name: "auto-renew", call: h.ToggleAutoRenew, method: http.MethodPatch, path: "/subscription/auto-renew"},
-		{name: "change", call: h.ChangeTariff, method: http.MethodPost, path: "/subscription/change"},
 		{name: "payments", call: h.ListSubscriptionPayments, method: http.MethodGet, path: "/subscription/payments"},
 		{name: "payment-methods", call: h.ListPaymentMethods, method: http.MethodGet, path: "/subscription/payment-methods"},
 	}
@@ -331,6 +360,253 @@ func TestDeferredEndpoints_Answer501(t *testing.T) {
 			tc.call(w, ownerRequest(t, tc.method, tc.path, ownerID))
 			if w.Code != http.StatusNotImplemented {
 				t.Fatalf("status = %d, want 501; body: %s", w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+// ownerJSONRequest builds an owner-authenticated request with a JSON body.
+func ownerJSONRequest(t *testing.T, method, target string, userID uuid.UUID, body string) *http.Request {
+	t.Helper()
+	return httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), userID),
+		method, target, strings.NewReader(body),
+	)
+}
+
+// TestCancelSubscription_Returns204 proves POST /subscription/cancel answers
+// 204 and forwards the owner id to the service (issue #249).
+func TestCancelSubscription_Returns204(t *testing.T) {
+	ownerID := uuid.New()
+	called := false
+	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{cancel: func(_ context.Context, got uuid.UUID) error {
+		called = true
+		if got != ownerID {
+			t.Errorf("CancelSubscription called with %v, want %v", got, ownerID)
+		}
+		return nil
+	}})
+
+	w := httptest.NewRecorder()
+	h.CancelSubscription(w, ownerRequest(t, http.MethodPost, "/subscription/cancel", ownerID))
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
+	}
+	if !called {
+		t.Error("service was not called")
+	}
+}
+
+// TestCancelSubscription_RequiresOwner proves the endpoint rejects
+// unauthenticated calls with 401 before touching the service.
+func TestCancelSubscription_RequiresOwner(t *testing.T) {
+	h := newTestHandlers(nil, nil, nil)
+
+	w := httptest.NewRecorder()
+	h.CancelSubscription(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/subscription/cancel", http.NoBody))
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", w.Code)
+	}
+}
+
+// TestCancelSubscription_ErrorMapping proves the service sentinels map to the
+// frozen contract statuses: 404 for a missing subscription, 409 for an invalid
+// state.
+func TestCancelSubscription_ErrorMapping(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{name: "no subscription", err: billingapp.ErrSubscriptionNotFound, want: http.StatusNotFound},
+		{name: "already cancelled", err: domain.ErrInvalidSubscriptionState, want: http.StatusConflict},
+		{name: "infrastructure", err: errors.New("connection reset"), want: http.StatusInternalServerError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandlers(nil, nil, &fakeSubscriptionManager{cancel: func(context.Context, uuid.UUID) error {
+				return tc.err
+			}})
+
+			w := httptest.NewRecorder()
+			h.CancelSubscription(w, ownerRequest(t, http.MethodPost, "/subscription/cancel", uuid.New()))
+
+			if w.Code != tc.want {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
+			}
+		})
+	}
+}
+
+// TestToggleAutoRenew_Returns204AndForwardsBody proves PATCH
+// /subscription/auto-renew decodes the contract body and answers 204 (issue
+// #249).
+func TestToggleAutoRenew_Returns204AndForwardsBody(t *testing.T) {
+	ownerID := uuid.New()
+	var gotEnabled bool
+	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{toggleRenew: func(_ context.Context, got uuid.UUID, enabled bool) error {
+		if got != ownerID {
+			t.Errorf("ToggleAutoRenew called with %v, want %v", got, ownerID)
+		}
+		gotEnabled = enabled
+		return nil
+	}})
+
+	w := httptest.NewRecorder()
+	h.ToggleAutoRenew(w, ownerJSONRequest(t, http.MethodPatch, "/subscription/auto-renew", ownerID, `{"enabled": true}`))
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
+	}
+	if !gotEnabled {
+		t.Error("service received enabled = false, want true")
+	}
+}
+
+// TestToggleAutoRenew_RejectsBadBody proves a malformed body answers 400
+// before the service is reached.
+func TestToggleAutoRenew_RejectsBadBody(t *testing.T) {
+	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{toggleRenew: func(context.Context, uuid.UUID, bool) error {
+		t.Error("service must not be called on a malformed body")
+		return nil
+	}})
+
+	w := httptest.NewRecorder()
+	h.ToggleAutoRenew(w, ownerJSONRequest(t, http.MethodPatch, "/subscription/auto-renew", uuid.New(), `{enabled`))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestToggleAutoRenew_CannotEnableMapsTo409 proves the domain rule "no
+// auto-renew without a validity period" answers 409 with a user-facing
+// detail.
+func TestToggleAutoRenew_CannotEnableMapsTo409(t *testing.T) {
+	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{toggleRenew: func(context.Context, uuid.UUID, bool) error {
+		return domain.ErrCannotEnableAutoRenew
+	}})
+
+	w := httptest.NewRecorder()
+	h.ToggleAutoRenew(w, ownerJSONRequest(t, http.MethodPatch, "/subscription/auto-renew", uuid.New(), `{"enabled": true}`))
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "автопродление") {
+		t.Errorf("body = %s, want a user-facing detail about auto-renew", w.Body.String())
+	}
+}
+
+// TestChangeTariff_DowngradeReturnsEmptyResult proves POST
+// /subscription/change answers 200 with the contract shape on the free
+// downgrade path: paymentId and confirmUrl are null (issue #249).
+func TestChangeTariff_DowngradeReturnsEmptyResult(t *testing.T) {
+	ownerID := uuid.New()
+	var gotReq billingapp.ChangeTariffRequest
+	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(_ context.Context, got uuid.UUID, req billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error) {
+		if got != ownerID {
+			t.Errorf("ChangeTariff called with %v, want %v", got, ownerID)
+		}
+		gotReq = req
+		return billingapp.ChangeTariffResult{}, nil
+	}})
+
+	w := httptest.NewRecorder()
+	h.ChangeTariff(w, ownerJSONRequest(t, http.MethodPost, "/subscription/change", ownerID, `{"tariffName":"pro","period":"year"}`))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if gotReq.TariffName != domain.TariffPro || gotReq.Period != domain.PeriodYear {
+		t.Errorf("service request = %+v, want pro/year", gotReq)
+	}
+	var resp struct {
+		PaymentID  *uuid.UUID `json:"paymentId"`
+		ConfirmURL *string    `json:"confirmUrl"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.PaymentID != nil || resp.ConfirmURL != nil {
+		t.Errorf("response = %+v, want null paymentId and confirmUrl", resp)
+	}
+}
+
+// TestChangeTariff_UpgradeTemporarilyUnavailable proves an upgrade answers
+// 503 with an explicit payment-unavailable problem until the payment flow
+// lands (issue #250).
+func TestChangeTariff_UpgradeTemporarilyUnavailable(t *testing.T) {
+	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(context.Context, uuid.UUID, billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error) {
+		return billingapp.ChangeTariffResult{}, billingapp.ErrPaymentUnavailable
+	}})
+
+	w := httptest.NewRecorder()
+	h.ChangeTariff(w, ownerJSONRequest(t, http.MethodPost, "/subscription/change", uuid.New(), `{"tariffName":"business","period":"month"}`))
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Оплата временно недоступна") {
+		t.Errorf("body = %s, want the explicit payment-unavailable detail", w.Body.String())
+	}
+}
+
+// TestChangeTariff_ErrorMapping proves the request-validation and state
+// sentinels map to the frozen contract statuses.
+func TestChangeTariff_ErrorMapping(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{name: "same tariff", err: domain.ErrAlreadyOnTariff, want: http.StatusConflict},
+		{name: "invalid state", err: domain.ErrInvalidSubscriptionState, want: http.StatusConflict},
+		{name: "unknown tariff", err: billingapp.ErrTariffNotFound, want: http.StatusNotFound},
+		{name: "infrastructure", err: errors.New("disk full"), want: http.StatusInternalServerError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(context.Context, uuid.UUID, billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error) {
+				return billingapp.ChangeTariffResult{}, tc.err
+			}})
+
+			w := httptest.NewRecorder()
+			h.ChangeTariff(w, ownerJSONRequest(t, http.MethodPost, "/subscription/change", uuid.New(), `{"tariffName":"pro","period":"month"}`))
+
+			if w.Code != tc.want {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
+			}
+		})
+	}
+}
+
+// TestChangeTariff_RejectsInvalidInput proves a malformed body, an unknown
+// tariff name and an unknown period answer 400 before the service is
+// reached.
+func TestChangeTariff_RejectsInvalidInput(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{name: "malformed body", body: `{"tariffName":`},
+		{name: "unknown tariff name", body: `{"tariffName":"gold","period":"month"}`},
+		{name: "unknown period", body: `{"tariffName":"pro","period":"week"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(context.Context, uuid.UUID, billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error) {
+				t.Error("service must not be called on invalid input")
+				return billingapp.ChangeTariffResult{}, nil
+			}})
+
+			w := httptest.NewRecorder()
+			h.ChangeTariff(w, ownerJSONRequest(t, http.MethodPost, "/subscription/change", uuid.New(), tc.body))
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
 			}
 		})
 	}

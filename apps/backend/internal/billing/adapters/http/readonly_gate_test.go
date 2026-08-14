@@ -82,7 +82,7 @@ func newGate(sub domain.Subscription, subErr error, now time.Time) *MutationGate
 		nil,
 		nil,
 	)
-	return NewMutationGate(billingapp.NewSubscriptionService(factory), clockOn(now))
+	return NewMutationGate(billingapp.NewSubscriptionService(factory, billingapp.SubscriptionServiceConfig{}), clockOn(now))
 }
 
 type clockOn time.Time

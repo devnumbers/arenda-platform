@@ -12,6 +12,11 @@ var (
 	// (yet). Consumers treat it as "no subscription" rather than an error:
 	// the readonly gate allows mutations, /me omits the field.
 	ErrSubscriptionNotFound = errors.New("subscription not found")
+	// ErrPaymentUnavailable is the explicit temporary error for the flows
+	// that require a payment until the payment ticket lands (issue #249:
+	// upgrades and same-tariff grace renewals answer with it; issue #250
+	// replaces it with the real payment initiation).
+	ErrPaymentUnavailable = errors.New("payment unavailable")
 
 	// Provider sentinels classify provider outcomes the application acts
 	// on beyond success/failure. They are provider-neutral by contract

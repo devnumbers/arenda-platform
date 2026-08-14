@@ -246,6 +246,7 @@ func run() error {
 		MeEnricher:               wire.BillingMeEnricher(billingMod.Services.Subscriptions),
 		Tariffs:                  billingMod.Services.Tariffs,
 		Subscriptions:            billingMod.Services.Subscriptions,
+		SubscriptionManagers:     billingMod.Services.Subscriptions,
 		ReadonlyGate:             billingMod.MutationGate,
 		Admin:                    adminMod.Service,
 		Properties:               propertiesMod.PropertyService,

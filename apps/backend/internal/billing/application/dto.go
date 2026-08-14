@@ -1,6 +1,7 @@
 package application
 
 import (
+	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
 
@@ -11,4 +12,20 @@ type SubscriptionView struct {
 	Subscription  domain.Subscription
 	Tariff        domain.Tariff
 	PendingTariff *domain.Tariff
+}
+
+// ChangeTariffRequest is the application-layer input of the tariff-change use
+// case: the target plan by canonical name and the billing period to apply.
+type ChangeTariffRequest struct {
+	TariffName domain.TariffName
+	Period     domain.SubscriptionPeriod
+}
+
+// ChangeTariffResult is the outcome of the tariff-change use case. The
+// downgrade path schedules the change and returns zero values: no payment is
+// involved. PaymentID and ConfirmURL are populated by the payment flow (issue
+// #250) for upgrades and same-tariff grace renewals.
+type ChangeTariffResult struct {
+	PaymentID  uuid.UUID
+	ConfirmURL string
 }

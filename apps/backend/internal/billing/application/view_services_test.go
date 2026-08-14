@@ -63,7 +63,7 @@ func TestTariffService_ListAllTariffs_ReturnsHiddenToo(t *testing.T) {
 func TestSubscriptionService_GetSubscription_AssemblesView(t *testing.T) {
 	tariffs := testTariffs()
 	stores := newFakeStores(tariffs...)
-	svc := NewSubscriptionService(stores.factory(nil))
+	svc := NewSubscriptionService(stores.factory(nil), SubscriptionServiceConfig{})
 	userID := uuid.New()
 
 	sub, err := domain.NewBasicSubscription(userID, tariffs[0].ID)
@@ -92,7 +92,7 @@ func TestSubscriptionService_GetSubscription_AssemblesView(t *testing.T) {
 // TestSubscriptionService_GetSubscription_NotFound proves a user without a
 // subscription maps to ErrSubscriptionNotFound.
 func TestSubscriptionService_GetSubscription_NotFound(t *testing.T) {
-	svc := NewSubscriptionService(newFakeStores().factory(nil))
+	svc := NewSubscriptionService(newFakeStores().factory(nil), SubscriptionServiceConfig{})
 
 	_, err := svc.GetSubscription(t.Context(), uuid.New())
 	if !errors.Is(err, ErrSubscriptionNotFound) {
