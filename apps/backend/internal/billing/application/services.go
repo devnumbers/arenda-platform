@@ -10,10 +10,11 @@ import (
 // every consumer (HTTP handlers, event subscribers, cross-context bridges,
 // workers) is wired against.
 type Services struct {
-	Tariffs       *TariffService
-	Subscriptions *SubscriptionService
-	Payments      *PaymentService
-	Onboarding    *OnboardingService
+	Tariffs        *TariffService
+	Subscriptions  *SubscriptionService
+	Payments       *PaymentService
+	PaymentMethods *PaymentMethodService
+	Onboarding     *OnboardingService
 	// Limiter computes the active-property limit from the user's subscription;
 	// the properties and access contexts consume it through their bridge
 	// adapters (issue #245 reconnect).
@@ -47,12 +48,13 @@ func NewServices(factory txStoreFactory, cfg ServicesConfig) Services {
 		cfg.Logger = slog.Default()
 	}
 	return Services{
-		Tariffs:       NewTariffService(factory),
-		Subscriptions: NewSubscriptionService(factory, SubscriptionServiceConfig{Clock: cfg.Clock, Provider: cfg.Provider, Config: cfg.Config, Logger: cfg.Logger}),
-		Payments:      NewPaymentService(factory, cfg.Provider, PaymentServiceConfig{Clock: cfg.Clock, Log: cfg.Logger}),
-		Onboarding:    NewOnboardingService(factory, OnboardingServiceConfig{Logger: cfg.Logger}),
-		Limiter:       NewSubscriptionPropertyLimiter(factory.subscriptions, factory.tariffs, cfg.Clock),
-		Workers:       Workers{},
-		Config:        cfg.Config,
+		Tariffs:        NewTariffService(factory),
+		Subscriptions:  NewSubscriptionService(factory, SubscriptionServiceConfig{Clock: cfg.Clock, Provider: cfg.Provider, Config: cfg.Config, Logger: cfg.Logger}),
+		Payments:       NewPaymentService(factory, cfg.Provider, PaymentServiceConfig{Clock: cfg.Clock, Log: cfg.Logger}),
+		PaymentMethods: NewPaymentMethodService(factory, cfg.Provider, PaymentMethodServiceConfig{Config: cfg.Config, Clock: cfg.Clock, Log: cfg.Logger}),
+		Onboarding:     NewOnboardingService(factory, OnboardingServiceConfig{Logger: cfg.Logger}),
+		Limiter:        NewSubscriptionPropertyLimiter(factory.subscriptions, factory.tariffs, cfg.Clock),
+		Workers:        Workers{},
+		Config:         cfg.Config,
 	}
 }

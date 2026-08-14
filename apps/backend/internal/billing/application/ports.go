@@ -54,3 +54,43 @@ type SubscriptionPaymentRepository interface {
 	Update(ctx context.Context, payment domain.SubscriptionPayment) error
 	WithTx(tx transaction.Tx) (SubscriptionPaymentRepository, error)
 }
+
+// PaymentMethodRepository is the persistence port for payment methods
+// (issue #251). The ForUpdate variant acquires a row-level pessimistic lock
+// and must only be called inside a transaction. Sensitive columns (charge
+// token, provider card id, expiry) are encrypted at rest by the adapter;
+// duplicate cards converge on the (user, token hash) row instead of
+// duplicating.
+type PaymentMethodRepository interface {
+	// UpsertByTokenHash inserts the method or converges on the existing row
+	// with the same user and token hash: repeated deliveries of one binding
+	// resolve to a single row and refresh its display fields.
+	UpsertByTokenHash(ctx context.Context, method domain.PaymentMethod) (domain.PaymentMethod, error)
+	GetByID(ctx context.Context, id uuid.UUID) (domain.PaymentMethod, error)
+	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.PaymentMethod, error)
+	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error)
+	// SetActive makes the method the user's single active one, deactivating
+	// every other method of the user in the same call. Must run inside a
+	// transaction.
+	SetActive(ctx context.Context, userID, methodID uuid.UUID) error
+	// Delete removes the method; an active-payment-method FK still referencing
+	// it surfaces as ErrPaymentMethodInUse (the durable backstop of the
+	// "active method cannot be deleted" rule).
+	Delete(ctx context.Context, userID, methodID uuid.UUID) error
+	WithTx(tx transaction.Tx) (PaymentMethodRepository, error)
+}
+
+// CardBindingSessionRepository is the persistence port for card-binding
+// sessions (issue #251). The ForUpdate variant acquires a row-level
+// pessimistic lock and must only be called inside a transaction.
+type CardBindingSessionRepository interface {
+	Create(ctx context.Context, session domain.CardBindingSession) (domain.CardBindingSession, error)
+	// GetByRequestKeyForUpdate resolves the add-card notification to its
+	// session under the row lock; misses narrow to ErrNotFound.
+	GetByRequestKeyForUpdate(ctx context.Context, provider domain.PaymentProvider, requestKey string) (domain.CardBindingSession, error)
+	// ListOpenByUserID returns the user's sessions still awaiting an outcome,
+	// newest first — the polling set of the sync flow.
+	ListOpenByUserID(ctx context.Context, userID uuid.UUID) ([]domain.CardBindingSession, error)
+	UpdateStatus(ctx context.Context, session domain.CardBindingSession) error
+	WithTx(tx transaction.Tx) (CardBindingSessionRepository, error)
+}

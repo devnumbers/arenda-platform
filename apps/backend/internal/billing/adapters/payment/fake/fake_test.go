@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -306,33 +307,106 @@ func TestProviderParseWebhook(t *testing.T) {
 
 func TestProviderBindingAPIs(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+	ctx := context.Background()
 
-	if _, err := p.BindPaymentMethod(context.Background(), application.BindMethodRequest{CustomerRef: "c1"}); err == nil {
-		t.Error("expected BindPaymentMethod to be unsupported")
+	if _, err := p.BindPaymentMethod(ctx, application.BindMethodRequest{}); err == nil {
+		t.Error("expected BindPaymentMethod to require a customer ref")
 	}
 
+	// The raw-token capability mints the provider-side card fields around the
+	// caller's token (issue #251): local runs drive the whole method flow
+	// without the binding form.
+	fromToken, err := p.AddPaymentMethodFromToken(ctx, "c1", "raw_token")
+	if err != nil {
+		t.Fatalf("AddPaymentMethodFromToken error: %v", err)
+	}
+	if fromToken.ChargeToken != "raw_token" || fromToken.ProviderMethodID == "" || fromToken.MaskedPan == "" {
+		t.Fatalf("method from token: got %+v, want the token with card fields", fromToken)
+	}
+	if _, err := p.AddPaymentMethodFromToken(ctx, "c1", ""); err == nil {
+		t.Error("expected AddPaymentMethodFromToken to require a token")
+	}
+
+	// A started binding is pending until confirmed and its form URL points at
+	// the local confirmation endpoint (issue #251).
+	bind, err := p.BindPaymentMethod(ctx, application.BindMethodRequest{CustomerRef: "c1"})
+	if err != nil {
+		t.Fatalf("BindPaymentMethod error: %v", err)
+	}
+	if bind.BindingID == "" {
+		t.Fatal("BindPaymentMethod must return a binding id")
+	}
+	if want := "http://localhost:8080/internal/fake-card-binding/" + bind.BindingID + "/confirm"; bind.FormURL != want {
+		t.Fatalf("FormURL: got %q, want %q", bind.FormURL, want)
+	}
+	state, err := p.PaymentMethodBinding(ctx, bind.BindingID)
+	if err != nil {
+		t.Fatalf("PaymentMethodBinding before confirm: %v", err)
+	}
+	if state.Status != application.MethodBindingPending || state.Method != nil {
+		t.Fatalf("state before confirm: got %+v, want pending without a method", state)
+	}
+
+	// Confirming completes the binding and yields the add-card event; the
+	// poll then reports the completed state with the bound method.
+	event, err := p.ConfirmCardBinding(ctx, bind.BindingID)
+	if err != nil {
+		t.Fatalf("ConfirmCardBinding error: %v", err)
+	}
+	if event.MethodBound == nil || event.MethodBound.BindingID != bind.BindingID {
+		t.Fatalf("confirm event: got %+v, want a method-bound notification", event.MethodBound)
+	}
+	if event.MethodBound.Method.ChargeToken == "" || event.MethodBound.Method.ProviderMethodID == "" {
+		t.Fatalf("bound method: got %+v, want card id and charge token", event.MethodBound.Method)
+	}
+	state, err = p.PaymentMethodBinding(ctx, bind.BindingID)
+	if err != nil {
+		t.Fatalf("PaymentMethodBinding after confirm: %v", err)
+	}
+	if state.Status != application.MethodBindingCompleted || state.Method == nil ||
+		state.Method.ChargeToken != event.MethodBound.Method.ChargeToken {
+		t.Fatalf("state after confirm: got %+v, want the completed binding", state)
+	}
+
+	// Repeated confirmation returns the same notification (idempotent at the
+	// provider; the application session state makes reprocessing a no-op).
+	again, err := p.ConfirmCardBinding(ctx, bind.BindingID)
+	if err != nil {
+		t.Fatalf("ConfirmCardBinding(repeat) error: %v", err)
+	}
+	if again.MethodBound.Method.ChargeToken != event.MethodBound.Method.ChargeToken {
+		t.Fatalf("repeat confirm changed the charge token: %q vs %q",
+			again.MethodBound.Method.ChargeToken, event.MethodBound.Method.ChargeToken)
+	}
+
+	// An unknown request key is a forgotten binding, not a hard failure.
+	if _, err := p.PaymentMethodBinding(ctx, "unknown"); !errors.Is(err, application.ErrProviderBindingNotFound) {
+		t.Errorf("PaymentMethodBinding(unknown) error = %v, want ErrProviderBindingNotFound", err)
+	}
+	if _, err := p.ConfirmCardBinding(ctx, "unknown"); !errors.Is(err, application.ErrProviderBindingNotFound) {
+		t.Errorf("ConfirmCardBinding(unknown) error = %v, want ErrProviderBindingNotFound", err)
+	}
+
+	// Programmed states still take precedence over real entries, so tests can
+	// force outcomes the local flow cannot produce.
 	method := application.SavedMethod{ProviderMethodID: "card-1", ChargeToken: "t"}
 	p.SetBindingState("binding-1", application.MethodBindingState{
 		Status: application.MethodBindingCompleted,
 		Method: &method,
 	})
-	state, err := p.PaymentMethodBinding(context.Background(), "binding-1")
+	state, err = p.PaymentMethodBinding(ctx, "binding-1")
 	if err != nil {
-		t.Fatalf("PaymentMethodBinding error: %v", err)
+		t.Fatalf("PaymentMethodBinding(programmed) error: %v", err)
 	}
 	if state.Status != application.MethodBindingCompleted || state.Method.ChargeToken != "t" {
-		t.Fatalf("state: got %+v", state)
+		t.Fatalf("programmed state: got %+v", state)
 	}
 
-	if _, err := p.PaymentMethodBinding(context.Background(), "unknown"); err == nil {
-		t.Error("expected error for unprogrammed binding id")
-	}
-
-	if err := p.RemovePaymentMethod(context.Background(), "c1", "card-1"); err != nil {
+	if err := p.RemovePaymentMethod(ctx, "c1", "card-1"); err != nil {
 		t.Errorf("RemovePaymentMethod error: %v", err)
 	}
 
-	methods, err := p.ListPaymentMethods(context.Background(), "c1")
+	methods, err := p.ListPaymentMethods(ctx, "c1")
 	if err != nil {
 		t.Fatalf("ListPaymentMethods error: %v", err)
 	}

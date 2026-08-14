@@ -43,6 +43,7 @@ type Deps struct {
 	Subscriptions        billinghttp.SubscriptionViewer
 	SubscriptionManagers billinghttp.SubscriptionManager
 	Payments             billinghttp.PaymentManager
+	PaymentMethods       billinghttp.PaymentMethodManager
 	Webhooks             billinghttp.WebhookProcessor
 	// BillingDevEndpoints enables the local-only fake-payment confirmation
 	// endpoint (APP_ENV=local, issue #250).
@@ -151,7 +152,7 @@ func New(deps Deps) http.Handler {
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
-	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.Subscriptions, deps.SubscriptionManagers, deps.Payments, deps.Webhooks, deps.BillingDevEndpoints, deps.Logger)
+	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.Subscriptions, deps.SubscriptionManagers, deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.BillingDevEndpoints, deps.Logger)
 	financeHandlers := leaseshttp.NewFinanceHandlers(deps.Operations)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)

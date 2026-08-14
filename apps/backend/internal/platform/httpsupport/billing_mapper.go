@@ -31,7 +31,24 @@ func SubscriptionResponse(view billingapp.SubscriptionView) openapi.Subscription
 		period := openapi.AdminSubscriptionPaymentPeriod(*sub.PendingPeriod)
 		resp.PendingPeriod = &period
 	}
+	if view.ActivePaymentMethod != nil {
+		method := PaymentMethodResponse(*view.ActivePaymentMethod)
+		resp.ActivePaymentMethod = &method
+	}
 	return resp
+}
+
+// PaymentMethodResponse maps a billing PaymentMethod domain value to the
+// OpenAPI PaymentMethod DTO (issue #251): display fields only — the charge
+// token stays server-side.
+func PaymentMethodResponse(m domain.PaymentMethod) openapi.PaymentMethod {
+	return openapi.PaymentMethod{
+		Id:          m.ID,
+		Provider:    string(m.Provider),
+		DisplayMask: m.DisplayMask,
+		IsActive:    m.IsActive,
+		CreatedAt:   m.CreatedAt,
+	}
 }
 
 // TariffResponse maps a billing Tariff domain value to the OpenAPI Tariff DTO.

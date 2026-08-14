@@ -25,11 +25,13 @@ import (
 // because their subscription limiters consume the tariff and subscription
 // repositories.
 type Billing struct {
-	TariffRepo       *billingpg.TariffRepository
-	SubscriptionRepo *billingpg.SubscriptionRepository
-	TransitionRepo   *billingpg.SubscriptionTransitionRepository
-	PaymentRepo      *billingpg.SubscriptionPaymentRepository
-	Services         billingapp.Services
+	TariffRepo        *billingpg.TariffRepository
+	SubscriptionRepo  *billingpg.SubscriptionRepository
+	TransitionRepo    *billingpg.SubscriptionTransitionRepository
+	PaymentRepo       *billingpg.SubscriptionPaymentRepository
+	PaymentMethodRepo *billingpg.PaymentMethodRepository
+	CardBindingRepo   *billingpg.CardBindingSessionRepository
+	Services          billingapp.Services
 	// PaymentProvider is the single active payment provider adapter behind
 	// the neutral provider port (issue #248, ADR 0038). Nil never occurs
 	// because config validation pins PAYMENT_PROVIDER to fake or tkassa.
@@ -41,13 +43,15 @@ type Billing struct {
 
 // WireBilling constructs the billing repositories, the shared txStoreFactory
 // (ADR 0033 γ-factory), every billing service of the rewritten core module
-// (issue #245), the payment flows of issue #250 and the active payment
-// provider adapter (issue #248).
+// (issue #245), the payment flows of issue #250, the payment-method flows of
+// issue #251 and the active payment provider adapter (issue #248).
 func WireBilling(ctx context.Context, p platformDeps) (*Billing, error) {
 	tariffRepo := billingpg.NewTariffRepository(p.DB, p.Cfg.TariffCacheTTL, p.Clock)
 	subscriptionRepo := billingpg.NewSubscriptionRepository(p.DB)
 	transitionRepo := billingpg.NewSubscriptionTransitionRepository(p.DB)
 	paymentRepo := billingpg.NewSubscriptionPaymentRepository(p.DB)
+	paymentMethodRepo := billingpg.NewPaymentMethodRepository(p.DB, p.Encryptor)
+	cardBindingRepo := billingpg.NewCardBindingSessionRepository(p.DB)
 
 	paymentMetrics, err := payment.NewMetrics()
 	if err != nil {
@@ -63,6 +67,8 @@ func WireBilling(ctx context.Context, p platformDeps) (*Billing, error) {
 		subscriptionRepo,
 		transitionRepo,
 		paymentRepo,
+		paymentMethodRepo,
+		cardBindingRepo,
 		p.AuditRecorder,
 		p.UoW,
 	)
@@ -80,13 +86,15 @@ func WireBilling(ctx context.Context, p platformDeps) (*Billing, error) {
 	)
 
 	return &Billing{
-		TariffRepo:       tariffRepo,
-		SubscriptionRepo: subscriptionRepo,
-		TransitionRepo:   transitionRepo,
-		PaymentRepo:      paymentRepo,
-		Services:         services,
-		PaymentProvider:  provider,
-		MutationGate:     billinghttp.NewMutationGate(services.Subscriptions, p.Clock),
+		TariffRepo:        tariffRepo,
+		SubscriptionRepo:  subscriptionRepo,
+		TransitionRepo:    transitionRepo,
+		PaymentRepo:       paymentRepo,
+		PaymentMethodRepo: paymentMethodRepo,
+		CardBindingRepo:   cardBindingRepo,
+		Services:          services,
+		PaymentProvider:   provider,
+		MutationGate:      billinghttp.NewMutationGate(services.Subscriptions, p.Clock),
 	}, nil
 }
 

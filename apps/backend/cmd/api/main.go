@@ -248,6 +248,7 @@ func run() error {
 		Subscriptions:            billingMod.Services.Subscriptions,
 		SubscriptionManagers:     billingMod.Services.Subscriptions,
 		Payments:                 billingMod.Services.Payments,
+		PaymentMethods:           billingMod.Services.PaymentMethods,
 		Webhooks:                 billingMod.Services.Payments,
 		BillingDevEndpoints:      p.Cfg.AppEnv == "local",
 		ReadonlyGate:             billingMod.MutationGate,

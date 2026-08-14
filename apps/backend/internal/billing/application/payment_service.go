@@ -21,6 +21,13 @@ type FakePaymentConfirmer interface {
 	ConfirmPayment(ctx context.Context, internalPaymentID string) (WebhookEvent, error)
 }
 
+// FakeCardBindingConfirmer completes a card binding at the provider from the
+// local dev endpoint (issue #251) — the same consumer-side pattern as
+// FakePaymentConfirmer.
+type FakeCardBindingConfirmer interface {
+	ConfirmCardBinding(ctx context.Context, requestKey string) (WebhookEvent, error)
+}
+
 // paymentFinalizerProvider is the narrow provider slice the payment service
 // needs: parsing and acknowledging webhooks, querying the provider-side
 // payment status, and the provider identity. Declared here, at the consumer,
@@ -117,12 +124,66 @@ func (s *PaymentService) HandleWebhook(ctx context.Context, providerName string,
 	case event.Payment != nil:
 		return s.handlePaymentNotification(ctx, event.Payment)
 	case event.MethodBound != nil:
-		// The card-binding flow lands with issue #251; until then no binding
-		// can be initiated, so such a notification cannot be legitimate.
-		return fmt.Errorf("%w: method-bound notification", ErrWebhookUnsupported)
+		return s.applyMethodBoundNotification(ctx, event.MethodBound)
 	default:
 		return fmt.Errorf("%w: empty event", ErrWebhookUnsupported)
 	}
+}
+
+// applyMethodBoundNotification applies a completed payment-method binding
+// synchronously (issue #251, ADR 0039): the notification resolves to the
+// session started by AddPaymentMethod by its request key, and one transaction
+// creates (or converges on) the payment method, activates it, links it to the
+// subscription and closes the session. The whole delivery is idempotent: a
+// repeated notification resolves to a no-op. A session past its TTL never
+// creates a card; an unknown request key cannot be fixed by a retry and is
+// answered as processed so the provider stops redelivering.
+func (s *PaymentService) applyMethodBoundNotification(ctx context.Context, n *MethodBoundNotification) error {
+	now := s.clock.Now().UTC()
+	return s.runInTx(ctx, func(stores *txStores) error {
+		session, err := stores.bindings.GetByRequestKeyForUpdate(ctx, s.provider.Name(), n.BindingID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				s.log.WarnContext(ctx, "method-bound webhook for unknown binding session; ignoring",
+					slog.String("binding_id", n.BindingID),
+					slog.String("provider", string(s.provider.Name())))
+				return nil
+			}
+			return fmt.Errorf("get card binding session: %w", err)
+		}
+		if !session.IsOpen() {
+			// Duplicate delivery of an already-resolved session.
+			return nil
+		}
+		if session.IsExpired(now) {
+			// The binding's lifetime is over: no card may be created from it,
+			// whatever the provider reports now.
+			if err := session.MarkRejected(now); err != nil {
+				return err
+			}
+			if err := stores.bindings.UpdateStatus(ctx, session); err != nil {
+				return fmt.Errorf("reject expired card binding session: %w", err)
+			}
+			s.log.InfoContext(ctx, "expired card binding session rejected by webhook",
+				slog.String("binding_id", n.BindingID),
+				slog.String("user_id", session.UserID.String()))
+			return nil
+		}
+		if n.Method.ChargeToken == "" {
+			// A completed binding without a charge token is a provider defect
+			// no retry can fix; the session stays open and expires by TTL.
+			return fmt.Errorf("%w: binding %s completed without a charge token", ErrWebhookRejected, n.BindingID)
+		}
+		method, err := domain.NewPaymentMethod(session.UserID, session.Provider, n.Method.ChargeToken, now)
+		if err != nil {
+			return err
+		}
+		method.ProviderCardID = n.Method.ProviderMethodID
+		method.DisplayMask = n.Method.MaskedPan
+		method.ExpDate = n.Method.ExpDate
+		_, err = applyCompletedCardBinding(ctx, stores, s.log, method, &session, now)
+		return err
+	})
 }
 
 // handlePaymentNotification applies one payment-status notification. Terminal
@@ -483,4 +544,30 @@ func (s *PaymentService) confirmFromProviderStatus(ctx context.Context, payment 
 		ErrorCode:         errorCode,
 		AmountKopecks:     payment.AmountKopecks,
 	})
+}
+
+// ConfirmFakeCardBinding completes a pending card binding through the fake
+// provider's local confirmation hook (POST
+// /internal/fake-card-binding/{requestKey}/confirm, APP_ENV=local only,
+// issue #251). The confirmed event flows through the same synchronous
+// application path as the add-card webhook, so local end-to-end runs exercise
+// production behaviour. Confirming an already-resolved binding is an
+// idempotent no-op; an unknown request key answers ErrNotFound.
+func (s *PaymentService) ConfirmFakeCardBinding(ctx context.Context, requestKey string) error {
+	confirmer, ok := s.provider.(FakeCardBindingConfirmer)
+	if !ok {
+		return ErrPaymentNotConfirmable
+	}
+
+	event, err := confirmer.ConfirmCardBinding(ctx, requestKey)
+	if err != nil {
+		if errors.Is(err, ErrProviderBindingNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("confirm fake card binding: %w", err)
+	}
+	if event.MethodBound == nil {
+		return fmt.Errorf("%w: confirm returned no method-bound event", ErrWebhookUnsupported)
+	}
+	return s.applyMethodBoundNotification(ctx, event.MethodBound)
 }

@@ -72,6 +72,55 @@ func (q *Queries) CountActiveSubscriptionsAdmin(ctx context.Context) (int64, err
 	return count, err
 }
 
+const createCardBindingSession = `-- name: CreateCardBindingSession :one
+
+INSERT INTO card_binding_sessions (
+    id,
+    user_id,
+    provider,
+    request_key,
+    status,
+    expires_at
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, user_id, provider, request_key, status, expires_at, created_at, updated_at
+`
+
+type CreateCardBindingSessionParams struct {
+	ID         pgtype.UUID        `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	Provider   string             `json:"provider"`
+	RequestKey string             `json:"request_key"`
+	Status     string             `json:"status"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+}
+
+// Card binding sessions (issue #251). One row per initiated provider binding;
+// the request key is unique per provider, and open sessions are resolved by
+// status polling or the add-card webhook before the TTL expires.
+func (q *Queries) CreateCardBindingSession(ctx context.Context, arg CreateCardBindingSessionParams) (CardBindingSession, error) {
+	row := q.db.QueryRow(ctx, createCardBindingSession,
+		arg.ID,
+		arg.UserID,
+		arg.Provider,
+		arg.RequestKey,
+		arg.Status,
+		arg.ExpiresAt,
+	)
+	var i CardBindingSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.RequestKey,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createSubscription = `-- name: CreateSubscription :one
 INSERT INTO user_subscriptions (
     id,
@@ -229,6 +278,103 @@ func (q *Queries) CreateSubscriptionPayment(ctx context.Context, arg CreateSubsc
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SucceededAt,
+	)
+	return i, err
+}
+
+const deactivateAllPaymentMethodsForUser = `-- name: DeactivateAllPaymentMethodsForUser :exec
+UPDATE payment_methods
+SET is_active = false, updated_at = now()
+WHERE user_id = $1
+`
+
+func (q *Queries) DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deactivateAllPaymentMethodsForUser, userID)
+	return err
+}
+
+const deletePaymentMethodByID = `-- name: DeletePaymentMethodByID :exec
+DELETE FROM payment_methods WHERE id = $1 AND user_id = $2
+`
+
+type DeletePaymentMethodByIDParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+// Owner-scoped: the row must belong to the user issuing the deletion.
+func (q *Queries) DeletePaymentMethodByID(ctx context.Context, arg DeletePaymentMethodByIDParams) error {
+	_, err := q.db.Exec(ctx, deletePaymentMethodByID, arg.ID, arg.UserID)
+	return err
+}
+
+const getCardBindingSessionByRequestKeyForUpdate = `-- name: GetCardBindingSessionByRequestKeyForUpdate :one
+SELECT id, user_id, provider, request_key, status, expires_at, created_at, updated_at FROM card_binding_sessions WHERE provider = $1 AND request_key = $2 FOR UPDATE
+`
+
+type GetCardBindingSessionByRequestKeyForUpdateParams struct {
+	Provider   string `json:"provider"`
+	RequestKey string `json:"request_key"`
+}
+
+func (q *Queries) GetCardBindingSessionByRequestKeyForUpdate(ctx context.Context, arg GetCardBindingSessionByRequestKeyForUpdateParams) (CardBindingSession, error) {
+	row := q.db.QueryRow(ctx, getCardBindingSessionByRequestKeyForUpdate, arg.Provider, arg.RequestKey)
+	var i CardBindingSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.RequestKey,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPaymentMethodByID = `-- name: GetPaymentMethodByID :one
+SELECT id, user_id, provider, provider_token, token_hash, provider_card_id, display_mask, exp_date, is_active, created_at, updated_at FROM payment_methods WHERE id = $1
+`
+
+func (q *Queries) GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, getPaymentMethodByID, id)
+	var i PaymentMethod
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderToken,
+		&i.TokenHash,
+		&i.ProviderCardID,
+		&i.DisplayMask,
+		&i.ExpDate,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPaymentMethodByIDForUpdate = `-- name: GetPaymentMethodByIDForUpdate :one
+SELECT id, user_id, provider, provider_token, token_hash, provider_card_id, display_mask, exp_date, is_active, created_at, updated_at FROM payment_methods WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.UUID) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, getPaymentMethodByIDForUpdate, id)
+	var i PaymentMethod
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderToken,
+		&i.TokenHash,
+		&i.ProviderCardID,
+		&i.DisplayMask,
+		&i.ExpDate,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -504,6 +650,77 @@ func (q *Queries) ListAllTariffs(ctx context.Context) ([]Tariff, error) {
 	return items, nil
 }
 
+const listOpenCardBindingSessionsByUserID = `-- name: ListOpenCardBindingSessionsByUserID :many
+SELECT id, user_id, provider, request_key, status, expires_at, created_at, updated_at FROM card_binding_sessions
+WHERE user_id = $1 AND status = 'new'
+ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error) {
+	rows, err := q.db.Query(ctx, listOpenCardBindingSessionsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CardBindingSession{}
+	for rows.Next() {
+		var i CardBindingSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Provider,
+			&i.RequestKey,
+			&i.Status,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentMethodsByUserID = `-- name: ListPaymentMethodsByUserID :many
+SELECT id, user_id, provider, provider_token, token_hash, provider_card_id, display_mask, exp_date, is_active, created_at, updated_at FROM payment_methods WHERE user_id = $1 ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error) {
+	rows, err := q.db.Query(ctx, listPaymentMethodsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PaymentMethod{}
+	for rows.Next() {
+		var i PaymentMethod
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Provider,
+			&i.ProviderToken,
+			&i.TokenHash,
+			&i.ProviderCardID,
+			&i.DisplayMask,
+			&i.ExpDate,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPendingSubscriptionPaymentsByUserID = `-- name: ListPendingSubscriptionPaymentsByUserID :many
 SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, payment_url, status, refunded_amount_kopecks, charge_attempts, error_code, created_at, updated_at, succeeded_at FROM subscription_payments
 WHERE user_id = $1 AND status = 'pending'
@@ -712,6 +929,92 @@ func (q *Queries) ListTariffs(ctx context.Context) ([]Tariff, error) {
 	return items, nil
 }
 
+const lockPaymentMethodsByUserID = `-- name: LockPaymentMethodsByUserID :many
+SELECT id FROM payment_methods WHERE user_id = $1 ORDER BY id FOR UPDATE
+`
+
+// Serializes activation switches per user: the deactivate-all / activate-one
+// pair must not interleave with a concurrent switch, or the one-active
+// partial unique index rejects the second committer.
+func (q *Queries) LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, lockPaymentMethodsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateCardBindingSessionStatus = `-- name: UpdateCardBindingSessionStatus :one
+UPDATE card_binding_sessions
+SET status = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, user_id, provider, request_key, status, expires_at, created_at, updated_at
+`
+
+type UpdateCardBindingSessionStatusParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Status string      `json:"status"`
+}
+
+func (q *Queries) UpdateCardBindingSessionStatus(ctx context.Context, arg UpdateCardBindingSessionStatusParams) (CardBindingSession, error) {
+	row := q.db.QueryRow(ctx, updateCardBindingSessionStatus, arg.ID, arg.Status)
+	var i CardBindingSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.RequestKey,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updatePaymentMethodActiveByID = `-- name: UpdatePaymentMethodActiveByID :one
+UPDATE payment_methods
+SET is_active = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, user_id, provider, provider_token, token_hash, provider_card_id, display_mask, exp_date, is_active, created_at, updated_at
+`
+
+type UpdatePaymentMethodActiveByIDParams struct {
+	ID       pgtype.UUID `json:"id"`
+	IsActive bool        `json:"is_active"`
+}
+
+func (q *Queries) UpdatePaymentMethodActiveByID(ctx context.Context, arg UpdatePaymentMethodActiveByIDParams) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, updatePaymentMethodActiveByID, arg.ID, arg.IsActive)
+	var i PaymentMethod
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderToken,
+		&i.TokenHash,
+		&i.ProviderCardID,
+		&i.DisplayMask,
+		&i.ExpDate,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateSubscription = `-- name: UpdateSubscription :one
 UPDATE user_subscriptions
 SET
@@ -839,6 +1142,85 @@ func (q *Queries) UpdateSubscriptionPayment(ctx context.Context, arg UpdateSubsc
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SucceededAt,
+	)
+	return i, err
+}
+
+const upsertPaymentMethodByTokenHash = `-- name: UpsertPaymentMethodByTokenHash :one
+
+INSERT INTO payment_methods (
+    id,
+    user_id,
+    provider,
+    provider_token,
+    token_hash,
+    display_mask,
+    provider_card_id,
+    exp_date,
+    is_active
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (user_id, token_hash)
+DO UPDATE SET
+    provider_token = EXCLUDED.provider_token,
+    provider_card_id = COALESCE(NULLIF(EXCLUDED.provider_card_id, ''), payment_methods.provider_card_id),
+    display_mask = COALESCE(NULLIF(EXCLUDED.display_mask, ''), payment_methods.display_mask),
+    exp_date = COALESCE(NULLIF(EXCLUDED.exp_date, ''), payment_methods.exp_date),
+    updated_at = now()
+RETURNING id, user_id, provider, provider_token, token_hash, provider_card_id, display_mask, exp_date, is_active, created_at, updated_at
+`
+
+type UpsertPaymentMethodByTokenHashParams struct {
+	ID             pgtype.UUID `json:"id"`
+	UserID         pgtype.UUID `json:"user_id"`
+	Provider       string      `json:"provider"`
+	ProviderToken  string      `json:"provider_token"`
+	TokenHash      string      `json:"token_hash"`
+	DisplayMask    pgtype.Text `json:"display_mask"`
+	ProviderCardID pgtype.Text `json:"provider_card_id"`
+	ExpDate        pgtype.Text `json:"exp_date"`
+	IsActive       bool        `json:"is_active"`
+}
+
+// Payment methods (issue #251). Token uniqueness is enforced per user by the
+// UNIQUE (user_id, token_hash) constraint: the upsert converges on the
+// existing row instead of creating a duplicate card, and exactly one active
+// method per user is enforced by the partial unique index
+// idx_payment_methods_one_active_per_user. Sensitive columns (provider_token,
+// provider_card_id, exp_date) hold ciphertext; the application encrypts
+// before writing and decrypts after reading.
+// Inserts a method or converges on the row with the same (user_id,
+// token_hash): a re-bound card (webhook redelivery, sync polling, duplicate
+// binding) updates the token and display fields instead of duplicating the
+// row. Empty incoming display fields do not wipe stored ones, so completion
+// paths that do not know the card data cannot erase what an earlier delivery
+// stored. is_active is deliberately not in the update set: activation is a
+// separate explicit step.
+func (q *Queries) UpsertPaymentMethodByTokenHash(ctx context.Context, arg UpsertPaymentMethodByTokenHashParams) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, upsertPaymentMethodByTokenHash,
+		arg.ID,
+		arg.UserID,
+		arg.Provider,
+		arg.ProviderToken,
+		arg.TokenHash,
+		arg.DisplayMask,
+		arg.ProviderCardID,
+		arg.ExpDate,
+		arg.IsActive,
+	)
+	var i PaymentMethod
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderToken,
+		&i.TokenHash,
+		&i.ProviderCardID,
+		&i.DisplayMask,
+		&i.ExpDate,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

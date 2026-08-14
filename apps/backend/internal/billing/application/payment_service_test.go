@@ -1102,17 +1102,9 @@ func TestWebhook_Rejections(t *testing.T) {
 	}
 }
 
-// TestWebhook_MethodBoundRejected proves method-binding notifications have no
-// handler until the card-binding flow lands (issue #251): they fail the
-// delivery explicitly instead of being silently dropped.
-func TestWebhook_MethodBoundRejected(t *testing.T) {
-	h := newPaymentHarness(t)
-	h.provider.parseEvent = WebhookEvent{MethodBound: &MethodBoundNotification{BindingID: "req-1"}}
-
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); !errors.Is(err, ErrWebhookUnsupported) {
-		t.Errorf("err = %v, want ErrWebhookUnsupported", err)
-	}
-}
+// The method-bound branch went live with issue #251; its delivery semantics
+// (completion, redelivery idempotency, expired and unknown sessions) are
+// covered by the payment-method service tests.
 
 // TestConfirmFakePayment_AppliesUpgrade proves the local confirmation endpoint
 // drives the whole synchronous application path: confirm at the provider,

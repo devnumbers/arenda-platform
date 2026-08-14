@@ -2,6 +2,7 @@ package application
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"slices"
@@ -304,6 +305,158 @@ func (r *fakePaymentRepo) WithTx(transaction.Tx) (SubscriptionPaymentRepository,
 	return r, nil
 }
 
+// fakePaymentMethodRepo is an in-memory PaymentMethodRepository. It mirrors
+// the database invariants the service layer relies on: at most one active
+// method per user and (user, provider token) uniqueness with upsert
+// convergence.
+type fakePaymentMethodRepo struct {
+	mu      sync.Mutex
+	methods map[uuid.UUID]domain.PaymentMethod
+}
+
+func newFakePaymentMethodRepo() *fakePaymentMethodRepo {
+	return &fakePaymentMethodRepo{methods: make(map[uuid.UUID]domain.PaymentMethod)}
+}
+
+func (r *fakePaymentMethodRepo) UpsertByTokenHash(_ context.Context, method domain.PaymentMethod) (domain.PaymentMethod, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, existing := range r.methods {
+		if existing.UserID == method.UserID && existing.ProviderToken == method.ProviderToken {
+			existing.ProviderCardID = cmp.Or(method.ProviderCardID, existing.ProviderCardID)
+			existing.DisplayMask = cmp.Or(method.DisplayMask, existing.DisplayMask)
+			existing.ExpDate = cmp.Or(method.ExpDate, existing.ExpDate)
+			r.methods[existing.ID] = existing
+			return existing, nil
+		}
+	}
+	r.methods[method.ID] = method
+	return method, nil
+}
+
+func (r *fakePaymentMethodRepo) GetByID(_ context.Context, id uuid.UUID) (domain.PaymentMethod, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if m, ok := r.methods[id]; ok {
+		return m, nil
+	}
+	return domain.PaymentMethod{}, ErrNotFound
+}
+
+func (r *fakePaymentMethodRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.PaymentMethod, error) {
+	return r.GetByID(ctx, id)
+}
+
+func (r *fakePaymentMethodRepo) ListByUserID(_ context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result := make([]domain.PaymentMethod, 0, len(r.methods))
+	for _, m := range r.methods {
+		if m.UserID == userID {
+			result = append(result, m)
+		}
+	}
+	slices.SortFunc(result, func(a, b domain.PaymentMethod) int {
+		if c := b.CreatedAt.Compare(a.CreatedAt); c != 0 {
+			return c
+		}
+		return bytes.Compare(b.ID[:], a.ID[:])
+	})
+	return result, nil
+}
+
+func (r *fakePaymentMethodRepo) SetActive(_ context.Context, userID, methodID uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.methods[methodID]; !ok {
+		return ErrNotFound
+	}
+	for id, m := range r.methods {
+		if m.UserID == userID && m.IsActive && id != methodID {
+			m.IsActive = false
+			r.methods[id] = m
+		}
+	}
+	active := r.methods[methodID]
+	active.IsActive = true
+	r.methods[methodID] = active
+	return nil
+}
+
+func (r *fakePaymentMethodRepo) Delete(_ context.Context, userID, methodID uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	m, ok := r.methods[methodID]
+	if !ok || m.UserID != userID {
+		return ErrNotFound
+	}
+	delete(r.methods, methodID)
+	return nil
+}
+
+func (r *fakePaymentMethodRepo) WithTx(transaction.Tx) (PaymentMethodRepository, error) {
+	return r, nil
+}
+
+// fakeBindingRepo is an in-memory CardBindingSessionRepository.
+type fakeBindingRepo struct {
+	mu       sync.Mutex
+	sessions map[uuid.UUID]domain.CardBindingSession
+}
+
+func newFakeBindingRepo() *fakeBindingRepo {
+	return &fakeBindingRepo{sessions: make(map[uuid.UUID]domain.CardBindingSession)}
+}
+
+func (r *fakeBindingRepo) Create(_ context.Context, session domain.CardBindingSession) (domain.CardBindingSession, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, existing := range r.sessions {
+		if existing.Provider == session.Provider && existing.RequestKey == session.RequestKey {
+			return domain.CardBindingSession{}, ErrAlreadyExists
+		}
+	}
+	r.sessions[session.ID] = session
+	return session, nil
+}
+
+func (r *fakeBindingRepo) GetByRequestKeyForUpdate(_ context.Context, provider domain.PaymentProvider, requestKey string) (domain.CardBindingSession, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, session := range r.sessions {
+		if session.Provider == provider && session.RequestKey == requestKey {
+			return session, nil
+		}
+	}
+	return domain.CardBindingSession{}, ErrNotFound
+}
+
+func (r *fakeBindingRepo) ListOpenByUserID(_ context.Context, userID uuid.UUID) ([]domain.CardBindingSession, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result := make([]domain.CardBindingSession, 0)
+	for _, session := range r.sessions {
+		if session.UserID == userID && session.IsOpen() {
+			result = append(result, session)
+		}
+	}
+	return result, nil
+}
+
+func (r *fakeBindingRepo) UpdateStatus(_ context.Context, session domain.CardBindingSession) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.sessions[session.ID]; !ok {
+		return ErrNotFound
+	}
+	r.sessions[session.ID] = session
+	return nil
+}
+
+func (r *fakeBindingRepo) WithTx(transaction.Tx) (CardBindingSessionRepository, error) {
+	return r, nil
+}
+
 // countingRecorder wraps auditapp.Noop to count WithTx bindings.
 type countingRecorder struct {
 	auditapp.Noop
@@ -328,6 +481,8 @@ type fakeStores struct {
 	subscriptions *fakeSubscriptionRepo
 	transitions   *fakeTransitionRepo
 	payments      *fakePaymentRepo
+	methods       *fakePaymentMethodRepo
+	bindings      *fakeBindingRepo
 	beginner      *fakeBeginner
 }
 
@@ -337,6 +492,8 @@ func newFakeStores(tariffs ...domain.Tariff) *fakeStores {
 		subscriptions: newFakeSubscriptionRepo(),
 		transitions:   newFakeTransitionRepo(),
 		payments:      newFakePaymentRepo(),
+		methods:       newFakePaymentMethodRepo(),
+		bindings:      newFakeBindingRepo(),
 		beginner:      &fakeBeginner{},
 	}
 }
@@ -344,7 +501,7 @@ func newFakeStores(tariffs ...domain.Tariff) *fakeStores {
 // factory builds a txStoreFactory from the fakes plus a fakeUoW. audit defaults
 // to nil (NewTxStoreFactory substitutes Noop).
 func (s *fakeStores) factory(audit auditapp.Recorder) txStoreFactory {
-	return NewTxStoreFactory(s.tariffs, s.subscriptions, s.transitions, s.payments, audit, &fakeUoW{beginner: s.beginner})
+	return NewTxStoreFactory(s.tariffs, s.subscriptions, s.transitions, s.payments, s.methods, s.bindings, audit, &fakeUoW{beginner: s.beginner})
 }
 
 // TestRunInTx_BuildsStoresFromTxAndCommits proves runInTx binds every

@@ -63,7 +63,8 @@ func NewSubscriptionService(factory txStoreFactory, cfg SubscriptionServiceConfi
 }
 
 // GetSubscription assembles the user's subscription view: the subscription
-// aggregate with its tariff and any scheduled (pending) tariff resolved.
+// aggregate with its tariff, any scheduled (pending) tariff, and the active
+// payment method resolved (issue #251).
 func (s *SubscriptionService) GetSubscription(ctx context.Context, userID uuid.UUID) (SubscriptionView, error) {
 	sub, err := s.subscriptions.GetByUserID(ctx, userID)
 	if err != nil {
@@ -94,6 +95,16 @@ func (s *SubscriptionService) GetSubscription(ctx context.Context, userID uuid.U
 			return SubscriptionView{}, fmt.Errorf("get pending tariff: %w", err)
 		}
 		view.PendingTariff = &pending
+	}
+	if sub.ActivePaymentMethodID != nil {
+		method, err := s.methods.GetByID(ctx, *sub.ActivePaymentMethodID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return SubscriptionView{}, fmt.Errorf("subscription %s references missing payment method %s: %w", sub.ID, *sub.ActivePaymentMethodID, ErrPaymentMethodNotFound)
+			}
+			return SubscriptionView{}, fmt.Errorf("get active payment method: %w", err)
+		}
+		view.ActivePaymentMethod = &method
 	}
 	return view, nil
 }

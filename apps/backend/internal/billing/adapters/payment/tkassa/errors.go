@@ -61,7 +61,8 @@ func metricStatus(err error) string {
 		errors.Is(err, application.ErrProviderCustomerNotFound) ||
 		errors.Is(err, application.ErrProviderAccountNotFound) ||
 		errors.Is(err, application.ErrProviderChargeBlocked) ||
-		errors.Is(err, application.ErrProviderPaymentNotFound) {
+		errors.Is(err, application.ErrProviderPaymentNotFound) ||
+		errors.Is(err, application.ErrProviderBindingNotFound) {
 		return "ok"
 	}
 	return "error"
@@ -120,6 +121,7 @@ func isAccountNotFoundError(err error) bool {
 //   - 255: payment not found
 //   - 262: parent payment of the saved card expired — re-binding required
 //   - 501: terminal not found
+//   - 502: request key not found — the binding session expired provider-side
 //   - 1125/1126: inconsistent operation parameters (OperationInitiatorType)
 func classifyProviderError(err error) error {
 	switch {
@@ -129,6 +131,10 @@ func classifyProviderError(err error) error {
 		return fmt.Errorf("%w: %w", application.ErrProviderAuthRejected, err)
 	case isProviderErrorCode(err, "255"):
 		return fmt.Errorf("%w: %w", application.ErrProviderPaymentNotFound, err)
+	case isProviderErrorCode(err, "502"):
+		// GetAddCardState for a request key the provider no longer tracks: the
+		// binding session expired provider-side.
+		return fmt.Errorf("%w: %w", application.ErrProviderBindingNotFound, err)
 	case isProviderErrorCode(err, "9", "12", "1125", "1126"):
 		return fmt.Errorf("%w: %w", application.ErrProviderInvalidOperation, err)
 	case isProviderErrorCode(err, "103", "116", "1051"):

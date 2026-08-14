@@ -111,6 +111,8 @@ func newGate(sub domain.Subscription, subErr error, now time.Time) *MutationGate
 		&gatePaymentRepo{},
 		nil,
 		nil,
+		nil,
+		nil,
 	)
 	return NewMutationGate(billingapp.NewSubscriptionService(factory, billingapp.SubscriptionServiceConfig{}), clockOn(now))
 }

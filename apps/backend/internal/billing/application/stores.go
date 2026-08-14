@@ -20,6 +20,8 @@ type txStores struct {
 	subscriptions SubscriptionRepository
 	transitions   SubscriptionTransitionRepository
 	payments      SubscriptionPaymentRepository
+	methods       PaymentMethodRepository
+	bindings      CardBindingSessionRepository
 	audit         auditapp.Recorder
 }
 
@@ -51,6 +53,24 @@ func (s *txStores) paymentForUpdate(ctx context.Context, paymentID uuid.UUID) (d
 	return payment, nil
 }
 
+// methodForUpdate loads a payment method under the row lock, narrows the
+// repository miss to ErrPaymentMethodNotFound and rejects a method of another
+// user as a miss too — the shared first step of every payment-method mutation
+// (issue #251).
+func (s *txStores) methodForUpdate(ctx context.Context, userID, methodID uuid.UUID) (domain.PaymentMethod, error) {
+	method, err := s.methods.GetByIDForUpdate(ctx, methodID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.PaymentMethod{}, ErrPaymentMethodNotFound
+		}
+		return domain.PaymentMethod{}, fmt.Errorf("get payment method: %w", err)
+	}
+	if method.UserID != userID {
+		return domain.PaymentMethod{}, ErrPaymentMethodNotFound
+	}
+	return method, nil
+}
+
 // txStoreFactory holds the non-transactional billing repositories and audit
 // recorder plus the Unit-of-Work, and builds a transactional txStores from each
 // runInTx call. It is embedded anonymously by every billing service so they
@@ -65,6 +85,8 @@ type txStoreFactory struct {
 	subscriptions SubscriptionRepository
 	transitions   SubscriptionTransitionRepository
 	payments      SubscriptionPaymentRepository
+	methods       PaymentMethodRepository
+	bindings      CardBindingSessionRepository
 	audit         auditapp.Recorder
 	uow           transaction.UoW
 }
@@ -80,6 +102,8 @@ func NewTxStoreFactory(
 	subscriptions SubscriptionRepository,
 	transitions SubscriptionTransitionRepository,
 	payments SubscriptionPaymentRepository,
+	methods PaymentMethodRepository,
+	bindings CardBindingSessionRepository,
 	audit auditapp.Recorder,
 	uow transaction.UoW,
 ) txStoreFactory {
@@ -91,6 +115,8 @@ func NewTxStoreFactory(
 		subscriptions: subscriptions,
 		transitions:   transitions,
 		payments:      payments,
+		methods:       methods,
+		bindings:      bindings,
 		audit:         audit,
 		uow:           uow,
 	}
@@ -130,11 +156,21 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 		if err != nil {
 			return fmt.Errorf("bind payment repository to tx: %w", err)
 		}
+		methods, err := f.methods.WithTx(tx)
+		if err != nil {
+			return fmt.Errorf("bind payment-method repository to tx: %w", err)
+		}
+		bindings, err := f.bindings.WithTx(tx)
+		if err != nil {
+			return fmt.Errorf("bind card-binding repository to tx: %w", err)
+		}
 		stores := &txStores{
 			tariffs:       tariffs,
 			subscriptions: subscriptions,
 			transitions:   transitions,
 			payments:      payments,
+			methods:       methods,
+			bindings:      bindings,
 			audit:         f.audit.WithTx(tx),
 		}
 		return work(stores)

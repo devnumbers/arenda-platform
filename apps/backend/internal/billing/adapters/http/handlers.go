@@ -46,6 +46,17 @@ type SubscriptionManager interface {
 type PaymentManager interface {
 	ListPayments(ctx context.Context, userID uuid.UUID) ([]billingapp.SubscriptionPaymentView, error)
 	ConfirmFakePayment(ctx context.Context, paymentID uuid.UUID) error
+	ConfirmFakeCardBinding(ctx context.Context, requestKey string) error
+}
+
+// PaymentMethodManager serves the user's saved payment methods (issue #251):
+// the card-binding flow, activation, deletion, sync, and the method list.
+type PaymentMethodManager interface {
+	ListPaymentMethods(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error)
+	AddPaymentMethod(ctx context.Context, userID uuid.UUID, req billingapp.AddPaymentMethodRequest) (billingapp.AddPaymentMethodResult, error)
+	DeletePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error
+	ActivatePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error
+	SyncPaymentMethods(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error)
 }
 
 // WebhookProcessor synchronously applies payment-provider webhooks (issue #250)
@@ -71,15 +82,17 @@ const maxWebhookBody = 256 * 1024
 // /subscription/change (downgrade scheduling; upgrades answer with a temporary
 // payment-unavailable error until #250). The payment endpoints of issue #250
 // are live — GET /subscription/payments, POST /webhooks/payment/{provider} and
-// the local-only fake-payment confirmation. The remaining endpoints answer 501
-// until their flows land — payment methods in #251, refunds and admin payment
-// views in #254. The user-facing contract is frozen, so the routes stay
-// mounted.
+// the local-only fake-payment confirmation. The payment-method endpoints of
+// issue #251 are live — the binding flow, activation, deletion, sync and the
+// local-only fake card-binding confirmation. The remaining endpoints answer
+// 501 until their flows land — refunds and admin payment views in #254. The
+// user-facing contract is frozen, so the routes stay mounted.
 type BillingHandlers struct {
 	tariffs       TariffLister
 	subscriptions SubscriptionViewer
 	managers      SubscriptionManager
 	payments      PaymentManager
+	methods       PaymentMethodManager
 	webhooks      WebhookProcessor
 	// devEndpoints enables the local-only fake-payment confirmation endpoint
 	// (APP_ENV=local).
@@ -93,6 +106,7 @@ func NewBillingHandlers(
 	subscriptions SubscriptionViewer,
 	managers SubscriptionManager,
 	payments PaymentManager,
+	methods PaymentMethodManager,
 	webhooks WebhookProcessor,
 	devEndpoints bool,
 	logger *slog.Logger,
@@ -105,6 +119,7 @@ func NewBillingHandlers(
 		subscriptions: subscriptions,
 		managers:      managers,
 		payments:      payments,
+		methods:       methods,
 		webhooks:      webhooks,
 		devEndpoints:  devEndpoints,
 		logger:        logger,
@@ -296,32 +311,125 @@ func (h *BillingHandlers) ListSubscriptionPayments(w http.ResponseWriter, r *htt
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.SubscriptionPaymentsResponse{Items: items})
 }
 
-// ListPaymentMethods implements GET /subscription/payment-methods (issue #251).
+// ListPaymentMethods implements GET /subscription/payment-methods
+// (issue #251): the user's saved methods, newest first.
 func (h *BillingHandlers) ListPaymentMethods(w http.ResponseWriter, r *http.Request) {
-	h.notImplemented(w, r)
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	methods, err := h.methods.ListPaymentMethods(r.Context(), ownerID)
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PaymentMethodsResponse{
+		Items: paymentMethodItems(methods),
+	})
 }
 
-// SyncPaymentMethods implements POST /subscription/payment-methods/sync
-// (issue #251).
-func (h *BillingHandlers) SyncPaymentMethods(w http.ResponseWriter, r *http.Request) {
-	h.notImplemented(w, r)
-}
-
-// AddPaymentMethod implements POST /subscription/payment-methods (issue #251).
+// AddPaymentMethod implements POST /subscription/payment-methods
+// (issue #251). A raw provider token creates the method synchronously; the
+// bank-form flow answers with the binding form URL the payer follows.
 func (h *BillingHandlers) AddPaymentMethod(w http.ResponseWriter, r *http.Request) {
-	h.notImplemented(w, r)
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	var body openapi.AddPaymentMethodRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode add payment method request", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	req := billingapp.AddPaymentMethodRequest{}
+	if body.ProviderToken != nil {
+		req.ProviderToken = *body.ProviderToken
+	}
+	result, err := h.methods.AddPaymentMethod(r.Context(), ownerID, req)
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	resp := openapi.AddPaymentMethodResponse{}
+	if result.ConfirmURL != "" {
+		confirmURL := result.ConfirmURL
+		resp.ConfirmUrl = &confirmURL
+	}
+	if result.PaymentMethod != nil {
+		method := httpsupport.PaymentMethodResponse(*result.PaymentMethod)
+		resp.PaymentMethod = &method
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, resp)
 }
 
 // DeletePaymentMethod implements DELETE /subscription/payment-methods/{id}
-// (issue #251).
-func (h *BillingHandlers) DeletePaymentMethod(w http.ResponseWriter, r *http.Request, _ uuid.UUID) {
-	h.notImplemented(w, r)
+// (issue #251). The active method answers 409 until another one is activated.
+func (h *BillingHandlers) DeletePaymentMethod(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	if err := h.methods.DeletePaymentMethod(r.Context(), ownerID, id); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ActivatePaymentMethod implements POST
-// /subscription/payment-methods/{id}/activate (issue #251).
-func (h *BillingHandlers) ActivatePaymentMethod(w http.ResponseWriter, r *http.Request, _ uuid.UUID) {
-	h.notImplemented(w, r)
+// /subscription/payment-methods/{id}/activate (issue #251): the method becomes
+// the user's single active one and the subscription's charge target.
+func (h *BillingHandlers) ActivatePaymentMethod(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	if err := h.methods.ActivatePaymentMethod(r.Context(), ownerID, id); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// SyncPaymentMethods implements POST /subscription/payment-methods/sync
+// (issue #251): open binding sessions are polled at the provider and resolved
+// (the self-healing path when the add-card webhook was not delivered), then
+// the user's up-to-date list is returned.
+func (h *BillingHandlers) SyncPaymentMethods(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	methods, err := h.methods.SyncPaymentMethods(r.Context(), ownerID)
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PaymentMethodsResponse{
+		Items: paymentMethodItems(methods),
+	})
+}
+
+// paymentMethodItems maps domain payment methods to the contract DTOs.
+func paymentMethodItems(methods []domain.PaymentMethod) []openapi.PaymentMethod {
+	items := make([]openapi.PaymentMethod, 0, len(methods))
+	for _, m := range methods {
+		items = append(items, httpsupport.PaymentMethodResponse(m))
+	}
+	return items
 }
 
 // ConfirmFakeSubscriptionPayment implements
@@ -335,6 +443,26 @@ func (h *BillingHandlers) ConfirmFakeSubscriptionPayment(w http.ResponseWriter, 
 	}
 
 	if err := h.payments.ConfirmFakePayment(r.Context(), id); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
+}
+
+// ConfirmFakeCardBinding implements
+// POST /internal/fake-card-binding/{requestKey}/confirm (issue #251). Local
+// only (APP_ENV=local): it completes a card-binding session at the fake
+// provider — the counterpart of the payer completing the bank form of a real
+// provider — so the binding flow is drivable end-to-end on a developer
+// machine.
+func (h *BillingHandlers) ConfirmFakeCardBinding(w http.ResponseWriter, r *http.Request, requestKey string) {
+	if !h.devEndpoints {
+		h.notImplemented(w, r)
+		return
+	}
+
+	if err := h.payments.ConfirmFakeCardBinding(r.Context(), requestKey); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -430,8 +558,11 @@ func (h *BillingHandlers) handleBillingError(w http.ResponseWriter, r *http.Requ
 	case errors.Is(err, billingapp.ErrNotFound),
 		errors.Is(err, billingapp.ErrTariffNotFound),
 		errors.Is(err, billingapp.ErrSubscriptionNotFound),
-		errors.Is(err, billingapp.ErrPaymentNotFound):
+		errors.Is(err, billingapp.ErrPaymentNotFound),
+		errors.Is(err, billingapp.ErrPaymentMethodNotFound):
 		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Ресурс не найден"))
+	case errors.Is(err, billingapp.ErrPaymentMethodInUse):
+		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Активный способ оплаты нельзя удалить, пока не выбран другой"))
 	case errors.Is(err, billingapp.ErrPaymentUnavailable):
 		// Temporary answer for the flows that need a payment until #250 lands;
 		// deliberately outside the frozen contract's response list because it

@@ -41,6 +41,13 @@ var (
 	// confirmation endpoint is called while the active provider has no local
 	// confirmation capability.
 	ErrPaymentNotConfirmable = errors.New("payment provider is not locally confirmable")
+	// ErrPaymentMethodNotFound is returned when a payment-method lookup misses
+	// or the method belongs to another user.
+	ErrPaymentMethodNotFound = errors.New("payment method not found")
+	// ErrPaymentMethodInUse is returned when the active payment method is
+	// deleted before another one is activated, or the database still
+	// references the method (active_payment_method_id FK).
+	ErrPaymentMethodInUse = errors.New("payment method is in use")
 
 	// Provider sentinels classify provider outcomes the application acts
 	// on beyond success/failure. They are provider-neutral by contract
@@ -71,6 +78,10 @@ var (
 	// ErrProviderPaymentNotFound is returned when the provider does not know
 	// the payment being operated on.
 	ErrProviderPaymentNotFound = errors.New("provider payment not found")
+	// ErrProviderBindingNotFound is returned when the provider no longer knows
+	// a card-binding session (the request key expired provider-side). For
+	// binding polling it means the session can never complete, not a failure.
+	ErrProviderBindingNotFound = errors.New("provider binding session not found")
 	// ErrProviderInvalidOperation is returned when the provider rejects the
 	// operation parameters as inconsistent or malformed — an integration
 	// defect (bad parameter combination, malformed deadline, missing

@@ -18,11 +18,16 @@ import (
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 )
 
 // integrationBaseTime anchors the fake clock so TTL and validity behaviour is
 // deterministic across tests.
 var integrationBaseTime = time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
+
+// integrationEncryptionKey is a fixed 32-byte hex key so payment-method tokens
+// are encrypted with a real AES encryptor in tests.
+const integrationEncryptionKey = "19bcc5ae5940668759add6f4475c21ce21298b58e3437f4b9a2881cafc4e3e2a"
 
 // mutableClock is a fake clock.Clock whose Now can be advanced mid-test.
 type mutableClock struct{ now time.Time }
@@ -42,20 +47,29 @@ type integrationHarness struct {
 	subscriptions *billingpg.SubscriptionRepository
 	transitions   *billingpg.SubscriptionTransitionRepository
 	payments      *billingpg.SubscriptionPaymentRepository
+	methods       *billingpg.PaymentMethodRepository
+	bindings      *billingpg.CardBindingSessionRepository
+	encryptor     encryption.Encryptor
+	// provider is the fake adapter itself (not just the port) so integration
+	// tests can drive provider-side state the flows cannot (issue #251
+	// binding polling).
+	provider *paymentfake.Provider
 
-	services         billingapp.Services
-	subscriptionsSvc *billingapp.SubscriptionService
-	paymentsSvc      *billingapp.PaymentService
-	tariffsSvc       *billingapp.TariffService
-	onboarding       *billingapp.OnboardingService
-	limiter          *billingapp.SubscriptionPropertyLimiter
+	services          billingapp.Services
+	subscriptionsSvc  *billingapp.SubscriptionService
+	paymentsSvc       *billingapp.PaymentService
+	paymentMethodsSvc *billingapp.PaymentMethodService
+	tariffsSvc        *billingapp.TariffService
+	onboarding        *billingapp.OnboardingService
+	limiter           *billingapp.SubscriptionPropertyLimiter
 }
 
 // newIntegrationHarness builds a fresh harness over a clean database. The
 // returned clock is anchored at integrationBaseTime. The payment flows run
 // against the fake provider adapter (issue #250): it implements the provider
 // port exactly like the real adapter, so integration tests drive payments the
-// way the local environment does.
+// way the local environment does. Payment-method tokens are encrypted at rest
+// with a real AES encryptor (issue #251).
 func newIntegrationHarness(t *testing.T) *integrationHarness {
 	t.Helper()
 
@@ -66,16 +80,22 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	clk := &mutableClock{now: integrationBaseTime}
 	logger := slog.New(slog.DiscardHandler)
 
+	encryptor, err := encryption.NewEncryptor(integrationEncryptionKey)
+	if err != nil {
+		t.Fatalf("init encryptor: %v", err)
+	}
 	tariffs := billingpg.NewTariffRepository(pool, 0, clk)
 	subscriptions := billingpg.NewSubscriptionRepository(pool)
 	transitions := billingpg.NewSubscriptionTransitionRepository(pool)
 	paymentsRepo := billingpg.NewSubscriptionPaymentRepository(pool)
+	methodsRepo := billingpg.NewPaymentMethodRepository(pool, encryptor)
+	bindingsRepo := billingpg.NewCardBindingSessionRepository(pool)
 	uow := pgdb.NewUoW(pool, logger)
 	audit := auditapp.NewService(auditpg.NewWriter(pool), clk)
 
 	provider := paymentfake.NewProvider("http://localhost:8080", logger, clk, nil)
 
-	factory := billingapp.NewTxStoreFactory(tariffs, subscriptions, transitions, paymentsRepo, audit, uow)
+	factory := billingapp.NewTxStoreFactory(tariffs, subscriptions, transitions, paymentsRepo, methodsRepo, bindingsRepo, audit, uow)
 	services := billingapp.NewServices(factory, billingapp.ServicesConfig{
 		Config:   billingapp.DefaultConfig(),
 		Clock:    clk,
@@ -84,19 +104,24 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	})
 
 	return &integrationHarness{
-		t:                t,
-		pool:             pool,
-		clock:            clk,
-		tariffs:          tariffs,
-		subscriptions:    subscriptions,
-		transitions:      transitions,
-		payments:         paymentsRepo,
-		services:         services,
-		subscriptionsSvc: services.Subscriptions,
-		paymentsSvc:      services.Payments,
-		tariffsSvc:       services.Tariffs,
-		onboarding:       services.Onboarding,
-		limiter:          services.Limiter,
+		t:                 t,
+		pool:              pool,
+		clock:             clk,
+		tariffs:           tariffs,
+		subscriptions:     subscriptions,
+		transitions:       transitions,
+		payments:          paymentsRepo,
+		methods:           methodsRepo,
+		bindings:          bindingsRepo,
+		encryptor:         encryptor,
+		provider:          provider,
+		services:          services,
+		subscriptionsSvc:  services.Subscriptions,
+		paymentsSvc:       services.Payments,
+		paymentMethodsSvc: services.PaymentMethods,
+		tariffsSvc:        services.Tariffs,
+		onboarding:        services.Onboarding,
+		limiter:           services.Limiter,
 	}
 }
 

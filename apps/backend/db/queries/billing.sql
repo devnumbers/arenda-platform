@@ -147,12 +147,108 @@ SET
 WHERE id = $1
 RETURNING *;
 
+-- Payment methods (issue #251). Token uniqueness is enforced per user by the
+-- UNIQUE (user_id, token_hash) constraint: the upsert converges on the
+-- existing row instead of creating a duplicate card, and exactly one active
+-- method per user is enforced by the partial unique index
+-- idx_payment_methods_one_active_per_user. Sensitive columns (provider_token,
+-- provider_card_id, exp_date) hold ciphertext; the application encrypts
+-- before writing and decrypts after reading.
+
+-- name: UpsertPaymentMethodByTokenHash :one
+-- Inserts a method or converges on the row with the same (user_id,
+-- token_hash): a re-bound card (webhook redelivery, sync polling, duplicate
+-- binding) updates the token and display fields instead of duplicating the
+-- row. Empty incoming display fields do not wipe stored ones, so completion
+-- paths that do not know the card data cannot erase what an earlier delivery
+-- stored. is_active is deliberately not in the update set: activation is a
+-- separate explicit step.
+INSERT INTO payment_methods (
+    id,
+    user_id,
+    provider,
+    provider_token,
+    token_hash,
+    display_mask,
+    provider_card_id,
+    exp_date,
+    is_active
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (user_id, token_hash)
+DO UPDATE SET
+    provider_token = EXCLUDED.provider_token,
+    provider_card_id = COALESCE(NULLIF(EXCLUDED.provider_card_id, ''), payment_methods.provider_card_id),
+    display_mask = COALESCE(NULLIF(EXCLUDED.display_mask, ''), payment_methods.display_mask),
+    exp_date = COALESCE(NULLIF(EXCLUDED.exp_date, ''), payment_methods.exp_date),
+    updated_at = now()
+RETURNING *;
+
+-- name: GetPaymentMethodByID :one
+SELECT * FROM payment_methods WHERE id = $1;
+
+-- name: GetPaymentMethodByIDForUpdate :one
+SELECT * FROM payment_methods WHERE id = $1 FOR UPDATE;
+
+-- name: ListPaymentMethodsByUserID :many
+SELECT * FROM payment_methods WHERE user_id = $1 ORDER BY created_at DESC, id DESC;
+
+-- name: LockPaymentMethodsByUserID :many
+-- Serializes activation switches per user: the deactivate-all / activate-one
+-- pair must not interleave with a concurrent switch, or the one-active
+-- partial unique index rejects the second committer.
+SELECT id FROM payment_methods WHERE user_id = $1 ORDER BY id FOR UPDATE;
+
+-- name: DeactivateAllPaymentMethodsForUser :exec
+UPDATE payment_methods
+SET is_active = false, updated_at = now()
+WHERE user_id = $1;
+
+-- name: UpdatePaymentMethodActiveByID :one
+UPDATE payment_methods
+SET is_active = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: DeletePaymentMethodByID :exec
+-- Owner-scoped: the row must belong to the user issuing the deletion.
+DELETE FROM payment_methods WHERE id = $1 AND user_id = $2;
+
+-- Card binding sessions (issue #251). One row per initiated provider binding;
+-- the request key is unique per provider, and open sessions are resolved by
+-- status polling or the add-card webhook before the TTL expires.
+
+-- name: CreateCardBindingSession :one
+INSERT INTO card_binding_sessions (
+    id,
+    user_id,
+    provider,
+    request_key,
+    status,
+    expires_at
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: GetCardBindingSessionByRequestKeyForUpdate :one
+SELECT * FROM card_binding_sessions WHERE provider = $1 AND request_key = $2 FOR UPDATE;
+
+-- name: ListOpenCardBindingSessionsByUserID :many
+SELECT * FROM card_binding_sessions
+WHERE user_id = $1 AND status = 'new'
+ORDER BY created_at DESC, id DESC;
+
+-- name: UpdateCardBindingSessionStatus :one
+UPDATE card_binding_sessions
+SET status = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- Admin dashboard stats. These queries are consumed by the admin context's
 -- repository, not by the billing module itself.
 
 -- name: CountActiveSubscriptionsAdmin :one
 SELECT COUNT(*) FROM user_subscriptions WHERE status = 'active';
-
 -- name: GetSubscriptionPaymentsStatsLast30dAdmin :one
 -- Aggregates over payments created in the last 30 days. Refunds are full-amount
 -- only in the rewritten schema (ADR 0037): the legacy partial_refunded status

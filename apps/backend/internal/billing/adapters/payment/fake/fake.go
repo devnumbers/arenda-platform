@@ -31,6 +31,9 @@ const (
 	defaultErrorCode            = "fake_error"
 	fakeFailTokenPrefix         = "fake_fail_"
 	fakeProviderPaymentIDPrefix = "fake_"
+	fakeBindingIDPrefix         = "fake_bind_"
+	fakeMaskedPan               = "4111********1111"
+	fakeExpDate                 = "1230"
 )
 
 type pendingEntry struct {
@@ -38,6 +41,16 @@ type pendingEntry struct {
 	savedMethod   application.SavedMethod
 	amountKopecks int64
 	createdAt     time.Time
+}
+
+// bindingEntry is one card-binding session held by the fake provider: the
+// customer it was started for, the bound method once it completed, and the
+// creation time for TTL purging.
+type bindingEntry struct {
+	customerRef string
+	method      application.SavedMethod
+	completed   bool
+	createdAt   time.Time
 }
 
 // Provider is a fake payment processor that keeps pending payments in memory.
@@ -49,6 +62,7 @@ type Provider struct {
 	pending          map[string]pendingEntry
 	confirmedAmounts map[string]int64
 	bindingStates    map[string]application.MethodBindingState
+	bindings         map[string]bindingEntry
 	metrics          *payment.Metrics
 }
 
@@ -83,6 +97,7 @@ func NewProvider(baseURL string, log *slog.Logger, clk clock.Clock, metrics *pay
 		pending:          make(map[string]pendingEntry),
 		confirmedAmounts: make(map[string]int64),
 		bindingStates:    make(map[string]application.MethodBindingState),
+		bindings:         make(map[string]bindingEntry),
 		metrics:          metrics,
 	}
 }
@@ -252,7 +267,10 @@ func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequ
 	}, nil
 }
 
-// BindPaymentMethod is not supported by the fake provider.
+// BindPaymentMethod starts a card-binding session: the "bank form" is the
+// local confirmation endpoint, so local end-to-end runs drive the whole
+// binding flow (issue #251). Calling it twice returns independent sessions,
+// exactly like re-opening the provider form.
 func (p *Provider) BindPaymentMethod(ctx context.Context, req application.BindMethodRequest) (res application.BindMethodResult, err error) {
 	start := time.Now()
 	defer func() {
@@ -263,8 +281,97 @@ func (p *Provider) BindPaymentMethod(ctx context.Context, req application.BindMe
 		p.metrics.RecordRequest(ctx, "fake", "BindPaymentMethod", status, time.Since(start))
 	}()
 
-	_ = req
-	return application.BindMethodResult{}, errors.New("fake: payment method binding is not supported")
+	if req.CustomerRef == "" {
+		return application.BindMethodResult{}, errors.New("fake: customer ref is required")
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.purgeLocked()
+
+	bindingID := fakeBindingIDPrefix + uuid.Must(uuid.NewV7()).String()
+	p.bindings[bindingID] = bindingEntry{
+		customerRef: req.CustomerRef,
+		createdAt:   p.clock.Now().UTC(),
+	}
+
+	logger.WithCorrelation(ctx, p.log).InfoContext(ctx, "fake card binding initialized",
+		"binding_id", bindingID,
+		"customer_ref", req.CustomerRef,
+	)
+	return application.BindMethodResult{
+		FormURL:   p.bindingConfirmURL(bindingID),
+		BindingID: bindingID,
+	}, nil
+}
+
+// bindingConfirmURL builds the local confirmation URL of a binding session —
+// the fake counterpart of the provider's bank form.
+func (p *Provider) bindingConfirmURL(bindingID string) string {
+	return fmt.Sprintf("%s/internal/fake-card-binding/%s/confirm", p.baseURL, bindingID)
+}
+
+// AddPaymentMethodFromToken accepts a raw charge token synchronously — the
+// capability bank-form providers do not offer (the application gates the
+// token path on it). The fake stores the card itself, so local runs and tests
+// can drive the whole method flow without the binding form.
+func (p *Provider) AddPaymentMethodFromToken(ctx context.Context, customerRef, token string) (res application.SavedMethod, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "AddPaymentMethodFromToken", status, time.Since(start))
+	}()
+
+	if customerRef == "" {
+		return application.SavedMethod{}, errors.New("fake: customer ref is required")
+	}
+	if token == "" {
+		return application.SavedMethod{}, errors.New("fake: charge token is required")
+	}
+	return application.SavedMethod{
+		ProviderMethodID: "fake_card_" + uuid.Must(uuid.NewV7()).String(),
+		ChargeToken:      token,
+		MaskedPan:        fakeMaskedPan,
+		ExpDate:          fakeExpDate,
+		CustomerRef:      customerRef,
+	}, nil
+}
+
+// PaymentMethodBinding returns the state of a binding session: programmed
+// states (SetBindingState) take precedence so tests can force outcomes, real
+// entries are pending until confirmed and completed afterwards. An unknown or
+// purged binding id resolves to ErrProviderBindingNotFound — the provider has
+// forgotten the session, which the sync treats as expired.
+func (p *Provider) PaymentMethodBinding(ctx context.Context, bindingID string) (res application.MethodBindingState, err error) {
+	start := time.Now()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "error"
+		}
+		p.metrics.RecordRequest(ctx, "fake", "PaymentMethodBinding", status, time.Since(start))
+	}()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.purgeLocked()
+	if state, ok := p.bindingStates[bindingID]; ok {
+		return state, nil
+	}
+	entry, ok := p.bindings[bindingID]
+	if !ok {
+		return application.MethodBindingState{}, fmt.Errorf("fake: binding not found: %w", application.ErrProviderBindingNotFound)
+	}
+	if entry.completed {
+		return application.MethodBindingState{
+			Status: application.MethodBindingCompleted,
+			Method: &entry.method,
+		}, nil
+	}
+	return application.MethodBindingState{Status: application.MethodBindingPending}, nil
 }
 
 // RemovePaymentMethod is a no-op for the fake provider.
@@ -301,34 +408,61 @@ func (p *Provider) ListPaymentMethods(ctx context.Context, customerRef string) (
 }
 
 // SetBindingState programs the PaymentMethodBinding result for a binding id.
-// It is the fake counterpart of provider-side binding polling and is used by
-// tests that drive the card-binding flow.
+// It is the fake counterpart of provider-side binding state and lets tests
+// force outcomes (failed bindings, foreign methods) the local confirmation
+// flow cannot produce.
 func (p *Provider) SetBindingState(bindingID string, state application.MethodBindingState) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.bindingStates[bindingID] = state
 }
 
-// PaymentMethodBinding returns the state programmed with SetBindingState.
-// The fake provider has no provider-side card storage, so an unprogrammed
-// binding id is an error.
-func (p *Provider) PaymentMethodBinding(ctx context.Context, bindingID string) (res application.MethodBindingState, err error) {
+// ConfirmCardBinding completes a previously started binding and returns the
+// add-card notification for it. It is used by the local confirmation handler
+// and is not part of the provider port. Confirming a completed binding is
+// idempotent: the same notification is returned again, and the application's
+// session state makes reprocessing a no-op.
+func (p *Provider) ConfirmCardBinding(ctx context.Context, requestKey string) (res application.WebhookEvent, err error) {
 	start := time.Now()
 	defer func() {
 		status := "ok"
 		if err != nil {
 			status = "error"
 		}
-		p.metrics.RecordRequest(ctx, "fake", "PaymentMethodBinding", status, time.Since(start))
+		p.metrics.RecordRequest(ctx, "fake", "ConfirmCardBinding", status, time.Since(start))
 	}()
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	state, ok := p.bindingStates[bindingID]
+	p.purgeLocked()
+	entry, ok := p.bindings[requestKey]
 	if !ok {
-		return application.MethodBindingState{}, errors.New("fake: binding state not programmed for binding id")
+		// The provider no longer tracks the session (TTL purge or an unknown
+		// key); the sentinel lets the caller answer not-found.
+		return application.WebhookEvent{}, fmt.Errorf("fake: binding not found: %w", application.ErrProviderBindingNotFound)
 	}
-	return state, nil
+	if !entry.completed {
+		entry.method = application.SavedMethod{
+			ProviderMethodID: "fake_card_" + uuid.Must(uuid.NewV7()).String(),
+			ChargeToken:      "fake_token_" + uuid.Must(uuid.NewV7()).String(),
+			MaskedPan:        fakeMaskedPan,
+			ExpDate:          fakeExpDate,
+			CustomerRef:      entry.customerRef,
+		}
+		entry.completed = true
+		p.bindings[requestKey] = entry
+	}
+
+	logger.WithCorrelation(ctx, p.log).InfoContext(ctx, "fake card binding confirmed",
+		"binding_id", requestKey,
+		"customer_ref", entry.customerRef,
+	)
+	return application.WebhookEvent{
+		MethodBound: &application.MethodBoundNotification{
+			BindingID: requestKey,
+			Method:    entry.method,
+		},
+	}, nil
 }
 
 // RefundPayment refunds a finalized fake payment. For the fake provider every
@@ -498,13 +632,18 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 	return event, nil
 }
 
-// purgeLocked removes pending entries older than pendingTTL.
-// p.mu must be held.
+// purgeLocked removes pending payments and open bindings older than
+// pendingTTL. p.mu must be held.
 func (p *Provider) purgeLocked() {
 	now := p.clock.Now().UTC()
 	for id, entry := range p.pending {
 		if now.Sub(entry.createdAt) > pendingTTL {
 			delete(p.pending, id)
+		}
+	}
+	for id, entry := range p.bindings {
+		if !entry.completed && now.Sub(entry.createdAt) > pendingTTL {
+			delete(p.bindings, id)
 		}
 	}
 }

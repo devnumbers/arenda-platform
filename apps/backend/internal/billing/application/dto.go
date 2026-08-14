@@ -6,12 +6,12 @@ import (
 )
 
 // SubscriptionView is the read model of the user's current subscription with
-// its tariffs resolved. The active payment method joins the view again with
-// the payment-methods ticket (#251); until then it is always nil.
+// its tariffs and the active payment method resolved (issue #251).
 type SubscriptionView struct {
-	Subscription  domain.Subscription
-	Tariff        domain.Tariff
-	PendingTariff *domain.Tariff
+	Subscription        domain.Subscription
+	Tariff              domain.Tariff
+	PendingTariff       *domain.Tariff
+	ActivePaymentMethod *domain.PaymentMethod
 }
 
 // ChangeTariffRequest is the application-layer input of the tariff-change use
@@ -35,4 +35,20 @@ type ChangeTariffResult struct {
 type SubscriptionPaymentView struct {
 	Payment domain.SubscriptionPayment
 	Tariff  domain.Tariff
+}
+
+// AddPaymentMethodRequest is the application-layer input of the
+// add-payment-method use case (issue #251). ProviderToken carries the raw
+// charge token of synchronous providers (the fake); bank-form providers such
+// as T-Kassa ignore it and run the binding-session flow instead.
+type AddPaymentMethodRequest struct {
+	ProviderToken string
+}
+
+// AddPaymentMethodResult carries either the created payment method (the
+// synchronous token path) or the confirmation URL of the binding form the
+// payer follows (the binding-session path). Exactly one of the two is set.
+type AddPaymentMethodResult struct {
+	ConfirmURL    string
+	PaymentMethod *domain.PaymentMethod
 }
