@@ -1,8 +1,10 @@
 package application
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -212,6 +214,96 @@ func (r *fakeTransitionRepo) WithTx(transaction.Tx) (SubscriptionTransitionRepos
 	return r, nil
 }
 
+// fakePaymentRepo is an in-memory SubscriptionPaymentRepository.
+type fakePaymentRepo struct {
+	mu       sync.Mutex
+	payments map[uuid.UUID]domain.SubscriptionPayment
+	// hidePending, when positive, makes ListPendingByUserID return empty and
+	// decrements, simulating a lookup that misses right before a concurrent
+	// writer creates the conflicting pending payment.
+	hidePending int
+}
+
+func newFakePaymentRepo() *fakePaymentRepo {
+	return &fakePaymentRepo{payments: make(map[uuid.UUID]domain.SubscriptionPayment)}
+}
+
+func (r *fakePaymentRepo) Create(_ context.Context, payment domain.SubscriptionPayment) (domain.SubscriptionPayment, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, existing := range r.payments {
+		if existing.Status == domain.PaymentStatusPending &&
+			existing.UserID == payment.UserID && existing.TariffID == payment.TariffID &&
+			existing.Period == payment.Period && existing.ID != payment.ID {
+			return domain.SubscriptionPayment{}, ErrAlreadyExists
+		}
+	}
+	r.payments[payment.ID] = payment
+	return payment, nil
+}
+
+func (r *fakePaymentRepo) GetByID(_ context.Context, id uuid.UUID) (domain.SubscriptionPayment, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if p, ok := r.payments[id]; ok {
+		return p, nil
+	}
+	return domain.SubscriptionPayment{}, ErrNotFound
+}
+
+func (r *fakePaymentRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error) {
+	return r.GetByID(ctx, id)
+}
+
+func (r *fakePaymentRepo) ListByUserID(_ context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result := make([]domain.SubscriptionPayment, 0, len(r.payments))
+	for _, p := range r.payments {
+		if p.UserID == userID {
+			result = append(result, p)
+		}
+	}
+	// Mirror the SQL ordering: newest first.
+	slices.SortFunc(result, func(a, b domain.SubscriptionPayment) int {
+		if c := b.CreatedAt.Compare(a.CreatedAt); c != 0 {
+			return c
+		}
+		return bytes.Compare(b.ID[:], a.ID[:])
+	})
+	return result, nil
+}
+
+func (r *fakePaymentRepo) ListPendingByUserID(_ context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result := make([]domain.SubscriptionPayment, 0)
+	if r.hidePending > 0 {
+		r.hidePending--
+		return result, nil
+	}
+	for _, p := range r.payments {
+		if p.UserID == userID && p.Status == domain.PaymentStatusPending {
+			result = append(result, p)
+		}
+	}
+	return result, nil
+}
+
+func (r *fakePaymentRepo) Update(_ context.Context, payment domain.SubscriptionPayment) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.payments[payment.ID]; !ok {
+		return ErrNotFound
+	}
+	r.payments[payment.ID] = payment
+	return nil
+}
+
+func (r *fakePaymentRepo) WithTx(transaction.Tx) (SubscriptionPaymentRepository, error) {
+	return r, nil
+}
+
 // countingRecorder wraps auditapp.Noop to count WithTx bindings.
 type countingRecorder struct {
 	auditapp.Noop
@@ -235,6 +327,7 @@ type fakeStores struct {
 	tariffs       *fakeTariffRepo
 	subscriptions *fakeSubscriptionRepo
 	transitions   *fakeTransitionRepo
+	payments      *fakePaymentRepo
 	beginner      *fakeBeginner
 }
 
@@ -243,6 +336,7 @@ func newFakeStores(tariffs ...domain.Tariff) *fakeStores {
 		tariffs:       newFakeTariffRepo(tariffs...),
 		subscriptions: newFakeSubscriptionRepo(),
 		transitions:   newFakeTransitionRepo(),
+		payments:      newFakePaymentRepo(),
 		beginner:      &fakeBeginner{},
 	}
 }
@@ -250,7 +344,7 @@ func newFakeStores(tariffs ...domain.Tariff) *fakeStores {
 // factory builds a txStoreFactory from the fakes plus a fakeUoW. audit defaults
 // to nil (NewTxStoreFactory substitutes Noop).
 func (s *fakeStores) factory(audit auditapp.Recorder) txStoreFactory {
-	return NewTxStoreFactory(s.tariffs, s.subscriptions, s.transitions, audit, &fakeUoW{beginner: s.beginner})
+	return NewTxStoreFactory(s.tariffs, s.subscriptions, s.transitions, s.payments, audit, &fakeUoW{beginner: s.beginner})
 }
 
 // TestRunInTx_BuildsStoresFromTxAndCommits proves runInTx binds every

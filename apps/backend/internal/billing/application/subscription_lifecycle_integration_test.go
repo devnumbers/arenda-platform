@@ -202,9 +202,10 @@ func TestSubscriptionLifecycle_Integration_DowngradeScheduling(t *testing.T) {
 }
 
 // TestSubscriptionLifecycle_Integration_ChangeTariffRejections proves the
-// rejection paths of the tariff-change use case on the real schema: the
-// same-tariff request on an active subscription and the temporarily
-// unavailable upgrade both leave no trace.
+// rejection paths of the tariff-change use case on the real schema: a
+// same-tariff request on an active subscription leaves no trace, and an
+// upgrade no longer fails with the temporary payment-unavailable error of
+// issue #249 — it starts a pending payment (issue #250).
 func TestSubscriptionLifecycle_Integration_ChangeTariffRejections(t *testing.T) {
 	h := newIntegrationHarness(t)
 	userID, sub := seedPaidProSubscription(t, h)
@@ -216,11 +217,18 @@ func TestSubscriptionLifecycle_Integration_ChangeTariffRejections(t *testing.T) 
 		t.Fatalf("same-tariff err = %v, want domain.ErrAlreadyOnTariff", err)
 	}
 
-	if _, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), userID, billingapp.ChangeTariffRequest{
+	result, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), userID, billingapp.ChangeTariffRequest{
 		TariffName: domain.TariffBusiness,
 		Period:     domain.PeriodMonth,
-	}); !errors.Is(err, billingapp.ErrPaymentUnavailable) {
-		t.Fatalf("upgrade err = %v, want ErrPaymentUnavailable", err)
+	})
+	if err != nil {
+		t.Fatalf("upgrade err = %v, want a started payment (issue #250)", err)
+	}
+	if result.PaymentID == uuid.Nil || result.ConfirmURL == "" {
+		t.Fatalf("result = %+v, want a payment id and a payer url", result)
+	}
+	if got := h.countRows(`SELECT count(*) FROM subscription_payments WHERE id = $1 AND status = 'pending'`, result.PaymentID); got != 1 {
+		t.Errorf("pending payment rows = %d, want 1", got)
 	}
 
 	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
@@ -228,12 +236,9 @@ func TestSubscriptionLifecycle_Integration_ChangeTariffRejections(t *testing.T) 
 		t.Fatalf("GetByUserID() error = %v", err)
 	}
 	if stored.HasPendingChange() {
-		t.Error("rejected requests must not leave a pending change")
+		t.Error("a paid upgrade must not leave a scheduled pending change")
 	}
 	if got := h.countRows(`SELECT count(*) FROM subscription_transitions WHERE subscription_id = $1`, sub.ID); got != 1 {
-		t.Errorf("transitions = %d, want 1 (only the onboarding registration)", got)
-	}
-	if got := h.countRows(`SELECT count(*) FROM audit_log WHERE entity_id = $1`, sub.ID); got != 0 {
-		t.Errorf("audit rows = %d, want 0", got)
+		t.Errorf("transitions = %d, want 1 (only the onboarding registration; the tariff lands with the payment)", got)
 	}
 }

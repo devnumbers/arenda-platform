@@ -3,8 +3,10 @@ package http
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
@@ -39,19 +41,50 @@ type SubscriptionManager interface {
 	ChangeTariff(ctx context.Context, userID uuid.UUID, req billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error)
 }
 
+// PaymentManager serves the user's payment views and the local fake-payment
+// confirmation of issue #250.
+type PaymentManager interface {
+	ListPayments(ctx context.Context, userID uuid.UUID) ([]billingapp.SubscriptionPaymentView, error)
+	ConfirmFakePayment(ctx context.Context, paymentID uuid.UUID) error
+}
+
+// WebhookProcessor synchronously applies payment-provider webhooks (issue #250)
+// and answers with the provider's fixed acknowledgement body.
+type WebhookProcessor interface {
+	HandleWebhook(ctx context.Context, providerName string, payload []byte) error
+	WebhookAck() []byte
+}
+
+// The synchronous webhook budget: the provider waits ~10 s for the
+// acknowledgement (T-Kassa's window), so processing must finish well inside it
+// — a failed or timed-out delivery is answered non-200 and the provider
+// retries. See the "synchronous payment webhooks" ADR.
+const webhookProcessBudget = 8 * time.Second
+
+// maxWebhookBody caps the accepted webhook payload size. Oversized bodies are
+// rejected without reading them fully.
+const maxWebhookBody = 256 * 1024
+
 // BillingHandlers implements the generated billing endpoints of the
 // OpenAPI contract. The subscription lifecycle mutations of issue #249 are
 // live — PATCH /subscription/auto-renew, POST /subscription/cancel and POST
 // /subscription/change (downgrade scheduling; upgrades answer with a temporary
-// payment-unavailable error until #250). The remaining endpoints answer 501
-// until their flows land — payments and webhooks in #250, payment methods in
-// #251, refunds and admin payment views in #254. The user-facing contract is
-// frozen, so the routes stay mounted.
+// payment-unavailable error until #250). The payment endpoints of issue #250
+// are live — GET /subscription/payments, POST /webhooks/payment/{provider} and
+// the local-only fake-payment confirmation. The remaining endpoints answer 501
+// until their flows land — payment methods in #251, refunds and admin payment
+// views in #254. The user-facing contract is frozen, so the routes stay
+// mounted.
 type BillingHandlers struct {
 	tariffs       TariffLister
 	subscriptions SubscriptionViewer
 	managers      SubscriptionManager
-	logger        *slog.Logger
+	payments      PaymentManager
+	webhooks      WebhookProcessor
+	// devEndpoints enables the local-only fake-payment confirmation endpoint
+	// (APP_ENV=local).
+	devEndpoints bool
+	logger       *slog.Logger
 }
 
 // NewBillingHandlers creates HTTP handlers for the billing API.
@@ -59,6 +92,9 @@ func NewBillingHandlers(
 	tariffs TariffLister,
 	subscriptions SubscriptionViewer,
 	managers SubscriptionManager,
+	payments PaymentManager,
+	webhooks WebhookProcessor,
+	devEndpoints bool,
 	logger *slog.Logger,
 ) *BillingHandlers {
 	if logger == nil {
@@ -68,6 +104,9 @@ func NewBillingHandlers(
 		tariffs:       tariffs,
 		subscriptions: subscriptions,
 		managers:      managers,
+		payments:      payments,
+		webhooks:      webhooks,
+		devEndpoints:  devEndpoints,
 		logger:        logger,
 	}
 }
@@ -222,9 +261,39 @@ func (h *BillingHandlers) ChangeTariff(w http.ResponseWriter, r *http.Request) {
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, resp)
 }
 
-// ListSubscriptionPayments implements GET /subscription/payments (issue #250).
+// ListSubscriptionPayments implements GET /subscription/payments (issue #250):
+// the user's own subscription payments with their tariffs, newest first.
 func (h *BillingHandlers) ListSubscriptionPayments(w http.ResponseWriter, r *http.Request) {
-	h.notImplemented(w, r)
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	views, err := h.payments.ListPayments(r.Context(), ownerID)
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.SubscriptionPayment, 0, len(views))
+	for _, v := range views {
+		item := openapi.SubscriptionPayment{
+			Id:            v.Payment.ID,
+			Tariff:        httpsupport.TariffResponse(v.Tariff),
+			Period:        openapi.AdminSubscriptionPaymentPeriod(v.Payment.Period),
+			Status:        openapi.SubscriptionPaymentStatus(v.Payment.Status),
+			AmountKopecks: int(v.Payment.AmountKopecks),
+			Provider:      string(v.Payment.Provider),
+			CreatedAt:     v.Payment.CreatedAt,
+		}
+		if v.Payment.HasPaymentURL() {
+			url := *v.Payment.PaymentURL
+			item.PaymentUrl = &url
+		}
+		items = append(items, item)
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.SubscriptionPaymentsResponse{Items: items})
 }
 
 // ListPaymentMethods implements GET /subscription/payment-methods (issue #251).
@@ -256,17 +325,79 @@ func (h *BillingHandlers) ActivatePaymentMethod(w http.ResponseWriter, r *http.R
 }
 
 // ConfirmFakeSubscriptionPayment implements
-// POST /internal/fake-subscription-payment/{id}/confirm (issue #250).
-func (h *BillingHandlers) ConfirmFakeSubscriptionPayment(w http.ResponseWriter, r *http.Request, _ uuid.UUID) {
-	h.notImplemented(w, r)
+// POST /internal/fake-subscription-payment/{id}/confirm (issue #250). Local
+// only (APP_ENV=local): it completes a pending payment at the fake provider so
+// the whole payment flow is drivable end-to-end on a developer machine.
+func (h *BillingHandlers) ConfirmFakeSubscriptionPayment(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	if !h.devEndpoints {
+		h.notImplemented(w, r)
+		return
+	}
+
+	if err := h.payments.ConfirmFakePayment(r.Context(), id); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
-// HandlePaymentWebhook implements POST /webhooks/payment/{provider}. The
-// synchronous-processing rewrite lands with issue #250; until then there are
-// no payments to notify about.
-func (h *BillingHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *http.Request, _ string) {
+// HandlePaymentWebhook implements POST /webhooks/payment/{provider}
+// (issue #250). The notification is processed synchronously within the
+// provider's delivery window: the handler answers 200 with the provider's
+// acknowledgement body only after the notification is fully applied (a
+// repeated delivery is an idempotent no-op and also answers 200); any failure
+// answers non-200 so the provider retries. See the "synchronous payment
+// webhooks" ADR.
+func (h *BillingHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *http.Request, provider string) {
 	defer func() { _ = r.Body.Close() }()
-	h.notImplemented(w, r)
+
+	payload, err := io.ReadAll(io.LimitReader(r.Body, maxWebhookBody+1))
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to read webhook body",
+			slog.String("provider", provider),
+			slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+	if len(payload) > maxWebhookBody {
+		h.logger.ErrorContext(r.Context(), "webhook body exceeds size limit",
+			slog.String("provider", provider),
+			slog.Int("size", len(payload)))
+		httpsupport.WriteProblem(w, http.StatusRequestEntityTooLarge, httpsupport.Problem(r.Context(), "Payload too large", "Тело запроса слишком большое"))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), webhookProcessBudget)
+	defer cancel()
+
+	if err := h.webhooks.HandleWebhook(ctx, provider, payload); err != nil {
+		// Non-200: the provider redelivers the notification. Mismatches and
+		// parse/verification failures are request defects no retry can fix, so
+		// they answer 400; processing failures answer 500 for the retry.
+		h.logger.ErrorContext(ctx, "payment webhook processing failed",
+			slog.String("provider", provider),
+			slog.String("error", httpsupport.SanitizeError(err)))
+		status := http.StatusInternalServerError
+		switch {
+		case errors.Is(err, billingapp.ErrWebhookProviderMismatch),
+			errors.Is(err, billingapp.ErrWebhookUnsupported),
+			errors.Is(err, billingapp.ErrWebhookPaymentMismatch),
+			errors.Is(err, billingapp.ErrWebhookRejected):
+			status = http.StatusBadRequest
+		case errors.Is(err, billingapp.ErrPaymentNotFound):
+			status = http.StatusNotFound
+		}
+		httpsupport.WriteProblem(w, status, httpsupport.Problem(r.Context(), "Webhook not processed", "Уведомление не обработано"))
+		return
+	}
+
+	ack := h.webhooks.WebhookAck()
+	if len(ack) > 0 {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(ack)
 }
 
 // GetAdminSubscriptionPayment implements GET /admin/subscription/payments/{paymentId}
@@ -298,17 +429,21 @@ func (h *BillingHandlers) handleBillingError(w http.ResponseWriter, r *http.Requ
 	switch {
 	case errors.Is(err, billingapp.ErrNotFound),
 		errors.Is(err, billingapp.ErrTariffNotFound),
-		errors.Is(err, billingapp.ErrSubscriptionNotFound):
+		errors.Is(err, billingapp.ErrSubscriptionNotFound),
+		errors.Is(err, billingapp.ErrPaymentNotFound):
 		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Ресурс не найден"))
 	case errors.Is(err, billingapp.ErrPaymentUnavailable):
 		// Temporary answer for the flows that need a payment until #250 lands;
 		// deliberately outside the frozen contract's response list because it
 		// disappears with the payment flow.
 		httpsupport.WriteProblem(w, http.StatusServiceUnavailable, httpsupport.Problem(r.Context(), "Payment unavailable", "Оплата временно недоступна, попробуйте позже"))
+	case errors.Is(err, billingapp.ErrPaymentNotConfirmable):
+		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Активный провайдер не поддерживает локальное подтверждение платежа"))
 	case errors.Is(err, domain.ErrAlreadyOnTariff),
 		errors.Is(err, domain.ErrInvalidTariffChange),
 		errors.Is(err, domain.ErrInvalidSubscriptionState),
-		errors.Is(err, domain.ErrCannotEnableAutoRenew):
+		errors.Is(err, domain.ErrCannotEnableAutoRenew),
+		errors.Is(err, domain.ErrInvalidPaymentStatus):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
 			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
@@ -316,7 +451,9 @@ func (h *BillingHandlers) handleBillingError(w http.ResponseWriter, r *http.Requ
 		}
 		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", detail))
 	case errors.Is(err, domain.ErrInvalidPeriod),
-		errors.Is(err, domain.ErrInvalidTariff):
+		errors.Is(err, domain.ErrInvalidTariff),
+		errors.Is(err, domain.ErrInvalidAmount),
+		errors.Is(err, domain.ErrInvalidPayment):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
 			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))

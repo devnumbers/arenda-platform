@@ -155,7 +155,7 @@ func TestOnboardingService_OnUserRegistered_ConcurrentCreateSkipsTransition(t *t
 	}
 	racing := &racingSubscriptionRepo{fakeSubscriptionRepo: stores.subscriptions, existing: winner}
 	svc := NewOnboardingService(
-		NewTxStoreFactory(stores.tariffs, racing, stores.transitions, nil, &fakeUoW{beginner: stores.beginner}),
+		NewTxStoreFactory(stores.tariffs, racing, stores.transitions, stores.payments, nil, &fakeUoW{beginner: stores.beginner}),
 		OnboardingServiceConfig{Logger: slog.New(slog.DiscardHandler)},
 	)
 

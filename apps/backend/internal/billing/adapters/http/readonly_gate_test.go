@@ -70,6 +70,35 @@ func (r *gateTransitionRepo) WithTx(transaction.Tx) (billingapp.SubscriptionTran
 	return r, nil
 }
 
+// gatePaymentRepo is an in-memory billingapp.SubscriptionPaymentRepository.
+type gatePaymentRepo struct{}
+
+func (r *gatePaymentRepo) Create(_ context.Context, p domain.SubscriptionPayment) (domain.SubscriptionPayment, error) {
+	return p, nil
+}
+
+func (r *gatePaymentRepo) GetByID(context.Context, uuid.UUID) (domain.SubscriptionPayment, error) {
+	return domain.SubscriptionPayment{}, billingapp.ErrNotFound
+}
+
+func (r *gatePaymentRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error) {
+	return r.GetByID(ctx, id)
+}
+
+func (r *gatePaymentRepo) ListByUserID(context.Context, uuid.UUID) ([]domain.SubscriptionPayment, error) {
+	return nil, nil
+}
+
+func (r *gatePaymentRepo) ListPendingByUserID(context.Context, uuid.UUID) ([]domain.SubscriptionPayment, error) {
+	return nil, nil
+}
+
+func (r *gatePaymentRepo) Update(context.Context, domain.SubscriptionPayment) error { return nil }
+
+func (r *gatePaymentRepo) WithTx(transaction.Tx) (billingapp.SubscriptionPaymentRepository, error) {
+	return r, nil
+}
+
 // newGate builds the readonly-gate adapter over an in-memory subscription
 // service. The txStoreFactory is unexported but constructible and passable
 // from this package (ADR 0033 factory pattern).
@@ -79,6 +108,7 @@ func newGate(sub domain.Subscription, subErr error, now time.Time) *MutationGate
 		&gateTariffRepo{tariff: tariff},
 		&gateSubscriptionRepo{sub: sub, err: subErr},
 		&gateTransitionRepo{},
+		&gatePaymentRepo{},
 		nil,
 		nil,
 	)

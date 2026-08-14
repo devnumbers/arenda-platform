@@ -32,16 +32,21 @@ import (
 
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
-	Auth                     identityhttp.Authenticator
-	PhoneChange              identityhttp.PhoneChanger
-	Profile                  identityhttp.Profiler
-	Logout                   identityhttp.Logout
-	Sessions                 httpsupport.SessionLoader
-	Audit                    auditapp.Recorder
-	MeEnricher               identityhttp.MeEnricher
-	Tariffs                  billinghttp.TariffLister
-	Subscriptions            billinghttp.SubscriptionViewer
-	SubscriptionManagers     billinghttp.SubscriptionManager
+	Auth                 identityhttp.Authenticator
+	PhoneChange          identityhttp.PhoneChanger
+	Profile              identityhttp.Profiler
+	Logout               identityhttp.Logout
+	Sessions             httpsupport.SessionLoader
+	Audit                auditapp.Recorder
+	MeEnricher           identityhttp.MeEnricher
+	Tariffs              billinghttp.TariffLister
+	Subscriptions        billinghttp.SubscriptionViewer
+	SubscriptionManagers billinghttp.SubscriptionManager
+	Payments             billinghttp.PaymentManager
+	Webhooks             billinghttp.WebhookProcessor
+	// BillingDevEndpoints enables the local-only fake-payment confirmation
+	// endpoint (APP_ENV=local, issue #250).
+	BillingDevEndpoints      bool
 	ReadonlyGate             httpsupport.SubscriptionMutationChecker
 	Admin                    *adminapp.AdminService
 	Properties               *propertiesapp.PropertyService
@@ -146,7 +151,7 @@ func New(deps Deps) http.Handler {
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
-	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.Subscriptions, deps.SubscriptionManagers, deps.Logger)
+	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.Subscriptions, deps.SubscriptionManagers, deps.Payments, deps.Webhooks, deps.BillingDevEndpoints, deps.Logger)
 	financeHandlers := leaseshttp.NewFinanceHandlers(deps.Operations)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)

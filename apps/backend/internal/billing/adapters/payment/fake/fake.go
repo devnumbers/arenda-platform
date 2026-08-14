@@ -464,7 +464,10 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 		delete(p.pending, internalPaymentID)
 	}
 	if !ok {
-		return application.WebhookEvent{}, errors.New("fake: payment not found")
+		// The provider no longer tracks the entry (TTL purge or an earlier
+		// confirmation); the sentinel lets the caller fall back to the
+		// provider status as the source of truth.
+		return application.WebhookEvent{}, fmt.Errorf("fake: payment not found: %w", application.ErrProviderPaymentNotFound)
 	}
 
 	status := domain.PaymentStatusSucceeded

@@ -28,11 +28,11 @@ type Billing struct {
 	TariffRepo       *billingpg.TariffRepository
 	SubscriptionRepo *billingpg.SubscriptionRepository
 	TransitionRepo   *billingpg.SubscriptionTransitionRepository
+	PaymentRepo      *billingpg.SubscriptionPaymentRepository
 	Services         billingapp.Services
 	// PaymentProvider is the single active payment provider adapter behind
-	// the neutral provider port (issue #248, ADR 0038). The flow tickets
-	// (#250-#252) wire their services against it; nil never occurs because
-	// config validation pins PAYMENT_PROVIDER to fake or tkassa.
+	// the neutral provider port (issue #248, ADR 0038). Nil never occurs
+	// because config validation pins PAYMENT_PROVIDER to fake or tkassa.
 	PaymentProvider billingapp.PaymentProvider
 	// MutationGate adapts the subscription service to the readonly-gate port
 	// declared by platform/httpsupport (ADR 0035 consumer-side interface).
@@ -41,25 +41,13 @@ type Billing struct {
 
 // WireBilling constructs the billing repositories, the shared txStoreFactory
 // (ADR 0033 γ-factory), every billing service of the rewritten core module
-// (issue #245) and the active payment provider adapter (issue #248).
+// (issue #245), the payment flows of issue #250 and the active payment
+// provider adapter (issue #248).
 func WireBilling(ctx context.Context, p platformDeps) (*Billing, error) {
 	tariffRepo := billingpg.NewTariffRepository(p.DB, p.Cfg.TariffCacheTTL, p.Clock)
 	subscriptionRepo := billingpg.NewSubscriptionRepository(p.DB)
 	transitionRepo := billingpg.NewSubscriptionTransitionRepository(p.DB)
-
-	factory := billingapp.NewTxStoreFactory(
-		tariffRepo,
-		subscriptionRepo,
-		transitionRepo,
-		p.AuditRecorder,
-		p.UoW,
-	)
-
-	services := billingapp.NewServices(factory, billingapp.ServicesConfig{
-		Config: billingapp.DefaultConfig(),
-		Clock:  p.Clock,
-		Logger: p.Logger,
-	})
+	paymentRepo := billingpg.NewSubscriptionPaymentRepository(p.DB)
 
 	paymentMetrics, err := payment.NewMetrics()
 	if err != nil {
@@ -70,6 +58,22 @@ func WireBilling(ctx context.Context, p platformDeps) (*Billing, error) {
 		return nil, err
 	}
 
+	factory := billingapp.NewTxStoreFactory(
+		tariffRepo,
+		subscriptionRepo,
+		transitionRepo,
+		paymentRepo,
+		p.AuditRecorder,
+		p.UoW,
+	)
+
+	services := billingapp.NewServices(factory, billingapp.ServicesConfig{
+		Config:   billingapp.DefaultConfig(),
+		Clock:    p.Clock,
+		Logger:   p.Logger,
+		Provider: provider,
+	})
+
 	p.Logger.InfoContext(ctx, "billing module initialized",
 		"tariff_cache_ttl", p.Cfg.TariffCacheTTL.String(),
 		"payment_provider", string(provider.Name()),
@@ -79,6 +83,7 @@ func WireBilling(ctx context.Context, p platformDeps) (*Billing, error) {
 		TariffRepo:       tariffRepo,
 		SubscriptionRepo: subscriptionRepo,
 		TransitionRepo:   transitionRepo,
+		PaymentRepo:      paymentRepo,
 		Services:         services,
 		PaymentProvider:  provider,
 		MutationGate:     billinghttp.NewMutationGate(services.Subscriptions, p.Clock),

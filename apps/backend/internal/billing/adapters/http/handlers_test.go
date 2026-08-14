@@ -78,9 +78,51 @@ func (f *fakeSubscriptionManager) ChangeTariff(ctx context.Context, userID uuid.
 	return billingapp.ChangeTariffResult{}, errors.New("unexpected ChangeTariff call")
 }
 
+// fakePaymentManager is a func-backed PaymentManager (the consumer-side port
+// of these handlers, ADR 0035).
+type fakePaymentManager struct {
+	list    func(ctx context.Context, userID uuid.UUID) ([]billingapp.SubscriptionPaymentView, error)
+	confirm func(ctx context.Context, paymentID uuid.UUID) error
+}
+
+func (f *fakePaymentManager) ListPayments(ctx context.Context, userID uuid.UUID) ([]billingapp.SubscriptionPaymentView, error) {
+	if f.list != nil {
+		return f.list(ctx, userID)
+	}
+	return nil, errors.New("unexpected ListPayments call")
+}
+
+func (f *fakePaymentManager) ConfirmFakePayment(ctx context.Context, paymentID uuid.UUID) error {
+	if f.confirm != nil {
+		return f.confirm(ctx, paymentID)
+	}
+	return errors.New("unexpected ConfirmFakePayment call")
+}
+
+// fakeWebhookProcessor is a func-backed WebhookProcessor.
+type fakeWebhookProcessor struct {
+	handle func(ctx context.Context, providerName string, payload []byte) error
+	ack    []byte
+}
+
+func (f *fakeWebhookProcessor) HandleWebhook(ctx context.Context, providerName string, payload []byte) error {
+	if f.handle != nil {
+		return f.handle(ctx, providerName, payload)
+	}
+	return errors.New("unexpected HandleWebhook call")
+}
+
+func (f *fakeWebhookProcessor) WebhookAck() []byte { return f.ack }
+
 // newTestHandlers builds handlers over the given fakes; a nil fake is
 // replaced by a stub that fails the test when called.
 func newTestHandlers(tariffs TariffLister, subs SubscriptionViewer, managers SubscriptionManager) *BillingHandlers {
+	return newTestHandlersOpts(tariffs, subs, managers, nil, nil, false)
+}
+
+// newTestHandlersOpts builds handlers with explicit payment, webhook and
+// dev-endpoint options.
+func newTestHandlersOpts(tariffs TariffLister, subs SubscriptionViewer, managers SubscriptionManager, payments PaymentManager, webhooks WebhookProcessor, devEndpoints bool) *BillingHandlers {
 	if tariffs == nil {
 		tariffs = &fakeTariffLister{}
 	}
@@ -90,7 +132,13 @@ func newTestHandlers(tariffs TariffLister, subs SubscriptionViewer, managers Sub
 	if managers == nil {
 		managers = &fakeSubscriptionManager{}
 	}
-	return NewBillingHandlers(tariffs, subs, managers, nil)
+	if payments == nil {
+		payments = &fakePaymentManager{}
+	}
+	if webhooks == nil {
+		webhooks = &fakeWebhookProcessor{}
+	}
+	return NewBillingHandlers(tariffs, subs, managers, payments, webhooks, devEndpoints, nil)
 }
 
 // ownerRequest builds a request authenticated as the given owner.
@@ -340,7 +388,7 @@ func TestGetSubscription_InfrastructureErrorIs500(t *testing.T) {
 }
 
 // TestDeferredEndpoints_Answer501 proves the endpoints whose flows return with
-// later tickets (#250–#254) answer 501 instead of pretending to work.
+// later tickets (#251–#254) answer 501 instead of pretending to work.
 func TestDeferredEndpoints_Answer501(t *testing.T) {
 	h := newTestHandlers(nil, nil, nil)
 	ownerID := uuid.New()
@@ -351,7 +399,6 @@ func TestDeferredEndpoints_Answer501(t *testing.T) {
 		method string
 		path   string
 	}{
-		{name: "payments", call: h.ListSubscriptionPayments, method: http.MethodGet, path: "/subscription/payments"},
 		{name: "payment-methods", call: h.ListPaymentMethods, method: http.MethodGet, path: "/subscription/payment-methods"},
 	}
 	for _, tc := range cases {
@@ -609,5 +656,220 @@ func TestChangeTariff_RejectsInvalidInput(t *testing.T) {
 				t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
 			}
 		})
+	}
+}
+
+// TestListSubscriptionPayments_MapsViewToContract proves GET
+// /subscription/payments answers with the frozen OpenAPI shape: items with
+// id, tariff, period, status, kopeck amount as integer, provider and the
+// payment URL of an unfinished payment (issue #250).
+func TestListSubscriptionPayments_MapsViewToContract(t *testing.T) {
+	ownerID := uuid.New()
+	paymentID := uuid.New()
+	url := "http://localhost:8080/internal/fake-subscription-payment/x/confirm"
+	createdAt := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
+	h := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{list: func(_ context.Context, got uuid.UUID) ([]billingapp.SubscriptionPaymentView, error) {
+		if got != ownerID {
+			t.Errorf("ListPayments called with %v, want %v", got, ownerID)
+		}
+		return []billingapp.SubscriptionPaymentView{{
+			Payment: domain.SubscriptionPayment{
+				ID:                paymentID,
+				UserID:            ownerID,
+				TariffID:          uuid.New(),
+				Period:            domain.PeriodMonth,
+				AmountKopecks:     49000,
+				Provider:          "fake",
+				ProviderPaymentID: new(string),
+				PaymentURL:        &url,
+				Status:            domain.PaymentStatusPending,
+				CreatedAt:         createdAt,
+			},
+			Tariff: domain.Tariff{Name: domain.TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true},
+		}}, nil
+	}}, nil, false)
+
+	w := httptest.NewRecorder()
+	h.ListSubscriptionPayments(w, ownerRequest(t, http.MethodGet, "/subscription/payments", ownerID))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Items []struct {
+			ID     string `json:"id"`
+			Tariff struct {
+				Name string `json:"name"`
+			} `json:"tariff"`
+			Period        string    `json:"period"`
+			Status        string    `json:"status"`
+			AmountKopecks int       `json:"amountKopecks"`
+			Provider      string    `json:"provider"`
+			PaymentURL    *string   `json:"paymentUrl"`
+			CreatedAt     time.Time `json:"createdAt"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(resp.Items))
+	}
+	item := resp.Items[0]
+	if item.ID != paymentID.String() || item.Tariff.Name != "pro" || item.Period != "month" ||
+		item.Status != "pending" || item.AmountKopecks != 49000 || item.Provider != "fake" {
+		t.Errorf("item = %+v, want id/tariff=pro/month/pending/49000/fake", item)
+	}
+	if item.PaymentURL == nil || *item.PaymentURL != url {
+		t.Errorf("paymentUrl = %v, want %q", item.PaymentURL, url)
+	}
+}
+
+// TestListSubscriptionPayments_RequiresOwner proves the endpoint rejects
+// unauthenticated calls with 401 before touching the service.
+func TestListSubscriptionPayments_RequiresOwner(t *testing.T) {
+	h := newTestHandlers(nil, nil, nil)
+
+	w := httptest.NewRecorder()
+	h.ListSubscriptionPayments(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/subscription/payments", http.NoBody))
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", w.Code)
+	}
+}
+
+// webhookRequest builds a webhook delivery request with the given payload.
+func webhookRequest(t *testing.T, provider, payload string) *http.Request {
+	t.Helper()
+	return httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/webhooks/payment/"+provider, strings.NewReader(payload))
+}
+
+// TestHandlePaymentWebhook_AnswersAckOnSuccess proves a fully processed
+// notification answers 200 with the provider's fixed acknowledgement body
+// (issue #250, synchronous webhooks).
+func TestHandlePaymentWebhook_AnswersAckOnSuccess(t *testing.T) {
+	var gotPayload []byte
+	h := newTestHandlersOpts(nil, nil, nil, nil, &fakeWebhookProcessor{
+		handle: func(_ context.Context, providerName string, payload []byte) error {
+			if providerName != "fake" {
+				t.Errorf("provider = %q, want fake", providerName)
+			}
+			gotPayload = payload
+			return nil
+		},
+		ack: []byte(`{"status":"ok"}`),
+	}, false)
+
+	w := httptest.NewRecorder()
+	h.HandlePaymentWebhook(w, webhookRequest(t, "fake", `{"internal_payment_id":"11111111-1111-1111-1111-111111111111"}`), "fake")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if w.Body.String() != `{"status":"ok"}` {
+		t.Errorf("body = %s, want the provider ack body", w.Body.String())
+	}
+	if string(gotPayload) != `{"internal_payment_id":"11111111-1111-1111-1111-111111111111"}` {
+		t.Errorf("payload forwarded = %s", gotPayload)
+	}
+}
+
+// TestHandlePaymentWebhook_ErrorMapping proves processing failures answer
+// non-200 so the provider retries: request defects answer 400, a missing
+// payment 404, anything else 500 (issue #250).
+func TestHandlePaymentWebhook_ErrorMapping(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{name: "provider mismatch", err: billingapp.ErrWebhookProviderMismatch, want: http.StatusBadRequest},
+		{name: "unsupported event", err: billingapp.ErrWebhookUnsupported, want: http.StatusBadRequest},
+		{name: "payment id mismatch", err: billingapp.ErrWebhookPaymentMismatch, want: http.StatusBadRequest},
+		{name: "unverified payload", err: billingapp.ErrWebhookRejected, want: http.StatusBadRequest},
+		{name: "payment not found", err: billingapp.ErrPaymentNotFound, want: http.StatusNotFound},
+		{name: "processing failure", err: errors.New("connection refused"), want: http.StatusInternalServerError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandlersOpts(nil, nil, nil, nil, &fakeWebhookProcessor{
+				handle: func(context.Context, string, []byte) error { return tc.err },
+			}, false)
+
+			w := httptest.NewRecorder()
+			h.HandlePaymentWebhook(w, webhookRequest(t, "fake", `{}`), "fake")
+
+			if w.Code != tc.want {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
+			}
+		})
+	}
+}
+
+// TestHandlePaymentWebhook_RejectsOversizedBody proves a body over the size
+// cap answers 413 without reaching the processor.
+func TestHandlePaymentWebhook_RejectsOversizedBody(t *testing.T) {
+	h := newTestHandlersOpts(nil, nil, nil, nil, &fakeWebhookProcessor{
+		handle: func(context.Context, string, []byte) error {
+			t.Error("processor must not be called on an oversized body")
+			return nil
+		},
+	}, false)
+
+	big := strings.Repeat("x", maxWebhookBody+1)
+	w := httptest.NewRecorder()
+	h.HandlePaymentWebhook(w, webhookRequest(t, "fake", big), "fake")
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestConfirmFakeSubscriptionPayment_DevGate proves the local confirmation
+// endpoint is disabled outside APP_ENV=local (501) and forwards to the service
+// when dev endpoints are enabled (issue #250).
+func TestConfirmFakeSubscriptionPayment_DevGate(t *testing.T) {
+	paymentID := uuid.New()
+
+	notDev := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{confirm: func(context.Context, uuid.UUID) error {
+		t.Error("service must not be called when dev endpoints are disabled")
+		return nil
+	}}, nil, false)
+	w := httptest.NewRecorder()
+	notDev.ConfirmFakeSubscriptionPayment(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/fake-subscription-payment/"+paymentID.String()+"/confirm", http.NoBody), paymentID)
+	if w.Code != http.StatusNotImplemented {
+		t.Fatalf("status = %d, want 501; body: %s", w.Code, w.Body.String())
+	}
+
+	called := false
+	dev := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{confirm: func(_ context.Context, got uuid.UUID) error {
+		called = true
+		if got != paymentID {
+			t.Errorf("ConfirmFakePayment called with %v, want %v", got, paymentID)
+		}
+		return nil
+	}}, nil, true)
+	w = httptest.NewRecorder()
+	dev.ConfirmFakeSubscriptionPayment(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/fake-subscription-payment/"+paymentID.String()+"/confirm", http.NoBody), paymentID)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if !called {
+		t.Error("service was not called")
+	}
+}
+
+// TestConfirmFakeSubscriptionPayment_NotFoundMapsTo404 proves a missing
+// payment answers the contract's 404.
+func TestConfirmFakeSubscriptionPayment_NotFoundMapsTo404(t *testing.T) {
+	h := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{confirm: func(context.Context, uuid.UUID) error {
+		return billingapp.ErrPaymentNotFound
+	}}, nil, true)
+
+	w := httptest.NewRecorder()
+	h.ConfirmFakeSubscriptionPayment(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/fake-subscription-payment/"+uuid.New().String()+"/confirm", http.NoBody), uuid.New())
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body: %s", w.Code, w.Body.String())
 	}
 }

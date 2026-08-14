@@ -25,4 +25,13 @@ var (
 	// ErrInvalidTransition is returned when a subscription transition record is
 	// built from an incomplete or inconsistent subscription state.
 	ErrInvalidTransition = errors.New("invalid subscription transition")
+	// ErrInvalidAmount is returned when a payment amount is not a positive
+	// integer number of kopecks.
+	ErrInvalidAmount = errors.New("invalid payment amount")
+	// ErrInvalidPayment is returned when a payment is built from incomplete or
+	// inconsistent identity data.
+	ErrInvalidPayment = errors.New("invalid subscription payment")
+	// ErrInvalidPaymentStatus is returned when a payment transition is
+	// attempted from a status that does not allow it.
+	ErrInvalidPaymentStatus = errors.New("invalid payment status transition")
 )

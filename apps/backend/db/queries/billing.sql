@@ -90,6 +90,63 @@ SELECT * FROM subscription_transitions
 WHERE subscription_id = $1
 ORDER BY created_at DESC, id DESC;
 
+-- Subscription payments (issue #250). The partial unique index
+-- idx_subscription_payments_one_pending_upgrade (user_id, tariff_id, period)
+-- WHERE status = 'pending' is the durable idempotency backstop against double
+-- payment initiation; Create surfaces its violation as a unique-constraint
+-- error the application maps to ErrAlreadyExists.
+
+-- name: CreateSubscriptionPayment :one
+INSERT INTO subscription_payments (
+    id,
+    user_id,
+    subscription_id,
+    tariff_id,
+    payment_method_id,
+    period,
+    amount_kopecks,
+    provider,
+    provider_payment_id,
+    payment_url,
+    status,
+    refunded_amount_kopecks,
+    charge_attempts,
+    error_code,
+    succeeded_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+RETURNING *;
+
+-- name: GetSubscriptionPaymentByID :one
+SELECT * FROM subscription_payments WHERE id = $1;
+
+-- name: GetSubscriptionPaymentByIDForUpdate :one
+SELECT * FROM subscription_payments WHERE id = $1 FOR UPDATE;
+
+-- name: ListSubscriptionPaymentsByUserID :many
+SELECT * FROM subscription_payments
+WHERE user_id = $1
+ORDER BY created_at DESC, id DESC;
+
+-- name: ListPendingSubscriptionPaymentsByUserID :many
+SELECT * FROM subscription_payments
+WHERE user_id = $1 AND status = 'pending'
+ORDER BY created_at DESC, id DESC;
+
+-- name: UpdateSubscriptionPayment :one
+UPDATE subscription_payments
+SET
+    payment_method_id = $2,
+    provider_payment_id = $3,
+    payment_url = $4,
+    status = $5,
+    refunded_amount_kopecks = $6,
+    charge_attempts = $7,
+    error_code = $8,
+    succeeded_at = $9
+WHERE id = $1
+RETURNING *;
+
 -- Admin dashboard stats. These queries are consumed by the admin context's
 -- repository, not by the billing module itself.
 

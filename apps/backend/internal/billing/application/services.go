@@ -12,6 +12,7 @@ import (
 type Services struct {
 	Tariffs       *TariffService
 	Subscriptions *SubscriptionService
+	Payments      *PaymentService
 	Onboarding    *OnboardingService
 	// Limiter computes the active-property limit from the user's subscription;
 	// the properties and access contexts consume it through their bridge
@@ -29,6 +30,10 @@ type ServicesConfig struct {
 	Config Config
 	Clock  clock.Clock
 	Logger *slog.Logger
+	// Provider is the single active payment provider (ADR 0038). The payment
+	// flows of issues #250-#252 consume it; nil keeps the pre-#250 behaviour
+	// where paid tariff changes answer ErrPaymentUnavailable.
+	Provider PaymentProvider
 }
 
 // NewServices builds every billing service over one shared txStoreFactory
@@ -43,7 +48,8 @@ func NewServices(factory txStoreFactory, cfg ServicesConfig) Services {
 	}
 	return Services{
 		Tariffs:       NewTariffService(factory),
-		Subscriptions: NewSubscriptionService(factory, SubscriptionServiceConfig{Clock: cfg.Clock}),
+		Subscriptions: NewSubscriptionService(factory, SubscriptionServiceConfig{Clock: cfg.Clock, Provider: cfg.Provider, Config: cfg.Config, Logger: cfg.Logger}),
+		Payments:      NewPaymentService(factory, cfg.Provider, PaymentServiceConfig{Clock: cfg.Clock, Log: cfg.Logger}),
 		Onboarding:    NewOnboardingService(factory, OnboardingServiceConfig{Logger: cfg.Logger}),
 		Limiter:       NewSubscriptionPropertyLimiter(factory.subscriptions, factory.tariffs, cfg.Clock),
 		Workers:       Workers{},

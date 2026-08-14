@@ -29,3 +29,10 @@ type ChangeTariffResult struct {
 	PaymentID  uuid.UUID
 	ConfirmURL string
 }
+
+// SubscriptionPaymentView is the read model of one subscription payment with
+// its tariff resolved — the shape of GET /subscription/payments (issue #250).
+type SubscriptionPaymentView struct {
+	Payment domain.SubscriptionPayment
+	Tariff  domain.Tariff
+}

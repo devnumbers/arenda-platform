@@ -17,6 +17,30 @@ var (
 	// upgrades and same-tariff grace renewals answer with it; issue #250
 	// replaces it with the real payment initiation).
 	ErrPaymentUnavailable = errors.New("payment unavailable")
+	// ErrPaymentNotFound is returned when a payment lookup misses.
+	ErrPaymentNotFound = errors.New("payment not found")
+	// ErrAlreadyExists is returned when the pending-payments unique index
+	// rejects a duplicate initiation; the caller resolves it to the existing
+	// pending payment instead of failing.
+	ErrAlreadyExists = errors.New("already exists")
+	// ErrWebhookProviderMismatch is returned when a webhook is delivered for
+	// a provider other than the single active one (ADR 0038).
+	ErrWebhookProviderMismatch = errors.New("webhook provider mismatch")
+	// ErrWebhookRejected is returned when a webhook payload fails
+	// verification or parsing — a delivery defect no provider retry can fix,
+	// so the HTTP layer answers 400 instead of 500 (ADR 0039).
+	ErrWebhookRejected = errors.New("webhook rejected")
+	// ErrWebhookUnsupported is returned when a parsed webhook event has no
+	// handler yet — method-binding notifications land with issue #251.
+	ErrWebhookUnsupported = errors.New("webhook event not supported")
+	// ErrWebhookPaymentMismatch is returned when a notification's provider
+	// payment id contradicts the reference persisted at initiation — a
+	// integrity violation, not a retryable condition.
+	ErrWebhookPaymentMismatch = errors.New("webhook provider payment id mismatch")
+	// ErrPaymentNotConfirmable is returned when the local fake-payment
+	// confirmation endpoint is called while the active provider has no local
+	// confirmation capability.
+	ErrPaymentNotConfirmable = errors.New("payment provider is not locally confirmable")
 
 	// Provider sentinels classify provider outcomes the application acts
 	// on beyond success/failure. They are provider-neutral by contract

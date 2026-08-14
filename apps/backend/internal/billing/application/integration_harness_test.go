@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	paymentfake "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/fake"
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
@@ -40,16 +41,21 @@ type integrationHarness struct {
 	tariffs       *billingpg.TariffRepository
 	subscriptions *billingpg.SubscriptionRepository
 	transitions   *billingpg.SubscriptionTransitionRepository
+	payments      *billingpg.SubscriptionPaymentRepository
 
 	services         billingapp.Services
 	subscriptionsSvc *billingapp.SubscriptionService
+	paymentsSvc      *billingapp.PaymentService
 	tariffsSvc       *billingapp.TariffService
 	onboarding       *billingapp.OnboardingService
 	limiter          *billingapp.SubscriptionPropertyLimiter
 }
 
 // newIntegrationHarness builds a fresh harness over a clean database. The
-// returned clock is anchored at integrationBaseTime.
+// returned clock is anchored at integrationBaseTime. The payment flows run
+// against the fake provider adapter (issue #250): it implements the provider
+// port exactly like the real adapter, so integration tests drive payments the
+// way the local environment does.
 func newIntegrationHarness(t *testing.T) *integrationHarness {
 	t.Helper()
 
@@ -63,14 +69,18 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	tariffs := billingpg.NewTariffRepository(pool, 0, clk)
 	subscriptions := billingpg.NewSubscriptionRepository(pool)
 	transitions := billingpg.NewSubscriptionTransitionRepository(pool)
+	paymentsRepo := billingpg.NewSubscriptionPaymentRepository(pool)
 	uow := pgdb.NewUoW(pool, logger)
 	audit := auditapp.NewService(auditpg.NewWriter(pool), clk)
 
-	factory := billingapp.NewTxStoreFactory(tariffs, subscriptions, transitions, audit, uow)
+	provider := paymentfake.NewProvider("http://localhost:8080", logger, clk, nil)
+
+	factory := billingapp.NewTxStoreFactory(tariffs, subscriptions, transitions, paymentsRepo, audit, uow)
 	services := billingapp.NewServices(factory, billingapp.ServicesConfig{
-		Config: billingapp.DefaultConfig(),
-		Clock:  clk,
-		Logger: logger,
+		Config:   billingapp.DefaultConfig(),
+		Clock:    clk,
+		Logger:   logger,
+		Provider: provider,
 	})
 
 	return &integrationHarness{
@@ -80,8 +90,10 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 		tariffs:          tariffs,
 		subscriptions:    subscriptions,
 		transitions:      transitions,
+		payments:         paymentsRepo,
 		services:         services,
 		subscriptionsSvc: services.Subscriptions,
+		paymentsSvc:      services.Payments,
 		tariffsSvc:       services.Tariffs,
 		onboarding:       services.Onboarding,
 		limiter:          services.Limiter,

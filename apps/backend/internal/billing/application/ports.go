@@ -38,3 +38,19 @@ type SubscriptionTransitionRepository interface {
 	ListBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) ([]domain.Transition, error)
 	WithTx(tx transaction.Tx) (SubscriptionTransitionRepository, error)
 }
+
+// SubscriptionPaymentRepository is the persistence port for subscription
+// payments (issue #250). The ForUpdate variant acquires a row-level
+// pessimistic lock and must only be called inside a transaction. Create
+// returns ErrAlreadyExists when the partial unique index over pending payments
+// rejects a duplicate initiation for the same user/tariff/period — the durable
+// backstop the payment flow turns into "return the existing pending payment".
+type SubscriptionPaymentRepository interface {
+	Create(ctx context.Context, payment domain.SubscriptionPayment) (domain.SubscriptionPayment, error)
+	GetByID(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)
+	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)
+	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
+	ListPendingByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
+	Update(ctx context.Context, payment domain.SubscriptionPayment) error
+	WithTx(tx transaction.Tx) (SubscriptionPaymentRepository, error)
+}

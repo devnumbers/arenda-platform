@@ -66,6 +66,12 @@ type Querier interface {
 	CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSReminderParams) (int64, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (UserSubscription, error)
+	// Subscription payments (issue #250). The partial unique index
+	// idx_subscription_payments_one_pending_upgrade (user_id, tariff_id, period)
+	// WHERE status = 'pending' is the durable idempotency backstop against double
+	// payment initiation; Create surfaces its violation as a unique-constraint
+	// error the application maps to ErrAlreadyExists.
+	CreateSubscriptionPayment(ctx context.Context, arg CreateSubscriptionPaymentParams) (SubscriptionPayment, error)
 	CreateTenantContact(ctx context.Context, arg CreateTenantContactParams) (TenantContact, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeleteExpiredLoginCodesBatch(ctx context.Context, arg DeleteExpiredLoginCodesBatchParams) (int64, error)
@@ -182,6 +188,8 @@ type Querier interface {
 	GetSubscriptionByIDForUpdate(ctx context.Context, id pgtype.UUID) (UserSubscription, error)
 	GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (UserSubscription, error)
 	GetSubscriptionByUserIDForUpdate(ctx context.Context, userID pgtype.UUID) (UserSubscription, error)
+	GetSubscriptionPaymentByID(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error)
+	GetSubscriptionPaymentByIDForUpdate(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error)
 	// Aggregates over payments created in the last 30 days. Refunds are full-amount
 	// only in the rewritten schema (ADR 0037): the legacy partial_refunded status
 	// is gone.
@@ -260,6 +268,7 @@ type Querier interface {
 	// registration is FIFO across properties (T5, issue #161).
 	ListPendingInvitationsByEmail(ctx context.Context, email string) ([]PropertyMemberInvitation, error)
 	ListPendingOperationsWithPastDate(ctx context.Context, arg ListPendingOperationsWithPastDateParams) ([]Operation, error)
+	ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
 	ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdminParams) ([]ListPropertiesAdminRow, error)
 	ListPropertyContactsAdmin(ctx context.Context, arg ListPropertyContactsAdminParams) ([]PropertyContact, error)
 	ListPropertyContactsByProperty(ctx context.Context, arg ListPropertyContactsByPropertyParams) ([]PropertyContact, error)
@@ -280,6 +289,7 @@ type Querier interface {
 	ListRemindersByRecurringOperation(ctx context.Context, arg ListRemindersByRecurringOperationParams) ([]Reminder, error)
 	ListSeenPopups(ctx context.Context, userID pgtype.UUID) ([]string, error)
 	ListStaleSendingReminders(ctx context.Context, arg ListStaleSendingRemindersParams) ([]Reminder, error)
+	ListSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
 	ListSubscriptionTransitionsBySubscription(ctx context.Context, subscriptionID pgtype.UUID) ([]SubscriptionTransition, error)
 	// The FIFO recovery queue. Memberships on archived properties are excluded:
 	// an archived object does not occupy a recipient slot (issue #163), so a free
@@ -338,6 +348,7 @@ type Querier interface {
 	UpdateSentSMSReminderProviderResponse(ctx context.Context, arg UpdateSentSMSReminderProviderResponseParams) (int64, error)
 	UpdateSession(ctx context.Context, arg UpdateSessionParams) error
 	UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (UserSubscription, error)
+	UpdateSubscriptionPayment(ctx context.Context, arg UpdateSubscriptionPaymentParams) (SubscriptionPayment, error)
 	UpdateTenantContact(ctx context.Context, arg UpdateTenantContactParams) (TenantContact, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error)

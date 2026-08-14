@@ -118,6 +118,12 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Некорректное состояние подписки", true
 	case errors.Is(err, billingdomain.ErrCannotEnableAutoRenew):
 		return "Нельзя включить автопродление без срока действия", true
+	case errors.Is(err, billingdomain.ErrInvalidAmount):
+		return "Некорректная сумма платежа", true
+	case errors.Is(err, billingdomain.ErrInvalidPayment):
+		return "Некорректный платёж", true
+	case errors.Is(err, billingdomain.ErrInvalidPaymentStatus):
+		return "Некорректный статус платежа для этой операции", true
 
 	// Admin.
 	case errors.Is(err, adminapp.ErrInvalidFilter):

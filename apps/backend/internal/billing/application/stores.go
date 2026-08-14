@@ -19,6 +19,7 @@ type txStores struct {
 	tariffs       TariffRepository
 	subscriptions SubscriptionRepository
 	transitions   SubscriptionTransitionRepository
+	payments      SubscriptionPaymentRepository
 	audit         auditapp.Recorder
 }
 
@@ -36,6 +37,20 @@ func (s *txStores) subscriptionForUpdate(ctx context.Context, userID uuid.UUID) 
 	return sub, nil
 }
 
+// paymentForUpdate loads a payment under the row lock and narrows the
+// repository miss to ErrPaymentNotFound — the shared first step of every
+// payment finalization (issue #250).
+func (s *txStores) paymentForUpdate(ctx context.Context, paymentID uuid.UUID) (domain.SubscriptionPayment, error) {
+	payment, err := s.payments.GetByIDForUpdate(ctx, paymentID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.SubscriptionPayment{}, ErrPaymentNotFound
+		}
+		return domain.SubscriptionPayment{}, fmt.Errorf("get payment: %w", err)
+	}
+	return payment, nil
+}
+
 // txStoreFactory holds the non-transactional billing repositories and audit
 // recorder plus the Unit-of-Work, and builds a transactional txStores from each
 // runInTx call. It is embedded anonymously by every billing service so they
@@ -49,6 +64,7 @@ type txStoreFactory struct {
 	tariffs       TariffRepository
 	subscriptions SubscriptionRepository
 	transitions   SubscriptionTransitionRepository
+	payments      SubscriptionPaymentRepository
 	audit         auditapp.Recorder
 	uow           transaction.UoW
 }
@@ -63,6 +79,7 @@ func NewTxStoreFactory(
 	tariffs TariffRepository,
 	subscriptions SubscriptionRepository,
 	transitions SubscriptionTransitionRepository,
+	payments SubscriptionPaymentRepository,
 	audit auditapp.Recorder,
 	uow transaction.UoW,
 ) txStoreFactory {
@@ -73,6 +90,7 @@ func NewTxStoreFactory(
 		tariffs:       tariffs,
 		subscriptions: subscriptions,
 		transitions:   transitions,
+		payments:      payments,
 		audit:         audit,
 		uow:           uow,
 	}
@@ -108,10 +126,15 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 		if err != nil {
 			return fmt.Errorf("bind transition repository to tx: %w", err)
 		}
+		payments, err := f.payments.WithTx(tx)
+		if err != nil {
+			return fmt.Errorf("bind payment repository to tx: %w", err)
+		}
 		stores := &txStores{
 			tariffs:       tariffs,
 			subscriptions: subscriptions,
 			transitions:   transitions,
+			payments:      payments,
 			audit:         f.audit.WithTx(tx),
 		}
 		return work(stores)

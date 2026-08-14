@@ -45,6 +45,11 @@ const (
 	// scheduled for the end of the paid period (issue #249); the tariff
 	// transition itself lands when the worker applies the change (#252).
 	TransitionReasonDowngradeScheduled TransitionReason = "downgrade_scheduled"
+	// TransitionReasonPaymentApplied marks a tariff or renewal applied by a
+	// succeeded subscription payment (issue #250): the full price of the new
+	// tariff, the period counted from the payment moment, auto-renew on. The
+	// transition carries the payment id that caused it.
+	TransitionReasonPaymentApplied TransitionReason = "payment_applied"
 )
 
 // Transition is one immutable entry of the subscription transition log: the
@@ -138,6 +143,41 @@ func NewScheduledTariffTransition(
 		Reason:         reason,
 		Initiator:      initiator,
 		InitiatorID:    initiatorID,
+	}, nil
+}
+
+// NewAppliedPaymentTransition builds the log entry for a subscription state
+// that a succeeded payment just applied (issue #250): it records the move to
+// the subscription's post-payment status and tariff and references the payment
+// that caused it. The provider webhook is the initiator, so the initiator is
+// the system without an actor id.
+func NewAppliedPaymentTransition(
+	sub Subscription,
+	fromStatus *SubscriptionStatus,
+	fromTariffID *uuid.UUID,
+	paymentID uuid.UUID,
+) (Transition, error) {
+	if paymentID == uuid.Nil {
+		return Transition{}, ErrInvalidTransition
+	}
+	reason := TransitionReasonPaymentApplied
+	if err := validateTransitionInput(sub.ID, sub.TariffID, sub.Status, reason, InitiatorSystem, nil); err != nil {
+		return Transition{}, err
+	}
+	id, err := uuid.NewV7()
+	if err != nil {
+		return Transition{}, err
+	}
+	return Transition{
+		ID:             id,
+		SubscriptionID: sub.ID,
+		FromStatus:     fromStatus,
+		ToStatus:       sub.Status,
+		FromTariffID:   fromTariffID,
+		ToTariffID:     sub.TariffID,
+		Reason:         reason,
+		Initiator:      InitiatorSystem,
+		PaymentID:      &paymentID,
 	}, nil
 }
 
