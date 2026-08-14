@@ -128,6 +128,10 @@ func (r *gatePaymentRepo) ListStalePendingUpgrades(context.Context, time.Time, i
 	return nil, nil
 }
 
+func (r *gatePaymentRepo) ListStaleRefunding(context.Context, time.Time, int) ([]domain.SubscriptionPayment, error) {
+	return nil, nil
+}
+
 func (r *gatePaymentRepo) Update(context.Context, domain.SubscriptionPayment) error { return nil }
 
 func (r *gatePaymentRepo) WithTx(transaction.Tx) (billingapp.SubscriptionPaymentRepository, error) {

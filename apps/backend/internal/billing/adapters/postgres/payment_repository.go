@@ -12,19 +12,26 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// SubscriptionPaymentRepository persists subscription payments.
+// SubscriptionPaymentRepository persists subscription payments. The encryptor
+// resolves the payer's phone for the admin views: the users table stores
+// either plaintext (phone_encrypted = false) or ciphertext, and the phone
+// filter has to match both forms.
 type SubscriptionPaymentRepository struct {
-	db postgres.DBTX
+	db  postgres.DBTX
+	enc encryption.Encryptor
 }
 
-// NewSubscriptionPaymentRepository creates a new payment repository.
-func NewSubscriptionPaymentRepository(db postgres.DBTX) *SubscriptionPaymentRepository {
-	return &SubscriptionPaymentRepository{db: db}
+// NewSubscriptionPaymentRepository creates a new payment repository. A nil
+// encryptor keeps the payment aggregate methods fully functional; only the
+// admin listing of encrypted phones fails fast.
+func NewSubscriptionPaymentRepository(db postgres.DBTX, enc encryption.Encryptor) *SubscriptionPaymentRepository {
+	return &SubscriptionPaymentRepository{db: db, enc: enc}
 }
 
 func (r *SubscriptionPaymentRepository) q() *postgres.Queries {
@@ -37,7 +44,7 @@ func (r *SubscriptionPaymentRepository) WithTx(tx transaction.Tx) (application.S
 	if !ok {
 		return nil, fmt.Errorf("billing.SubscriptionPaymentRepository.WithTx: %T is not a postgres.DBTX", tx)
 	}
-	return NewSubscriptionPaymentRepository(dbtx), nil
+	return NewSubscriptionPaymentRepository(dbtx, r.enc), nil
 }
 
 // Create inserts a new payment. A unique violation on the pending-payments
@@ -124,6 +131,175 @@ func (r *SubscriptionPaymentRepository) ListStalePendingUpgrades(ctx context.Con
 		return nil, fmt.Errorf("list stale pending upgrade subscription payments: %w", err)
 	}
 	return mapSubscriptionPayments(rows)
+}
+
+// ListStaleRefunding returns a batch of payments stuck in the refunding
+// reservation longer than the threshold (issue #254).
+func (r *SubscriptionPaymentRepository) ListStaleRefunding(ctx context.Context, updatedBefore time.Time, limit int) ([]domain.SubscriptionPayment, error) {
+	rows, err := r.q().ListStaleRefundingSubscriptionPayments(ctx, postgres.ListStaleRefundingSubscriptionPaymentsParams{
+		UpdatedAt: pgtype.Timestamptz{Time: updatedBefore, Valid: true},
+		Limit:     batchLimit(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list stale refunding subscription payments: %w", err)
+	}
+	return mapSubscriptionPayments(rows)
+}
+
+// adminPaymentQueryParams maps the validated application filters to the SQL
+// parameters. The phone filter is encrypted deterministically so it matches
+// the stored ciphertext; a plaintext row still matches its own form.
+func (r *SubscriptionPaymentRepository) adminPaymentQueryParams(ctx context.Context, filters application.AdminPaymentFilters) (postgres.ListSubscriptionPaymentsAdminParams, error) {
+	params := postgres.ListSubscriptionPaymentsAdminParams{
+		Status:             filters.Status,
+		UserPhone:          filters.UserPhone,
+		SubscriptionStatus: filters.SubscriptionStatus,
+		Sort:               filters.Sort,
+		Order:              filters.Order,
+		Offset:             int32(filters.Offset), //nolint:gosec // bounded by the service normalization (<= 2^31)
+		Limit:              int32(filters.Limit),  //nolint:gosec // bounded by the service normalization (1..100)
+	}
+	if filters.UserID != nil {
+		params.UserID = pgtype.UUID{Bytes: *filters.UserID, Valid: true}
+	}
+	if filters.UserPhone != "" {
+		encrypted, err := r.enc.DeterministicEncrypt(ctx, filters.UserPhone)
+		if err != nil {
+			return params, fmt.Errorf("encrypt phone filter: %w", err)
+		}
+		params.UserPhoneEnc = encrypted
+	}
+	return params, nil
+}
+
+// ListAdminPayments implements the admin payment listing (issue #254): every
+// user's payments joined with the payer's phone, filtered and sorted by the
+// validated filters, with the total count of the filtered set.
+func (r *SubscriptionPaymentRepository) ListAdminPayments(ctx context.Context, filters application.AdminPaymentFilters) ([]application.AdminPaymentRow, int64, error) {
+	params, err := r.adminPaymentQueryParams(ctx, filters)
+	if err != nil {
+		return nil, 0, err
+	}
+	total, err := r.q().CountSubscriptionPaymentsAdmin(ctx, postgres.CountSubscriptionPaymentsAdminParams{
+		UserID:             params.UserID,
+		Status:             params.Status,
+		UserPhone:          params.UserPhone,
+		UserPhoneEnc:       params.UserPhoneEnc,
+		SubscriptionStatus: params.SubscriptionStatus,
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("count admin subscription payments: %w", err)
+	}
+	rows, err := r.q().ListSubscriptionPaymentsAdmin(ctx, params)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list admin subscription payments: %w", err)
+	}
+	mapped, err := mapAdminPaymentRows(ctx, r, rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return mapped, total, nil
+}
+
+// GetAdminPayment implements the single-payment admin read (issue #254).
+func (r *SubscriptionPaymentRepository) GetAdminPayment(ctx context.Context, paymentID uuid.UUID) (application.AdminPaymentRow, error) {
+	row, err := r.q().GetSubscriptionPaymentAdmin(ctx, pgtype.UUID{Bytes: paymentID, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.AdminPaymentRow{}, application.ErrNotFound
+		}
+		return application.AdminPaymentRow{}, fmt.Errorf("get admin subscription payment: %w", err)
+	}
+	payment, err := mapSubscriptionPaymentFromColumns(
+		row.ID, row.UserID, row.SubscriptionID, row.TariffID, row.PaymentMethodID,
+		row.Period, row.AmountKopecks, row.Provider, row.ProviderPaymentID, row.PaymentUrl,
+		row.Status, row.RefundedAmountKopecks, row.ChargeAttempts, row.ErrorCode,
+		row.CreatedAt, row.UpdatedAt, row.SucceededAt,
+	)
+	if err != nil {
+		return application.AdminPaymentRow{}, err
+	}
+	phone, err := r.resolveUserPhone(ctx, row.UserPhone, row.UserPhoneEncrypted)
+	if err != nil {
+		return application.AdminPaymentRow{}, err
+	}
+	return application.AdminPaymentRow{Payment: payment, UserPhone: phone}, nil
+}
+
+// mapAdminPaymentRows maps the admin listing rows to the application shape,
+// decrypting the payer's phone where it is stored as ciphertext.
+func mapAdminPaymentRows(ctx context.Context, r *SubscriptionPaymentRepository, rows []postgres.ListSubscriptionPaymentsAdminRow) ([]application.AdminPaymentRow, error) {
+	result := make([]application.AdminPaymentRow, 0, len(rows))
+	for _, row := range rows {
+		payment, err := mapSubscriptionPaymentFromColumns(
+			row.ID, row.UserID, row.SubscriptionID, row.TariffID, row.PaymentMethodID,
+			row.Period, row.AmountKopecks, row.Provider, row.ProviderPaymentID, row.PaymentUrl,
+			row.Status, row.RefundedAmountKopecks, row.ChargeAttempts, row.ErrorCode,
+			row.CreatedAt, row.UpdatedAt, row.SucceededAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		phone, err := r.resolveUserPhone(ctx, row.UserPhone, row.UserPhoneEncrypted)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, application.AdminPaymentRow{Payment: payment, UserPhone: phone})
+	}
+	return result, nil
+}
+
+// resolveUserPhone decrypts the payer's phone when it is stored as
+// ciphertext; a plaintext row (phone_encrypted = false) passes through.
+func (r *SubscriptionPaymentRepository) resolveUserPhone(ctx context.Context, phone string, encrypted bool) (string, error) {
+	if !encrypted {
+		return phone, nil
+	}
+	if r.enc == nil {
+		return "", errors.New("billing.SubscriptionPaymentRepository: encrypted phone cannot be resolved without an encryptor")
+	}
+	decrypted, err := r.enc.Decrypt(ctx, phone)
+	if err != nil {
+		return "", fmt.Errorf("decrypt phone: %w", err)
+	}
+	return decrypted, nil
+}
+
+// mapSubscriptionPaymentFromColumns maps the shared payment column set of the
+// admin queries through the canonical reconstitution.
+func mapSubscriptionPaymentFromColumns(
+	id, userID, subscriptionID, tariffID pgtype.UUID,
+	paymentMethodID pgtype.UUID,
+	period string,
+	amountKopecks int64,
+	provider string,
+	providerPaymentID, paymentURL pgtype.Text,
+	status string,
+	refundedAmountKopecks pgtype.Int8,
+	chargeAttempts int32,
+	errorCode pgtype.Text,
+	createdAt, updatedAt pgtype.Timestamptz,
+	succeededAt pgtype.Timestamptz,
+) (domain.SubscriptionPayment, error) {
+	return mapSubscriptionPayment(postgres.SubscriptionPayment{
+		ID:                    id,
+		UserID:                userID,
+		SubscriptionID:        subscriptionID,
+		TariffID:              tariffID,
+		PaymentMethodID:       paymentMethodID,
+		Period:                period,
+		AmountKopecks:         amountKopecks,
+		Provider:              provider,
+		ProviderPaymentID:     providerPaymentID,
+		PaymentUrl:            paymentURL,
+		Status:                status,
+		RefundedAmountKopecks: refundedAmountKopecks,
+		ChargeAttempts:        chargeAttempts,
+		ErrorCode:             errorCode,
+		CreatedAt:             createdAt,
+		UpdatedAt:             updatedAt,
+		SucceededAt:           succeededAt,
+	})
 }
 
 // Update persists the mutable fields of a payment. Callers hold the row lock

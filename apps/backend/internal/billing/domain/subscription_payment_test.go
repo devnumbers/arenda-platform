@@ -125,6 +125,88 @@ func TestSubscriptionPayment_FinalizationTransitions(t *testing.T) {
 			t.Errorf("payment = %q/%v, want refunded with the full amount", payment.Status, payment.RefundedAmountKopecks)
 		}
 	})
+
+	t.Run("begin refund reserves succeeded and pending only", func(t *testing.T) {
+		succeeded := newTestPayment(t)
+		if err := succeeded.MarkSucceeded(paymentNow); err != nil {
+			t.Fatalf("MarkSucceeded() error = %v", err)
+		}
+		if err := succeeded.BeginRefund(paymentNow); err != nil {
+			t.Fatalf("BeginRefund(succeeded) error = %v", err)
+		}
+		if succeeded.Status != PaymentStatusRefunding || succeeded.RefundedAmountKopecks != nil {
+			t.Errorf("payment = %q/%v, want the refunding reservation without a refunded amount", succeeded.Status, succeeded.RefundedAmountKopecks)
+		}
+
+		pending := newTestPayment(t)
+		if err := pending.BeginRefund(paymentNow); err != nil {
+			t.Fatalf("BeginRefund(pending) error = %v", err)
+		}
+		if pending.Status != PaymentStatusRefunding {
+			t.Errorf("pending refund status = %q, want refunding", pending.Status)
+		}
+	})
+
+	t.Run("begin refund rejects terminal and reserved payments", func(t *testing.T) {
+		for status, prepare := range map[PaymentStatus]func(*SubscriptionPayment){
+			PaymentStatusFailed:   func(p *SubscriptionPayment) { _ = p.MarkFailed(nil, paymentNow) },
+			PaymentStatusRefunded: func(p *SubscriptionPayment) { _ = p.MarkSucceeded(paymentNow); _ = p.MarkRefunded(paymentNow) },
+			PaymentStatusRefunding: func(p *SubscriptionPayment) {
+				_ = p.MarkSucceeded(paymentNow)
+				_ = p.BeginRefund(paymentNow)
+			},
+		} {
+			payment := newTestPayment(t)
+			prepare(&payment)
+			if err := payment.BeginRefund(paymentNow); !errors.Is(err, ErrInvalidPaymentStatus) {
+				t.Errorf("BeginRefund(%s) err = %v, want ErrInvalidPaymentStatus", status, err)
+			}
+		}
+	})
+
+	t.Run("revert refund reservation restores the previous status", func(t *testing.T) {
+		succeeded := newTestPayment(t)
+		if err := succeeded.MarkSucceeded(paymentNow); err != nil {
+			t.Fatalf("MarkSucceeded() error = %v", err)
+		}
+		if err := succeeded.BeginRefund(paymentNow); err != nil {
+			t.Fatalf("BeginRefund() error = %v", err)
+		}
+		if err := succeeded.RevertRefundReservation(PaymentStatusSucceeded, paymentNow); err != nil {
+			t.Fatalf("RevertRefundReservation() error = %v", err)
+		}
+		if succeeded.Status != PaymentStatusSucceeded {
+			t.Errorf("status = %q, want succeeded restored", succeeded.Status)
+		}
+
+		pending := newTestPayment(t)
+		if err := pending.BeginRefund(paymentNow); err != nil {
+			t.Fatalf("BeginRefund() error = %v", err)
+		}
+		if err := pending.RevertRefundReservation(PaymentStatusPending, paymentNow); err != nil {
+			t.Fatalf("RevertRefundReservation(pending) error = %v", err)
+		}
+		if pending.Status != PaymentStatusPending {
+			t.Errorf("status = %q, want pending restored", pending.Status)
+		}
+	})
+
+	t.Run("revert requires the reservation and a refundable previous status", func(t *testing.T) {
+		payment := newTestPayment(t)
+		if err := payment.RevertRefundReservation(PaymentStatusSucceeded, paymentNow); !errors.Is(err, ErrInvalidPaymentStatus) {
+			t.Errorf("revert without reservation err = %v, want ErrInvalidPaymentStatus", err)
+		}
+		reserved := newTestPayment(t)
+		if err := reserved.MarkSucceeded(paymentNow); err != nil {
+			t.Fatalf("MarkSucceeded() error = %v", err)
+		}
+		if err := reserved.BeginRefund(paymentNow); err != nil {
+			t.Fatalf("BeginRefund() error = %v", err)
+		}
+		if err := reserved.RevertRefundReservation(PaymentStatusRefunded, paymentNow); !errors.Is(err, ErrInvalidPaymentStatus) {
+			t.Errorf("revert to refunded err = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
 }
 
 func TestSubscriptionPayment_SaveProviderReference(t *testing.T) {

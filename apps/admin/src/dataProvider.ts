@@ -30,7 +30,8 @@ interface ProblemDetails {
 }
 
 interface AdminDataProvider extends DataProvider {
-  refundPayment: (payload: { id: string | number; amountKopecks?: number }) => Promise<{ data: unknown }>;
+  // Возврат всегда полный (ADR 0037): контракт эндпоинта не принимает тело.
+  refundPayment: (payload: { id: string | number }) => Promise<{ data: unknown }>;
   syncPayment: (payload: { id: string | number }) => Promise<{ data: unknown }>;
 }
 
@@ -294,13 +295,8 @@ export const dataProvider: AdminDataProvider = {
     throw new HttpError(`Массовое удаление для ресурса ${resource} не поддерживается`, 405);
   },
 
-  refundPayment: async ({ id, amountKopecks }) => {
-    const body = amountKopecks !== undefined ? JSON.stringify({ amount_kopecks: amountKopecks }) : undefined;
-    const { json } = await httpClient(`${API_PREFIX}/admin/subscription/payments/${id}/refund`, {
-      method: 'POST',
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
-      body,
-    });
+  refundPayment: async ({ id }) => {
+    const { json } = await httpClient(`${API_PREFIX}/admin/subscription/payments/${id}/refund`, { method: 'POST' });
     return { data: json };
   },
 

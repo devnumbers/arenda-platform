@@ -40,6 +40,10 @@ type ServicesConfig struct {
 	// (issue #253); nil keeps the pre-#253 behaviour of no grace
 	// notifications.
 	Publisher EventPublisher
+	// AdminPayments reads the cross-user payment rows behind the admin views
+	// (issue #254); nil keeps the admin read methods answered by an explicit
+	// wiring error.
+	AdminPayments AdminPaymentListing
 }
 
 // NewServices builds every billing service over one shared txStoreFactory
@@ -52,7 +56,13 @@ func NewServices(factory txStoreFactory, cfg ServicesConfig) Services {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
-	payments := NewPaymentService(factory, cfg.Provider, PaymentServiceConfig{Clock: cfg.Clock, Log: cfg.Logger, Config: cfg.Config, Publisher: cfg.Publisher})
+	payments := NewPaymentService(factory, cfg.Provider, PaymentServiceConfig{
+		Clock:         cfg.Clock,
+		Log:           cfg.Logger,
+		Config:        cfg.Config,
+		Publisher:     cfg.Publisher,
+		AdminPayments: cfg.AdminPayments,
+	})
 	return Services{
 		Tariffs:        NewTariffService(factory),
 		Subscriptions:  NewSubscriptionService(factory, SubscriptionServiceConfig{Clock: cfg.Clock, Provider: cfg.Provider, Config: cfg.Config, Logger: cfg.Logger}),

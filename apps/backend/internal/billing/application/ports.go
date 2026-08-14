@@ -83,6 +83,11 @@ type SubscriptionPaymentRepository interface {
 	// target tariff differs from the subscription's current one — the
 	// tariff-change payments of the ChangeTariff flow (issue #252).
 	ListStalePendingUpgrades(ctx context.Context, createdBefore time.Time, limit int) ([]domain.SubscriptionPayment, error)
+	// ListStaleRefunding returns a batch of payments stuck in the refunding
+	// reservation longer than the reconciliation staleness — the lost-outcome
+	// set the refund reconciliation worker re-checks with the provider
+	// (issue #254).
+	ListStaleRefunding(ctx context.Context, updatedBefore time.Time, limit int) ([]domain.SubscriptionPayment, error)
 	Update(ctx context.Context, payment domain.SubscriptionPayment) error
 	WithTx(tx transaction.Tx) (SubscriptionPaymentRepository, error)
 }
@@ -125,4 +130,14 @@ type CardBindingSessionRepository interface {
 	ListOpenByUserID(ctx context.Context, userID uuid.UUID) ([]domain.CardBindingSession, error)
 	UpdateStatus(ctx context.Context, session domain.CardBindingSession) error
 	WithTx(tx transaction.Tx) (CardBindingSessionRepository, error)
+}
+
+// AdminPaymentListing is the cross-context read port behind the admin payment
+// views (issue #254): payments of any user joined with the payer's phone. The
+// postgres payment repository implements it; it lives here, next to its
+// consumer (ADR 0035), because it reads identity data (users.phone) the
+// billing payment port deliberately does not model.
+type AdminPaymentListing interface {
+	ListAdminPayments(ctx context.Context, filters AdminPaymentFilters) ([]AdminPaymentRow, int64, error)
+	GetAdminPayment(ctx context.Context, paymentID uuid.UUID) (AdminPaymentRow, error)
 }

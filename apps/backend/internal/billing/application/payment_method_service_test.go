@@ -65,6 +65,14 @@ func (p *stubMethodProvider) PaymentStatus(_ context.Context, _ uuid.UUID, _ str
 	return PaymentStatusResult{}, nil
 }
 
+// RefundPayment satisfies the payment-finalizer slice the payment service
+// consumes; the method-method tests never refund, so it answers a plain
+// failure.
+func (p *stubMethodProvider) RefundPayment(_ context.Context, req RefundRequest) (RefundResult, error) {
+	_ = req
+	return RefundResult{}, errors.New("stubMethodProvider: refund is not programmed")
+}
+
 func (p *stubMethodProvider) AddPaymentMethodFromToken(_ context.Context, customerRef, token string) (SavedMethod, error) {
 	if customerRef == "" || token == "" {
 		return SavedMethod{}, errors.New("stub: customer ref and token are required")

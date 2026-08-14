@@ -240,6 +240,68 @@ SET
 WHERE id = $1
 RETURNING *;
 
+-- name: ListStaleRefundingSubscriptionPayments :many
+-- Payments stuck in the internal refunding reservation longer than the
+-- reconciliation staleness (issue #254): the refund call's outcome was never
+-- finalized, so the worker asks the provider for the truth. The provider
+-- reference is mandatory — without it there is nothing to query.
+SELECT * FROM subscription_payments
+WHERE status = 'refunding'
+  AND provider_payment_id IS NOT NULL
+  AND provider_payment_id <> ''
+  AND updated_at < $1
+ORDER BY updated_at ASC, id ASC
+LIMIT $2;
+
+-- Admin payment views (issue #254). The phone filter matches the stored
+-- ciphertext (deterministic encryption) or the plaintext of a not-yet-
+-- encrypted row, mirroring ListUsersAdmin; user input is never interpolated
+-- into SQL — sort/order map to columns through fixed CASE arms.
+
+-- name: ListSubscriptionPaymentsAdmin :many
+SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id,
+       sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.payment_url,
+       sp.status, sp.refunded_amount_kopecks, sp.charge_attempts, sp.error_code,
+       sp.created_at, sp.updated_at, sp.succeeded_at,
+       u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
+FROM subscription_payments sp
+JOIN users u ON u.id = sp.user_id
+LEFT JOIN user_subscriptions us ON us.user_id = sp.user_id
+WHERE (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id'))
+  AND (sqlc.arg('status')::text = '' OR sp.status = sqlc.arg('status'))
+  AND (sqlc.arg('user_phone')::text = '' OR u.phone = sqlc.arg('user_phone_enc')::text OR (u.phone = sqlc.arg('user_phone')::text AND u.phone_encrypted = false))
+  AND (sqlc.arg('subscription_status')::text = '' OR us.status = sqlc.arg('subscription_status'))
+ORDER BY
+  CASE WHEN sqlc.arg('sort')::text = 'createdAt' AND sqlc.arg('order')::text = 'asc' THEN sp.created_at END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'createdAt' AND sqlc.arg('order')::text = 'desc' THEN sp.created_at END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'amountKopecks' AND sqlc.arg('order')::text = 'asc' THEN sp.amount_kopecks END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'amountKopecks' AND sqlc.arg('order')::text = 'desc' THEN sp.amount_kopecks END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'status' AND sqlc.arg('order')::text = 'asc' THEN sp.status END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'status' AND sqlc.arg('order')::text = 'desc' THEN sp.status END DESC,
+  CASE WHEN sqlc.arg('sort')::text = '' THEN sp.created_at END DESC,
+  sp.id DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountSubscriptionPaymentsAdmin :one
+SELECT COUNT(*)
+FROM subscription_payments sp
+JOIN users u ON u.id = sp.user_id
+LEFT JOIN user_subscriptions us ON us.user_id = sp.user_id
+WHERE (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id'))
+  AND (sqlc.arg('status')::text = '' OR sp.status = sqlc.arg('status'))
+  AND (sqlc.arg('user_phone')::text = '' OR u.phone = sqlc.arg('user_phone_enc')::text OR (u.phone = sqlc.arg('user_phone')::text AND u.phone_encrypted = false))
+  AND (sqlc.arg('subscription_status')::text = '' OR us.status = sqlc.arg('subscription_status'));
+
+-- name: GetSubscriptionPaymentAdmin :one
+SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id,
+       sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.payment_url,
+       sp.status, sp.refunded_amount_kopecks, sp.charge_attempts, sp.error_code,
+       sp.created_at, sp.updated_at, sp.succeeded_at,
+       u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
+FROM subscription_payments sp
+JOIN users u ON u.id = sp.user_id
+WHERE sp.id = $1;
+
 -- Payment methods (issue #251). Token uniqueness is enforced per user by the
 -- UNIQUE (user_id, token_hash) constraint: the upsert converges on the
 -- existing row instead of creating a duplicate card, and exactly one active

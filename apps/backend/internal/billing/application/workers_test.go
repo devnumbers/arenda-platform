@@ -78,6 +78,14 @@ func (p *scriptedProvider) ParseWebhook(context.Context, []byte) (WebhookEvent, 
 
 func (p *scriptedProvider) WebhookAck() []byte { return []byte(`{"status":"ok"}`) }
 
+// RefundPayment satisfies the payment-finalizer slice; the worker phases
+// built on scriptedProvider never refund through it (the refund scenarios use
+// stubPaymentProvider), so it answers a plain failure.
+func (p *scriptedProvider) RefundPayment(_ context.Context, req RefundRequest) (RefundResult, error) {
+	_ = req
+	return RefundResult{}, errors.New("scripted provider refunds nothing")
+}
+
 func (p *scriptedProvider) calls() (inits, charges, statuses int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

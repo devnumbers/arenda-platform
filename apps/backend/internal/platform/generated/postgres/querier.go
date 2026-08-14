@@ -39,6 +39,7 @@ type Querier interface {
 	CountPropertiesAdmin(ctx context.Context, arg CountPropertiesAdminParams) (int64, error)
 	CountPropertyContactsAdmin(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) (int64, error)
+	CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error)
 	// Shared objects hidden from the recipient by a tariff slot shortage (the
 	// hidden_shared_count badge). Memberships on archived properties are excluded
 	// (issue #163): those objects are hidden by the archive, not by the tariff.
@@ -198,6 +199,7 @@ type Querier interface {
 	GetSubscriptionByIDForUpdate(ctx context.Context, id pgtype.UUID) (UserSubscription, error)
 	GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (UserSubscription, error)
 	GetSubscriptionByUserIDForUpdate(ctx context.Context, userID pgtype.UUID) (UserSubscription, error)
+	GetSubscriptionPaymentAdmin(ctx context.Context, id pgtype.UUID) (GetSubscriptionPaymentAdminRow, error)
 	GetSubscriptionPaymentByID(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error)
 	GetSubscriptionPaymentByIDForUpdate(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error)
 	// Aggregates over payments created in the last 30 days. Refunds are full-amount
@@ -310,7 +312,17 @@ type Querier interface {
 	// one are the tariff-change payments of the ChangeTariff flow (upgrades and
 	// recovery upgrades): a lost webhook here leaves the paid change unapplied.
 	ListStalePendingUpgradeSubscriptionPayments(ctx context.Context, arg ListStalePendingUpgradeSubscriptionPaymentsParams) ([]SubscriptionPayment, error)
+	// Payments stuck in the internal refunding reservation longer than the
+	// reconciliation staleness (issue #254): the refund call's outcome was never
+	// finalized, so the worker asks the provider for the truth. The provider
+	// reference is mandatory — without it there is nothing to query.
+	ListStaleRefundingSubscriptionPayments(ctx context.Context, arg ListStaleRefundingSubscriptionPaymentsParams) ([]SubscriptionPayment, error)
 	ListStaleSendingReminders(ctx context.Context, arg ListStaleSendingRemindersParams) ([]Reminder, error)
+	// Admin payment views (issue #254). The phone filter matches the stored
+	// ciphertext (deterministic encryption) or the plaintext of a not-yet-
+	// encrypted row, mirroring ListUsersAdmin; user input is never interpolated
+	// into SQL — sort/order map to columns through fixed CASE arms.
+	ListSubscriptionPaymentsAdmin(ctx context.Context, arg ListSubscriptionPaymentsAdminParams) ([]ListSubscriptionPaymentsAdminRow, error)
 	ListSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
 	ListSubscriptionTransitionsBySubscription(ctx context.Context, subscriptionID pgtype.UUID) ([]SubscriptionTransition, error)
 	ListSubscriptionsInExpiredGrace(ctx context.Context, arg ListSubscriptionsInExpiredGraceParams) ([]UserSubscription, error)

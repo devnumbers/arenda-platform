@@ -52,7 +52,7 @@ func WireBilling(ctx context.Context, p platformDeps, eventDispatcher platformev
 	tariffRepo := billingpg.NewTariffRepository(p.DB, p.Cfg.TariffCacheTTL, p.Clock)
 	subscriptionRepo := billingpg.NewSubscriptionRepository(p.DB)
 	transitionRepo := billingpg.NewSubscriptionTransitionRepository(p.DB)
-	paymentRepo := billingpg.NewSubscriptionPaymentRepository(p.DB)
+	paymentRepo := billingpg.NewSubscriptionPaymentRepository(p.DB, p.Encryptor)
 	paymentMethodRepo := billingpg.NewPaymentMethodRepository(p.DB, p.Encryptor)
 	cardBindingRepo := billingpg.NewCardBindingSessionRepository(p.DB)
 
@@ -77,11 +77,12 @@ func WireBilling(ctx context.Context, p platformDeps, eventDispatcher platformev
 	)
 
 	services := billingapp.NewServices(factory, billingapp.ServicesConfig{
-		Config:    billingapp.DefaultConfig(),
-		Clock:     p.Clock,
-		Logger:    p.Logger,
-		Provider:  provider,
-		Publisher: billingevents.NewPublisher(eventDispatcher),
+		Config:        billingapp.DefaultConfig(),
+		Clock:         p.Clock,
+		Logger:        p.Logger,
+		Provider:      provider,
+		Publisher:     billingevents.NewPublisher(eventDispatcher),
+		AdminPayments: paymentRepo,
 	})
 
 	p.Logger.InfoContext(ctx, "billing module initialized",

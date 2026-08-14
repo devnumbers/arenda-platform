@@ -30,20 +30,23 @@ type FakeCardBindingConfirmer interface {
 
 // paymentFinalizerProvider is the narrow provider slice the payment service
 // needs: parsing and acknowledging webhooks, querying the provider-side
-// payment status, and the provider identity. Declared here, at the consumer,
-// per ADR 0035.
+// payment status, refunding a payment, and the provider identity. Declared
+// here, at the consumer, per ADR 0035.
 type paymentFinalizerProvider interface {
 	WebhookParser
 	WebhookResponder
 	PaymentStatusReader
+	PaymentRefunder
 	ProviderNamer
 }
 
 // PaymentService finalizes subscription payments: it processes provider
 // webhooks synchronously (issue #250, ADR 0039),
-// serves the local fake-payment confirmation endpoint and lists the user's
-// payments. The payment itself is started by SubscriptionService.ChangeTariff;
-// this service owns everything that happens after the provider reports an
+// serves the local fake-payment confirmation endpoint, lists the user's
+// payments, and runs the admin payment operations of issue #254 — the
+// three-phase refund saga, the manual provider sync and the admin listing.
+// The payment itself is started by SubscriptionService.ChangeTariff; this
+// service owns everything that happens after the provider reports an
 // outcome.
 type PaymentService struct {
 	txStoreFactory
@@ -55,6 +58,16 @@ type PaymentService struct {
 	// asynchronously failed renewal charge moves the subscription into grace
 	// (issue #253); nil keeps the pre-#253 behaviour.
 	publisher EventPublisher
+	// adminPayments reads the cross-user payment rows behind the admin views
+	// (issue #254); nil keeps the admin read methods answered by an explicit
+	// wiring error.
+	adminPayments AdminPaymentListing
+	// archiverSource and slotSource bridge the refund's subscription
+	// downgrade to the properties and access contexts (issue #254); nil until
+	// SetLifecycleBridges wires them (the payment-side refund still applies
+	// without the bridges, only the excess archiving waits).
+	archiverSource ExcessPropertyArchiverSource
+	slotSource     RecipientSlotEnforcerSource
 }
 
 // PaymentServiceConfig carries the non-transactional dependencies of the
@@ -68,6 +81,10 @@ type PaymentServiceConfig struct {
 	// Publisher emits the grace lifecycle events (issue #253); nil keeps the
 	// pre-#253 behaviour.
 	Publisher EventPublisher
+	// AdminPayments reads the cross-user payment rows behind the admin views
+	// (issue #254); nil keeps the admin read methods answered by an explicit
+	// wiring error.
+	AdminPayments AdminPaymentListing
 }
 
 // NewPaymentService creates a payment service over the shared factory.
@@ -88,7 +105,20 @@ func NewPaymentService(factory txStoreFactory, provider paymentFinalizerProvider
 		config:         cfg.Config,
 		log:            cfg.Log,
 		publisher:      cfg.Publisher,
+		adminPayments:  cfg.AdminPayments,
 	}
+}
+
+// SetLifecycleBridges wires the cross-context lifecycle bridges the refund
+// finalization calls in its transaction: excess-property archiving
+// (properties context) and recipient-slot enforcement (access context). The
+// composition root calls it with the same bridge sources the workers use —
+// billing is built before them. Without bridges the refund still marks the
+// payment and downgrades the subscription; only the excess properties and
+// suspended memberships wait for the next wired run.
+func (s *PaymentService) SetLifecycleBridges(archiver ExcessPropertyArchiverSource, slots RecipientSlotEnforcerSource) {
+	s.archiverSource = archiver
+	s.slotSource = slots
 }
 
 // WebhookAck returns the fixed success body the provider expects as the
@@ -478,13 +508,14 @@ func applySucceededPayment(ctx context.Context, stores *txStores, payment domain
 	return nil
 }
 
-// applyRefundNotification records a full refund reported by the provider.
-// Refunds are always full-amount (ADR 0037). The subscription-side effects of
-// a refund (downgrade to basic, archiving) belong to the admin refund flow
-// (issue #254); here the payment state is kept truthful while that flow is
-// pending.
+// applyRefundNotification records a full refund reported by the provider and
+// applies the subscription effects of the refund (downgrade to basic with the
+// excess properties archived, issue #254) atomically. Refunds are always
+// full-amount (ADR 0037). The system is the initiator — a refund notification
+// reports a provider-side outcome, not an admin action; the admin-triggered
+// refund that landed first is visible in the transition log by its own entry.
 func (s *PaymentService) applyRefundNotification(ctx context.Context, n *PaymentNotification) error {
-	return s.runInTx(ctx, func(stores *txStores) error {
+	return s.runRefundTx(ctx, func(stores *txStores) error {
 		payment, err := stores.paymentForUpdate(ctx, n.InternalPaymentID)
 		if err != nil {
 			return err
@@ -494,25 +525,13 @@ func (s *PaymentService) applyRefundNotification(ctx context.Context, n *Payment
 		}
 		switch payment.Status {
 		case domain.PaymentStatusRefunded:
-			return nil // duplicate delivery
+			return nil // duplicate delivery; the effects were applied with it
 		case domain.PaymentStatusPending, domain.PaymentStatusSucceeded, domain.PaymentStatusRefunding:
 		default:
 			return nil // a failed charge was never captured; nothing to refund
 		}
-		if err := payment.MarkRefunded(s.clock.Now().UTC()); err != nil {
+		if err := s.applyRefundedPayment(ctx, stores, payment, s.clock.Now().UTC(), systemRefundActor()); err != nil {
 			return err
-		}
-		if err := stores.payments.Update(ctx, payment); err != nil {
-			return fmt.Errorf("mark payment refunded: %w", err)
-		}
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorRole:  auditdomain.ActorRoleSystem,
-			Action:     auditdomain.ActionSubscriptionPaymentRefunded,
-			EntityType: auditdomain.EntitySubscriptionPayment,
-			EntityID:   &payment.ID,
-			Context:    map[string]any{"payment_id": payment.ID, "provider": string(s.provider.Name())},
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
 		}
 		return nil
 	})

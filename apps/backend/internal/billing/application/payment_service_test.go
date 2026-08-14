@@ -28,6 +28,15 @@ type stubPaymentProvider struct {
 	statusRes   PaymentStatusResult
 	statusErr   error
 
+	refundCalls int
+	refundReqs  []RefundRequest
+	// refundRes is answered for every refund request unless refundFn is set;
+	// the zero value means "full refund confirmed" — the default a captured
+	// charge produces.
+	refundRes RefundResult
+	refundErr error
+	refundFn  func(req RefundRequest) (RefundResult, error)
+
 	parseEvent WebhookEvent
 	parseErr   error
 
@@ -60,6 +69,30 @@ func (p *stubPaymentProvider) PaymentStatus(_ context.Context, _ uuid.UUID, _ st
 	defer p.mu.Unlock()
 	p.statusCalls++
 	return p.statusRes, p.statusErr
+}
+
+// RefundPayment records the request and answers the programmed outcome: the
+// injected function first, then the error, and by default a confirmed full
+// refund of the requested amount.
+func (p *stubPaymentProvider) RefundPayment(_ context.Context, req RefundRequest) (RefundResult, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.refundCalls++
+	p.refundReqs = append(p.refundReqs, req)
+	if p.refundFn != nil {
+		return p.refundFn(req)
+	}
+	if p.refundErr != nil {
+		return RefundResult{}, p.refundErr
+	}
+	if p.refundRes != (RefundResult{}) {
+		return p.refundRes, nil
+	}
+	return RefundResult{
+		ProviderPaymentID:     req.ProviderPaymentID,
+		Status:                domain.PaymentStatusRefunded,
+		RefundedAmountKopecks: req.AmountKopecks,
+	}, nil
 }
 
 func (p *stubPaymentProvider) ParseWebhook(_ context.Context, _ []byte) (WebhookEvent, error) {
@@ -1041,14 +1074,39 @@ func TestWebhook_RefundedMarksPaymentRefunded(t *testing.T) {
 	if stored.RefundedAmountKopecks == nil || *stored.RefundedAmountKopecks != 99000 {
 		t.Errorf("refunded amount = %v, want the full 99000", stored.RefundedAmountKopecks)
 	}
-	// The refund flow's subscription effects are #254; the paid tariff stays
-	// applied for now.
+	// A refund notification applies the refund's subscription effects with the
+	// system initiator (issue #254): the paid time is returned, so the
+	// subscription falls to the basic tariff.
 	subsStored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
 	if err != nil {
 		t.Fatalf("GetByUserID() error = %v", err)
 	}
-	if subsStored.TariffID != h.tariffID(t, domain.TariffBusiness) {
-		t.Errorf("tariff = %v, want business until the refund flow lands (#254)", subsStored.TariffID)
+	if subsStored.TariffID != h.tariffID(t, domain.TariffBasic) {
+		t.Errorf("tariff = %v, want basic after the refund", subsStored.TariffID)
+	}
+	if subsStored.ValidUntil != nil || subsStored.AutoRenewEnabled {
+		t.Errorf("subscription = valid_until %v, auto-renew %t; want both cleared by the downgrade to basic", subsStored.ValidUntil, subsStored.AutoRenewEnabled)
+	}
+	// The transition log records the refund downgrade with the system
+	// initiator and the refunded payment.
+	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), subsStored.ID)
+	if err != nil {
+		t.Fatalf("ListBySubscriptionID() error = %v", err)
+	}
+	var refundTransition *domain.Transition
+	for i := range transitions {
+		if transitions[i].Reason == domain.TransitionReasonRefunded {
+			refundTransition = &transitions[i]
+		}
+	}
+	if refundTransition == nil {
+		t.Fatalf("transitions contain no refunded entry: %+v", transitions)
+	}
+	if refundTransition.Initiator != domain.InitiatorSystem || refundTransition.InitiatorID != nil {
+		t.Errorf("refund transition initiator = %q/%v, want system without an actor", refundTransition.Initiator, refundTransition.InitiatorID)
+	}
+	if refundTransition.PaymentID == nil || *refundTransition.PaymentID != result.PaymentID {
+		t.Errorf("refund transition payment = %v, want %v", refundTransition.PaymentID, result.PaymentID)
 	}
 }
 

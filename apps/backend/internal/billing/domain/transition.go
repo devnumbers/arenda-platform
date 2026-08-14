@@ -64,6 +64,12 @@ const (
 	// subscription whose retained period ended — one reason, the from-side of
 	// the transition tells the paths apart.
 	TransitionReasonExpired TransitionReason = "expired"
+	// TransitionReasonRefunded marks the downgrade to the basic tariff after a
+	// subscription payment was refunded (issue #254): the paid time the payment
+	// bought is returned, so the subscription falls to the free plan. The
+	// initiator is the admin who refunded (with the actor id) or the system
+	// (refund webhook, reconciliation worker).
+	TransitionReasonRefunded TransitionReason = "refunded"
 )
 
 // Transition is one immutable entry of the subscription transition log: the
@@ -191,6 +197,45 @@ func NewAppliedPaymentTransition(
 		ToTariffID:     sub.TariffID,
 		Reason:         reason,
 		Initiator:      InitiatorSystem,
+		PaymentID:      &paymentID,
+	}, nil
+}
+
+// NewRefundTransition builds the log entry for the downgrade to basic a
+// refunded payment caused (issue #254): it records the move to the
+// subscription's post-refund status and tariff and references the refunded
+// payment. Unlike a payment application, the refund may be initiated by an
+// admin (InitiatorAdmin with the actor id) or applied by the system (the
+// refund webhook, the reconciliation worker).
+func NewRefundTransition(
+	sub Subscription,
+	fromStatus *SubscriptionStatus,
+	fromTariffID *uuid.UUID,
+	initiator TransitionInitiator,
+	initiatorID *uuid.UUID,
+	paymentID uuid.UUID,
+) (Transition, error) {
+	if paymentID == uuid.Nil {
+		return Transition{}, ErrInvalidTransition
+	}
+	reason := TransitionReasonRefunded
+	if err := validateTransitionInput(sub.ID, sub.TariffID, sub.Status, reason, initiator, initiatorID); err != nil {
+		return Transition{}, err
+	}
+	id, err := uuid.NewV7()
+	if err != nil {
+		return Transition{}, err
+	}
+	return Transition{
+		ID:             id,
+		SubscriptionID: sub.ID,
+		FromStatus:     fromStatus,
+		ToStatus:       sub.Status,
+		FromTariffID:   fromTariffID,
+		ToTariffID:     sub.TariffID,
+		Reason:         reason,
+		Initiator:      initiator,
+		InitiatorID:    initiatorID,
 		PaymentID:      &paymentID,
 	}, nil
 }

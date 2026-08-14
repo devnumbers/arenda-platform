@@ -29,12 +29,13 @@ export const subscriptionStatusChoices: Choice[] = [
   { id: 'cancelled', name: 'Отменена' },
 ];
 
+// partial_refunded отсутствует: возвраты всегда полные (ADR 0037), статус
+// выпадает из нового домена и строк с ним быть не может.
 export const subscriptionPaymentStatusChoices: Choice[] = [
   { id: 'pending', name: 'Ожидает оплаты' },
   { id: 'succeeded', name: 'Оплачен' },
   { id: 'failed', name: 'Ошибка оплаты' },
   { id: 'refunded', name: 'Возвращён' },
-  { id: 'partial_refunded', name: 'Частичный возврат' },
   { id: 'refunding', name: 'Возврат выполняется' },
 ];
 

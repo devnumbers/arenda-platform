@@ -3,8 +3,8 @@ import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
-import TextField from '@mui/material/TextField';
 import {
   Datagrid,
   DateField,
@@ -22,11 +22,26 @@ import {
   useRecordContext,
   useRefresh,
 } from 'react-admin';
-import { ChoiceChipField, MoneyField, UserLinkField, UserReferenceField, subscriptionPaymentPeriodChoices, subscriptionPaymentStatusChoices } from './fields';
+import {
+  ChoiceChipField,
+  MoneyField,
+  UserLinkField,
+  UserReferenceField,
+  subscriptionPaymentPeriodChoices,
+  subscriptionPaymentStatusChoices,
+  subscriptionStatusChoices,
+} from './fields';
 
 const filters = [
   <TextInput key="user_phone" source="user_phone" label="Телефон пользователя" alwaysOn />,
-  <SelectInput key="status" source="status" label="Статус" choices={subscriptionPaymentStatusChoices} alwaysOn />,
+  <SelectInput key="status" source="status" label="Статус платежа" choices={subscriptionPaymentStatusChoices} alwaysOn />,
+  <SelectInput
+    key="subscription_status"
+    source="subscription_status"
+    label="Статус подписки"
+    choices={subscriptionStatusChoices}
+    alwaysOn
+  />,
 ];
 
 // sortable={false} проставлен колонкам вне whitelist сортировки бэкенда
@@ -51,13 +66,14 @@ export const SubscriptionPaymentList = () => (
   </List>
 );
 
+// Возвраты всегда полные (ADR 0037): контракт эндпоинта не принимает сумму,
+// диалог — только подтверждение действия.
 const RefundButton = () => {
   const dataProvider = useDataProvider();
   const notify = useNotify();
   const refresh = useRefresh();
   const record = useRecordContext();
   const [open, setOpen] = useState(false);
-  const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
 
   if (!record) {
@@ -65,20 +81,11 @@ const RefundButton = () => {
   }
 
   const handleRefund = async () => {
-    const trimmed = amount.trim();
-    const amountKopecks = trimmed ? Number(trimmed) : undefined;
-
-    if (amountKopecks !== undefined && (!Number.isFinite(amountKopecks) || !Number.isInteger(amountKopecks) || amountKopecks <= 0)) {
-      notify('Введите целую положительную сумму возврата или оставьте поле пустым для полного возврата', { type: 'warning' });
-      return;
-    }
-
     setLoading(true);
     try {
-      await dataProvider.refundPayment({ id: record.id, amountKopecks });
+      await dataProvider.refundPayment({ id: record.id });
       notify('Возврат выполнен', { type: 'success' });
       setOpen(false);
-      setAmount('');
       refresh();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Ошибка возврата';
@@ -96,23 +103,17 @@ const RefundButton = () => {
       <Dialog open={open} onClose={() => setOpen(false)}>
         <DialogTitle>Возврат платежа</DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Сумма возврата (коп.)"
-            type="number"
-            fullWidth
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-            helperText="Оставьте пустым для полного возврата"
-          />
+          <DialogContentText>
+            Платёж будет возвращён полностью. Подписка пользователя перейдёт на базовый тариф,
+            избыточные объекты будут архивированы.
+          </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)} disabled={loading}>
             Отмена
           </Button>
-          <Button onClick={handleRefund} disabled={loading}>
-            Вернуть
+          <Button onClick={handleRefund} disabled={loading} color="error">
+            Вернуть полностью
           </Button>
         </DialogActions>
       </Dialog>

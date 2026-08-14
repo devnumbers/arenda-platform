@@ -2560,6 +2560,12 @@ paths:
           description: Exact match on the user's phone number.
           schema:
             type: string
+        - name: subscription_status
+          in: query
+          required: false
+          description: Filters payments by the payer's current subscription status (issue #254).
+          schema:
+            $ref: '#/components/schemas/SubscriptionStatus'
         - name: sort
           in: query
           required: false

@@ -185,6 +185,51 @@ func (p *SubscriptionPayment) ReconcileToSucceeded(now time.Time) error {
 	return nil
 }
 
+// BeginRefund reserves the payment for a full refund (issue #254): the
+// internal refunding state is the double-refund guard — the reservation
+// transaction moves the payment into it atomically, so a concurrent refund
+// loses the race and never reaches the provider. A succeeded payment (the
+// captured charge) and a still-pending one (the provider may have captured it
+// while the webhook was lost) can be reserved; every terminal or already
+// reserved state is rejected.
+func (p *SubscriptionPayment) BeginRefund(now time.Time) error {
+	if p.Status != PaymentStatusSucceeded && p.Status != PaymentStatusPending {
+		return ErrInvalidPaymentStatus
+	}
+	p.Status = PaymentStatusRefunding
+	p.UpdatedAt = now.UTC()
+	return nil
+}
+
+// RevertRefundReservation rolls the refunding reservation back to the status
+// the payment had before it was reserved — the compensation step of the refund
+// saga when the provider reports the refund did not happen (issue #254). Only
+// the statuses BeginRefund accepts can be restored.
+func (p *SubscriptionPayment) RevertRefundReservation(prev PaymentStatus, now time.Time) error {
+	if p.Status != PaymentStatusRefunding {
+		return ErrInvalidPaymentStatus
+	}
+	if prev != PaymentStatusSucceeded && prev != PaymentStatusPending {
+		return ErrInvalidPaymentStatus
+	}
+	p.Status = prev
+	p.UpdatedAt = now.UTC()
+	return nil
+}
+
+// StatusBeforeRefundReservation reconstructs the status the payment had before
+// the refunding reservation from its persisted shape: the reservation is taken
+// from succeeded or pending only, and a payment whose charge was captured
+// carries succeeded_at. Callers that hold the payment from before the
+// reservation capture the status directly; this serves the paths that read the
+// payment after the fact (the reconciliation worker).
+func (p *SubscriptionPayment) StatusBeforeRefundReservation() PaymentStatus {
+	if p.SucceededAt != nil {
+		return PaymentStatusSucceeded
+	}
+	return PaymentStatusPending
+}
+
 // MarkRefunded records a full refund of the payment. Refunds are always
 // full-amount (ADR 0037); the subscription-side effects of a refund land with
 // the admin refund flow (issue #254).

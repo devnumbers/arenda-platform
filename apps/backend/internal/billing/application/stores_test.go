@@ -423,6 +423,31 @@ func (r *fakePaymentRepo) listStalePending(createdBefore time.Time, limit int, e
 	return result
 }
 
+// ListStaleRefunding mirrors the refund reconciliation listing: refunding
+// payments with a provider reference updated before the threshold, oldest
+// first (issue #254).
+func (r *fakePaymentRepo) ListStaleRefunding(_ context.Context, updatedBefore time.Time, limit int) ([]domain.SubscriptionPayment, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result := make([]domain.SubscriptionPayment, 0)
+	for _, p := range r.payments {
+		if p.Status == domain.PaymentStatusRefunding && p.HasProviderReference() &&
+			p.UpdatedAt.Before(updatedBefore) {
+			result = append(result, p)
+		}
+	}
+	slices.SortFunc(result, func(a, b domain.SubscriptionPayment) int {
+		if c := a.UpdatedAt.Compare(b.UpdatedAt); c != 0 {
+			return c
+		}
+		return bytes.Compare(a.ID[:], b.ID[:])
+	})
+	if len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
+}
+
 func (r *fakePaymentRepo) WithTx(transaction.Tx) (SubscriptionPaymentRepository, error) {
 	return r, nil
 }

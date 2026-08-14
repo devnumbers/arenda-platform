@@ -164,6 +164,49 @@ func TestParseTransitionInitiator(t *testing.T) {
 	}
 }
 
+func TestNewRefundTransition(t *testing.T) {
+	sub := validSubscription(t)
+	fromStatus := sub.Status
+	fromTariff := sub.TariffID
+	paymentID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	adminID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14")
+
+	t.Run("admin refund carries the actor", func(t *testing.T) {
+		transition, err := NewRefundTransition(sub, &fromStatus, &fromTariff, InitiatorAdmin, &adminID, paymentID)
+		if err != nil {
+			t.Fatalf("NewRefundTransition() error = %v", err)
+		}
+		if transition.Reason != TransitionReasonRefunded {
+			t.Errorf("Reason = %q, want refunded", transition.Reason)
+		}
+		if transition.Initiator != InitiatorAdmin || transition.InitiatorID == nil || *transition.InitiatorID != adminID {
+			t.Errorf("initiator = %q/%v, want admin with the actor id", transition.Initiator, transition.InitiatorID)
+		}
+		if transition.PaymentID == nil || *transition.PaymentID != paymentID {
+			t.Errorf("PaymentID = %v, want %v", transition.PaymentID, paymentID)
+		}
+	})
+
+	t.Run("system refund carries no actor", func(t *testing.T) {
+		transition, err := NewRefundTransition(sub, &fromStatus, &fromTariff, InitiatorSystem, nil, paymentID)
+		if err != nil {
+			t.Fatalf("NewRefundTransition(system) error = %v", err)
+		}
+		if transition.Initiator != InitiatorSystem || transition.InitiatorID != nil {
+			t.Errorf("initiator = %q/%v, want system without an actor", transition.Initiator, transition.InitiatorID)
+		}
+	})
+
+	t.Run("rejects a missing payment and a system actor id", func(t *testing.T) {
+		if _, err := NewRefundTransition(sub, &fromStatus, &fromTariff, InitiatorSystem, nil, uuid.Nil); err == nil {
+			t.Error("nil payment error = nil, want error")
+		}
+		if _, err := NewRefundTransition(sub, &fromStatus, &fromTariff, InitiatorSystem, &adminID, paymentID); err == nil {
+			t.Error("system initiator with actor id error = nil, want error")
+		}
+	})
+}
+
 func TestReconstituteTransition(t *testing.T) {
 	sub := validSubscription(t)
 	valid, err := NewTransition(sub, nil, nil, TransitionReasonRegistered, InitiatorSystem, nil)

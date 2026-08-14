@@ -106,4 +106,8 @@ var (
 	// refund repeated after a network duplicate). The transition stands; the
 	// caller should reconcile the current state instead of retrying.
 	ErrProviderDuplicateOperation = errors.New("provider duplicate operation")
+	// ErrInvalidFilter is returned when an admin listing receives a filter or
+	// sort value outside its whitelist — a request defect, not a server
+	// failure, so the HTTP layer answers 400 (issue #254).
+	ErrInvalidFilter = errors.New("invalid filter")
 )

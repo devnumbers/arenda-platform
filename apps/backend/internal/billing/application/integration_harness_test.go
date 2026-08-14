@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -87,7 +88,7 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	tariffs := billingpg.NewTariffRepository(pool, 0, clk)
 	subscriptions := billingpg.NewSubscriptionRepository(pool)
 	transitions := billingpg.NewSubscriptionTransitionRepository(pool)
-	paymentsRepo := billingpg.NewSubscriptionPaymentRepository(pool)
+	paymentsRepo := billingpg.NewSubscriptionPaymentRepository(pool, encryptor)
 	methodsRepo := billingpg.NewPaymentMethodRepository(pool, encryptor)
 	bindingsRepo := billingpg.NewCardBindingSessionRepository(pool)
 	uow := pgdb.NewUoW(pool, logger)
@@ -97,10 +98,11 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 
 	factory := billingapp.NewTxStoreFactory(tariffs, subscriptions, transitions, paymentsRepo, methodsRepo, bindingsRepo, audit, uow)
 	services := billingapp.NewServices(factory, billingapp.ServicesConfig{
-		Config:   billingapp.DefaultConfig(),
-		Clock:    clk,
-		Logger:   logger,
-		Provider: provider,
+		Config:        billingapp.DefaultConfig(),
+		Clock:         clk,
+		Logger:        logger,
+		Provider:      provider,
+		AdminPayments: paymentsRepo,
 	})
 
 	return &integrationHarness{
@@ -144,6 +146,10 @@ ON CONFLICT (name) DO NOTHING`)
 	}
 }
 
+// seedUserCounter disambiguates seeded phones: two uuidv7 ids minted in the
+// same millisecond would otherwise collide on users_phone_key.
+var seedUserCounter atomic.Int64
+
 // seedUser inserts a users row (the subscriptions FK target) and returns its id.
 func (h *integrationHarness) seedUser() uuid.UUID {
 	h.t.Helper()
@@ -151,7 +157,7 @@ func (h *integrationHarness) seedUser() uuid.UUID {
 	if err != nil {
 		h.t.Fatalf("new uuid: %v", err)
 	}
-	phone := fmt.Sprintf("+7999%010d", id.Time()%1e10)
+	phone := fmt.Sprintf("+7999%010d", seedUserCounter.Add(1)%10000000000)
 	if _, err := h.pool.Exec(h.ctx(),
 		"INSERT INTO users (id, phone, role) VALUES ($1, $2, 'owner')", id, phone,
 	); err != nil {

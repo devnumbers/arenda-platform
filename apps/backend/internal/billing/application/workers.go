@@ -130,6 +130,7 @@ const (
 	triggerGraceExpired       = "grace_expired"
 	triggerNonRenewingExpired = "non_renewing_expired"
 	triggerCancelledExpired   = "cancelled_expired"
+	triggerRefund             = "refund"
 )
 
 // enterSubscriptionGrace moves the subscription into its grace window inside
@@ -1156,24 +1157,91 @@ func (w *Workers) reconcileStalePendingPayments(ctx context.Context, now time.Ti
 // ADR 0039): atomic finalization with the subscription effects, idempotent on
 // repeats.
 func (w *Workers) finalizeFromProviderStatus(ctx context.Context, payment domain.SubscriptionPayment, status PaymentStatusResult) error {
-	var errorCode *string
-	if status.Status == domain.PaymentStatusFailed && status.ErrorCode != "" {
-		errorCode = &status.ErrorCode
-	}
-	return w.payments.handlePaymentNotification(ctx, &PaymentNotification{
-		InternalPaymentID: payment.ID,
-		ProviderPaymentID: *payment.ProviderPaymentID,
-		Status:            status.Status,
-		ErrorCode:         errorCode,
-		AmountKopecks:     payment.AmountKopecks,
-	})
+	return w.payments.handlePaymentNotification(ctx, notificationFromStatus(payment, status))
 }
 
-// ReconcileStaleRefunds resolves payments stuck in the refunding state. The
-// refund flow that creates them lands with the admin refund ticket (issue
-// #254); until then nothing can enter refunding, so the phase stays a
-// deliberate no-op that keeps the scheduler shell wired.
-func (w *Workers) ReconcileStaleRefunds(context.Context, time.Time) (int, error) { return 0, nil }
+// ReconcileStaleRefunds resolves payments stuck in the refunding reservation
+// of the refund saga (issue #254): the provider call's outcome was never
+// finalized — an in-flight refund, an unanswered request, a crash between the
+// phases. The provider's status is the source of truth (ADR 0010): a refunded
+// payment finalizes with its subscription effects, a still-captured charge
+// reverts the reservation to the payment's previous status (a pending one
+// re-enters the pending-payment reconciliation), a failed provider status is
+// ambiguous for a refund and stays under manual review, and anything else
+// waits for the next tick. Returns the number of payments checked with the
+// provider.
+func (w *Workers) ReconcileStaleRefunds(ctx context.Context, now time.Time) (int, error) {
+	if w.provider == nil {
+		return 0, fmt.Errorf("refund reconciliation worker requires a payment provider: %w", ErrPaymentUnavailable)
+	}
+	if w.payments == nil {
+		return 0, fmt.Errorf("refund reconciliation worker requires the payment service: %w", ErrPaymentUnavailable)
+	}
+
+	processed := 0
+	updatedBefore := now.Add(-w.config.PendingPaymentStaleness)
+	for {
+		payments, err := w.txStoreFactory.payments.ListStaleRefunding(ctx, updatedBefore, w.config.WorkerBatchSize)
+		if err != nil {
+			return processed, fmt.Errorf("list stale refunding payments: %w", err)
+		}
+		if len(payments) == 0 {
+			break
+		}
+		resolved := 0
+		for _, payment := range payments {
+			processed++
+			didResolve, err := w.resolveStaleRefund(ctx, payment)
+			if err != nil {
+				w.log.ErrorContext(ctx, "failed to resolve stale refunding payment",
+					slog.String("payment_id", payment.ID.String()),
+					slog.String("error", sanitize.Error(err)))
+				continue
+			}
+			if didResolve {
+				resolved++
+			}
+		}
+		if len(payments) < w.config.WorkerBatchSize {
+			break
+		}
+		if resolved == 0 {
+			// A full batch of unresolved refunds stays in the selection; the
+			// ambiguous ones need manual review, the unsettled ones the
+			// provider's settlement.
+			w.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", "stale refund reconciliation"))
+			break
+		}
+	}
+	return processed, nil
+}
+
+// resolveStaleRefund resolves one stuck refunding payment against the
+// provider. It reports whether the payment actually left the refunding state
+// (finalized or reverted) — the progress signal that keeps the batch loop from
+// spinning on permanently unresolved rows.
+func (w *Workers) resolveStaleRefund(ctx context.Context, payment domain.SubscriptionPayment) (bool, error) {
+	status, err := w.provider.PaymentStatus(ctx, payment.ID, *payment.ProviderPaymentID)
+	if err != nil {
+		return false, fmt.Errorf("provider status: %w", err)
+	}
+	switch status.Status {
+	case domain.PaymentStatusRefunded, domain.PaymentStatusSucceeded:
+		return w.payments.resolveRefundingFromStatus(ctx, payment, status)
+	case domain.PaymentStatusFailed:
+		// A failed provider status is ambiguous for a payment being refunded:
+		// whether the refund happened before the failure is unknowable from
+		// the status alone, so the payment stays for manual review.
+		w.log.WarnContext(ctx, "refunding payment has a failed status at the provider; manual review required",
+			slog.String("payment_id", payment.ID.String()),
+			slog.String("provider_payment_id", *payment.ProviderPaymentID))
+		return false, nil
+	default:
+		// The provider has not settled the refund yet; retry on the next tick.
+		return false, nil
+	}
+}
 
 // providerCoder is implemented by provider errors that carry their provider's
 // own error code; it is how a code survives into the failed payment row.

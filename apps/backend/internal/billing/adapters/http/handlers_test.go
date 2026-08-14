@@ -14,6 +14,8 @@ import (
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 )
 
 // fakeTariffLister is a func-backed TariffLister (the consumer-side port of
@@ -174,7 +176,7 @@ func newTestHandlers(tariffs TariffLister, subs SubscriptionViewer, managers Sub
 }
 
 // newTestHandlersOpts builds handlers with explicit payment,
-// payment-method, webhook and dev-endpoint options.
+// payment-method, webhook, admin-payment and dev-endpoint options.
 func newTestHandlersOpts(tariffs TariffLister, subs SubscriptionViewer, managers SubscriptionManager, payments PaymentManager, methods PaymentMethodManager, webhooks WebhookProcessor, devEndpoints bool) *BillingHandlers {
 	if tariffs == nil {
 		tariffs = &fakeTariffLister{}
@@ -194,7 +196,44 @@ func newTestHandlersOpts(tariffs TariffLister, subs SubscriptionViewer, managers
 	if webhooks == nil {
 		webhooks = &fakeWebhookProcessor{}
 	}
-	return NewBillingHandlers(tariffs, subs, managers, payments, methods, webhooks, devEndpoints, nil)
+	return NewBillingHandlers(tariffs, subs, managers, payments, methods, webhooks, &fakeAdminPaymentManager{}, devEndpoints, nil)
+}
+
+// fakeAdminPaymentManager fails the test when an admin payment endpoint is
+// called without one being wired; the admin-endpoint tests override it.
+type fakeAdminPaymentManager struct {
+	get    func(ctx context.Context, paymentID uuid.UUID) (billingapp.AdminSubscriptionPaymentView, error)
+	list   func(ctx context.Context, filters billingapp.AdminPaymentFilters) ([]billingapp.AdminSubscriptionPaymentView, int64, error)
+	refund func(ctx context.Context, adminID, paymentID uuid.UUID) error
+	sync   func(ctx context.Context, adminID, paymentID uuid.UUID) error
+}
+
+func (f *fakeAdminPaymentManager) GetAdminPayment(ctx context.Context, paymentID uuid.UUID) (billingapp.AdminSubscriptionPaymentView, error) {
+	if f.get != nil {
+		return f.get(ctx, paymentID)
+	}
+	return billingapp.AdminSubscriptionPaymentView{}, errors.New("unexpected GetAdminPayment call")
+}
+
+func (f *fakeAdminPaymentManager) ListAdminPayments(ctx context.Context, filters billingapp.AdminPaymentFilters) ([]billingapp.AdminSubscriptionPaymentView, int64, error) {
+	if f.list != nil {
+		return f.list(ctx, filters)
+	}
+	return nil, 0, errors.New("unexpected ListAdminPayments call")
+}
+
+func (f *fakeAdminPaymentManager) RefundPayment(ctx context.Context, adminID, paymentID uuid.UUID) error {
+	if f.refund != nil {
+		return f.refund(ctx, adminID, paymentID)
+	}
+	return errors.New("unexpected RefundPayment call")
+}
+
+func (f *fakeAdminPaymentManager) SyncPayment(ctx context.Context, adminID, paymentID uuid.UUID) error {
+	if f.sync != nil {
+		return f.sync(ctx, adminID, paymentID)
+	}
+	return errors.New("unexpected SyncPayment call")
 }
 
 // ownerRequest builds a request authenticated as the given owner.
@@ -443,16 +482,210 @@ func TestGetSubscription_InfrastructureErrorIs500(t *testing.T) {
 	}
 }
 
-// TestDeferredEndpoints_Answer501 proves the endpoints whose flows return
-// with later tickets (#254 admin payment views) answer 501 instead of
-// pretending to work. The payment-method endpoints went live with #251.
-func TestDeferredEndpoints_Answer501(t *testing.T) {
+// adminRequest builds an admin-authenticated request (the AdminOnlyMiddleware
+// stores the actor the handlers attribute refunds and syncs with).
+func adminRequest(t *testing.T, method, target string, adminID uuid.UUID) *http.Request {
+	t.Helper()
+	return httptest.NewRequestWithContext(
+		httpsupport.WithActor(t.Context(), adminID, actor.RoleAdmin),
+		method, target, nil,
+	)
+}
+
+// adminPaymentView builds a view the get/list tests can round-trip.
+func adminPaymentView(t *testing.T) billingapp.AdminSubscriptionPaymentView {
+	t.Helper()
+	providerPaymentID := "prov_1"
+	succeededAt := time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC)
+	refunded := int64(99000)
+	payment, err := domain.NewSubscriptionPayment(
+		uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+		uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+		uuid.MustParse("33333333-3333-3333-3333-333333333333"),
+		domain.PeriodMonth, 99000, "fake", time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("NewSubscriptionPayment() error = %v", err)
+	}
+	payment.ProviderPaymentID = &providerPaymentID
+	payment.Status = domain.PaymentStatusRefunded
+	payment.RefundedAmountKopecks = &refunded
+	payment.SucceededAt = &succeededAt
+	return billingapp.AdminSubscriptionPaymentView{
+		Payment:   payment,
+		Tariff:    domain.Tariff{ID: payment.TariffID, Name: domain.TariffBusiness},
+		UserPhone: "+79990000001",
+	}
+}
+
+// TestGetAdminSubscriptionPayment_AnswersView proves GET
+// /admin/subscription/payments/{id} maps the view to the contract DTO
+// (issue #254).
+func TestGetAdminSubscriptionPayment_AnswersView(t *testing.T) {
+	view := adminPaymentView(t)
 	h := newTestHandlers(nil, nil, nil)
+	h.adminPayments = &fakeAdminPaymentManager{get: func(_ context.Context, paymentID uuid.UUID) (billingapp.AdminSubscriptionPaymentView, error) {
+		if paymentID != view.Payment.ID {
+			t.Errorf("GetAdminPayment called with %v, want %v", paymentID, view.Payment.ID)
+		}
+		return view, nil
+	}}
 
 	w := httptest.NewRecorder()
-	h.GetAdminSubscriptionPayment(w, ownerRequest(t, http.MethodGet, "/admin/subscription/payments/"+uuid.New().String(), uuid.New()), uuid.New())
-	if w.Code != http.StatusNotImplemented {
-		t.Fatalf("status = %d, want 501; body: %s", w.Code, w.Body.String())
+	h.GetAdminSubscriptionPayment(w, adminRequest(t, http.MethodGet, "/admin/subscription/payments/"+view.Payment.ID.String(), uuid.New()), view.Payment.ID)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp openapi.AdminSubscriptionPayment
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp.Id != view.Payment.ID {
+		t.Errorf("id = %v, want %v", resp.Id, view.Payment.ID)
+	}
+	if resp.UserPhone != view.UserPhone {
+		t.Errorf("userPhone = %q, want %q", resp.UserPhone, view.UserPhone)
+	}
+	if resp.RefundedAmountKopecks == nil || *resp.RefundedAmountKopecks != 99000 {
+		t.Errorf("refundedAmountKopecks = %v, want 99000", resp.RefundedAmountKopecks)
+	}
+	if resp.SucceededAt == nil {
+		t.Error("succeededAt = nil, want the timestamp")
+	}
+}
+
+// TestRefundSubscriptionPayment_AttributesAdmin proves POST
+// /admin/subscription/payments/{id}/refund answers 204 and forwards the acting
+// admin from the session (issue #254).
+func TestRefundSubscriptionPayment_AttributesAdmin(t *testing.T) {
+	adminID := uuid.New()
+	paymentID := uuid.New()
+	called := false
+	h := newTestHandlers(nil, nil, nil)
+	h.adminPayments = &fakeAdminPaymentManager{refund: func(_ context.Context, gotAdmin, gotPayment uuid.UUID) error {
+		called = true
+		if gotAdmin != adminID {
+			t.Errorf("RefundPayment admin = %v, want %v", gotAdmin, adminID)
+		}
+		if gotPayment != paymentID {
+			t.Errorf("RefundPayment payment = %v, want %v", gotPayment, paymentID)
+		}
+		return nil
+	}}
+
+	w := httptest.NewRecorder()
+	h.RefundSubscriptionPayment(w, adminRequest(t, http.MethodPost, "/admin/subscription/payments/"+paymentID.String()+"/refund", adminID), paymentID)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
+	}
+	if !called {
+		t.Error("service was not called")
+	}
+}
+
+// TestSyncSubscriptionPayment_AttributesAdmin proves POST
+// /admin/subscription/payments/{id}/sync answers 204 and forwards the acting
+// admin (issue #254).
+func TestSyncSubscriptionPayment_AttributesAdmin(t *testing.T) {
+	adminID := uuid.New()
+	paymentID := uuid.New()
+	h := newTestHandlers(nil, nil, nil)
+	h.adminPayments = &fakeAdminPaymentManager{sync: func(_ context.Context, gotAdmin, gotPayment uuid.UUID) error {
+		if gotAdmin != adminID {
+			t.Errorf("SyncPayment admin = %v, want %v", gotAdmin, adminID)
+		}
+		if gotPayment != paymentID {
+			t.Errorf("SyncPayment payment = %v, want %v", gotPayment, paymentID)
+		}
+		return nil
+	}}
+
+	w := httptest.NewRecorder()
+	h.SyncSubscriptionPayment(w, adminRequest(t, http.MethodPost, "/admin/subscription/payments/"+paymentID.String()+"/sync", adminID), paymentID)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestListAdminSubscriptionPayments_MapsFilters proves GET
+// /admin/subscription/payments forwards every contract filter to the service
+// and answers the items with the total (issue #254).
+func TestListAdminSubscriptionPayments_MapsFilters(t *testing.T) {
+	userID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	limit, offset := 50, 10
+	h := newTestHandlers(nil, nil, nil)
+	h.adminPayments = &fakeAdminPaymentManager{list: func(_ context.Context, filters billingapp.AdminPaymentFilters) ([]billingapp.AdminSubscriptionPaymentView, int64, error) {
+		if filters.UserID == nil || *filters.UserID != userID {
+			t.Errorf("userID filter = %v, want %v", filters.UserID, userID)
+		}
+		if filters.Status != string(domain.PaymentStatusRefunding) {
+			t.Errorf("status filter = %q, want refunding", filters.Status)
+		}
+		if filters.UserPhone != "+79990000001" {
+			t.Errorf("userPhone filter = %q", filters.UserPhone)
+		}
+		if filters.SubscriptionStatus != string(domain.SubscriptionStatusGrace) {
+			t.Errorf("subscriptionStatus filter = %q, want grace", filters.SubscriptionStatus)
+		}
+		if filters.Sort != "amountKopecks" || filters.Order != "asc" {
+			t.Errorf("sort/order = %q/%q, want amountKopecks/asc", filters.Sort, filters.Order)
+		}
+		if filters.Limit != limit || filters.Offset != offset {
+			t.Errorf("limit/offset = %d/%d, want %d/%d", filters.Limit, filters.Offset, limit, offset)
+		}
+		return []billingapp.AdminSubscriptionPaymentView{adminPaymentView(t)}, 7, nil
+	}}
+
+	target := "/admin/subscription/payments?user_id=" + userID.String() +
+		"&status=refunding&user_phone=%2B79990000001&subscription_status=grace" +
+		"&sort=amountKopecks&order=asc&limit=50&offset=10"
+	w := httptest.NewRecorder()
+	statusParam := openapi.SubscriptionPaymentStatus("refunding")
+	phoneParam := "+79990000001"
+	subscriptionStatusParam := openapi.SubscriptionStatus("grace")
+	sortParam := "amountKopecks"
+	orderParam := openapi.ListAdminSubscriptionPaymentsParamsOrder("asc")
+	h.ListAdminSubscriptionPayments(w, adminRequest(t, http.MethodGet, target, uuid.New()), openapi.ListAdminSubscriptionPaymentsParams{
+		UserId:             &userID,
+		Status:             &statusParam,
+		UserPhone:          &phoneParam,
+		SubscriptionStatus: &subscriptionStatusParam,
+		Sort:               &sortParam,
+		Order:              &orderParam,
+		Limit:              &limit,
+		Offset:             &offset,
+	})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp openapi.AdminSubscriptionPaymentsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp.Total != 7 || len(resp.Items) != 1 {
+		t.Fatalf("total/items = %d/%d, want 7/1", resp.Total, len(resp.Items))
+	}
+	if resp.Items[0].UserPhone != "+79990000001" {
+		t.Errorf("item userPhone = %q", resp.Items[0].UserPhone)
+	}
+}
+
+// TestListAdminSubscriptionPayments_InvalidFilterAnswers400 proves a sort
+// field outside the whitelist answers 400, not 500 (issue #254).
+func TestListAdminSubscriptionPayments_InvalidFilterAnswers400(t *testing.T) {
+	h := newTestHandlers(nil, nil, nil)
+	h.adminPayments = &fakeAdminPaymentManager{list: func(_ context.Context, filters billingapp.AdminPaymentFilters) ([]billingapp.AdminSubscriptionPaymentView, int64, error) {
+		return nil, 0, billingapp.ErrInvalidFilter
+	}}
+
+	w := httptest.NewRecorder()
+	h.ListAdminSubscriptionPayments(w, adminRequest(t, http.MethodGet, "/admin/subscription/payments", uuid.New()), openapi.ListAdminSubscriptionPaymentsParams{})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
 	}
 }
 

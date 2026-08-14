@@ -63,10 +63,24 @@ type Provider struct {
 	confirmedAmounts map[string]int64
 	// charges counts completed charges by internal payment id — the probe
 	// tests use to prove a payment was charged exactly once.
-	charges       map[string]int
+	charges map[string]int
+	// refundOutcomes programs RefundPayment answers by internal payment id
+	// (issue #254): outcome.result is answered when set, otherwise outcome.err.
+	refundOutcomes map[string]refundOutcome
+	// paymentStates programs PaymentStatus answers by internal payment id
+	// (issue #254): programmed states take precedence over the pending map —
+	// the refund tests model a provider that already settled a refund.
+	paymentStates map[string]application.PaymentStatusResult
 	bindingStates map[string]application.MethodBindingState
 	bindings      map[string]bindingEntry
 	metrics       *payment.Metrics
+}
+
+// refundOutcome is one programmed RefundPayment answer: exactly one of result
+// and err is used.
+type refundOutcome struct {
+	result *application.RefundResult
+	err    error
 }
 
 // Compile-time assertions that Provider satisfies the aggregate provider port
@@ -100,6 +114,8 @@ func NewProvider(baseURL string, log *slog.Logger, clk clock.Clock, metrics *pay
 		pending:          make(map[string]pendingEntry),
 		confirmedAmounts: make(map[string]int64),
 		charges:          make(map[string]int),
+		refundOutcomes:   make(map[string]refundOutcome),
+		paymentStates:    make(map[string]application.PaymentStatusResult),
 		bindingStates:    make(map[string]application.MethodBindingState),
 		bindings:         make(map[string]bindingEntry),
 		metrics:          metrics,
@@ -198,7 +214,7 @@ func (p *Provider) PaymentURL(internalPaymentID uuid.UUID) string {
 
 // PaymentStatus returns the provider-side status of a payment. If the payment
 // is not found in the pending map it is assumed to have been completed and
-// succeeded.
+// succeeded. A status programmed via SetPaymentState takes precedence.
 func (p *Provider) PaymentStatus(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (res application.PaymentStatusResult, err error) {
 	start := time.Now()
 	defer func() {
@@ -214,6 +230,9 @@ func (p *Provider) PaymentStatus(ctx context.Context, paymentID uuid.UUID, provi
 	defer p.mu.Unlock()
 	p.purgeLocked()
 
+	if state, ok := p.paymentStates[paymentID.String()]; ok {
+		return state, nil
+	}
 	if entry, ok := p.pending[paymentID.String()]; ok {
 		res := application.PaymentStatusResult{Status: entry.event.Payment.Status}
 		if entry.event.Payment.Status == domain.PaymentStatusFailed {
@@ -496,7 +515,8 @@ func (p *Provider) ConfirmCardBinding(ctx context.Context, requestKey string) (r
 
 // RefundPayment refunds a finalized fake payment. For the fake provider every
 // refund succeeds and reports the full amount back, so callers do not need to
-// track it separately.
+// track it separately. An outcome programmed via SetRefundOutcome takes
+// precedence, so tests can model refused, in-flight and partial refunds.
 func (p *Provider) RefundPayment(ctx context.Context, req application.RefundRequest) (res application.RefundResult, err error) {
 	start := time.Now()
 	defer func() {
@@ -515,6 +535,17 @@ func (p *Provider) RefundPayment(ctx context.Context, req application.RefundRequ
 	}
 
 	log := logger.WithCorrelation(ctx, p.log)
+
+	if outcome, ok := p.programmedRefundOutcome(req.PaymentID.String()); ok {
+		if outcome.err != nil {
+			log.InfoContext(ctx, "fake payment refund failed (programmed)",
+				"provider_payment_id", req.ProviderPaymentID,
+				"internal_payment_id", req.PaymentID.String(),
+			)
+			return application.RefundResult{}, outcome.err
+		}
+		return *outcome.result, nil
+	}
 
 	refundedAmount := req.AmountKopecks
 	if refundedAmount == 0 {
@@ -538,6 +569,33 @@ func (p *Provider) RefundPayment(ctx context.Context, req application.RefundRequ
 		Status:                domain.PaymentStatusRefunded,
 		RefundedAmountKopecks: refundedAmount,
 	}, nil
+}
+
+// SetRefundOutcome programs the RefundPayment answer for an internal payment
+// id — the fake counterpart of provider-side refund states local flows cannot
+// produce (refused refunds, in-flight settlements, partial amounts). It is not
+// part of the provider port.
+func (p *Provider) SetRefundOutcome(internalPaymentID string, result *application.RefundResult, err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.refundOutcomes[internalPaymentID] = refundOutcome{result: result, err: err}
+}
+
+// programmedRefundOutcome returns the programmed refund answer of a payment.
+func (p *Provider) programmedRefundOutcome(internalPaymentID string) (refundOutcome, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	outcome, ok := p.refundOutcomes[internalPaymentID]
+	return outcome, ok
+}
+
+// SetPaymentState programs the PaymentStatus answer for an internal payment
+// id, overriding the pending map — the refund tests model a provider that
+// already settled (or refused) a refund. It is not part of the provider port.
+func (p *Provider) SetPaymentState(internalPaymentID string, state application.PaymentStatusResult) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.paymentStates[internalPaymentID] = state
 }
 
 // WebhookAck returns the fixed success response the fake provider expects

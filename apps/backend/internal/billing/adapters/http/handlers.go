@@ -59,6 +59,17 @@ type PaymentMethodManager interface {
 	SyncPaymentMethods(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error)
 }
 
+// AdminPaymentManager serves the admin payment operations (issue #254): the
+// cross-user payment views, the full-refund saga and the manual provider
+// sync. Access control is the AdminOnlyMiddleware the routes are mounted
+// with; the acting admin's id is attributed by the handlers.
+type AdminPaymentManager interface {
+	GetAdminPayment(ctx context.Context, paymentID uuid.UUID) (billingapp.AdminSubscriptionPaymentView, error)
+	ListAdminPayments(ctx context.Context, filters billingapp.AdminPaymentFilters) ([]billingapp.AdminSubscriptionPaymentView, int64, error)
+	RefundPayment(ctx context.Context, adminID, paymentID uuid.UUID) error
+	SyncPayment(ctx context.Context, adminID, paymentID uuid.UUID) error
+}
+
 // WebhookProcessor synchronously applies payment-provider webhooks (issue #250)
 // and answers with the provider's fixed acknowledgement body.
 type WebhookProcessor interface {
@@ -84,9 +95,10 @@ const maxWebhookBody = 256 * 1024
 // are live — GET /subscription/payments, POST /webhooks/payment/{provider} and
 // the local-only fake-payment confirmation. The payment-method endpoints of
 // issue #251 are live — the binding flow, activation, deletion, sync and the
-// local-only fake card-binding confirmation. The remaining endpoints answer
-// 501 until their flows land — refunds and admin payment views in #254. The
-// user-facing contract is frozen, so the routes stay mounted.
+// local-only fake card-binding confirmation. The admin payment endpoints of
+// issue #254 are live — the cross-user payment views, the full-refund saga
+// and the manual provider sync. The user-facing contract is frozen, so the
+// routes stay mounted.
 type BillingHandlers struct {
 	tariffs       TariffLister
 	subscriptions SubscriptionViewer
@@ -94,6 +106,7 @@ type BillingHandlers struct {
 	payments      PaymentManager
 	methods       PaymentMethodManager
 	webhooks      WebhookProcessor
+	adminPayments AdminPaymentManager
 	// devEndpoints enables the local-only fake-payment confirmation endpoint
 	// (APP_ENV=local).
 	devEndpoints bool
@@ -108,6 +121,7 @@ func NewBillingHandlers(
 	payments PaymentManager,
 	methods PaymentMethodManager,
 	webhooks WebhookProcessor,
+	adminPayments AdminPaymentManager,
 	devEndpoints bool,
 	logger *slog.Logger,
 ) *BillingHandlers {
@@ -121,6 +135,7 @@ func NewBillingHandlers(
 		payments:      payments,
 		methods:       methods,
 		webhooks:      webhooks,
+		adminPayments: adminPayments,
 		devEndpoints:  devEndpoints,
 		logger:        logger,
 	}
@@ -529,27 +544,128 @@ func (h *BillingHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *http.Re
 }
 
 // GetAdminSubscriptionPayment implements GET /admin/subscription/payments/{paymentId}
-// (issue #254).
-func (h *BillingHandlers) GetAdminSubscriptionPayment(w http.ResponseWriter, r *http.Request, _ uuid.UUID) {
-	h.notImplemented(w, r)
+// (issue #254): the payment with its tariff and the payer's phone resolved.
+func (h *BillingHandlers) GetAdminSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentID uuid.UUID) {
+	view, err := h.adminPayments.GetAdminPayment(r.Context(), paymentID)
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, adminSubscriptionPaymentResponse(view))
 }
 
 // RefundSubscriptionPayment implements POST /admin/subscription/payments/{paymentId}/refund
-// (issue #254).
-func (h *BillingHandlers) RefundSubscriptionPayment(w http.ResponseWriter, r *http.Request, _ uuid.UUID) {
-	h.notImplemented(w, r)
+// (issue #254): the full-amount refund saga. The acting admin — resolved from
+// the session the AdminOnlyMiddleware already verified — is attributed in the
+// transition log and the audit record.
+func (h *BillingHandlers) RefundSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentID uuid.UUID) {
+	adminID, ok := h.adminActor(w, r)
+	if !ok {
+		return
+	}
+	if err := h.adminPayments.RefundPayment(r.Context(), adminID, paymentID); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // SyncSubscriptionPayment implements POST /admin/subscription/payments/{paymentId}/sync
-// (issue #254).
-func (h *BillingHandlers) SyncSubscriptionPayment(w http.ResponseWriter, r *http.Request, _ uuid.UUID) {
-	h.notImplemented(w, r)
+// (issue #254): the payment is reconciled with the provider's current status
+// through the same synchronous paths the webhooks use.
+func (h *BillingHandlers) SyncSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentID uuid.UUID) {
+	adminID, ok := h.adminActor(w, r)
+	if !ok {
+		return
+	}
+	if err := h.adminPayments.SyncPayment(r.Context(), adminID, paymentID); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ListAdminSubscriptionPayments implements GET /admin/subscription/payments
-// (issue #254).
-func (h *BillingHandlers) ListAdminSubscriptionPayments(w http.ResponseWriter, r *http.Request, _ openapi.ListAdminSubscriptionPaymentsParams) {
-	h.notImplemented(w, r)
+// (issue #254): the cross-user payment listing with the payer's phone, the
+// payment-status, subscription-status and phone filters, and the sort
+// whitelist of the contract.
+func (h *BillingHandlers) ListAdminSubscriptionPayments(w http.ResponseWriter, r *http.Request, params openapi.ListAdminSubscriptionPaymentsParams) {
+	filters := billingapp.AdminPaymentFilters{}
+	if params.UserId != nil {
+		filters.UserID = params.UserId
+	}
+	if params.Status != nil {
+		filters.Status = string(*params.Status)
+	}
+	if params.UserPhone != nil {
+		filters.UserPhone = *params.UserPhone
+	}
+	if params.SubscriptionStatus != nil {
+		filters.SubscriptionStatus = string(*params.SubscriptionStatus)
+	}
+	if params.Sort != nil {
+		filters.Sort = *params.Sort
+	}
+	if params.Order != nil {
+		filters.Order = string(*params.Order)
+	}
+	if params.Limit != nil {
+		filters.Limit = *params.Limit
+	}
+	if params.Offset != nil {
+		filters.Offset = *params.Offset
+	}
+
+	views, total, err := h.adminPayments.ListAdminPayments(r.Context(), filters)
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	items := make([]openapi.AdminSubscriptionPayment, 0, len(views))
+	for _, v := range views {
+		items = append(items, adminSubscriptionPaymentResponse(v))
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminSubscriptionPaymentsResponse{
+		Items: items,
+		Total: int(total),
+	})
+}
+
+// adminActor resolves the acting admin from the authenticated session. The
+// AdminOnlyMiddleware guarantees the admin role on the mounted routes; this
+// only extracts the id and answers unauthorized when no session is present.
+func (h *BillingHandlers) adminActor(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	adminID, _, ok := httpsupport.ActorFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return uuid.Nil, false
+	}
+	return adminID, true
+}
+
+// adminSubscriptionPaymentResponse maps the admin payment view to the
+// contract DTO.
+func adminSubscriptionPaymentResponse(view billingapp.AdminSubscriptionPaymentView) openapi.AdminSubscriptionPayment {
+	p := view.Payment
+	resp := openapi.AdminSubscriptionPayment{
+		Id:              p.ID,
+		Tariff:          httpsupport.TariffResponse(view.Tariff),
+		Period:          openapi.AdminSubscriptionPaymentPeriod(p.Period),
+		AmountKopecks:   int(p.AmountKopecks),
+		Status:          openapi.SubscriptionPaymentStatus(p.Status),
+		Provider:        string(p.Provider),
+		UserId:          p.UserID,
+		UserPhone:       view.UserPhone,
+		CreatedAt:       p.CreatedAt,
+		UpdatedAt:       p.UpdatedAt,
+		SucceededAt:     p.SucceededAt,
+		PaymentMethodId: p.PaymentMethodID,
+	}
+	if p.RefundedAmountKopecks != nil {
+		v := int(*p.RefundedAmountKopecks)
+		resp.RefundedAmountKopecks = &v
+	}
+	return resp
 }
 
 // handleBillingError maps billing sentinel errors to RFC 7807 problems.
@@ -581,6 +697,10 @@ func (h *BillingHandlers) handleBillingError(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", detail))
+	case errors.Is(err, billingapp.ErrInvalidFilter):
+		// An admin listing filter outside its whitelist — a request defect,
+		// not a server failure (issue #254).
+		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректные параметры фильтра"))
 	case errors.Is(err, domain.ErrInvalidPeriod),
 		errors.Is(err, domain.ErrInvalidTariff),
 		errors.Is(err, domain.ErrInvalidAmount),

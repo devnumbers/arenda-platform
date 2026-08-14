@@ -37,6 +37,38 @@ type SubscriptionPaymentView struct {
 	Tariff  domain.Tariff
 }
 
+// AdminPaymentFilters carries the optional filters of the admin payment
+// listing (issue #254). Status and SubscriptionStatus are validated against
+// the domain vocabularies; Sort against the endpoint whitelist; the repository
+// layer encrypts the phone filter.
+type AdminPaymentFilters struct {
+	UserID             *uuid.UUID
+	Status             string
+	UserPhone          string
+	SubscriptionStatus string
+	Sort               string
+	Order              string
+	Limit              int
+	Offset             int
+}
+
+// AdminPaymentRow is one row of the admin payment listing as the persistence
+// adapter produces it: the payment aggregate plus the payer's phone resolved
+// from identity (decrypted when stored as ciphertext).
+type AdminPaymentRow struct {
+	Payment   domain.SubscriptionPayment
+	UserPhone string
+}
+
+// AdminSubscriptionPaymentView is the read model of one subscription payment
+// for the admin views (issue #254): the payment with its tariff resolved and
+// the payer's phone.
+type AdminSubscriptionPaymentView struct {
+	Payment   domain.SubscriptionPayment
+	Tariff    domain.Tariff
+	UserPhone string
+}
+
 // AddPaymentMethodRequest is the application-layer input of the
 // add-payment-method use case (issue #251). ProviderToken carries the raw
 // charge token of synchronous providers (the fake); bank-form providers such
