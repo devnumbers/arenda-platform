@@ -20,3 +20,9 @@ export const unlimitedPropertyLimit = -1;
 /** Лимит активных объектов: -1 → «Безлимит», иначе число. */
 export const formatPropertyLimit = (limit: number): string =>
   limit === unlimitedPropertyLimit ? 'Безлимит' : String(limit);
+
+/** Представление записи тарифа для react-admin: русское название, иначе #id. */
+export const tariffRepresentation = (record: { id?: unknown; name?: unknown }): string => {
+  const name = typeof record.name === 'string' && record.name !== '' ? tariffName(record.name) : '';
+  return name || `#${record.id}`;
+};

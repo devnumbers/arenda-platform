@@ -90,15 +90,22 @@ const sortableFieldsByResource: Record<string, readonly string[]> = {
   tariffs: [],
 };
 
+// Ресурсы без серверной пагинации: эндпоинт отдаёт полный список, limit/offset
+// в его контракте не объявлены — не отправляем их, чтобы запрос соответствовал
+// OpenAPI-контракту.
+const unpaginatedResources = new Set(['tariffs']);
+
 const buildListQuery = (resource: string, params: GetListParams): string => {
   const { pagination, sort, filter } = params;
   const query = new URLSearchParams();
 
-  const page = pagination?.page ?? 1;
-  const perPage = pagination?.perPage ?? 10;
+  if (!unpaginatedResources.has(resource)) {
+    const page = pagination?.page ?? 1;
+    const perPage = pagination?.perPage ?? 10;
 
-  query.set('limit', String(perPage));
-  query.set('offset', String((page - 1) * perPage));
+    query.set('limit', String(perPage));
+    query.set('offset', String((page - 1) * perPage));
+  }
 
   // Отбрасываем sort/order вне whitelist'а ресурса: бэкенд валидирует sort
   // и отвечает 400, а в URL списков у пользователей могли остаться старые

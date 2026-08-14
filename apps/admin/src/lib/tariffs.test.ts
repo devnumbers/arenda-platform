@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPropertyLimit, tariffName, tariffNameChoices } from './tariffs';
+import { formatPropertyLimit, tariffName, tariffNameChoices, tariffRepresentation } from './tariffs';
 
 // Значения enum TariffName из apps/backend/api/openapi/openapi.yaml.
 const openApiTariffNames = ['basic', 'pro', 'business'] as const;
@@ -44,5 +44,21 @@ describe('formatPropertyLimit', () => {
     expect(formatPropertyLimit(1)).toBe('1');
     expect(formatPropertyLimit(5)).toBe('5');
     expect(formatPropertyLimit(100)).toBe('100');
+  });
+});
+
+describe('tariffRepresentation', () => {
+  it('shows the Russian tariff label for a record with a known name', () => {
+    expect(tariffRepresentation({ id: '6fd1f3c2-0000-0000-0000-000000000001', name: 'pro' })).toBe('Про');
+  });
+
+  it('falls back to #id when the name is missing or empty', () => {
+    expect(tariffRepresentation({ id: 'abc', name: undefined })).toBe('#abc');
+    expect(tariffRepresentation({ id: 'abc', name: '' })).toBe('#abc');
+    expect(tariffRepresentation({ id: 'abc' })).toBe('#abc');
+  });
+
+  it('shows an unknown name as-is instead of falling back to #id', () => {
+    expect(tariffRepresentation({ id: 'abc', name: 'unlimited' })).toBe('unlimited');
   });
 });

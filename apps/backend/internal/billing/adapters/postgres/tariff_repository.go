@@ -19,17 +19,19 @@ import (
 
 // TariffRepository persists tariffs. Reads are served from an in-memory cache
 // with a TTL (tariffs change rarely and are read on every limit check and
-// listing).
+// listing). The admin listing keeps its own cache entry and its own TTL
+// timestamp, so refreshing one cache never extends the other's lifetime.
 type TariffRepository struct {
-	db       postgres.DBTX
-	mu       sync.RWMutex
-	byID     map[uuid.UUID]domain.Tariff
-	byName   map[domain.TariffName]domain.Tariff
-	list     []domain.Tariff
-	listAll  []domain.Tariff
-	cachedAt time.Time
-	ttl      time.Duration
-	clock    clock.Clock
+	db              postgres.DBTX
+	mu              sync.RWMutex
+	byID            map[uuid.UUID]domain.Tariff
+	byName          map[domain.TariffName]domain.Tariff
+	list            []domain.Tariff
+	listAll         []domain.Tariff
+	cachedAt        time.Time
+	listAllCachedAt time.Time
+	ttl             time.Duration
+	clock           clock.Clock
 }
 
 // NewTariffRepository creates a new tariff repository.
@@ -117,8 +119,9 @@ func (r *TariffRepository) List(ctx context.Context) ([]domain.Tariff, error) {
 }
 
 // ListAll returns every tariff, hidden ones included, ordered by price. It
-// backs the admin tariff views (issue #247) and keeps its own cache entry so
-// the user-facing List cache is not polluted with hidden tariffs.
+// backs the admin tariff views (issue #247) and keeps its own cache entry and
+// TTL timestamp, so the user-facing List cache is not polluted with hidden
+// tariffs and neither cache can extend the other's lifetime.
 func (r *TariffRepository) ListAll(ctx context.Context) ([]domain.Tariff, error) {
 	if listAll, ok := r.cachedListAll(); ok {
 		return listAll, nil
@@ -165,10 +168,17 @@ func (r *TariffRepository) cachedList() ([]domain.Tariff, bool) {
 func (r *TariffRepository) cachedListAll() ([]domain.Tariff, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if r.staleLocked() || r.listAll == nil {
+	if r.listAllStaleLocked() || r.listAll == nil {
 		return nil, false
 	}
 	return copyTariffs(r.listAll), true
+}
+
+// listAllStaleLocked reports whether the admin listing cache is empty or past
+// its TTL. It reads a dedicated timestamp, not the shared cachedAt, so a
+// user-facing cache refresh cannot extend the admin listing's lifetime.
+func (r *TariffRepository) listAllStaleLocked() bool {
+	return r.listAllCachedAt.IsZero() || r.clock.Now().Sub(r.listAllCachedAt) >= r.ttl
 }
 
 func (r *TariffRepository) staleLocked() bool {
@@ -199,8 +209,10 @@ func (r *TariffRepository) storeList(list []domain.Tariff) {
 	r.cachedAt = r.clock.Now()
 }
 
-// storeListAll caches the full tariff list including hidden tariffs and
-// refreshes the by-ID/by-name maps alongside it.
+// storeListAll caches the full tariff list including hidden tariffs, refreshes
+// the by-ID/by-name maps alongside it, and stamps its own TTL timestamp — the
+// shared cachedAt stays untouched so the admin listing cannot extend the
+// user-facing caches' lifetime.
 func (r *TariffRepository) storeListAll(listAll []domain.Tariff) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -209,7 +221,7 @@ func (r *TariffRepository) storeListAll(listAll []domain.Tariff) {
 		r.byID[tariff.ID] = tariff
 		r.byName[tariff.Name] = tariff
 	}
-	r.cachedAt = r.clock.Now()
+	r.listAllCachedAt = r.clock.Now()
 }
 
 func mapTariff(row postgres.Tariff) domain.Tariff {
