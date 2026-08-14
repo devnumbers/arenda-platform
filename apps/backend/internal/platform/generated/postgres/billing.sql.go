@@ -325,6 +325,40 @@ func (q *Queries) GetTariffByName(ctx context.Context, name string) (Tariff, err
 	return i, err
 }
 
+const listAllTariffs = `-- name: ListAllTariffs :many
+SELECT id, name, active_property_limit, monthly_price_kopecks, yearly_price_kopecks, is_active, created_at, updated_at FROM tariffs ORDER BY monthly_price_kopecks, id
+`
+
+// Admin tariff listing: every tariff including hidden ones (issue #247).
+func (q *Queries) ListAllTariffs(ctx context.Context) ([]Tariff, error) {
+	rows, err := q.db.Query(ctx, listAllTariffs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Tariff{}
+	for rows.Next() {
+		var i Tariff
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ActivePropertyLimit,
+			&i.MonthlyPriceKopecks,
+			&i.YearlyPriceKopecks,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentSubscriptionPaymentsAdmin = `-- name: ListRecentSubscriptionPaymentsAdmin :many
 SELECT sp.id, sp.user_id, sp.amount_kopecks, sp.status, sp.created_at,
        u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted

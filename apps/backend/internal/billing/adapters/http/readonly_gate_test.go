@@ -27,6 +27,10 @@ func (r *gateTariffRepo) List(context.Context) ([]domain.Tariff, error) {
 	return nil, nil
 }
 
+func (r *gateTariffRepo) ListAll(context.Context) ([]domain.Tariff, error) {
+	return nil, nil
+}
+
 func (r *gateTariffRepo) WithTx(transaction.Tx) (billingapp.TariffRepository, error) { return r, nil }
 
 // gateSubscriptionRepo is an in-memory billingapp.SubscriptionRepository.

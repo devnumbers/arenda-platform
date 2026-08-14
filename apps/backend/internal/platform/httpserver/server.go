@@ -184,6 +184,7 @@ func New(deps Deps) http.Handler {
 		Handler:          handler,
 		ErrorHandlerFunc: httpsupport.OpenAPIErrorHandler,
 	}
+	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/tariffs", wrapper.ListAdminTariffs)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/subscription/payments", wrapper.ListAdminSubscriptionPayments)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/subscription/payments/{paymentId}", wrapper.GetAdminSubscriptionPayment)
 	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/refund", wrapper.RefundSubscriptionPayment)

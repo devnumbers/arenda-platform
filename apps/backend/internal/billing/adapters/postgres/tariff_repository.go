@@ -26,6 +26,7 @@ type TariffRepository struct {
 	byID     map[uuid.UUID]domain.Tariff
 	byName   map[domain.TariffName]domain.Tariff
 	list     []domain.Tariff
+	listAll  []domain.Tariff
 	cachedAt time.Time
 	ttl      time.Duration
 	clock    clock.Clock
@@ -115,6 +116,23 @@ func (r *TariffRepository) List(ctx context.Context) ([]domain.Tariff, error) {
 	return copyTariffs(list), nil
 }
 
+// ListAll returns every tariff, hidden ones included, ordered by price. It
+// backs the admin tariff views (issue #247) and keeps its own cache entry so
+// the user-facing List cache is not polluted with hidden tariffs.
+func (r *TariffRepository) ListAll(ctx context.Context) ([]domain.Tariff, error) {
+	if listAll, ok := r.cachedListAll(); ok {
+		return listAll, nil
+	}
+
+	rows, err := r.q().ListAllTariffs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	listAll := mapTariffs(rows)
+	r.storeListAll(listAll)
+	return copyTariffs(listAll), nil
+}
+
 func (r *TariffRepository) cachedByID(id uuid.UUID) (domain.Tariff, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -144,6 +162,15 @@ func (r *TariffRepository) cachedList() ([]domain.Tariff, bool) {
 	return copyTariffs(r.list), true
 }
 
+func (r *TariffRepository) cachedListAll() ([]domain.Tariff, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.staleLocked() || r.listAll == nil {
+		return nil, false
+	}
+	return copyTariffs(r.listAll), true
+}
+
 func (r *TariffRepository) staleLocked() bool {
 	return r.cachedAt.IsZero() || r.clock.Now().Sub(r.cachedAt) >= r.ttl
 }
@@ -166,6 +193,19 @@ func (r *TariffRepository) storeList(list []domain.Tariff) {
 	defer r.mu.Unlock()
 	r.list = copyTariffs(list)
 	for _, tariff := range list {
+		r.byID[tariff.ID] = tariff
+		r.byName[tariff.Name] = tariff
+	}
+	r.cachedAt = r.clock.Now()
+}
+
+// storeListAll caches the full tariff list including hidden tariffs and
+// refreshes the by-ID/by-name maps alongside it.
+func (r *TariffRepository) storeListAll(listAll []domain.Tariff) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.listAll = copyTariffs(listAll)
+	for _, tariff := range listAll {
 		r.byID[tariff.ID] = tariff
 		r.byName[tariff.Name] = tariff
 	}

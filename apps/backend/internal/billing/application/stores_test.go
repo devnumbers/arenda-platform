@@ -121,6 +121,14 @@ func (r *fakeTariffRepo) List(context.Context) ([]domain.Tariff, error) {
 	return active, nil
 }
 
+func (r *fakeTariffRepo) ListAll(context.Context) ([]domain.Tariff, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	all := make([]domain.Tariff, len(r.tariffs))
+	copy(all, r.tariffs)
+	return all, nil
+}
+
 func (r *fakeTariffRepo) WithTx(transaction.Tx) (TariffRepository, error) { return r, nil }
 
 // fakeSubscriptionRepo is an in-memory SubscriptionRepository.

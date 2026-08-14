@@ -6,6 +6,7 @@ import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import PaymentIcon from '@mui/icons-material/Payment';
 import PeopleIcon from '@mui/icons-material/People';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import SellIcon from '@mui/icons-material/Sell';
 import { authProvider } from './authProvider';
 import { dataProvider } from './dataProvider';
 import { Dashboard } from './Dashboard';
@@ -14,6 +15,7 @@ import { LoginPage } from './LoginPage';
 import { asPersonName, fullName } from './fields';
 import { UserList, UserShow } from './users';
 import { SubscriptionPaymentList, SubscriptionPaymentShow } from './subscriptionPayments';
+import { TariffList, tariffRepresentation } from './tariffs';
 import { PropertyList, PropertyShow } from './properties';
 import { LeaseList, LeaseShow } from './leases';
 import { TenantContactList, TenantContactShow } from './tenantContacts';
@@ -46,6 +48,7 @@ export default function App() {
     >
       <Resource name="users" list={UserList} show={UserShow} icon={PeopleIcon} recordRepresentation="phone" />
       <Resource name="subscriptionPayments" list={SubscriptionPaymentList} show={SubscriptionPaymentShow} icon={PaymentIcon} recordRepresentation="userPhone" />
+      <Resource name="tariffs" list={TariffList} icon={SellIcon} recordRepresentation={tariffRepresentation} />
       <Resource name="properties" list={PropertyList} show={PropertyShow} icon={HomeWorkIcon} recordRepresentation="name" />
       <Resource name="leases" list={LeaseList} show={LeaseShow} icon={DescriptionIcon} recordRepresentation={leaseRepresentation} />
       <Resource name="tenantContacts" list={TenantContactList} show={TenantContactShow} icon={ContactPageIcon} recordRepresentation={tenantContactRepresentation} />

@@ -19,7 +19,8 @@ import (
 // fakeTariffLister is a func-backed TariffLister (the consumer-side port of
 // these handlers, ADR 0035).
 type fakeTariffLister struct {
-	list func(ctx context.Context) ([]domain.Tariff, error)
+	list    func(ctx context.Context) ([]domain.Tariff, error)
+	listAll func(ctx context.Context) ([]domain.Tariff, error)
 }
 
 func (f *fakeTariffLister) ListTariffs(ctx context.Context) ([]domain.Tariff, error) {
@@ -27,6 +28,13 @@ func (f *fakeTariffLister) ListTariffs(ctx context.Context) ([]domain.Tariff, er
 		return f.list(ctx)
 	}
 	return nil, errors.New("unexpected ListTariffs call")
+}
+
+func (f *fakeTariffLister) ListAllTariffs(ctx context.Context) ([]domain.Tariff, error) {
+	if f.listAll != nil {
+		return f.listAll(ctx)
+	}
+	return nil, errors.New("unexpected ListAllTariffs call")
 }
 
 // fakeSubscriptionViewer is a func-backed SubscriptionViewer.
@@ -111,6 +119,68 @@ func TestListTariffs_RequiresOwner(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", w.Code)
+	}
+}
+
+// TestListAdminTariffs_MapsDomainTariffsToContract proves GET /admin/tariffs
+// answers with the frozen OpenAPI shape: every tariff including hidden ones,
+// with id, isActive and the kopeck prices as integers (issue #247).
+func TestListAdminTariffs_MapsDomainTariffsToContract(t *testing.T) {
+	hiddenID := uuid.New()
+	h := newTestHandlers(&fakeTariffLister{listAll: func(context.Context) ([]domain.Tariff, error) {
+		return []domain.Tariff{
+			{ID: uuid.New(), Name: domain.TariffBasic, ActivePropertyLimit: 1, MonthlyPriceKopecks: 0, YearlyPriceKopecks: 0, IsActive: true},
+			{ID: uuid.New(), Name: domain.TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true},
+			{ID: hiddenID, Name: domain.TariffBusiness, ActivePropertyLimit: -1, MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000, IsActive: false},
+		}, nil
+	}}, nil)
+
+	w := httptest.NewRecorder()
+	h.ListAdminTariffs(w, ownerRequest(t, http.MethodGet, "/admin/tariffs", uuid.New()))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Items []struct {
+			ID                  string `json:"id"`
+			Name                string `json:"name"`
+			IsActive            bool   `json:"isActive"`
+			ActivePropertyLimit int    `json:"activePropertyLimit"`
+			MonthlyPriceKopecks int    `json:"monthlyPriceKopecks"`
+			YearlyPriceKopecks  int    `json:"yearlyPriceKopecks"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Items) != 3 {
+		t.Fatalf("items = %d, want 3 (hidden tariff included)", len(resp.Items))
+	}
+	hidden := resp.Items[2]
+	if hidden.ID != hiddenID.String() {
+		t.Errorf("hidden item id = %q, want %q", hidden.ID, hiddenID)
+	}
+	if hidden.Name != "business" || hidden.IsActive || hidden.ActivePropertyLimit != -1 || hidden.MonthlyPriceKopecks != 99000 || hidden.YearlyPriceKopecks != 890000 {
+		t.Errorf("hidden item = %+v, want name=business isActive=false limit=-1 monthly=99000 yearly=890000", hidden)
+	}
+}
+
+// TestListAdminTariffs_InfrastructureErrorIs500 proves an unexpected service
+// error answers 500 without leaking the cause into the response body.
+func TestListAdminTariffs_InfrastructureErrorIs500(t *testing.T) {
+	h := newTestHandlers(&fakeTariffLister{listAll: func(context.Context) ([]domain.Tariff, error) {
+		return nil, errors.New("connection reset by peer")
+	}}, nil)
+
+	w := httptest.NewRecorder()
+	h.ListAdminTariffs(w, ownerRequest(t, http.MethodGet, "/admin/tariffs", uuid.New()))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", w.Code)
+	}
+	if body := w.Body.String(); strings.Contains(body, "connection reset by peer") {
+		t.Errorf("body leaks the internal error cause: %s", body)
 	}
 }
 

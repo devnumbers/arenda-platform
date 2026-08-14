@@ -2518,6 +2518,25 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /admin/tariffs:
+    get:
+      operationId: listAdminTariffs
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: All tariffs, including hidden ones
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTariffsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /admin/subscription/payments:
     get:
       operationId: listAdminSubscriptionPayments
@@ -4037,6 +4056,35 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Tariff'
+
+    AdminTariff:
+      type: object
+      required: [id, name, isActive, activePropertyLimit, monthlyPriceKopecks, yearlyPriceKopecks]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          $ref: '#/components/schemas/TariffName'
+        isActive:
+          type: boolean
+          description: Hidden tariffs (false) stay referable by foreign keys but are not offered to users.
+        activePropertyLimit:
+          type: integer
+          description: Maximum number of active properties; -1 means unlimited.
+        monthlyPriceKopecks:
+          type: integer
+        yearlyPriceKopecks:
+          type: integer
+
+    AdminTariffsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminTariff'
 
     PaymentMethodsResponse:
       type: object

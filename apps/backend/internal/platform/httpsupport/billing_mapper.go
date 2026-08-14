@@ -44,3 +44,17 @@ func TariffResponse(t domain.Tariff) openapi.Tariff {
 		YearlyPriceKopecks:  int(t.YearlyPriceKopecks),
 	}
 }
+
+// AdminTariffResponse maps a billing Tariff domain value to the OpenAPI
+// AdminTariff DTO: the user-facing shape plus the id and the active flag the
+// admin tariff screen needs (issue #247).
+func AdminTariffResponse(t domain.Tariff) openapi.AdminTariff {
+	return openapi.AdminTariff{
+		Id:                  t.ID,
+		Name:                openapi.TariffName(t.Name),
+		IsActive:            t.IsActive,
+		ActivePropertyLimit: t.ActivePropertyLimit,
+		MonthlyPriceKopecks: int(t.MonthlyPriceKopecks),
+		YearlyPriceKopecks:  int(t.YearlyPriceKopecks),
+	}
+}

@@ -28,3 +28,13 @@ func (s *TariffService) ListTariffs(ctx context.Context) ([]domain.Tariff, error
 	}
 	return tariffs, nil
 }
+
+// ListAllTariffs returns every tariff including hidden ones, ordered by price.
+// It backs the admin tariff views (issue #247).
+func (s *TariffService) ListAllTariffs(ctx context.Context) ([]domain.Tariff, error) {
+	tariffs, err := s.tariffs.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return tariffs, nil
+}

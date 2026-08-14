@@ -18,9 +18,12 @@ import (
 // next to BillingHandlers rather than in the application package.
 // Conformance is checked where the handlers are wired (httpserver.Deps).
 
-// TariffLister serves the user-facing tariff views.
+// TariffLister serves the user-facing and admin tariff views: ListTariffs the
+// active plans users choose from, ListAllTariffs every plan including hidden
+// ones for the admin screen (issue #247).
 type TariffLister interface {
 	ListTariffs(ctx context.Context) ([]domain.Tariff, error)
+	ListAllTariffs(ctx context.Context) ([]domain.Tariff, error)
 }
 
 // SubscriptionViewer serves the user's own subscription view.
@@ -30,11 +33,12 @@ type SubscriptionViewer interface {
 
 // BillingHandlers implements the generated billing endpoints of the
 // OpenAPI contract. In this core slice of the billing rewrite (issue #245)
-// only the view endpoints are live: GET /tariffs and GET /subscription. The
-// remaining endpoints answer 501 until their flows land — lifecycle mutations
-// in #249, payments and webhooks in #250, payment methods in #251, refunds and
-// admin payment views in #254. The user-facing contract is frozen, so the
-// routes stay mounted.
+// only the view endpoints are live: GET /tariffs, GET /subscription, and the
+// admin tariff listing GET /admin/tariffs (issue #247). The remaining
+// endpoints answer 501 until their flows land — lifecycle mutations in #249,
+// payments and webhooks in #250, payment methods in #251, refunds and admin
+// payment views in #254. The user-facing contract is frozen, so the routes
+// stay mounted.
 type BillingHandlers struct {
 	tariffs       TariffLister
 	subscriptions SubscriptionViewer
@@ -75,6 +79,23 @@ func (h *BillingHandlers) ListTariffs(w http.ResponseWriter, r *http.Request) {
 		items = append(items, httpsupport.TariffResponse(t))
 	}
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.TariffsResponse{Items: items})
+}
+
+// ListAdminTariffs implements GET /admin/tariffs. Access control is the
+// AdminOnlyMiddleware the route is mounted with, like every other admin
+// endpoint.
+func (h *BillingHandlers) ListAdminTariffs(w http.ResponseWriter, r *http.Request) {
+	tariffs, err := h.tariffs.ListAllTariffs(r.Context())
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.AdminTariff, 0, len(tariffs))
+	for _, t := range tariffs {
+		items = append(items, httpsupport.AdminTariffResponse(t))
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminTariffsResponse{Items: items})
 }
 
 // GetSubscription implements GET /subscription.

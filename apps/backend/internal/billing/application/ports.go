@@ -9,13 +9,14 @@ import (
 )
 
 // TariffRepository is the persistence port for tariffs. List returns only
-// active (user-visible) tariffs; GetByID and GetByName resolve any tariff,
-// including hidden ones, because foreign keys keep referencing them
-// (issue #245).
+// active (user-visible) tariffs; ListAll returns every tariff including hidden
+// ones for the admin views. GetByID and GetByName resolve any tariff, including
+// hidden ones, because foreign keys keep referencing them (issue #245).
 type TariffRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Tariff, error)
 	GetByName(ctx context.Context, name domain.TariffName) (domain.Tariff, error)
 	List(ctx context.Context) ([]domain.Tariff, error)
+	ListAll(ctx context.Context) ([]domain.Tariff, error)
 	WithTx(tx transaction.Tx) (TariffRepository, error)
 }
 

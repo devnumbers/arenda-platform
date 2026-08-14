@@ -15,6 +15,10 @@ SELECT * FROM tariffs WHERE id = $1;
 -- offered (issue #245).
 SELECT * FROM tariffs WHERE is_active ORDER BY monthly_price_kopecks, id;
 
+-- name: ListAllTariffs :many
+-- Admin tariff listing: every tariff including hidden ones (issue #247).
+SELECT * FROM tariffs ORDER BY monthly_price_kopecks, id;
+
 -- name: CreateSubscription :one
 INSERT INTO user_subscriptions (
     id,

@@ -29,6 +29,35 @@ func TestTariffService_ListTariffs_ReturnsActiveOnly(t *testing.T) {
 	}
 }
 
+// TestTariffService_ListAllTariffs_ReturnsHiddenToo proves the admin tariff
+// listing includes hidden tariffs (issue #247).
+func TestTariffService_ListAllTariffs_ReturnsHiddenToo(t *testing.T) {
+	hidden := domain.Tariff{ID: uuid.New(), Name: domain.TariffBusiness, ActivePropertyLimit: -1, IsActive: false}
+	seeded := append(testTariffs(), hidden)
+	stores := newFakeStores(seeded...)
+	svc := NewTariffService(stores.factory(nil))
+
+	tariffs, err := svc.ListAllTariffs(t.Context())
+	if err != nil {
+		t.Fatalf("ListAllTariffs() error = %v", err)
+	}
+	if len(tariffs) != len(seeded) {
+		t.Fatalf("tariffs = %d, want %d (hidden tariff included)", len(tariffs), len(seeded))
+	}
+	foundHidden := false
+	for _, tariff := range tariffs {
+		if tariff.ID == hidden.ID {
+			foundHidden = true
+			if tariff.IsActive {
+				t.Error("hidden tariff returned with IsActive=true, want false")
+			}
+		}
+	}
+	if !foundHidden {
+		t.Error("hidden tariff missing from ListAllTariffs result")
+	}
+}
+
 // TestSubscriptionService_GetSubscription_AssemblesView proves GetSubscription
 // resolves the current and pending tariffs into the view.
 func TestSubscriptionService_GetSubscription_AssemblesView(t *testing.T) {

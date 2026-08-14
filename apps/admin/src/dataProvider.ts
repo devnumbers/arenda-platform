@@ -78,6 +78,7 @@ const ensureId = <T extends RaRecord>(item: T): T => {
 // (apps/backend/internal/admin/application/service.go,
 // apps/backend/internal/billing/application/payment_service.go);
 // при расширении бэкендных списков держать мапу синхронно.
+// Ресурсы без серверной сортировки (tariffs) объявляются пустым списком.
 const sortableFieldsByResource: Record<string, readonly string[]> = {
   users: ['createdAt', 'updatedAt'],
   properties: ['name', 'createdAt', 'updatedAt', 'status'],
@@ -86,6 +87,7 @@ const sortableFieldsByResource: Record<string, readonly string[]> = {
   tenantContacts: ['name', 'updatedAt'],
   subscriptionPayments: ['createdAt', 'amountKopecks', 'status'],
   auditLogs: ['createdAt'],
+  tariffs: [],
 };
 
 const buildListQuery = (resource: string, params: GetListParams): string => {
@@ -135,6 +137,8 @@ const listUrl = (resource: string, ownerId?: string | number): string => {
       return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/operations` : `${API_PREFIX}/admin/operations`;
     case 'subscriptionPayments':
       return `${API_PREFIX}/admin/subscription/payments`;
+    case 'tariffs':
+      return `${API_PREFIX}/admin/tariffs`;
     case 'auditLogs':
       return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/audit-logs` : `${API_PREFIX}/admin/audit-logs`;
     default:
