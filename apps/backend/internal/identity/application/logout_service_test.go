@@ -275,8 +275,4 @@ func (r *errorSessionRepo) DeleteByUserID(context.Context, uuid.UUID) error { re
 func (r *errorSessionRepo) DeleteByUserIDExcept(context.Context, uuid.UUID, string) error {
 	return r.err
 }
-
-func (r *errorSessionRepo) DeleteExpiredBefore(context.Context, time.Time) error {
-	return nil
-}
 func (r *errorSessionRepo) WithTx(transaction.Tx) (SessionRepository, error) { return r, nil }

@@ -244,5 +244,4 @@ func (r *capturingSessionRepo) DeleteByUserID(_ context.Context, _ uuid.UUID) er
 func (r *capturingSessionRepo) DeleteByUserIDExcept(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
-func (r *capturingSessionRepo) DeleteExpiredBefore(context.Context, time.Time) error { return nil }
-func (r *capturingSessionRepo) WithTx(transaction.Tx) (SessionRepository, error)     { return r, nil }
+func (r *capturingSessionRepo) WithTx(transaction.Tx) (SessionRepository, error) { return r, nil }

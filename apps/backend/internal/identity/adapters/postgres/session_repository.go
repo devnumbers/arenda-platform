@@ -83,8 +83,8 @@ func (r *SessionRepository) DeleteByUserIDExcept(ctx context.Context, userID uui
 	return nil
 }
 
-func (r *SessionRepository) DeleteExpiredBefore(ctx context.Context, before time.Time) error {
-	if err := deleteBatched(ctx, before, func(ctx context.Context, before time.Time, limit int32) (int64, error) {
+func (r *SessionRepository) DeleteExpiredBefore(ctx context.Context, before time.Time) (int64, error) {
+	total, err := deleteBatched(ctx, before, func(ctx context.Context, before time.Time, limit int32) (int64, error) {
 		n, err := r.q().DeleteExpiredSessionsBatch(ctx, pgen.DeleteExpiredSessionsBatchParams{
 			ExpiresAt: pgtype.Timestamptz{Time: before, Valid: true},
 			Limit:     limit,
@@ -93,10 +93,11 @@ func (r *SessionRepository) DeleteExpiredBefore(ctx context.Context, before time
 			return 0, fmt.Errorf("delete expired sessions batch: %w", err)
 		}
 		return n, nil
-	}); err != nil {
-		return fmt.Errorf("delete expired sessions: %w", err)
+	})
+	if err != nil {
+		return 0, fmt.Errorf("delete expired sessions: %w", err)
 	}
-	return nil
+	return total, nil
 }
 
 func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string, now time.Time) (domain.Session, domain.User, error) {

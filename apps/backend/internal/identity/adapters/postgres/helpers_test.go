@@ -34,13 +34,13 @@ func TestNotFound(t *testing.T) {
 	}
 }
 
-func TestDeleteBatched_LoopsUntilZeroRows(t *testing.T) {
+func TestDeleteBatched_LoopsUntilZeroRowsAndReturnsTotal(t *testing.T) {
 	t.Parallel()
 
 	var calls int
 	// First two calls return 1000 rows; third returns 0 (completeness).
 	rowsSequence := []int64{1000, 1000, 0}
-	err := deleteBatched(t.Context(), time.Now(), func(_ context.Context, _ time.Time, _ int32) (int64, error) {
+	total, err := deleteBatched(t.Context(), time.Now(), func(_ context.Context, _ time.Time, _ int32) (int64, error) {
 		rows := rowsSequence[calls]
 		calls++
 		return rows, nil
@@ -51,6 +51,9 @@ func TestDeleteBatched_LoopsUntilZeroRows(t *testing.T) {
 	if calls != 3 {
 		t.Fatalf("deleteBatch calls = %d, want 3 (loop until 0 rows)", calls)
 	}
+	if total != 2000 {
+		t.Fatalf("total = %d, want 2000 (sum across batches)", total)
+	}
 }
 
 func TestDeleteBatched_ReturnsErrorImmediately(t *testing.T) {
@@ -58,12 +61,15 @@ func TestDeleteBatched_ReturnsErrorImmediately(t *testing.T) {
 
 	dbErr := errors.New("batch delete failed")
 	calls := 0
-	err := deleteBatched(t.Context(), time.Now(), func(_ context.Context, _ time.Time, _ int32) (int64, error) {
+	total, err := deleteBatched(t.Context(), time.Now(), func(_ context.Context, _ time.Time, _ int32) (int64, error) {
 		calls++
 		return 0, dbErr
 	})
 	if !errors.Is(err, dbErr) {
 		t.Fatalf("deleteBatched error = %v, want wrap of dbErr", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d, want 0 on error", total)
 	}
 	if calls != 1 {
 		t.Fatalf("deleteBatch calls = %d, want 1 (stops on first error)", calls)

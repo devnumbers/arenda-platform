@@ -42,7 +42,6 @@ type Config struct {
 	EncryptionKey                       string
 	BillingWorkerInterval               time.Duration
 	PaymentReconciliationWorkerInterval time.Duration
-	OverdueOperationWorkerInterval      time.Duration
 	IdentityCleanerInterval             time.Duration
 	IdentityCleanerRetention            time.Duration
 	LogSuccessfulRequests               bool
@@ -630,18 +629,6 @@ func Load() (Config, error) {
 			return Config{}, errors.New("PAYMENT_RECONCILIATION_WORKER_INTERVAL must be positive")
 		}
 		cfg.PaymentReconciliationWorkerInterval = d
-	}
-
-	cfg.OverdueOperationWorkerInterval = 24 * time.Hour
-	if v := os.Getenv("OVERDUE_OPERATION_WORKER_INTERVAL"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return Config{}, fmt.Errorf("invalid OVERDUE_OPERATION_WORKER_INTERVAL %q: %w", v, err)
-		}
-		if d <= 0 {
-			return Config{}, errors.New("OVERDUE_OPERATION_WORKER_INTERVAL must be positive")
-		}
-		cfg.OverdueOperationWorkerInterval = d
 	}
 
 	cfg.IdentityCleanerInterval = time.Hour

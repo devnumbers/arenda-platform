@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,20 +16,21 @@ import (
 // fakeDeleter is a function-field stub that satisfies all three deleter ports
 // (ExpiredSessionDeleter, ExpiredLoginCodeDeleter, StaleAttemptDeleter) via
 // structural typing. DeleteExpiredBefore and DeleteStaleBefore both increment
-// the same counter and return the same configured error.
+// the same counter and return the same configured count and error.
 type fakeDeleter struct {
-	err   error
-	calls atomic.Int32
+	err     error
+	deleted int64
+	calls   atomic.Int32
 }
 
-func (d *fakeDeleter) DeleteExpiredBefore(_ context.Context, _ time.Time) error {
+func (d *fakeDeleter) DeleteExpiredBefore(_ context.Context, _ time.Time) (int64, error) {
 	d.calls.Add(1)
-	return d.err
+	return d.deleted, d.err
 }
 
-func (d *fakeDeleter) DeleteStaleBefore(_ context.Context, _ time.Time) error {
+func (d *fakeDeleter) DeleteStaleBefore(_ context.Context, _ time.Time) (int64, error) {
 	d.calls.Add(1)
-	return d.err
+	return d.deleted, d.err
 }
 
 // capturingDeleter captures the "before" timestamp passed to each delete call
@@ -36,19 +39,62 @@ type capturingDeleter struct {
 	before time.Time
 }
 
-func (d *capturingDeleter) DeleteExpiredBefore(_ context.Context, before time.Time) error {
+func (d *capturingDeleter) DeleteExpiredBefore(_ context.Context, before time.Time) (int64, error) {
 	d.before = before
-	return nil
+	return 0, nil
 }
 
-func (d *capturingDeleter) DeleteStaleBefore(_ context.Context, before time.Time) error {
+func (d *capturingDeleter) DeleteStaleBefore(_ context.Context, before time.Time) (int64, error) {
 	d.before = before
-	return nil
+	return 0, nil
 }
 
 type fakeClock struct{ now time.Time }
 
 func (c *fakeClock) Now() time.Time { return c.now }
+
+// recordHandler captures slog records so tests can assert on log attributes.
+type recordHandler struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (h *recordHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *recordHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r.Clone())
+	return nil
+}
+
+func (h *recordHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+
+func (h *recordHandler) WithGroup(string) slog.Handler { return h }
+
+// int64Attr returns the value of the named Int64 attribute on the last record
+// with the given message.
+func (h *recordHandler) int64Attr(message, key string) (int64, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, r := range slices.Backward(h.records) {
+		if r.Message != message {
+			continue
+		}
+		var value int64
+		found := false
+		r.Attrs(func(a slog.Attr) bool {
+			if a.Key == key {
+				value = a.Value.Int64()
+				found = true
+				return false
+			}
+			return true
+		})
+		return value, found
+	}
+	return 0, false
+}
 
 func TestNewCleaner_NilLoggerDefaultsToSlogDefault(t *testing.T) {
 	t.Parallel()
@@ -81,6 +127,34 @@ func TestCleaner_Clean_CallsAllDeletersWithRetentionWindow(t *testing.T) {
 	for name, d := range map[string]*capturingDeleter{"codes": codes, "sessions": sessions, "attempts": attempts} {
 		if !d.before.Equal(wantBefore) {
 			t.Errorf("%s before = %v, want %v (now - retention)", name, d.before, wantBefore)
+		}
+	}
+}
+
+func TestCleaner_Clean_LogsDeletedCountsPerTable(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+	codes := &fakeDeleter{deleted: 5}
+	sessions := &fakeDeleter{deleted: 7}
+	attempts := &fakeDeleter{deleted: 9}
+	h := &recordHandler{}
+	c := NewCleaner(sessions, codes, attempts, &fakeClock{now: now},
+		time.Minute, time.Hour, slog.New(h))
+
+	c.clean(t.Context())
+
+	for key, want := range map[string]int64{
+		"login_codes_deleted":    5,
+		"sessions_deleted":       7,
+		"login_attempts_deleted": 9,
+	} {
+		got, ok := h.int64Attr("cleanup completed", key)
+		if !ok {
+			t.Errorf("log record %q has no %q attribute", "cleanup completed", key)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s = %d, want %d", key, got, want)
 		}
 	}
 }
@@ -125,9 +199,35 @@ func TestCleaner_CleanExpired_SwallowsContextCanceled(t *testing.T) {
 // cancelDeleter returns context.Canceled to exercise the swallow path.
 type cancelDeleter struct{ calls atomic.Int32 }
 
-func (d *cancelDeleter) DeleteExpiredBefore(_ context.Context, _ time.Time) error {
+func (d *cancelDeleter) DeleteExpiredBefore(_ context.Context, _ time.Time) (int64, error) {
 	d.calls.Add(1)
-	return context.Canceled
+	return 0, context.Canceled
+}
+
+func TestCleaner_Run_CleansImmediatelyBeforeFirstTick(t *testing.T) {
+	t.Parallel()
+	sessions := &fakeDeleter{}
+	codes := &fakeDeleter{}
+	attempts := &fakeDeleter{}
+	// The interval is an hour, so no ticker fire can explain a clean cycle:
+	// only the startup cycle can have run.
+	c := NewCleaner(sessions, codes, attempts, &fakeClock{now: time.Now()},
+		time.Hour, time.Hour, slog.New(slog.DiscardHandler))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		c.Run(ctx)
+		close(done)
+	}()
+	cancel()
+	<-done
+
+	for name, d := range map[string]*fakeDeleter{"codes": codes, "sessions": sessions, "attempts": attempts} {
+		if calls := d.calls.Load(); calls != 1 {
+			t.Fatalf("%s calls = %d, want 1 (startup cycle before any tick)", name, calls)
+		}
+	}
 }
 
 func TestCleaner_Run_StopsOnContextCancel(t *testing.T) {
@@ -146,7 +246,7 @@ func TestCleaner_Run_StopsOnContextCancel(t *testing.T) {
 		close(done)
 	}()
 
-	// Let at least one tick fire.
+	// Let at least one tick fire beyond the startup cycle.
 	time.Sleep(interval * 3)
 	cancel()
 	select {
@@ -156,9 +256,9 @@ func TestCleaner_Run_StopsOnContextCancel(t *testing.T) {
 		t.Fatal("Run did not return after context cancel")
 	}
 
-	// At least one clean cycle should have run (codes, sessions, attempts).
-	if codes.calls.Load() == 0 && sessions.calls.Load() == 0 && attempts.calls.Load() == 0 {
-		t.Fatal("no clean cycle ran before cancel")
+	// The startup cycle plus at least one tick should have run.
+	if codes.calls.Load() < 2 || sessions.calls.Load() < 2 || attempts.calls.Load() < 2 {
+		t.Fatal("no tick cycle ran beyond the startup cycle before cancel")
 	}
 }
 

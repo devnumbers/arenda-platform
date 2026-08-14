@@ -49,7 +49,7 @@ On-ramps (merge into the main flow):
 
 Reference layer other skills invoke: `/domain-modeling` (domain language in per-context `CONTEXT.md` files), `/codebase-design` (deep-module vocabulary).
 
-`/tdd` and writing tests are invoked only when the user explicitly asks for them. Do not write tests or use TDD unless requested.
+`/tdd` is the default: build every behavior change test-first (red-green-refactor) on pre-agreed seams, without waiting to be asked.
 
 ## MCP Servers
 

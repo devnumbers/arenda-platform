@@ -39,7 +39,7 @@ func (r *fakeSessionRepoForLoader) DeleteByUserID(context.Context, uuid.UUID) er
 func (r *fakeSessionRepoForLoader) DeleteByUserIDExcept(context.Context, uuid.UUID, string) error {
 	return nil
 }
-func (r *fakeSessionRepoForLoader) DeleteExpiredBefore(context.Context, time.Time) error { return nil }
+
 func (r *fakeSessionRepoForLoader) WithTx(_ transaction.Tx) (identityapp.SessionRepository, error) {
 	return r, nil
 }

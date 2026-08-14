@@ -203,10 +203,6 @@ func (r *fakeCodeRepo) DeleteByUserID(_ context.Context, userID uuid.UUID) error
 	return nil
 }
 
-func (r *fakeCodeRepo) DeleteExpiredBefore(context.Context, time.Time) error {
-	return nil
-}
-
 func (r *fakeCodeRepo) DeleteExpiredByPhoneAndEmail(_ context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, before time.Time) error {
 	for id, c := range r.codes {
 		if c.Phone == phone && c.Email == email && c.Purpose == purpose && !c.ExpiresAt.After(before) {
@@ -267,10 +263,6 @@ func (r *fakeAttemptRepo) DeleteByPhone(_ context.Context, phone domain.Phone) e
 
 func (r *fakeAttemptRepo) DeleteByUserID(context.Context, uuid.UUID) error { return nil }
 
-func (r *fakeAttemptRepo) DeleteStaleBefore(context.Context, time.Time) error {
-	return nil
-}
-
 func (r *fakeAttemptRepo) WithTx(transaction.Tx) (AttemptRepository, error) { return r, nil }
 
 type fakeSessionRepo struct {
@@ -315,10 +307,6 @@ func (r *fakeSessionRepo) DeleteByUserIDExcept(_ context.Context, userID uuid.UU
 			delete(r.sessions, hash)
 		}
 	}
-	return nil
-}
-
-func (r *fakeSessionRepo) DeleteExpiredBefore(context.Context, time.Time) error {
 	return nil
 }
 

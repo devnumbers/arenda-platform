@@ -22,20 +22,23 @@ const defaultDeleteBatchSize = 1000
 
 // deleteBatched repeatedly invokes deleteBatch — a sqlc :execrows query that
 // deletes up to defaultDeleteBatchSize rows matching before — until the query
-// reports zero rows affected (completeness). It hides the ctid-batching SQL
-// dialect from the application port: the port says "delete everything older
-// than before", the adapter decides how to chunk the work. Cancellation policy
-// (swallow ctx.Canceled vs. log) is left to the caller, so any error —
-// including context.Canceled — is returned as-is.
-func deleteBatched(ctx context.Context, before time.Time, deleteBatch func(ctx context.Context, before time.Time, limit int32) (int64, error)) error {
+// reports zero rows affected (completeness), and returns the total number of
+// rows removed. It hides the ctid-batching SQL dialect from the application
+// port: the port says "delete everything older than before", the adapter
+// decides how to chunk the work. Cancellation policy (swallow ctx.Canceled
+// vs. log) is left to the caller, so any error — including context.Canceled —
+// is returned as-is.
+func deleteBatched(ctx context.Context, before time.Time, deleteBatch func(ctx context.Context, before time.Time, limit int32) (int64, error)) (int64, error) {
+	var total int64
 	for {
 		n, err := deleteBatch(ctx, before, defaultDeleteBatchSize)
 		if err != nil {
-			return err
+			return total, err
 		}
 		if n == 0 {
-			return nil
+			return total, nil
 		}
+		total += n
 	}
 }
 

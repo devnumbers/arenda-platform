@@ -130,8 +130,8 @@ func (r *LoginCodeRepository) DeleteByUserID(ctx context.Context, userID uuid.UU
 	return nil
 }
 
-func (r *LoginCodeRepository) DeleteExpiredBefore(ctx context.Context, before time.Time) error {
-	if err := deleteBatched(ctx, before, func(ctx context.Context, before time.Time, limit int32) (int64, error) {
+func (r *LoginCodeRepository) DeleteExpiredBefore(ctx context.Context, before time.Time) (int64, error) {
+	total, err := deleteBatched(ctx, before, func(ctx context.Context, before time.Time, limit int32) (int64, error) {
 		n, err := r.q().DeleteExpiredLoginCodesBatch(ctx, pgen.DeleteExpiredLoginCodesBatchParams{
 			ExpiresAt: pgtype.Timestamptz{Time: before, Valid: true},
 			Limit:     limit,
@@ -140,10 +140,11 @@ func (r *LoginCodeRepository) DeleteExpiredBefore(ctx context.Context, before ti
 			return 0, fmt.Errorf("delete expired login codes batch: %w", err)
 		}
 		return n, nil
-	}); err != nil {
-		return fmt.Errorf("delete expired login codes: %w", err)
+	})
+	if err != nil {
+		return 0, fmt.Errorf("delete expired login codes: %w", err)
 	}
-	return nil
+	return total, nil
 }
 
 type loginCodeRow struct {

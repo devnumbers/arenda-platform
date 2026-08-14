@@ -76,7 +76,7 @@ func NewWorkers(
 	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, p.Clock, 1*time.Hour, 100, p.Logger, p.TZResolver)
 	billingWorker := scheduler.NewBillingWorker(billingWorkers, billingWorkers, p.Pool, p.Clock, p.Cfg.BillingWorkerInterval, p.Logger)
 	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(billingWorkers, p.Pool, p.Clock, p.Cfg.PaymentReconciliationWorkerInterval, p.Logger)
-	operationOverdueWorker := scheduler.NewOperationOverdueWorker(operationService, p.Clock, p.Cfg.OverdueOperationWorkerInterval, 100, p.Logger, p.TZResolver)
+	operationOverdueWorker := scheduler.NewOperationOverdueWorker(operationService, p.Clock, 100, p.Logger, p.TZResolver)
 
 	dataCleaner := identityscheduler.NewCleaner(sessionRepo, codeRepo, attemptRepo, p.Clock, p.Cfg.IdentityCleanerInterval, p.Cfg.IdentityCleanerRetention, p.Logger)
 

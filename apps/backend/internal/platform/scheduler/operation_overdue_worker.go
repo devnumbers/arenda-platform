@@ -32,24 +32,23 @@ type operationService interface {
 type OperationOverdueWorker struct {
 	operationService operationService
 	clock            clock.Clock
-	interval         time.Duration
 	batchSize        int
 	logger           *slog.Logger
 	tzResolver       sharedtz.OwnerTimezoneResolver
+	// nextRun maps "now" to the next scheduled scan instant. Production
+	// default is nextDailyRun; tests override it to shrink the delay.
+	nextRun func(time.Time) time.Time
 }
 
-// NewOperationOverdueWorker creates a new operation overdue worker.
+// NewOperationOverdueWorker creates a new operation overdue worker. The scan
+// schedule is owned by nextDailyRun — daily at 00:00 UTC — not by the caller.
 func NewOperationOverdueWorker(
 	operationService *leasesapp.OperationService,
 	clock clock.Clock,
-	interval time.Duration,
 	batchSize int,
 	logger *slog.Logger,
 	tzResolver sharedtz.OwnerTimezoneResolver,
 ) *OperationOverdueWorker {
-	if interval <= 0 {
-		interval = 24 * time.Hour
-	}
 	if batchSize <= 0 {
 		batchSize = 100
 	}
@@ -59,32 +58,50 @@ func NewOperationOverdueWorker(
 	return &OperationOverdueWorker{
 		operationService: operationService,
 		clock:            clock,
-		interval:         interval,
 		batchSize:        batchSize,
 		logger:           logger,
 		tzResolver:       tzResolver,
+		nextRun:          nextDailyRun,
 	}
 }
 
-// Run starts the overdue detection loop. It stops when the provided context is cancelled.
-func (w *OperationOverdueWorker) Run(ctx context.Context) {
-	w.logger.InfoContext(ctx, "operation overdue worker started", "interval", w.interval.String())
-
-	ticker := time.NewTicker(w.interval)
-	defer ticker.Stop()
-
-	if err := w.tick(ctx); err != nil {
-		w.logger.ErrorContext(ctx, "operation overdue tick failed", "error", sanitize.Error(err))
+// nextDailyRun returns the next 00:00 UTC strictly after now. The anchor is
+// UTC midnight because overdue candidacy is date-based on the server's UTC
+// clock (ListAllOverdueCandidates compares operation_date against the UTC
+// date): new candidates become visible exactly at UTC midnight, so an earlier
+// anchor would find nothing and a later one only delays the scan. Owner-local
+// reminders still dispatch at their scheduled 10:00 local time.
+func nextDailyRun(now time.Time) time.Time {
+	n := now.UTC()
+	next := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
+	if !next.After(n) {
+		next = next.AddDate(0, 0, 1)
 	}
+	return next
+}
+
+// Run starts the overdue detection loop: one scan per day, anchored to 00:00
+// UTC. It stops when the provided context is cancelled. There is no scan at
+// startup by design — the daily anchor owns the schedule, so deploys do not
+// trigger work; a run missed while the process is down waits for the next
+// anchor.
+func (w *OperationOverdueWorker) Run(ctx context.Context) {
+	w.logger.InfoContext(ctx, "operation overdue worker started", "schedule", "daily at 00:00 UTC")
+
+	now := w.clock.Now()
+	timer := time.NewTimer(w.nextRun(now).Sub(now))
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-timer.C:
 			if err := w.tick(ctx); err != nil {
 				w.logger.ErrorContext(ctx, "operation overdue tick failed", "error", sanitize.Error(err))
 			}
+			now = w.clock.Now()
+			timer.Reset(w.nextRun(now).Sub(now))
 		}
 	}
 }

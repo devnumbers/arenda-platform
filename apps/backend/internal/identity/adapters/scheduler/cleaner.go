@@ -17,21 +17,21 @@ import (
 // conformance is checked at the assignment site in wire/workers.go.
 
 // ExpiredSessionDeleter removes sessions whose expiry falls before the given
-// instant.
+// instant and reports the number of rows removed.
 type ExpiredSessionDeleter interface {
-	DeleteExpiredBefore(ctx context.Context, before time.Time) error
+	DeleteExpiredBefore(ctx context.Context, before time.Time) (int64, error)
 }
 
 // ExpiredLoginCodeDeleter removes login codes whose expiry falls before the
-// given instant.
+// given instant and reports the number of rows removed.
 type ExpiredLoginCodeDeleter interface {
-	DeleteExpiredBefore(ctx context.Context, before time.Time) error
+	DeleteExpiredBefore(ctx context.Context, before time.Time) (int64, error)
 }
 
 // StaleAttemptDeleter removes login-attempt windows older than the given
-// instant.
+// instant and reports the number of rows removed.
 type StaleAttemptDeleter interface {
-	DeleteStaleBefore(ctx context.Context, before time.Time) error
+	DeleteStaleBefore(ctx context.Context, before time.Time) (int64, error)
 }
 
 // Cleaner periodically removes expired identity data.
@@ -68,8 +68,12 @@ func NewCleaner(
 	}
 }
 
-// Run starts the cleanup loop and blocks until ctx is cancelled.
+// Run starts the cleanup loop and blocks until ctx is cancelled. The first
+// cycle runs immediately so a restart does not postpone cleanup by a full
+// interval; subsequent cycles run on the ticker.
 func (c *Cleaner) Run(ctx context.Context) {
+	c.clean(ctx)
+
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 
@@ -86,26 +90,31 @@ func (c *Cleaner) Run(ctx context.Context) {
 func (c *Cleaner) clean(ctx context.Context) {
 	before := c.clock.Now().UTC().Add(-c.retention)
 
-	c.cleanExpired(ctx, "login codes", before, c.codes.DeleteExpiredBefore)
-	c.cleanExpired(ctx, "sessions", before, c.sessions.DeleteExpiredBefore)
-	c.cleanExpired(ctx, "login attempts", before, c.attempts.DeleteStaleBefore)
+	codes := c.cleanExpired(ctx, "login codes", before, c.codes.DeleteExpiredBefore)
+	sessions := c.cleanExpired(ctx, "sessions", before, c.sessions.DeleteExpiredBefore)
+	attempts := c.cleanExpired(ctx, "login attempts", before, c.attempts.DeleteStaleBefore)
 
-	c.logger.InfoContext(ctx, "cleanup completed", slog.Time("before", before))
+	c.logger.InfoContext(ctx, "cleanup completed",
+		slog.Time("before", before),
+		slog.Int64("login_codes_deleted", codes),
+		slog.Int64("sessions_deleted", sessions),
+		slog.Int64("login_attempts_deleted", attempts),
+	)
 }
 
-// cleanExpired runs a single DeleteExpiredBefore/DeleteStaleBefore call and logs
-// any non-cancellation error. The adapter loops the SQL batch internally, so
-// the scheduler only speaks the "delete old data" intent.
+// cleanExpired runs a single DeleteExpiredBefore/DeleteStaleBefore call, logs
+// any non-cancellation error and reports how many rows were removed. The
+// adapter loops the SQL batch internally, so the scheduler only speaks the
+// "delete old data" intent.
 func (c *Cleaner) cleanExpired(
 	ctx context.Context,
 	name string,
 	before time.Time,
-	deleteBefore func(context.Context, time.Time) error,
-) {
-	if err := deleteBefore(ctx, before); err != nil {
-		if errors.Is(err, context.Canceled) {
-			return
-		}
+	deleteBefore func(context.Context, time.Time) (int64, error),
+) int64 {
+	n, err := deleteBefore(ctx, before)
+	if err != nil && !errors.Is(err, context.Canceled) {
 		c.logger.ErrorContext(ctx, "failed to clean expired "+name, slog.String("error", sanitize.Error(err)))
 	}
+	return n
 }

@@ -44,7 +44,6 @@ type LoginCodeRepository interface {
 	MarkUsedByID(ctx context.Context, id uuid.UUID) error
 	DeleteByID(ctx context.Context, id uuid.UUID) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
-	DeleteExpiredBefore(ctx context.Context, before time.Time) error
 	DeleteExpiredByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, before time.Time) error
 	DeleteUnusedByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error
 	WithTx(tx transaction.Tx) (LoginCodeRepository, error)
@@ -63,7 +62,6 @@ type AttemptRepository interface {
 	Save(ctx context.Context, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow, delta int) error
 	DeleteByPhone(ctx context.Context, phone domain.Phone) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
-	DeleteStaleBefore(ctx context.Context, before time.Time) error
 	WithTx(tx transaction.Tx) (AttemptRepository, error)
 }
 
@@ -74,6 +72,5 @@ type SessionRepository interface {
 	DeleteByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 	DeleteByUserIDExcept(ctx context.Context, userID uuid.UUID, tokenHash string) error
-	DeleteExpiredBefore(ctx context.Context, before time.Time) error
 	WithTx(tx transaction.Tx) (SessionRepository, error)
 }
