@@ -12,7 +12,7 @@ All coding agents in this repo — Kimi Code, ZCode, or any other harness — wo
 
 ## Project Map
 
-- Arenda Platform is a rental property finance tracker for private owners and small rental businesses in Russia.
+- Arenda Platform is a fintech platform for rental-property finance management for private owners and small rental businesses in Russia. The product is record-keeping, not money movement: owners record and plan income/expense operations; the only payment processing is the SaaS subscription via T-Kassa (`docs/adr/0036-fintech-domain-language.md`).
 - Backend: `apps/backend`, a separate Go module linked by root `go.work`.
 - Frontend: `apps/frontend`, a Next.js React application.
 - Admin: `apps/admin`, a Vite + React SPA built on react-admin 5 and MUI 7 — a separate stack from the Next.js frontend; its rules live in `apps/admin/AGENTS.md`.
@@ -94,7 +94,10 @@ Use `make local-infra-reset` only when intentionally deleting local Docker volum
 
 - Do not create or switch to a git worktree by default. Work in the current checkout and current branch unless the user explicitly asks for a worktree or branch isolation.
 - If a generic skill recommends a worktree, this repository rule overrides it.
-- Money is stored as `BIGINT` in kopecks across the backend. See `docs/adr/0008-subscription-lifecycle.md`.
+- Money is stored as `BIGINT` in kopecks across the backend and crosses every layer (API, frontend, admin) as integer kopecks — never floats; money arithmetic is integer-only. See `docs/adr/0008-subscription-lifecycle.md`.
+- All amounts are in RUB; there is no multi-currency support (`docs/adr/0036-fintech-domain-language.md`).
+- Format money for display only at the UI layer: frontend — `formatMoneyKopecks` (`apps/frontend/shared/lib/format-money.ts`); admin — `formatKopecks` / `MoneyField` (`apps/admin/src/fields.tsx`).
+- Two money vocabularies (`docs/adr/0036-fintech-domain-language.md`): rental money records are Операции — «платёж»/«транзакция» belong to Billing (T-Kassa processing) only. Canonical terms and `_Avoid_` lists live in `CONTEXT-MAP.md` and the per-context `CONTEXT.md` files.
 
 ## Agent skills
 

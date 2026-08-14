@@ -80,6 +80,7 @@ go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1 -config a
 - Authorization goes through the policy port (`internal/shared/policy.Policy`), the single point that maps an actor and a data owner (scope) to a role. Owner-scoped repository queries filter by the data owner (`scope`), not by the actor; membership is resolved by the policy port, not in SQL. See ADR 0028 (`docs/adr/0028-object-data-access-model.md`).
 - Application-layer services receive `actor` (the operation initiator) and thread `scope` (the data owner) into repository calls. For the owner's own data `actor == scope`. Do not reintroduce a bare `ownerID` parameter that conflates the two; the split is the seam for property sharing (T3).
 - Use `date` for domain dates, `timestamptz` for system timestamps, and `BIGINT` (kopecks) for money.
+- Money arithmetic is integer-only (`int64` kopecks); never use floating-point for money at any layer.
 - Identifiers are UUIDv7, generated in the application via `uuid.NewV7()`; `id` columns have no `DEFAULT` in the database. Set `id` explicitly in new migrations and seeds (in SQL, use PostgreSQL 18 `uuidv7()`). See `docs/adr/0019-uuid-v7-app-generated-ids.md`.
 - Browser auth uses opaque server-side sessions with `HttpOnly` cookies. Do not replace this with browser-readable JWT/session storage without a new ADR.
 - Store property photos through a storage port backed by REG.RU S3-compatible storage. Do not add MinIO as a local dependency.

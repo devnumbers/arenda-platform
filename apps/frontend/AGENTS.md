@@ -54,6 +54,7 @@ Before adding components, hooks, helpers, entity types, feature state, or API wr
 - Use Next.js server-side data fetching (Server Components and route handlers) by default.
 - Browser-side state only when interactivity requires it.
 - Map backend DTOs to entity models at the API boundary; do not leak generated DTOs into widgets or features.
+- Money arrives from the API as integer kopecks (`number`, safe below 2^53); format for display only via `formatMoneyKopecks` from `shared/lib/format-money.ts` — never hand-roll `/100` formatting.
 - Reuse backend types from OpenAPI where possible; keep frontend entity types explicit and minimal.
 - Do not edit generated API client files by hand; update the backend OpenAPI contract and regenerate the frontend client.
 - The property attributes catalog (`features/property-attributes/lib/generated/`) is generated from `tools/property-attributes/catalog.json`. Regenerate with `make attributes-gen` (or `cd tools/property-attributes && npm run generate`); the gate `make attributes-check` fails in CI if a `catalog.json` change was not committed with its regenerated artifacts. Do not hand-edit `generated/`.

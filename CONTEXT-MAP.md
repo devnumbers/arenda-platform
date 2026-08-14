@@ -1,6 +1,8 @@
 # Context Map
 
-Arenda Platform — DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by bounded context. See ADR 0001 (modular monolith) and ADR 0029 (rental super-context).
+Arenda Platform is a fintech platform for rental-property finance management: owners record and plan income/expense operations. The product is record-keeping, not money movement — the only payment processing is the SaaS subscription via T-Kassa (ADR 0036).
+
+DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by bounded context. See ADR 0001 (modular monolith) and ADR 0029 (rental super-context).
 
 ## Contexts
 
@@ -40,3 +42,10 @@ Terms shared across contexts, documented once here:
 - **Full Access / Полный доступ** — member role: full data operations + member management.
 - **Viewer / Просмотр** — member role: read-only access to all property data.
 - **Suspended Access / Приостановленный доступ** — shared access hidden due to recipient tariff limit exhaustion.
+
+**Two money vocabularies** (ADR 0036) — never mix them:
+
+- **Record-keeping (Rental)**: Операция, Доход, Расход — money records about properties. «Платёж» and «транзакция» are banned as synonyms here.
+- **Processing (Billing only)**: Оплата подписки, Возврат, PaymentId, CIT/MIT — the T-Kassa payment world. The «операция» in CIT/MIT definitions is a quoted provider term, not a Rental Операция.
+
+**Money / Деньги**: all product amounts are in Russian rubles (RUB); there is no multi-currency support. Storage, transport, and formatting rules: root `AGENTS.md` and ADR 0008.
