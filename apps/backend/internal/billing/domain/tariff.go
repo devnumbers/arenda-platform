@@ -34,12 +34,15 @@ const (
 // an unlimited number of properties.
 const UnlimitedPropertyLimit = -1
 
+// Tariff is a subscription plan. IsActive=false hides the plan from users
+// (listing) without breaking foreign keys that still reference it (issue #245).
 type Tariff struct {
 	ID                  uuid.UUID
 	Name                TariffName
 	ActivePropertyLimit int
 	MonthlyPriceKopecks int64
 	YearlyPriceKopecks  int64
+	IsActive            bool
 }
 
 // ClassifyTariffChange compares current and next tariffs and returns the

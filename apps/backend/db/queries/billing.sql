@@ -1,16 +1,19 @@
+-- Billing context queries (rewritten module, issue #245).
+--
+-- Only the queries consumed by the rewritten core module and by the admin
+-- dashboard live here. The payment, payment-method and webhook queries return
+-- with their tickets (#250, #251, #254).
+
 -- name: GetTariffByName :one
-SELECT id, name, active_property_limit, monthly_price_kopecks, yearly_price_kopecks, created_at
-FROM tariffs
-WHERE name = $1;
+SELECT * FROM tariffs WHERE name = $1;
 
 -- name: GetTariffByID :one
-SELECT id, name, active_property_limit, monthly_price_kopecks, yearly_price_kopecks, created_at
-FROM tariffs
-WHERE id = $1;
+SELECT * FROM tariffs WHERE id = $1;
 
 -- name: ListTariffs :many
-SELECT id, name, active_property_limit, monthly_price_kopecks, yearly_price_kopecks, created_at
-FROM tariffs ORDER BY monthly_price_kopecks, id;
+-- User-facing tariff listing: hidden tariffs stay referable by FK but are not
+-- offered (issue #245).
+SELECT * FROM tariffs WHERE is_active ORDER BY monthly_price_kopecks, id;
 
 -- name: CreateSubscription :one
 INSERT INTO user_subscriptions (
@@ -61,315 +64,42 @@ SET
 WHERE id = $1
 RETURNING *;
 
--- name: CreatePaymentMethod :one
-INSERT INTO payment_methods (
+-- name: AppendSubscriptionTransition :exec
+-- The transition log is append-only (enforced by trigger, ADR 0037); the first
+-- transition of a subscription has no prior status or tariff.
+INSERT INTO subscription_transitions (
     id,
-    user_id,
-    provider,
-    provider_token,
-    token_hash,
-    display_mask,
-    provider_card_id,
-    exp_date,
-    is_active
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING *;
-
--- name: UpsertPaymentMethodByTokenHash :one
-INSERT INTO payment_methods (
-    id,
-    user_id,
-    provider,
-    provider_token,
-    token_hash,
-    display_mask,
-    provider_card_id,
-    exp_date,
-    is_active
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-ON CONFLICT (user_id, token_hash)
-DO UPDATE SET
-    provider_token = EXCLUDED.provider_token,
-    provider_card_id = COALESCE(NULLIF(EXCLUDED.provider_card_id, ''), payment_methods.provider_card_id),
-    display_mask = COALESCE(NULLIF(EXCLUDED.display_mask, ''), payment_methods.display_mask),
-    exp_date = COALESCE(NULLIF(EXCLUDED.exp_date, ''), payment_methods.exp_date),
-    updated_at = now()
-RETURNING *;
-
--- name: GetPaymentMethodByID :one
-SELECT * FROM payment_methods WHERE id = $1;
-
--- name: GetPaymentMethodByIDForUpdate :one
-SELECT * FROM payment_methods WHERE id = $1 FOR UPDATE;
-
--- name: LockPaymentMethodsByUserID :many
-SELECT id FROM payment_methods WHERE user_id = $1 ORDER BY id FOR UPDATE;
-
--- name: ListPaymentMethodsByUserID :many
-SELECT * FROM payment_methods WHERE user_id = $1 ORDER BY created_at DESC;
-
--- name: UpdatePaymentMethodActiveByID :one
-UPDATE payment_methods
-SET is_active = $2, updated_at = now()
-WHERE id = $1
-RETURNING *;
-
--- name: DeactivateAllPaymentMethodsForUser :exec
-UPDATE payment_methods
-SET is_active = false, updated_at = now()
-WHERE user_id = $1;
-
--- name: CountSubscriptionsByActivePaymentMethodID :one
-SELECT COUNT(*) FROM user_subscriptions WHERE active_payment_method_id = $1;
-
--- name: DeletePaymentMethodByID :exec
-DELETE FROM payment_methods WHERE id = $1;
-
--- name: CreateSubscriptionPayment :one
-INSERT INTO subscription_payments (
-    id,
-    user_id,
     subscription_id,
-    tariff_id,
-    payment_method_id,
-    period,
-    amount_kopecks,
-    provider,
-    provider_payment_id,
-    payment_url,
-    status,
-    error_code
+    from_status,
+    to_status,
+    from_tariff_id,
+    to_tariff_id,
+    reason,
+    initiator_type,
+    initiator_id,
+    payment_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING *;
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
 
--- name: GetSubscriptionPaymentByID :one
-SELECT * FROM subscription_payments WHERE id = $1;
+-- name: ListSubscriptionTransitionsBySubscription :many
+SELECT * FROM subscription_transitions
+WHERE subscription_id = $1
+ORDER BY created_at DESC, id DESC;
 
--- name: GetSubscriptionPaymentByIDAdmin :one
-SELECT sp.*, u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
-FROM subscription_payments sp
-JOIN users u ON sp.user_id = u.id
-WHERE sp.id = $1;
-
--- name: GetSubscriptionPaymentByIDForUpdate :one
-SELECT * FROM subscription_payments WHERE id = $1 FOR UPDATE;
-
--- name: ListSubscriptionPaymentsByUserID :many
-SELECT * FROM subscription_payments WHERE user_id = $1 ORDER BY created_at DESC;
-
--- name: ListPendingSubscriptionPaymentsByUserID :many
-SELECT * FROM subscription_payments WHERE user_id = $1 AND status = 'pending' ORDER BY created_at DESC;
-
--- name: MarkSubscriptionPaymentSucceeded :one
-UPDATE subscription_payments
-SET status = 'succeeded', succeeded_at = $2
-WHERE id = $1 AND status = 'pending'
-RETURNING *;
-
--- name: MarkSubscriptionPaymentFailed :one
-UPDATE subscription_payments
-SET status = 'failed', error_code = $2
-WHERE id = $1 AND status = 'pending'
-RETURNING *;
-
--- name: MarkSubscriptionPaymentRefunded :one
-UPDATE subscription_payments
-SET status = $2, refunded_amount_kopecks = $3
-WHERE id = $1 AND status IN ('succeeded', 'pending', 'refunding')
-RETURNING *;
-
--- name: MarkSubscriptionPaymentReconciledSucceeded :one
--- Transition a failed payment to succeeded after an explicit provider-side
--- status check. This handles out-of-order webhooks where the provider reports
--- success after the system has already marked the payment as failed.
-UPDATE subscription_payments
-SET status = 'succeeded', succeeded_at = $2, error_code = NULL
-WHERE id = $1 AND status = 'failed'
-RETURNING *;
-
--- name: MarkSubscriptionPaymentReconciledRefunded :one
--- Transition a failed payment to refunded after an explicit provider-side
--- status check. This handles out-of-order webhooks where the provider reports
--- a refund after the system has already marked the payment as failed.
-UPDATE subscription_payments
-SET status = 'refunded', refunded_amount_kopecks = $2
-WHERE id = $1 AND status = 'failed'
-RETURNING *;
-
--- name: BeginSubscriptionPaymentRefund :execresult
--- Atomically reserve a payment for an in-flight refund. updated_at is maintained
--- by the trg_subscription_payments_updated_at trigger, so it is not set here.
-UPDATE subscription_payments
-SET status = 'refunding'
-WHERE id = $1 AND status IN ('succeeded', 'pending');
-
--- name: RevertSubscriptionPaymentRefund :execresult
--- Roll back an in-flight refund reservation to the previous status ($2).
--- updated_at is maintained by the trg_subscription_payments_updated_at trigger.
-UPDATE subscription_payments
-SET status = $2
-WHERE id = $1 AND status = 'refunding';
-
--- name: UpdateSubscriptionPaymentProviderPaymentID :one
-UPDATE subscription_payments
-SET provider_payment_id = $2, updated_at = now()
-WHERE id = $1
-RETURNING *;
-
--- name: UpdateSubscriptionPaymentPaymentURL :one
-UPDATE subscription_payments
-SET payment_url = $2, updated_at = now()
-WHERE id = $1
-RETURNING *;
-
--- name: UpdateSubscriptionPaymentMethodAndProviderID :one
-UPDATE subscription_payments
-SET payment_method_id = $2, provider_payment_id = $3, updated_at = now()
-WHERE id = $1
-RETURNING *;
-
--- name: UpdateSubscriptionPaymentMethodID :one
-UPDATE subscription_payments
-SET payment_method_id = $2, updated_at = now()
-WHERE id = $1
-RETURNING *;
-
--- name: IncrementSubscriptionPaymentChargeAttempts :one
--- Atomically increment the renewal charge attempt counter and return the new
--- value so the renewal job can cap retries on persistent charge failures.
--- updated_at is maintained by the trg_subscription_payments_updated_at trigger.
-UPDATE subscription_payments
-SET charge_attempts = charge_attempts + 1
-WHERE id = $1
-RETURNING charge_attempts;
-
--- name: ListSubscriptionsUpForRenewal :many
-SELECT * FROM user_subscriptions
-WHERE status = 'active'
-  AND auto_renew_enabled = true
-  AND valid_until IS NOT NULL
-  AND valid_until <= $1
-ORDER BY valid_until ASC
-LIMIT $2
-FOR UPDATE SKIP LOCKED;
-
--- name: ListSubscriptionsInExpiredGrace :many
-SELECT * FROM user_subscriptions
-WHERE status = 'grace'
-  AND valid_until IS NOT NULL
-  AND valid_until <= $1
-ORDER BY valid_until ASC
-LIMIT $2
-FOR UPDATE SKIP LOCKED;
-
--- name: ListExpiredNonRenewingSubscriptions :many
-SELECT * FROM user_subscriptions
-WHERE status = 'active'
-  AND auto_renew_enabled = false
-  AND valid_until IS NOT NULL
-  AND valid_until <= $1
-ORDER BY valid_until ASC
-LIMIT $2
-FOR UPDATE SKIP LOCKED;
-
--- name: ListExpiredCancelledSubscriptions :many
-SELECT * FROM user_subscriptions
-WHERE status = 'cancelled'
-  AND valid_until IS NOT NULL
-  AND valid_until <= $1
-ORDER BY valid_until ASC
-LIMIT $2
-FOR UPDATE SKIP LOCKED;
-
--- name: ListSubscriptionsWithPendingChange :many
-SELECT * FROM user_subscriptions
-WHERE status = 'active'
-  AND pending_tariff_id IS NOT NULL
-  AND pending_change_at IS NOT NULL
-  AND pending_change_at <= $1
-ORDER BY pending_change_at ASC
-LIMIT $2
-FOR UPDATE SKIP LOCKED;
-
--- name: GetLastSucceededSubscriptionPaymentBySubscriptionID :one
-SELECT * FROM subscription_payments
-WHERE subscription_id = $1 AND status = 'succeeded'
-ORDER BY created_at DESC
-LIMIT 1;
-
--- name: ListPendingUpgradePayments :many
-SELECT sp.*
-FROM subscription_payments sp
-JOIN user_subscriptions us ON us.id = sp.subscription_id
-WHERE sp.status = 'pending'
-  AND sp.provider_payment_id IS NOT NULL
-  AND sp.provider_payment_id <> ''
-  AND sp.tariff_id != us.tariff_id
-  AND sp.created_at < $1
-ORDER BY sp.created_at ASC
-LIMIT $2;
-
--- name: ListPendingPayments :many
-SELECT *
-FROM subscription_payments
-WHERE status = 'pending'
-  AND provider_payment_id IS NOT NULL
-  AND provider_payment_id <> ''
-  AND created_at < $1
-ORDER BY created_at ASC
-LIMIT $2;
-
--- name: ListStaleRefundingPayments :many
--- Payments stuck in the refunding state (refund reserved but never finalized or
--- reverted). updated_at is trigger-maintained and marks entry into refunding.
-SELECT *
-FROM subscription_payments
-WHERE status = 'refunding'
-  AND provider_payment_id IS NOT NULL
-  AND provider_payment_id <> ''
-  AND updated_at < $1
-ORDER BY updated_at ASC
-LIMIT $2;
-
--- name: ListSubscriptionPaymentsAdmin :many
-SELECT sp.*, u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
-FROM subscription_payments sp
-JOIN users u ON sp.user_id = u.id
-WHERE (sqlc.arg('status')::text = '' OR sp.status = sqlc.arg('status')::text)
-  AND (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id')::uuid)
-  AND (sqlc.arg('user_phone')::text = '' OR u.phone = sqlc.arg('user_phone_enc')::text OR (u.phone = sqlc.arg('user_phone')::text AND u.phone_encrypted = false))
-ORDER BY
-  CASE WHEN sqlc.arg('sort')::text = 'createdAt' AND sqlc.arg('order')::text = 'asc' THEN sp.created_at END ASC,
-  CASE WHEN sqlc.arg('sort')::text = 'createdAt' AND sqlc.arg('order')::text = 'desc' THEN sp.created_at END DESC,
-  CASE WHEN sqlc.arg('sort')::text = 'amountKopecks' AND sqlc.arg('order')::text = 'asc' THEN sp.amount_kopecks END ASC,
-  CASE WHEN sqlc.arg('sort')::text = 'amountKopecks' AND sqlc.arg('order')::text = 'desc' THEN sp.amount_kopecks END DESC,
-  CASE WHEN sqlc.arg('sort')::text = 'status' AND sqlc.arg('order')::text = 'asc' THEN sp.status END ASC,
-  CASE WHEN sqlc.arg('sort')::text = 'status' AND sqlc.arg('order')::text = 'desc' THEN sp.status END DESC,
-  CASE WHEN sqlc.arg('sort')::text = '' THEN sp.created_at END DESC,
-  sp.id DESC
-LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
-
--- name: CountSubscriptionPaymentsAdmin :one
-SELECT COUNT(*)
-FROM subscription_payments sp
-JOIN users u ON sp.user_id = u.id
-WHERE (sqlc.arg('status')::text = '' OR sp.status = sqlc.arg('status')::text)
-  AND (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id')::uuid)
-  AND (sqlc.arg('user_phone')::text = '' OR u.phone = sqlc.arg('user_phone_enc')::text OR (u.phone = sqlc.arg('user_phone')::text AND u.phone_encrypted = false));
+-- Admin dashboard stats. These queries are consumed by the admin context's
+-- repository, not by the billing module itself.
 
 -- name: CountActiveSubscriptionsAdmin :one
 SELECT COUNT(*) FROM user_subscriptions WHERE status = 'active';
 
 -- name: GetSubscriptionPaymentsStatsLast30dAdmin :one
--- Aggregates over payments created in the last 30 days. "refunded" covers both
--- full and partial refunds.
+-- Aggregates over payments created in the last 30 days. Refunds are full-amount
+-- only in the rewritten schema (ADR 0037): the legacy partial_refunded status
+-- is gone.
 SELECT
   COALESCE(SUM(amount_kopecks) FILTER (WHERE status = 'succeeded'), 0)::bigint AS succeeded_total_kopecks,
   COUNT(*) FILTER (WHERE status = 'failed') AS failed_count,
-  COUNT(*) FILTER (WHERE status IN ('refunded', 'partial_refunded')) AS refunded_count
+  COUNT(*) FILTER (WHERE status = 'refunded') AS refunded_count
 FROM subscription_payments
 WHERE created_at >= now() - interval '30 days';
 

@@ -8,10 +8,29 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
+
+// The two interfaces below are consumed only by this package (the billing
+// worker shell), so per the consumer-side interface rule (ADR 0035) they are
+// declared here next to their consumer rather than in the billing application.
+// The billing module provides the implementation; conformance is checked at
+// the wiring site (cmd/api/wire).
+
+// ScheduledChangeProcessor applies due deferred tariff changes.
+type ScheduledChangeProcessor interface {
+	ProcessScheduledChanges(ctx context.Context, now time.Time) (int, error)
+}
+
+// RenewalProcessor drives the subscription lifecycle phases of the billing
+// worker: auto-renewal charges, pending upgrade payments and expired grace
+// handling (ADR 0008).
+type RenewalProcessor interface {
+	ProcessRenewals(ctx context.Context, now time.Time) (int, error)
+	ProcessPendingUpgradePayments(ctx context.Context, now time.Time) (int, error)
+	ProcessExpiredGrace(ctx context.Context, now time.Time) (int, error)
+}
 
 // billingWorkerLockKey is a stable application-level key for the PostgreSQL
 // advisory lock used to ensure only one billing worker runs at a time.
@@ -21,8 +40,8 @@ const billingWorkerLockKey int64 = 0xB111
 // periods. It delegates the actual billing decisions to the billing ports so the
 // worker stays a thin scheduling shell.
 type BillingWorker struct {
-	renewals  billingapp.RenewalRunner
-	scheduled billingapp.ScheduledChangeRunner
+	renewals  RenewalProcessor
+	scheduled ScheduledChangeProcessor
 	pool      *pgxpool.Pool
 	clock     clock.Clock
 	interval  time.Duration
@@ -30,7 +49,7 @@ type BillingWorker struct {
 }
 
 // NewBillingWorker creates a new billing lifecycle worker.
-func NewBillingWorker(renewals billingapp.RenewalRunner, scheduled billingapp.ScheduledChangeRunner, pool *pgxpool.Pool, clock clock.Clock, interval time.Duration, logger *slog.Logger) *BillingWorker {
+func NewBillingWorker(renewals RenewalProcessor, scheduled ScheduledChangeProcessor, pool *pgxpool.Pool, clock clock.Clock, interval time.Duration, logger *slog.Logger) *BillingWorker {
 	if interval <= 0 {
 		interval = time.Hour
 	}

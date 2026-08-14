@@ -202,6 +202,17 @@ type AuditLog struct {
 	Ip         *netip.Addr        `json:"ip"`
 }
 
+type CardBindingSession struct {
+	ID         pgtype.UUID        `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	Provider   string             `json:"provider"`
+	RequestKey string             `json:"request_key"`
+	Status     string             `json:"status"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type FreeReminder struct {
 	ID          pgtype.UUID        `json:"id"`
 	OwnerID     pgtype.UUID        `json:"owner_id"`
@@ -289,12 +300,12 @@ type PaymentMethod struct {
 	Provider       string             `json:"provider"`
 	ProviderToken  string             `json:"provider_token"`
 	TokenHash      string             `json:"token_hash"`
+	ProviderCardID pgtype.Text        `json:"provider_card_id"`
 	DisplayMask    pgtype.Text        `json:"display_mask"`
+	ExpDate        pgtype.Text        `json:"exp_date"`
 	IsActive       bool               `json:"is_active"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	ProviderCardID pgtype.Text        `json:"provider_card_id"`
-	ExpDate        pgtype.Text        `json:"exp_date"`
 }
 
 type Property struct {
@@ -449,14 +460,28 @@ type SubscriptionPayment struct {
 	AmountKopecks         int64              `json:"amount_kopecks"`
 	Provider              string             `json:"provider"`
 	ProviderPaymentID     pgtype.Text        `json:"provider_payment_id"`
+	PaymentUrl            pgtype.Text        `json:"payment_url"`
 	Status                string             `json:"status"`
+	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
+	ChargeAttempts        int32              `json:"charge_attempts"`
 	ErrorCode             pgtype.Text        `json:"error_code"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
-	PaymentUrl            pgtype.Text        `json:"payment_url"`
 	SucceededAt           pgtype.Timestamptz `json:"succeeded_at"`
-	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
-	ChargeAttempts        int32              `json:"charge_attempts"`
+}
+
+type SubscriptionTransition struct {
+	ID             pgtype.UUID        `json:"id"`
+	SubscriptionID pgtype.UUID        `json:"subscription_id"`
+	FromStatus     pgtype.Text        `json:"from_status"`
+	ToStatus       string             `json:"to_status"`
+	FromTariffID   pgtype.UUID        `json:"from_tariff_id"`
+	ToTariffID     pgtype.UUID        `json:"to_tariff_id"`
+	Reason         string             `json:"reason"`
+	InitiatorType  string             `json:"initiator_type"`
+	InitiatorID    pgtype.UUID        `json:"initiator_id"`
+	PaymentID      pgtype.UUID        `json:"payment_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type Tariff struct {
@@ -465,7 +490,9 @@ type Tariff struct {
 	ActivePropertyLimit int32              `json:"active_property_limit"`
 	MonthlyPriceKopecks int64              `json:"monthly_price_kopecks"`
 	YearlyPriceKopecks  int64              `json:"yearly_price_kopecks"`
+	IsActive            bool               `json:"is_active"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
 type TenantContact struct {
@@ -518,13 +545,13 @@ type UserSubscription struct {
 	Source                string             `json:"source"`
 	Status                string             `json:"status"`
 	ValidUntil            pgtype.Timestamptz `json:"valid_until"`
-	CreatedAt             pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	AutoRenewEnabled      bool               `json:"auto_renew_enabled"`
 	PendingTariffID       pgtype.UUID        `json:"pending_tariff_id"`
 	PendingChangeAt       pgtype.Timestamptz `json:"pending_change_at"`
-	ActivePaymentMethodID pgtype.UUID        `json:"active_payment_method_id"`
 	PendingPeriod         pgtype.Text        `json:"pending_period"`
+	ActivePaymentMethodID pgtype.UUID        `json:"active_payment_method_id"`
 	LastAppliedPaymentID  pgtype.UUID        `json:"last_applied_payment_id"`
 	CurrentPeriod         pgtype.Text        `json:"current_period"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 }

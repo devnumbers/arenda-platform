@@ -2,27 +2,29 @@ package application
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
 
-// TariffService handles read-only tariff queries.
+// TariffService serves the user-facing tariff views: the active plans users
+// can choose from.
 type TariffService struct {
-	deps tariffServiceDeps
+	txStoreFactory
 }
 
-// NewTariffService creates a TariffService.
-func NewTariffService(deps tariffServiceDeps) *TariffService {
-	return &TariffService{deps: deps}
+// NewTariffService creates a tariff service over the shared factory. Listing
+// is a single read, so it goes straight to the factory's non-transactional
+// repository — no Unit-of-Work needed (ADR 0033: transactions for writes).
+func NewTariffService(factory txStoreFactory) *TariffService {
+	return &TariffService{txStoreFactory: factory}
 }
 
-// ListTariffs returns all tariffs ordered by price.
+// ListTariffs returns the active tariffs ordered by price. Hidden tariffs
+// (is_active=false) stay referable by foreign keys but are not offered.
 func (s *TariffService) ListTariffs(ctx context.Context) ([]domain.Tariff, error) {
-	list, err := s.deps.tariffs.List(ctx)
+	tariffs, err := s.tariffs.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list tariffs: %w", err)
+		return nil, err
 	}
-
-	return list, nil
+	return tariffs, nil
 }

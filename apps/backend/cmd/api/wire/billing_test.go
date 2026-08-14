@@ -11,8 +11,8 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 )
 
-// stubSubscriber is a minimal billingapp.Subscriber whose only exercised
-// method in these tests is GetSubscription; the rest return their zero values.
+// stubSubscriber is a minimal subscriptionViewer (the billing port consumed
+// by the /me enricher glue, ADR 0035) returning canned results.
 type stubSubscriber struct {
 	view billingapp.SubscriptionView
 	err  error
@@ -21,16 +21,6 @@ type stubSubscriber struct {
 func (s stubSubscriber) GetSubscription(_ context.Context, _ uuid.UUID) (billingapp.SubscriptionView, error) {
 	return s.view, s.err
 }
-
-func (s stubSubscriber) ChangeTariff(_ context.Context, _ uuid.UUID, _ billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResponse, error) {
-	return billingapp.ChangeTariffResponse{}, nil
-}
-
-func (s stubSubscriber) CancelSubscription(_ context.Context, _ uuid.UUID) error { return nil }
-
-func (s stubSubscriber) ToggleAutoRenew(_ context.Context, _ uuid.UUID, _ bool) error { return nil }
-
-var _ billingapp.Subscriber = stubSubscriber{}
 
 func TestBillingMeEnricher(t *testing.T) {
 	t.Parallel()

@@ -8,13 +8,16 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestNewOwnerSubscription(t *testing.T) {
+// graceDuration mirrors the production default (ADR 0008) for the tests below.
+const graceDuration = 7 * 24 * time.Hour
+
+func TestNewBasicSubscription(t *testing.T) {
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
 
-	sub, err := NewOwnerSubscription(userID, tariffID)
+	sub, err := NewBasicSubscription(userID, tariffID)
 	if err != nil {
-		t.Fatalf("NewOwnerSubscription() error = %v", err)
+		t.Fatalf("NewBasicSubscription() error = %v", err)
 	}
 
 	if sub.UserID != userID {
@@ -399,12 +402,12 @@ func TestSubscriptionEnterGrace(t *testing.T) {
 			Status:   SubscriptionStatusActive,
 		}
 
-		sub.EnterGrace(now)
+		sub.EnterGrace(now, graceDuration)
 
 		if sub.Status != SubscriptionStatusGrace {
 			t.Errorf("Status = %v, want %v", sub.Status, SubscriptionStatusGrace)
 		}
-		wantValidUntil := now.Add(gracePeriod)
+		wantValidUntil := now.Add(graceDuration)
 		if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
 			t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, wantValidUntil)
 		}
@@ -420,7 +423,7 @@ func TestSubscriptionEnterGrace(t *testing.T) {
 			ValidUntil: &farFuture,
 		}
 
-		sub.EnterGrace(now)
+		sub.EnterGrace(now, graceDuration)
 
 		if sub.Status != SubscriptionStatusGrace {
 			t.Errorf("Status = %v, want %v", sub.Status, SubscriptionStatusGrace)
@@ -446,7 +449,7 @@ func TestSubscriptionEnterGrace(t *testing.T) {
 			PendingPeriod:   &period,
 		}
 
-		sub.EnterGrace(now)
+		sub.EnterGrace(now, graceDuration)
 
 		if sub.Status != SubscriptionStatusGrace {
 			t.Errorf("Status = %v, want %v", sub.Status, SubscriptionStatusGrace)
@@ -455,7 +458,7 @@ func TestSubscriptionEnterGrace(t *testing.T) {
 			t.Errorf("expected pending change fields cleared, got %+v/%+v/%+v",
 				sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
 		}
-		wantValidUntil := now.Add(gracePeriod)
+		wantValidUntil := now.Add(graceDuration)
 		if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
 			t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, wantValidUntil)
 		}

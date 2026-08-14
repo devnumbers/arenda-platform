@@ -24,6 +24,16 @@ import (
 // imports notifications.
 var _ notificationsapp.PropertyRecipientLister = (*accesspg.MemberRecipientAdapter)(nil)
 
+// Compile-time checks that the billing worker shells satisfy the scheduler's
+// consumer-side ports (ADR 0035). The phases are deliberate no-ops until the
+// lifecycle-worker ticket lands (issue #252); conformance is checked here, at
+// the wiring site.
+var (
+	_ scheduler.ScheduledChangeProcessor = billingapp.Workers{}
+	_ scheduler.RenewalProcessor         = billingapp.Workers{}
+	_ scheduler.PaymentReconciler        = billingapp.Workers{}
+)
+
 // Workers bundles the six background workers and exposes Wait (block until they
 // exit). NewWorkers builds the notifier infrastructure (contact resolver, email
 // notifier, notifiers map), the identity data cleaner, the six workers and
@@ -50,9 +60,7 @@ func NewWorkers(
 	codeRepo *identitypg.LoginCodeRepository,
 	attemptRepo *identitypg.AttemptRepository,
 	emailMailer mailer.Sender,
-	billingRenewals billingapp.RenewalRunner,
-	billingScheduledChanges billingapp.ScheduledChangeRunner,
-	billingPayments billingapp.PaymentProcessor,
+	billingWorkers billingapp.Workers,
 	pushSubRepo *notificationspg.PushSubscriptionRepository,
 	pushSender notificationsapp.PushSender,
 ) *Workers {
@@ -67,8 +75,8 @@ func NewWorkers(
 	recipientLister := accesspg.NewMemberRecipientAdapter(accesspg.NewMembershipRepository(p.DB))
 	reminderWorker := scheduler.NewReminderWorker(reminderRepo, p.Renderer, notifiers, contactResolver, recipientLister, pushSender, pushSubRepo, p.Beginner, p.Clock, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, p.Logger)
 	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, p.Clock, 1*time.Hour, 100, p.Logger, p.TZResolver)
-	billingWorker := scheduler.NewBillingWorker(billingRenewals, billingScheduledChanges, p.Pool, p.Clock, p.Cfg.BillingWorkerInterval, p.Logger)
-	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(billingPayments, p.Pool, p.Clock, p.Cfg.PaymentReconciliationWorkerInterval, p.Logger)
+	billingWorker := scheduler.NewBillingWorker(billingWorkers, billingWorkers, p.Pool, p.Clock, p.Cfg.BillingWorkerInterval, p.Logger)
+	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(billingWorkers, p.Pool, p.Clock, p.Cfg.PaymentReconciliationWorkerInterval, p.Logger)
 	operationOverdueWorker := scheduler.NewOperationOverdueWorker(operationService, p.Clock, p.Cfg.OverdueOperationWorkerInterval, 100, p.Logger, p.TZResolver)
 
 	dataCleaner := identityscheduler.NewCleaner(sessionRepo, codeRepo, attemptRepo, p.Clock, p.Cfg.IdentityCleanerInterval, p.Cfg.IdentityCleanerRetention, p.Logger)

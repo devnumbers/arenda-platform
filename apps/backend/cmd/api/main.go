@@ -65,10 +65,11 @@ func run() error {
 		return err
 	}
 
-	// 5. Billing repositories + payment provider. Built before properties
-	//    because the subscription limiter used by PropertyService needs the
-	//    tariff and subscription repositories.
-	billingRepos, err := wire.WireBillingRepos(ctx, p)
+	// 5. Billing module (rewritten core, issue #245): repositories, UoW
+	//    factory, tariff/subscription/onboarding services, limiter and worker
+	//    shells. Built before access and properties because their subscription
+	//    limiters consume the billing repositories.
+	billingMod, err := wire.WireBilling(ctx, p)
 	if err != nil {
 		return err
 	}
@@ -82,7 +83,7 @@ func run() error {
 	//    resolver, membership-aware policy and access service. Built before
 	//    properties because the policy replaces the T2 owner-only policy and is
 	//    injected into every property/lease/operation service.
-	accessMod, err := wire.WireAccess(ctx, p, billingRepos, identityMod.EmailMailer)
+	accessMod, err := wire.WireAccess(ctx, p, billingMod, identityMod.EmailMailer)
 	if err != nil {
 		return err
 	}
@@ -104,7 +105,7 @@ func run() error {
 
 	// 8. Properties: repos, subscription limiter, photo storage, property and
 	//    property-contact services, dadata suggester.
-	propertiesMod, err := wire.WireProperties(ctx, p, billingRepos, leasesRepos)
+	propertiesMod, err := wire.WireProperties(ctx, p, billingMod, leasesRepos)
 	if err != nil {
 		return err
 	}
@@ -127,9 +128,6 @@ func run() error {
 	// its former members (issue #162, T6).
 	propertiesMod.PropertyService.SetSharedMembersDeleteMailer(accessMod.PropertyDeleteMailer)
 
-	// 8. Billing Services aggregate. Depends on the property service.
-	billingMod := wire.BuildBillingServices(p, billingRepos, propertiesMod.PropertyService, accessMod.SlotCoordinator)
-
 	// 9. Cross-module event subscribers: billing onboarding and default-category
 	//    seeding both react to user_registered. Kept here (not in wire) because
 	//    they reference types from identity, billing and leases.
@@ -138,7 +136,7 @@ func run() error {
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)
 		}
-		return billingMod.Services.OnUserRegistered(ctx, e.UserID)
+		return billingMod.Services.Onboarding.OnUserRegistered(ctx, e.UserID)
 	})
 	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
 		e, ok := event.(identityapp.UserRegistered)
@@ -223,9 +221,7 @@ func run() error {
 		identityMod.CodeRepo,
 		identityMod.AttemptRepo,
 		identityMod.EmailMailer,
-		billingMod.Services.Renewals,
-		billingMod.Services.ScheduledChanges,
-		billingMod.Services.Payments,
+		billingMod.Services.Workers,
 		notificationsMod.PushSubscriptionRepo,
 		pushSender,
 	)
@@ -250,9 +246,7 @@ func run() error {
 		MeEnricher:               wire.BillingMeEnricher(billingMod.Services.Subscriptions),
 		Tariffs:                  billingMod.Services.Tariffs,
 		Subscriptions:            billingMod.Services.Subscriptions,
-		PaymentMethods:           billingMod.Services.PaymentMethods,
-		Payments:                 billingMod.Services.Payments,
-		Webhooks:                 billingMod.Services.Webhooks,
+		ReadonlyGate:             billingMod.MutationGate,
 		Admin:                    adminMod.Service,
 		Properties:               propertiesMod.PropertyService,
 		PropertyContacts:         propertiesMod.PropertyContactService,
@@ -285,7 +279,6 @@ func run() error {
 		PhoneChangeVerifyLimiter: limiters.PhoneChangeVerifyLimiter,
 		ClientErrorsLimiter:      limiters.ClientErrorsLimiter,
 		DBPoolStats:              poolStats,
-		DevMode:                  p.Cfg.AppEnv == "local" && p.Cfg.PaymentProvider == "fake",
 		TrustedProxies:           p.Cfg.TrustedProxies,
 		AppVersion:               p.Cfg.AppVersion,
 	})

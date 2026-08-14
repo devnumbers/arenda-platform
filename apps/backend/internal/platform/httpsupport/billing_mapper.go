@@ -19,8 +19,8 @@ func SubscriptionResponse(view billingapp.SubscriptionView) openapi.Subscription
 		AutoRenewEnabled: sub.AutoRenewEnabled,
 		PendingChangeAt:  sub.PendingChangeAt,
 	}
-	if view.CurrentPeriod != nil {
-		period := openapi.AdminSubscriptionPaymentPeriod(*view.CurrentPeriod)
+	if sub.CurrentPeriod != nil {
+		period := openapi.AdminSubscriptionPaymentPeriod(*sub.CurrentPeriod)
 		resp.CurrentPeriod = &period
 	}
 	if view.PendingTariff != nil {
@@ -30,9 +30,6 @@ func SubscriptionResponse(view billingapp.SubscriptionView) openapi.Subscription
 	if sub.PendingPeriod != nil {
 		period := openapi.AdminSubscriptionPaymentPeriod(*sub.PendingPeriod)
 		resp.PendingPeriod = &period
-	}
-	if view.ActivePaymentMethod != nil {
-		resp.ActivePaymentMethod = PaymentMethodResponse(*view.ActivePaymentMethod)
 	}
 	return resp
 }
@@ -45,18 +42,5 @@ func TariffResponse(t domain.Tariff) openapi.Tariff {
 		ActivePropertyLimit: t.ActivePropertyLimit,
 		MonthlyPriceKopecks: int(t.MonthlyPriceKopecks),
 		YearlyPriceKopecks:  int(t.YearlyPriceKopecks),
-	}
-}
-
-// PaymentMethodResponse maps a billing PaymentMethod domain value to the
-// OpenAPI PaymentMethod DTO pointer. Exported so the billing and identity HTTP
-// adapters share a single mapper.
-func PaymentMethodResponse(pm domain.PaymentMethod) *openapi.PaymentMethod {
-	return &openapi.PaymentMethod{
-		Id:          pm.ID,
-		Provider:    string(pm.Provider),
-		DisplayMask: pm.DisplayMask,
-		IsActive:    pm.IsActive,
-		CreatedAt:   pm.CreatedAt,
 	}
 }

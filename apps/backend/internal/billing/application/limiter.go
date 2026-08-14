@@ -5,18 +5,22 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// SubscriptionPropertyLimiter computes the active property limit from the
-// user's subscription and tariff. It implements PropertyLimiter.
+// SubscriptionPropertyLimiter computes the active-property limit from the
+// user's subscription and tariff. It is a read-path helper consumed by the
+// properties and access contexts through their bridge adapters; it owns no use
+// case and therefore no transaction of its own — WithTx binds it to the
+// caller's transaction when the caller needs the row lock.
 type SubscriptionPropertyLimiter struct {
 	subscriptions SubscriptionRepository
 	tariffs       TariffRepository
+	clock         clock.Clock
 	// lock, when set by WithTx, makes ActivePropertyLimit read the subscription
 	// with SELECT ... FOR UPDATE so concurrent property-limit checks serialize
 	// on the subscription row instead of racing past the limit.
@@ -24,14 +28,17 @@ type SubscriptionPropertyLimiter struct {
 }
 
 // NewSubscriptionPropertyLimiter creates a new limiter.
-func NewSubscriptionPropertyLimiter(subscriptions SubscriptionRepository, tariffs TariffRepository) *SubscriptionPropertyLimiter {
-	return &SubscriptionPropertyLimiter{subscriptions: subscriptions, tariffs: tariffs}
+func NewSubscriptionPropertyLimiter(subscriptions SubscriptionRepository, tariffs TariffRepository, clk clock.Clock) *SubscriptionPropertyLimiter {
+	if clk == nil {
+		clk = clock.Real{}
+	}
+	return &SubscriptionPropertyLimiter{subscriptions: subscriptions, tariffs: tariffs, clock: clk}
 }
 
 // WithTx returns a limiter bound to the provided transaction. The returned
 // limiter reads the subscription with a row lock, serializing concurrent limit
 // checks so two racing CreateProperty/UnarchiveProperty calls cannot both pass.
-func (l *SubscriptionPropertyLimiter) WithTx(tx transaction.Tx) (PropertyLimiter, error) {
+func (l *SubscriptionPropertyLimiter) WithTx(tx transaction.Tx) (*SubscriptionPropertyLimiter, error) {
 	subRepo, err := l.subscriptions.WithTx(tx)
 	if err != nil {
 		return nil, fmt.Errorf("bind subscription limiter transaction: %w", err)
@@ -40,7 +47,7 @@ func (l *SubscriptionPropertyLimiter) WithTx(tx transaction.Tx) (PropertyLimiter
 	if err != nil {
 		return nil, fmt.Errorf("bind tariff limiter transaction: %w", err)
 	}
-	return &SubscriptionPropertyLimiter{subscriptions: subRepo, tariffs: tariffRepo, lock: true}, nil
+	return &SubscriptionPropertyLimiter{subscriptions: subRepo, tariffs: tariffRepo, clock: l.clock, lock: true}, nil
 }
 
 // ActivePropertyLimit returns the limit for the user. If the user has no paid
@@ -66,7 +73,7 @@ func (l *SubscriptionPropertyLimiter) ActivePropertyLimit(ctx context.Context, u
 	if sub.Status != domain.SubscriptionStatusActive && sub.Status != domain.SubscriptionStatusGrace {
 		// ADR 0008: cancelled subscriptions keep the paid tariff limit until
 		// valid_until; after that (or without it) mutations are blocked.
-		if sub.Status != domain.SubscriptionStatusCancelled || sub.ValidUntil == nil || !sub.ValidUntil.After(time.Now()) {
+		if sub.Status != domain.SubscriptionStatusCancelled || sub.ValidUntil == nil || !sub.ValidUntil.After(l.clock.Now()) {
 			return 0, nil
 		}
 	}
@@ -84,5 +91,3 @@ func (l *SubscriptionPropertyLimiter) ActivePropertyLimit(ctx context.Context, u
 	}
 	return tariff.ActivePropertyLimit, nil
 }
-
-var _ PropertyLimiter = (*SubscriptionPropertyLimiter)(nil)

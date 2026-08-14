@@ -14,7 +14,6 @@ import (
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	leaseshttp "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/http"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
@@ -40,11 +39,9 @@ type Deps struct {
 	Sessions                 httpsupport.SessionLoader
 	Audit                    auditapp.Recorder
 	MeEnricher               identityhttp.MeEnricher
-	Tariffs                  billingapp.Tariffer
-	Subscriptions            billingapp.Subscriber
-	PaymentMethods           billingapp.PaymentMethodManager
-	Payments                 billingapp.PaymentProcessor
-	Webhooks                 billingapp.WebhookHandler
+	Tariffs                  billinghttp.TariffLister
+	Subscriptions            billinghttp.SubscriptionViewer
+	ReadonlyGate             httpsupport.SubscriptionMutationChecker
 	Admin                    *adminapp.AdminService
 	Properties               *propertiesapp.PropertyService
 	PropertyContacts         *propertiesapp.PropertyContactService
@@ -77,7 +74,6 @@ type Deps struct {
 	PhoneChangeVerifyLimiter *httpsupport.RateLimiter
 	ClientErrorsLimiter      *httpsupport.RateLimiter
 	DBPoolStats              func() httpsupport.DBPoolSnapshot
-	DevMode                  bool
 	TrustedProxies           []string
 	AppVersion               string
 }
@@ -114,7 +110,7 @@ func New(deps Deps) http.Handler {
 	r.Use(clientErrorsBodyLimitMiddleware)
 	r.Use(securityHeaders(deps.CookieSecure))
 	r.Use(httpsupport.SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
-	r.Use(httpsupport.ReadonlyMiddleware(deps.Subscriptions, deps.Logger, deps.Clock))
+	r.Use(httpsupport.ReadonlyMiddleware(deps.ReadonlyGate, deps.Logger))
 
 	r.Get("/healthz", httpsupport.HealthHandler(deps.AppVersion))
 
@@ -149,7 +145,7 @@ func New(deps Deps) http.Handler {
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
-	subscriptionHandlers := billinghttp.NewSubscriptionHandlers(deps.Tariffs, deps.Subscriptions, deps.PaymentMethods, deps.Payments, deps.Webhooks, deps.Logger, deps.DevMode)
+	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.Subscriptions, deps.Logger)
 	financeHandlers := leaseshttp.NewFinanceHandlers(deps.Operations)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
@@ -167,7 +163,7 @@ func New(deps Deps) http.Handler {
 		NotificationPreferenceHandlers: notificationPreferenceHandlers,
 		PushSubscriptionHandlers:       pushSubscriptionHandlers,
 		PopupHandlers:                  popupHandlers,
-		SubscriptionHandlers:           subscriptionHandlers,
+		BillingHandlers:                billingHandlers,
 		FinanceHandlers:                financeHandlers,
 		AdminHandlers:                  adminHandlers,
 		CategoryHandlers:               categoryHandlers,
@@ -284,7 +280,7 @@ type composedHandler struct {
 	*notificationshttp.NotificationPreferenceHandlers
 	*notificationshttp.PushSubscriptionHandlers
 	*popupshttp.PopupHandlers
-	*billinghttp.SubscriptionHandlers
+	*billinghttp.BillingHandlers
 	*leaseshttp.FinanceHandlers
 	*adminhttp.AdminHandlers
 	*leaseshttp.CategoryHandlers

@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	billingdomain "github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
@@ -107,8 +106,6 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Арендатор с таким телефоном уже существует", true
 
 	// Billing / subscriptions.
-	case errors.Is(err, billingdomain.ErrInvalidAmount):
-		return "Сумма должна быть больше нуля", true
 	case errors.Is(err, billingdomain.ErrInvalidPeriod):
 		return "Период должен быть месяц или год", true
 	case errors.Is(err, billingdomain.ErrInvalidTariff):
@@ -119,16 +116,8 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Некорректная смена тарифа", true
 	case errors.Is(err, billingdomain.ErrInvalidSubscriptionState):
 		return "Некорректное состояние подписки", true
-	case errors.Is(err, billingdomain.ErrInvalidPaymentStatus):
-		return "Возврат платежа невозможен в текущем статусе", true
 	case errors.Is(err, billingdomain.ErrCannotEnableAutoRenew):
 		return "Нельзя включить автопродление без срока действия", true
-	case errors.Is(err, billingapp.ErrPaymentMethodInUse):
-		return "Способ оплаты используется", true
-	case errors.Is(err, billingapp.ErrPaymentMethodAlreadyExists):
-		return "Способ оплаты уже добавлен", true
-	case errors.Is(err, billingapp.ErrInvalidFilter):
-		return "Некорректный фильтр", true
 
 	// Admin.
 	case errors.Is(err, adminapp.ErrInvalidFilter):

@@ -17,7 +17,9 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// TariffRepository persists tariffs.
+// TariffRepository persists tariffs. Reads are served from an in-memory cache
+// with a TTL (tariffs change rarely and are read on every limit check and
+// listing).
 type TariffRepository struct {
 	db       postgres.DBTX
 	mu       sync.RWMutex
@@ -62,7 +64,7 @@ func (r *TariffRepository) WithTx(tx transaction.Tx) (application.TariffReposito
 	return NewTariffRepository(dbtx, r.ttl, r.clock), nil
 }
 
-// GetByID returns a tariff by ID.
+// GetByID returns a tariff by ID, active or hidden.
 func (r *TariffRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Tariff, error) {
 	if tariff, ok := r.cachedByID(id); ok {
 		return tariff, nil
@@ -80,7 +82,7 @@ func (r *TariffRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Ta
 	return tariff, nil
 }
 
-// GetByName returns a tariff by its unique name.
+// GetByName returns a tariff by its unique name, active or hidden.
 func (r *TariffRepository) GetByName(ctx context.Context, name domain.TariffName) (domain.Tariff, error) {
 	if tariff, ok := r.cachedByName(name); ok {
 		return tariff, nil
@@ -98,7 +100,7 @@ func (r *TariffRepository) GetByName(ctx context.Context, name domain.TariffName
 	return tariff, nil
 }
 
-// List returns all tariffs ordered by price.
+// List returns all active tariffs ordered by price.
 func (r *TariffRepository) List(ctx context.Context) ([]domain.Tariff, error) {
 	if list, ok := r.cachedList(); ok {
 		return list, nil
@@ -156,8 +158,9 @@ func (r *TariffRepository) store(tariff domain.Tariff) {
 	r.cachedAt = r.clock.Now()
 }
 
-// storeList caches a full tariff list in this repository instance, refreshes the
-// instance-level cachedAt timestamp, and also populates the by-ID/by-name maps.
+// storeList caches a full tariff list in this repository instance, refreshes
+// the instance-level cachedAt timestamp, and also populates the by-ID/by-name
+// maps.
 func (r *TariffRepository) storeList(list []domain.Tariff) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -176,6 +179,7 @@ func mapTariff(row postgres.Tariff) domain.Tariff {
 		ActivePropertyLimit: int(row.ActivePropertyLimit),
 		MonthlyPriceKopecks: row.MonthlyPriceKopecks,
 		YearlyPriceKopecks:  row.YearlyPriceKopecks,
+		IsActive:            row.IsActive,
 	}
 }
 

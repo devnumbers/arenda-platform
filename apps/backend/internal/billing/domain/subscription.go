@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
+// SubscriptionSource distinguishes owner-paid subscriptions from service
+// subscriptions assigned by an admin without payment.
 type SubscriptionSource string
 
 const (
@@ -15,6 +17,7 @@ const (
 	SubscriptionSourceService SubscriptionSource = "service"
 )
 
+// SubscriptionStatus is the ADR 0008 lifecycle state of a subscription.
 type SubscriptionStatus string
 
 const (
@@ -23,7 +26,13 @@ const (
 	SubscriptionStatusCancelled SubscriptionStatus = "cancelled"
 )
 
-const gracePeriod = 7 * 24 * time.Hour
+// SubscriptionPeriod is the billing period a subscription is paid for.
+type SubscriptionPeriod string
+
+const (
+	PeriodMonth SubscriptionPeriod = "month"
+	PeriodYear  SubscriptionPeriod = "year"
+)
 
 // ParseSubscriptionPeriod validates and converts a string to SubscriptionPeriod.
 func ParseSubscriptionPeriod(s string) (SubscriptionPeriod, error) {
@@ -54,10 +63,11 @@ type Subscription struct {
 	CurrentPeriod *SubscriptionPeriod
 }
 
-// NewOwnerSubscription creates a free basic subscription for a newly-registered owner.
-// Source is set to "paid" because the owner is on the paid-subscription track,
-// even though the initial basic tariff itself is free.
-func NewOwnerSubscription(userID, tariffID uuid.UUID) (Subscription, error) {
+// NewBasicSubscription creates the free basic subscription for a
+// newly-registered owner (issue #245 onboarding). Source is set to "paid"
+// because the owner is on the paid-subscription track, even though the initial
+// basic tariff itself is free: active, no expiry, auto-renew off.
+func NewBasicSubscription(userID, tariffID uuid.UUID) (Subscription, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return Subscription{}, err
@@ -347,16 +357,18 @@ func (s *Subscription) DowngradeToBasic(basicTariffID uuid.UUID) {
 }
 
 // EnterGrace moves the subscription into the grace period. The validity date is
-// extended to now+gracePeriod unless the subscription is already paid up beyond
-// that point, so an already-paid period is never shortened. Any pending
-// scheduled tariff change is dropped: it is considered consumed by the failed
-// charge that triggered grace, and re-scheduling after renewal is a fresh user
-// action. Clearing pending_change_at also keeps the
+// extended to now+grace unless the subscription is already paid up beyond that
+// point, so an already-paid period is never shortened. Any pending scheduled
+// tariff change is dropped: it is considered consumed by the failed charge that
+// triggered grace, and re-scheduling after renewal is a fresh user action.
+// Clearing pending_change_at also keeps the
 // user_subscriptions_pending_change_at_check constraint satisfied
 // (pending_change_at must be NULL or not earlier than valid_until).
-func (s *Subscription) EnterGrace(now time.Time) {
+// The grace duration is an operational parameter passed by the caller
+// (application Config, ADR 0008 default: 7 days).
+func (s *Subscription) EnterGrace(now time.Time, grace time.Duration) {
 	s.Status = SubscriptionStatusGrace
-	graceUntil := now.Add(gracePeriod)
+	graceUntil := now.Add(grace)
 	if s.ValidUntil == nil || graceUntil.After(*s.ValidUntil) {
 		s.ValidUntil = &graceUntil
 	}

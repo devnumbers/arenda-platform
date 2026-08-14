@@ -3,128 +3,82 @@ package wire
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
-	paymentfake "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/fake"
-	paymenttkassa "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/tkassa"
+	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
-	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
-	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 )
 
-// BillingRepos holds the billing module's repositories, onboarding service and
-// payment provider wired by WireBillingRepos. These are constructed early
-// (before the properties services) because the subscription limiter used by
-// PropertyService depends on the tariff and subscription repositories.
-type BillingRepos struct {
-	TariffRepo                *billingpg.TariffRepository
-	SubscriptionRepo          *billingpg.SubscriptionRepository
-	PaymentMethodRepo         *billingpg.PaymentMethodRepository
-	SubscriptionPaymentRepo   *billingpg.SubscriptionPaymentRepository
-	OnboardingService         *billingpg.OnboardingService
-	PaymentMethodInUseChecker *billingpg.PaymentMethodInUseChecker
-	PaymentProvider           billingapp.Provider
+// Billing holds the billing module's repositories and services wired by
+// WireBilling. It is constructed before the access and properties modules
+// because their subscription limiters consume the tariff and subscription
+// repositories. The payment provider returns with the provider-port ticket
+// (#248); until then the module has no provider-dependent code.
+type Billing struct {
+	TariffRepo       *billingpg.TariffRepository
+	SubscriptionRepo *billingpg.SubscriptionRepository
+	TransitionRepo   *billingpg.SubscriptionTransitionRepository
+	Services         billingapp.Services
+	// MutationGate adapts the subscription service to the readonly-gate port
+	// declared by platform/httpsupport (ADR 0035 consumer-side interface).
+	MutationGate httpsupport.SubscriptionMutationChecker
 }
 
-// WireBillingRepos constructs the billing repositories, the onboarding service,
-// selects the payment provider based on config and logs initialization. The
-// billing Services aggregate is built later (BuildBillingServices) once the
-// properties service (property archiver) is available.
-func WireBillingRepos(ctx context.Context, p platformDeps) (*BillingRepos, error) {
+// WireBilling constructs the billing repositories, the shared txStoreFactory
+// (ADR 0033 γ-factory) and every billing service of the rewritten core module
+// (issue #245): tariff and subscription views, registration onboarding, the
+// property limiter and the worker shells.
+func WireBilling(ctx context.Context, p platformDeps) (*Billing, error) {
 	tariffRepo := billingpg.NewTariffRepository(p.DB, p.Cfg.TariffCacheTTL, p.Clock)
 	subscriptionRepo := billingpg.NewSubscriptionRepository(p.DB)
-	onboardingService := billingpg.NewOnboardingService(tariffRepo, subscriptionRepo, platformpostgres.NewBeginner(p.Pool, p.Logger))
-	paymentMethodRepo := billingpg.NewPaymentMethodRepository(p.DB, p.Encryptor)
-	paymentMethodInUseChecker := billingpg.NewPaymentMethodInUseChecker(p.DB)
-	subscriptionPaymentRepo := billingpg.NewSubscriptionPaymentRepository(p.DB, p.Encryptor)
-	p.Logger.InfoContext(ctx, "billing repositories initialized",
-		"payment_methods", paymentMethodRepo != nil,
-		"subscription_payments", subscriptionPaymentRepo != nil)
+	transitionRepo := billingpg.NewSubscriptionTransitionRepository(p.DB)
 
-	var paymentProvider billingapp.Provider
-	paymentMetrics, err := payment.NewMetrics()
-	if err != nil {
-		return nil, fmt.Errorf("payment metrics: %w", err)
-	}
-	switch p.Cfg.PaymentProvider {
-	case "fake":
-		paymentProvider = paymentfake.NewProvider(p.Cfg.AppBaseURL, p.Logger, p.Clock, paymentMetrics)
-	case "tkassa":
-		paymentProvider = paymenttkassa.NewProvider(
-			p.Cfg.TKassaBaseURL,
-			p.Cfg.TKassaTerminalKey,
-			p.Cfg.TKassaPassword,
-			p.Cfg.TKassaTimeout,
-			p.Cfg.TKassaMaxRetries,
-			p.Cfg.TKassaRetryBaseDelay,
-			p.Cfg.TKassaRetryMaxDelay,
-			p.Logger,
-			paymentMetrics,
-		)
-	}
-	p.Logger.InfoContext(ctx, "payment provider initialized", "provider", p.Cfg.PaymentProvider, "initialized", paymentProvider != nil)
+	factory := billingapp.NewTxStoreFactory(
+		tariffRepo,
+		subscriptionRepo,
+		transitionRepo,
+		p.AuditRecorder,
+		p.UoW,
+	)
 
-	return &BillingRepos{
-		TariffRepo:                tariffRepo,
-		SubscriptionRepo:          subscriptionRepo,
-		PaymentMethodRepo:         paymentMethodRepo,
-		SubscriptionPaymentRepo:   subscriptionPaymentRepo,
-		OnboardingService:         onboardingService,
-		PaymentMethodInUseChecker: paymentMethodInUseChecker,
-		PaymentProvider:           paymentProvider,
+	services := billingapp.NewServices(factory, billingapp.ServicesConfig{
+		Config: billingapp.DefaultConfig(),
+		Clock:  p.Clock,
+		Logger: p.Logger,
+	})
+	p.Logger.InfoContext(ctx, "billing module initialized",
+		"tariff_cache_ttl", p.Cfg.TariffCacheTTL.String())
+
+	return &Billing{
+		TariffRepo:       tariffRepo,
+		SubscriptionRepo: subscriptionRepo,
+		TransitionRepo:   transitionRepo,
+		Services:         services,
+		MutationGate:     billinghttp.NewMutationGate(services.Subscriptions, p.Clock),
 	}, nil
 }
 
-// Billing holds the billing Services aggregate wired by BuildBillingServices.
-type Billing struct {
-	Services billingapp.Services
-}
-
-// BuildBillingServices constructs the billing Services aggregate from the
-// billing repos, the property service (property archiver) and the recipient
-// slot enforcer (access SlotCoordinator). It runs after the properties services
-// and the access module are built.
-func BuildBillingServices(
-	p platformDeps,
-	repos *BillingRepos,
-	propertyService *propertiesapp.PropertyService,
-	recipientSlotEnforcer billingapp.RecipientSlotEnforcer,
-) *Billing {
-	services := billingapp.NewServices(
-		repos.TariffRepo,
-		repos.SubscriptionRepo,
-		repos.PaymentMethodRepo,
-		repos.SubscriptionPaymentRepo,
-		repos.PaymentProvider,
-		platformpostgres.NewBeginner(p.Pool, p.Logger),
-		p.AuditRecorder,
-		p.Clock,
-		p.Logger,
-		p.Cfg.AppBaseURL,
-		propertyService,
-		recipientSlotEnforcer,
-		repos.OnboardingService,
-		repos.PaymentMethodInUseChecker,
-	)
-	return &Billing{Services: services}
+// subscriptionViewer is the billing port consumed by the /me enricher glue
+// below — the narrow slice of the subscription service it needs, declared at
+// the consumer per ADR 0035.
+type subscriptionViewer interface {
+	GetSubscription(ctx context.Context, userID uuid.UUID) (billingapp.SubscriptionView, error)
 }
 
 // BillingMeEnricher returns an identity MeEnricher that adds the current billing
 // subscription to a MeResponse. It is the composition-root glue between the
-// billing application layer (Subscriber) and the identity HTTP layer
-// (MeEnricher); keeping it here means identity does not import billing.
-func BillingMeEnricher(billing billingapp.Subscriber) identityhttp.MeEnricher {
+// billing application layer and the identity HTTP layer (MeEnricher); keeping
+// it here means identity does not import billing.
+func BillingMeEnricher(subscriptions subscriptionViewer) identityhttp.MeEnricher {
 	return func(ctx context.Context, userID uuid.UUID, resp *openapi.MeResponse) error {
-		if billing == nil {
+		if subscriptions == nil {
 			return nil
 		}
-		view, err := billing.GetSubscription(ctx, userID)
+		view, err := subscriptions.GetSubscription(ctx, userID)
 		if err != nil {
 			if errors.Is(err, billingapp.ErrSubscriptionNotFound) {
 				return nil
