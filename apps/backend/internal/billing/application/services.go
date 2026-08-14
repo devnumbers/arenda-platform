@@ -19,8 +19,9 @@ type Services struct {
 	// the properties and access contexts consume it through their bridge
 	// adapters (issue #245 reconnect).
 	Limiter *SubscriptionPropertyLimiter
-	// Workers reconnects the scheduler worker shells to the module (issue #245).
-	Workers Workers
+	// Workers drives the lifecycle phases of the scheduler worker shells
+	// (issues #245, #252).
+	Workers *Workers
 	// Config carries the module's operational parameters (issue #244).
 	Config Config
 }
@@ -47,14 +48,21 @@ func NewServices(factory txStoreFactory, cfg ServicesConfig) Services {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
+	payments := NewPaymentService(factory, cfg.Provider, PaymentServiceConfig{Clock: cfg.Clock, Log: cfg.Logger, Config: cfg.Config})
 	return Services{
 		Tariffs:        NewTariffService(factory),
 		Subscriptions:  NewSubscriptionService(factory, SubscriptionServiceConfig{Clock: cfg.Clock, Provider: cfg.Provider, Config: cfg.Config, Logger: cfg.Logger}),
-		Payments:       NewPaymentService(factory, cfg.Provider, PaymentServiceConfig{Clock: cfg.Clock, Log: cfg.Logger}),
+		Payments:       payments,
 		PaymentMethods: NewPaymentMethodService(factory, cfg.Provider, PaymentMethodServiceConfig{Config: cfg.Config, Clock: cfg.Clock, Log: cfg.Logger}),
 		Onboarding:     NewOnboardingService(factory, OnboardingServiceConfig{Logger: cfg.Logger}),
 		Limiter:        NewSubscriptionPropertyLimiter(factory.subscriptions, factory.tariffs, cfg.Clock),
-		Workers:        Workers{},
-		Config:         cfg.Config,
+		Workers: NewWorkers(factory, WorkersConfig{
+			Provider: cfg.Provider,
+			Payments: payments,
+			Clock:    cfg.Clock,
+			Config:   cfg.Config,
+			Logger:   cfg.Logger,
+		}),
+		Config: cfg.Config,
 	}
 }

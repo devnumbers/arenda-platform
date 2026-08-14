@@ -1,0 +1,78 @@
+package wire
+
+import (
+	"context"
+
+	"github.com/google/uuid"
+	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
+	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
+	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+)
+
+// Composition-root glue between the billing worker phases and the properties
+// and access contexts (issue #252): the expiry and downgrade phases consume
+// the consumer-side bridge ports the billing application declares (ADR 0035),
+// and these adapters — the only place both sides meet — fit the real services
+// to them. Keeping the glue here means the billing application never imports
+// properties or access.
+
+// propertyArchiverSource adapts the properties service to the billing
+// archiver source.
+type propertyArchiverSource struct {
+	svc *propertiesapp.PropertyService
+}
+
+// NewPropertyArchiverSource wraps the properties service as the billing
+// worker's excess-property archiver source.
+func NewPropertyArchiverSource(svc *propertiesapp.PropertyService) billingapp.ExcessPropertyArchiverSource {
+	return propertyArchiverSource{svc: svc}
+}
+
+// WithTx binds the archiver to the worker phase's transaction, so archiving
+// lands in the same commit as the subscription change.
+func (s propertyArchiverSource) WithTx(tx transaction.Tx) (billingapp.ExcessPropertyArchiver, error) {
+	return propertyArchiver{svc: s.svc, tx: tx}, nil
+}
+
+// propertyArchiver runs the properties context's archiver on the bound
+// transaction: active properties beyond the limit are archived (their open
+// leases force-completed), keeping the newest.
+type propertyArchiver struct {
+	svc *propertiesapp.PropertyService
+	tx  transaction.Tx
+}
+
+// ArchiveExcess archives the owner's active properties beyond the limit.
+func (a propertyArchiver) ArchiveExcess(ctx context.Context, ownerID uuid.UUID, limit int) error {
+	return a.svc.ArchiveExcessProperties(ctx, a.tx, ownerID, limit)
+}
+
+// recipientSlotSource adapts the access SlotCoordinator to the billing
+// enforcer source.
+type recipientSlotSource struct {
+	coordinator *accessapp.SlotCoordinator
+}
+
+// NewRecipientSlotSource wraps the access SlotCoordinator as the billing
+// worker's recipient-slot enforcer source.
+func NewRecipientSlotSource(coordinator *accessapp.SlotCoordinator) billingapp.RecipientSlotEnforcerSource {
+	return recipientSlotSource{coordinator: coordinator}
+}
+
+// WithTx binds the enforcer to the worker phase's transaction.
+func (s recipientSlotSource) WithTx(tx transaction.Tx) (billingapp.RecipientSlotEnforcer, error) {
+	return recipientSlotEnforcer{coordinator: s.coordinator, tx: tx}, nil
+}
+
+// recipientSlotEnforcer suspends the excess shared memberships after a billing
+// limit drop on the bound transaction.
+type recipientSlotEnforcer struct {
+	coordinator *accessapp.SlotCoordinator
+	tx          transaction.Tx
+}
+
+// Enforce suspends the recipient's excess shared memberships.
+func (e recipientSlotEnforcer) Enforce(ctx context.Context, userID uuid.UUID, trigger string) error {
+	return e.coordinator.EnforceRecipientLimit(ctx, e.tx, userID, trigger)
+}

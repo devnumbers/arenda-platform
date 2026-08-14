@@ -195,15 +195,28 @@ func TestTransitionRepository_Integration_AppendOnly(t *testing.T) {
 	}
 }
 
-// TestWorkers_Integration_ShellIsNoOp proves the worker shell ticks without a
-// database and processes nothing (phases land with #252).
-func TestWorkers_Integration_ShellIsNoOp(t *testing.T) {
+// TestWorkers_Integration_EmptyDatabaseIsNoOp proves the worker phases tick
+// over an empty database without errors or side effects (the lifecycle
+// scenarios themselves live in workers_integration_test.go, issue #252).
+func TestWorkers_Integration_EmptyDatabaseIsNoOp(t *testing.T) {
 	h := newIntegrationHarness(t)
-	count, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now())
-	if err != nil {
-		t.Fatalf("ProcessRenewals() error = %v", err)
-	}
-	if count != 0 {
-		t.Errorf("ProcessRenewals() = %d, want 0", count)
+	for name, phase := range map[string]func() (int, error){
+		"ProcessScheduledChanges": func() (int, error) { return h.services.Workers.ProcessScheduledChanges(h.ctx(), h.clock.Now()) },
+		"ProcessRenewals":         func() (int, error) { return h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()) },
+		"ProcessPendingUpgradePayments": func() (int, error) {
+			return h.services.Workers.ProcessPendingUpgradePayments(h.ctx(), h.clock.Now())
+		},
+		"ProcessExpiredGrace": func() (int, error) { return h.services.Workers.ProcessExpiredGrace(h.ctx(), h.clock.Now()) },
+		"ReconcilePendingPayments": func() (int, error) {
+			return h.services.Workers.ReconcilePendingPayments(h.ctx(), h.clock.Now())
+		},
+	} {
+		count, err := phase()
+		if err != nil {
+			t.Fatalf("%s() error = %v", name, err)
+		}
+		if count != 0 {
+			t.Errorf("%s() = %d, want 0", name, count)
+		}
 	}
 }

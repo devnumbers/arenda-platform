@@ -24,14 +24,13 @@ import (
 // imports notifications.
 var _ notificationsapp.PropertyRecipientLister = (*accesspg.MemberRecipientAdapter)(nil)
 
-// Compile-time checks that the billing worker shells satisfy the scheduler's
-// consumer-side ports (ADR 0035). The phases are deliberate no-ops until the
-// lifecycle-worker ticket lands (issue #252); conformance is checked here, at
-// the wiring site.
+// Compile-time checks that the billing worker phases satisfy the scheduler's
+// consumer-side ports (ADR 0035). The phases are the issue #252 lifecycle
+// workers; conformance is checked here, at the wiring site.
 var (
-	_ scheduler.ScheduledChangeProcessor = billingapp.Workers{}
-	_ scheduler.RenewalProcessor         = billingapp.Workers{}
-	_ scheduler.PaymentReconciler        = billingapp.Workers{}
+	_ scheduler.ScheduledChangeProcessor = (*billingapp.Workers)(nil)
+	_ scheduler.RenewalProcessor         = (*billingapp.Workers)(nil)
+	_ scheduler.PaymentReconciler        = (*billingapp.Workers)(nil)
 )
 
 // Workers bundles the six background workers and exposes Wait (block until they
@@ -60,7 +59,7 @@ func NewWorkers(
 	codeRepo *identitypg.LoginCodeRepository,
 	attemptRepo *identitypg.AttemptRepository,
 	emailMailer mailer.Sender,
-	billingWorkers billingapp.Workers,
+	billingWorkers *billingapp.Workers,
 	pushSubRepo *notificationspg.PushSubscriptionRepository,
 	pushSender notificationsapp.PushSender,
 ) *Workers {

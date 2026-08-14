@@ -90,6 +90,83 @@ SELECT * FROM subscription_transitions
 WHERE subscription_id = $1
 ORDER BY created_at DESC, id DESC;
 
+-- Worker batch listings (issue #252, ADR 0008 lifecycle phases). Each listing
+-- is a plain selection; the processing transaction re-reads and locks the row
+-- by user id, so a concurrent mutation between listing and processing is
+-- re-checked under the lock and never applied twice. The partial indexes of
+-- migration 000104 back every filter below.
+
+-- name: ListSubscriptionsUpForRenewal :many
+SELECT * FROM user_subscriptions
+WHERE status = 'active'
+  AND auto_renew_enabled = true
+  AND valid_until IS NOT NULL
+  AND valid_until <= $1
+ORDER BY valid_until ASC, id ASC
+LIMIT $2;
+
+-- name: ListSubscriptionsInExpiredGrace :many
+SELECT * FROM user_subscriptions
+WHERE status = 'grace'
+  AND valid_until IS NOT NULL
+  AND valid_until <= $1
+ORDER BY valid_until ASC, id ASC
+LIMIT $2;
+
+-- name: ListExpiredNonRenewingSubscriptions :many
+SELECT * FROM user_subscriptions
+WHERE status = 'active'
+  AND auto_renew_enabled = false
+  AND valid_until IS NOT NULL
+  AND valid_until <= $1
+ORDER BY valid_until ASC, id ASC
+LIMIT $2;
+
+-- name: ListExpiredCancelledSubscriptions :many
+SELECT * FROM user_subscriptions
+WHERE status = 'cancelled'
+  AND valid_until IS NOT NULL
+  AND valid_until <= $1
+ORDER BY valid_until ASC, id ASC
+LIMIT $2;
+
+-- name: ListSubscriptionsWithPendingChange :many
+SELECT * FROM user_subscriptions
+WHERE status = 'active'
+  AND pending_tariff_id IS NOT NULL
+  AND pending_change_at IS NOT NULL
+  AND pending_change_at <= $1
+ORDER BY pending_change_at ASC, id ASC
+LIMIT $2;
+
+-- Reconciliation listings (issue #252): pending payments stale enough that a
+-- webhook is presumed lost. The provider reference is mandatory — without it
+-- there is nothing to query at the provider.
+
+-- name: ListStalePendingSubscriptionPayments :many
+SELECT * FROM subscription_payments
+WHERE status = 'pending'
+  AND provider_payment_id IS NOT NULL
+  AND provider_payment_id <> ''
+  AND created_at < $1
+ORDER BY created_at ASC, id ASC
+LIMIT $2;
+
+-- name: ListStalePendingUpgradeSubscriptionPayments :many
+-- Pending payments whose target tariff differs from the subscription's current
+-- one are the tariff-change payments of the ChangeTariff flow (upgrades and
+-- recovery upgrades): a lost webhook here leaves the paid change unapplied.
+SELECT sp.*
+FROM subscription_payments sp
+JOIN user_subscriptions us ON us.id = sp.subscription_id
+WHERE sp.status = 'pending'
+  AND sp.provider_payment_id IS NOT NULL
+  AND sp.provider_payment_id <> ''
+  AND sp.tariff_id != us.tariff_id
+  AND sp.created_at < $1
+ORDER BY sp.created_at ASC, sp.id ASC
+LIMIT $2;
+
 -- Subscription payments (issue #250). The partial unique index
 -- idx_subscription_payments_one_pending_upgrade (user_id, tariff_id, period)
 -- WHERE status = 'pending' is the durable idempotency backstop against double

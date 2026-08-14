@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -94,6 +95,33 @@ func (r *SubscriptionPaymentRepository) ListPendingByUserID(ctx context.Context,
 	rows, err := r.q().ListPendingSubscriptionPaymentsByUserID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
 	if err != nil {
 		return nil, fmt.Errorf("list pending subscription payments: %w", err)
+	}
+	return mapSubscriptionPayments(rows)
+}
+
+// ListStalePending returns a batch of pending payments with a provider
+// reference older than the threshold — the lost-webhook set of the
+// reconciliation worker (issue #252).
+func (r *SubscriptionPaymentRepository) ListStalePending(ctx context.Context, createdBefore time.Time, limit int) ([]domain.SubscriptionPayment, error) {
+	rows, err := r.q().ListStalePendingSubscriptionPayments(ctx, postgres.ListStalePendingSubscriptionPaymentsParams{
+		CreatedAt: pgtype.Timestamptz{Time: createdBefore, Valid: true},
+		Limit:     batchLimit(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list stale pending subscription payments: %w", err)
+	}
+	return mapSubscriptionPayments(rows)
+}
+
+// ListStalePendingUpgrades narrows the stale-pending set to payments whose
+// target tariff differs from the subscription's current one (issue #252).
+func (r *SubscriptionPaymentRepository) ListStalePendingUpgrades(ctx context.Context, createdBefore time.Time, limit int) ([]domain.SubscriptionPayment, error) {
+	rows, err := r.q().ListStalePendingUpgradeSubscriptionPayments(ctx, postgres.ListStalePendingUpgradeSubscriptionPaymentsParams{
+		CreatedAt: pgtype.Timestamptz{Time: createdBefore, Valid: true},
+		Limit:     batchLimit(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list stale pending upgrade subscription payments: %w", err)
 	}
 	return mapSubscriptionPayments(rows)
 }

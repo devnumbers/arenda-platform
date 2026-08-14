@@ -135,6 +135,16 @@ func (p *SubscriptionPayment) SaveProviderReference(providerPaymentID, paymentUR
 	return nil
 }
 
+// RecordChargeAttempt counts one charge attempt that ended with an unresolved
+// provider outcome (still pending or unexpected). The renewal worker caps
+// these via the configured ChargeAttemptLimit and then fails the payment with
+// grace entry, so a permanently unresolved charge cannot keep an expired
+// subscription active forever (issue #252). Outcomes the worker can resolve —
+// a definitive success or failure — never pass through here.
+func (p *SubscriptionPayment) RecordChargeAttempt() {
+	p.ChargeAttempts++
+}
+
 // MarkSucceeded finalizes a pending payment as succeeded.
 func (p *SubscriptionPayment) MarkSucceeded(now time.Time) error {
 	if p.Status != PaymentStatusPending {

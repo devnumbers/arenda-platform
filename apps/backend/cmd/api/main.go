@@ -128,6 +128,16 @@ func run() error {
 	// its former members (issue #162, T6).
 	propertiesMod.PropertyService.SetSharedMembersDeleteMailer(accessMod.PropertyDeleteMailer)
 
+	// Wire the billing worker's cross-context lifecycle bridges (issue #252):
+	// the expiry and downgrade phases archive excess properties (open leases
+	// force-completed) and suspend excess shared memberships in the same
+	// transaction as the subscription change. Billing is built before the
+	// properties and access modules, so the bridges land here.
+	billingMod.Services.Workers.SetLifecycleBridges(
+		wire.NewPropertyArchiverSource(propertiesMod.PropertyService),
+		wire.NewRecipientSlotSource(accessMod.SlotCoordinator),
+	)
+
 	// 9. Cross-module event subscribers: billing onboarding and default-category
 	//    seeding both react to user_registered. Kept here (not in wire) because
 	//    they reference types from identity, billing and leases.

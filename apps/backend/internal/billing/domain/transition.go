@@ -50,6 +50,20 @@ const (
 	// tariff, the period counted from the payment moment, auto-renew on. The
 	// transition carries the payment id that caused it.
 	TransitionReasonPaymentApplied TransitionReason = "payment_applied"
+	// TransitionReasonGraceEntered marks the grace entry after a failed renewal
+	// charge (issue #252, ADR 0008): no chargeable method, a method of a
+	// foreign provider, or a charge the provider declined.
+	TransitionReasonGraceEntered TransitionReason = "grace_entered"
+	// TransitionReasonScheduledChangeApplied marks a deferred tariff change the
+	// worker applied at the end of the paid period (issue #252): the free path
+	// of ADR 0008 §3 — no payment is involved.
+	TransitionReasonScheduledChangeApplied TransitionReason = "scheduled_change_applied"
+	// TransitionReasonExpired marks the worker's downgrade to the basic tariff
+	// after the paid time ran out (issue #252): an expired grace period, a
+	// non-renewing subscription that reached valid_until, or a cancelled
+	// subscription whose retained period ended — one reason, the from-side of
+	// the transition tells the paths apart.
+	TransitionReasonExpired TransitionReason = "expired"
 )
 
 // Transition is one immutable entry of the subscription transition log: the

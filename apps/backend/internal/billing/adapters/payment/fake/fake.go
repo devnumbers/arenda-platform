@@ -61,9 +61,12 @@ type Provider struct {
 	mu               sync.Mutex
 	pending          map[string]pendingEntry
 	confirmedAmounts map[string]int64
-	bindingStates    map[string]application.MethodBindingState
-	bindings         map[string]bindingEntry
-	metrics          *payment.Metrics
+	// charges counts completed charges by internal payment id — the probe
+	// tests use to prove a payment was charged exactly once.
+	charges       map[string]int
+	bindingStates map[string]application.MethodBindingState
+	bindings      map[string]bindingEntry
+	metrics       *payment.Metrics
 }
 
 // Compile-time assertions that Provider satisfies the aggregate provider port
@@ -96,6 +99,7 @@ func NewProvider(baseURL string, log *slog.Logger, clk clock.Clock, metrics *pay
 		clock:            clk,
 		pending:          make(map[string]pendingEntry),
 		confirmedAmounts: make(map[string]int64),
+		charges:          make(map[string]int),
 		bindingStates:    make(map[string]application.MethodBindingState),
 		bindings:         make(map[string]bindingEntry),
 		metrics:          metrics,
@@ -221,6 +225,10 @@ func (p *Provider) PaymentStatus(ctx context.Context, paymentID uuid.UUID, provi
 }
 
 // ChargePayment performs a merchant-initiated charge using a saved token.
+// The charge resolves the provider-side payment the way a bank provider's
+// recurring charge does: the outcome is final and PaymentStatus reports it, so
+// callers recover a crash between the charge and its local application by
+// re-reading the status instead of charging again.
 func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequest) (res application.ChargeResult, err error) {
 	start := time.Now()
 	defer func() {
@@ -242,6 +250,19 @@ func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequ
 
 	providerPaymentID := fakeProviderPaymentIDPrefix + uuid.Must(uuid.NewV7()).String()
 
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if entry, ok := p.pending[req.PaymentID.String()]; ok {
+		entry.event.Payment.ProviderPaymentID = providerPaymentID
+		if strings.HasPrefix(req.ChargeToken, fakeFailTokenPrefix) {
+			entry.event.Payment.Status = domain.PaymentStatusFailed
+		} else {
+			entry.event.Payment.Status = domain.PaymentStatusSucceeded
+		}
+		p.pending[req.PaymentID.String()] = entry
+	}
+
 	if strings.HasPrefix(req.ChargeToken, fakeFailTokenPrefix) {
 		log.InfoContext(ctx, "fake charge failed",
 			"provider_payment_id", providerPaymentID,
@@ -258,13 +279,21 @@ func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequ
 		"provider_payment_id", providerPaymentID,
 		"internal_payment_id", req.PaymentID.String(),
 	)
-	p.mu.Lock()
 	p.confirmedAmounts[providerPaymentID] = req.AmountKopecks
-	p.mu.Unlock()
+	p.confirmedAmounts[req.PaymentID.String()] = req.AmountKopecks
+	p.charges[req.PaymentID.String()]++
 	return application.ChargeResult{
 		ProviderPaymentID: providerPaymentID,
 		Status:            domain.PaymentStatusSucceeded,
 	}, nil
+}
+
+// ChargeCount reports how many charges completed for the internal payment id
+// — the double-charge probe of tests and local debugging.
+func (p *Provider) ChargeCount(internalPaymentID uuid.UUID) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.charges[internalPaymentID.String()]
 }
 
 // BindPaymentMethod starts a card-binding session: the "bank form" is the

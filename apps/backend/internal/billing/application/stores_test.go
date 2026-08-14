@@ -162,6 +162,74 @@ func (r *fakeSubscriptionRepo) GetByUserIDForUpdate(ctx context.Context, userID 
 	return r.GetByUserID(ctx, userID)
 }
 
+// ListUpForRenewal mirrors the worker listing: active auto-renewing
+// subscriptions whose paid period has ended, oldest first.
+func (r *fakeSubscriptionRepo) ListUpForRenewal(_ context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
+	return r.listWorkerBatch(limit, func(s domain.Subscription) bool {
+		return s.Status == domain.SubscriptionStatusActive && s.AutoRenewEnabled &&
+			s.ValidUntil != nil && !s.ValidUntil.After(now)
+	}, func(s domain.Subscription) time.Time { return *s.ValidUntil }), nil
+}
+
+// ListInExpiredGrace mirrors the worker listing: grace subscriptions whose
+// window has ended.
+func (r *fakeSubscriptionRepo) ListInExpiredGrace(_ context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
+	return r.listWorkerBatch(limit, func(s domain.Subscription) bool {
+		return s.Status == domain.SubscriptionStatusGrace &&
+			s.ValidUntil != nil && !s.ValidUntil.After(now)
+	}, func(s domain.Subscription) time.Time { return *s.ValidUntil }), nil
+}
+
+// ListExpiredNonRenewing mirrors the worker listing: active subscriptions with
+// auto-renew off whose retained period has ended.
+func (r *fakeSubscriptionRepo) ListExpiredNonRenewing(_ context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
+	return r.listWorkerBatch(limit, func(s domain.Subscription) bool {
+		return s.Status == domain.SubscriptionStatusActive && !s.AutoRenewEnabled &&
+			s.ValidUntil != nil && !s.ValidUntil.After(now)
+	}, func(s domain.Subscription) time.Time { return *s.ValidUntil }), nil
+}
+
+// ListExpiredCancelled mirrors the worker listing: cancelled subscriptions
+// whose retained period has ended.
+func (r *fakeSubscriptionRepo) ListExpiredCancelled(_ context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
+	return r.listWorkerBatch(limit, func(s domain.Subscription) bool {
+		return s.Status == domain.SubscriptionStatusCancelled &&
+			s.ValidUntil != nil && !s.ValidUntil.After(now)
+	}, func(s domain.Subscription) time.Time { return *s.ValidUntil }), nil
+}
+
+// ListPendingChanges mirrors the worker listing: active subscriptions with a
+// deferred tariff change that is due.
+func (r *fakeSubscriptionRepo) ListPendingChanges(_ context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
+	return r.listWorkerBatch(limit, func(s domain.Subscription) bool {
+		return s.Status == domain.SubscriptionStatusActive && s.PendingTariffID != nil &&
+			s.PendingChangeAt != nil && !s.PendingChangeAt.After(now)
+	}, func(s domain.Subscription) time.Time { return *s.PendingChangeAt }), nil
+}
+
+// listWorkerBatch selects, orders by the phase key then id, and limits — the
+// shared shape of the worker listings.
+func (r *fakeSubscriptionRepo) listWorkerBatch(limit int, match func(domain.Subscription) bool, key func(domain.Subscription) time.Time) []domain.Subscription {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result := make([]domain.Subscription, 0)
+	for _, s := range r.subs {
+		if match(s) {
+			result = append(result, s)
+		}
+	}
+	slices.SortFunc(result, func(a, b domain.Subscription) int {
+		if c := key(a).Compare(key(b)); c != 0 {
+			return c
+		}
+		return bytes.Compare(a.ID[:], b.ID[:])
+	})
+	if len(result) > limit {
+		result = result[:limit]
+	}
+	return result
+}
+
 func (r *fakeSubscriptionRepo) Create(_ context.Context, sub domain.Subscription) (domain.Subscription, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -223,6 +291,9 @@ type fakePaymentRepo struct {
 	// decrements, simulating a lookup that misses right before a concurrent
 	// writer creates the conflicting pending payment.
 	hidePending int
+	// tariffOfSubscription resolves the user's current subscription tariff for
+	// ListStalePendingUpgrades; fakeStores wires it to the subscription fake.
+	tariffOfSubscription func(userID uuid.UUID) (uuid.UUID, bool)
 }
 
 func newFakePaymentRepo() *fakePaymentRepo {
@@ -299,6 +370,48 @@ func (r *fakePaymentRepo) Update(_ context.Context, payment domain.SubscriptionP
 	}
 	r.payments[payment.ID] = payment
 	return nil
+}
+
+// ListStalePending mirrors the reconciliation listing: pending payments with a
+// provider reference created before the threshold, oldest first.
+func (r *fakePaymentRepo) ListStalePending(_ context.Context, createdBefore time.Time, limit int) ([]domain.SubscriptionPayment, error) {
+	return r.listStalePending(createdBefore, limit, func(domain.SubscriptionPayment) bool { return true }), nil
+}
+
+// ListStalePendingUpgrades narrows the stale set to payments whose tariff
+// differs from the subscription's current one; fakeStores wires the
+// subscription tariff lookup.
+func (r *fakePaymentRepo) ListStalePendingUpgrades(_ context.Context, createdBefore time.Time, limit int) ([]domain.SubscriptionPayment, error) {
+	return r.listStalePending(createdBefore, limit, func(p domain.SubscriptionPayment) bool {
+		if r.tariffOfSubscription == nil {
+			return false
+		}
+		current, ok := r.tariffOfSubscription(p.UserID)
+		return ok && current != p.TariffID
+	}), nil
+}
+
+// listStalePending is the shared selection of both reconciliation listings.
+func (r *fakePaymentRepo) listStalePending(createdBefore time.Time, limit int, extra func(domain.SubscriptionPayment) bool) []domain.SubscriptionPayment {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result := make([]domain.SubscriptionPayment, 0)
+	for _, p := range r.payments {
+		if p.Status == domain.PaymentStatusPending && p.HasProviderReference() &&
+			p.CreatedAt.Before(createdBefore) && extra(p) {
+			result = append(result, p)
+		}
+	}
+	slices.SortFunc(result, func(a, b domain.SubscriptionPayment) int {
+		if c := a.CreatedAt.Compare(b.CreatedAt); c != 0 {
+			return c
+		}
+		return bytes.Compare(a.ID[:], b.ID[:])
+	})
+	if len(result) > limit {
+		result = result[:limit]
+	}
+	return result
 }
 
 func (r *fakePaymentRepo) WithTx(transaction.Tx) (SubscriptionPaymentRepository, error) {
@@ -487,11 +600,22 @@ type fakeStores struct {
 }
 
 func newFakeStores(tariffs ...domain.Tariff) *fakeStores {
+	subs := newFakeSubscriptionRepo()
+	payments := newFakePaymentRepo()
+	// The upgrade-reconciliation listing joins the subscription's current
+	// tariff in SQL; the fakes express the same join through this lookup.
+	payments.tariffOfSubscription = func(userID uuid.UUID) (uuid.UUID, bool) {
+		sub, err := subs.GetByUserID(context.Background(), userID)
+		if err != nil {
+			return uuid.Nil, false
+		}
+		return sub.TariffID, true
+	}
 	return &fakeStores{
 		tariffs:       newFakeTariffRepo(tariffs...),
-		subscriptions: newFakeSubscriptionRepo(),
+		subscriptions: subs,
 		transitions:   newFakeTransitionRepo(),
-		payments:      newFakePaymentRepo(),
+		payments:      payments,
 		methods:       newFakePaymentMethodRepo(),
 		bindings:      newFakeBindingRepo(),
 		beginner:      &fakeBeginner{},

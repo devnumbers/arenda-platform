@@ -23,6 +23,43 @@ type txStores struct {
 	methods       PaymentMethodRepository
 	bindings      CardBindingSessionRepository
 	audit         auditapp.Recorder
+	// archiver and slots are the cross-context lifecycle bridges (issue #252),
+	// bound to the transaction by runLifecycleTx when the worker phases were
+	// wired with them; nil keeps the helpers below no-ops.
+	archiver ExcessPropertyArchiver
+	slots    RecipientSlotEnforcer
+}
+
+// archiveExcessProperties archives the owner's active properties beyond the
+// limit (open leases force-completed by the implementation) inside the current
+// transaction. Without a wired bridge it is a no-op: the subscription-side
+// phase still applies, only the excess properties wait (issue #252).
+func (s *txStores) archiveExcessProperties(ctx context.Context, ownerID uuid.UUID, limit int) error {
+	if s.archiver == nil {
+		return nil
+	}
+	return s.archiver.ArchiveExcess(ctx, ownerID, limit)
+}
+
+// enforceRecipientSlots suspends the excess shared memberships after a billing
+// limit drop. Without a wired bridge it is a no-op.
+func (s *txStores) enforceRecipientSlots(ctx context.Context, userID uuid.UUID, trigger string) error {
+	if s.slots == nil {
+		return nil
+	}
+	return s.slots.Enforce(ctx, userID, trigger)
+}
+
+// enforceTariffLimit is the shared tail of every worker phase that lowers a
+// tariff limit: the owner's excess active properties are archived (open leases
+// force-completed) and the affected recipients' excess shared memberships
+// suspended, inside the caller's transaction so a bridge failure rolls the
+// whole phase back (issue #252).
+func (s *txStores) enforceTariffLimit(ctx context.Context, ownerID uuid.UUID, limit int, trigger string) error {
+	if err := s.archiveExcessProperties(ctx, ownerID, limit); err != nil {
+		return err
+	}
+	return s.enforceRecipientSlots(ctx, ownerID, trigger)
 }
 
 // subscriptionForUpdate loads the user's subscription under the row lock and
@@ -127,52 +164,93 @@ func NewTxStoreFactory(
 // back otherwise; a panic in work rolls back and re-panics (see
 // transaction.UoW).
 //
-// WithTx errors are wrapped so a repository that fails to bind aborts the
-// transaction with a clear cause rather than a silent fallthrough. audit is
-// bound last: its WithTx is infallible (auditapp.Recorder.WithTx returns no
-// error), so it cannot mask a prior repository-bind failure.
-//
 // runInTx returns an error if the factory's UoW was not configured — a service
 // without a UoW has no business calling it. This keeps the call sites free of
 // nil checks while making a wiring mistake loud and immediate.
 func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error) error {
+	return f.runInTxWithBridges(ctx, nil, nil, work)
+}
+
+// runInTxWithBridges is runInTx extended with the optional cross-context
+// lifecycle bridges: the worker phases that change a tariff limit run the
+// subscription change, the excess-property archiving and the recipient-slot
+// enforcement in one transaction, so a bridge failure rolls the whole phase
+// back and the next tick retries it (issue #252).
+func (f *txStoreFactory) runInTxWithBridges(
+	ctx context.Context,
+	archiver ExcessPropertyArchiverSource,
+	slots RecipientSlotEnforcerSource,
+	work func(*txStores) error,
+) error {
 	if f.uow == nil {
 		return errors.New("billing runInTx: Unit-of-Work is not configured")
 	}
 	return f.uow.Do(ctx, func(tx transaction.Tx) error {
-		tariffs, err := f.tariffs.WithTx(tx)
+		stores, err := f.buildTxStores(tx, archiver, slots)
 		if err != nil {
-			return fmt.Errorf("bind tariff repository to tx: %w", err)
-		}
-		subscriptions, err := f.subscriptions.WithTx(tx)
-		if err != nil {
-			return fmt.Errorf("bind subscription repository to tx: %w", err)
-		}
-		transitions, err := f.transitions.WithTx(tx)
-		if err != nil {
-			return fmt.Errorf("bind transition repository to tx: %w", err)
-		}
-		payments, err := f.payments.WithTx(tx)
-		if err != nil {
-			return fmt.Errorf("bind payment repository to tx: %w", err)
-		}
-		methods, err := f.methods.WithTx(tx)
-		if err != nil {
-			return fmt.Errorf("bind payment-method repository to tx: %w", err)
-		}
-		bindings, err := f.bindings.WithTx(tx)
-		if err != nil {
-			return fmt.Errorf("bind card-binding repository to tx: %w", err)
-		}
-		stores := &txStores{
-			tariffs:       tariffs,
-			subscriptions: subscriptions,
-			transitions:   transitions,
-			payments:      payments,
-			methods:       methods,
-			bindings:      bindings,
-			audit:         f.audit.WithTx(tx),
+			return err
 		}
 		return work(stores)
 	})
+}
+
+// buildTxStores binds every billing repository and the audit recorder to the
+// transaction, plus the lifecycle bridges when their sources are given. WithTx
+// errors are wrapped so a repository that fails to bind aborts the transaction
+// with a clear cause rather than a silent fallthrough. audit is bound last:
+// its WithTx is infallible (auditapp.Recorder.WithTx returns no error), so it
+// cannot mask a prior repository-bind failure.
+func (f *txStoreFactory) buildTxStores(
+	tx transaction.Tx,
+	archiver ExcessPropertyArchiverSource,
+	slots RecipientSlotEnforcerSource,
+) (*txStores, error) {
+	tariffs, err := f.tariffs.WithTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("bind tariff repository to tx: %w", err)
+	}
+	subscriptions, err := f.subscriptions.WithTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("bind subscription repository to tx: %w", err)
+	}
+	transitions, err := f.transitions.WithTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("bind transition repository to tx: %w", err)
+	}
+	payments, err := f.payments.WithTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("bind payment repository to tx: %w", err)
+	}
+	methods, err := f.methods.WithTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("bind payment-method repository to tx: %w", err)
+	}
+	bindings, err := f.bindings.WithTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("bind card-binding repository to tx: %w", err)
+	}
+	stores := &txStores{
+		tariffs:       tariffs,
+		subscriptions: subscriptions,
+		transitions:   transitions,
+		payments:      payments,
+		methods:       methods,
+		bindings:      bindings,
+		audit:         f.audit.WithTx(tx),
+	}
+	if archiver != nil {
+		bound, err := archiver.WithTx(tx)
+		if err != nil {
+			return nil, fmt.Errorf("bind property archiver to tx: %w", err)
+		}
+		stores.archiver = bound
+	}
+	if slots != nil {
+		bound, err := slots.WithTx(tx)
+		if err != nil {
+			return nil, fmt.Errorf("bind recipient-slot enforcer to tx: %w", err)
+		}
+		stores.slots = bound
+	}
+	return stores, nil
 }

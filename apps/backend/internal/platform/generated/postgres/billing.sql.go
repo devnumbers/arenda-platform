@@ -650,6 +650,107 @@ func (q *Queries) ListAllTariffs(ctx context.Context) ([]Tariff, error) {
 	return items, nil
 }
 
+const listExpiredCancelledSubscriptions = `-- name: ListExpiredCancelledSubscriptions :many
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions
+WHERE status = 'cancelled'
+  AND valid_until IS NOT NULL
+  AND valid_until <= $1
+ORDER BY valid_until ASC, id ASC
+LIMIT $2
+`
+
+type ListExpiredCancelledSubscriptionsParams struct {
+	ValidUntil pgtype.Timestamptz `json:"valid_until"`
+	Limit      int32              `json:"limit"`
+}
+
+func (q *Queries) ListExpiredCancelledSubscriptions(ctx context.Context, arg ListExpiredCancelledSubscriptionsParams) ([]UserSubscription, error) {
+	rows, err := q.db.Query(ctx, listExpiredCancelledSubscriptions, arg.ValidUntil, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserSubscription{}
+	for rows.Next() {
+		var i UserSubscription
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TariffID,
+			&i.Source,
+			&i.Status,
+			&i.ValidUntil,
+			&i.AutoRenewEnabled,
+			&i.PendingTariffID,
+			&i.PendingChangeAt,
+			&i.PendingPeriod,
+			&i.ActivePaymentMethodID,
+			&i.LastAppliedPaymentID,
+			&i.CurrentPeriod,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExpiredNonRenewingSubscriptions = `-- name: ListExpiredNonRenewingSubscriptions :many
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions
+WHERE status = 'active'
+  AND auto_renew_enabled = false
+  AND valid_until IS NOT NULL
+  AND valid_until <= $1
+ORDER BY valid_until ASC, id ASC
+LIMIT $2
+`
+
+type ListExpiredNonRenewingSubscriptionsParams struct {
+	ValidUntil pgtype.Timestamptz `json:"valid_until"`
+	Limit      int32              `json:"limit"`
+}
+
+func (q *Queries) ListExpiredNonRenewingSubscriptions(ctx context.Context, arg ListExpiredNonRenewingSubscriptionsParams) ([]UserSubscription, error) {
+	rows, err := q.db.Query(ctx, listExpiredNonRenewingSubscriptions, arg.ValidUntil, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserSubscription{}
+	for rows.Next() {
+		var i UserSubscription
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TariffID,
+			&i.Source,
+			&i.Status,
+			&i.ValidUntil,
+			&i.AutoRenewEnabled,
+			&i.PendingTariffID,
+			&i.PendingChangeAt,
+			&i.PendingPeriod,
+			&i.ActivePaymentMethodID,
+			&i.LastAppliedPaymentID,
+			&i.CurrentPeriod,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOpenCardBindingSessionsByUserID = `-- name: ListOpenCardBindingSessionsByUserID :many
 SELECT id, user_id, provider, request_key, status, expires_at, created_at, updated_at FROM card_binding_sessions
 WHERE user_id = $1 AND status = 'new'
@@ -812,6 +913,122 @@ func (q *Queries) ListRecentSubscriptionPaymentsAdmin(ctx context.Context) ([]Li
 	return items, nil
 }
 
+const listStalePendingSubscriptionPayments = `-- name: ListStalePendingSubscriptionPayments :many
+
+SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, payment_url, status, refunded_amount_kopecks, charge_attempts, error_code, created_at, updated_at, succeeded_at FROM subscription_payments
+WHERE status = 'pending'
+  AND provider_payment_id IS NOT NULL
+  AND provider_payment_id <> ''
+  AND created_at < $1
+ORDER BY created_at ASC, id ASC
+LIMIT $2
+`
+
+type ListStalePendingSubscriptionPaymentsParams struct {
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Limit     int32              `json:"limit"`
+}
+
+// Reconciliation listings (issue #252): pending payments stale enough that a
+// webhook is presumed lost. The provider reference is mandatory — without it
+// there is nothing to query at the provider.
+func (q *Queries) ListStalePendingSubscriptionPayments(ctx context.Context, arg ListStalePendingSubscriptionPaymentsParams) ([]SubscriptionPayment, error) {
+	rows, err := q.db.Query(ctx, listStalePendingSubscriptionPayments, arg.CreatedAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SubscriptionPayment{}
+	for rows.Next() {
+		var i SubscriptionPayment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.SubscriptionID,
+			&i.TariffID,
+			&i.PaymentMethodID,
+			&i.Period,
+			&i.AmountKopecks,
+			&i.Provider,
+			&i.ProviderPaymentID,
+			&i.PaymentUrl,
+			&i.Status,
+			&i.RefundedAmountKopecks,
+			&i.ChargeAttempts,
+			&i.ErrorCode,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SucceededAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStalePendingUpgradeSubscriptionPayments = `-- name: ListStalePendingUpgradeSubscriptionPayments :many
+SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id, sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.payment_url, sp.status, sp.refunded_amount_kopecks, sp.charge_attempts, sp.error_code, sp.created_at, sp.updated_at, sp.succeeded_at
+FROM subscription_payments sp
+JOIN user_subscriptions us ON us.id = sp.subscription_id
+WHERE sp.status = 'pending'
+  AND sp.provider_payment_id IS NOT NULL
+  AND sp.provider_payment_id <> ''
+  AND sp.tariff_id != us.tariff_id
+  AND sp.created_at < $1
+ORDER BY sp.created_at ASC, sp.id ASC
+LIMIT $2
+`
+
+type ListStalePendingUpgradeSubscriptionPaymentsParams struct {
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Limit     int32              `json:"limit"`
+}
+
+// Pending payments whose target tariff differs from the subscription's current
+// one are the tariff-change payments of the ChangeTariff flow (upgrades and
+// recovery upgrades): a lost webhook here leaves the paid change unapplied.
+func (q *Queries) ListStalePendingUpgradeSubscriptionPayments(ctx context.Context, arg ListStalePendingUpgradeSubscriptionPaymentsParams) ([]SubscriptionPayment, error) {
+	rows, err := q.db.Query(ctx, listStalePendingUpgradeSubscriptionPayments, arg.CreatedAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SubscriptionPayment{}
+	for rows.Next() {
+		var i SubscriptionPayment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.SubscriptionID,
+			&i.TariffID,
+			&i.PaymentMethodID,
+			&i.Period,
+			&i.AmountKopecks,
+			&i.Provider,
+			&i.ProviderPaymentID,
+			&i.PaymentUrl,
+			&i.Status,
+			&i.RefundedAmountKopecks,
+			&i.ChargeAttempts,
+			&i.ErrorCode,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SucceededAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSubscriptionPaymentsByUserID = `-- name: ListSubscriptionPaymentsByUserID :many
 SELECT id, user_id, subscription_id, tariff_id, payment_method_id, period, amount_kopecks, provider, provider_payment_id, payment_url, status, refunded_amount_kopecks, charge_attempts, error_code, created_at, updated_at, succeeded_at FROM subscription_payments
 WHERE user_id = $1
@@ -883,6 +1100,164 @@ func (q *Queries) ListSubscriptionTransitionsBySubscription(ctx context.Context,
 			&i.InitiatorID,
 			&i.PaymentID,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubscriptionsInExpiredGrace = `-- name: ListSubscriptionsInExpiredGrace :many
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions
+WHERE status = 'grace'
+  AND valid_until IS NOT NULL
+  AND valid_until <= $1
+ORDER BY valid_until ASC, id ASC
+LIMIT $2
+`
+
+type ListSubscriptionsInExpiredGraceParams struct {
+	ValidUntil pgtype.Timestamptz `json:"valid_until"`
+	Limit      int32              `json:"limit"`
+}
+
+func (q *Queries) ListSubscriptionsInExpiredGrace(ctx context.Context, arg ListSubscriptionsInExpiredGraceParams) ([]UserSubscription, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionsInExpiredGrace, arg.ValidUntil, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserSubscription{}
+	for rows.Next() {
+		var i UserSubscription
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TariffID,
+			&i.Source,
+			&i.Status,
+			&i.ValidUntil,
+			&i.AutoRenewEnabled,
+			&i.PendingTariffID,
+			&i.PendingChangeAt,
+			&i.PendingPeriod,
+			&i.ActivePaymentMethodID,
+			&i.LastAppliedPaymentID,
+			&i.CurrentPeriod,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubscriptionsUpForRenewal = `-- name: ListSubscriptionsUpForRenewal :many
+
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions
+WHERE status = 'active'
+  AND auto_renew_enabled = true
+  AND valid_until IS NOT NULL
+  AND valid_until <= $1
+ORDER BY valid_until ASC, id ASC
+LIMIT $2
+`
+
+type ListSubscriptionsUpForRenewalParams struct {
+	ValidUntil pgtype.Timestamptz `json:"valid_until"`
+	Limit      int32              `json:"limit"`
+}
+
+// Worker batch listings (issue #252, ADR 0008 lifecycle phases). Each listing
+// is a plain selection; the processing transaction re-reads and locks the row
+// by user id, so a concurrent mutation between listing and processing is
+// re-checked under the lock and never applied twice. The partial indexes of
+// migration 000104 back every filter below.
+func (q *Queries) ListSubscriptionsUpForRenewal(ctx context.Context, arg ListSubscriptionsUpForRenewalParams) ([]UserSubscription, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionsUpForRenewal, arg.ValidUntil, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserSubscription{}
+	for rows.Next() {
+		var i UserSubscription
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TariffID,
+			&i.Source,
+			&i.Status,
+			&i.ValidUntil,
+			&i.AutoRenewEnabled,
+			&i.PendingTariffID,
+			&i.PendingChangeAt,
+			&i.PendingPeriod,
+			&i.ActivePaymentMethodID,
+			&i.LastAppliedPaymentID,
+			&i.CurrentPeriod,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubscriptionsWithPendingChange = `-- name: ListSubscriptionsWithPendingChange :many
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions
+WHERE status = 'active'
+  AND pending_tariff_id IS NOT NULL
+  AND pending_change_at IS NOT NULL
+  AND pending_change_at <= $1
+ORDER BY pending_change_at ASC, id ASC
+LIMIT $2
+`
+
+type ListSubscriptionsWithPendingChangeParams struct {
+	PendingChangeAt pgtype.Timestamptz `json:"pending_change_at"`
+	Limit           int32              `json:"limit"`
+}
+
+func (q *Queries) ListSubscriptionsWithPendingChange(ctx context.Context, arg ListSubscriptionsWithPendingChangeParams) ([]UserSubscription, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionsWithPendingChange, arg.PendingChangeAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserSubscription{}
+	for rows.Next() {
+		var i UserSubscription
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TariffID,
+			&i.Source,
+			&i.Status,
+			&i.ValidUntil,
+			&i.AutoRenewEnabled,
+			&i.PendingTariffID,
+			&i.PendingChangeAt,
+			&i.PendingPeriod,
+			&i.ActivePaymentMethodID,
+			&i.LastAppliedPaymentID,
+			&i.CurrentPeriod,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

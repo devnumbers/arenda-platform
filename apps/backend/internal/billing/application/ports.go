@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
@@ -22,10 +23,27 @@ type TariffRepository interface {
 
 // SubscriptionRepository is the persistence port for subscriptions. The
 // ForUpdate variants acquire a row-level pessimistic lock and must only be
-// called inside a transaction.
+// called inside a transaction. The worker listings are plain selections; each
+// processing transaction re-reads and locks the row, so state checked between
+// listing and processing is never trusted blindly.
 type SubscriptionRepository interface {
 	GetByUserID(ctx context.Context, userID uuid.UUID) (domain.Subscription, error)
 	GetByUserIDForUpdate(ctx context.Context, userID uuid.UUID) (domain.Subscription, error)
+	// ListUpForRenewal returns a batch of active auto-renewing subscriptions
+	// whose paid period has ended (the renewal-charge selection, issue #252).
+	ListUpForRenewal(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error)
+	// ListInExpiredGrace returns a batch of grace subscriptions whose grace
+	// window has ended (the downgrade-to-basic selection, issue #252).
+	ListInExpiredGrace(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error)
+	// ListExpiredNonRenewing returns a batch of active subscriptions with
+	// auto-renew off whose retained period has ended (issue #252).
+	ListExpiredNonRenewing(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error)
+	// ListExpiredCancelled returns a batch of cancelled subscriptions whose
+	// retained period has ended (issue #252).
+	ListExpiredCancelled(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error)
+	// ListPendingChanges returns a batch of active subscriptions with a
+	// deferred tariff change that is due (issue #252).
+	ListPendingChanges(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error)
 	Create(ctx context.Context, sub domain.Subscription) (domain.Subscription, error)
 	Update(ctx context.Context, sub domain.Subscription) error
 	WithTx(tx transaction.Tx) (SubscriptionRepository, error)
@@ -51,6 +69,15 @@ type SubscriptionPaymentRepository interface {
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
 	ListPendingByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
+	// ListStalePending returns a batch of pending payments with a provider
+	// reference that have been pending longer than the reconciliation
+	// staleness — the lost-webhook set the reconciliation worker re-checks with
+	// the provider (issue #252).
+	ListStalePending(ctx context.Context, createdBefore time.Time, limit int) ([]domain.SubscriptionPayment, error)
+	// ListStalePendingUpgrades narrows the stale-pending set to payments whose
+	// target tariff differs from the subscription's current one — the
+	// tariff-change payments of the ChangeTariff flow (issue #252).
+	ListStalePendingUpgrades(ctx context.Context, createdBefore time.Time, limit int) ([]domain.SubscriptionPayment, error)
 	Update(ctx context.Context, payment domain.SubscriptionPayment) error
 	WithTx(tx transaction.Tx) (SubscriptionPaymentRepository, error)
 }

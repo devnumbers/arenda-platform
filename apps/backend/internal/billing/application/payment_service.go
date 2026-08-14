@@ -49,6 +49,7 @@ type PaymentService struct {
 	txStoreFactory
 	provider paymentFinalizerProvider
 	clock    clock.Clock
+	config   Config
 	log      *slog.Logger
 }
 
@@ -57,6 +58,9 @@ type PaymentService struct {
 type PaymentServiceConfig struct {
 	Clock clock.Clock
 	Log   *slog.Logger
+	// Config carries the operational parameters; the grace duration backs the
+	// grace entry of an asynchronously failed renewal charge (issue #252).
+	Config Config
 }
 
 // NewPaymentService creates a payment service over the shared factory.
@@ -67,10 +71,14 @@ func NewPaymentService(factory txStoreFactory, provider paymentFinalizerProvider
 	if cfg.Log == nil {
 		cfg.Log = slog.Default()
 	}
+	if cfg.Config == (Config{}) {
+		cfg.Config = DefaultConfig()
+	}
 	return &PaymentService{
 		txStoreFactory: factory,
 		provider:       provider,
 		clock:          cfg.Clock,
+		config:         cfg.Config,
 		log:            cfg.Log,
 	}
 }
@@ -318,6 +326,21 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 			if err := stores.payments.Update(ctx, payment); err != nil {
 				return fmt.Errorf("mark payment failed: %w", err)
 			}
+			// A merchant-initiated renewal charge (it carries the charged
+			// method) that the provider declined asynchronously enters grace:
+			// the user gets the window to fix the payment method, and the next
+			// worker tick does not simply charge a fresh payment forever
+			// (ADR 0008). A customer-initiated payment has no method — its
+			// failure leaves the subscription untouched.
+			if payment.PaymentMethodID != nil {
+				sub, err := stores.subscriptionForUpdate(ctx, payment.UserID)
+				if err != nil {
+					return err
+				}
+				if err := enterSubscriptionGrace(ctx, stores, sub, now, s.config.GraceDuration); err != nil {
+					return err
+				}
+			}
 			if err := stores.audit.Record(ctx, auditdomain.Entry{
 				ActorRole:  auditdomain.ActorRoleSystem,
 				Action:     auditdomain.ActionSubscriptionPaymentFailed,
@@ -356,7 +379,7 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 			if err := stores.payments.Update(ctx, payment); err != nil {
 				return fmt.Errorf("mark payment succeeded: %w", err)
 			}
-			if err := s.applySucceededPayment(ctx, stores, payment, now); err != nil {
+			if err := applySucceededPayment(ctx, stores, payment, now); err != nil {
 				return err
 			}
 			if err := stores.audit.Record(ctx, auditdomain.Entry{
@@ -381,9 +404,10 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 // the full price of the new plan with the period counted from the payment
 // moment and auto-renew on; a same-tariff payment is a renewal. The transition
 // log records the applied change with the payment that caused it. A payment
-// the subscription already reflects is a no-op, so duplicate deliveries and
-// reconciliations stay idempotent.
-func (s *PaymentService) applySucceededPayment(ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time) error {
+// the subscription already reflects is a no-op, so duplicate deliveries,
+// reconciliations and worker retries stay idempotent. Shared by the webhook
+// flow and the renewal worker (issue #252).
+func applySucceededPayment(ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time) error {
 	sub, err := stores.subscriptionForUpdate(ctx, payment.UserID)
 	if err != nil {
 		return err

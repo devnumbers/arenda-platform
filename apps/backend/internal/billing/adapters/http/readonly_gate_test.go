@@ -47,6 +47,27 @@ func (r *gateSubscriptionRepo) GetByUserIDForUpdate(ctx context.Context, id uuid
 	return r.GetByUserID(ctx, id)
 }
 
+// The worker listings are unused by the gate; empty results satisfy the port.
+func (r *gateSubscriptionRepo) ListUpForRenewal(context.Context, time.Time, int) ([]domain.Subscription, error) {
+	return nil, nil
+}
+
+func (r *gateSubscriptionRepo) ListInExpiredGrace(context.Context, time.Time, int) ([]domain.Subscription, error) {
+	return nil, nil
+}
+
+func (r *gateSubscriptionRepo) ListExpiredNonRenewing(context.Context, time.Time, int) ([]domain.Subscription, error) {
+	return nil, nil
+}
+
+func (r *gateSubscriptionRepo) ListExpiredCancelled(context.Context, time.Time, int) ([]domain.Subscription, error) {
+	return nil, nil
+}
+
+func (r *gateSubscriptionRepo) ListPendingChanges(context.Context, time.Time, int) ([]domain.Subscription, error) {
+	return nil, nil
+}
+
 func (r *gateSubscriptionRepo) Create(_ context.Context, sub domain.Subscription) (domain.Subscription, error) {
 	return sub, nil
 }
@@ -90,6 +111,16 @@ func (r *gatePaymentRepo) ListByUserID(context.Context, uuid.UUID) ([]domain.Sub
 }
 
 func (r *gatePaymentRepo) ListPendingByUserID(context.Context, uuid.UUID) ([]domain.SubscriptionPayment, error) {
+	return nil, nil
+}
+
+// The reconciliation listings are unused by the gate; empty results satisfy
+// the port.
+func (r *gatePaymentRepo) ListStalePending(context.Context, time.Time, int) ([]domain.SubscriptionPayment, error) {
+	return nil, nil
+}
+
+func (r *gatePaymentRepo) ListStalePendingUpgrades(context.Context, time.Time, int) ([]domain.SubscriptionPayment, error) {
 	return nil, nil
 }
 
