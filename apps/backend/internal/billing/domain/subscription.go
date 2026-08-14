@@ -61,6 +61,10 @@ type Subscription struct {
 	// applied and cleared on downgrade to basic, so renewal resolution does not
 	// depend on the last succeeded payment.
 	CurrentPeriod *SubscriptionPeriod
+	// GraceRemindedAt records when the grace-expiry reminder worker last
+	// reminded this grace window (issue #253). Nil means the current window
+	// has not been reminded yet; entering a new grace window resets it.
+	GraceRemindedAt *time.Time
 }
 
 // NewBasicSubscription creates the free basic subscription for a
@@ -383,6 +387,16 @@ func (s *Subscription) EnterGrace(now time.Time, grace time.Duration) {
 		s.ValidUntil = &graceUntil
 	}
 	s.ClearPendingChange()
+	// A fresh window starts unreminded: the expiry reminder is due again even
+	// when a previous window was already reminded (issue #253).
+	s.GraceRemindedAt = nil
+}
+
+// MarkGraceReminded records that the grace-expiry reminder of the current
+// grace window was dispatched, so the reminder worker does not repeat it every
+// tick (issue #253).
+func (s *Subscription) MarkGraceReminded(now time.Time) {
+	s.GraceRemindedAt = &now
 }
 
 // addSubscriptionPeriod returns the time one subscription period after start.

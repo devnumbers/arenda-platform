@@ -62,6 +62,7 @@ const (
 	NotificationEventTypeLeaseRequiresAction NotificationEventType = "lease_requires_action"
 	NotificationEventTypeOperationOverdue    NotificationEventType = "operation_overdue"
 	NotificationEventTypeFreeReminder        NotificationEventType = "free_reminder"
+	NotificationEventTypeSubscriptionGrace   NotificationEventType = "subscription_grace"
 )
 
 func (e *NotificationEventType) Scan(src interface{}) error {
@@ -554,4 +555,5 @@ type UserSubscription struct {
 	CurrentPeriod         pgtype.Text        `json:"current_period"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	GraceRemindedAt       pgtype.Timestamptz `json:"grace_reminded_at"`
 }

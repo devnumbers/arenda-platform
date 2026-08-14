@@ -27,6 +27,11 @@ type Config struct {
 	// PendingPaymentStaleness is how long a pending payment may linger before
 	// the reconciliation worker asks the provider for its status.
 	PendingPaymentStaleness time.Duration
+	// GraceExpiryReminderBefore is how long before the end of a grace window
+	// the grace-expiry reminder is dispatched (issue #253). The reminder
+	// worker scans the half-open window [valid_until-before, valid_until):
+	// never earlier than the lead time, never after the window ends.
+	GraceExpiryReminderBefore time.Duration
 }
 
 // DefaultConfig returns the billing operational parameters with their
@@ -34,11 +39,12 @@ type Config struct {
 // module constants).
 func DefaultConfig() Config {
 	return Config{
-		GraceDuration:           7 * 24 * time.Hour,
-		PaymentFormTTL:          15 * time.Minute,
-		ChargeAttemptLimit:      3,
-		WorkerBatchSize:         100,
-		CardBindingTTL:          24 * time.Hour,
-		PendingPaymentStaleness: 5 * time.Minute,
+		GraceDuration:             7 * 24 * time.Hour,
+		PaymentFormTTL:            15 * time.Minute,
+		ChargeAttemptLimit:        3,
+		WorkerBatchSize:           100,
+		CardBindingTTL:            24 * time.Hour,
+		PendingPaymentStaleness:   5 * time.Minute,
+		GraceExpiryReminderBefore: 48 * time.Hour,
 	}
 }

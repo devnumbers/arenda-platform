@@ -24,11 +24,12 @@ type ScheduledChangeProcessor interface {
 }
 
 // RenewalProcessor drives the subscription lifecycle phases of the billing
-// worker: auto-renewal charges, pending upgrade payments and expired grace
-// handling (ADR 0008).
+// worker: auto-renewal charges, pending upgrade payments, grace-expiry
+// reminders and expired grace handling (ADR 0008).
 type RenewalProcessor interface {
 	ProcessRenewals(ctx context.Context, now time.Time) (int, error)
 	ProcessPendingUpgradePayments(ctx context.Context, now time.Time) (int, error)
+	ProcessGraceExpiryReminders(ctx context.Context, now time.Time) (int, error)
 	ProcessExpiredGrace(ctx context.Context, now time.Time) (int, error)
 }
 
@@ -129,6 +130,16 @@ func (w *BillingWorker) tick(ctx context.Context) error {
 		w.logger.InfoContext(ctx, "billing worker finalized pending upgrade payments", "count", upgrades)
 	}
 
+	// The grace-expiry reminder runs before the expired-grace downgrade: a
+	// window closing this tick is reminded first, and once the window has
+	// ended the reminder is moot (issue #253).
+	reminded, reminderErr := w.renewals.ProcessGraceExpiryReminders(ctx, now)
+	if reminderErr != nil {
+		w.logger.ErrorContext(ctx, "billing worker grace expiry reminders failed", "error", sanitize.Error(reminderErr))
+	} else if reminded > 0 {
+		w.logger.InfoContext(ctx, "billing worker dispatched grace expiry reminders", "count", reminded)
+	}
+
 	downgraded, graceErr := w.renewals.ProcessExpiredGrace(ctx, now)
 	if graceErr != nil {
 		w.logger.ErrorContext(ctx, "billing worker expired grace processing failed", "error", sanitize.Error(graceErr))
@@ -145,6 +156,9 @@ func (w *BillingWorker) tick(ctx context.Context) error {
 	}
 	if upgradeErr != nil {
 		errs = append(errs, fmt.Errorf("pending upgrades: %w", upgradeErr))
+	}
+	if reminderErr != nil {
+		errs = append(errs, fmt.Errorf("grace expiry reminders: %w", reminderErr))
 	}
 	if graceErr != nil {
 		errs = append(errs, fmt.Errorf("expired grace: %w", graceErr))

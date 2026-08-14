@@ -189,6 +189,13 @@ type Notifier interface {
 	Notify(ctx context.Context, n Notification) (providerResponse, renderedPlainBody string, err error)
 }
 
+// DirectEmailSender renders and sends a one-off email outside the reminder
+// lifecycle (issue #253): the direct-notification service owns subject and
+// content, the adapter owns templates and transport.
+type DirectEmailSender interface {
+	SendDirect(ctx context.Context, to, subject, template string, data map[string]any) error
+}
+
 // SMSSender sends an SMS message to a phone number.
 type SMSSender interface {
 	Send(ctx context.Context, phone string, message string) (providerResponse string, err error)

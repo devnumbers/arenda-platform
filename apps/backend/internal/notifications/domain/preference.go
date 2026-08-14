@@ -1,6 +1,6 @@
 package domain
 
-// AllEventTypes lists every reminder event type in stable order.
+// AllEventTypes lists every notification event type in stable order.
 func AllEventTypes() []EventType {
 	return []EventType{
 		EventOperationDue,
@@ -8,13 +8,14 @@ func AllEventTypes() []EventType {
 		EventLeaseExpiring,
 		EventLeaseRequiresAction,
 		EventFreeReminder,
+		EventSubscriptionGrace,
 	}
 }
 
-// IsValid reports whether the event type is a known reminder event type.
+// IsValid reports whether the event type is a known notification event type.
 func (e EventType) IsValid() bool {
 	switch e {
-	case EventOperationDue, EventOperationOverdue, EventLeaseExpiring, EventLeaseRequiresAction, EventFreeReminder:
+	case EventOperationDue, EventOperationOverdue, EventLeaseExpiring, EventLeaseRequiresAction, EventFreeReminder, EventSubscriptionGrace:
 		return true
 	default:
 		return false

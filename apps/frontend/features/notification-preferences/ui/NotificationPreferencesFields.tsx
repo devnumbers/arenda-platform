@@ -15,6 +15,7 @@ const EMPTY_PREFERENCES: NotificationPreferencesState = {
     lease_expiring: false,
     lease_requires_action: false,
     free_reminder: false,
+    subscription_grace: false,
 };
 
 export type NotificationPreferencesFieldsProps = {

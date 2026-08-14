@@ -56,6 +56,10 @@ func (r *gateSubscriptionRepo) ListInExpiredGrace(context.Context, time.Time, in
 	return nil, nil
 }
 
+func (r *gateSubscriptionRepo) ListInGraceReminderWindow(context.Context, time.Time, time.Duration, int) ([]domain.Subscription, error) {
+	return nil, nil
+}
+
 func (r *gateSubscriptionRepo) ListExpiredNonRenewing(context.Context, time.Time, int) ([]domain.Subscription, error) {
 	return nil, nil
 }

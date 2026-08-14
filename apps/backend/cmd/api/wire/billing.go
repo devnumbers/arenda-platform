@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	billingevents "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/events"
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
 	paymentfake "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/fake"
@@ -15,6 +16,7 @@ import (
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
+	platformevents "github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
@@ -44,8 +46,9 @@ type Billing struct {
 // WireBilling constructs the billing repositories, the shared txStoreFactory
 // (ADR 0033 γ-factory), every billing service of the rewritten core module
 // (issue #245), the payment flows of issue #250, the payment-method flows of
-// issue #251 and the active payment provider adapter (issue #248).
-func WireBilling(ctx context.Context, p platformDeps) (*Billing, error) {
+// issue #251 and the active payment provider adapter (issue #248). The grace
+// lifecycle events of issue #253 are published through eventDispatcher.
+func WireBilling(ctx context.Context, p platformDeps, eventDispatcher platformevents.Dispatcher) (*Billing, error) {
 	tariffRepo := billingpg.NewTariffRepository(p.DB, p.Cfg.TariffCacheTTL, p.Clock)
 	subscriptionRepo := billingpg.NewSubscriptionRepository(p.DB)
 	transitionRepo := billingpg.NewSubscriptionTransitionRepository(p.DB)
@@ -74,10 +77,11 @@ func WireBilling(ctx context.Context, p platformDeps) (*Billing, error) {
 	)
 
 	services := billingapp.NewServices(factory, billingapp.ServicesConfig{
-		Config:   billingapp.DefaultConfig(),
-		Clock:    p.Clock,
-		Logger:   p.Logger,
-		Provider: provider,
+		Config:    billingapp.DefaultConfig(),
+		Clock:     p.Clock,
+		Logger:    p.Logger,
+		Provider:  provider,
+		Publisher: billingevents.NewPublisher(eventDispatcher),
 	})
 
 	p.Logger.InfoContext(ctx, "billing module initialized",

@@ -10,12 +10,16 @@ import (
 	"time"
 
 	"github.com/nambers/arenda-planform/apps/backend/cmd/api/wire"
+	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
+	emailnotifier "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/email"
+	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
 	webpush "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/webpush"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
+	platformgenerated "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpserver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 )
@@ -68,8 +72,9 @@ func run() error {
 	// 5. Billing module (rewritten core, issue #245): repositories, UoW
 	//    factory, tariff/subscription/onboarding services, limiter and worker
 	//    shells. Built before access and properties because their subscription
-	//    limiters consume the billing repositories.
-	billingMod, err := wire.WireBilling(ctx, p)
+	//    limiters consume the billing repositories. The grace lifecycle events
+	//    (issue #253) go through the shared event dispatcher.
+	billingMod, err := wire.WireBilling(ctx, p, eventDispatcher)
 	if err != nil {
 		return err
 	}
@@ -166,10 +171,56 @@ func run() error {
 		return accessMod.InvitationService.ActivatePendingInvitations(ctx, e.UserID, e.Email.String())
 	})
 
-	// 10. Admin service (depends on billing subscriptions + occupancy provider).
+	// 10. Grace notifications (issue #253): the billing grace events deliver
+	//    through the notifications context over push and email, honouring the
+	//    per-channel preferences (ADR 0030). The Web Push sender is built when
+	//    VAPID keys are configured (RFC 8292); without them delivery is
+	//    email-only (same guard as the reminder worker below). Subscribers are
+	//    registered before the workers start so no grace event fires unwired.
+	var pushSender notificationsapp.PushSender
+	if p.Cfg.VAPIDPublicKey != "" && p.Cfg.VAPIDPrivateKey != "" {
+		pushMetrics, err := webpush.NewMetrics()
+		if err != nil {
+			return fmt.Errorf("wire push metrics: %w", err)
+		}
+		s, err := webpush.NewSender(p.Cfg.VAPIDSubject, p.Cfg.VAPIDPublicKey, p.Cfg.VAPIDPrivateKey, pushMetrics, p.Logger)
+		if err != nil {
+			return fmt.Errorf("wire webpush sender: %w", err)
+		}
+		pushSender = s
+		p.Logger.InfoContext(ctx, "web push delivery enabled")
+	} else {
+		p.Logger.WarnContext(ctx, "VAPID keys not configured; web push delivery disabled (email-only)")
+	}
+	queries := platformgenerated.New(p.DB)
+	graceNotifier := notificationsapp.NewDirectNotificationService(
+		notificationsMod.ReminderRepo,
+		notificationspg.NewContactResolver(queries),
+		emailnotifier.NewNotifier(identityMod.EmailMailer, p.Renderer),
+		pushSender,
+		notificationsMod.PushSubscriptionRepo,
+		p.Cfg.AppBaseURL,
+		p.Logger,
+	)
+	eventDispatcher.Subscribe(events.EventType("subscription_grace_entered"), func(ctx context.Context, event any) error {
+		e, ok := event.(billingapp.GraceEntered)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return graceNotifier.NotifyGraceEntered(ctx, e.UserID, e.GraceUntil)
+	})
+	eventDispatcher.Subscribe(events.EventType("subscription_grace_expiring"), func(ctx context.Context, event any) error {
+		e, ok := event.(billingapp.GraceExpiring)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return graceNotifier.NotifyGraceExpiring(ctx, e.UserID, e.GraceUntil)
+	})
+
+	// 11. Admin service (depends on billing subscriptions + occupancy provider).
 	adminMod := wire.WireAdmin(p, billingMod.Services.Subscriptions, propertiesMod.OccupancyProvider)
 
-	// 11. Leases services: lease/operation/recurring/tenant-contact/export.
+	// 12. Leases services: lease/operation/recurring/tenant-contact/export.
 	leasesMod := wire.WireLeasesServices(p, leasesRepos, notificationsMod.ReminderScheduler, notificationsMod.ReminderService)
 	// Wire the membership-aware policy and the accessible-scopes adapter into
 	// the tenant contact service so list endpoints include owner-wide data the
@@ -200,28 +251,14 @@ func run() error {
 	notificationsMod.ReminderService.SetSharedPropertyIDs(accessMod.SharedProperties)
 	notificationsMod.FreeReminderService.SetSharedPropertyIDs(accessMod.SharedProperties)
 
-	// 12. Popups service.
+	// 13. Popups service.
 	popupsMod := wire.WirePopups(p)
 
-	// 13. Background workers (6 goroutines). Started before the HTTP server so
-	//     they are live while serving. The Web Push sender is constructed when
-	//     VAPID keys are configured (RFC 8292); without them the reminder worker
-	//     runs email-only and push dispatch is skipped (guard in reminder_worker).
-	var pushSender notificationsapp.PushSender
-	if p.Cfg.VAPIDPublicKey != "" && p.Cfg.VAPIDPrivateKey != "" {
-		pushMetrics, err := webpush.NewMetrics()
-		if err != nil {
-			return fmt.Errorf("wire push metrics: %w", err)
-		}
-		s, err := webpush.NewSender(p.Cfg.VAPIDSubject, p.Cfg.VAPIDPublicKey, p.Cfg.VAPIDPrivateKey, pushMetrics, p.Logger)
-		if err != nil {
-			return fmt.Errorf("wire webpush sender: %w", err)
-		}
-		pushSender = s
-		p.Logger.InfoContext(ctx, "web push delivery enabled")
-	} else {
-		p.Logger.WarnContext(ctx, "VAPID keys not configured; web push delivery disabled (email-only)")
-	}
+	// 14. Background workers (6 goroutines). Started before the HTTP server so
+	//     they are live while serving. The Web Push sender was constructed in
+	//     step 10 together with the grace notification delivery; without VAPID
+	//     keys the reminder worker runs email-only and push dispatch is skipped
+	//     (guard in reminder_worker).
 	workers := wire.NewWorkers(
 		ctx, p,
 		leasesMod.LeaseService,
@@ -236,7 +273,7 @@ func run() error {
 		pushSender,
 	)
 
-	// 14. HTTP rate limiters.
+	// 15. HTTP rate limiters.
 	limiters := wire.WireRateLimiters(p.Cfg)
 	defer limiters.Stop()
 
@@ -245,7 +282,7 @@ func run() error {
 		poolStats = wire.DBPoolStats(p.Pool)
 	}
 
-	// 15. HTTP handler + server.
+	// 16. HTTP handler + server.
 	handler := httpserver.New(httpserver.Deps{
 		Auth:                     identityMod.Authentication,
 		PhoneChange:              identityMod.PhoneChange,

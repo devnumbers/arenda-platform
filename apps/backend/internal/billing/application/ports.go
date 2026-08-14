@@ -35,6 +35,11 @@ type SubscriptionRepository interface {
 	// ListInExpiredGrace returns a batch of grace subscriptions whose grace
 	// window has ended (the downgrade-to-basic selection, issue #252).
 	ListInExpiredGrace(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error)
+	// ListInGraceReminderWindow returns a batch of grace subscriptions inside
+	// the grace-expiry reminder window — valid_until is still in the future
+	// but arrives within the lead duration — whose window has not been
+	// reminded yet (issue #253).
+	ListInGraceReminderWindow(ctx context.Context, now time.Time, lead time.Duration, limit int) ([]domain.Subscription, error)
 	// ListExpiredNonRenewing returns a batch of active subscriptions with
 	// auto-renew off whose retained period has ended (issue #252).
 	ListExpiredNonRenewing(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error)

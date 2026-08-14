@@ -36,6 +36,10 @@ type ServicesConfig struct {
 	// flows of issues #250-#252 consume it; nil keeps the pre-#250 behaviour
 	// where paid tariff changes answer ErrPaymentUnavailable.
 	Provider PaymentProvider
+	// Publisher emits the grace lifecycle events to the notifications context
+	// (issue #253); nil keeps the pre-#253 behaviour of no grace
+	// notifications.
+	Publisher EventPublisher
 }
 
 // NewServices builds every billing service over one shared txStoreFactory
@@ -48,7 +52,7 @@ func NewServices(factory txStoreFactory, cfg ServicesConfig) Services {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
-	payments := NewPaymentService(factory, cfg.Provider, PaymentServiceConfig{Clock: cfg.Clock, Log: cfg.Logger, Config: cfg.Config})
+	payments := NewPaymentService(factory, cfg.Provider, PaymentServiceConfig{Clock: cfg.Clock, Log: cfg.Logger, Config: cfg.Config, Publisher: cfg.Publisher})
 	return Services{
 		Tariffs:        NewTariffService(factory),
 		Subscriptions:  NewSubscriptionService(factory, SubscriptionServiceConfig{Clock: cfg.Clock, Provider: cfg.Provider, Config: cfg.Config, Logger: cfg.Logger}),
@@ -57,11 +61,12 @@ func NewServices(factory txStoreFactory, cfg ServicesConfig) Services {
 		Onboarding:     NewOnboardingService(factory, OnboardingServiceConfig{Logger: cfg.Logger}),
 		Limiter:        NewSubscriptionPropertyLimiter(factory.subscriptions, factory.tariffs, cfg.Clock),
 		Workers: NewWorkers(factory, WorkersConfig{
-			Provider: cfg.Provider,
-			Payments: payments,
-			Clock:    cfg.Clock,
-			Config:   cfg.Config,
-			Logger:   cfg.Logger,
+			Provider:  cfg.Provider,
+			Payments:  payments,
+			Clock:     cfg.Clock,
+			Config:    cfg.Config,
+			Logger:    cfg.Logger,
+			Publisher: cfg.Publisher,
 		}),
 		Config: cfg.Config,
 	}

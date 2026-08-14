@@ -64,7 +64,8 @@ SET
     pending_period = $9,
     active_payment_method_id = $10,
     last_applied_payment_id = $11,
-    current_period = $12
+    current_period = $12,
+    grace_reminded_at = $13
 WHERE id = $1
 RETURNING *;
 
@@ -112,6 +113,21 @@ WHERE status = 'grace'
   AND valid_until <= $1
 ORDER BY valid_until ASC, id ASC
 LIMIT $2;
+
+-- name: ListSubscriptionsInGraceReminderWindow :many
+-- Grace subscriptions inside the grace-expiry reminder window — the end of the
+-- window (valid_until) is still ahead of $1 but arrives no later than $2 (the
+-- caller passes now and now+lead) — whose window was not reminded yet (issue
+-- #253). Backed by the partial index idx_user_subscriptions_grace_unreminded
+-- (migration 000105).
+SELECT * FROM user_subscriptions
+WHERE status = 'grace'
+  AND valid_until IS NOT NULL
+  AND valid_until > $1
+  AND valid_until <= $2
+  AND grace_reminded_at IS NULL
+ORDER BY valid_until ASC, id ASC
+LIMIT $3;
 
 -- name: ListExpiredNonRenewingSubscriptions :many
 SELECT * FROM user_subscriptions

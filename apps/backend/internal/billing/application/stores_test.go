@@ -180,6 +180,15 @@ func (r *fakeSubscriptionRepo) ListInExpiredGrace(_ context.Context, now time.Ti
 	}, func(s domain.Subscription) time.Time { return *s.ValidUntil }), nil
 }
 
+// ListInGraceReminderWindow mirrors the worker listing: grace subscriptions
+// inside the half-open reminder window [valid_until - lead, valid_until) whose
+// window was not reminded yet (issue #253).
+func (r *fakeSubscriptionRepo) ListInGraceReminderWindow(_ context.Context, now time.Time, lead time.Duration, limit int) ([]domain.Subscription, error) {
+	return r.listWorkerBatch(limit, func(s domain.Subscription) bool {
+		return subscriptionInGraceReminderWindow(s, now, lead)
+	}, func(s domain.Subscription) time.Time { return *s.ValidUntil }), nil
+}
+
 // ListExpiredNonRenewing mirrors the worker listing: active subscriptions with
 // auto-renew off whose retained period has ended.
 func (r *fakeSubscriptionRepo) ListExpiredNonRenewing(_ context.Context, now time.Time, limit int) ([]domain.Subscription, error) {

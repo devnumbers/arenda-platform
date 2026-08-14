@@ -153,3 +153,69 @@ func TestSubscriptionRepository_Integration_ExpiryWindowRespectedBySchema(t *tes
 		t.Error("Update with pending_change_at < valid_until succeeded, want CHECK violation")
 	}
 }
+
+// TestSubscriptionRepository_Integration_GraceReminderWindowListing proves
+// the reminder-window listing of issue #253 against the real schema: only
+// unreminded grace subscriptions whose window ends within the lead time and
+// has not ended yet are selected, and the reminded flag round-trips through
+// Update.
+func TestSubscriptionRepository_Integration_GraceReminderWindowListing(t *testing.T) {
+	h := newIntegrationHarness(t)
+	now := h.clock.Now()
+
+	seedGrace := func(validUntil time.Time) domain.Subscription {
+		t.Helper()
+		userID := h.seedUser()
+		if err := h.onboarding.OnUserRegistered(h.ctx(), userID); err != nil {
+			t.Fatalf("OnUserRegistered() error = %v", err)
+		}
+		sub, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+		if err != nil {
+			t.Fatalf("GetByUserID() error = %v", err)
+		}
+		sub.Status = domain.SubscriptionStatusGrace
+		sub.ValidUntil = &validUntil
+		if err := h.subscriptions.Update(h.ctx(), sub); err != nil {
+			t.Fatalf("Update() error = %v", err)
+		}
+		return sub
+	}
+
+	const lead = 48 * time.Hour
+	inside := seedGrace(now.Add(24 * time.Hour))
+	seedGrace(now.Add(7 * 24 * time.Hour)) // window not open yet
+	seedGrace(now.Add(-time.Hour))         // window already ended
+
+	found, err := h.subscriptions.ListInGraceReminderWindow(h.ctx(), now, lead, 100)
+	if err != nil {
+		t.Fatalf("ListInGraceReminderWindow() error = %v", err)
+	}
+	if len(found) != 1 {
+		t.Fatalf("listed %d subscriptions, want 1 (only the window-inside one)", len(found))
+	}
+	if found[0].ID != inside.ID {
+		t.Errorf("listed subscription = %s, want %s", found[0].ID, inside.ID)
+	}
+
+	// Marking the window reminded removes it from the selection, and the
+	// flag persists through a re-read.
+	reminded := found[0]
+	reminded.MarkGraceReminded(now)
+	if err := h.subscriptions.Update(h.ctx(), reminded); err != nil {
+		t.Fatalf("Update() after MarkGraceReminded: %v", err)
+	}
+	reread, err := h.subscriptions.GetByUserID(h.ctx(), reminded.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if reread.GraceRemindedAt == nil || !reread.GraceRemindedAt.Equal(now) {
+		t.Fatalf("GraceRemindedAt = %v, want %v", reread.GraceRemindedAt, now)
+	}
+	after, err := h.subscriptions.ListInGraceReminderWindow(h.ctx(), now, lead, 100)
+	if err != nil {
+		t.Fatalf("ListInGraceReminderWindow() after reminder: %v", err)
+	}
+	if len(after) != 0 {
+		t.Errorf("listed %d subscriptions after reminder, want 0", len(after))
+	}
+}

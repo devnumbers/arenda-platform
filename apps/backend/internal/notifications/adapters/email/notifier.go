@@ -24,6 +24,26 @@ func reminderSubject(title string) string {
 	return "Напоминание от Рентли: " + title
 }
 
+// SendDirect renders the named template and sends a one-off email outside the
+// reminder lifecycle (issue #253): the direct-notification service owns the
+// subject and content, so unlike Notify it carries no reminder subject prefix.
+func (n *Notifier) SendDirect(ctx context.Context, to, subject, template string, data map[string]any) error {
+	plain, html, err := n.renderer.Render(template, data)
+	if err != nil {
+		return fmt.Errorf("render %s email: %w", template, err)
+	}
+	msg := mailer.Message{
+		To:       []string{to},
+		Subject:  subject,
+		TextBody: plain,
+		HTMLBody: html,
+	}
+	if err := n.sender.Send(ctx, msg); err != nil {
+		return fmt.Errorf("send %s email: %w", template, err)
+	}
+	return nil
+}
+
 // Notify sends a reminder email.
 func (n *Notifier) Notify(ctx context.Context, notification application.Notification) (string, string, error) {
 	if notification.Contact == nil || notification.Contact.Email == "" {
@@ -52,3 +72,5 @@ func (n *Notifier) Notify(ctx context.Context, notification application.Notifica
 }
 
 var _ application.Notifier = (*Notifier)(nil)
+
+var _ application.DirectEmailSender = (*Notifier)(nil)

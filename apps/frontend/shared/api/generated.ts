@@ -1089,6 +1089,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tariffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminTariffs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/subscription/payments": {
         parameters: {
             query?: never;
@@ -1473,6 +1489,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/fake-card-binding/{requestKey}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Local-only (APP_ENV=local) completion of a card-binding session at the
+         *     fake provider — the counterpart of the bank form of a real provider.
+         *     The confirmed event flows through the same synchronous application path
+         *     as the add-card webhook.
+         */
+        post: operations["confirmFakeCardBinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/client-errors": {
         parameters: {
             query?: never;
@@ -1622,6 +1660,20 @@ export interface components {
         };
         TariffsResponse: {
             items: components["schemas"]["Tariff"][];
+        };
+        AdminTariff: {
+            /** Format: uuid */
+            id: string;
+            name: components["schemas"]["TariffName"];
+            /** @description Hidden tariffs (false) stay referable by foreign keys but are not offered to users. */
+            isActive: boolean;
+            /** @description Maximum number of active properties; -1 means unlimited. */
+            activePropertyLimit: number;
+            monthlyPriceKopecks: number;
+            yearlyPriceKopecks: number;
+        };
+        AdminTariffsResponse: {
+            items: components["schemas"]["AdminTariff"][];
         };
         PaymentMethodsResponse: {
             items: components["schemas"]["PaymentMethod"][];
@@ -2411,7 +2463,7 @@ export interface components {
             /** Format: uuid */
             property_id?: string | null;
             /** @enum {string} */
-            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder";
+            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder" | "subscription_grace";
             /** @enum {string} */
             status: "pending" | "sent" | "failed" | "cancelled" | "skipped";
             /** Format: date-time */
@@ -2454,7 +2506,7 @@ export interface components {
              */
             status?: "pending" | "sent" | null;
             /** @enum {string|null} */
-            event_type?: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder" | null;
+            event_type?: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder" | "subscription_grace" | null;
             /** Format: uuid */
             operation_id?: string | null;
             /** Format: uuid */
@@ -2529,7 +2581,7 @@ export interface components {
         };
         NotificationPreference: {
             /** @enum {string} */
-            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder";
+            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder" | "subscription_grace";
             /** @description Permission to deliver this event type over email. */
             email_allowed: boolean;
             /** @description Permission to deliver this event type over Web Push. */
@@ -5209,6 +5261,29 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    listAdminTariffs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All tariffs, including hidden ones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTariffsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     listAdminSubscriptionPayments: {
         parameters: {
             query?: {
@@ -5947,6 +6022,32 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Payment confirmed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    confirmFakeCardBinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Card binding confirmed */
             200: {
                 headers: {
                     [name: string]: unknown;

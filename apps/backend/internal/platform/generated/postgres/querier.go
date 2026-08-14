@@ -314,6 +314,12 @@ type Querier interface {
 	ListSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
 	ListSubscriptionTransitionsBySubscription(ctx context.Context, subscriptionID pgtype.UUID) ([]SubscriptionTransition, error)
 	ListSubscriptionsInExpiredGrace(ctx context.Context, arg ListSubscriptionsInExpiredGraceParams) ([]UserSubscription, error)
+	// Grace subscriptions inside the grace-expiry reminder window — the end of the
+	// window (valid_until) is still ahead of $1 but arrives no later than $2 (the
+	// caller passes now and now+lead) — whose window was not reminded yet (issue
+	// #253). Backed by the partial index idx_user_subscriptions_grace_unreminded
+	// (migration 000105).
+	ListSubscriptionsInGraceReminderWindow(ctx context.Context, arg ListSubscriptionsInGraceReminderWindowParams) ([]UserSubscription, error)
 	// Worker batch listings (issue #252, ADR 0008 lifecycle phases). Each listing
 	// is a plain selection; the processing transaction re-reads and locks the row
 	// by user id, so a concurrent mutation between listing and processing is

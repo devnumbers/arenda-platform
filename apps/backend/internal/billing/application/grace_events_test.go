@@ -1,0 +1,365 @@
+package application
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+)
+
+// The grace lifecycle events of issue #253, tested on the application seam
+// with a capture publisher (issue #244 testing decisions): every grace entry
+// publishes GraceEntered exactly once after its transaction commits, the
+// expiry reminder fires inside its window exactly once, and a failing
+// publisher never fails or rolls back the payment transition.
+
+// capturePublisher is an EventPublisher that records the published events and
+// can be scripted to fail.
+type capturePublisher struct {
+	entered  []GraceEntered
+	expiring []GraceExpiring
+	err      error
+}
+
+func (p *capturePublisher) PublishGraceEntered(_ context.Context, event GraceEntered) error {
+	if p.err != nil {
+		return p.err
+	}
+	p.entered = append(p.entered, event)
+	return nil
+}
+
+func (p *capturePublisher) PublishGraceExpiring(_ context.Context, event GraceExpiring) error {
+	if p.err != nil {
+		return p.err
+	}
+	p.expiring = append(p.expiring, event)
+	return nil
+}
+
+// graceTestConfig returns the workers config with the grace-expiry reminder
+// lead time set, so the reminder-window tests are independent of the default.
+func graceTestConfig(lead time.Duration) Config {
+	cfg := DefaultConfig()
+	cfg.GraceExpiryReminderBefore = lead
+	return cfg
+}
+
+// seedGraceSubscription stores a subscription inside an open grace window
+// ending at the given instant.
+func (h *workersHarness) seedGraceSubscription(t *testing.T, graceUntil time.Time) domain.Subscription {
+	t.Helper()
+	return h.seedSubscription(t, func(s *domain.Subscription) {
+		s.Status = domain.SubscriptionStatusGrace
+		s.ValidUntil = &graceUntil
+	})
+}
+
+// TestWorkers_NoChargeableMethodPublishesGraceEntered proves the acceptance
+// criterion of issue #253: a renewal with no chargeable payment method moves
+// the subscription into grace and publishes GraceEntered exactly once, after
+// the planning transaction commits, with the subscription and window
+// identified.
+func TestWorkers_NoChargeableMethodPublishesGraceEntered(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	pub := &capturePublisher{}
+	h.workers.publisher = pub
+
+	sub := h.seedSubscription(t, nil) // no method linked
+
+	if _, err := h.workers.ProcessRenewals(t.Context(), h.now); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+
+	stored := h.storedSubscription(t, sub)
+	if stored.Status != domain.SubscriptionStatusGrace {
+		t.Fatalf("subscription status = %q, want grace", stored.Status)
+	}
+	if len(pub.entered) != 1 {
+		t.Fatalf("GraceEntered published %d times, want 1", len(pub.entered))
+	}
+	event := pub.entered[0]
+	if event.UserID != sub.UserID || event.SubscriptionID != sub.ID {
+		t.Errorf("event identifies user %s subscription %s, want user %s subscription %s", event.UserID, event.SubscriptionID, sub.UserID, sub.ID)
+	}
+	wantUntil := h.now.Add(h.cfg.GraceDuration)
+	if !event.GraceUntil.Equal(wantUntil) {
+		t.Errorf("event GraceUntil = %v, want %v", event.GraceUntil, wantUntil)
+	}
+	if !event.At.Equal(h.now) {
+		t.Errorf("event At = %v, want %v", event.At, h.now)
+	}
+}
+
+// TestWorkers_FailedChargePublishesGraceEntered proves a definitively failed
+// renewal charge publishes GraceEntered once (issue #253).
+func TestWorkers_FailedChargePublishesGraceEntered(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	pub := &capturePublisher{}
+	h.workers.publisher = pub
+	h.provider.chargeFn = func(ChargeRequest) (ChargeResult, error) {
+		return ChargeResult{Status: domain.PaymentStatusFailed, ErrorCode: "declined"}, nil
+	}
+	sub := h.seedSubscription(t, nil)
+	h.seedActiveMethod(t, sub, "fake", "token_bad")
+
+	if _, err := h.workers.ProcessRenewals(t.Context(), h.now); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+
+	if len(pub.entered) != 1 {
+		t.Fatalf("GraceEntered published %d times, want 1", len(pub.entered))
+	}
+	stored := h.storedSubscription(t, sub)
+	if stored.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("subscription status = %q, want grace", stored.Status)
+	}
+}
+
+// TestWorkers_GraceEnteredNotRepublishedInsideWindow proves the event fires
+// once per grace window: a second failed charge while the subscription is
+// already in grace publishes nothing new (issue #253).
+func TestWorkers_GraceEnteredNotRepublishedInsideWindow(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	pub := &capturePublisher{}
+	h.workers.publisher = pub
+	h.provider.chargeFn = func(ChargeRequest) (ChargeResult, error) {
+		return ChargeResult{Status: domain.PaymentStatusFailed, ErrorCode: "declined"}, nil
+	}
+	sub := h.seedSubscription(t, nil)
+	h.seedActiveMethod(t, sub, "fake", "token_bad")
+
+	if _, err := h.workers.ProcessRenewals(t.Context(), h.now); err != nil {
+		t.Fatalf("first ProcessRenewals() error = %v", err)
+	}
+	// A late failed webhook for the same renewal: the subscription is already
+	// in grace, the window is not re-entered and no second event fires.
+	payment := h.singlePaymentOf(t, sub.UserID)
+	if err := h.workers.failRenewalPayment(t.Context(), payment.ID, nil, h.now); err != nil {
+		t.Fatalf("failRenewalPayment() error = %v", err)
+	}
+
+	if len(pub.entered) != 1 {
+		t.Fatalf("GraceEntered published %d times, want 1 (no re-entry inside an open window)", len(pub.entered))
+	}
+}
+
+// TestWorkers_PublisherFailureDoesNotAffectTransition proves the best-effort
+// contract of issue #253: a failing publisher is swallowed — the subscription
+// still enters grace, the payment still fails, and no error surfaces.
+func TestWorkers_PublisherFailureDoesNotAffectTransition(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	pub := &capturePublisher{err: errors.New("publisher down")}
+	h.workers.publisher = pub
+	sub := h.seedSubscription(t, nil)
+
+	count, err := h.workers.ProcessRenewals(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ProcessRenewals() error = %v (a publisher failure must not surface)", err)
+	}
+	if count != 1 {
+		t.Fatalf("ProcessRenewals() = %d, want 1", count)
+	}
+	stored := h.storedSubscription(t, sub)
+	if stored.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("subscription status = %q, want grace despite the publisher failure", stored.Status)
+	}
+	if len(pub.entered) != 0 {
+		t.Errorf("GraceEntered recorded %d events despite the error, want 0", len(pub.entered))
+	}
+}
+
+// TestWebhook_FailedRenewalChargePublishesGraceEntered proves the webhook
+// finalization of a failed merchant-initiated renewal charge (the charge
+// carries the payment method) publishes GraceEntered after the finalizing
+// transaction commits (issue #253).
+func TestWebhook_FailedRenewalChargePublishesGraceEntered(t *testing.T) {
+	h := newPaymentHarness(t)
+	pub := &capturePublisher{}
+	h.payments.publisher = pub
+	method, err := domain.NewPaymentMethod(uuid.Must(uuid.NewV7()), "fake", "token_bad", h.now)
+	if err != nil {
+		t.Fatalf("new method: %v", err)
+	}
+	storedMethod, err := h.stores.methods.UpsertByTokenHash(t.Context(), method)
+	if err != nil {
+		t.Fatalf("seed method: %v", err)
+	}
+
+	sub := h.seedSubscription(t, nil)
+	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.tariffID(t, domain.TariffPro), domain.PeriodMonth, 49000, "fake", h.now)
+	if err != nil {
+		t.Fatalf("new payment: %v", err)
+	}
+	payment.PaymentMethodID = &storedMethod.ID
+	if err := payment.SaveProviderReference("prov_1", "https://pay.example/1", h.now); err != nil {
+		t.Fatalf("save provider reference: %v", err)
+	}
+	payment, err = h.stores.payments.Create(t.Context(), payment)
+	if err != nil {
+		t.Fatalf("seed payment: %v", err)
+	}
+
+	h.setNotification(&PaymentNotification{
+		InternalPaymentID: payment.ID,
+		ProviderPaymentID: "prov_1",
+		Status:            domain.PaymentStatusFailed,
+		AmountKopecks:     payment.AmountKopecks,
+	})
+	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook() error = %v", err)
+	}
+
+	if len(pub.entered) != 1 {
+		t.Fatalf("GraceEntered published %d times, want 1", len(pub.entered))
+	}
+	if pub.entered[0].SubscriptionID != sub.ID {
+		t.Errorf("event subscription = %s, want %s", pub.entered[0].SubscriptionID, sub.ID)
+	}
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("subscription status = %q, want grace", stored.Status)
+	}
+}
+
+// The grace-expiry reminder phase (issue #253): the reminder fires inside the
+// window [valid_until - lead, valid_until), exactly once per window.
+
+// TestWorkers_GraceExpiryReminderWindow proves the window edges: no reminder
+// before the lead time arrives, one reminder inside the window, no second
+// reminder on the next tick, and no reminder after the window has ended.
+func TestWorkers_GraceExpiryReminderWindow(t *testing.T) {
+	const lead = 48 * time.Hour
+	h := newWorkersHarness(t, graceTestConfig(lead))
+	pub := &capturePublisher{}
+	h.workers.publisher = pub
+	graceUntil := h.now.Add(7 * 24 * time.Hour)
+	sub := h.seedGraceSubscription(t, graceUntil)
+
+	// Before the window: five days left, the 48h lead has not arrived.
+	if n, err := h.workers.ProcessGraceExpiryReminders(t.Context(), h.now); err != nil || n != 0 {
+		t.Fatalf("ProcessGraceExpiryReminders() = %d, %v; want 0, nil before the window", n, err)
+	}
+
+	// Inside the window: 24h left.
+	inside := graceUntil.Add(-24 * time.Hour)
+	if n, err := h.workers.ProcessGraceExpiryReminders(t.Context(), inside); err != nil {
+		t.Fatalf("ProcessGraceExpiryReminders() error = %v", err)
+	} else if n != 1 {
+		t.Fatalf("ProcessGraceExpiryReminders() = %d, want 1 inside the window", n)
+	}
+	if len(pub.expiring) != 1 {
+		t.Fatalf("GraceExpiring published %d times, want 1", len(pub.expiring))
+	}
+	event := pub.expiring[0]
+	if event.SubscriptionID != sub.ID || event.UserID != sub.UserID {
+		t.Errorf("event identifies user %s subscription %s, want user %s subscription %s", event.UserID, event.SubscriptionID, sub.UserID, sub.ID)
+	}
+	if !event.GraceUntil.Equal(graceUntil) {
+		t.Errorf("event GraceUntil = %v, want %v", event.GraceUntil, graceUntil)
+	}
+	reminded := h.storedSubscription(t, sub)
+	if reminded.GraceRemindedAt == nil || !reminded.GraceRemindedAt.Equal(inside) {
+		t.Errorf("GraceRemindedAt = %v, want %v", reminded.GraceRemindedAt, inside)
+	}
+
+	// Next tick inside the same window: already reminded, no second event.
+	if n, err := h.workers.ProcessGraceExpiryReminders(t.Context(), inside.Add(time.Hour)); err != nil || n != 0 {
+		t.Fatalf("ProcessGraceExpiryReminders() = %d, %v; want 0, nil when already reminded", n, err)
+	}
+	if len(pub.expiring) != 1 {
+		t.Fatalf("GraceExpiring published %d times after re-run, want 1", len(pub.expiring))
+	}
+
+	// After the window: the grace has ended, the reminder is moot.
+	if n, err := h.workers.ProcessGraceExpiryReminders(t.Context(), graceUntil.Add(time.Minute)); err != nil || n != 0 {
+		t.Fatalf("ProcessGraceExpiryReminders() = %d, %v; want 0, nil after the window", n, err)
+	}
+	if len(pub.expiring) != 1 {
+		t.Fatalf("GraceExpiring published %d times after grace end, want 1", len(pub.expiring))
+	}
+}
+
+// TestWorkers_GraceExpiryReminderFreshWindow proves a subscription that
+// recovers, fails again and enters a new grace window is reminded again: a new
+// window starts unreminded (issue #253).
+func TestWorkers_GraceExpiryReminderFreshWindow(t *testing.T) {
+	const lead = 48 * time.Hour
+	h := newWorkersHarness(t, graceTestConfig(lead))
+	pub := &capturePublisher{}
+	h.workers.publisher = pub
+	firstUntil := h.now.Add(30 * time.Hour) // window [now-18h, now+30h) is already open
+	sub := h.seedGraceSubscription(t, firstUntil)
+	remindedAt := h.now.Add(time.Hour)
+
+	if _, err := h.workers.ProcessGraceExpiryReminders(t.Context(), remindedAt); err != nil {
+		t.Fatalf("ProcessGraceExpiryReminders() error = %v", err)
+	}
+	if len(pub.expiring) != 1 {
+		t.Fatalf("GraceExpiring published %d times, want 1 for the first window", len(pub.expiring))
+	}
+
+	// The subscription recovers (grace exits on a succeeded charge), then a
+	// later failed renewal opens a fresh window — EnterGrace must reset the
+	// reminded flag so the new window is reminded too.
+	stored := h.storedSubscription(t, sub)
+	stored.Status = domain.SubscriptionStatusActive
+	until := h.now.Add(-time.Hour)
+	stored.ValidUntil = &until
+	if err := h.stores.subscriptions.Update(t.Context(), stored); err != nil {
+		t.Fatalf("recover subscription: %v", err)
+	}
+	if _, err := h.workers.ProcessRenewals(t.Context(), h.now); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+	inGrace := h.storedSubscription(t, sub)
+	if inGrace.Status != domain.SubscriptionStatusGrace {
+		t.Fatalf("subscription status = %q, want grace after the second failed renewal", inGrace.Status)
+	}
+	if inGrace.GraceRemindedAt != nil {
+		t.Fatalf("GraceRemindedAt = %v on a fresh window, want nil (reset by EnterGrace)", inGrace.GraceRemindedAt)
+	}
+
+	secondUntil := inGrace.ValidUntil
+	inside := secondUntil.Add(-lead / 2)
+	if n, err := h.workers.ProcessGraceExpiryReminders(t.Context(), inside); err != nil {
+		t.Fatalf("ProcessGraceExpiryReminders() error = %v", err)
+	} else if n != 1 {
+		t.Fatalf("ProcessGraceExpiryReminders() = %d, want 1 for the fresh window", n)
+	}
+	if len(pub.expiring) != 2 {
+		t.Fatalf("GraceExpiring published %d times, want 2 (one per window)", len(pub.expiring))
+	}
+	if !pub.expiring[1].GraceUntil.Equal(*secondUntil) {
+		t.Errorf("second event GraceUntil = %v, want %v", pub.expiring[1].GraceUntil, *secondUntil)
+	}
+}
+
+// TestWorkers_GraceExpiryReminderPublisherFailure proves the best-effort
+// contract for the reminder: the window is marked reminded (at most one
+// dispatch attempt per window) and the publisher failure never fails the
+// phase (issue #253).
+func TestWorkers_GraceExpiryReminderPublisherFailure(t *testing.T) {
+	const lead = 48 * time.Hour
+	h := newWorkersHarness(t, graceTestConfig(lead))
+	pub := &capturePublisher{err: errors.New("publisher down")}
+	h.workers.publisher = pub
+	graceUntil := h.now.Add(24 * time.Hour)
+	sub := h.seedGraceSubscription(t, graceUntil)
+
+	if n, err := h.workers.ProcessGraceExpiryReminders(t.Context(), h.now); err != nil {
+		t.Fatalf("ProcessGraceExpiryReminders() error = %v (a publisher failure must not surface)", err)
+	} else if n != 1 {
+		t.Fatalf("ProcessGraceExpiryReminders() = %d, want 1", n)
+	}
+	stored := h.storedSubscription(t, sub)
+	if stored.GraceRemindedAt == nil {
+		t.Fatal("GraceRemindedAt = nil, want the window marked reminded despite the publisher failure")
+	}
+}

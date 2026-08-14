@@ -139,7 +139,7 @@ INSERT INTO user_subscriptions (
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (user_id) DO NOTHING
-RETURNING id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at
+RETURNING id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at
 `
 
 type CreateSubscriptionParams struct {
@@ -191,6 +191,7 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 		&i.CurrentPeriod,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.GraceRemindedAt,
 	)
 	return i, err
 }
@@ -380,7 +381,7 @@ func (q *Queries) GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.U
 }
 
 const getSubscriptionByID = `-- name: GetSubscriptionByID :one
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions WHERE id = $1
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at FROM user_subscriptions WHERE id = $1
 `
 
 func (q *Queries) GetSubscriptionByID(ctx context.Context, id pgtype.UUID) (UserSubscription, error) {
@@ -402,12 +403,13 @@ func (q *Queries) GetSubscriptionByID(ctx context.Context, id pgtype.UUID) (User
 		&i.CurrentPeriod,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.GraceRemindedAt,
 	)
 	return i, err
 }
 
 const getSubscriptionByIDForUpdate = `-- name: GetSubscriptionByIDForUpdate :one
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions WHERE id = $1 FOR UPDATE
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at FROM user_subscriptions WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetSubscriptionByIDForUpdate(ctx context.Context, id pgtype.UUID) (UserSubscription, error) {
@@ -429,12 +431,13 @@ func (q *Queries) GetSubscriptionByIDForUpdate(ctx context.Context, id pgtype.UU
 		&i.CurrentPeriod,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.GraceRemindedAt,
 	)
 	return i, err
 }
 
 const getSubscriptionByUserID = `-- name: GetSubscriptionByUserID :one
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions WHERE user_id = $1
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at FROM user_subscriptions WHERE user_id = $1
 `
 
 func (q *Queries) GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (UserSubscription, error) {
@@ -456,12 +459,13 @@ func (q *Queries) GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUI
 		&i.CurrentPeriod,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.GraceRemindedAt,
 	)
 	return i, err
 }
 
 const getSubscriptionByUserIDForUpdate = `-- name: GetSubscriptionByUserIDForUpdate :one
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions WHERE user_id = $1 FOR UPDATE
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at FROM user_subscriptions WHERE user_id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetSubscriptionByUserIDForUpdate(ctx context.Context, userID pgtype.UUID) (UserSubscription, error) {
@@ -483,6 +487,7 @@ func (q *Queries) GetSubscriptionByUserIDForUpdate(ctx context.Context, userID p
 		&i.CurrentPeriod,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.GraceRemindedAt,
 	)
 	return i, err
 }
@@ -651,7 +656,7 @@ func (q *Queries) ListAllTariffs(ctx context.Context) ([]Tariff, error) {
 }
 
 const listExpiredCancelledSubscriptions = `-- name: ListExpiredCancelledSubscriptions :many
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at FROM user_subscriptions
 WHERE status = 'cancelled'
   AND valid_until IS NOT NULL
   AND valid_until <= $1
@@ -689,6 +694,7 @@ func (q *Queries) ListExpiredCancelledSubscriptions(ctx context.Context, arg Lis
 			&i.CurrentPeriod,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.GraceRemindedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -701,7 +707,7 @@ func (q *Queries) ListExpiredCancelledSubscriptions(ctx context.Context, arg Lis
 }
 
 const listExpiredNonRenewingSubscriptions = `-- name: ListExpiredNonRenewingSubscriptions :many
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at FROM user_subscriptions
 WHERE status = 'active'
   AND auto_renew_enabled = false
   AND valid_until IS NOT NULL
@@ -740,6 +746,7 @@ func (q *Queries) ListExpiredNonRenewingSubscriptions(ctx context.Context, arg L
 			&i.CurrentPeriod,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.GraceRemindedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1112,7 +1119,7 @@ func (q *Queries) ListSubscriptionTransitionsBySubscription(ctx context.Context,
 }
 
 const listSubscriptionsInExpiredGrace = `-- name: ListSubscriptionsInExpiredGrace :many
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at FROM user_subscriptions
 WHERE status = 'grace'
   AND valid_until IS NOT NULL
   AND valid_until <= $1
@@ -1150,6 +1157,66 @@ func (q *Queries) ListSubscriptionsInExpiredGrace(ctx context.Context, arg ListS
 			&i.CurrentPeriod,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.GraceRemindedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubscriptionsInGraceReminderWindow = `-- name: ListSubscriptionsInGraceReminderWindow :many
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at FROM user_subscriptions
+WHERE status = 'grace'
+  AND valid_until IS NOT NULL
+  AND valid_until > $1
+  AND valid_until <= $2
+  AND grace_reminded_at IS NULL
+ORDER BY valid_until ASC, id ASC
+LIMIT $3
+`
+
+type ListSubscriptionsInGraceReminderWindowParams struct {
+	ValidUntil   pgtype.Timestamptz `json:"valid_until"`
+	ValidUntil_2 pgtype.Timestamptz `json:"valid_until_2"`
+	Limit        int32              `json:"limit"`
+}
+
+// Grace subscriptions inside the grace-expiry reminder window — the end of the
+// window (valid_until) is still ahead of $1 but arrives no later than $2 (the
+// caller passes now and now+lead) — whose window was not reminded yet (issue
+// #253). Backed by the partial index idx_user_subscriptions_grace_unreminded
+// (migration 000105).
+func (q *Queries) ListSubscriptionsInGraceReminderWindow(ctx context.Context, arg ListSubscriptionsInGraceReminderWindowParams) ([]UserSubscription, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionsInGraceReminderWindow, arg.ValidUntil, arg.ValidUntil_2, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserSubscription{}
+	for rows.Next() {
+		var i UserSubscription
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TariffID,
+			&i.Source,
+			&i.Status,
+			&i.ValidUntil,
+			&i.AutoRenewEnabled,
+			&i.PendingTariffID,
+			&i.PendingChangeAt,
+			&i.PendingPeriod,
+			&i.ActivePaymentMethodID,
+			&i.LastAppliedPaymentID,
+			&i.CurrentPeriod,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.GraceRemindedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1163,7 +1230,7 @@ func (q *Queries) ListSubscriptionsInExpiredGrace(ctx context.Context, arg ListS
 
 const listSubscriptionsUpForRenewal = `-- name: ListSubscriptionsUpForRenewal :many
 
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at FROM user_subscriptions
 WHERE status = 'active'
   AND auto_renew_enabled = true
   AND valid_until IS NOT NULL
@@ -1207,6 +1274,7 @@ func (q *Queries) ListSubscriptionsUpForRenewal(ctx context.Context, arg ListSub
 			&i.CurrentPeriod,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.GraceRemindedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1219,7 +1287,7 @@ func (q *Queries) ListSubscriptionsUpForRenewal(ctx context.Context, arg ListSub
 }
 
 const listSubscriptionsWithPendingChange = `-- name: ListSubscriptionsWithPendingChange :many
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at FROM user_subscriptions
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at FROM user_subscriptions
 WHERE status = 'active'
   AND pending_tariff_id IS NOT NULL
   AND pending_change_at IS NOT NULL
@@ -1258,6 +1326,7 @@ func (q *Queries) ListSubscriptionsWithPendingChange(ctx context.Context, arg Li
 			&i.CurrentPeriod,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.GraceRemindedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1403,9 +1472,10 @@ SET
     pending_period = $9,
     active_payment_method_id = $10,
     last_applied_payment_id = $11,
-    current_period = $12
+    current_period = $12,
+    grace_reminded_at = $13
 WHERE id = $1
-RETURNING id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at
+RETURNING id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at
 `
 
 type UpdateSubscriptionParams struct {
@@ -1421,6 +1491,7 @@ type UpdateSubscriptionParams struct {
 	ActivePaymentMethodID pgtype.UUID        `json:"active_payment_method_id"`
 	LastAppliedPaymentID  pgtype.UUID        `json:"last_applied_payment_id"`
 	CurrentPeriod         pgtype.Text        `json:"current_period"`
+	GraceRemindedAt       pgtype.Timestamptz `json:"grace_reminded_at"`
 }
 
 func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (UserSubscription, error) {
@@ -1437,6 +1508,7 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		arg.ActivePaymentMethodID,
 		arg.LastAppliedPaymentID,
 		arg.CurrentPeriod,
+		arg.GraceRemindedAt,
 	)
 	var i UserSubscription
 	err := row.Scan(
@@ -1455,6 +1527,7 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		&i.CurrentPeriod,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.GraceRemindedAt,
 	)
 	return i, err
 }

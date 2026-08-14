@@ -90,6 +90,21 @@ func (r *SubscriptionRepository) ListInExpiredGrace(ctx context.Context, now tim
 	return mapSubscriptions(rows)
 }
 
+// ListInGraceReminderWindow returns a batch of grace subscriptions inside the
+// grace-expiry reminder window — valid_until still ahead but arriving within
+// the lead duration — whose window was not reminded yet (issue #253).
+func (r *SubscriptionRepository) ListInGraceReminderWindow(ctx context.Context, now time.Time, lead time.Duration, limit int) ([]domain.Subscription, error) {
+	rows, err := r.q().ListSubscriptionsInGraceReminderWindow(ctx, postgres.ListSubscriptionsInGraceReminderWindowParams{
+		ValidUntil:   pgtype.Timestamptz{Time: now, Valid: true},
+		ValidUntil_2: pgtype.Timestamptz{Time: now.Add(lead), Valid: true},
+		Limit:        batchLimit(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list subscriptions in grace reminder window: %w", err)
+	}
+	return mapSubscriptions(rows)
+}
+
 // ListExpiredNonRenewing returns a batch of active subscriptions with
 // auto-renew off whose retained period has ended (issue #252).
 func (r *SubscriptionRepository) ListExpiredNonRenewing(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
@@ -217,6 +232,7 @@ func mapUpdateSubscriptionParams(sub domain.Subscription) postgres.UpdateSubscri
 		ActivePaymentMethodID: pgconv.UUIDToPgtypePtr(sub.ActivePaymentMethodID),
 		LastAppliedPaymentID:  pgconv.UUIDToPgtypePtr(sub.LastAppliedPaymentID),
 		CurrentPeriod:         periodTextPtr(sub.CurrentPeriod),
+		GraceRemindedAt:       pgconv.TimePtrToPgtype(sub.GraceRemindedAt),
 	}
 }
 
@@ -245,5 +261,6 @@ func mapSubscription(row postgres.UserSubscription) (domain.Subscription, error)
 		ActivePaymentMethodID: pgconv.UUIDFromPgtypePtr(row.ActivePaymentMethodID),
 		LastAppliedPaymentID:  pgconv.UUIDFromPgtypePtr(row.LastAppliedPaymentID),
 		CurrentPeriod:         currentPeriod,
+		GraceRemindedAt:       pgconv.TimestamptzToPtrTime(row.GraceRemindedAt),
 	})
 }

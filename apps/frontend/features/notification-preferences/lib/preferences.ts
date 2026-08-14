@@ -33,6 +33,11 @@ export const NOTIFICATION_OPTIONS: {
     label: 'Свои напоминания',
     description: 'Созданные вами напоминания о любых датах по объектам',
   },
+  {
+    eventType: 'subscription_grace',
+    label: 'Оплата подписки',
+    description: 'Неудачное списание за тариф и конец льготного периода',
+  },
 ];
 
 export type NotificationPreferencesState = Record<NotificationEventType, boolean>;
@@ -59,6 +64,7 @@ export function buildInitialPreferences(
     lease_expiring: true,
     lease_requires_action: true,
     free_reminder: true,
+    subscription_grace: true,
   };
   for (const preference of preferences) {
     state[preference.eventType] = preference.emailAllowed;
@@ -79,6 +85,7 @@ export function buildInitialChannelPreferences(
     lease_expiring: { ...DEFAULT_CHANNEL_FLAGS },
     lease_requires_action: { ...DEFAULT_CHANNEL_FLAGS },
     free_reminder: { ...DEFAULT_CHANNEL_FLAGS },
+    subscription_grace: { ...DEFAULT_CHANNEL_FLAGS },
   };
   for (const preference of preferences) {
     state[preference.eventType] = {
