@@ -3,35 +3,45 @@ package wire
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
+	paymentfake "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/fake"
+	paymenttkassa "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/tkassa"
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
 // Billing holds the billing module's repositories and services wired by
 // WireBilling. It is constructed before the access and properties modules
 // because their subscription limiters consume the tariff and subscription
-// repositories. The payment provider returns with the provider-port ticket
-// (#248); until then the module has no provider-dependent code.
+// repositories.
 type Billing struct {
 	TariffRepo       *billingpg.TariffRepository
 	SubscriptionRepo *billingpg.SubscriptionRepository
 	TransitionRepo   *billingpg.SubscriptionTransitionRepository
 	Services         billingapp.Services
+	// PaymentProvider is the single active payment provider adapter behind
+	// the neutral provider port (issue #248, ADR 0038). The flow tickets
+	// (#250-#252) wire their services against it; nil never occurs because
+	// config validation pins PAYMENT_PROVIDER to fake or tkassa.
+	PaymentProvider billingapp.PaymentProvider
 	// MutationGate adapts the subscription service to the readonly-gate port
 	// declared by platform/httpsupport (ADR 0035 consumer-side interface).
 	MutationGate httpsupport.SubscriptionMutationChecker
 }
 
 // WireBilling constructs the billing repositories, the shared txStoreFactory
-// (ADR 0033 γ-factory) and every billing service of the rewritten core module
-// (issue #245): tariff and subscription views, registration onboarding, the
-// property limiter and the worker shells.
+// (ADR 0033 γ-factory), every billing service of the rewritten core module
+// (issue #245) and the active payment provider adapter (issue #248).
 func WireBilling(ctx context.Context, p platformDeps) (*Billing, error) {
 	tariffRepo := billingpg.NewTariffRepository(p.DB, p.Cfg.TariffCacheTTL, p.Clock)
 	subscriptionRepo := billingpg.NewSubscriptionRepository(p.DB)
@@ -50,16 +60,59 @@ func WireBilling(ctx context.Context, p platformDeps) (*Billing, error) {
 		Clock:  p.Clock,
 		Logger: p.Logger,
 	})
+
+	paymentMetrics, err := payment.NewMetrics()
+	if err != nil {
+		return nil, fmt.Errorf("payment metrics: %w", err)
+	}
+	provider, err := wirePaymentProvider(p.Cfg, p.Logger, p.Clock, paymentMetrics)
+	if err != nil {
+		return nil, err
+	}
+
 	p.Logger.InfoContext(ctx, "billing module initialized",
-		"tariff_cache_ttl", p.Cfg.TariffCacheTTL.String())
+		"tariff_cache_ttl", p.Cfg.TariffCacheTTL.String(),
+		"payment_provider", string(provider.Name()),
+	)
 
 	return &Billing{
 		TariffRepo:       tariffRepo,
 		SubscriptionRepo: subscriptionRepo,
 		TransitionRepo:   transitionRepo,
 		Services:         services,
+		PaymentProvider:  provider,
 		MutationGate:     billinghttp.NewMutationGate(services.Subscriptions, p.Clock),
 	}, nil
+}
+
+// wirePaymentProvider selects the single active provider adapter from the
+// configuration (ADR 0038). The adapter itself fails fast on missing
+// provider endpoint configuration — the test base URL is deliberately not a
+// default (issue #248) — and the wrap below names the env vars so the error
+// is actionable in local, where the config layer allows an empty
+// T_KASSA_BASE_URL.
+func wirePaymentProvider(cfg *config.Config, log *slog.Logger, clk clock.Clock, metrics *payment.Metrics) (billingapp.PaymentProvider, error) {
+	switch cfg.PaymentProvider {
+	case "fake":
+		return paymentfake.NewProvider(cfg.AppBaseURL, log, clk, metrics), nil
+	case "tkassa":
+		provider, err := paymenttkassa.NewProvider(paymenttkassa.Config{
+			BaseURL:        cfg.TKassaBaseURL,
+			TerminalKey:    cfg.TKassaTerminalKey,
+			Password:       cfg.TKassaPassword,
+			AppBaseURL:     cfg.AppBaseURL,
+			Timeout:        cfg.TKassaTimeout,
+			MaxRetries:     cfg.TKassaMaxRetries,
+			RetryBaseDelay: cfg.TKassaRetryBaseDelay,
+			RetryMaxDelay:  cfg.TKassaRetryMaxDelay,
+		}, log, metrics)
+		if err != nil {
+			return nil, fmt.Errorf("init tkassa payment provider (check T_KASSA_BASE_URL, T_KASSA_TERMINAL_KEY, T_KASSA_PASSWORD, APP_BASE_URL): %w", err)
+		}
+		return provider, nil
+	default:
+		return nil, fmt.Errorf("unsupported payment provider %q", cfg.PaymentProvider)
+	}
 }
 
 // subscriptionViewer is the billing port consumed by the /me enricher glue

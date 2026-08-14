@@ -1,6 +1,6 @@
 openapi: 3.0.2
 info:
-  version: '1.21'
+  version: '1.27'
   title: Прием платежей
   description: |-
     ## Правила работы
@@ -29,7 +29,7 @@ tags:
   - name: Методы для работы с 3DS
     x-parent-tag: Прием платежей по карте
   - name: Другие способы приема платежей
-    description: СБП, T‑Pay, SberPay, Mir Pay.
+    description: СБП, T‑Pay, SberPay, Mir Pay, цифровой рубль.
   - name: СБП
     x-parent-tag: Другие способы приема платежей
   - name: T‑Pay
@@ -39,6 +39,8 @@ tags:
   - name: Mir Pay
     x-parent-tag: Другие способы приема платежей
   - name: Alfa Pay
+    x-parent-tag: Другие способы приема платежей
+  - name: Цифровой рубль
     x-parent-tag: Другие способы приема платежей
   - name: Привязка карты
     description: Методы для работы с покупателями и картами.
@@ -71,7 +73,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Init'
+              $ref: '#/components/schemas/InitRequest'
             example:
               TerminalKey: TBankTest
               Amount: 140000
@@ -108,16 +110,26 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Response'
-              example:
-                Success: true
-                ErrorCode: '0'
-                TerminalKey: TBankTest
-                Status: NEW
-                PaymentId: '3093639567'
-                OrderId: '21090'
-                Amount: 140000
-                PaymentURL: https://pay.tbank.ru/new/fU1ppgqa
+                oneOf:
+                  - $ref: '#/components/schemas/InitResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Success:
+                  value:
+                    Success: true
+                    ErrorCode: '0'
+                    TerminalKey: TBankTest
+                    Status: NEW
+                    PaymentId: '3093639567'
+                    OrderId: '21090'
+                    Amount: 140000
+                    PaymentURL: https://pay.tbank.ru/new/fU1ppgqa
+                Failed:
+                  value:
+                    Success: false
+                    ErrorCode: '501'
+                    Message: Неверные параметры
+                    Details: Терминал не найден.
         '500':
           description: Внутренняя ошибка сервера
           content:
@@ -148,7 +160,7 @@ paths:
 
         Метод возвращает версию протокола 3DS, по которому может аутентифицироваться карта.
 
-        Если 3DS v2.1, можно получить данные для прохождения дополнительного метода [Пройти этап 3DS Method](/eacq/api/3-ds-method). Он позволяет эмитенту собрать данные браузера покупателя — это может быть полезно при принятии решения в пользу Frictionless Flow (аутентификация покупателя без редиректа на страницу ACS).
+        Если 3DS v2.1, можно получить данные для прохождения дополнительного метода [Пройти этап 3DS Method](/eacq/api/three-ds-method). Он позволяет эмитенту собрать данные браузера покупателя — это может быть полезно при принятии решения в пользу Frictionless Flow (аутентификация покупателя без редиректа на страницу ACS).
       requestBody:
         required: true
         content:
@@ -193,50 +205,52 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - Version
-                  - PaymentSystem
-                  - Success
-                  - ErrorCode
-                properties:
-                  Version:
-                    description: |
-                      Версия протокола 3DS. 
-                      Примеры:
-                      * `1.0.0` — первая версия,
-                      * `2.1.0` — вторая версия.
-                    type: string
-                  TdsServerTransID:
-                    description: |
-                      Идентификатор платежа, который генерируется 3DS Server. Параметр обязательный для 3DS v2.1.
-                    type: string
-                  ThreeDSMethodURL:
-                    description: |
-                      Дополнительный параметр для 3DS v2.1, который позволяет пройти этап по сбору данных браузера ACS-ом.
-                    type: string
-                    format: uri
-                  PaymentSystem:
-                    description: |
-                      Платежная система карты.
-                    type: string
-                  Success:
-                    description: |
-                      Успешность прохождения запроса — `true`/`false`.
-                    type: boolean
-                  ErrorCode:
-                    description: |
-                      Код ошибки.
-                    type: string
-                    maxLength: 20
-                  Message:
-                    description: |
-                      Краткое описание ошибки.
-                    type: string
-                  Details:
-                    description: |
-                      Подробное описание ошибки.
-                    type: string
+                oneOf:
+                  - type: object
+                    required:
+                      - Version
+                      - PaymentSystem
+                      - Success
+                      - ErrorCode
+                    properties:
+                      Version:
+                        description: |
+                          Версия протокола 3DS. 
+                          Примеры:
+                          * `1.0.0` — первая версия,
+                          * `2.1.0` — вторая версия.
+                        type: string
+                      TdsServerTransID:
+                        description: |
+                          Идентификатор платежа, который генерируется 3DS Server. Параметр обязательный для 3DS v2.1.
+                        type: string
+                      ThreeDSMethodURL:
+                        description: |
+                          Дополнительный параметр для 3DS v2.1, который позволяет пройти этап по сбору данных браузера ACS-ом.
+                        type: string
+                        format: uri
+                      PaymentSystem:
+                        description: |
+                          Платежная система карты.
+                        type: string
+                      Success:
+                        description: |
+                          Успешность прохождения запроса — `true`/`false`.
+                        type: boolean
+                      ErrorCode:
+                        description: |
+                          Код ошибки.
+                        type: string
+                        maxLength: 20
+                      Message:
+                        description: |
+                          Краткое описание ошибки.
+                        type: string
+                      Details:
+                        description: |
+                          Подробное описание ошибки.
+                        type: string
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 Version: 2.1.0
                 TdsServerTransID: 17d3791b-5cfa-4318-bc23-3d949e8c4b7e
@@ -258,7 +272,7 @@ paths:
                 Message: Внутренняя ошибка системы.
                 Causes:
                   - Internal Service Error.
-  /v2/3DSMethod:
+  /v2/ThreeDSMethod:
     post:
       tags:
         - Методы для работы с 3DS
@@ -276,7 +290,7 @@ paths:
       servers:
         - url: https://acs.vendorcert.mirconnect.ru/ds/6300
           description: production
-      operationId: 3DSMethod
+      operationId: ThreeDSMethod
       x-front:
         usage-scenario:
           - name: Оплата картой на своей платежной форме
@@ -287,7 +301,7 @@ paths:
         content:
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/3DSMethod'
+              $ref: '#/components/schemas/ThreeDSMethodRequest'
       x-codeSamples:
         - lang: Пример запроса на 3DS Method Url
           source: |
@@ -300,7 +314,7 @@ paths:
           source: |
             {
             "threeDSServerTransID":"56e712a5-190a-4588-91bc-e08626e77c44",
-            "threeDSMethodNotificationURL":https://rest-api-test.tinkoff.ru/v2/Complete3DSMethodv2
+            "threeDSMethodNotificationURL":https://rest-api-test.tinkoff.ru/v2/CompleteThreeDSMethodv2
             }
       responses:
         '200':
@@ -308,7 +322,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/3DSMethod-2'
+                oneOf:
+                  - $ref: '#/components/schemas/ThreeDSMethodResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Внутренняя ошибка сервера
           content:
@@ -338,13 +354,13 @@ paths:
         Метод подтверждает платеж:
 
         * при одностадийной оплате —  списывает деньги за покупку сразу после завершения оплаты;
-        * при двухстадийной — блокирует деньги за покупку на карте покупателя и только потом списывает их. 
+        * при двухстадийной — блокирует деньги за покупку на счете покупателя и только потом списывает их. 
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/FinishAuthorize'
+              $ref: '#/components/schemas/FinishAuthorizeRequest'
             example:
               TerminalKey: TBankTest
               PaymentId: '700001702044'
@@ -361,7 +377,7 @@ paths:
                 screen_width: '967'
                 cresCallbackUrl: www.callbackurl.ru
                 colorDepth: '48'
-                javaEnabled: 'false'
+                javaEnabled: false
               InfoEmail: qwerty@test.com
               EncryptedPaymentData: string
               CardData: eyJzaWduYXR1cmUiOiJNRVVDSVFEdjNJS1A5WG9nWml4RytUUm9zZWFDK0RGd3RKd2FtMHVEcm91RUVGZVB6Z0lnYXBFbHhxQ3AwQWtZcVVmTFVMaVNhUjBKWkVQNmg 4THFqYks5YkJKQnM5d1x1MDAzZCIsInByb3RvY29sVmVyc2lvbiI6IkVDdjEiLCJzaWduZWRNZXNzYWdlIjoie1wiZW5jcnlwdGVkTWVzc2FnZVwiOlwiQW11dm5OYUIralBsa3VKTitrMUZLSDZFcm1VK2lTY052 L05rR3FFaXIxOHZmSWxkVFJ5L2U4cW5zMXkyanFtcm1acU1JSWNYMUhyTHBxRURpaXkvS3B6SUhNZFllcXRkSVVNOU1tRjNpejU2d2NTZUVVaXU2ODI3QThGcitaYm8xRWtWRjY1TUxRYVY3NlBOUFRndH UvQ1BodW5HUk0rN25KdVhDczVtbkVvOHFma0RNVk8xWktGWDQ4TnVEL2FKcDJQdVVIY2puSnBTZ0pTSDB4U21YSnAzU1MreXFDNm54N254WUEwN2h4YjYvSnp2R2s3ZExDU2hWWGU1Z2haUjNDaFQyV W8rRnpXTWJRRGZtSjBLQW9kc2VlR0xaaitqMzVqOUlKMkhJRFhIUUZZMWNuTW9YVUVoTjgvdEkvRkpqRnJiYVdFRkIzRDZwOFUzT2tkUmVaNHAyYi8yYURNZXVxR1ozSUtjc3R0R2lKMFhQQVhhZXYyQU8 o1M3RRQXVqQXRYdFlaekNTVjVBVXdXZS85T1VcXHUwMDNkXCJ9In0=
@@ -374,10 +390,11 @@ paths:
             application/json:
               schema:
                 oneOf:
-                  - $ref: '#/components/schemas/Without3DS'
-                  - $ref: '#/components/schemas/With3DS'
-                  - $ref: '#/components/schemas/With3DSv2APP'
-                  - $ref: '#/components/schemas/With3DSv2BRW'
+                  - $ref: '#/components/schemas/WithoutThreeDS'
+                  - $ref: '#/components/schemas/WithThreeDS'
+                  - $ref: '#/components/schemas/WithThreeDSv2APP'
+                  - $ref: '#/components/schemas/WithThreeDSv2BRW'
+                  - $ref: '#/components/schemas/ErrorResponse'
               examples:
                 Without3DS:
                   summary: Without3DS
@@ -410,8 +427,8 @@ paths:
                     MD: ACQT-563587431
                     PaReq: eJxVUl1TwjAQ/CtM30s+KLTDHGHQwsiogFh09C2kp1RpC2nLh7/eBAtqnnYvN3ubvUD/kK4bO9RFkmc9hzWp08BM5XGSvfecRTRyA6cvIFppxP\nARVaVRwD0WhXzHRhL3HMUU73itwKVtyl1Pcs8Nli3pymUQK+z2Sww6joDZYI5bAfUgYeY0OZAzNYparWRWCpBqezWeiDZnLe3BqSmkqMeh4PRy2p\n02BfJThkymKCIsSiAnCCqvslIfhXEG5Eyg0muxKstN0SVkv983yyT7zN/emroiQOwlkF8js8qiwogdklg8rEfT5WK0jj6G7D4cepNo8TWNBmwSDXtAbAfEskTjkPk0\noF6DeV3a6jLj8VQHmVoXglFTqTFs7IjBn4u/BTBZa7OK8yPODPCwyTM0HSbACwby6/f6xsaoSpNMMN89+uHdV/iUPz2nyat/uxrPXz5nuX/c2nBPTVYxMflwzthJ0hIgVobUeyP1yg469xW+AedOuuM=\
                     ACSUrl: https://secure.tcsbank.ru/acs/auth/start.do
-                With3DSv2APP:
-                  summary: With3DSv2APP
+                WithThreeDSv2APP:
+                  summary: WithThreeDSv2APP
                   value:
                     TerminalKey: TBankTest
                     Amount: 100000
@@ -431,8 +448,8 @@ paths:
                     AcsSignedContent: eyJ4NWMiOlsiTUlJRGtUQ0NBbm1nQXdJQkFnSVVRU1VEV05VZEFicWozS1Uya0M0VHpaSEpVVHd3RFFZSktvWklodmNOQVFFTEJRQXdXREVMTUFrR0ExVUVCaE1DVWxVeER6QU5CZ05WQkFnTUJrMXZjMk52ZHpFUE1BMEdBMVVFQnd3R1RXOXpZMjkzTVJJ d0VBWURWUVFLREFsVGIyMWxJR0poYm1zeEV6QVJCZ05WQkFNTUNtUnpMbTF2WTJzdWNuVXdIaGNOTWpBd056RTRNVFExT1RNM1doY05NakV3TnpFNE1UUTFPVE0zV2pCWU1Rc3dDUVlEVlFRR0V3SlNWVEVQTUEwR0ExVUVDQXdHVFc5elkyOTNNUTh3RF FZRFZRUUhEQVpOYjNOamIzY3hFakFRQmdOVkJBb01DVk52YldVZ1ltRnVhekVUTUJFR0ExVUVBd3dLWkhNdWJXOWpheTV5ZFRDQ0FTSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTUhNdXB1Wlg3VUFWR3Z5dm9uZ1o4U3BJcisrRD RnMjBRaFwvZ0NGb3JUN1pDUkRaVWhRamlDSzdXSWpiVHRKQUFKVG1yelhcLzlMSGJIdHpIcFFvRFVTNXZPTnRqVWFaVGVQUE91SklMRWl6NDBBVjJCUVZRd0xnRzBjbm9oK21Qa0dNMEZ4VmJFcHFEVHk3SHB0dFAwdm96cGxHNjdFWk1HTXdKSUpESmlDYUdG OGZ0aTlYR3M4MXB3NUhWZElmOHNpQnFaWW94cGt0QWJ1dnpBTFJEUnp3dFBhclFHOTZyQStPM0dJaE53VDhZXC9pallwS0hWNkJCWDBKNmxZdFdoaVY5blhBVktYNTNlVTJ4M1E2Njh4U3BLa2dwSVh1N2xiNUN2M2dDTlIrelVqK0lTODNZYjJhUlR2WkF6MFI1 V3dBNW5Zb2J6V3Vta1wvdE5iV1FYdzBWTUNBd0VBQWFOVE1GRXdIUVlEVlIwT0JCWUVGRmVWN0dzR0tCSzhUTDljaVk4UFF2N0RhY290TUI4R0ExVWRJd1FZTUJhQUZGZVY3R3NHS0JLOFRMOWNpWThQUXY3RGFjb3RNQThHQTFVZEV3RUJcL3dRRk1BT UJBZjh3RFFZSktvWklodmNOQVFFTEJRQURnZ0VCQUZqVGppUkxKOFpaWld5dXFLNTZHVkR6dnJiXC9uRlVDTHVjVXZEV2toK09lRWkxWUFPOUJZV3RFVTVzdmRNNTlsOWVTMGtjbGxrRzVDTklcL1U4S2dKSnUzV0tEVXp5cU80eVRNU3g3RWZDXC9qVE1oT2d2Y UJubktWK2hvV3FQZTlKNHZVYzZ2R0wzWE1cL0FNeWpoVDlBRko1ZjZBaVdZMk5QYkxHczQ2N0ZPY2Vwb1RJMkdseHBtcWdaMFVGKzlsblNZbDU0WEg2dGNZYUszWjcxS2NES0I0QkUySWVmV1Y3MUM3anBVdjFFSlFsNTY4XC8xaGpsZktXUExWcE5NTzVlTlNMR 1ZKd1VmdFA0V0tKU2Y2VmdtbG5XOU1yVStiK3hvZW44MFF1dUxrSWs1ZXBIM2l1ZDV4a1IxcVVXQU1aTUZTQW4yUHJDdjQrZFFMRDd2OG83d3BrPSJdLCJhbGciOiJQUzI1NiJ9.eyJhY3NFcGhlbVB1YktleSI6eyJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IlRoRj NJY3BIMVVLanliQW5lNWhHcy1BNnpyYXo2aUxiYVk0WmVEOU1oSU0iLCJ5Ijoid0VuVXNvNlRLZDlfbjZSc2NjUXRCeFc2Q1gzLXFSTGk0UWJBU3pNbm4tTSJ9LCJzZGtFcGhlbVB1YktleSI6eyJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6Ikp6R2tGM2w3WGxnclJ6NU 1PTl9ncDg3WUxfd0NkVVJpVUlxOXJmNnVyR2MiLCJ5IjoiTnI4UmllTE9vVzJXUkhiX2RFazFmdHRoWEZXTHdYaWZFUzNZZkFnMkhvWSJ9LCJhY3NVUkwiOiJodHRwczovL2VhY3EtZHMtbW9jay1zZXJ2aWNlLXRlc3QudGNzYmFuay5ydS9jaGFsbGVuZ2UvZDkzZjdj NjYtM2VjZi00ZDEwLWJhNjItNDYwNDZlN2I3NTk2In0.hQLVTT5YMAY8TjISRdYX2IT04zH8Z8DgoB4kIAyVfkuJ0X6AGIKXSVcIVSNgC-A_SEkCZRqAyUeu0ZJtpoIVyOf1mumBGEK-uC6yVQlX5WSPidQUj4nuBvpYsfdrGPeoHWvNsrBpMMxvvW4559jtbAUY00NcW3rwDShAi4gVKgJcssMPAM1zOOR5vi0_ClUsCW1k9a201Hv6cYcEBuO2JQ8NPLampEkZ55nOmwcPPTEziXeZsq9VjROXNfBewbA4wLuQmh8aSrcOcwFtJo0CPpdrsKiY77KPT0c8XMmZZK_FiAxzrWocfHraqC7cRJNQ5glEBakXvSfrwGg_xXA
                     AcsReferenceNumber: '12345'
                     SdkTransID: d5a44dfe-673b-4666-82f9-96346107e424
-                With3DSv2BRW:
-                  summary: With3DSv2BRW
+                WithThreeDSv2BRW:
+                  summary: WithThreeDSv2BRW
                   value:
                     TerminalKey: TBankTest
                     Amount: 100000
@@ -473,7 +490,7 @@ paths:
         - Проведение платежа
       summary: Подтвердить списание
       description: |
-        Метод подтверждает списание денег с карты покупателя. 
+        Метод подтверждает списание денег со счета покупателя. 
 
         Используется при двухстадийном платеже. 
 
@@ -485,7 +502,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Confirm'
+              $ref: '#/components/schemas/ConfirmRequest'
             example:
               TerminalKey: TBankTest
               PaymentId: '2304882'
@@ -496,7 +513,7 @@ paths:
                 ClientInfo:
                   Birthdate: string
                   Citizenship: string
-                  DocumentСode: '21'
+                  DocumentCode: '21'
                   DocumentData: string
                   Address: string
                 Taxation: osn
@@ -567,7 +584,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Confirm-2'
+                oneOf:
+                  - $ref: '#/components/schemas/ConfirmResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 OrderId: '21057'
@@ -611,7 +630,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Cancel'
+              $ref: '#/components/schemas/CancelRequest'
             example:
               TerminalKey: TBankTest
               PaymentId: '2304882'
@@ -622,7 +641,7 @@ paths:
                 ClientInfo:
                   Birthdate: string
                   Citizenship: string
-                  DocumentСode: '21'
+                  DocumentCode: '21'
                   DocumentData: string
                   Address: string
                 Taxation: osn
@@ -694,7 +713,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Cancel-2'
+                oneOf:
+                  - $ref: '#/components/schemas/CancelResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 OrderId: '21057'
@@ -733,7 +754,7 @@ paths:
       summary: Провести платеж по сохраненным реквизитам
       description: |-
         Метод используется для проведения COF-операции с использованием ранее сохраненных 
-        реквизитов карты. Выполняет безакцептное списание средств с карты покупателя на основании сохраненных реквизитов и параметра `RebillId`.
+        платежных реквизитов. Выполняет безакцептное списание средств со счета покупателя на основании сохраненных реквизитов и параметра `RebillId`.
 
         Подробнее про платежи по сохраненным реквизитам при интеграции:
         - [с платежной формой банка](/eacq/scenarios/payments/nonPCI/autopay/);
@@ -744,7 +765,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Charge'
+              $ref: '#/components/schemas/ChargeRequest'
             example:
               TerminalKey: TBankTest
               PaymentId: '700001702044'
@@ -759,69 +780,71 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - TerminalKey
-                  - Amount
-                  - OrderId
-                  - Success
-                  - PaymentId
-                  - ErrorCode
-                  - Status
-                properties:
-                  TerminalKey:
-                    description: |
-                      Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
-                    type: string
-                    maxLength: 20
-                    example: TBankTest
-                  Amount:
-                    description: |
-                      Сумма в копейках.
-                    type: number
-                    maxLength: 20
-                    example: 100000
-                  OrderId:
-                    description: |
-                      Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
-                    type: string
-                    maxLength: 36
-                    example: '21050'
-                  Success:
-                    description: |
-                      Успешность прохождения запроса — `true`/`false`.
-                    type: boolean
-                    example: true
-                  Status:
-                    description: |
-                      Статус платежа. 
+                oneOf:
+                  - type: object
+                    required:
+                      - TerminalKey
+                      - Amount
+                      - OrderId
+                      - Success
+                      - PaymentId
+                      - ErrorCode
+                      - Status
+                    properties:
+                      TerminalKey:
+                        description: |
+                          Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+                        type: string
+                        maxLength: 20
+                        example: TBankTest
+                      Amount:
+                        description: |
+                          Сумма в копейках.
+                        type: integer
+                        format: int64
+                        example: 100000
+                      OrderId:
+                        description: |
+                          Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+                        type: string
+                        maxLength: 36
+                        example: '21050'
+                      Success:
+                        description: |
+                          Успешность прохождения запроса — `true`/`false`.
+                        type: boolean
+                        example: true
+                      Status:
+                        description: |
+                          Статус платежа. 
 
-                      Возвращается один из статусов:
-                      * `CONFIRMED` — если платеж выполнен;
-                      * `REJECTED` — если платеж не выполнен.
-                    type: string
-                    maxLength: 20
-                    example: CONFIRMED
-                  PaymentId:
-                    description: |
-                      Идентификатор платежа в системе Т‑Бизнес.
-                    type: string
-                    maxLength: 20
-                    example: '13660'
-                  ErrorCode:
-                    description: |
-                      Код ошибки.
-                    type: string
-                    maxLength: 20
-                    example: '0'
-                  Message:
-                    description: |
-                      Краткое описание ошибки.
-                    type: string
-                  Details:
-                    description: |
-                      Подробное описание ошибки.
-                    type: string
+                          Возвращается один из статусов:
+                          * `CONFIRMED` — если платеж выполнен;
+                          * `REJECTED` — если платеж не выполнен.
+                        type: string
+                        maxLength: 20
+                        example: CONFIRMED
+                      PaymentId:
+                        description: |
+                          Идентификатор платежа в системе Т‑Бизнес.
+                        type: string
+                        maxLength: 20
+                        example: '13660'
+                      ErrorCode:
+                        description: |
+                          Код ошибки.
+                        type: string
+                        maxLength: 20
+                        example: '0'
+                      Message:
+                        description: |
+                          Краткое описание ошибки.
+                        type: string
+                      Details:
+                        description: |
+                          Подробное описание ошибки.
+                        type: string
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 Amount: 100000
@@ -861,7 +884,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetState'
+              $ref: '#/components/schemas/GetStateRequest'
             example:
               TerminalKey: TBankTest
               PaymentId: '13660'
@@ -873,71 +896,72 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - TerminalKey
-                  - Amount
-                  - OrderId
-                  - Success
-                  - PaymentId
-                  - ErrorCode
-                  - Status
-                properties:
-                  TerminalKey:
-                    description: |
-                      Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
-                    type: string
-                    maxLength: 64
-                  Amount:
-                    description: |
-                      Сумма в копейках.
-                    type: number
-                    maxLength: 20
-                  OrderId:
-                    description: |
-                      Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
-                    type: string
-                    maxLength: 36
-                  Success:
-                    description: |
-                      Успешность прохождения запроса — `true`/`false`.
-                    type: boolean
-                  Status:
-                    description: |
-                      Статус платежа.
-                    type: string
-                    maxLength: 20
-                  PaymentId:
-                    description: |
-                      Идентификатор платежа в системе Т‑Бизнес.
-                    type: string
-                    maxLength: 20
-                  RebillId:
-                    description: |
-                      Уникальный идентификатор сохраненных платежных реквизитов покупателя.
-                    type: string
-                  ErrorCode:
-                    description: |
-                      Код ошибки.
+                oneOf:
+                  - type: object
+                    required:
+                      - TerminalKey
+                      - Amount
+                      - OrderId
+                      - Success
+                      - PaymentId
+                      - ErrorCode
+                      - Status
+                    properties:
+                      TerminalKey:
+                        description: |
+                          Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+                        type: string
+                        maxLength: 64
+                      Amount:
+                        description: |
+                          Сумма в копейках.
+                        type: integer
+                        format: int64
+                      OrderId:
+                        description: |
+                          Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+                        type: string
+                        maxLength: 36
+                      Success:
+                        description: |
+                          Успешность прохождения запроса — `true`/`false`.
+                        type: boolean
+                      Status:
+                        description: |
+                          Статус платежа.
+                        type: string
+                        maxLength: 20
+                      PaymentId:
+                        description: |
+                          Идентификатор платежа в системе Т‑Бизнес.
+                        type: string
+                        maxLength: 20
+                      RebillId:
+                        description: |
+                          Уникальный идентификатор сохраненных платежных реквизитов покупателя.
+                        type: string
+                      ErrorCode:
+                        description: |
+                          Код ошибки.
 
-                      При успешном прохождении запроса для СБП возвращается `0`. Ориентируйтесь на статус платежа.
-                    type: string
-                  Message:
-                    description: |
-                      Краткое описание ошибки.
+                          При успешном прохождении запроса для СБП возвращается `0`. Ориентируйтесь на статус платежа.
+                        type: string
+                      Message:
+                        description: |
+                          Краткое описание ошибки.
 
-                      При успешном прохождении запроса для СБП возвращается `ОК`.
-                    type: string
-                  Details:
-                    description: |
-                      Подробное описание ошибки.
-                    type: string
-                  Params:
-                    description: |
-                      Информация по способу оплаты или деталям для платежей в рассрочку.
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Items_Params'
+                          При успешном прохождении запроса для СБП возвращается `ОК`.
+                        type: string
+                      Details:
+                        description: |
+                          Подробное описание ошибки.
+                        type: string
+                      Params:
+                        description: Информация по способу оплаты или деталям для платежей в рассрочку.
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ItemsParams'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 Success: true
                 ErrorCode: '0'
@@ -953,6 +977,14 @@ paths:
                     Value: cards
                   - Key: CreditAmount
                     Value: '100000'
+                  - Key: EndCoolingPeriod
+                    Value: '2024-12-31T23:59:59Z'
+                  - Key: ParticipantWalletId
+                    Value: g.ru.cbrdc.wlt.clt.1234****-****-****-****-**********12
+                  - Key: DrPaymentId
+                    Value: a1b2c3d4-e5f6-4a7b-8c9d-e1f2g3h4i5j6
+                  - Key: DrPaymentSettlementDate
+                    Value: '2024-03-15T12:00:00Z'
                 Amount: 1230
         '500':
           description: Внутренняя ошибка сервера
@@ -985,7 +1017,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AddCustomer'
+              $ref: '#/components/schemas/AddCustomerRequest'
             example:
               TerminalKey: TBankTest
               CustomerKey: 4387c647-a693-449d-bc35-91faecfc50de
@@ -999,7 +1031,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AddCustomerResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/AddCustomerResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 CustomerKey: 05d65baa-9718-445e-8212-76fa0dd4c1d2
@@ -1037,7 +1071,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetOrRemoveCustomer'
+              $ref: '#/components/schemas/GetOrRemoveCustomerRequest'
             example:
               TerminalKey: TBankTest
               CustomerKey: string
@@ -1049,7 +1083,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetCustomerResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/GetCustomerResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 CustomerKey: 4264aa7b-08ab-4429-ab5a-2a171d841ced
@@ -1089,7 +1125,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetOrRemoveCustomer'
+              $ref: '#/components/schemas/GetOrRemoveCustomerRequest'
             example:
               TerminalKey: TBankTest
               CustomerKey: string
@@ -1101,7 +1137,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RemoveCustomerResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/RemoveCustomerResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 CustomerKey: string
@@ -1140,7 +1178,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AddCard'
+              $ref: '#/components/schemas/AddCardRequest'
             example:
               TerminalKey: TBankTest
               CustomerKey: testCustomer1234
@@ -1154,7 +1192,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AddCardResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/AddCardResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 PaymentId: 6155312072
                 TerminalKey: TBankTest
@@ -1193,13 +1233,13 @@ paths:
 
         Метод завершает привязку карты к покупателю. 
 
-        Для прохождения 3DS v2 перед вызовом метода нужно вызвать поочередно методы [Проверить версию 3DS](/eacq/api/check-3-ds-version) и [Пройти этап 3DS Method](/eacq/api/3-ds-method).
+        Для прохождения 3DS v2 перед вызовом метода нужно вызвать поочередно методы [Проверить версию 3DS](/eacq/api/check-3-ds-version) и [Пройти этап 3DS Method](/eacq/api/three-ds-method).
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AttachCard'
+              $ref: '#/components/schemas/AttachCardRequest'
             example:
               TerminalKey: TBankTest
               RequestKey: 13021e10-a3ed-4f14-bcd1-823b5ac37390
@@ -1215,7 +1255,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AttachCardResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/AttachCardResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               examples:
                 Пример ответа 3DS v1.0:
                   value:
@@ -1259,7 +1301,7 @@ paths:
                 Message: Внутренняя ошибка системы.
                 Causes:
                   - Internal Service Error.
-  /v2/ACSUrl:
+  /v2/AcsUrl:
     post:
       tags:
         - Методы для работы с 3DS
@@ -1271,7 +1313,7 @@ paths:
          Если в ответе метода [Подтвердить платеж](/eacq/api/finish-authorize) возвращается статус `3DS_CHECKING`, 
          мерчанту нужно сформировать запрос на URL ACS банка, выпустившего карту, из параметра `ACSUrl`.
          
-         **Для 3DS v2.1**: компонент ACS использует пары сообщений CReq и CRes для выполнения проверки (Challenge). В ответ на полученное сообщение CReq компонент ACS формирует сообщение CRes, которое запрашивает держателя карты ввести данные для аутентификации.
+         **Для 3DS v2.1**: компонент ACS использует пары сообщений CReq и CRes для выполнения проверки (Challenge). В ответ на полученное сообщение CReq компонент ACS формирует сообщение CRes, которое запрашивает покупателя ввести данные для аутентификации.
 
          **Формат ответа**: cres, полученный по `NotificationUrl` из запроса метода [Подтвердить платеж](/eacq/api/finish-authorize).
          При успешном результате прохождения 3DS инициированный платеж подтверждается с помощью методов [Подтвердить прохождение 3DS v1.0](/eacq/api/submit-3-ds-authorization) или [Подтвердить прохождение 3DS v2.1](/eacq/api/submit-3-ds-authorization-v-2) в зависимости от версии 3DS.
@@ -1281,7 +1323,7 @@ paths:
       servers:
         - url: https://acsSignedContent.com
           description: production
-      operationId: ACSUrl
+      operationId: AcsUrl
       x-front:
         usage-scenario:
           - name: Оплата картой на своей платежной форме
@@ -1293,13 +1335,13 @@ paths:
           application/x-www-form-urlencoded:
             schema:
               oneOf:
-                - $ref: '#/components/schemas/ACSUrl_V1'
-                - $ref: '#/components/schemas/ACSUrl_V2'
+                - $ref: '#/components/schemas/AcsUrlv1Request'
+                - $ref: '#/components/schemas/AcsUrlv2Request'
       x-codeSamples:
         - lang: Payload 3DS v1.0
           source: |
             <body onload="document.form.submit()" >
-            <form name="form" action="{ACSUrl}" method="post" >
+            <form name="form" action="{AcsUrl}" method="post" >
               <input type="hidden" name="TermUrl" value="{TermUrl}" >
               <input type="hidden" name="MD" value="{MD}" >
               <input type="hidden" name="PaReq" value="{PaReq}" >
@@ -1308,7 +1350,7 @@ paths:
         - lang: Payload 3DS v2.1
           source: |
             <body onload="document.form.submit()">
-            <form name="form" action="{ACSUrl}" method="post">
+            <form name="form" action="{AcsUrl}" method="post">
               <input type="hidden" name="creq" value="ewogICJhY3NUcmFuc0lEIjogImUxNzZkNWQzLTJmMTktNDBmNS04MjM0LTQ2ZDM0NjRlMGIwOCIsCiAgImNoYWxsZW5nZVdpbmRvd1NpemUiOiAiMDMiLAogICJtZXNzYWdlVHlwZSI6ICJDUmVxIiwKICAibWVzc2FnZVZlcnNpb24iOiAiMi4xLjAiLAogICJ0aHJlZURTU2VydmVyVHJhbnNJRCI6ICJkNzE3MWEwNi03MTU5LTRiZGQtODkxYS1hNTYwZmU5OTM4ZDIiCn0K">
             </form>
             </body>
@@ -1319,8 +1361,9 @@ paths:
             application/json:
               schema:
                 oneOf:
-                  - $ref: '#/components/schemas/ACSUrlResponseV1'
-                  - $ref: '#/components/schemas/ACSUrlResponseV2'
+                  - $ref: '#/components/schemas/AcsUrlv1Response'
+                  - $ref: '#/components/schemas/AcsUrlv2Response'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 cres: FwlGfSwmRARfDXsgt1PBvbtYTIMY2l2SThPEeei6aFwlGfSwmRARfDXsgt1PBvbtYTIMY2l2SThPEeei6aGIdXfZ3psSfuKZt3O35yCVpfAbYs8AmIdIHQmJyskyNxYZyGIdXfZ3psSfuKZt3O35yCVpNkQwzuH68WlB9oiEnt6NdGaegzJ6ljDlKAl7tvQNCPw2FjDWbhHlxj34ut0hhivaJBNHSmvumv7sndTpA7AzxJYNUhkp67fG411fAbYs8AmIdIHQmJyskyNxYZy
         '500':
@@ -1354,9 +1397,9 @@ paths:
         Проверяет результаты прохождения 3D Secure и при успешном прохождении
         подтверждает инициированный платеж.
         При использовании:
-          * одностадийной оплаты — списывает денежные средства с карты
+          * одностадийной оплаты — списывает денежные средства со счета покупателя
          покупателя;
-          * двухстадийной оплаты — блокирует указанную сумму на карте покупателя.
+          * двухстадийной оплаты — блокирует указанную сумму на счете покупателя.
 
 
          Формат запроса — `x-www-form-urlencoded`.
@@ -1416,51 +1459,53 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - TerminalKey
-                  - OrderId
-                  - Success
-                  - Status
-                  - PaymentId
-                  - ErrorCode
-                properties:
-                  TerminalKey:
-                    description: |
-                      Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
-                    type: string
-                  OrderId:
-                    description: |
-                      Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
-                    type: string
-                  Success:
-                    description: |
-                      Успешность прохождения запроса — `true`/`false`.
-                    type: boolean
-                  Status:
-                    description: |
-                      Статус транзакции:
-                      - `CONFIRMED` — при успешном сценарии и одностадийном проведении платежа;
-                      - `AUTHORIZED` — при успешном сценарии и двухстадийном проведении платежа; 
-                      - `REJECTED` — при неуспешном сценарии.
-                    type: string
-                  PaymentId:
-                    description: |
-                      Идентификатор платежа в системе Т‑Бизнес.
-                    type: string
-                  ErrorCode:
-                    description: |
-                      Код ошибки.
-                    type: string
-                    maxLength: 20
-                  Message:
-                    description: |
-                      Краткое описание ошибки.
-                    type: string
-                  Details:
-                    description: |
-                      Подробное описание ошибки.
-                    type: string
+                oneOf:
+                  - type: object
+                    required:
+                      - TerminalKey
+                      - OrderId
+                      - Success
+                      - Status
+                      - PaymentId
+                      - ErrorCode
+                    properties:
+                      TerminalKey:
+                        description: |
+                          Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+                        type: string
+                      OrderId:
+                        description: |
+                          Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+                        type: string
+                      Success:
+                        description: |
+                          Успешность прохождения запроса — `true`/`false`.
+                        type: boolean
+                      Status:
+                        description: |
+                          Статус транзакции:
+                          - `CONFIRMED` — при успешном сценарии и одностадийном проведении платежа;
+                          - `AUTHORIZED` — при успешном сценарии и двухстадийном проведении платежа; 
+                          - `REJECTED` — при неуспешном сценарии.
+                        type: string
+                      PaymentId:
+                        description: |
+                          Идентификатор платежа в системе Т‑Бизнес.
+                        type: string
+                      ErrorCode:
+                        description: |
+                          Код ошибки.
+                        type: string
+                        maxLength: 20
+                      Message:
+                        description: |
+                          Краткое описание ошибки.
+                        type: string
+                      Details:
+                        description: |
+                          Подробное описание ошибки.
+                        type: string
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 OrderId: '21050'
@@ -1553,48 +1598,50 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - OrderId
-                  - Status
-                  - TerminalKey
-                  - Success
-                  - ErrorCode
-                  - PaymentId
-                properties:
-                  OrderId:
-                    description: |
-                      Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
-                    type: string
-                  TerminalKey:
-                    description: |
-                      Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
-                    type: string
-                  Status:
-                    description: |
-                      Статус транзакции
-                    type: string
-                  PaymentId:
-                    description: |
-                      Идентификатор платежа в системе Т‑Бизнес.
-                    type: string
-                  Success:
-                    description: |
-                      Успешность прохождения запроса — `true`/`false`.
-                    type: boolean
-                  ErrorCode:
-                    description: |
-                      Код ошибки.
-                    type: string
-                    maxLength: 20
-                  Message:
-                    description: |
-                      Краткое описание ошибки.
-                    type: string
-                  Details:
-                    description: |
-                      Подробное описание ошибки.
-                    type: string
+                oneOf:
+                  - type: object
+                    required:
+                      - OrderId
+                      - Status
+                      - TerminalKey
+                      - Success
+                      - ErrorCode
+                      - PaymentId
+                    properties:
+                      OrderId:
+                        description: |
+                          Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+                        type: string
+                      TerminalKey:
+                        description: |
+                          Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+                        type: string
+                      Status:
+                        description: |
+                          Статус транзакции
+                        type: string
+                      PaymentId:
+                        description: |
+                          Идентификатор платежа в системе Т‑Бизнес.
+                        type: string
+                      Success:
+                        description: |
+                          Успешность прохождения запроса — `true`/`false`.
+                        type: boolean
+                      ErrorCode:
+                        description: |
+                          Код ошибки.
+                        type: string
+                        maxLength: 20
+                      Message:
+                        description: |
+                          Краткое описание ошибки.
+                        type: string
+                      Details:
+                        description: |
+                          Подробное описание ошибки.
+                        type: string
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 OrderId: '21050'
                 TerminalKey: TBankTest
@@ -1632,7 +1679,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetAddCardState'
+              $ref: '#/components/schemas/GetAddCardStateRequest'
             example:
               TerminalKey: TBankTest
               RequestKey: 13021e10-a3ed-4f14-bcd1-823b5ac37390
@@ -1643,7 +1690,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetAddCardStateResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/GetAddCardStateResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 RequestKey: 13021e10-a3ed-4f14-bcd1-823b5ac37390
@@ -1686,7 +1735,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetCardList'
+              $ref: '#/components/schemas/GetCardListRequest'
             example:
               TerminalKey: TBankTest
               CustomerKey: testCustomer1234
@@ -1699,51 +1748,53 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  required:
-                    - CardId
-                    - Pan
-                    - Status
-                    - CardType
-                  properties:
-                    CardId:
-                      description: |
-                        Идентификатор карты в системе Т‑Бизнес.
-                      type: string
-                    Pan:
-                      description: |
-                        Номер карты.
-                      type: string
-                    Status:
-                      description: |
-                        Статус карты:
-                        * `A` — активная;
-                        * `D` — удаленная.
-                      type: string
-                      enum:
-                        - A
-                        - D
-                    RebillId:
-                      description: |
-                        Уникальный идентификатор сохраненных реквизитов карты покупателя.
-                      type: string
-                    CardType:
-                      description: |
-                        Тип карты:
-                        * `0` — карта списания;
-                        * `1` — карта пополнения;
-                        * `2` — карта пополнения и списания.
-                      type: number
-                      enum:
-                        - 0
-                        - 1
-                        - 2
-                    ExpDate:
-                      description: |
-                        Срок действия карты.
-                      type: string
+                oneOf:
+                  - type: array
+                    items:
+                      type: object
+                      required:
+                        - CardId
+                        - Pan
+                        - Status
+                        - CardType
+                      properties:
+                        CardId:
+                          description: |
+                            Идентификатор платежного средства в системе Т‑Бизнес.
+                          type: string
+                        Pan:
+                          description: |
+                            Номер карты.
+                          type: string
+                        Status:
+                          description: |
+                            Статус карты:
+                            * `A` — активная;
+                            * `D` — удаленная.
+                          type: string
+                          enum:
+                            - A
+                            - D
+                        RebillId:
+                          description: |
+                            Уникальный идентификатор сохраненных платежных реквизитов покупателя.
+                          type: string
+                        CardType:
+                          description: |
+                            Тип карты:
+                            * `0` — карта списания;
+                            * `1` — карта пополнения;
+                            * `2` — карта пополнения и списания.
+                          type: number
+                          enum:
+                            - 0
+                            - 1
+                            - 2
+                        ExpDate:
+                          description: |
+                            Срок действия платежного средства.
+                          type: string
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 CardId: '881900'
                 Pan: 518223******0036
@@ -1782,7 +1833,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RemoveCard'
+              $ref: '#/components/schemas/RemoveCardRequest'
             example:
               TerminalKey: TBankTest
               CustomerKey: testCustomer1234
@@ -1795,7 +1846,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RemoveCardResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/RemoveCardResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 Status: D
@@ -1830,6 +1883,7 @@ paths:
             link: /eacq/scenarios/payments/PCI_DSS/sbp/
       tags:
         - СБП
+        - Цифровой рубль
       summary: Сформировать QR
       description: |
         Метод регистрирует QR и возвращает информацию о нем. 
@@ -1839,7 +1893,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetQr'
+              $ref: '#/components/schemas/GetQrRequest'
             example:
               TerminalKey: TBankTest
               PaymentId: 10063
@@ -1851,7 +1905,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QrResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/QrResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 OrderId: '21057'
@@ -1902,47 +1958,49 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - Params
-                  - Success
-                  - ErrorCode
-                properties:
-                  Params:
-                    description: |
-                      Параметры ответа.
-                    type: object
+                oneOf:
+                  - type: object
                     required:
-                      - Allowed
+                      - Params
+                      - Success
+                      - ErrorCode
                     properties:
-                      Allowed:
+                      Params:
                         description: |
-                          Наличие возможности проведения оплаты
-                          T‑Pay по API.
+                          Параметры ответа.
+                        type: object
+                        required:
+                          - Allowed
+                        properties:
+                          Allowed:
+                            description: |
+                              Наличие возможности проведения оплаты
+                              T‑Pay по API.
+                            type: boolean
+                          Version:
+                            description: |
+                              Версия T‑Pay, доступная на терминале:
+                              * `1.0` — e-invoice;
+                              * `2.0` — T‑Pay.
+                            type: string
+                      Success:
+                        description: |
+                          Успешность прохождения запроса — `true`/`false`.
                         type: boolean
-                      Version:
+                      ErrorCode:
                         description: |
-                          Версия T‑Pay, доступная на терминале:
-                          * `1.0` — e-invoice;
-                          * `2.0` — T‑Pay.
+                          Код ошибки.
                         type: string
-                  Success:
-                    description: |
-                      Успешность прохождения запроса — `true`/`false`.
-                    type: boolean
-                  ErrorCode:
-                    description: |
-                      Код ошибки.
-                    type: string
-                    maxLength: 20
-                  Message:
-                    description: |
-                      Краткое описание ошибки.
-                    type: string
-                  Details:
-                    description: |
-                      Подробное описание ошибки.
-                    type: string
+                        maxLength: 20
+                      Message:
+                        description: |
+                          Краткое описание ошибки.
+                        type: string
+                      Details:
+                        description: |
+                          Подробное описание ошибки.
+                        type: string
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 Params:
                   Allowed: true
@@ -1980,7 +2038,6 @@ paths:
           name: paymentId
           schema:
             type: number
-            maxLength: 20
             example: 13660
           required: true
           description: |
@@ -1999,46 +2056,48 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - Params
-                  - Success
-                  - ErrorCode
-                properties:
-                  Params:
-                    description: |
-                      Параметры ответа.
-                    type: object
+                oneOf:
+                  - type: object
                     required:
-                      - RedirectUrl
+                      - Params
+                      - Success
+                      - ErrorCode
                     properties:
-                      RedirectUrl:
+                      Params:
                         description: |
-                          URL для перехода.
-                        type: string
-                        format: uri
-                      WebQR:
+                          Параметры ответа.
+                        type: object
+                        required:
+                          - RedirectUrl
+                        properties:
+                          RedirectUrl:
+                            description: |
+                              URL для перехода.
+                            type: string
+                            format: uri
+                          WebQR:
+                            description: |
+                              URL для получения QR.
+                            type: string
+                            format: uri
+                      Success:
                         description: |
-                          URL для получения QR.
+                          Успешность прохождения запроса — `true`/`false`.
+                        type: boolean
+                      ErrorCode:
+                        description: |
+                          Код ошибки.
                         type: string
-                        format: uri
-                  Success:
-                    description: |
-                      Успешность прохождения запроса — `true`/`false`.
-                    type: boolean
-                  ErrorCode:
-                    description: |
-                      Код ошибки.
-                    type: string
-                    maxLength: 20
-                  Message:
-                    description: |
-                      Краткое описание ошибки.
-                    type: string
-                  Details:
-                    description: |
-                      Подробное описание ошибки.
-                    type: string
+                        maxLength: 20
+                      Message:
+                        description: |
+                          Краткое описание ошибки.
+                        type: string
+                      Details:
+                        description: |
+                          Подробное описание ошибки.
+                        type: string
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 Params:
                   RedirectUrl: https://o.tbank.ru/tpay/<requestId>
@@ -2059,35 +2118,46 @@ paths:
                 Message: Внутренняя ошибка системы.
                 Causes:
                   - Internal Service Error.
-  /v2/TinkoffPay/{paymentId}/QR:
-    get:
-      operationId: QR
+  /v2/SberPay/link/get:
+    servers:
+      - url: https://securepay.tinkoff.ru
+        description: production
+    post:
+      operationId: Sberpay-link-get
       x-front:
         usage-scenario:
-          - name: Прием платежей через T-Pay на своей платежной форме
-            link: /eacq/scenarios/payments/PCI_DSS/t-pay/
+          - name: Прием платежей через SberPay на своей платежной форме
+            link: /eacq/scenarios/payments/PCI_DSS/sberpay/
       deprecated: false
       tags:
-        - T‑Pay
-      summary: Получить QR
-      description: |
-        Метод генерирует QR для десктопов.
-      parameters:
-        - in: path
-          name: paymentId
-          schema:
-            type: number
-            example: 700001702044
-          required: true
-          description: Идентификатор платежа в системе Т‑Бизнес.
+        - SberPay
+      summary: Создать заказ
+      description: Метод создает заказ в SberPay и отправляет push-уведомление окупателю.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SberPayLinkGet'
+            example:
+              TerminalKey: TBankTest
+              PaymentId: '2559680770'
+              Token: 871199b37f207f0c4f721a37cdcc71dfcea880b4a4b85e3cf852c5dc1e99a8d6
+              Phone: '+79651023749'
       responses:
         '200':
-          description: SVG QR, размер — 124*124.
+          description: OK
           content:
-            image/svg:
+            application/json:
               schema:
-                type: string
-                format: binary
+                oneOf:
+                  - $ref: '#/components/schemas/SberPayLinkGetResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+              example:
+                Params:
+                  RedirectUrl: https://payment-app.com
+                Success: true
+                ErrorCode: '0'
         '500':
           description: Внутренняя ошибка сервера
           content:
@@ -2115,6 +2185,9 @@ paths:
         - SberPay
       summary: Получить QR
       description: |
+
+        >С 1 сентября 2026 года поддержка метода прекратится. Вместо него будет использоваться метод [Создать заказ](/eacq/api/sberpay-link-get) согласно [сценарию оплаты через SberPay](/eacq/scenarios/payments/PCI_DSS/sberpay).
+
         Метод генерирует QR для десктопов.
       parameters:
         - in: path
@@ -2159,6 +2232,9 @@ paths:
         - SberPay
       summary: Получить ссылку
       description: |
+
+        >С 1 сентября 2026 года поддержка метода прекратится. Вместо него будет использоваться метод [Создать заказ](/eacq/api/sberpay-link-get) согласно [сценарию оплаты через SberPay](/eacq/scenarios/payments/PCI_DSS/sberpay).
+
         Метод генерирует ссылку SberPay.
       parameters:
         - in: path
@@ -2174,41 +2250,43 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - Params
-                  - Success
-                  - ErrorCode
-                properties:
-                  Params:
-                    description: |
-                      Параметры ответа.
-                    type: object
+                oneOf:
+                  - type: object
                     required:
-                      - RedirectUrl
+                      - Params
+                      - Success
+                      - ErrorCode
                     properties:
-                      RedirectUrl:
+                      Params:
                         description: |
-                          URL для перехода.
+                          Параметры ответа.
+                        type: object
+                        required:
+                          - RedirectUrl
+                        properties:
+                          RedirectUrl:
+                            description: |
+                              URL для перехода.
+                            type: string
+                            format: uri
+                      Success:
+                        description: |
+                          Успешность прохождения запроса — `true`/`false`.
+                        type: boolean
+                      ErrorCode:
+                        description: |
+                          Код ошибки.
                         type: string
-                        format: uri
-                  Success:
-                    description: |
-                      Успешность прохождения запроса — `true`/`false`.
-                    type: boolean
-                  ErrorCode:
-                    description: |
-                      Код ошибки.
-                    type: string
-                    maxLength: 20
-                  Message:
-                    description: |
-                      Краткое описание ошибки.
-                    type: string
-                  Details:
-                    description: |
-                      Подробное описание ошибки.
-                    type: string
+                        maxLength: 20
+                      Message:
+                        description: |
+                          Краткое описание ошибки.
+                        type: string
+                      Details:
+                        description: |
+                          Подробное описание ошибки.
+                        type: string
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 Params:
                   RedirectUrl: tinkoffbank://Main/EInvoicing?billId=5000015507&providerId=e-invoicing
@@ -2248,14 +2326,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetDeepLink'
+              $ref: '#/components/schemas/GetDeepLinkRequest'
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetDeepLinkResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/GetDeepLinkResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Внутренняя ошибка сервера
           content:
@@ -2289,14 +2369,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AlfaPayLink'
+              $ref: '#/components/schemas/AlfaPayLinkRequest'
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AlfaPayLinkResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/AlfaPayLinkResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Внутренняя ошибка сервера
           content:
@@ -2351,35 +2433,37 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - OrderId
-                  - Success
-                  - ErrorCode
-                properties:
-                  Members:
-                    type: array
-                    description: Массив списка участников. Возвращается, только если возврат возможен.
-                    items:
-                      $ref: '#/components/schemas/Member'
-                  OrderId:
-                    description: |
-                      Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
-                    type: string
-                    maxLength: 36
-                  Success:
-                    description: |
-                      Успешность прохождения запроса — `true`/`false`.
-                    type: boolean
-                  ErrorCode:
-                    description: |
-                      Код ошибки.
-                    type: string
-                    maxLength: 20
-                  Message:
-                    description: |
-                      Краткое описание ошибки.
-                    type: string
+                oneOf:
+                  - type: object
+                    required:
+                      - OrderId
+                      - Success
+                      - ErrorCode
+                    properties:
+                      Members:
+                        type: array
+                        description: Массив списка участников. Возвращается, только если возврат возможен.
+                        items:
+                          $ref: '#/components/schemas/Member'
+                      OrderId:
+                        description: |
+                          Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+                        type: string
+                        maxLength: 36
+                      Success:
+                        description: |
+                          Успешность прохождения запроса — `true`/`false`.
+                        type: boolean
+                      ErrorCode:
+                        description: |
+                          Код ошибки.
+                        type: string
+                        maxLength: 20
+                      Message:
+                        description: |
+                          Краткое описание ошибки.
+                        type: string
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 Members:
                   - MemberId: '1000000'
@@ -2424,7 +2508,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AddAccountQr'
+              $ref: '#/components/schemas/AddAccountQrRequest'
             example:
               TerminalKey: TBankTest
               Description: string
@@ -2440,7 +2524,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AddAccountQrResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/AddAccountQrResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 Description: string
@@ -2477,7 +2563,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetAddAccountQrState'
+              $ref: '#/components/schemas/GetAddAccountQrStateRequest'
             example:
               RequestKey: 13021e10-a3ed-4f14-bcd1-823b5ac37390
               TerminalKey: TBankTest
@@ -2488,7 +2574,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetAddAccountQrStateResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/GetAddAccountQrStateResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 RequestKey: 211258
@@ -2525,7 +2613,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetAccountQrList'
+              $ref: '#/components/schemas/GetAccountQrListRequest'
             examples:
               GetAccountQrListRequest:
                 summary: Пример запроса
@@ -2538,7 +2626,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetAccountQrListResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/GetAccountQrListResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               examples:
                 GetAccountQrListResponse:
                   summary: Пример ответа
@@ -2597,7 +2687,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ChargeQr'
+              $ref: '#/components/schemas/ChargeQrRequest'
             example:
               TerminalKey: TBankTest
               PaymentId: '700001702044'
@@ -2613,7 +2703,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ChargeQrResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/ChargeQrResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 Amount: 100000
@@ -2656,7 +2748,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SbpPayTest'
+              $ref: '#/components/schemas/SbpPayTestRequest'
             example:
               TerminalKey: TBankTest
               PaymentId: '13660'
@@ -2669,7 +2761,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SbpPayTestResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/SbpPayTestResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 Success: true
                 ErrorCode: '0'
@@ -2701,7 +2795,7 @@ paths:
         - СБП
       summary: Получить статус возврата
       description: |
-        Метод возвращает статус возврата платежа по СБП.
+        Метод возвращает статус возврата платежа по СБП. 
 
         <a href="/eacq/scenarios/notification">Подробнее про способы получения данных о платеже</a>
       requestBody:
@@ -2740,7 +2834,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetQRStateResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/GetQrStateResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 Success: true
                 ErrorCode: '0'
@@ -2774,6 +2870,7 @@ paths:
             link: /eacq/scenarios/payments/PCI_DSS/sbp/
       tags:
         - СБП
+        - Цифровой рубль
       summary: Получить список банков-участников СБП для платежа
       description: |
         Метод возвращает список банков-участников СБП.
@@ -2782,7 +2879,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetQrBankList'
+              $ref: '#/components/schemas/GetQrBankListRequest'
             example:
               TerminalKey: TBankTest
               ScenarioType: qr
@@ -2796,7 +2893,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetQrBankListResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/GetQrBankListResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 Success: true
                 ErrorCode: '0'
@@ -2848,7 +2947,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CheckOrder'
+              $ref: '#/components/schemas/CheckOrderRequest'
             example:
               TerminalKey: TBankTest
               OrderId: '21057'
@@ -2859,7 +2958,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CheckOrder-2'
+                oneOf:
+                  - $ref: '#/components/schemas/CheckOrderResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 TerminalKey: TBankTest
                 OrderId: '21057'
@@ -2872,11 +2973,14 @@ paths:
                     Amount: 13660
                     Status: NEW
                     RRN: '12345678'
-                    Success: 'true'
+                    Success: true
                     ErrorCode: 0
                     Message: None
                     SbpPaymentId: A42631655397753A0000030011340501
                     SbpCustomerId: c4494ca1c0888b3fb0e2bfd0b83576aaae0d2c71161c5f472133ea9401473aee
+                    DrPaymentId: a1b2c3d4-e5f6-4a7b-8c9d-e1f2g3h4i5j6
+                    DrPaymentSettlementDate: '2024-03-15T12:00:00Z'
+                    ParticipantWalletId: g.ru.cbrdc.wlt.clt.1234****-****-****-****-**********12
         '500':
           description: Внутренняя ошибка сервера
           content:
@@ -2911,7 +3015,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SendClosingReceipt'
+              $ref: '#/components/schemas/SendClosingReceiptRequest'
             example:
               TerminalKey: TBankTest
               PaymentId: '2304882'
@@ -2919,7 +3023,7 @@ paths:
                 ClientInfo:
                   Birthdate: string
                   Citizenship: string
-                  DocumentСode: '21'
+                  DocumentCode: '21'
                   DocumentData: string
                   Address: string
                 Taxation: osn
@@ -2980,7 +3084,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SendClosingReceipt-2'
+                oneOf:
+                  - $ref: '#/components/schemas/SendClosingReceiptResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               example:
                 Success: true
                 ErrorCode: '2304882'
@@ -3009,7 +3115,7 @@ paths:
       description: |
         Метод генерирует справку по конкретной операции. 
 
-        Работает только для операций по карте, T‑Pay и Mir Pay.
+        Работает только для операций по карте, T‑Pay, СБП и Mir Pay.
 
         <a href="/eacq/scenarios/notification">Подробнее про способы получения данных о платеже</a>
       summary: Получить справку по операции
@@ -3018,8 +3124,8 @@ paths:
           application/json:
             schema:
               oneOf:
-                - $ref: '#/components/schemas/by_url'
-                - $ref: '#/components/schemas/by_email'
+                - $ref: '#/components/schemas/ConfirmByUrlRequest'
+                - $ref: '#/components/schemas/ConfirmByEmailRequest'
             examples:
               URL:
                 value:
@@ -3046,8 +3152,9 @@ paths:
             application/json:
               schema:
                 oneOf:
-                  - $ref: '#/components/schemas/response_by_url'
-                  - $ref: '#/components/schemas/response_by_email'
+                  - $ref: '#/components/schemas/ConfirmByUrlResponse'
+                  - $ref: '#/components/schemas/ConfirmByEmailResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
               examples:
                 URL:
                   value:
@@ -3090,6 +3197,10 @@ components:
         - Message
         - Causes
       properties:
+        Success:
+          type: boolean
+          description: Успешность прохождения запроса — `true`/`false`.
+          example: false
         ErrorCode:
           type: string
           description: Код ошибки.
@@ -3135,7 +3246,7 @@ components:
             - I
             - D
             - 'N'
-    T-Pay:
+    TPay:
       type: object
       properties:
         Device:
@@ -3194,82 +3305,237 @@ components:
             * `1` — невозвратный.
           type: string
     LongPay2:
+      type: object
       description: |
-        `%` — порядковый номер пассажира от 1 до 4.
+        Суффикс 1–4 — порядковый номер пассажира. Обязательно передается набор данных как минимум 1 пассажира.
       required:
-        - ticketPassengerSurname%
-        - ticketPassengerFirstname%
+        - ticketPassengerSurname1
+        - ticketPassengerFirstname1
       properties:
-        ticketPassengerSurname%:
+        ticketPassengerSurname1:
           description: Фамилия латиницей.
           type: string
-        ticketPassengerFirstname%:
+        ticketPassengerSurname2:
+          description: Фамилия латиницей.
+          type: string
+        ticketPassengerSurname3:
+          description: Фамилия латиницей.
+          type: string
+        ticketPassengerSurname4:
+          description: Фамилия латиницей.
+          type: string
+        ticketPassengerFirstname1:
           description: Имя латиницей.
           type: string
-        passengerPassport%:
+        ticketPassengerFirstname2:
+          description: Имя латиницей.
+          type: string
+        ticketPassengerFirstname3:
+          description: Имя латиницей.
+          type: string
+        ticketPassengerFirstname4:
+          description: Имя латиницей.
+          type: string
+        passengerPassport1:
           description: Серия и номер паспорта.
           type: string
-        passengerCountry%:
+        passengerPassport2:
+          description: Серия и номер паспорта.
+          type: string
+        passengerPassport3:
+          description: Серия и номер паспорта.
+          type: string
+        passengerPassport4:
+          description: Серия и номер паспорта.
+          type: string
+        passengerCountry1:
           description: Гражданство по стандарту `ISO 3166-1 alpha-3`.
           type: string
-        ticketPassengerBirthDate%:
-          description: Дата рождения в формате `YYYY-DD-MM`.
+        passengerCountry2:
+          description: Гражданство по стандарту `ISO 3166-1 alpha-3`.
+          type: string
+        passengerCountry3:
+          description: Гражданство по стандарту `ISO 3166-1 alpha-3`.
+          type: string
+        passengerCountry4:
+          description: Гражданство по стандарту `ISO 3166-1 alpha-3`.
+          type: string
+        ticketPassengerBirthDate1:
+          description: Дата рождения в формате `YYYY-MM-DD`.
+          type: string
+        ticketPassengerBirthDate2:
+          description: Дата рождения в формате `YYYY-MM-DD`.
+          type: string
+        ticketPassengerBirthDate3:
+          description: Дата рождения в формате `YYYY-MM-DD`.
+          type: string
+        ticketPassengerBirthDate4:
+          description: Дата рождения в формате `YYYY-MM-DD`.
           type: string
     LongPay3:
-      description: '`#` — порядковый номер пассажира от 1 до 4.'
+      type: object
+      description: Суффикс 1–4 — порядковый номер сегмента перелёта. Обязательно передается набор данных как минимум 1 сегмента.
       required:
-        - triplegDate#
-        - triplegCarrier#
-        - triplegDestinationFrom#
-        - triplegDestinationTo#
+        - triplegDate1
+        - triplegCarrier1
+        - triplegDestinationFrom1
+        - triplegDestinationTo1
       properties:
-        triplegDate#:
-          description: Дата вылета в формате `YYYY-DD-MM`.
+        triplegDate1:
+          description: Дата вылета в формате `YYYY-MM-DD`.
           type: string
-        triplegTime#:
+        triplegDate2:
+          description: Дата вылета в формате `YYYY-MM-DD`.
+          type: string
+        triplegDate3:
+          description: Дата вылета в формате `YYYY-MM-DD`.
+          type: string
+        triplegDate4:
+          description: Дата вылета в формате `YYYY-MM-DD`.
+          type: string
+        triplegTime1:
           description: Время вылета в формате `hh24:mm:ss`.
           type: string
-        triplegCarrier#:
+        triplegTime2:
+          description: Время вылета в формате `hh24:mm:ss`.
+          type: string
+        triplegTime3:
+          description: Время вылета в формате `hh24:mm:ss`.
+          type: string
+        triplegTime4:
+          description: Время вылета в формате `hh24:mm:ss`.
+          type: string
+        triplegCarrier1:
           description: Код перевозчика `ИАТА`.
           type: string
-        triplegFlightNumber#:
+        triplegCarrier2:
+          description: Код перевозчика `ИАТА`.
+          type: string
+        triplegCarrier3:
+          description: Код перевозчика `ИАТА`.
+          type: string
+        triplegCarrier4:
+          description: Код перевозчика `ИАТА`.
+          type: string
+        triplegFlightNumber1:
           description: Номер рейса.
           type: string
-        triplegClass#:
+        triplegFlightNumber2:
+          description: Номер рейса.
+          type: string
+        triplegFlightNumber3:
+          description: Номер рейса.
+          type: string
+        triplegFlightNumber4:
+          description: Номер рейса.
+          type: string
+        triplegClass1:
           description: Класс перелета.
           type: string
-        triplegDestinationFrom#:
+        triplegClass2:
+          description: Класс перелета.
+          type: string
+        triplegClass3:
+          description: Класс перелета.
+          type: string
+        triplegClass4:
+          description: Класс перелета.
+          type: string
+        triplegDestinationFrom1:
           description: Код аэропорта вылета ИАТА.
           type: string
-        triplegDestinationTo#:
+        triplegDestinationFrom2:
+          description: Код аэропорта вылета ИАТА.
+          type: string
+        triplegDestinationFrom3:
+          description: Код аэропорта вылета ИАТА.
+          type: string
+        triplegDestinationFrom4:
+          description: Код аэропорта вылета ИАТА.
+          type: string
+        triplegDestinationTo1:
           description: Код аэропорта прилета ИАТА.
           type: string
-        triplegCountryFrom#:
+        triplegDestinationTo2:
+          description: Код аэропорта прилета ИАТА.
+          type: string
+        triplegDestinationTo3:
+          description: Код аэропорта прилета ИАТА.
+          type: string
+        triplegDestinationTo4:
+          description: Код аэропорта прилета ИАТА.
+          type: string
+        triplegCountryFrom1:
           description: Код страны вылета по стандарту `ISO 3166-1 numeric`.
           type: string
-        triplegCountryTo#:
+        triplegCountryFrom2:
+          description: Код страны вылета по стандарту `ISO 3166-1 numeric`.
+          type: string
+        triplegCountryFrom3:
+          description: Код страны вылета по стандарту `ISO 3166-1 numeric`.
+          type: string
+        triplegCountryFrom4:
+          description: Код страны вылета по стандарту `ISO 3166-1 numeric`.
+          type: string
+        triplegCountryTo1:
           description: Код страны прилета по стандарту `ISO 3166-1 numeric`.
           type: string
-        triplegStopover#:
+        triplegCountryTo2:
+          description: Код страны прилета по стандарту `ISO 3166-1 numeric`.
+          type: string
+        triplegCountryTo3:
+          description: Код страны прилета по стандарту `ISO 3166-1 numeric`.
+          type: string
+        triplegCountryTo4:
+          description: Код страны прилета по стандарту `ISO 3166-1 numeric`.
+          type: string
+        triplegStopover1:
           description: |
             Остановка при пересадке:
             * `0` — разрешена;
             * `X` — запрещена.
           type: string
-        triplegFareBasisCode#:
+        triplegStopover2:
+          description: |
+            Остановка при пересадке:
+            * `0` — разрешена;
+            * `X` — запрещена.
+          type: string
+        triplegStopover3:
+          description: |
+            Остановка при пересадке:
+            * `0` — разрешена;
+            * `X` — запрещена.
+          type: string
+        triplegStopover4:
+          description: |
+            Остановка при пересадке:
+            * `0` — разрешена;
+            * `X` — запрещена.
+          type: string
+        triplegFareBasisCode1:
+          description: Код тарифа.
+          type: string
+        triplegFareBasisCode2:
+          description: Код тарифа.
+          type: string
+        triplegFareBasisCode3:
+          description: Код тарифа.
+          type: string
+        triplegFareBasisCode4:
           description: Код тарифа.
           type: string
     LongPay:
       description: Расширенный набор параметров авиабилета передается при создании платежа (метод [Инициировать платеж](/eacq/api/init)) в параметре `DATA`.
       type: object
       properties:
-        Параметры билета:
+        ticketParams:
           type: array
           $ref: '#/components/schemas/LongPay1'
-        Параметры пассажира:
+        passengerParams:
           type: array
           $ref: '#/components/schemas/LongPay2'
-        Параметры перелета:
+        flightParams:
           type: array
           $ref: '#/components/schemas/LongPay3'
     AgentData:
@@ -3429,7 +3695,7 @@ components:
           minLength: 10
           maxLength: 12
           example: '7710140679'
-    Items_FFD_105:
+    ItemsFfd105:
       type: object
       required:
         - Name
@@ -3451,7 +3717,8 @@ components:
             `Тег ФФД: 1078`
 
             Цена в копейках.
-          type: number
+          type: integer
+          format: int64
           example: 10000
         Quantity:
           description: |
@@ -3461,7 +3728,6 @@ components:
             * целая часть — не больше 5 знаков;
             * дробная — не больше 6 знаков.
           type: number
-          maxLength: 11
           example: 1
         Amount:
           description: |
@@ -3469,8 +3735,8 @@ components:
 
             Стоимость товара в копейках.
             Произведение `Quantity` и `Price`.
-          type: number
-          maxLength: 10
+          type: integer
+          format: int64
           example: 10000
         PaymentMethod:
           description: |
@@ -3599,7 +3865,7 @@ components:
           example: '0123456789'
         ShopCode:
           description: |
-            Код магазина. Для параметра `ShopСode`
+            Код магазина. Для параметра `ShopCode`
             нужно использовать значение параметра
             `Submerchant_ID`, который возвращается в ответе при
             регистрации магазинов через XML. Если XML не
@@ -3700,7 +3966,7 @@ components:
           type: string
           minLength: 1
           maxLength: 256
-    Receipt_FFD_105:
+    ReceiptFfd105:
       type: object
       description: Объект с информацией о видах суммы платежа. Если объект не передан, автоматически указывается итоговая сумма чека с видом оплаты «Безналичная».
       required:
@@ -3711,7 +3977,7 @@ components:
           description: Массив позиций чека с информацией о товарах. Количество товаров в чеке — не больше 100.
           type: array
           items:
-            $ref: '#/components/schemas/Items_FFD_105'
+            $ref: '#/components/schemas/ItemsFfd105'
         Email:
           description: |
             `Тег ФФД: 1008`
@@ -3768,7 +4034,6 @@ components:
             `Тег ФФД: 1084`
 
             Дополнительный реквизит пользователя.
-          type: object
           $ref: '#/components/schemas/AddUserProp'
         additionalCheckProps:
           description: |
@@ -3794,7 +4059,7 @@ components:
 
             Числовой код страны, гражданином которой является покупатель. Код страны указывается в соответствии с Общероссийским классификатором стран мира [ОКСМ](https://classifikators.ru/oksm).
           type: string
-        DocumentСode:
+        DocumentCode:
           description: |
             `Тег ФФД: 1245`
 
@@ -3951,7 +4216,7 @@ components:
           type: string
           maxLength: 256
           example: test value SectoralItemProps
-    Items_FFD_12:
+    ItemsFfd12:
       type: object
       description: |
         Массив с информацией о товарах.  
@@ -3974,10 +4239,8 @@ components:
         - MeasurementUnit
       properties:
         AgentData:
-          type: object
           $ref: '#/components/schemas/AgentData'
         SupplierInfo:
-          type: object
           $ref: '#/components/schemas/SupplierInfo'
         Name:
           description: |
@@ -3992,7 +4255,8 @@ components:
             `Тег ФФД: 1079`
 
             Цена в копейках.
-          type: number
+          type: integer
+          format: int64
           example: 10000
         Quantity:
           description: |
@@ -4004,7 +4268,6 @@ components:
 
             Для касс Ferma значение должно быть целым числом, если `MeasurementUnit=шт`.
           type: number
-          maxLength: 11
           example: 1
         Amount:
           description: |
@@ -4012,8 +4275,8 @@ components:
 
             Стоимость товара в копейках.
             Произведение `Quantity` и `Price`.
-          type: number
-          maxLength: 10
+          type: integer
+          format: int64
           example: 10000
         Tax:
           description: |
@@ -4149,7 +4412,7 @@ components:
 
             Дополнительный реквизит предмета расчета.
           type: string
-          maxLenght: 64
+          maxLength: 64
           example: Данные пользователя ext.test.qa@tbank.ru
         Excise:
           description: |
@@ -4245,14 +4508,13 @@ components:
             С **01.09.2025** для чеков с маркированными товарами обязательно передается часовая зона места расчета (тег 1011). По умолчанию — Москва. Для изменения напишите на <a href="mailto:acq_help@tbank.ru">acq_help@tbank.ru</a>.
           $ref: '#/components/schemas/MarkCode'
         MarkQuantity:
-          type: object
           $ref: '#/components/schemas/MarkQuantity'
         SectoralItemProps:
-          type: array
           description: |
             Отраслевой реквизит предмета расчета. Указывается только для товаров, которые подлежат обязательной маркировке сканером. Включение этого реквизита предусмотрено НПА отраслевого регулирования для
             соответствующей товарной группы.
-          $ref: '#/components/schemas/SectoralItemProps'
+          items:
+            $ref: '#/components/schemas/SectoralItemProps'
     OperatingCheckProps:
       type: object
       description: |
@@ -4317,7 +4579,7 @@ components:
           type: string
           minLength: 1
           maxLength: 256
-    Receipt_FFD_12:
+    ReceiptFfd12:
       type: object
       description: Объект с информацией о видах суммы платежа. Если не передан, автоматически указывается итоговая сумма чека с видом оплаты «Безналичная».
       required:
@@ -4325,7 +4587,6 @@ components:
         - Items
       properties:
         ClientInfo:
-          type: object
           $ref: '#/components/schemas/ClientInfo'
         Taxation:
           description: |
@@ -4390,8 +4651,8 @@ components:
 
 
             Если используется ФФД 1.2, но реализуемый товар не подлежит маркировке, поля можно не отправлять или отправить со значением `null`.
-          type: array
-          $ref: '#/components/schemas/Items_FFD_12'
+          items:
+            $ref: '#/components/schemas/ItemsFfd12'
         Payments:
           description: |
             Детали платежа.
@@ -4404,7 +4665,7 @@ components:
             При этом сумма введенных значений по всем видам оплат, включая `Electronic`, должна быть равна сумме (`Amount`) всех товаров, которые были переданы в объекте `receipt.Items`
           type: object
           $ref: '#/components/schemas/Payments'
-        OperatingСheckProps:
+        OperatingCheckProps:
           description: |
             `Тег ФФД: 1270`
 
@@ -4416,8 +4677,8 @@ components:
             `Тег ФФД: 1261`
 
             Отраслевой реквизит чека.
-          type: array
-          $ref: '#/components/schemas/SectoralCheckProps'
+          items:
+            $ref: '#/components/schemas/SectoralCheckProps'
         AddUserProp:
           description: |
             `Тег ФФД: 1084`
@@ -4447,8 +4708,9 @@ components:
           example: '700456'
         Amount:
           description: |
-            Cумма в копейках, которая относится к указанному `ShopCode`.
-          type: number
+            Сумма в копейках, которая относится к указанному `ShopCode`.
+          type: integer
+          format: int64
           example: 10000
         Name:
           description: |
@@ -4462,7 +4724,7 @@ components:
             Если параметр не передан, используется комиссия, которая была указана при регистрации.
           type: string
           example: '500'
-    Init:
+    InitRequest:
       type: object
       required:
         - TerminalKey
@@ -4483,7 +4745,6 @@ components:
             * Минимальная сумма операции с помощью СБП составляет 10 руб.
           type: integer
           format: int64
-          maxLength: 10
           example: 140000
         OrderId:
           description: Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
@@ -4525,7 +4786,7 @@ components:
 
             Если передается и установлен в `Y`, при платеже будут сохранены реквизиты карты покупателя. 
             В этом случае после оплаты в уведомлении на `AUTHORIZED` будет передан параметр `RebillId` для использования в методе [Провести платеж по сохраненным реквизитам](/eacq/api/charge).
-            Для привязки и одновременной оплаты по CБП передавайте `Y`.
+            Для привязки и одновременной оплаты по СБП передавайте `Y`.
           type: string
           maxLength: 1
           example: 'Y'
@@ -4586,7 +4847,7 @@ components:
           format: uri
         RedirectDueDate:
           description: |
-            Cрок жизни ссылки или динамического QR-кода СБП, если выбран этот способ оплаты.
+            Срок жизни ссылки или динамического QR-кода СБП, если выбран этот способ оплаты.
 
 
             Если дата в параметре меньше текущей, оплата по ссылке и QR будет недоступна.
@@ -4602,15 +4863,8 @@ components:
             Если параметр не был передан, проверяется настроечный параметр терминала `REDIRECT_TIMEOUT`, который содержит значение срока жизни ссылки в часах. Если его значение:
             * больше нуля — оно будет установлено в качестве срока жизни ссылки или динамического QR-кода;
             * меньше нуля — устанавливается значение по умолчанию: 1440 мин. (1 сутки).
+          type: string
           format: date-time
-        ttl:
-          description: |
-            Время жизни операции в минутах.
-
-            * Минимальное значение — 5 минут.
-            * Макисмальное значение — 20 минут.
-
-            Параметр используется, если нужно ограничить время, в течение которого можно совершить оплату.
         DATA:
           description: |
             JSON-объект с дополнительными параметрами по операции и настройками в формате `ключ:значение`.
@@ -4630,19 +4884,46 @@ components:
             -->
           oneOf:
             - $ref: '#/components/schemas/Common'
-            - $ref: '#/components/schemas/T-Pay'
+            - $ref: '#/components/schemas/TPay'
             - $ref: '#/components/schemas/LongPay'
         Receipt:
           description: JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
           oneOf:
-            - $ref: '#/components/schemas/Receipt_FFD_105'
-            - $ref: '#/components/schemas/Receipt_FFD_12'
+            - $ref: '#/components/schemas/ReceiptFfd105'
+            - $ref: '#/components/schemas/ReceiptFfd12'
         Shops:
           type: array
           description: JSON-объект с данными маркетплейса. Параметр обязательный для маркетплейсов.
           items:
             $ref: '#/components/schemas/Shops'
-    Response:
+    SessionStatusEnum:
+      type: string
+      description: |
+        Статус транзакции:
+        * `NEW` — платеж создан;
+        * `AUTHORIZED` — платеж авторизован;
+        * `CONFIRMED` — платеж подтверждён;
+        * `REVERSED` — платеж отменён;
+        * `REFUNDED` — возврат выполнен;
+        * `PARTIAL_REFUNDED` — частичный возврат;
+        * `REJECTED` — платеж отклонён;
+        * `DEADLINE_EXPIRED` — срок жизни платежа истёк;
+        * `3DS_CHECKING` — идёт проверка 3DS;
+        * `3DS_CHECKED` — проверка 3DS завершена;
+        * `FORM_SHOWED` — форма показана;
+      enum:
+        - NEW
+        - AUTHORIZED
+        - CONFIRMED
+        - REVERSED
+        - REFUNDED
+        - PARTIAL_REFUNDED
+        - REJECTED
+        - DEADLINE_EXPIRED
+        - 3DS_CHECKING
+        - 3DS_CHECKED
+        - FORM_SHOWED
+    InitResponse:
       type: object
       required:
         - TerminalKey
@@ -4662,8 +4943,8 @@ components:
         Amount:
           description: |
             Сумма в копейках.
-          type: number
-          maxLength: 20
+          type: integer
+          format: int64
           example: 100000
         OrderId:
           description: |
@@ -4679,9 +4960,8 @@ components:
         Status:
           description: |
             Статус транзакции.
-          type: string
-          maxLength: 20
-          example: NEW
+          allOf:
+            - $ref: '#/components/schemas/SessionStatusEnum'
         PaymentId:
           description: |
             Идентификатор платежа в системе Т‑Бизнес.
@@ -4712,6 +4992,26 @@ components:
             Подробное описание ошибки.
           type: string
           example: '0'
+    ErrorResponse:
+      type: object
+      description: Стандартная модель ошибки
+      properties:
+        Success:
+          type: boolean
+          description: Успешность прохождения запроса — `true`/`false`.
+          default: false
+        ErrorCode:
+          type: string
+          description: Код ошибки.
+          example: '1051'
+        Message:
+          type: string
+          description: Краткое описание ошибки.
+          example: Неверные параметры
+        Details:
+          type: string
+          description: Детальное описание ошибки.
+          example: Параметр "PaymentId" не может быть пустым
     Causes:
       type: array
       description: Подробное описание причины ошибки.
@@ -4719,7 +5019,7 @@ components:
         type: string
       example:
         - Internal Service Error.
-    3DSMethod:
+    ThreeDSMethodRequest:
       title: Запрос
       type: object
       required:
@@ -4733,7 +5033,7 @@ components:
             * `threeDSMethodNotificationURL` — обратный адрес, на который будет отправлен запрос после прохождения threeDSMethod;
             * `threeDSServerTransID` — идентификатор платежа из ответа метода [Проверить версию 3DS](/eacq/api/check-3-ds-version). Генерируется 3DS Server.
           example: eyJ0aHJlZURTU2VydmVyVHJhbnNJRCI6IjU2ZTcxMmE1LTE5MGEtNDU4OC05MWJjLWUwODYyNmU3N2M0NCIsInRocmVlRFNNZXRob2ROb3RpZmljYXRpb25VUkwiOiJodHRwczovL3Jlc3QtYXBpLXRlc3QudGlua29mZi5ydS92Mi9Db21wbGV0ZTNEU01ldGhvZHYyIn0
-    3DSMethod-2:
+    ThreeDSMethodResponse:
       type: object
       required:
         - threeDSServerTransID
@@ -4744,7 +5044,7 @@ components:
           type: string
           maxLength: 36
           example: string
-    3DSv2:
+    ThreeDSv2:
       type: object
       required:
         - threeDSCompInd
@@ -4760,7 +5060,7 @@ components:
             `deviceChannel 02 — BRW`
 
 
-            Идентификатор выполнения метода [Пройти этап 3DS Method](/eacq/api/3-ds-method):
+            Идентификатор выполнения метода [Пройти этап 3DS Method](/eacq/api/three-ds-method):
             * `Y` — выполнение метода успешно завершено;
             * `N` — выполнение метода завершено неуспешно или метод не выполнялся;
             * `U` — в ответе метода [Проверить версию 3DS](/eacq/api/check-3-ds-version) не вернулось значение `threeDSMethodURL`.
@@ -4824,10 +5124,10 @@ components:
 
 
             Рекомендуем получать значение в браузере из глобального объекта `screen` — `screen.colorDepth`.
-          default: 48
+          default: '48'
           example: '48'
         javaEnabled:
-          type: string
+          type: boolean
           description: |
             `deviceChannel 02 — BRW`
 
@@ -4838,8 +5138,8 @@ components:
 
             Значение по умолчанию — `false`.
           default: false
-          example: 'false'
-    FinishAuthorize:
+          example: false
+    FinishAuthorizeRequest:
       type: object
       required:
         - TerminalKey
@@ -4915,7 +5215,7 @@ components:
 
             Если ключи или значения содержат в себе специальные символы, получившееся значение должно быть закодировано функцией `urlencode`.
           oneOf:
-            - $ref: '#/components/schemas/3DSv2'
+            - $ref: '#/components/schemas/ThreeDSv2'
             - type: object
               additionalProperties:
                 type: string
@@ -4934,11 +5234,11 @@ components:
             Параметр обязательный только для ApplePay или GooglePay.
         CardData:
           type: string
-          description: "Объект `CardData` собирается в виде списка `ключ=значение` (разделитель `;`) и зашифровывается открытым ключом — X509 RSA 2048. Бинарное значение кодируется в `Base64`.\n\nОткрытый ключ генерируется в Т‑Бизнес и выдается при регистрации терминала. \nКлюч доступен в личном кабинете Интернет-эквайринга в разделе **Магазины**.\n\nОбязательные параметры с типом данных `number`:\n\n* `PAN` — номер карты;\n* `ExpDate` —\_месяц и год срока действия карты в формате MMYY.\n\nНеобязательные параметры с типом данных `string`:\n\n* `CardHolder` — имя и фамилия держателя карты как на карте.\n* `CVV` — код защиты с обратной стороны карты. Параметр необязательный для платежей через Apple Pay с расшифровкой токена на своей стороне.\n* `ECI` — Electronic Commerce Indicator. Индикатор, который показывает степень защиты, применяемой при предоставлении покупателя своих данных ТСП.\n* `CAVV`\_— Cardholder Authentication Verification Value или Accountholder Authentication Value.\n\n\nПример значения элемента формы `CardData`:\n\n```\nPAN=4300000000000777;ExpDate=0519;CardHolder=IVAN PETROV;CVV=111\n```\n\n[Как получить платежный токен для MirPay при интеграции с НСПК](/eacq/scenarios/payments/PCI_DSS/mirpay/#метод-подтвердить-платеж)\n\nЕсли мерчант интегрируется только с банком для проведения платежа по MirPay,\nметод не вызывается. Эквайер самостоятельно получает платежный токен и инициирует авторизацию\nвместо мерчанта.\n\nПри получении `CAVV` в `CardData` оплата будет проводиться как оплата токеном — иначе прохождение 3DS будет регулироваться стандартными настройками терминала или платежа.\n\nПараметр не используется, если передается `EncryptedPaymentData`."
+          description: "Объект `CardData` собирается в виде списка `ключ=значение` (разделитель `;`) и зашифровывается открытым ключом — X509 RSA 2048. Бинарное значение кодируется в `Base64`.\n\nОткрытый ключ генерируется в Т‑Бизнес и выдается при регистрации терминала. \nКлюч доступен в личном кабинете Интернет-эквайринга в разделе **Магазины**.\n\nОбязательные параметры с типом данных `number`:\n\n* `PAN` — номер платежного средства;\n* `ExpDate` —\_месяц и год срока действия платежного средства в формате MMYY.\n\nНеобязательные параметры с типом данных `string`:\n\n* `CardHolder` — имя и фамилия покупателя.\n* `CVV` — код защиты с обратной стороны платежного средства. Параметр необязательный для платежей через Apple Pay с расшифровкой токена на своей стороне.\n* `ECI` — Electronic Commerce Indicator. Индикатор, который показывает степень защиты, применяемой при предоставлении покупателя своих данных ТСП.\n* `CAVV`\_— Cardholder Authentication Verification Value или Accountholder Authentication Value.\n\n\nПример значения элемента формы `CardData`:\n\n```\nPAN=4300000000000777;ExpDate=0519;CardHolder=IVAN PETROV;CVV=111\n```\n\n[Как получить платежный токен для MirPay при интеграции с НСПК](/eacq/scenarios/payments/PCI_DSS/mirpay/#метод-подтвердить-платеж)\n\nЕсли мерчант интегрируется только с банком для проведения платежа по MirPay,\nметод не вызывается. Эквайер самостоятельно получает платежный токен и инициирует авторизацию\nвместо мерчанта.\n\nПри получении `CAVV` в `CardData` оплата будет проводиться как оплата токеном — иначе прохождение 3DS будет регулироваться стандартными настройками терминала или платежа.\n\nПараметр не используется, если передается `EncryptedPaymentData`."
           example: eyJzaWduYXR1cmUiOiJNRVVDSVFEdjNJS1A5WG9nWml4RytUUm9zZWFDK0RGd3RKd2FtMHVEcm91RUVGZVB6Z0lnYXBFbHhxQ3AwQWtZcVVmTFVMaVNhUjBKWkVQNmg 4THFqYks5YkJKQnM5d1x1MDAzZCIsInByb3RvY29sVmVyc2lvbiI6IkVDdjEiLCJzaWduZWRNZXNzYWdlIjoie1wiZW5jcnlwdGVkTWVzc2FnZVwiOlwiQW11dm5OYUIralBsa3VKTitrMUZLSDZFcm1VK2lTY052 L05rR3FFaXIxOHZmSWxkVFJ5L2U4cW5zMXkyanFtcm1acU1JSWNYMUhyTHBxRURpaXkvS3B6SUhNZFllcXRkSVVNOU1tRjNpejU2d2NTZUVVaXU2ODI3QThGcitaYm8xRWtWRjY1TUxRYVY3NlBOUFRndH UvQ1BodW5HUk0rN25KdVhDczVtbkVvOHFma0RNVk8xWktGWDQ4TnVEL2FKcDJQdVVIY2puSnBTZ0pTSDB4U21YSnAzU1MreXFDNm54N254WUEwN2h4YjYvSnp2R2s3ZExDU2hWWGU1Z2haUjNDaFQyV W8rRnpXTWJRRGZtSjBLQW9kc2VlR0xaaitqMzVqOUlKMkhJRFhIUUZZMWNuTW9YVUVoTjgvdEkvRkpqRnJiYVdFRkIzRDZwOFUzT2tkUmVaNHAyYi8yYURNZXVxR1ozSUtjc3R0R2lKMFhQQVhhZXYyQU8 o1M3RRQXVqQXRYdFlaekNTVjVBVXdXZS85T1VcXHUwMDNkXCJ9In0=
         Amount:
-          type: number
-          maxLength: 10
+          type: integer
+          format: int64
           description: |
             Сумма в копейках.
           example: 10000
@@ -4967,7 +5267,7 @@ components:
             - EINV
             - WM
           example: ACQ
-    FinishAuthorize-2:
+    FinishAuthorizeResponse:
       type: object
       required:
         - TerminalKey
@@ -4986,8 +5286,8 @@ components:
         Amount:
           description: |
             Сумма в копейках.
-          type: number
-          maxLength: 20
+          type: integer
+          format: int64
           example: 100000
         OrderId:
           description: |
@@ -5036,24 +5336,23 @@ components:
           example: '0'
         RebillId:
           type: string
-          description: Уникальный идентификатор сохраненных реквизитов карты покупателя.
+          description: Уникальный идентификатор сохраненных платежных реквизитов покупателя.
           example: '21813157'
         CardId:
-          description: Идентификатор карты в системе Т‑Бизнес. Передается только для cохраненной карты.
+          description: Идентификатор платежного средства в системе Т‑Бизнес.
           type: string
-    Without3DS:
+    WithoutThreeDS:
       allOf:
-        - $ref: '#/components/schemas/FinishAuthorize-2'
+        - $ref: '#/components/schemas/FinishAuthorizeResponse'
         - type: object
           properties:
             CardId:
               type: string
               description: |
-                Идентификатор карты в системе Т‑Бизнес. 
-                Передается только для сохраненной карты.
-    With3DS:
+                Идентификатор платежного средства в системе Т‑Бизнес.
+    WithThreeDS:
       allOf:
-        - $ref: '#/components/schemas/FinishAuthorize-2'
+        - $ref: '#/components/schemas/FinishAuthorizeResponse'
         - type: object
           properties:
             MD:
@@ -5077,9 +5376,9 @@ components:
                 Если в ответе метода [Подтвердить платеж](/eacq/api/finish-authorize) возвращается статус `3DS_CHECKING`, 
                 мерчанту нужно сформировать запрос на URL ACS банка, который выпустил карту — параметр `ACSUrl` в ответе, и вместе с этим перенаправить покупателя на эту же страницу ACSUrl для прохождения 3DS.
               example: https://secure.tcsbank.ru/acs/auth/start.do
-    With3DSv2APP:
+    WithThreeDSv2APP:
       allOf:
-        - $ref: '#/components/schemas/FinishAuthorize-2'
+        - $ref: '#/components/schemas/FinishAuthorizeResponse'
         - type: object
         - required:
             - TdsServerTransId
@@ -5144,9 +5443,9 @@ components:
               format: uri
               description: Идентификатор платежа, который назначается 3DS SDK.
               example: d5a44dfe-673b-4666-82f9-96346107e424
-    With3DSv2BRW:
+    WithThreeDSv2BRW:
       allOf:
-        - $ref: '#/components/schemas/FinishAuthorize-2'
+        - $ref: '#/components/schemas/FinishAuthorizeResponse'
         - type: object
         - required:
             - TdsServerTransId
@@ -5169,7 +5468,7 @@ components:
                 Если в ответе метода [Подтвердить платеж](/eacq/api/finish-authorize) возвращается статус `3DS_CHECKING`, 
                 мерчанту нужно сформировать запрос на URL ACS банка, который выпустил карту — параметр `ACSUrl` в ответе, и вместе с этим перенаправить покупателя на эту же страницу ACSUrl для прохождения 3DS.
               example: https://acs.vendorcert.mirconnect.ru/mdpayacs/creq
-    Confirm:
+    ConfirmRequest:
       type: object
       required:
         - TerminalKey
@@ -5194,15 +5493,16 @@ components:
           description: IP-адрес покупателя.
           example: 192.168.255.255
         Amount:
-          type: number
+          type: integer
+          format: int64
           description: Сумма в копейках. Если не передан, используется `Amount`, который был передан в методе [Инициировать платеж](/eacq/api/init).
           example: 19200
         Receipt:
           type: object
           description: JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
           oneOf:
-            - $ref: '#/components/schemas/Receipt_FFD_12'
-            - $ref: '#/components/schemas/Receipt_FFD_105'
+            - $ref: '#/components/schemas/ReceiptFfd12'
+            - $ref: '#/components/schemas/ReceiptFfd105'
         Shops:
           type: array
           description: JSON-объект с данными маркетплейса. Обязательный для маркетплейсов.
@@ -5224,7 +5524,7 @@ components:
             - installment
             - BNPL
           example: BNPL
-    Items_Params:
+    ItemsParams:
       type: object
       description: Информация по способу оплаты или деталям для платежей в рассрочку.
       properties:
@@ -5235,23 +5535,33 @@ components:
             * `Route` — способ оплаты.
             * `Source` — источник платежа.
             * `CreditAmount` — сумма выданного кредита в копейках. Возвращается только для платежей в рассрочку.
+            * `EndCoolingPeriod` — дата окончания периода охлаждения в формате `date-time`. Возвращается только для платежей через сервис «Долями».
+            * `DrPaymentId` – идентификатор операции в ЦБ при оплате цифровым рублем.
+            * `DrPaymentSettlementDate` — дата и время исполнения распоряжения от ЦБ.
+            * `ParticipantWalletId` —  идентификатор счета цифрового рубля (СЦР) плательщика-физлица.
           enum:
             - Route
             - Source
             - CreditAmount
+            - DrPaymentId
+            - DrPaymentSettlementDate
+            - ParticipantWalletId
         Value:
           type: string
           description: |
 
-            * для `Route` — `ACQ`, `BNPL`, `TCB`, `SBER`;
-            * для `Source` — `BNPL`, `cards`, `Installment`, `MirPay`, `qrsbp`, `SberPay`, `TinkoffPay`, `YandexPay`;
+            * для `Route` — `ACQ`, `BNPL`, `TCB`, `SBER`, `QRDR`;
+            * для `Source` — `BNPL`, `cards`, `Installment`, `MirPay`, `qrsbp`, `SberPay`, `TinkoffPay`, `YandexPay`, `qrdigitalruble`;
             * для `CreditAmount` — сумма в копейках.
+            * для `DrPaymentId` — идентификатор операции в ЦБ при оплате цифровым рублем.
+            * для `DrPaymentSettlementDate` — дата и время исполнения распоряжения в формате `date-time`.
+            * для `ParticipantWalletId` — идентификатор СЦР.
           enum:
             - ACQ
             - BNPL
             - TCB
             - SBER
-            - BNPL
+            - QRDR
             - cards
             - Installment
             - MirPay
@@ -5259,7 +5569,8 @@ components:
             - SberPay
             - TinkoffPay
             - YandexPay
-    Confirm-2:
+            - qrdigitalruble
+    ConfirmResponse:
       type: object
       required:
         - TerminalKey
@@ -5332,7 +5643,7 @@ components:
             Детали для платежей в рассрочку.
           type: array
           items:
-            $ref: '#/components/schemas/Items_Params'
+            $ref: '#/components/schemas/ItemsParams'
     ShopsCancel:
       type: object
       description: JSON-объект с данными маркетплейса. Обязательный для маркетплейсов.
@@ -5349,7 +5660,8 @@ components:
           description: |
             Cумма в копейках, которая относится к
             указанному `ShopCode`.
-          type: number
+          type: integer
+          format: int64
           example: 10000
         Name:
           description: |
@@ -5357,7 +5669,7 @@ components:
           type: string
           maxLength: 128
           example: Товар
-    Cancel:
+    CancelRequest:
       type: object
       required:
         - TerminalKey
@@ -5399,8 +5711,8 @@ components:
 
             При полной отмене структура чека не передается, при частичной — передаются товары, которые нужно отменить.
           oneOf:
-            - $ref: '#/components/schemas/Receipt_FFD_12'
-            - $ref: '#/components/schemas/Receipt_FFD_105'
+            - $ref: '#/components/schemas/ReceiptFfd12'
+            - $ref: '#/components/schemas/ReceiptFfd105'
         Shops:
           type: array
           description: JSON-объект с данными маркетплейса. Обязательный для маркетплейсов.
@@ -5431,7 +5743,7 @@ components:
           example: BNPL
         ExternalRequestId:
           description: |
-            Идентификатор операции на стороне мерчанта. 
+            Ключ [идемпотентости](/eacq/intro/developer/glossary) и идентификатор операции на стороне мерчанта. 
 
             Параметр обязательный для операций «Долями» и в рассрочку. 
 
@@ -5444,7 +5756,7 @@ components:
             * Для способа оплаты AlfaPay при заполнении параметра `ExternalRequestId` длина значения не должна превышать 36 символов.
           type: string
           maxLength: 255
-    Cancel-2:
+    CancelResponse:
       type: object
       required:
         - TerminalKey
@@ -5473,11 +5785,13 @@ components:
           description: Статус транзакции.
           example: REVERSED
         OriginalAmount:
-          type: number
+          type: integer
+          format: int64
           description: Сумма в копейках до операции отмены.
           example: 13000
         NewAmount:
-          type: number
+          type: integer
+          format: int64
           description: Сумма в копейках после операции отмены.
           example: 5000
         PaymentId:
@@ -5501,7 +5815,7 @@ components:
           type: string
           description: Идентификатор операции на стороне мерчанта.
           example: '756478567845678436'
-    Charge:
+    ChargeRequest:
       type: object
       required:
         - TerminalKey
@@ -5523,7 +5837,7 @@ components:
           example: '700001702044'
         RebillId:
           description: |
-            Уникальный идентификатор сохраненных реквизитов карты покупателя. Возвращается в уведомлении после успешного проведения родительской CC-операции.
+            Уникальный идентификатор сохраненных платежных реквизитов покупателя. Возвращается в уведомлении после успешного проведения родительской CC-операции.
           type: string
           example: '145919'
         Token:
@@ -5549,7 +5863,7 @@ components:
             Адрес электронной почты покупателя.
             Параметр обязательный, если передан `SendEmail`=`true`.
           example: customer@test.com
-    GetState:
+    GetStateRequest:
       type: object
       required:
         - TerminalKey
@@ -5583,7 +5897,7 @@ components:
             Получение номера телефона.
           type: boolean
           example: false
-    AddCustomer:
+    AddCustomerRequest:
       type: object
       required:
         - TerminalKey
@@ -5661,7 +5975,7 @@ components:
           type: string
           maxLength: 255
           example: Терминал не найден
-    GetOrRemoveCustomer:
+    GetOrRemoveCustomerRequest:
       type: object
       required:
         - TerminalKey
@@ -5775,7 +6089,7 @@ components:
           description: |
             Подробное описание ошибки.
           type: string
-    AddCard:
+    AddCardRequest:
       type: object
       required:
         - TerminalKey
@@ -5842,7 +6156,6 @@ components:
           description: |
             Идентификатор платежа в системе Т‑Бизнес.
           type: number
-          maxLength: 20
           example: 6155312072
         TerminalKey:
           description: |
@@ -5890,7 +6203,7 @@ components:
           format: uri
           maxLength: 100
           example: https://securepayments.tinkoff.ru/addcard/82a31a62-6067-4ad8-b379-04bf13e37642d
-    AttachCard:
+    AttachCardRequest:
       type: object
       required:
         - TerminalKey
@@ -5935,12 +6248,12 @@ components:
 
             Если ключи или значения содержат в себе специальные символы, получившееся значение должно быть закодировано функцией `urlencode`. 
 
-            Для 3DS v2.1 в `DATA` нужно передавать параметры, которые описаны в объекте `3DSv2`. В `HttpHeaders` запроса обязательны заголовки `User-Agent` и `Accept`.
+            Для 3DS v2.1 в `DATA` нужно передавать параметры, которые описаны в объекте `ThreeDSv2`. В `HttpHeaders` запроса обязательны заголовки `User-Agent` и `Accept`.
           oneOf:
             - type: object
               additionalProperties:
                 type: string
-            - $ref: '#/components/schemas/3DSv2'
+            - $ref: '#/components/schemas/ThreeDSv2'
         Token:
           description: |
             Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
@@ -5974,7 +6287,7 @@ components:
           example: 8de92934-26c9-474c-a4ce-424f2021d24d
         CardId:
           description: |
-            Идентификатор карты в системе Т‑Бизнес. 
+            Идентификатор платежного средства в системе Т‑Бизнес. 
 
             Для сценария 3D Secure Authentication Challenge `CardId` можно получить после успешного прохождения 3DS.
           type: string
@@ -6014,7 +6327,7 @@ components:
           maxLength: 20
         RebillId:
           description: |
-            Уникальный идентификатор сохраненных реквизитов карты покупателя.
+            Уникальный идентификатор сохраненных платежных реквизитов покупателя.
           type: string
           example: '130799909'
         Message:
@@ -6049,7 +6362,7 @@ components:
             Возвращается в ответе для статуса `3DS_CHECKING`.
           type: string
           example: eJxVUl1TwjAQ/CtM30s+KLTDHGHQwsiogFh09C2kp1RpC2nLh7/eBAtqnnYvN3ubvUD/kK4bO9RFkmc9hzWp08BM5XGSvfecRT RyA6cvIFppxPARVaVRwD0WhXzHRhL3HMUU73itwKVtyl1Pcs8Nli3pymUQK+z2Sww6joDZYI5bAfUgYeY0OZAzNYparWRWCpBqe zWeiDZnLe3BqSmkqMeh4PRy2p02BfJThkymKCIsSiAnCCqvslIfhXEG5Eyg0muxKstN0SVkv983yyT7zN/emroiQOwlkF8js8qiwogdk lg8rEfT5WK0jj6G7D4cepNo8TWNBmwSDXtAbAfEskTjkPk0oF6DeV3a6jLj8VQHmVoXglFTqTFs7IjBn4u/BTBZa7OK8yPODPCwyT M0HSbACwby6/f6xsaoSpNMMN89+uHdV/iUPz2nyat/uxrPXz5nuX/c2nBPTVYxMflwzthJ0hIgVobUeyP1yg469xW+AedOuuM=
-    ACSUrl_V1:
+    AcsUrlv1Request:
       title: Параметры запроса для 3DS v1.0
       type: object
       required:
@@ -6066,7 +6379,7 @@ components:
         TermUrl:
           type: string
           description: Адрес перенаправления после 3D Secure аутентификации — URL обработчик на стороне мерчанта, принимающий результаты прохождения 3D Secure.
-    ACSUrl_V2:
+    AcsUrlv2Request:
       title: Параметры запроса для 3DS v2.1
       type: object
       required:
@@ -6081,7 +6394,7 @@ components:
             - challengeWindowSize
             - messageType
             - messageVersion
-          description: JSON-объект с параметрами, закодированный в форматe `Base64`.
+          description: JSON-объект с параметрами в форматe `Base64`.
           properties:
             threeDSServerTransID:
               type: string
@@ -6105,7 +6418,7 @@ components:
             messageVersion:
               type: string
               description: Версия 3DS из ответа метода [Проверить версию 3DS](/eacq/api/check-3-ds-version).
-    ACSUrlResponseV1:
+    AcsUrlv1Response:
       title: Ответ на запрос 3DS v1.0
       type: object
       required:
@@ -6123,7 +6436,7 @@ components:
         FallbackOnTdsV1:
           type: string
           description: Если аутентификация по 3DS v2.1 невозможна, выполняется переход на 3DS v1.0 и параметр устанавливается в значение `true`, иначе параметр не передается в ответе.
-    ACSUrlResponseV2:
+    AcsUrlv2Response:
       title: Ответ на запрос 3DS v2.1
       type: object
       required:
@@ -6158,7 +6471,7 @@ components:
             messageVersion:
               type: string
               description: Версия 3DS из ответа метода [Проверить версию 3DS](/eacq/api/check-3-ds-version).
-    GetAddCardState:
+    GetAddCardStateRequest:
       type: object
       required:
         - TerminalKey
@@ -6229,13 +6542,13 @@ components:
           example: true
         CardId:
           description: |
-            Идентификатор карты в системе Т‑Бизнес.
+            Идентификатор платежного средства в системе Т‑Бизнес.
           type: string
           maxLength: 40
           example: '156516516'
         RebillId:
           description: |
-            Уникальный идентификатор сохраненных реквизитов карты покупателя.
+            Уникальный идентификатор сохраненных платежных реквизитов покупателя.
           type: string
           example: '134249124'
         ErrorCode:
@@ -6261,7 +6574,7 @@ components:
           type: string
           maxLength: 36
           example: testCustomer1234
-    GetCardList:
+    GetCardListRequest:
       type: object
       required:
         - TerminalKey
@@ -6293,7 +6606,7 @@ components:
             IP-адрес покупателя.
           type: string
           example: 2011:0db8:85a3:0101:0101:8a2e:0370:7334
-    RemoveCard:
+    RemoveCardRequest:
       type: object
       required:
         - TerminalKey
@@ -6361,7 +6674,7 @@ components:
           example: testCustomer1234
         CardId:
           description: |
-            Идентификатор карты в системе Т‑Бизнес.
+            Идентификатор платежного средства в системе Т‑Бизнес.
           type: string
           maxLength: 40
           example: '156516516'
@@ -6399,7 +6712,7 @@ components:
             Подробное описание ошибки.
           type: string
           example: Не удалось удалить карту покупателя, для данного покупателя такая карта не существует
-    GetQr:
+    GetQrRequest:
       type: object
       required:
         - TerminalKey
@@ -6435,13 +6748,18 @@ components:
             Внутренний идентификатор банка, который выбран для оплаты.   
 
 
-            Cписок доступных `BankId` можно получить через метод [Получить список банков-участников СБП для платежа](/eacq/api/get-qr-bank-list).   
+            Список доступных `BankId` можно получить через метод [Получить список банков-участников СБП для платежа](/eacq/api/get-qr-bank-list).   
             Если передается, в ответе в параметре `Data` вместо функциональной платежной ссылки (payload) возвращается deeplink.   
 
 
             `BankId` передается только для `DataType = PAYLOAD` или `null`. 
-          format: uuid
           example: bank100000000004
+        PaymentMethod:
+          type: string
+          enum:
+            - SBP
+            - DR
+          description: Способ оплаты.
         Token:
           type: string
           description: Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
@@ -6504,10 +6822,76 @@ components:
           example: Подробное описание ошибки
         RequestKey:
           description: |
-            Идентификатор запроса на привязку счета. Передается в случае привязки счета после оплаты по CБП.
+            Идентификатор запроса на привязку счета. Передается в случае привязки счета после оплаты по СБП.
           type: string
           example: Идентификатор запроса
-    GetDeepLink:
+    SberPayLinkGet:
+      type: object
+      required:
+        - TerminalKey
+        - PaymentId
+        - Token
+      description: Список доступных методов оплаты.
+      properties:
+        TerminalKey:
+          type: string
+          description: |
+            Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+          maxLength: 64
+          example: TBankTest
+        PaymentId:
+          type: string
+          description: Идентификатор платежа в системе Т‑Бизнес.
+          example: '2559680770'
+        Token:
+          type: string
+          description: Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
+          example: 871199b37f207f0c4f721a37cdcc71dfcea880b4a4b85e3cf852c5dc1e99a8d6
+        Phone:
+          type: string
+          description: Телефон покупателя в формате `+{Ц}`. Параметр обязательный при оплате на десктопе.
+          example: '+79999999999'
+    SberPayLinkGetResponse:
+      type: object
+      required:
+        - Success
+        - ErrorCode
+      properties:
+        Params:
+          description: |
+            Параметры ответа.
+          type: object
+          required:
+            - RedirectUrl
+          properties:
+            RedirectUrl:
+              description: |
+                URL для перехода, если оплата проводится через мобильное устройство.
+              type: string
+              format: uri
+              example: https://payment-app.com
+        Success:
+          description: |
+            Успешность прохождения запроса — `true`/`false`.
+          type: boolean
+          example: true
+        ErrorCode:
+          description: |
+            Код ошибки.
+          type: string
+          maxLength: 20
+          example: '0'
+        Message:
+          description: |
+            Краткое описание ошибки.
+          type: string
+          example: string
+        Details:
+          description: |
+            Подробное описание ошибки.
+          type: string
+          example: string
+    GetDeepLinkRequest:
       type: object
       required:
         - TerminalKey
@@ -6550,7 +6934,7 @@ components:
         Details:
           type: string
           description: Подробное описание ошибки.
-    AlfaPayLink:
+    AlfaPayLinkRequest:
       type: object
       required:
         - TerminalKey
@@ -6633,7 +7017,7 @@ components:
             Признак того, что данный участник был получателем
             указанного платежа.
           example: true
-    AddAccountQr:
+    AddAccountQrRequest:
       type: object
       required:
         - TerminalKey
@@ -6667,12 +7051,11 @@ components:
             Внутренний идентификатор банка, который выбран для оплаты.   
 
 
-            Cписок доступных `BankId` можно получить через метод [Получить список банков-участников СБП для платежа](/eacq/api/get-qr-bank-list).   
+            Список доступных `BankId` можно получить через метод [Получить список банков-участников СБП для платежа](/eacq/api/get-qr-bank-list).   
             Если передается, в ответе в параметре `Data` вместо функциональной платежной ссылки (payload) возвращается deeplink.   
 
 
             `BankId` передается только для `DataType = PAYLOAD` или `null`. 
-          format: uuid
           example: bank100000000004
         Data:
           type: object
@@ -6695,9 +7078,9 @@ components:
             type: string
         RedirectDueDate:
           type: string
-          format: datatime
+          format: date-time
           description: |
-            Cрок жизни ссылки или динамического QR-кода СБП, если выбран этот способ оплаты.<br><br>
+            Срок жизни ссылки или динамического QR-кода СБП, если выбран этот способ оплаты.<br><br>
 
             Если дата в параметре меньше текущей, оплата по ссылке и QR будет недоступна.
 
@@ -6761,7 +7144,7 @@ components:
           type: string
           maxLength: 255
           example: OK
-    GetAddAccountQrState:
+    GetAddAccountQrStateRequest:
       type: object
       required:
         - RequestKey
@@ -6771,8 +7154,7 @@ components:
         RequestKey:
           description: |
             Идентификатор запроса на привязку счета.
-          type: number
-          format: uuid
+          type: string
           example: 13021e10-a3ed-4f14-bcd1-823b5ac37390
         TerminalKey:
           description: |
@@ -6802,9 +7184,8 @@ components:
         RequestKey:
           description: |
             Идентификатор запроса на привязку счета.
-          type: number
-          format: uuid
-          example: 211258
+          type: string
+          example: 13021e10-a3ed-4f14-bcd1-823b5ac37390
         BankMemberId:
           description: |
             Идентификатор банка покупателя, который будет совершать оплату по привязанному счету. Параметр передается, если статус `ACTIVE` или `INACTIVE`.
@@ -6852,7 +7233,7 @@ components:
           type: string
           maxLength: 255
           example: OK
-    GetAccountQrList:
+    GetAccountQrListRequest:
       type: object
       required:
         - TerminalKey
@@ -6873,8 +7254,6 @@ components:
       type: object
       required:
         - TerminalKey
-        - RequestKey
-        - Status
         - Success
         - ErrorCode
       properties:
@@ -6946,7 +7325,7 @@ components:
                   Наименование банка-эмитента. Заполнен, если передан `BankMemberId`.
                 type: string
                 example: T-Банк
-    ChargeQr:
+    ChargeQrRequest:
       type: object
       required:
         - TerminalKey
@@ -7020,8 +7399,8 @@ components:
         Amount:
           description: |
             Сумма в копейках.
-          type: number
-          maxLength: 20
+          type: integer
+          format: int64
           example: 100000
         OrderId:
           description: |
@@ -7069,10 +7448,10 @@ components:
             Подробное описание ошибки.
           type: string
         Currency:
-          type: number
+          type: string
           description: Код валюты по `ISO 4217`.
-          example: 643
-    SbpPayTest:
+          example: '643'
+    SbpPayTestRequest:
       type: object
       required:
         - TerminalKey
@@ -7146,7 +7525,7 @@ components:
             Подробное описание ошибки.
           type: string
           example: '0'
-    GetQRStateResponse:
+    GetQrStateResponse:
       type: object
       required:
         - Success
@@ -7186,14 +7565,15 @@ components:
         Amount:
           description: |
             Сумма отмены в копейках.
-          type: number
+          type: integer
+          format: int64
           example: 10000
         Message:
           description: |
             Краткое описание ошибки при запросе статуса.
           type: string
           example: OK
-    GetQrBankList:
+    GetQrBankListRequest:
       type: object
       required:
         - TerminalKey
@@ -7238,46 +7618,18 @@ components:
               description: |
                 ОС устройства.
               example: iOS
+        PaymentMethod:
+          type: string
+          enum:
+            - SBP
+            - DR
+          description: Способ оплаты.
         Token:
           type: string
           maxLength: 255
           description: |
             Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
           example: 871199b37f207f0c4f721a37cdcc71dfcea880b4a4b85e3cf852c5dc1e99a8d6
-    BankList:
-      type: object
-      required:
-        - BankId
-        - NspkBankId
-        - BankName
-        - BankLogo
-        - BankOrder
-      properties:
-        BankId:
-          type: string
-          maxLength: 200
-          format: uuid
-          description: Внутренний идентификатор банка.
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
-        NspkBankId:
-          type: string
-          maxLength: 200
-          description: Идентификатор банка в системе НСПК.
-          example: '100000000004'
-        BankName:
-          type: string
-          maxLength: 200
-          description: Наименование банка.
-          example: Т-Банк
-        BankLogo:
-          type: string
-          maxLength: 200
-          description: Ссылка на логотип банка.
-          example: https://qr.nspk.ru/proxyapp/logo/bank100000000004.png
-        BankOrder:
-          type: integer
-          description: Порядок для сортировки.
-          example: 1
     GetQrBankListResponse:
       type: object
       required:
@@ -7305,8 +7657,40 @@ components:
             Список банков от НСПК.
           type: array
           items:
-            $ref: '#/components/schemas/BankList'
-    CheckOrder:
+            type: object
+            required:
+              - BankId
+              - NspkBankId
+              - BankName
+              - BankLogo
+              - BankOrder
+            properties:
+              BankId:
+                type: string
+                maxLength: 200
+                format: uuid
+                description: Внутренний идентификатор банка.
+                example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              NspkBankId:
+                type: string
+                maxLength: 200
+                description: Идентификатор банка в системе НСПК.
+                example: '100000000004'
+              BankName:
+                type: string
+                maxLength: 200
+                description: Наименование банка.
+                example: Т-Банк
+              BankLogo:
+                type: string
+                maxLength: 200
+                description: Ссылка на логотип банка.
+                example: https://qr.nspk.ru/proxyapp/logo/bank100000000004.png
+              BankOrder:
+                type: integer
+                description: Порядок для сортировки.
+                example: 1
+    CheckOrderRequest:
       type: object
       required:
         - TerminalKey
@@ -7344,7 +7728,8 @@ components:
         Amount:
           description: |
             Сумма операции в копейках.
-          type: number
+          type: integer
+          format: int64
           example: 13660
         Status:
           description: |
@@ -7353,19 +7738,19 @@ components:
           example: NEW
         RRN:
           description: |
-            RRN операции.
+            Уникальный идентификатор операции.
           type: string
           example: '12345678'
         Success:
           description: |
             Успешность прохождения запроса — `true`/`false`.
           type: string
-          example: 'true'
+          example: true
         ErrorCode:
           description: |
             Код ошибки.
-          type: number
-          example: 0
+          type: string
+          example: '0'
         Message:
           description: |
             Краткое описание ошибки.
@@ -7381,7 +7766,17 @@ components:
             Хэшированный номер телефона покупателя.
           type: string
           example: c4494ca1c0888b3fb0e2bfd0b83576aaae0d2c71161c5f472133ea9401473aee
-    CheckOrder-2:
+        DrPaymentId:
+          type: string
+          description: Идентификатор операции в ЦБ при оплате цифровым рублем.
+        DrPaymentSettlementDate:
+          type: string
+          format: date-time
+          description: Дата и время исполнения распоряжения от ЦБ.
+        ParticipantWalletId:
+          type: string
+          description: Идентификатор счета цифрового рубля (СЦР) плательщика-физлица.
+    CheckOrderResponse:
       type: object
       required:
         - Success
@@ -7419,7 +7814,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PaymentsCheckOrder'
-    SendClosingReceipt:
+    SendClosingReceiptRequest:
       type: object
       required:
         - TerminalKey
@@ -7439,12 +7834,12 @@ components:
           type: object
           description: JSON-объект с данными чека.
           oneOf:
-            - $ref: '#/components/schemas/Receipt_FFD_12'
-            - $ref: '#/components/schemas/Receipt_FFD_105'
+            - $ref: '#/components/schemas/ReceiptFfd12'
+            - $ref: '#/components/schemas/ReceiptFfd105'
         Token:
           type: string
           description: Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
-    SendClosingReceipt-2:
+    SendClosingReceiptResponse:
       type: object
       required:
         - Success
@@ -7463,7 +7858,7 @@ components:
           description: Краткое описание ошибки.
           maxLength: 255
           example: Неверные параметры
-    by_url:
+    ConfirmByUrlRequest:
       title: URL
       required:
         - TerminalKey
@@ -7482,7 +7877,6 @@ components:
         PaymentIdList:
           type: array
           description: JSON-массив, который содержит в себе перечень `PaymentId` c типом `Number`.
-          maxLength: 500
           example:
             - 1201206437
             - 1201206442
@@ -7492,7 +7886,7 @@ components:
           type: string
           description: Подпись запроса. [Как сформировать](/eacq/intro/developer/token). Для создания токена используйте только `Password` и `TerminalKey`.
           example: f2fdd7fec8225872590e1558b7ea258c75df8f300d808006c41ab540dd7514d9
-    by_email:
+    ConfirmByEmailRequest:
       title: Email
       required:
         - TerminalKey
@@ -7507,7 +7901,6 @@ components:
         PaymentIdList:
           type: array
           description: JSON-массив, который содержит в себе перечень `PaymentId` c типом `Number`.
-          maxLength: 500
           example:
             - 1201206437
             - 1201206442
@@ -7528,7 +7921,7 @@ components:
           type: string
           description: Подпись запроса. [Как сформировать](/eacq/intro/developer/token). Для создания токена используйте только `Password` и `TerminalKey`.
           example: f2fdd7fec8225872590e1558b7ea258c75df8f300d808006c41ab540dd7514d9
-    PaymentIdListForGCO:
+    PaymentIdList:
       type: object
       description: JSON-массив с объектами, которые содержат информацию по запросу.
       required:
@@ -7553,7 +7946,7 @@ components:
           type: number
           description: Идентификатор платежа в системе Т‑Бизнес.
           example: 1201206442
-    response_by_url:
+    ConfirmByUrlResponse:
       title: URL
       type: object
       required:
@@ -7577,15 +7970,14 @@ components:
         PaymentIdList:
           type: array
           items:
-            $ref: '#/components/schemas/PaymentIdListForGCO'
-    response_by_email:
+            $ref: '#/components/schemas/PaymentIdList'
+    ConfirmByEmailResponse:
       title: Email
       type: object
       required:
         - Success
         - ErrorCode
         - PaymentIdList
-        - RequestList
       properties:
         Success:
           type: boolean
@@ -7602,12 +7994,12 @@ components:
         PaymentIdList:
           type: array
           items:
-            $ref: '#/components/schemas/PaymentIdListForGCO'
+            $ref: '#/components/schemas/PaymentIdList'
 x-tagGroups:
   - name: Проведение платежа
     tags:
       - Проведение платежа
-  - name: Прием платежей по картe
+  - name: Прием платежей по карте
     tags:
       - Методы для работы с 3DS
   - name: Другие способы приема платежей
@@ -7616,3 +8008,4 @@ x-tagGroups:
       - T‑Pay
       - SberPay
       - Mir Pay
+      - Цифровой рубль
