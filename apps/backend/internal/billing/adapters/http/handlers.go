@@ -70,6 +70,19 @@ type AdminPaymentManager interface {
 	SyncPayment(ctx context.Context, adminID, paymentID uuid.UUID) error
 }
 
+// AdminSubscriptionManager serves the admin subscription operations (issue
+// #255): service-subscription assignment, force tariff change, manual grace
+// extension, cancellation on the user's behalf and the transition-history
+// view. Access control is the AdminOnlyMiddleware the routes are mounted
+// with; the acting admin's id is attributed by the handlers.
+type AdminSubscriptionManager interface {
+	AssignServiceSubscription(ctx context.Context, adminID, userID uuid.UUID, req billingapp.AssignServiceSubscriptionRequest) error
+	ForceChangeTariff(ctx context.Context, adminID, userID uuid.UUID, req billingapp.ForceChangeTariffRequest) error
+	ExtendGrace(ctx context.Context, adminID, userID uuid.UUID, days int) error
+	CancelSubscriptionAsAdmin(ctx context.Context, adminID, userID uuid.UUID) error
+	ListTransitions(ctx context.Context, userID uuid.UUID) ([]billingapp.SubscriptionTransitionView, error)
+}
+
 // WebhookProcessor synchronously applies payment-provider webhooks (issue #250)
 // and answers with the provider's fixed acknowledgement body.
 type WebhookProcessor interface {
@@ -97,16 +110,19 @@ const maxWebhookBody = 256 * 1024
 // issue #251 are live — the binding flow, activation, deletion, sync and the
 // local-only fake card-binding confirmation. The admin payment endpoints of
 // issue #254 are live — the cross-user payment views, the full-refund saga
-// and the manual provider sync. The user-facing contract is frozen, so the
-// routes stay mounted.
+// and the manual provider sync. The admin subscription endpoints of issue
+// #255 are live — the service assignment, the force tariff change, the grace
+// extension, the admin cancellation and the transition history. The
+// user-facing contract is frozen, so the routes stay mounted.
 type BillingHandlers struct {
-	tariffs       TariffLister
-	subscriptions SubscriptionViewer
-	managers      SubscriptionManager
-	payments      PaymentManager
-	methods       PaymentMethodManager
-	webhooks      WebhookProcessor
-	adminPayments AdminPaymentManager
+	tariffs            TariffLister
+	subscriptions      SubscriptionViewer
+	managers           SubscriptionManager
+	payments           PaymentManager
+	methods            PaymentMethodManager
+	webhooks           WebhookProcessor
+	adminPayments      AdminPaymentManager
+	adminSubscriptions AdminSubscriptionManager
 	// devEndpoints enables the local-only fake-payment confirmation endpoint
 	// (APP_ENV=local).
 	devEndpoints bool
@@ -122,6 +138,7 @@ func NewBillingHandlers(
 	methods PaymentMethodManager,
 	webhooks WebhookProcessor,
 	adminPayments AdminPaymentManager,
+	adminSubscriptions AdminSubscriptionManager,
 	devEndpoints bool,
 	logger *slog.Logger,
 ) *BillingHandlers {
@@ -129,15 +146,16 @@ func NewBillingHandlers(
 		logger = slog.Default()
 	}
 	return &BillingHandlers{
-		tariffs:       tariffs,
-		subscriptions: subscriptions,
-		managers:      managers,
-		payments:      payments,
-		methods:       methods,
-		webhooks:      webhooks,
-		adminPayments: adminPayments,
-		devEndpoints:  devEndpoints,
-		logger:        logger,
+		tariffs:            tariffs,
+		subscriptions:      subscriptions,
+		managers:           managers,
+		payments:           payments,
+		methods:            methods,
+		webhooks:           webhooks,
+		adminPayments:      adminPayments,
+		adminSubscriptions: adminSubscriptions,
+		devEndpoints:       devEndpoints,
+		logger:             logger,
 	}
 }
 
@@ -643,6 +661,159 @@ func (h *BillingHandlers) adminActor(w http.ResponseWriter, r *http.Request) (uu
 	return adminID, true
 }
 
+// AssignAdminServiceSubscription implements
+// POST /admin/users/{id}/subscription/service (issue #255): the service
+// subscription is assigned for a fixed term without payment, overwriting the
+// current subscription. The acting admin is attributed in the transition log
+// and the audit record. The term vocabulary is validated by the application
+// layer (serviceTermValidUntil answers ErrInvalidTerm for unknown values).
+func (h *BillingHandlers) AssignAdminServiceSubscription(w http.ResponseWriter, r *http.Request, userID uuid.UUID) {
+	adminID, ok := h.adminActor(w, r)
+	if !ok {
+		return
+	}
+	var body openapi.AdminAssignServiceSubscriptionRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode service assignment request", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+	tariffName, err := domain.ParseTariffName(string(body.TariffName))
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	req := billingapp.AssignServiceSubscriptionRequest{
+		TariffName: tariffName,
+		TermType:   billingapp.ServiceTermType(body.TermType),
+	}
+	if body.UntilDate != nil {
+		until := body.UntilDate.UTC()
+		req.UntilDate = &until
+	}
+	if err := h.adminSubscriptions.AssignServiceSubscription(r.Context(), adminID, userID, req); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ForceChangeAdminSubscriptionTariff implements
+// POST /admin/users/{id}/subscription/force-change (issue #255): the new
+// tariff applies immediately without payment.
+func (h *BillingHandlers) ForceChangeAdminSubscriptionTariff(w http.ResponseWriter, r *http.Request, userID uuid.UUID) {
+	adminID, ok := h.adminActor(w, r)
+	if !ok {
+		return
+	}
+	var body openapi.AdminForceChangeTariffRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode force tariff change request", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+	tariffName, err := domain.ParseTariffName(string(body.TariffName))
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	period, err := domain.ParseSubscriptionPeriod(string(body.Period))
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	if err := h.adminSubscriptions.ForceChangeTariff(r.Context(), adminID, userID, billingapp.ForceChangeTariffRequest{
+		TariffName: tariffName,
+		Period:     period,
+	}); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ExtendAdminSubscriptionGrace implements
+// POST /admin/users/{id}/subscription/grace-extension (issue #255): the grace
+// window is lengthened by whole days.
+func (h *BillingHandlers) ExtendAdminSubscriptionGrace(w http.ResponseWriter, r *http.Request, userID uuid.UUID) {
+	adminID, ok := h.adminActor(w, r)
+	if !ok {
+		return
+	}
+	var body openapi.AdminExtendGraceRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode grace extension request", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+	if err := h.adminSubscriptions.ExtendGrace(r.Context(), adminID, userID, body.Days); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// CancelAdminSubscription implements POST /admin/users/{id}/subscription/cancel
+// (issue #255): the user's own cancellation semantics, attributed to the
+// acting admin.
+func (h *BillingHandlers) CancelAdminSubscription(w http.ResponseWriter, r *http.Request, userID uuid.UUID) {
+	adminID, ok := h.adminActor(w, r)
+	if !ok {
+		return
+	}
+	if err := h.adminSubscriptions.CancelSubscriptionAsAdmin(r.Context(), adminID, userID); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ListAdminSubscriptionTransitions implements
+// GET /admin/users/{id}/subscription/transitions (issue #255): the immutable
+// transition history of the user's subscription, newest first.
+func (h *BillingHandlers) ListAdminSubscriptionTransitions(w http.ResponseWriter, r *http.Request, userID uuid.UUID) {
+	views, err := h.adminSubscriptions.ListTransitions(r.Context(), userID)
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	items := make([]openapi.AdminSubscriptionTransition, 0, len(views))
+	for _, v := range views {
+		items = append(items, adminSubscriptionTransitionResponse(v))
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminSubscriptionTransitionsResponse{
+		Items: items,
+		Total: len(items),
+	})
+}
+
+// adminSubscriptionTransitionResponse maps the transition view to the
+// contract DTO.
+func adminSubscriptionTransitionResponse(view billingapp.SubscriptionTransitionView) openapi.AdminSubscriptionTransition {
+	transition := view.Transition
+	resp := openapi.AdminSubscriptionTransition{
+		Id:           transition.ID,
+		ToStatus:     openapi.SubscriptionStatus(transition.ToStatus),
+		ToTariffId:   transition.ToTariffID,
+		ToTariffName: view.ToTariffName,
+		Reason:       string(transition.Reason),
+		Initiator:    openapi.AdminSubscriptionTransitionInitiator(transition.Initiator),
+		InitiatorId:  transition.InitiatorID,
+		PaymentId:    transition.PaymentID,
+		CreatedAt:    transition.CreatedAt,
+	}
+	if transition.FromStatus != nil {
+		from := openapi.SubscriptionStatus(*transition.FromStatus)
+		resp.FromStatus = &from
+	}
+	if transition.FromTariffID != nil {
+		id := *transition.FromTariffID
+		resp.FromTariffId = &id
+	}
+	resp.FromTariffName = view.FromTariffName
+	return resp
+}
+
 // adminSubscriptionPaymentResponse maps the admin payment view to the
 // contract DTO.
 func adminSubscriptionPaymentResponse(view billingapp.AdminSubscriptionPaymentView) openapi.AdminSubscriptionPayment {
@@ -704,7 +875,9 @@ func (h *BillingHandlers) handleBillingError(w http.ResponseWriter, r *http.Requ
 	case errors.Is(err, domain.ErrInvalidPeriod),
 		errors.Is(err, domain.ErrInvalidTariff),
 		errors.Is(err, domain.ErrInvalidAmount),
-		errors.Is(err, domain.ErrInvalidPayment):
+		errors.Is(err, domain.ErrInvalidPayment),
+		errors.Is(err, domain.ErrInvalidTerm),
+		errors.Is(err, domain.ErrInvalidGraceExtension):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
 			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))

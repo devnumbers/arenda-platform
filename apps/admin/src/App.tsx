@@ -56,6 +56,8 @@ export default function App() {
       <Resource name="propertyContacts" recordRepresentation="name" />
       <Resource name="operations" list={OperationList} show={OperationShow} icon={ReceiptLongIcon} recordRepresentation="name" />
       <Resource name="auditLogs" list={AuditLogList} show={AuditLogShow} icon={HistoryIcon} recordRepresentation={auditLogRepresentation} />
+      {/* История переходов подписки (issue #255): только вложенный просмотр в карточке пользователя. */}
+      <Resource name="subscriptionTransitions" />
     </Admin>
   );
 }

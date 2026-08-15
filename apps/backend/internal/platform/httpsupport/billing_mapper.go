@@ -15,6 +15,7 @@ func SubscriptionResponse(view billingapp.SubscriptionView) openapi.Subscription
 	resp := openapi.Subscription{
 		Tariff:           TariffResponse(view.Tariff),
 		Status:           openapi.SubscriptionStatus(sub.Status),
+		Source:           openapi.SubscriptionSource(sub.Source),
 		ValidUntil:       sub.ValidUntil,
 		AutoRenewEnabled: sub.AutoRenewEnabled,
 		PendingChangeAt:  sub.PendingChangeAt,

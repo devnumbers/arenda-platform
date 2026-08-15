@@ -124,6 +124,10 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Некорректный платёж", true
 	case errors.Is(err, billingdomain.ErrInvalidPaymentStatus):
 		return "Некорректный статус платежа для этой операции", true
+	case errors.Is(err, billingdomain.ErrInvalidTerm):
+		return "Некорректный срок служебной подписки", true
+	case errors.Is(err, billingdomain.ErrInvalidGraceExtension):
+		return "Некорректное продление льготного периода", true
 
 	// Admin.
 	case errors.Is(err, adminapp.ErrInvalidFilter):

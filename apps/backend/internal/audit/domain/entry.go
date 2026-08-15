@@ -119,6 +119,13 @@ const (
 	ActionSubscriptionTariffChanged    Action = "subscription.tariff_changed"
 	ActionSubscriptionCancelled        Action = "subscription.cancelled"
 	ActionSubscriptionAutoRenewToggled Action = "subscription.auto_renew_toggled"
+	// ActionSubscriptionServiceAssigned and its neighbours below are the
+	// admin subscription operations of issue #255: service assignment, force
+	// tariff change and grace extension. The admin cancel on the user's
+	// behalf reuses ActionSubscriptionCancelled with the admin actor.
+	ActionSubscriptionServiceAssigned Action = "subscription.service_assigned"
+	ActionSubscriptionTariffForced    Action = "subscription.tariff_forced"
+	ActionSubscriptionGraceExtended   Action = "subscription.grace_extended"
 
 	ActionPaymentMethodAdded     Action = "payment_method.added"
 	ActionPaymentMethodActivated Action = "payment_method.activated"

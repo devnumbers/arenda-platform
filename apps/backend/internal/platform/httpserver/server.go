@@ -46,6 +46,7 @@ type Deps struct {
 	PaymentMethods       billinghttp.PaymentMethodManager
 	Webhooks             billinghttp.WebhookProcessor
 	AdminPayments        billinghttp.AdminPaymentManager
+	AdminSubscriptions   billinghttp.AdminSubscriptionManager
 	// BillingDevEndpoints enables the local-only fake-payment confirmation
 	// endpoint (APP_ENV=local, issue #250).
 	BillingDevEndpoints      bool
@@ -153,7 +154,7 @@ func New(deps Deps) http.Handler {
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
-	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.Subscriptions, deps.SubscriptionManagers, deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.AdminPayments, deps.BillingDevEndpoints, deps.Logger)
+	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.Subscriptions, deps.SubscriptionManagers, deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.AdminPayments, deps.AdminSubscriptions, deps.BillingDevEndpoints, deps.Logger)
 	financeHandlers := leaseshttp.NewFinanceHandlers(deps.Operations)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
@@ -197,6 +198,11 @@ func New(deps Deps) http.Handler {
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/subscription/payments/{paymentId}", wrapper.GetAdminSubscriptionPayment)
 	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/refund", wrapper.RefundSubscriptionPayment)
 	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/sync", wrapper.SyncSubscriptionPayment)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/users/{id}/subscription/service", wrapper.AssignAdminServiceSubscription)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/users/{id}/subscription/force-change", wrapper.ForceChangeAdminSubscriptionTariff)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/users/{id}/subscription/grace-extension", wrapper.ExtendAdminSubscriptionGrace)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/users/{id}/subscription/cancel", wrapper.CancelAdminSubscription)
+	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}/subscription/transitions", wrapper.ListAdminSubscriptionTransitions)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users", wrapper.ListAdminUsers)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}", wrapper.GetAdminUser)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}/properties", wrapper.ListAdminUserProperties)

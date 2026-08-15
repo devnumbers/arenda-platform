@@ -3716,6 +3716,190 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /admin/users/{id}/subscription/service:
+    post:
+      operationId: assignAdminServiceSubscription
+      security:
+        - sessionCookie: []
+      description: |
+        Assigns a service subscription (issue #255): the tariff runs for a fixed
+        term without payment, auto-renew off; at the end of the term the
+        subscription falls to the basic tariff through the common expiry path.
+        The assignment overwrites the current subscription — a paid remainder
+        does not stack. An upgrade on top of the service subscription later
+        converts it back to paid from the new period.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminAssignServiceSubscriptionRequest'
+      responses:
+        '204':
+          description: Service subscription assigned
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{id}/subscription/force-change:
+    post:
+      operationId: forceChangeAdminSubscriptionTariff
+      security:
+        - sessionCookie: []
+      description: |
+        Force-changes the subscription tariff (issue #255): the new tariff
+        applies immediately without payment for the chosen period from now.
+        The subscription keeps its source (a paid subscription stays paid, a
+        service one stays service); excess properties beyond the new tariff
+        limit are archived. Used to repair subscription state during incidents.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminForceChangeTariffRequest'
+      responses:
+        '204':
+          description: Tariff force-changed
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{id}/subscription/grace-extension:
+    post:
+      operationId: extendAdminSubscriptionGrace
+      security:
+        - sessionCookie: []
+      description: |
+        Extends the grace window manually (issue #255): gives the user extra
+        days to fix their payment method. Only a subscription in grace can be
+        extended; an already-expired window that the worker has not downgraded
+        yet extends from now.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminExtendGraceRequest'
+      responses:
+        '204':
+          description: Grace window extended
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{id}/subscription/cancel:
+    post:
+      operationId: cancelAdminSubscription
+      security:
+        - sessionCookie: []
+      description: |
+        Cancels the subscription on the user's behalf (issue #255): the same
+        semantics as the user's own cancellation — the tariff keeps working
+        until valid_until, auto-renew switches off immediately. Paid
+        subscriptions only; a service subscription is withdrawn by
+        reassignment, not cancellation.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Subscription cancelled
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{id}/subscription/transitions:
+    get:
+      operationId: listAdminSubscriptionTransitions
+      security:
+        - sessionCookie: []
+      description: >
+        The subscription transition log of one user's subscription (issue
+        #255): every status and tariff change with its reason, initiator
+        (user/admin/system) and the payment that caused it, newest first.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Subscription transition log
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSubscriptionTransitionsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /internal/fake-subscription-payment/{id}/confirm:
     post:
       operationId: confirmFakeSubscriptionPayment
@@ -3965,12 +4149,19 @@ components:
 
     Subscription:
       type: object
-      required: [tariff, status, autoRenewEnabled]
+      required: [tariff, status, source, autoRenewEnabled]
       properties:
         tariff:
           $ref: '#/components/schemas/Tariff'
         status:
           $ref: '#/components/schemas/SubscriptionStatus'
+        source:
+          type: string
+          enum: [paid, service]
+          description: |
+            paid — the owner pays for the tariff (or runs the free basic plan);
+            service — an admin assigned the tariff for a fixed term without
+            payment (issue #255).
         validUntil:
           type: string
           format: date-time
@@ -4185,6 +4376,103 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdminSubscriptionPayment'
+        total:
+          type: integer
+
+    AdminAssignServiceSubscriptionRequest:
+      type: object
+      required: [tariffName, termType]
+      properties:
+        tariffName:
+          $ref: '#/components/schemas/TariffName'
+        termType:
+          type: string
+          enum: [month, year, date]
+          description: |
+            The fixed term of the service subscription: month or year counts
+            from the assignment moment; date runs until the end of untilDate
+            (UTC, inclusive).
+        untilDate:
+          type: string
+          format: date
+          description: Required when termType is date; must be today or later.
+
+    AdminForceChangeTariffRequest:
+      type: object
+      required: [tariffName, period]
+      properties:
+        tariffName:
+          $ref: '#/components/schemas/TariffName'
+        period:
+          $ref: '#/components/schemas/AdminSubscriptionPaymentPeriod'
+
+    AdminExtendGraceRequest:
+      type: object
+      required: [days]
+      properties:
+        days:
+          type: integer
+          minimum: 1
+          maximum: 90
+          description: The extra days added to the current grace window.
+
+    AdminSubscriptionTransition:
+      type: object
+      required: [id, toStatus, toTariffId, toTariffName, reason, initiator, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fromStatus:
+          allOf:
+            - $ref: '#/components/schemas/SubscriptionStatus'
+          nullable: true
+        toStatus:
+          $ref: '#/components/schemas/SubscriptionStatus'
+        fromTariffId:
+          type: string
+          format: uuid
+          nullable: true
+        toTariffId:
+          type: string
+          format: uuid
+        fromTariffName:
+          type: string
+          nullable: true
+        toTariffName:
+          type: string
+        reason:
+          type: string
+          description: |
+            Why the transition happened: registered, cancelled,
+            downgrade_scheduled, payment_applied, grace_entered,
+            grace_extended, scheduled_change_applied, expired, refunded,
+            service_assigned, forced_change.
+        initiator:
+          type: string
+          enum: [user, admin, system]
+        initiatorId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The user or admin actor id; absent for the system.
+        paymentId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The payment that caused the transition, when there was one.
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminSubscriptionTransitionsResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminSubscriptionTransition'
         total:
           type: integer
 

@@ -1,6 +1,8 @@
 package application
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
@@ -83,4 +85,40 @@ type AddPaymentMethodRequest struct {
 type AddPaymentMethodResult struct {
 	ConfirmURL    string
 	PaymentMethod *domain.PaymentMethod
+}
+
+// ServiceTermType names the fixed term of an admin-assigned service
+// subscription (issue #255): a month or a year from the assignment moment, or
+// an explicit until date.
+type ServiceTermType string
+
+const (
+	ServiceTermMonth ServiceTermType = "month"
+	ServiceTermYear  ServiceTermType = "year"
+	ServiceTermDate  ServiceTermType = "date"
+)
+
+// AssignServiceSubscriptionRequest is the application-layer input of the
+// admin service-subscription assignment (issue #255). UntilDate is the UTC
+// date at midnight and is required with ServiceTermDate.
+type AssignServiceSubscriptionRequest struct {
+	TariffName domain.TariffName
+	TermType   ServiceTermType
+	UntilDate  *time.Time
+}
+
+// ForceChangeTariffRequest is the application-layer input of the admin force
+// tariff change (issue #255).
+type ForceChangeTariffRequest struct {
+	TariffName domain.TariffName
+	Period     domain.SubscriptionPeriod
+}
+
+// SubscriptionTransitionView is one row of the admin subscription transition
+// history (issue #255): the transition with the tariff names resolved — the
+// incident-review view of the user card's «Подписка» block.
+type SubscriptionTransitionView struct {
+	Transition     domain.Transition
+	FromTariffName *string
+	ToTariffName   string
 }

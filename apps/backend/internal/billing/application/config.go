@@ -32,6 +32,10 @@ type Config struct {
 	// worker scans the half-open window [valid_until-before, valid_until):
 	// never earlier than the lead time, never after the window ends.
 	GraceExpiryReminderBefore time.Duration
+	// MaxGraceExtensionDays caps a single admin grace extension (issue #255):
+	// the manual lever gives the user extra days, not an unbounded freeze of
+	// the lifecycle.
+	MaxGraceExtensionDays int
 }
 
 // DefaultConfig returns the billing operational parameters with their
@@ -46,5 +50,6 @@ func DefaultConfig() Config {
 		CardBindingTTL:            24 * time.Hour,
 		PendingPaymentStaleness:   5 * time.Minute,
 		GraceExpiryReminderBefore: 48 * time.Hour,
+		MaxGraceExtensionDays:     90,
 	}
 }

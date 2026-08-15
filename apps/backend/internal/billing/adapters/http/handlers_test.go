@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -196,7 +197,7 @@ func newTestHandlersOpts(tariffs TariffLister, subs SubscriptionViewer, managers
 	if webhooks == nil {
 		webhooks = &fakeWebhookProcessor{}
 	}
-	return NewBillingHandlers(tariffs, subs, managers, payments, methods, webhooks, &fakeAdminPaymentManager{}, devEndpoints, nil)
+	return NewBillingHandlers(tariffs, subs, managers, payments, methods, webhooks, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, devEndpoints, nil)
 }
 
 // fakeAdminPaymentManager fails the test when an admin payment endpoint is
@@ -234,6 +235,52 @@ func (f *fakeAdminPaymentManager) SyncPayment(ctx context.Context, adminID, paym
 		return f.sync(ctx, adminID, paymentID)
 	}
 	return errors.New("unexpected SyncPayment call")
+}
+
+// fakeAdminSubscriptionManager fails the test when an admin subscription
+// endpoint is called without one being wired; the admin-endpoint tests
+// override it.
+type fakeAdminSubscriptionManager struct {
+	assignService func(ctx context.Context, adminID, userID uuid.UUID, req billingapp.AssignServiceSubscriptionRequest) error
+	forceChange   func(ctx context.Context, adminID, userID uuid.UUID, req billingapp.ForceChangeTariffRequest) error
+	extendGrace   func(ctx context.Context, adminID, userID uuid.UUID, days int) error
+	cancel        func(ctx context.Context, adminID, userID uuid.UUID) error
+	transitions   func(ctx context.Context, userID uuid.UUID) ([]billingapp.SubscriptionTransitionView, error)
+}
+
+func (f *fakeAdminSubscriptionManager) AssignServiceSubscription(ctx context.Context, adminID, userID uuid.UUID, req billingapp.AssignServiceSubscriptionRequest) error {
+	if f.assignService != nil {
+		return f.assignService(ctx, adminID, userID, req)
+	}
+	return errors.New("unexpected AssignServiceSubscription call")
+}
+
+func (f *fakeAdminSubscriptionManager) ForceChangeTariff(ctx context.Context, adminID, userID uuid.UUID, req billingapp.ForceChangeTariffRequest) error {
+	if f.forceChange != nil {
+		return f.forceChange(ctx, adminID, userID, req)
+	}
+	return errors.New("unexpected ForceChangeTariff call")
+}
+
+func (f *fakeAdminSubscriptionManager) ExtendGrace(ctx context.Context, adminID, userID uuid.UUID, days int) error {
+	if f.extendGrace != nil {
+		return f.extendGrace(ctx, adminID, userID, days)
+	}
+	return errors.New("unexpected ExtendGrace call")
+}
+
+func (f *fakeAdminSubscriptionManager) CancelSubscriptionAsAdmin(ctx context.Context, adminID, userID uuid.UUID) error {
+	if f.cancel != nil {
+		return f.cancel(ctx, adminID, userID)
+	}
+	return errors.New("unexpected CancelSubscriptionAsAdmin call")
+}
+
+func (f *fakeAdminSubscriptionManager) ListTransitions(ctx context.Context, userID uuid.UUID) ([]billingapp.SubscriptionTransitionView, error) {
+	if f.transitions != nil {
+		return f.transitions(ctx, userID)
+	}
+	return nil, errors.New("unexpected ListTransitions call")
 }
 
 // ownerRequest builds a request authenticated as the given owner.
@@ -1421,5 +1468,257 @@ func TestConfirmFakeCardBinding(t *testing.T) {
 	missing.ConfirmFakeCardBinding(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/fake-card-binding/unknown/confirm", http.NoBody), "unknown")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// adminBodyRequest builds an admin POST request carrying a JSON body.
+func adminBodyRequest(t *testing.T, target string, adminID uuid.UUID, body string) *http.Request {
+	t.Helper()
+	req := httptest.NewRequestWithContext(
+		httpsupport.WithActor(t.Context(), adminID, actor.RoleAdmin),
+		http.MethodPost, target, strings.NewReader(body),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
+// subscriptionTransitionView builds a transition view the listing test can
+// round-trip (issue #255).
+func subscriptionTransitionView(t *testing.T) billingapp.SubscriptionTransitionView {
+	t.Helper()
+	subID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	fromTariff := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	toTariff := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	adminID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	paymentID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	fromStatus := domain.SubscriptionStatusActive
+	fromName := "pro"
+	return billingapp.SubscriptionTransitionView{
+		Transition: domain.Transition{
+			ID:             uuid.MustParse("66666666-6666-6666-6666-666666666666"),
+			SubscriptionID: subID,
+			FromStatus:     &fromStatus,
+			ToStatus:       domain.SubscriptionStatusActive,
+			FromTariffID:   &fromTariff,
+			ToTariffID:     toTariff,
+			Reason:         domain.TransitionReasonServiceAssigned,
+			Initiator:      domain.InitiatorAdmin,
+			InitiatorID:    &adminID,
+			PaymentID:      &paymentID,
+			CreatedAt:      time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC),
+		},
+		FromTariffName: &fromName,
+		ToTariffName:   "business",
+	}
+}
+
+// TestAssignAdminServiceSubscription_MapsBodyAndAttributesAdmin proves POST
+// /admin/users/{id}/subscription/service answers 204, forwards the acting
+// admin and maps the contract body to the application input (issue #255).
+func TestAssignAdminServiceSubscription_MapsBodyAndAttributesAdmin(t *testing.T) {
+	adminID := uuid.New()
+	userID := uuid.MustParse("77777777-7777-7777-7777-777777777777")
+	called := false
+	h := newTestHandlers(nil, nil, nil)
+	h.adminSubscriptions = &fakeAdminSubscriptionManager{assignService: func(_ context.Context, gotAdmin, gotUser uuid.UUID, req billingapp.AssignServiceSubscriptionRequest) error {
+		called = true
+		if gotAdmin != adminID {
+			t.Errorf("AssignServiceSubscription admin = %v, want %v", gotAdmin, adminID)
+		}
+		if gotUser != userID {
+			t.Errorf("AssignServiceSubscription user = %v, want %v", gotUser, userID)
+		}
+		if req.TariffName != domain.TariffBusiness {
+			t.Errorf("tariffName = %q, want business", req.TariffName)
+		}
+		if req.TermType != billingapp.ServiceTermDate {
+			t.Errorf("termType = %q, want date", req.TermType)
+		}
+		wantDate := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+		if req.UntilDate == nil || !req.UntilDate.Equal(wantDate) {
+			t.Errorf("untilDate = %v, want %v", req.UntilDate, wantDate)
+		}
+		return nil
+	}}
+
+	w := httptest.NewRecorder()
+	h.AssignAdminServiceSubscription(w, adminBodyRequest(t, "/admin/users/"+userID.String()+"/subscription/service", adminID,
+		`{"tariffName":"business","termType":"date","untilDate":"2026-09-01"}`), userID)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
+	}
+	if !called {
+		t.Error("service was not called")
+	}
+}
+
+// TestAssignAdminServiceSubscription_ErrorMapping proves the service
+// assignment's error mapping: a past until date answers 400, a state conflict
+// answers 409 (issue #255).
+func TestAssignAdminServiceSubscription_ErrorMapping(t *testing.T) {
+	userID := uuid.New()
+	h := newTestHandlers(nil, nil, nil)
+	h.adminSubscriptions = &fakeAdminSubscriptionManager{assignService: func(_ context.Context, _, _ uuid.UUID, _ billingapp.AssignServiceSubscriptionRequest) error {
+		return fmt.Errorf("%w: untilDate is in the past", domain.ErrInvalidTerm)
+	}}
+	w := httptest.NewRecorder()
+	h.AssignAdminServiceSubscription(w, adminBodyRequest(t, "/admin/users/"+userID.String()+"/subscription/service", uuid.New(),
+		`{"tariffName":"business","termType":"month"}`), userID)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+
+	h.adminSubscriptions = &fakeAdminSubscriptionManager{assignService: func(_ context.Context, _, _ uuid.UUID, _ billingapp.AssignServiceSubscriptionRequest) error {
+		return domain.ErrInvalidSubscriptionState
+	}}
+	w = httptest.NewRecorder()
+	h.AssignAdminServiceSubscription(w, adminBodyRequest(t, "/admin/users/"+userID.String()+"/subscription/service", uuid.New(),
+		`{"tariffName":"business","termType":"month"}`), userID)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestForceChangeAdminSubscriptionTariff_MapsBodyAndAttributesAdmin proves
+// POST /admin/users/{id}/subscription/force-change answers 204 with the body
+// and the acting admin forwarded (issue #255).
+func TestForceChangeAdminSubscriptionTariff_MapsBodyAndAttributesAdmin(t *testing.T) {
+	adminID := uuid.New()
+	userID := uuid.New()
+	h := newTestHandlers(nil, nil, nil)
+	h.adminSubscriptions = &fakeAdminSubscriptionManager{forceChange: func(_ context.Context, gotAdmin, gotUser uuid.UUID, req billingapp.ForceChangeTariffRequest) error {
+		if gotAdmin != adminID {
+			t.Errorf("ForceChangeTariff admin = %v, want %v", gotAdmin, adminID)
+		}
+		if gotUser != userID {
+			t.Errorf("ForceChangeTariff user = %v, want %v", gotUser, userID)
+		}
+		if req.TariffName != domain.TariffPro {
+			t.Errorf("tariffName = %q, want pro", req.TariffName)
+		}
+		if req.Period != domain.PeriodYear {
+			t.Errorf("period = %q, want year", req.Period)
+		}
+		return nil
+	}}
+
+	w := httptest.NewRecorder()
+	h.ForceChangeAdminSubscriptionTariff(w, adminBodyRequest(t, "/admin/users/"+userID.String()+"/subscription/force-change", adminID,
+		`{"tariffName":"pro","period":"year"}`), userID)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestExtendAdminSubscriptionGrace_MapsBodyAndAttributesAdmin proves POST
+// /admin/users/{id}/subscription/grace-extension answers 204 with the day
+// count and the acting admin forwarded (issue #255).
+func TestExtendAdminSubscriptionGrace_MapsBodyAndAttributesAdmin(t *testing.T) {
+	adminID := uuid.New()
+	userID := uuid.New()
+	h := newTestHandlers(nil, nil, nil)
+	h.adminSubscriptions = &fakeAdminSubscriptionManager{extendGrace: func(_ context.Context, gotAdmin, gotUser uuid.UUID, days int) error {
+		if gotAdmin != adminID {
+			t.Errorf("ExtendGrace admin = %v, want %v", gotAdmin, adminID)
+		}
+		if gotUser != userID {
+			t.Errorf("ExtendGrace user = %v, want %v", gotUser, userID)
+		}
+		if days != 5 {
+			t.Errorf("days = %d, want 5", days)
+		}
+		return nil
+	}}
+
+	w := httptest.NewRecorder()
+	h.ExtendAdminSubscriptionGrace(w, adminBodyRequest(t, "/admin/users/"+userID.String()+"/subscription/grace-extension", adminID,
+		`{"days":5}`), userID)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestCancelAdminSubscription_AttributesAdmin proves POST
+// /admin/users/{id}/subscription/cancel answers 204 and forwards the acting
+// admin (issue #255).
+func TestCancelAdminSubscription_AttributesAdmin(t *testing.T) {
+	adminID := uuid.New()
+	userID := uuid.New()
+	called := false
+	h := newTestHandlers(nil, nil, nil)
+	h.adminSubscriptions = &fakeAdminSubscriptionManager{cancel: func(_ context.Context, gotAdmin, gotUser uuid.UUID) error {
+		called = true
+		if gotAdmin != adminID {
+			t.Errorf("CancelSubscriptionAsAdmin admin = %v, want %v", gotAdmin, adminID)
+		}
+		if gotUser != userID {
+			t.Errorf("CancelSubscriptionAsAdmin user = %v, want %v", gotUser, userID)
+		}
+		return nil
+	}}
+
+	w := httptest.NewRecorder()
+	h.CancelAdminSubscription(w, adminRequest(t, http.MethodPost, "/admin/users/"+userID.String()+"/subscription/cancel", adminID), userID)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
+	}
+	if !called {
+		t.Error("service was not called")
+	}
+}
+
+// TestListAdminSubscriptionTransitions_MapsView proves GET
+// /admin/users/{id}/subscription/transitions answers the newest-first history
+// with the tariff names and the initiator vocabulary of the contract
+// (issue #255).
+func TestListAdminSubscriptionTransitions_MapsView(t *testing.T) {
+	userID := uuid.New()
+	view := subscriptionTransitionView(t)
+	h := newTestHandlers(nil, nil, nil)
+	h.adminSubscriptions = &fakeAdminSubscriptionManager{transitions: func(_ context.Context, gotUser uuid.UUID) ([]billingapp.SubscriptionTransitionView, error) {
+		if gotUser != userID {
+			t.Errorf("ListTransitions user = %v, want %v", gotUser, userID)
+		}
+		return []billingapp.SubscriptionTransitionView{view}, nil
+	}}
+
+	w := httptest.NewRecorder()
+	h.ListAdminSubscriptionTransitions(w, adminRequest(t, http.MethodGet, "/admin/users/"+userID.String()+"/subscription/transitions", uuid.New()), userID)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp openapi.AdminSubscriptionTransitionsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp.Total != 1 || len(resp.Items) != 1 {
+		t.Fatalf("total/items = %d/%d, want 1/1", resp.Total, len(resp.Items))
+	}
+	item := resp.Items[0]
+	if item.Id != view.Transition.ID {
+		t.Errorf("id = %v, want %v", item.Id, view.Transition.ID)
+	}
+	if item.ToTariffName != "business" || item.FromTariffName == nil || *item.FromTariffName != "pro" {
+		t.Errorf("tariff names = %q/%v, want business/pro", item.ToTariffName, item.FromTariffName)
+	}
+	if item.Reason != string(domain.TransitionReasonServiceAssigned) {
+		t.Errorf("reason = %q, want service_assigned", item.Reason)
+	}
+	if item.Initiator != openapi.AdminSubscriptionTransitionInitiatorAdmin {
+		t.Errorf("initiator = %q, want admin", item.Initiator)
+	}
+	if item.InitiatorId == nil || *item.InitiatorId != *view.Transition.InitiatorID {
+		t.Errorf("initiatorId = %v, want %v", item.InitiatorId, *view.Transition.InitiatorID)
+	}
+	if item.PaymentId == nil || *item.PaymentId != *view.Transition.PaymentID {
+		t.Errorf("paymentId = %v, want the referenced payment", item.PaymentId)
+	}
+	if item.FromStatus == nil || *item.FromStatus != openapi.SubscriptionStatusActive {
+		t.Errorf("fromStatus = %v, want active", item.FromStatus)
 	}
 }

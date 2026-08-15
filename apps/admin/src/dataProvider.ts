@@ -33,6 +33,20 @@ interface AdminDataProvider extends DataProvider {
   // Возврат всегда полный (ADR 0037): контракт эндпоинта не принимает тело.
   refundPayment: (payload: { id: string | number }) => Promise<{ data: unknown }>;
   syncPayment: (payload: { id: string | number }) => Promise<{ data: unknown }>;
+  // Админ-операции над подпиской (issue #255).
+  assignServiceSubscription: (payload: {
+    userId: string | number;
+    tariffName: string;
+    termType: 'month' | 'year' | 'date';
+    untilDate?: string;
+  }) => Promise<{ data: unknown }>;
+  forceChangeSubscriptionTariff: (payload: {
+    userId: string | number;
+    tariffName: string;
+    period: 'month' | 'year';
+  }) => Promise<{ data: unknown }>;
+  extendSubscriptionGrace: (payload: { userId: string | number; days: number }) => Promise<{ data: unknown }>;
+  cancelSubscription: (payload: { userId: string | number }) => Promise<{ data: unknown }>;
 }
 
 const httpClient = async (url: string, options: RequestInit = {}): Promise<{ json: unknown; headers: Headers }> => {
@@ -94,7 +108,7 @@ const sortableFieldsByResource: Record<string, readonly string[]> = {
 // Ресурсы без серверной пагинации: эндпоинт отдаёт полный список, limit/offset
 // в его контракте не объявлены — не отправляем их, чтобы запрос соответствовал
 // OpenAPI-контракту.
-const unpaginatedResources = new Set(['tariffs']);
+const unpaginatedResources = new Set(['tariffs', 'subscriptionTransitions']);
 
 const buildListQuery = (resource: string, params: GetListParams): string => {
   const { pagination, sort, filter } = params;
@@ -149,6 +163,13 @@ const listUrl = (resource: string, ownerId?: string | number): string => {
       return `${API_PREFIX}/admin/tariffs`;
     case 'auditLogs':
       return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/audit-logs` : `${API_PREFIX}/admin/audit-logs`;
+    // История переходов подписки существует только в рамках пользователя
+    // (issue #255) — плоского эндпоинта нет.
+    case 'subscriptionTransitions':
+      if (!hasOwner) {
+        throw new Error('subscriptionTransitions requires a user id');
+      }
+      return `${API_PREFIX}/admin/users/${ownerId}/subscription/transitions`;
     default:
       throw new Error(`Unknown resource: ${resource}`);
   }
@@ -302,6 +323,42 @@ export const dataProvider: AdminDataProvider = {
 
   syncPayment: async ({ id }) => {
     const { json } = await httpClient(`${API_PREFIX}/admin/subscription/payments/${id}/sync`, { method: 'POST' });
+    return { data: json };
+  },
+
+  assignServiceSubscription: async ({ userId, tariffName, termType, untilDate }) => {
+    const body: Record<string, string> = { tariffName, termType };
+    if (termType === 'date' && untilDate) {
+      body.untilDate = untilDate;
+    }
+    const { json } = await httpClient(`${API_PREFIX}/admin/users/${userId}/subscription/service`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return { data: json };
+  },
+
+  forceChangeSubscriptionTariff: async ({ userId, tariffName, period }) => {
+    const { json } = await httpClient(`${API_PREFIX}/admin/users/${userId}/subscription/force-change`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tariffName, period }),
+    });
+    return { data: json };
+  },
+
+  extendSubscriptionGrace: async ({ userId, days }) => {
+    const { json } = await httpClient(`${API_PREFIX}/admin/users/${userId}/subscription/grace-extension`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ days }),
+    });
+    return { data: json };
+  },
+
+  cancelSubscription: async ({ userId }) => {
+    const { json } = await httpClient(`${API_PREFIX}/admin/users/${userId}/subscription/cancel`, { method: 'POST' });
     return { data: json };
   },
 };

@@ -138,14 +138,16 @@ func run() error {
 	// force-completed) and suspend excess shared memberships in the same
 	// transaction as the subscription change. Billing is built before the
 	// properties and access modules, so the bridges land here.
-	// The workers and the payment service share the same bridges: the expiry
-	// and downgrade phases (issue #252) and the refund's downgrade to basic
-	// (issue #254) all archive excess properties and suspend excess shared
-	// memberships in the same transaction as the subscription change.
+	// The workers, the payment service and the subscription service share the
+	// same bridges: the expiry and downgrade phases (issue #252), the refund's
+	// downgrade to basic (issue #254) and the admin operations that can lower a
+	// tariff limit (issue #255) all archive excess properties and suspend excess
+	// shared memberships in the same transaction as the subscription change.
 	archiverSource := wire.NewPropertyArchiverSource(propertiesMod.PropertyService)
 	slotSource := wire.NewRecipientSlotSource(accessMod.SlotCoordinator)
 	billingMod.Services.Workers.SetLifecycleBridges(archiverSource, slotSource)
 	billingMod.Services.Payments.SetLifecycleBridges(archiverSource, slotSource)
+	billingMod.Services.Subscriptions.SetLifecycleBridges(archiverSource, slotSource)
 
 	// 9. Cross-module event subscribers: billing onboarding and default-category
 	//    seeding both react to user_registered. Kept here (not in wire) because
@@ -302,6 +304,7 @@ func run() error {
 		PaymentMethods:           billingMod.Services.PaymentMethods,
 		Webhooks:                 billingMod.Services.Payments,
 		AdminPayments:            billingMod.Services.Payments,
+		AdminSubscriptions:       billingMod.Services.Subscriptions,
 		BillingDevEndpoints:      p.Cfg.AppEnv == "local",
 		ReadonlyGate:             billingMod.MutationGate,
 		Admin:                    adminMod.Service,

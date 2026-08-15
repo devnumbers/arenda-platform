@@ -22,13 +22,20 @@ type paymentInitiationProvider interface {
 }
 
 // SubscriptionService serves the user's view of and lifecycle control over
-// their own subscription.
+// their own subscription, plus the admin subscription operations of issue
+// #255 (admin_subscription_service.go).
 type SubscriptionService struct {
 	txStoreFactory
 	provider paymentInitiationProvider
 	clock    clock.Clock
 	config   Config
 	log      *slog.Logger
+	// archiverSource and slotSource bridge the admin operations that lower a
+	// tariff limit to the properties and access contexts (issue #255); nil
+	// until SetLifecycleBridges wires them — the subscription-side change
+	// still applies, only the excess archiving waits.
+	archiverSource ExcessPropertyArchiverSource
+	slotSource     RecipientSlotEnforcerSource
 }
 
 // SubscriptionServiceConfig carries the non-transactional dependencies of the
@@ -49,6 +56,9 @@ type SubscriptionServiceConfig struct {
 func NewSubscriptionService(factory txStoreFactory, cfg SubscriptionServiceConfig) *SubscriptionService {
 	if cfg.Clock == nil {
 		cfg.Clock = clock.Real{}
+	}
+	if cfg.Config == (Config{}) {
+		cfg.Config = DefaultConfig()
 	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
@@ -194,7 +204,9 @@ func (s *SubscriptionService) ToggleAutoRenew(ctx context.Context, userID uuid.U
 // on an active subscription is rejected; upgrades and same-tariff grace
 // renewals go through the payment flow (issue #250): the pending payment is
 // persisted before the provider is called, so a crash between the provider
-// initiation and the save is recoverable on retry.
+// initiation and the save is recoverable on retry. An upgrade on top of a
+// service subscription takes the payment path too (issue #255): the applied
+// payment converts the subscription into a paid one from the new period.
 func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID, req ChangeTariffRequest) (ChangeTariffResult, error) {
 	// state captured by the planning transaction for the payment orchestration
 	// that runs after it commits.
@@ -218,9 +230,6 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 		sub, err := stores.subscriptionForUpdate(ctx, userID)
 		if err != nil {
 			return err
-		}
-		if !sub.IsPaidSource() {
-			return domain.ErrInvalidSubscriptionState
 		}
 
 		now := s.clock.Now().UTC()
@@ -250,6 +259,13 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 
 		changeType := domain.ClassifyTariffChange(currentTariff, newTariff)
 		needsPayment = sameTariffGraceRenewal || changeType == domain.TariffChangeUpgrade
+		if !sub.IsPaidSource() && !needsPayment {
+			// Service subscriptions are assigned and withdrawn by an admin
+			// (#255): the user controls neither their deferred changes nor
+			// their cancellation. The payment path stays open — an upgrade on
+			// top of a service subscription converts it into a paid one.
+			return domain.ErrInvalidSubscriptionState
+		}
 		if needsPayment {
 			if sameTariffGraceRenewal {
 				paymentPurpose = PaymentPurposeRenewal

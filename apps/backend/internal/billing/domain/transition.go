@@ -70,6 +70,20 @@ const (
 	// initiator is the admin who refunded (with the actor id) or the system
 	// (refund webhook, reconciliation worker).
 	TransitionReasonRefunded TransitionReason = "refunded"
+	// TransitionReasonServiceAssigned marks an admin-assigned service
+	// subscription (issue #255): the tariff runs a fixed term without payment
+	// and overwrites whatever subscription was there before. The initiator is
+	// the acting admin.
+	TransitionReasonServiceAssigned TransitionReason = "service_assigned"
+	// TransitionReasonForcedChange marks an admin force-change of the tariff
+	// (issue #255): the new tariff applied immediately without payment. The
+	// initiator is the acting admin.
+	TransitionReasonForcedChange TransitionReason = "forced_change"
+	// TransitionReasonGraceExtended marks an admin extension of the grace
+	// window (issue #255): the user gets extra time to fix the payment method.
+	// The status and tariff stay as they were — the reason and the validity
+	// date tell the story. The initiator is the acting admin.
+	TransitionReasonGraceExtended TransitionReason = "grace_extended"
 )
 
 // Transition is one immutable entry of the subscription transition log: the

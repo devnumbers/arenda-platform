@@ -211,7 +211,10 @@ func (s *Subscription) ScheduleDowngrade(currentTariff, newTariff Tariff, period
 
 // ApplyTariffChange applies a successful tariff change immediately. It sets the
 // new tariff, extends validity by the chosen period, enables auto-renew,
-// records the applied payment and clears any pending change.
+// records the applied payment and clears any pending change. A paid tariff
+// change on top of a service subscription converts it to the paid track
+// (issue #255): the owner paid, so the subscription is theirs from the new
+// period.
 func (s *Subscription) ApplyTariffChange(paymentID uuid.UUID, currentTariff, newTariff Tariff, period SubscriptionPeriod, now time.Time) error {
 	if period != PeriodMonth && period != PeriodYear {
 		return ErrInvalidPeriod
@@ -227,6 +230,7 @@ func (s *Subscription) ApplyTariffChange(paymentID uuid.UUID, currentTariff, new
 	}
 	validUntil := addSubscriptionPeriod(now, period)
 	s.TariffID = newTariff.ID
+	s.Source = SubscriptionSourcePaid
 	s.ValidUntil = &validUntil
 	s.AutoRenewEnabled = true
 	s.LastAppliedPaymentID = &paymentID
@@ -243,7 +247,8 @@ func (s *Subscription) ApplyTariffChange(paymentID uuid.UUID, currentTariff, new
 // current valid_until when it exists and is in the future, so an early renewal
 // keeps the paid remainder. Renewals in grace or after expiry start from now:
 // grace is not paid time and must not be gifted. A successful renewal also
-// clears any scheduled downgrade.
+// clears any scheduled downgrade. Like every applied payment, it puts the
+// subscription on the paid track (issue #255).
 func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeriod, now time.Time) error {
 	if period != PeriodMonth && period != PeriodYear {
 		return ErrInvalidPeriod
@@ -254,6 +259,7 @@ func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeri
 	}
 	validUntil := addSubscriptionPeriod(base, period)
 	s.ValidUntil = &validUntil
+	s.Source = SubscriptionSourcePaid
 	s.LastAppliedPaymentID = &paymentID
 	s.CurrentPeriod = &period
 	s.Status = SubscriptionStatusActive
@@ -357,10 +363,83 @@ func (s *Subscription) Cancel() error {
 	return nil
 }
 
+// AssignService overwrites the subscription with an admin-assigned service
+// subscription (issue #255, billing CONTEXT.md): the given tariff runs until
+// validUntil without payment, auto-renew is off, and every planning field of
+// the overwritten subscription is cleared — the paid remainder does not stack.
+// The active payment method survives: it belongs to the owner and serves the
+// paid track the upgrade on top of this assignment returns them to. At the end
+// of the term the expiry worker downgrades the subscription to basic through
+// the common expiry path.
+func (s *Subscription) AssignService(tariffID uuid.UUID, validUntil time.Time) {
+	s.TariffID = tariffID
+	s.Source = SubscriptionSourceService
+	s.Status = SubscriptionStatusActive
+	s.ValidUntil = &validUntil
+	s.AutoRenewEnabled = false
+	s.PendingTariffID = nil
+	s.PendingChangeAt = nil
+	s.PendingPeriod = nil
+	s.CurrentPeriod = nil
+	s.GraceRemindedAt = nil
+}
+
+// ForceApplyTariffChange switches the subscription to the given tariff
+// immediately without payment (issue #255): the new tariff runs for one period
+// from now, the status moves to active and any pending change is dropped. The
+// source and the auto-renew setting keep their value — the operation repairs
+// the tariff, it does not convert a paid subscription into a service one or
+// vice versa. A cancelled subscription is out of scope: restoration goes
+// through paying for a tariff (ADR 0008).
+func (s *Subscription) ForceApplyTariffChange(newTariffID uuid.UUID, period SubscriptionPeriod, now time.Time) error {
+	if period != PeriodMonth && period != PeriodYear {
+		return ErrInvalidPeriod
+	}
+	if s.Status != SubscriptionStatusActive && s.Status != SubscriptionStatusGrace {
+		return ErrInvalidSubscriptionState
+	}
+	if s.TariffID == newTariffID {
+		return ErrAlreadyOnTariff
+	}
+	validUntil := addSubscriptionPeriod(now, period)
+	s.TariffID = newTariffID
+	s.ValidUntil = &validUntil
+	s.Status = SubscriptionStatusActive
+	s.CurrentPeriod = &period
+	s.PendingTariffID = nil
+	s.PendingChangeAt = nil
+	s.PendingPeriod = nil
+	s.GraceRemindedAt = nil
+	return nil
+}
+
+// ExtendGrace lengthens the current grace window by extra (issue #255): the
+// new deadline counts from the later of now and the current deadline, so a
+// window the expiry worker has not closed yet still yields the full extra
+// time. The reminder flag resets: the extended window is a fresh one for the
+// grace-expiry reminder (#253). Only a subscription in grace can be extended.
+func (s *Subscription) ExtendGrace(now time.Time, extra time.Duration) error {
+	if s.Status != SubscriptionStatusGrace || s.ValidUntil == nil {
+		return ErrInvalidSubscriptionState
+	}
+	base := now
+	if s.ValidUntil.After(base) {
+		base = *s.ValidUntil
+	}
+	validUntil := base.Add(extra)
+	s.ValidUntil = &validUntil
+	s.GraceRemindedAt = nil
+	return nil
+}
+
 // DowngradeToBasic resets the subscription to the free basic tariff. It clears
-// any validity period, current period, pending change and auto-renewal state.
+// any validity period, current period, pending change and auto-renewal state,
+// and returns the subscription to the paid track: the free basic plan is the
+// owner's default state (NewBasicSubscription), so an expired or withdrawn
+// service subscription converges on it too (issue #255).
 func (s *Subscription) DowngradeToBasic(basicTariffID uuid.UUID) {
 	s.TariffID = basicTariffID
+	s.Source = SubscriptionSourcePaid
 	s.Status = SubscriptionStatusActive
 	s.ValidUntil = nil
 	s.AutoRenewEnabled = false

@@ -34,4 +34,10 @@ var (
 	// ErrInvalidPaymentStatus is returned when a payment transition is
 	// attempted from a status that does not allow it.
 	ErrInvalidPaymentStatus = errors.New("invalid payment status transition")
+	// ErrInvalidTerm is returned when an admin service-subscription term is
+	// inconsistent: an explicit until date in the past (issue #255).
+	ErrInvalidTerm = errors.New("invalid service subscription term")
+	// ErrInvalidGraceExtension is returned when an admin grace extension adds
+	// no time or more than the operational cap allows (issue #255).
+	ErrInvalidGraceExtension = errors.New("invalid grace extension")
 )
