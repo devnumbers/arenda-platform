@@ -304,6 +304,59 @@ func TestAdminTariff_Integration_DeferredChangeChargesUpdatedPrice(t *testing.T)
 	}
 }
 
+// TestAdminTariff_Integration_HiddenTariffSubscriptionStillRenews proves the
+// second half of the hiding criterion of issue #256: an existing subscription
+// on a hidden tariff keeps renewing — the renewal worker charges it at the
+// plan's current price even though the plan is no longer offered or
+// selectable, and the subscription stays on it.
+func TestAdminTariff_Integration_HiddenTariffSubscriptionStillRenews(t *testing.T) {
+	h := newPaymentIntegrationHarness(t)
+	adminID := h.seedUser()
+	userID, sub := seedPaidProSubscription(t, h.integrationHarness)
+	seedActiveMethod(t, h.integrationHarness, userID, "tok_hidden_renew")
+
+	// Hide the plan the subscription runs on.
+	if _, err := h.tariffsSvc.UpdateTariff(h.ctx(), adminID, sub.TariffID, billingapp.UpdateTariffRequest{
+		ActivePropertyLimit: 5,
+		MonthlyPriceKopecks: 59000,
+		YearlyPriceKopecks:  540000,
+		IsActive:            false,
+	}); err != nil {
+		t.Fatalf("UpdateTariff() error = %v", err)
+	}
+
+	// The paid period ended an hour ago. The row is re-read first so the
+	// expire-update does not clobber the payment-method binding added above.
+	expired := h.clock.Now().Add(-time.Hour)
+	fresh, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID(): %v", err)
+	}
+	fresh.ValidUntil = &expired
+	if err := h.subscriptions.Update(h.ctx(), fresh); err != nil {
+		t.Fatalf("expire subscription: %v", err)
+	}
+
+	if count, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()); err != nil || count != 1 {
+		t.Fatalf("ProcessRenewals() = %d (err %v), want 1", count, err)
+	}
+
+	payments, err := h.payments.ListByUserID(h.ctx(), userID)
+	if err != nil || len(payments) != 1 {
+		t.Fatalf("payments = %d (err %v), want the renewal on the hidden plan", len(payments), err)
+	}
+	if payments[0].Status != domain.PaymentStatusSucceeded || payments[0].AmountKopecks != 59000 {
+		t.Errorf("renewal = %s/%d, want succeeded at the current 59000", payments[0].Status, payments[0].AmountKopecks)
+	}
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() after renewal: %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusActive || stored.TariffID != sub.TariffID {
+		t.Errorf("subscription = %s on %v, want active on the hidden plan", stored.Status, stored.TariffID)
+	}
+}
+
 // TestAdminTariff_Integration_RenewalChargesUpdatedPrice proves the pricing
 // acceptance criterion of issue #256 on the real schema: an admin price edit
 // does not reprice the running paid period, and the next renewal charges the
