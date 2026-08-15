@@ -1,6 +1,6 @@
 openapi: 3.0.2
 info:
-  version: '1.27'
+  version: '1.28'
   title: Прием платежей
   description: |-
     ## Правила работы
@@ -182,7 +182,7 @@ paths:
                   description: |
                     Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
                   type: string
-                  maxLength: 20
+                  maxLength: 64
                 CardData:
                   description: |
                     Зашифрованные данные карты в формате: 
@@ -795,7 +795,7 @@ paths:
                         description: |
                           Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
                         type: string
-                        maxLength: 20
+                        maxLength: 64
                         example: TBankTest
                       Amount:
                         description: |
@@ -807,7 +807,7 @@ paths:
                         description: |
                           Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
                         type: string
-                        maxLength: 36
+                        maxLength: 50
                         example: '21050'
                       Success:
                         description: |
@@ -921,7 +921,7 @@ paths:
                         description: |
                           Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
                         type: string
-                        maxLength: 36
+                        maxLength: 50
                       Success:
                         description: |
                           Успешность прохождения запроса — `true`/`false`.
@@ -1196,7 +1196,7 @@ paths:
                   - $ref: '#/components/schemas/AddCardResponse'
                   - $ref: '#/components/schemas/ErrorResponse'
               example:
-                PaymentId: 6155312072
+                PaymentId: '6155312072'
                 TerminalKey: TBankTest
                 CustomerKey: '906540'
                 RequestKey: ed989549-d3be-4758-95c7-22647e03f9ec
@@ -1435,7 +1435,7 @@ paths:
                   description: |
                     Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
                   type: string
-                  maxLength: 20
+                  maxLength: 64
                   example: TBankTest
                 Token:
                   description: |
@@ -1473,9 +1473,11 @@ paths:
                         description: |
                           Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
                         type: string
+                        maxLength: 64
                       OrderId:
                         description: |
                           Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+                        maxLength: 50
                         type: string
                       Success:
                         description: |
@@ -1576,7 +1578,7 @@ paths:
                   description: |
                     Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
                   type: string
-                  maxLength: 20
+                  maxLength: 64
                   example: TBankTest
                 Token:
                   description: |
@@ -1611,11 +1613,13 @@ paths:
                       OrderId:
                         description: |
                           Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+                        maxLength: 50
                         type: string
                       TerminalKey:
                         description: |
                           Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
                         type: string
+                        maxLength: 64
                       Status:
                         description: |
                           Статус транзакции
@@ -1896,7 +1900,7 @@ paths:
               $ref: '#/components/schemas/GetQrRequest'
             example:
               TerminalKey: TBankTest
-              PaymentId: 10063
+              PaymentId: '10063'
               DataType: PAYLOAD
               Token: 871199b37f207f0c4f721a37cdcc71dfcea880b4a4b85e3cf852c5dc1e99a8d6
       responses:
@@ -1913,7 +1917,7 @@ paths:
                 OrderId: '21057'
                 Success: true
                 Data: https://qr.nspk.ru/AD1000670LSS7DN18SJQDNP4B05KLJL2
-                PaymentId: 10063
+                PaymentId: '10063'
                 ErrorCode: '0'
                 Message: Неверные параметры
                 Details: Подробное описание ошибки
@@ -2231,11 +2235,7 @@ paths:
       tags:
         - SberPay
       summary: Получить ссылку
-      description: |
-
-        >С 1 сентября 2026 года поддержка метода прекратится. Вместо него будет использоваться метод [Создать заказ](/eacq/api/sberpay-link-get) согласно [сценарию оплаты через SberPay](/eacq/scenarios/payments/PCI_DSS/sberpay).
-
-        Метод генерирует ссылку SberPay.
+      description: Метод генерирует ссылку SberPay.
       parameters:
         - in: path
           name: paymentId
@@ -2416,6 +2416,7 @@ paths:
                   type: string
                   description: |
                     Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+                  maxLength: 64
                 PaymentId:
                   type: string
                   description: |
@@ -2449,7 +2450,7 @@ paths:
                         description: |
                           Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
                         type: string
-                        maxLength: 36
+                        maxLength: 50
                       Success:
                         description: |
                           Успешность прохождения запроса — `true`/`false`.
@@ -2813,6 +2814,7 @@ paths:
                   type: string
                   description: |
                     Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+                  maxLength: 64
                   example: TBankTest
                 PaymentId:
                   type: string
@@ -4938,7 +4940,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         Amount:
           description: |
@@ -4950,7 +4952,7 @@ components:
           description: |
             Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
           type: string
-          maxLength: 36
+          maxLength: 50
           example: '21050'
         Success:
           description: |
@@ -5151,6 +5153,7 @@ components:
           type: string
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+          maxLength: 64
           example: TBankTest
         PaymentId:
           type: string
@@ -5281,7 +5284,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         Amount:
           description: |
@@ -5293,7 +5296,7 @@ components:
           description: |
             Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
           type: string
-          maxLength: 36
+          maxLength: 50
           example: '21050'
         Success:
           description: |
@@ -5478,6 +5481,7 @@ components:
         TerminalKey:
           type: string
           description: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+          maxLength: 64
           example: TBankTest
         PaymentId:
           type: string
@@ -5584,10 +5588,12 @@ components:
         TerminalKey:
           type: string
           description: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+          maxLength: 64
           example: TBankTest
         OrderId:
           type: string
           description: Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+          maxLength: 50
           example: '21057'
         Success:
           type: boolean
@@ -5679,6 +5685,7 @@ components:
         TerminalKey:
           type: string
           description: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+          maxLength: 64
           example: TBankTest
         PaymentId:
           type: string
@@ -5704,10 +5711,9 @@ components:
         Receipt:
           type: object
           description: |
-            JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
+            JSON-объект с данными чека. Обязателен при частичной отмене, если подключена онлайн-касса.
 
             При частичной отмене данные, которые передаются в этом запросе, могут отличаться от данных, которые были переданы в методе [Инициировать платеж](/eacq/api/init).
-
 
             При полной отмене структура чека не передается, при частичной — передаются товары, которые нужно отменить.
           oneOf:
@@ -5771,10 +5777,12 @@ components:
         TerminalKey:
           type: string
           description: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+          maxLength: 64
           example: TBankTest
         OrderId:
           type: string
           description: Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+          maxLength: 50
           example: '21057'
         Success:
           type: boolean
@@ -5795,9 +5803,9 @@ components:
           description: Сумма в копейках после операции отмены.
           example: 5000
         PaymentId:
-          type: number
+          type: string
           description: Идентификатор платежа в системе Т‑Бизнес.
-          example: 2304882
+          example: '2304882'
         ErrorCode:
           type: string
           description: Код ошибки.
@@ -5827,7 +5835,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         PaymentId:
           type: string
@@ -5945,7 +5953,7 @@ components:
         TerminalKey:
           type: string
           description: Идентификатор терминала. Выдается продавцу в Т‑Бизнес при заведении терминала.
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         CustomerKey:
           type: string
@@ -6009,7 +6017,7 @@ components:
         TerminalKey:
           type: string
           description: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         CustomerKey:
           type: string
@@ -6062,7 +6070,7 @@ components:
         TerminalKey:
           type: string
           description: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         CustomerKey:
           type: string
@@ -6155,13 +6163,13 @@ components:
         PaymentId:
           description: |
             Идентификатор платежа в системе Т‑Бизнес.
-          type: number
-          example: 6155312072
+          type: string
+          example: '6155312072'
         TerminalKey:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         CustomerKey:
           description: |
@@ -6216,7 +6224,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         RequestKey:
           description: |
@@ -6272,7 +6280,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала
           type: string
-          maxLength: 20
+          maxLength: 64
           example: testRegress
         CustomerKey:
           description: |
@@ -6482,7 +6490,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         RequestKey:
           description: |
@@ -6506,7 +6514,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         RequestKey:
           description: |
@@ -6585,6 +6593,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
+          maxLength: 64
           example: TBankTest
         CustomerKey:
           description: |
@@ -6618,7 +6627,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         CustomerKey:
           description: |
@@ -6658,7 +6667,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         Status:
           description: |
@@ -6723,12 +6732,13 @@ components:
           type: string
           description: |
             Идентификатор терминала. Выдается мерчанту в Т-Бизнес при заведении терминала.
+          maxLength: 64
           example: TBankTest
         PaymentId:
-          type: number
+          type: string
           description: |
             Идентификатор платежа в системе Т‑Бизнес.
-          example: 10063
+          example: '10063'
         DataType:
           type: string
           description: |
@@ -6779,12 +6789,13 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         OrderId:
           description: |
             Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
           type: string
+          maxLength: 50
           example: '21057'
         Success:
           description: |
@@ -6801,8 +6812,8 @@ components:
         PaymentId:
           description: |
             Идентификатор платежа в системе Т‑Бизнес.
-          type: number
-          example: 10063
+          type: string
+          example: '10063'
         ErrorCode:
           description: |
             Код ошибки.
@@ -6901,6 +6912,7 @@ components:
         TerminalKey:
           type: string
           description: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+          maxLength: 64
           example: TBankTest
         PaymentId:
           type: string
@@ -6944,9 +6956,10 @@ components:
         TerminalKey:
           type: string
           description: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+          maxLength: 64
           example: TBankTest
         PaymentId:
-          type: number
+          type: string
           description: Идентификатор платежа в системе Т-Бизнес.
           example: '2559680770'
         Token:
@@ -7028,6 +7041,7 @@ components:
           type: string
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+          maxLength: 64
           example: TBankTest
         Description:
           type: string
@@ -7112,6 +7126,7 @@ components:
       properties:
         TerminalKey:
           type: string
+          maxLength: 64
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизес при заведении терминала.
           example: TBankTest
@@ -7160,7 +7175,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         Token:
           description: |
@@ -7179,7 +7194,7 @@ components:
         TerminalKey:
           description: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: testRegress
         RequestKey:
           description: |
@@ -7243,7 +7258,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         Token:
           description: |
@@ -7261,7 +7276,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: testRegress
         Success:
           description: |
@@ -7337,7 +7352,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         PaymentId:
           type: string
@@ -7394,7 +7409,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         Amount:
           description: |
@@ -7406,7 +7421,7 @@ components:
           description: |
             Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
           type: string
-          maxLength: 36
+          maxLength: 50
           example: '21050'
         Success:
           description: |
@@ -7462,7 +7477,7 @@ components:
           description: |
             Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
           type: string
-          maxLength: 20
+          maxLength: 64
           example: TBankTest
         PaymentId:
           description: |
@@ -7561,6 +7576,7 @@ components:
           description: |
             Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
           type: string
+          maxLength: 50
           example: '7830122'
         Amount:
           description: |
@@ -7788,10 +7804,12 @@ components:
         TerminalKey:
           type: string
           description: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+          maxLength: 64
           example: TBankTest
         OrderId:
           type: string
           description: Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+          maxLength: 50
           example: '21057'
         Success:
           type: boolean
@@ -7825,6 +7843,7 @@ components:
         TerminalKey:
           type: string
           description: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+          maxLength: 64
           example: TBankTest
         PaymentId:
           type: string
@@ -7869,6 +7888,7 @@ components:
         TerminalKey:
           type: string
           description: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+          maxLength: 64
           example: TBankTest
         CallbackUrl:
           type: string
@@ -7897,6 +7917,7 @@ components:
         TerminalKey:
           type: string
           description: Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+          maxLength: 64
           example: TBankTest
         PaymentIdList:
           type: array
@@ -7943,9 +7964,9 @@ components:
           description: Сервисное сообщение.
           example: Запрос на отправку документа принят
         PaymentId:
-          type: number
+          type: string
           description: Идентификатор платежа в системе Т‑Бизнес.
-          example: 1201206442
+          example: '1201206442'
     ConfirmByUrlResponse:
       title: URL
       type: object

@@ -1403,7 +1403,7 @@ type AddCardResponse struct {
 	Message *string `json:"Message,omitempty"`
 
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
-	PaymentId float32 `json:"PaymentId"`
+	PaymentId string `json:"PaymentId"`
 
 	// PaymentURL Ссылка на форму привязки карты. Используется для работы с платежной формой Т-Банка.
 	PaymentURL string `json:"PaymentURL"`
@@ -1558,7 +1558,7 @@ type AgentDataAgentSign string
 // AlfaPayLinkRequest defines model for AlfaPayLinkRequest.
 type AlfaPayLinkRequest struct {
 	// PaymentId Идентификатор платежа в системе Т-Бизнес.
-	PaymentId float32 `json:"PaymentId"`
+	PaymentId string `json:"PaymentId"`
 
 	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
 	TerminalKey string `json:"TerminalKey"`
@@ -1737,10 +1737,9 @@ type CancelRequest struct {
 	// Подробнее — в параметре `MemberId` метода [Получить список банков-пользователей QR](/eacq/api/qr-members-list).
 	QrMemberId *string `json:"QrMemberId,omitempty"`
 
-	// Receipt JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
+	// Receipt JSON-объект с данными чека. Обязателен при частичной отмене, если подключена онлайн-касса.
 	//
 	// При частичной отмене данные, которые передаются в этом запросе, могут отличаться от данных, которые были переданы в методе [Инициировать платеж](/eacq/api/init).
-	//
 	//
 	// При полной отмене структура чека не передается, при частичной — передаются товары, которые нужно отменить.
 	Receipt *CancelRequest_Receipt `json:"Receipt,omitempty"`
@@ -1761,7 +1760,7 @@ type CancelRequest struct {
 	Token string `json:"Token"`
 }
 
-// CancelRequest_Receipt JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
+// CancelRequest_Receipt JSON-объект с данными чека. Обязателен при частичной отмене, если подключена онлайн-касса.
 //
 // При частичной отмене данные, которые передаются в этом запросе, могут отличаться от данных, которые были переданы в методе [Инициировать платеж](/eacq/api/init).
 //
@@ -1800,7 +1799,7 @@ type CancelResponse struct {
 	OriginalAmount int64 `json:"OriginalAmount"`
 
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
-	PaymentId float32 `json:"PaymentId"`
+	PaymentId string `json:"PaymentId"`
 
 	// Status Статус транзакции.
 	Status string `json:"Status"`
@@ -2711,7 +2710,7 @@ type GetQrRequest struct {
 	DataType *GetQrRequestDataType `json:"DataType,omitempty"`
 
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
-	PaymentId float32 `json:"PaymentId"`
+	PaymentId string `json:"PaymentId"`
 
 	// PaymentMethod Способ оплаты.
 	PaymentMethod *GetQrRequestPaymentMethod `json:"PaymentMethod,omitempty"`
@@ -3810,7 +3809,7 @@ type PaymentIdList struct {
 	Message string `json:"Message"`
 
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
-	PaymentId float32 `json:"PaymentId"`
+	PaymentId string `json:"PaymentId"`
 
 	// Success Успешность прохождения запроса — `true`/`false`.
 	Success bool `json:"Success"`
@@ -3919,7 +3918,7 @@ type QrResponse struct {
 	OrderId string `json:"OrderId"`
 
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
-	PaymentId float32 `json:"PaymentId"`
+	PaymentId string `json:"PaymentId"`
 
 	// RequestKey Идентификатор запроса на привязку счета. Передается в случае привязки счета после оплаты по СБП.
 	RequestKey string `json:"RequestKey"`

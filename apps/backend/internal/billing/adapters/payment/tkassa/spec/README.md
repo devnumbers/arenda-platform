@@ -7,7 +7,7 @@ specification and the Go types generated from it. See ADR 0016
 ## Upstream
 
 - URL: <https://developer.tbank.ru/schemas/eacq/openapi.yaml>
-- Vendored version: 1.27 (verify: `grep '^  version:' openapi.yaml`)
+- Vendored version: 1.28 (verify: `grep '^  version:' openapi.yaml`)
 - `openapi.yaml` is byte-identical to upstream — never edit it by hand.
   Verify with:
 
