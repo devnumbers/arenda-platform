@@ -1,6 +1,7 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -170,6 +171,27 @@ func (f *fakeWebhookProcessor) HandleWebhook(ctx context.Context, providerName s
 
 func (f *fakeWebhookProcessor) WebhookAck() []byte { return f.ack }
 
+// fakeAdminTariffManager fails the test when an admin tariff endpoint is
+// called without one being wired; the admin-tariff tests override it.
+type fakeAdminTariffManager struct {
+	create func(ctx context.Context, adminID uuid.UUID, req billingapp.CreateTariffRequest) (domain.Tariff, error)
+	update func(ctx context.Context, adminID, tariffID uuid.UUID, req billingapp.UpdateTariffRequest) (domain.Tariff, error)
+}
+
+func (f *fakeAdminTariffManager) CreateTariff(ctx context.Context, adminID uuid.UUID, req billingapp.CreateTariffRequest) (domain.Tariff, error) {
+	if f.create != nil {
+		return f.create(ctx, adminID, req)
+	}
+	return domain.Tariff{}, errors.New("unexpected CreateTariff call")
+}
+
+func (f *fakeAdminTariffManager) UpdateTariff(ctx context.Context, adminID, tariffID uuid.UUID, req billingapp.UpdateTariffRequest) (domain.Tariff, error) {
+	if f.update != nil {
+		return f.update(ctx, adminID, tariffID, req)
+	}
+	return domain.Tariff{}, errors.New("unexpected UpdateTariff call")
+}
+
 // newTestHandlers builds handlers over the given fakes; a nil fake is
 // replaced by a stub that fails the test when called.
 func newTestHandlers(tariffs TariffLister, subs SubscriptionViewer, managers SubscriptionManager) *BillingHandlers {
@@ -197,7 +219,7 @@ func newTestHandlersOpts(tariffs TariffLister, subs SubscriptionViewer, managers
 	if webhooks == nil {
 		webhooks = &fakeWebhookProcessor{}
 	}
-	return NewBillingHandlers(tariffs, subs, managers, payments, methods, webhooks, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, devEndpoints, nil)
+	return NewBillingHandlers(tariffs, &fakeAdminTariffManager{}, subs, managers, payments, methods, webhooks, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, devEndpoints, nil)
 }
 
 // fakeAdminPaymentManager fails the test when an admin payment endpoint is
@@ -403,6 +425,188 @@ func TestListAdminTariffs_InfrastructureErrorIs500(t *testing.T) {
 	}
 	if body := w.Body.String(); strings.Contains(body, "connection reset by peer") {
 		t.Errorf("body leaks the internal error cause: %s", body)
+	}
+}
+
+// adminJSONRequest builds an admin-authenticated request with a JSON body.
+func adminJSONRequest(t *testing.T, method, target string, adminID uuid.UUID, body any) *http.Request {
+	t.Helper()
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	req := httptest.NewRequestWithContext(
+		httpsupport.WithActor(t.Context(), adminID, actor.RoleAdmin),
+		method, target, bytes.NewReader(payload),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
+// TestCreateAdminTariff_CreatesAndAnswers201 proves POST /admin/tariffs
+// (issue #256): the body maps to the application request, the acting admin is
+// attributed, and the created plan answers 201 with the contract shape.
+func TestCreateAdminTariff_CreatesAndAnswers201(t *testing.T) {
+	adminID := uuid.New()
+	created := domain.Tariff{
+		ID: uuid.New(), Name: domain.TariffPro, ActivePropertyLimit: 5,
+		MonthlyPriceKopecks: 59000, YearlyPriceKopecks: 540000, IsActive: true,
+	}
+	h := NewBillingHandlers(nil, &fakeAdminTariffManager{create: func(_ context.Context, gotAdmin uuid.UUID, req billingapp.CreateTariffRequest) (domain.Tariff, error) {
+		if gotAdmin != adminID {
+			t.Errorf("CreateTariff admin = %v, want %v", gotAdmin, adminID)
+		}
+		if req.Name != domain.TariffPro || req.ActivePropertyLimit != 5 ||
+			req.MonthlyPriceKopecks != 59000 || req.YearlyPriceKopecks != 540000 {
+			t.Errorf("CreateTariff request = %+v, want the decoded body", req)
+		}
+		return created, nil
+	}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, false, nil)
+
+	w := httptest.NewRecorder()
+	h.CreateAdminTariff(w, adminJSONRequest(t, http.MethodPost, "/admin/tariffs", adminID, map[string]any{
+		"name": "pro", "activePropertyLimit": 5, "monthlyPriceKopecks": 59000, "yearlyPriceKopecks": 540000,
+	}))
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		ID                  string `json:"id"`
+		Name                string `json:"name"`
+		IsActive            bool   `json:"isActive"`
+		ActivePropertyLimit int    `json:"activePropertyLimit"`
+		MonthlyPriceKopecks int    `json:"monthlyPriceKopecks"`
+		YearlyPriceKopecks  int    `json:"yearlyPriceKopecks"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.ID != created.ID.String() || resp.Name != "pro" || !resp.IsActive ||
+		resp.ActivePropertyLimit != 5 || resp.MonthlyPriceKopecks != 59000 || resp.YearlyPriceKopecks != 540000 {
+		t.Errorf("response = %+v, want the created tariff", resp)
+	}
+}
+
+// TestCreateAdminTariff_ErrorMapping proves the create endpoint's error
+// contract (issue #256): a duplicate name answers 409, invalid pricing 400,
+// an unknown name 400, and no session 401 before the service is touched.
+func TestCreateAdminTariff_ErrorMapping(t *testing.T) {
+	validBody := func() map[string]any {
+		return map[string]any{"name": "pro", "activePropertyLimit": 5, "monthlyPriceKopecks": 59000, "yearlyPriceKopecks": 540000}
+	}
+	tests := []struct {
+		name   string
+		body   map[string]any
+		svcErr error
+		want   int
+	}{
+		{"duplicate name", validBody(), billingapp.ErrTariffAlreadyExists, http.StatusConflict},
+		{"invalid pricing", map[string]any{"name": "pro", "activePropertyLimit": 5, "monthlyPriceKopecks": -1, "yearlyPriceKopecks": 540000}, domain.ErrInvalidTariffPricing, http.StatusBadRequest},
+		{"unknown name", map[string]any{"name": "premium", "activePropertyLimit": 5, "monthlyPriceKopecks": 59000, "yearlyPriceKopecks": 540000}, nil, http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewBillingHandlers(nil, &fakeAdminTariffManager{create: func(context.Context, uuid.UUID, billingapp.CreateTariffRequest) (domain.Tariff, error) {
+				return domain.Tariff{}, tt.svcErr
+			}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, false, nil)
+
+			w := httptest.NewRecorder()
+			h.CreateAdminTariff(w, adminJSONRequest(t, http.MethodPost, "/admin/tariffs", uuid.New(), tt.body))
+
+			if w.Code != tt.want {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, tt.want, w.Body.String())
+			}
+		})
+	}
+
+	t.Run("requires admin session", func(t *testing.T) {
+		h := NewBillingHandlers(nil, &fakeAdminTariffManager{}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, false, nil)
+
+		w := httptest.NewRecorder()
+		payload, err := json.Marshal(validBody())
+		if err != nil {
+			t.Fatalf("marshal body: %v", err)
+		}
+		h.CreateAdminTariff(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/tariffs", bytes.NewReader(payload)))
+
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", w.Code)
+		}
+	})
+}
+
+// TestUpdateAdminTariff_UpdatesAndAnswers200 proves PUT /admin/tariffs/{id}
+// (issue #256): the full editable state maps to the application request with
+// the acting admin and the path id, and the saved plan answers 200.
+func TestUpdateAdminTariff_UpdatesAndAnswers200(t *testing.T) {
+	adminID := uuid.New()
+	tariffID := uuid.New()
+	updated := domain.Tariff{
+		ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 7,
+		MonthlyPriceKopecks: 59000, YearlyPriceKopecks: 540000, IsActive: false,
+	}
+	h := NewBillingHandlers(nil, &fakeAdminTariffManager{update: func(_ context.Context, gotAdmin, gotID uuid.UUID, req billingapp.UpdateTariffRequest) (domain.Tariff, error) {
+		if gotAdmin != adminID {
+			t.Errorf("UpdateTariff admin = %v, want %v", gotAdmin, adminID)
+		}
+		if gotID != tariffID {
+			t.Errorf("UpdateTariff id = %v, want %v", gotID, tariffID)
+		}
+		if req.ActivePropertyLimit != 7 || req.MonthlyPriceKopecks != 59000 ||
+			req.YearlyPriceKopecks != 540000 || req.IsActive {
+			t.Errorf("UpdateTariff request = %+v, want the decoded body", req)
+		}
+		return updated, nil
+	}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, false, nil)
+
+	w := httptest.NewRecorder()
+	h.UpdateAdminTariff(w, adminJSONRequest(t, http.MethodPut, "/admin/tariffs/"+tariffID.String(), adminID, map[string]any{
+		"activePropertyLimit": 7, "monthlyPriceKopecks": 59000, "yearlyPriceKopecks": 540000, "isActive": false,
+	}), tariffID)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		ID       string `json:"id"`
+		IsActive bool   `json:"isActive"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.ID != tariffID.String() || resp.IsActive {
+		t.Errorf("response = %+v, want the hidden updated tariff", resp)
+	}
+}
+
+// TestUpdateAdminTariff_ErrorMapping proves the edit endpoint's error
+// contract (issue #256): a miss answers 404, invalid pricing 400.
+func TestUpdateAdminTariff_ErrorMapping(t *testing.T) {
+	tests := []struct {
+		name   string
+		svcErr error
+		want   int
+	}{
+		{"missing tariff", billingapp.ErrTariffNotFound, http.StatusNotFound},
+		{"invalid pricing", domain.ErrInvalidTariffPricing, http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewBillingHandlers(nil, &fakeAdminTariffManager{update: func(context.Context, uuid.UUID, uuid.UUID, billingapp.UpdateTariffRequest) (domain.Tariff, error) {
+				return domain.Tariff{}, tt.svcErr
+			}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, false, nil)
+
+			tariffID := uuid.New()
+			w := httptest.NewRecorder()
+			h.UpdateAdminTariff(w, adminJSONRequest(t, http.MethodPut, "/admin/tariffs/"+tariffID.String(), uuid.New(), map[string]any{
+				"activePropertyLimit": 7, "monthlyPriceKopecks": 59000, "yearlyPriceKopecks": 540000, "isActive": false,
+			}), tariffID)
+
+			if w.Code != tt.want {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, tt.want, w.Body.String())
+			}
+		})
 	}
 }
 

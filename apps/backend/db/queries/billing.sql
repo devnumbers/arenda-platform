@@ -19,6 +19,31 @@ SELECT * FROM tariffs WHERE is_active ORDER BY monthly_price_kopecks, id;
 -- Admin tariff listing: every tariff including hidden ones (issue #247).
 SELECT * FROM tariffs ORDER BY monthly_price_kopecks, id;
 
+-- name: CreateTariff :one
+-- Admin tariff creation (issue #256). The name is UNIQUE; a duplicate surfaces
+-- as a unique violation the adapter narrows to ErrAlreadyExists.
+INSERT INTO tariffs (
+    id,
+    name,
+    active_property_limit,
+    monthly_price_kopecks,
+    yearly_price_kopecks,
+    is_active
+) VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: UpdateTariff :one
+-- Admin tariff edit (issue #256): prices, property limit and the activity
+-- flag. The name is immutable — user-facing tariff selection is by name, so a
+-- rename would silently change what existing references point at.
+UPDATE tariffs
+SET active_property_limit = $2,
+    monthly_price_kopecks = $3,
+    yearly_price_kopecks = $4,
+    is_active = $5
+WHERE id = $1
+RETURNING *;
+
 -- name: CreateSubscription :one
 INSERT INTO user_subscriptions (
     id,

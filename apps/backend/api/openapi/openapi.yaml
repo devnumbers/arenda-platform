@@ -2536,6 +2536,84 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    post:
+      operationId: createAdminTariff
+      description: |
+        Creates a tariff plan (issue #256). The name comes from the closed
+        TariffName vocabulary the frozen user contract pins; a name that
+        already exists answers 409.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateTariffRequest'
+      responses:
+        '201':
+          description: The created tariff
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTariff'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: A tariff with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/tariffs/{tariffId}:
+    put:
+      operationId: updateAdminTariff
+      description: |
+        Updates a tariff's prices, active-property limit and activity
+        (issue #256). Hiding (isActive=false) removes the plan from the
+        user-facing listing and blocks new selection; existing subscriptions,
+        renewals and the payment history keep referencing it. Paid periods
+        already granted are not repriced — the next renewal charges the
+        updated price.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: tariffId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateTariffRequest'
+      responses:
+        '200':
+          description: The updated tariff
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTariff'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /admin/subscription/payments:
     get:
@@ -4309,6 +4387,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdminTariff'
+
+    AdminCreateTariffRequest:
+      type: object
+      required: [name, activePropertyLimit, monthlyPriceKopecks, yearlyPriceKopecks]
+      properties:
+        name:
+          $ref: '#/components/schemas/TariffName'
+        activePropertyLimit:
+          type: integer
+          minimum: -1
+          description: Maximum number of active properties; -1 means unlimited.
+        monthlyPriceKopecks:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Monthly price in kopecks.
+        yearlyPriceKopecks:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Yearly price in kopecks.
+
+    AdminUpdateTariffRequest:
+      type: object
+      required: [activePropertyLimit, monthlyPriceKopecks, yearlyPriceKopecks, isActive]
+      properties:
+        activePropertyLimit:
+          type: integer
+          minimum: -1
+          description: Maximum number of active properties; -1 means unlimited.
+        monthlyPriceKopecks:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Monthly price in kopecks.
+        yearlyPriceKopecks:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Yearly price in kopecks.
+        isActive:
+          type: boolean
+          description: |
+            false hides the plan: it disappears from the user-facing listing
+            and cannot be newly selected, while existing subscriptions,
+            renewals and payment history keep referencing it.
 
     PaymentMethodsResponse:
       type: object

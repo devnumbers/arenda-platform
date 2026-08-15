@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -134,6 +136,76 @@ func (r *TariffRepository) ListAll(ctx context.Context) ([]domain.Tariff, error)
 	listAll := mapTariffs(rows)
 	r.storeListAll(listAll)
 	return copyTariffs(listAll), nil
+}
+
+// tariffLimitForColumn maps the domain property limit onto the INT column.
+// The domain bound is ≥ -1; anything above the column range is clamped — a
+// limit past two billion properties is unlimited in practice.
+func tariffLimitForColumn(limit int) int32 {
+	return int32(min(limit, math.MaxInt32)) //nolint:gosec // clamped to math.MaxInt32 by min above
+}
+
+// Create inserts a new tariff (issue #256). A unique violation on the name is
+// narrowed to ErrAlreadyExists — the durable backstop of the closed tariff
+// name vocabulary. The returned row is cached so intra-transaction reads of
+// this instance observe it.
+func (r *TariffRepository) Create(ctx context.Context, tariff domain.Tariff) (domain.Tariff, error) {
+	row, err := r.q().CreateTariff(ctx, postgres.CreateTariffParams{
+		ID:                  pgtype.UUID{Bytes: tariff.ID, Valid: true},
+		Name:                string(tariff.Name),
+		ActivePropertyLimit: tariffLimitForColumn(tariff.ActivePropertyLimit),
+		MonthlyPriceKopecks: tariff.MonthlyPriceKopecks,
+		YearlyPriceKopecks:  tariff.YearlyPriceKopecks,
+		IsActive:            tariff.IsActive,
+	})
+	if err != nil {
+		if pgerr.IsUniqueViolation(err) {
+			return domain.Tariff{}, application.ErrAlreadyExists
+		}
+		return domain.Tariff{}, fmt.Errorf("create tariff: %w", err)
+	}
+	created := mapTariff(row)
+	r.store(created)
+	return created, nil
+}
+
+// Update saves the admin-editable fields of a tariff (issue #256): prices,
+// property limit and the activity flag; the name is immutable. A miss answers
+// ErrNotFound. The returned row is cached so intra-transaction reads of this
+// instance observe it.
+func (r *TariffRepository) Update(ctx context.Context, tariff domain.Tariff) (domain.Tariff, error) {
+	row, err := r.q().UpdateTariff(ctx, postgres.UpdateTariffParams{
+		ID:                  pgtype.UUID{Bytes: tariff.ID, Valid: true},
+		ActivePropertyLimit: tariffLimitForColumn(tariff.ActivePropertyLimit),
+		MonthlyPriceKopecks: tariff.MonthlyPriceKopecks,
+		YearlyPriceKopecks:  tariff.YearlyPriceKopecks,
+		IsActive:            tariff.IsActive,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Tariff{}, application.ErrNotFound
+		}
+		return domain.Tariff{}, fmt.Errorf("update tariff: %w", err)
+	}
+	updated := mapTariff(row)
+	r.store(updated)
+	return updated, nil
+}
+
+// Invalidate drops every cached read of this instance (issue #256). Writes go
+// through transaction-bound instances with their own caches, so after a
+// committed admin write the caller invalidates the shared instance to make
+// the change visible to its readers without waiting out the TTL.
+func (r *TariffRepository) Invalidate(context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byID = make(map[uuid.UUID]domain.Tariff)
+	r.byName = make(map[domain.TariffName]domain.Tariff)
+	r.list = nil
+	r.listAll = nil
+	r.cachedAt = time.Time{}
+	r.listAllCachedAt = time.Time{}
+	return nil
 }
 
 func (r *TariffRepository) cachedByID(id uuid.UUID) (domain.Tariff, bool) {

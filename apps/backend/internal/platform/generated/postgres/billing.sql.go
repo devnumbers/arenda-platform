@@ -315,6 +315,52 @@ func (q *Queries) CreateSubscriptionPayment(ctx context.Context, arg CreateSubsc
 	return i, err
 }
 
+const createTariff = `-- name: CreateTariff :one
+INSERT INTO tariffs (
+    id,
+    name,
+    active_property_limit,
+    monthly_price_kopecks,
+    yearly_price_kopecks,
+    is_active
+) VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, name, active_property_limit, monthly_price_kopecks, yearly_price_kopecks, is_active, created_at, updated_at
+`
+
+type CreateTariffParams struct {
+	ID                  pgtype.UUID `json:"id"`
+	Name                string      `json:"name"`
+	ActivePropertyLimit int32       `json:"active_property_limit"`
+	MonthlyPriceKopecks int64       `json:"monthly_price_kopecks"`
+	YearlyPriceKopecks  int64       `json:"yearly_price_kopecks"`
+	IsActive            bool        `json:"is_active"`
+}
+
+// Admin tariff creation (issue #256). The name is UNIQUE; a duplicate surfaces
+// as a unique violation the adapter narrows to ErrAlreadyExists.
+func (q *Queries) CreateTariff(ctx context.Context, arg CreateTariffParams) (Tariff, error) {
+	row := q.db.QueryRow(ctx, createTariff,
+		arg.ID,
+		arg.Name,
+		arg.ActivePropertyLimit,
+		arg.MonthlyPriceKopecks,
+		arg.YearlyPriceKopecks,
+		arg.IsActive,
+	)
+	var i Tariff
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ActivePropertyLimit,
+		&i.MonthlyPriceKopecks,
+		&i.YearlyPriceKopecks,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deactivateAllPaymentMethodsForUser = `-- name: DeactivateAllPaymentMethodsForUser :exec
 UPDATE payment_methods
 SET is_active = false, updated_at = now()
@@ -1853,6 +1899,49 @@ func (q *Queries) UpdateSubscriptionPayment(ctx context.Context, arg UpdateSubsc
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SucceededAt,
+	)
+	return i, err
+}
+
+const updateTariff = `-- name: UpdateTariff :one
+UPDATE tariffs
+SET active_property_limit = $2,
+    monthly_price_kopecks = $3,
+    yearly_price_kopecks = $4,
+    is_active = $5
+WHERE id = $1
+RETURNING id, name, active_property_limit, monthly_price_kopecks, yearly_price_kopecks, is_active, created_at, updated_at
+`
+
+type UpdateTariffParams struct {
+	ID                  pgtype.UUID `json:"id"`
+	ActivePropertyLimit int32       `json:"active_property_limit"`
+	MonthlyPriceKopecks int64       `json:"monthly_price_kopecks"`
+	YearlyPriceKopecks  int64       `json:"yearly_price_kopecks"`
+	IsActive            bool        `json:"is_active"`
+}
+
+// Admin tariff edit (issue #256): prices, property limit and the activity
+// flag. The name is immutable — user-facing tariff selection is by name, so a
+// rename would silently change what existing references point at.
+func (q *Queries) UpdateTariff(ctx context.Context, arg UpdateTariffParams) (Tariff, error) {
+	row := q.db.QueryRow(ctx, updateTariff,
+		arg.ID,
+		arg.ActivePropertyLimit,
+		arg.MonthlyPriceKopecks,
+		arg.YearlyPriceKopecks,
+		arg.IsActive,
+	)
+	var i Tariff
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ActivePropertyLimit,
+		&i.MonthlyPriceKopecks,
+		&i.YearlyPriceKopecks,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

@@ -121,6 +121,7 @@ export const auditEntityTypeChoices: Choice[] = [
   { id: 'subscription', name: 'Подписка' },
   { id: 'payment_method', name: 'Способ оплаты' },
   { id: 'subscription_payment', name: 'Платёж подписки' },
+  { id: 'tariff', name: 'Тариф' },
 ];
 
 export const auditActionChoices: Choice[] = [
@@ -168,6 +169,8 @@ export const auditActionChoices: Choice[] = [
   { id: 'subscription_payment.failed', name: 'Платёж не удался' },
   { id: 'subscription_payment.refunded', name: 'Возврат платежа' },
   { id: 'subscription_payment.synced', name: 'Синхронизация платежа' },
+  { id: 'tariff.created', name: 'Создание тарифа' },
+  { id: 'tariff.updated', name: 'Изменение тарифа' },
 ];
 
 interface PersonName {

@@ -296,12 +296,38 @@ export const dataProvider: AdminDataProvider = {
     throw new HttpError(`getManyReference для ${resource} не поддерживает target=${params.target}`, 400);
   },
 
-  create: async <T extends RaRecord>(resource: string, _params: CreateParams<T>): Promise<CreateResult<T>> => {
-    throw new HttpError(`Создание для ресурса ${resource} не поддерживается`, 405);
+  create: async <T extends RaRecord>(resource: string, params: CreateParams<T>): Promise<CreateResult<T>> => {
+    if (resource !== 'tariffs') {
+      throw new HttpError(`Создание для ресурса ${resource} не поддерживается`, 405);
+    }
+    const { json } = await httpClient(`${API_PREFIX}/admin/tariffs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params.data),
+    });
+    return { data: ensureId(json as T) };
   },
 
-  update: async <T extends RaRecord>(resource: string, _params: UpdateParams<T>): Promise<UpdateResult<T>> => {
-    throw new HttpError(`Обновление для ресурса ${resource} не поддерживается`, 405);
+  update: async <T extends RaRecord>(resource: string, params: UpdateParams<T>): Promise<UpdateResult<T>> => {
+    if (resource !== 'tariffs') {
+      throw new HttpError(`Обновление для ресурса ${resource} не поддерживается`, 405);
+    }
+    // PUT /admin/tariffs/{id} принимает полное редактируемое состояние. Вызов
+    // может передать только часть (скрытие меняет один isActive) — недостающие
+    // поля догружаются из previousData; всё вне контракта (id, name) не отправляется.
+    const prev = params.previousData as Record<string, unknown> | undefined;
+    const data = params.data as Record<string, unknown>;
+    const editableFields = ['activePropertyLimit', 'monthlyPriceKopecks', 'yearlyPriceKopecks', 'isActive'] as const;
+    const body: Record<string, unknown> = {};
+    for (const field of editableFields) {
+      body[field] = data[field] !== undefined ? data[field] : prev?.[field];
+    }
+    const { json } = await httpClient(`${API_PREFIX}/admin/tariffs/${params.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return { data: ensureId(json as T) };
   },
 
   updateMany: async <T extends RaRecord>(resource: string, _params: UpdateManyParams<T>): Promise<UpdateManyResult<T>> => {

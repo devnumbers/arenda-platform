@@ -135,6 +135,13 @@ const (
 	ActionSubscriptionPaymentFailed    Action = "subscription_payment.failed"
 	ActionSubscriptionPaymentRefunded  Action = "subscription_payment.refunded"
 	ActionSubscriptionPaymentSynced    Action = "subscription_payment.synced"
+
+	// ActionTariffCreated and ActionTariffUpdated are the admin tariff
+	// management operations (issue #256): creating a plan and editing its
+	// prices, property limit or activity (hiding included). Context carries
+	// the resulting field values, never user data.
+	ActionTariffCreated Action = "tariff.created"
+	ActionTariffUpdated Action = "tariff.updated"
 )
 
 // EntityType identifies the kind of entity the action targets.
@@ -157,6 +164,7 @@ const (
 	EntitySubscription             EntityType = "subscription"
 	EntityPaymentMethod            EntityType = "payment_method"
 	EntitySubscriptionPayment      EntityType = "subscription_payment"
+	EntityTariff                   EntityType = "tariff"
 )
 
 // Entry is a single audit log record.

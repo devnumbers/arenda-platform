@@ -122,3 +122,24 @@ type SubscriptionTransitionView struct {
 	FromTariffName *string
 	ToTariffName   string
 }
+
+// CreateTariffRequest is the application-layer input of the admin tariff
+// creation (issue #256). The name comes from the closed TariffName vocabulary
+// the frozen user contract pins; domain.NewTariff validates it together with
+// the pricing fields.
+type CreateTariffRequest struct {
+	Name                domain.TariffName
+	ActivePropertyLimit int
+	MonthlyPriceKopecks int64
+	YearlyPriceKopecks  int64
+}
+
+// UpdateTariffRequest is the application-layer input of the admin tariff edit
+// (issue #256): the prices, the property limit and the activity flag whose
+// false value hides the plan. The name is immutable and absent by design.
+type UpdateTariffRequest struct {
+	ActivePropertyLimit int
+	MonthlyPriceKopecks int64
+	YearlyPriceKopecks  int64
+	IsActive            bool
+}

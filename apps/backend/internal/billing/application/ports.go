@@ -13,11 +13,23 @@ import (
 // active (user-visible) tariffs; ListAll returns every tariff including hidden
 // ones for the admin views. GetByID and GetByName resolve any tariff, including
 // hidden ones, because foreign keys keep referencing them (issue #245).
+//
+// The write methods back the admin tariff management (issue #256): Create
+// narrows a name collision to ErrAlreadyExists, Update misses to ErrNotFound.
+// The postgres adapter serves reads from an in-memory cache with a TTL, and
+// writes go through a transaction-bound instance with a cache of its own, so
+// after a committed write the caller must Invalidate the shared instance to
+// make the change visible to its readers immediately.
 type TariffRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Tariff, error)
 	GetByName(ctx context.Context, name domain.TariffName) (domain.Tariff, error)
 	List(ctx context.Context) ([]domain.Tariff, error)
 	ListAll(ctx context.Context) ([]domain.Tariff, error)
+	Create(ctx context.Context, tariff domain.Tariff) (domain.Tariff, error)
+	Update(ctx context.Context, tariff domain.Tariff) (domain.Tariff, error)
+	// Invalidate drops this instance's cached reads so the next one observes
+	// committed writes from transaction-bound instances.
+	Invalidate(ctx context.Context) error
 	WithTx(tx transaction.Tx) (TariffRepository, error)
 }
 

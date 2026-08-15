@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPropertyLimit, tariffName, tariffNameChoices, tariffRepresentation } from './tariffs';
+import { formatPropertyLimit, parseTariffNumber, tariffName, tariffNameChoices, tariffRepresentation, unlimitedPropertyLimit, validateTariffPricing } from './tariffs';
 
 // Значения enum TariffName из apps/backend/api/openapi/openapi.yaml.
 const openApiTariffNames = ['basic', 'pro', 'business'] as const;
@@ -60,5 +60,47 @@ describe('tariffRepresentation', () => {
 
   it('shows an unknown name as-is instead of falling back to #id', () => {
     expect(tariffRepresentation({ id: 'abc', name: 'unlimited' })).toBe('unlimited');
+  });
+});
+
+// Инварианты домена (apps/backend/internal/billing/domain/tariff.go, issue #256):
+// цены в копейках ≥ 0, лимит активных объектов ≥ −1 (−1 = безлимит).
+
+describe('parseTariffNumber', () => {
+  it('parses integers and trims whitespace', () => {
+    expect(parseTariffNumber('59000')).toBe(59000);
+    expect(parseTariffNumber(' 7 ')).toBe(7);
+    expect(parseTariffNumber('-1')).toBe(-1);
+  });
+
+  it('rejects non-numeric and non-integer input', () => {
+    expect(parseTariffNumber('')).toBeNull();
+    expect(parseTariffNumber('abc')).toBeNull();
+    expect(parseTariffNumber('1.5')).toBeNull();
+  });
+});
+
+describe('validateTariffPricing', () => {
+  it('accepts valid prices and limits', () => {
+    expect(validateTariffPricing({ monthlyPriceKopecks: 59000, yearlyPriceKopecks: 540000, activePropertyLimit: 5 })).toBeNull();
+    expect(validateTariffPricing({ monthlyPriceKopecks: 0, yearlyPriceKopecks: 0, activePropertyLimit: 1 })).toBeNull();
+    expect(
+      validateTariffPricing({ monthlyPriceKopecks: 99000, yearlyPriceKopecks: 890000, activePropertyLimit: unlimitedPropertyLimit })
+    ).toBeNull();
+  });
+
+  it('rejects negative prices', () => {
+    expect(validateTariffPricing({ monthlyPriceKopecks: -1, yearlyPriceKopecks: 540000, activePropertyLimit: 5 })).toBe(
+      'Цены не могут быть отрицательными'
+    );
+    expect(validateTariffPricing({ monthlyPriceKopecks: 59000, yearlyPriceKopecks: -1, activePropertyLimit: 5 })).toBe(
+      'Цены не могут быть отрицательными'
+    );
+  });
+
+  it('rejects limits below −1', () => {
+    expect(validateTariffPricing({ monthlyPriceKopecks: 59000, yearlyPriceKopecks: 540000, activePropertyLimit: -2 })).toBe(
+      'Лимит должен быть −1 (безлимит) или больше'
+    );
   });
 });

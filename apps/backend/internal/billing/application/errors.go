@@ -8,6 +8,14 @@ var (
 	ErrNotFound = errors.New("not found")
 	// ErrTariffNotFound is returned when a tariff lookup misses.
 	ErrTariffNotFound = errors.New("tariff not found")
+	// ErrTariffInactive is returned when a user-facing flow requests a hidden
+	// tariff: hidden plans are not offered and cannot be newly selected, while
+	// subscriptions that already reference them keep working (issue #256).
+	ErrTariffInactive = errors.New("tariff is not available for selection")
+	// ErrTariffAlreadyExists is returned when the admin creates a tariff whose
+	// name is taken — the closed vocabulary is backed by the database's unique
+	// constraint (issue #256).
+	ErrTariffAlreadyExists = errors.New("tariff already exists")
 	// ErrSubscriptionNotFound is returned when the user has no subscription
 	// (yet). Consumers treat it as "no subscription" rather than an error:
 	// the readonly gate allows mutations, /me omits the field.

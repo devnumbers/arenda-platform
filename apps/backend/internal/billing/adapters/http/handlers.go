@@ -28,6 +28,15 @@ type TariffLister interface {
 	ListAllTariffs(ctx context.Context) ([]domain.Tariff, error)
 }
 
+// AdminTariffManager serves the admin tariff management mutations (issue
+// #256): plan creation and the prices/limit/activity edit (hiding included).
+// Access control is the AdminOnlyMiddleware the routes are mounted with; the
+// acting admin's id is attributed by the handlers.
+type AdminTariffManager interface {
+	CreateTariff(ctx context.Context, adminID uuid.UUID, req billingapp.CreateTariffRequest) (domain.Tariff, error)
+	UpdateTariff(ctx context.Context, adminID, tariffID uuid.UUID, req billingapp.UpdateTariffRequest) (domain.Tariff, error)
+}
+
 // SubscriptionViewer serves the user's own subscription view.
 type SubscriptionViewer interface {
 	GetSubscription(ctx context.Context, userID uuid.UUID) (billingapp.SubscriptionView, error)
@@ -112,10 +121,13 @@ const maxWebhookBody = 256 * 1024
 // issue #254 are live — the cross-user payment views, the full-refund saga
 // and the manual provider sync. The admin subscription endpoints of issue
 // #255 are live — the service assignment, the force tariff change, the grace
-// extension, the admin cancellation and the transition history. The
-// user-facing contract is frozen, so the routes stay mounted.
+// extension, the admin cancellation and the transition history. The admin
+// tariff endpoints of issue #256 are live — plan creation and the
+// prices/limit/activity edit. The user-facing contract is frozen, so the
+// routes stay mounted.
 type BillingHandlers struct {
 	tariffs            TariffLister
+	adminTariffs       AdminTariffManager
 	subscriptions      SubscriptionViewer
 	managers           SubscriptionManager
 	payments           PaymentManager
@@ -132,6 +144,7 @@ type BillingHandlers struct {
 // NewBillingHandlers creates HTTP handlers for the billing API.
 func NewBillingHandlers(
 	tariffs TariffLister,
+	adminTariffs AdminTariffManager,
 	subscriptions SubscriptionViewer,
 	managers SubscriptionManager,
 	payments PaymentManager,
@@ -147,6 +160,7 @@ func NewBillingHandlers(
 	}
 	return &BillingHandlers{
 		tariffs:            tariffs,
+		adminTariffs:       adminTariffs,
 		subscriptions:      subscriptions,
 		managers:           managers,
 		payments:           payments,
@@ -194,6 +208,70 @@ func (h *BillingHandlers) ListAdminTariffs(w http.ResponseWriter, r *http.Reques
 		items = append(items, httpsupport.AdminTariffResponse(t))
 	}
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminTariffsResponse{Items: items})
+}
+
+// CreateAdminTariff implements POST /admin/tariffs (issue #256): a plan from
+// the closed name vocabulary with validated kopeck prices and property limit.
+// A name that already exists answers 409. The acting admin — resolved from
+// the session the AdminOnlyMiddleware already verified — is attributed in
+// the audit record.
+func (h *BillingHandlers) CreateAdminTariff(w http.ResponseWriter, r *http.Request) {
+	adminID, ok := h.adminActor(w, r)
+	if !ok {
+		return
+	}
+	var body openapi.AdminCreateTariffRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode create tariff request", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+	tariffName, err := domain.ParseTariffName(string(body.Name))
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	tariff, err := h.adminTariffs.CreateTariff(r.Context(), adminID, billingapp.CreateTariffRequest{
+		Name:                tariffName,
+		ActivePropertyLimit: body.ActivePropertyLimit,
+		MonthlyPriceKopecks: body.MonthlyPriceKopecks,
+		YearlyPriceKopecks:  body.YearlyPriceKopecks,
+	})
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusCreated, httpsupport.AdminTariffResponse(tariff))
+}
+
+// UpdateAdminTariff implements PUT /admin/tariffs/{tariffId} (issue #256):
+// the prices, the property limit and the activity flag (false hides the plan
+// from users without breaking the subscriptions and payments that reference
+// it) in one edit, attributed to the acting admin.
+func (h *BillingHandlers) UpdateAdminTariff(w http.ResponseWriter, r *http.Request, tariffID uuid.UUID) {
+	adminID, ok := h.adminActor(w, r)
+	if !ok {
+		return
+	}
+	var body openapi.AdminUpdateTariffRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode update tariff request", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	tariff, err := h.adminTariffs.UpdateTariff(r.Context(), adminID, tariffID, billingapp.UpdateTariffRequest{
+		ActivePropertyLimit: body.ActivePropertyLimit,
+		MonthlyPriceKopecks: body.MonthlyPriceKopecks,
+		YearlyPriceKopecks:  body.YearlyPriceKopecks,
+		IsActive:            body.IsActive,
+	})
+	if err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, httpsupport.AdminTariffResponse(tariff))
 }
 
 // GetSubscription implements GET /subscription.
@@ -846,8 +924,14 @@ func (h *BillingHandlers) handleBillingError(w http.ResponseWriter, r *http.Requ
 		errors.Is(err, billingapp.ErrTariffNotFound),
 		errors.Is(err, billingapp.ErrSubscriptionNotFound),
 		errors.Is(err, billingapp.ErrPaymentNotFound),
-		errors.Is(err, billingapp.ErrPaymentMethodNotFound):
+		errors.Is(err, billingapp.ErrPaymentMethodNotFound),
+		errors.Is(err, billingapp.ErrTariffInactive):
 		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Ресурс не найден"))
+	case errors.Is(err, billingapp.ErrTariffAlreadyExists):
+		// The closed tariff-name vocabulary is backed by a unique constraint:
+		// creating a name that exists is a request defect, not a server
+		// failure (issue #256).
+		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Тариф с таким названием уже существует"))
 	case errors.Is(err, billingapp.ErrPaymentMethodInUse):
 		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Активный способ оплаты нельзя удалить, пока не выбран другой"))
 	case errors.Is(err, billingapp.ErrPaymentUnavailable):
@@ -877,7 +961,8 @@ func (h *BillingHandlers) handleBillingError(w http.ResponseWriter, r *http.Requ
 		errors.Is(err, domain.ErrInvalidAmount),
 		errors.Is(err, domain.ErrInvalidPayment),
 		errors.Is(err, domain.ErrInvalidTerm),
-		errors.Is(err, domain.ErrInvalidGraceExtension):
+		errors.Is(err, domain.ErrInvalidGraceExtension),
+		errors.Is(err, domain.ErrInvalidTariffPricing):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
 			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))

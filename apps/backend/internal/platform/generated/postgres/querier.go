@@ -77,6 +77,9 @@ type Querier interface {
 	// payment initiation; Create surfaces its violation as a unique-constraint
 	// error the application maps to ErrAlreadyExists.
 	CreateSubscriptionPayment(ctx context.Context, arg CreateSubscriptionPaymentParams) (SubscriptionPayment, error)
+	// Admin tariff creation (issue #256). The name is UNIQUE; a duplicate surfaces
+	// as a unique violation the adapter narrows to ErrAlreadyExists.
+	CreateTariff(ctx context.Context, arg CreateTariffParams) (Tariff, error)
 	CreateTenantContact(ctx context.Context, arg CreateTenantContactParams) (TenantContact, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error
@@ -403,6 +406,10 @@ type Querier interface {
 	UpdateSession(ctx context.Context, arg UpdateSessionParams) error
 	UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (UserSubscription, error)
 	UpdateSubscriptionPayment(ctx context.Context, arg UpdateSubscriptionPaymentParams) (SubscriptionPayment, error)
+	// Admin tariff edit (issue #256): prices, property limit and the activity
+	// flag. The name is immutable — user-facing tariff selection is by name, so a
+	// rename would silently change what existing references point at.
+	UpdateTariff(ctx context.Context, arg UpdateTariffParams) (Tariff, error)
 	UpdateTenantContact(ctx context.Context, arg UpdateTenantContactParams) (TenantContact, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error)

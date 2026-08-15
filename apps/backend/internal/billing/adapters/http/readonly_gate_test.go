@@ -31,6 +31,17 @@ func (r *gateTariffRepo) ListAll(context.Context) ([]domain.Tariff, error) {
 	return nil, nil
 }
 
+// The write methods are unused by the gate; they satisfy the port (issue #256).
+func (r *gateTariffRepo) Create(_ context.Context, tariff domain.Tariff) (domain.Tariff, error) {
+	return tariff, nil
+}
+
+func (r *gateTariffRepo) Update(_ context.Context, tariff domain.Tariff) (domain.Tariff, error) {
+	return tariff, nil
+}
+
+func (r *gateTariffRepo) Invalidate(context.Context) error { return nil }
+
 func (r *gateTariffRepo) WithTx(transaction.Tx) (billingapp.TariffRepository, error) { return r, nil }
 
 // gateSubscriptionRepo is an in-memory billingapp.SubscriptionRepository.

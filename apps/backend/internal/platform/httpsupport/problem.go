@@ -128,6 +128,8 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Некорректный срок служебной подписки", true
 	case errors.Is(err, billingdomain.ErrInvalidGraceExtension):
 		return "Некорректное продление льготного периода", true
+	case errors.Is(err, billingdomain.ErrInvalidTariffPricing):
+		return "Некорректные цены или лимит тарифа", true
 
 	// Admin.
 	case errors.Is(err, adminapp.ErrInvalidFilter):

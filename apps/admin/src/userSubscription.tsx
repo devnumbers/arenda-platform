@@ -25,6 +25,7 @@ import {
   useRefresh,
 } from 'react-admin';
 import { ChoiceChipField, subscriptionStatusChoices } from './fields';
+import { errorMessage } from './lib/error-message';
 import {
   canCancelOnBehalf,
   canExtendGrace,
@@ -45,9 +46,6 @@ const useUserSubscription = (): UserSubscriptionRecord => {
   const subscription = (record as Record<string, unknown> | undefined)?.subscription;
   return subscription && typeof subscription === 'object' ? (subscription as UserSubscriptionRecord) : {};
 };
-
-/** Сообщение об ошибке провайдера для тоста. */
-const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : 'Ошибка операции');
 
 /** Ссылка на Show платежа из истории переходов. */
 const TransitionPaymentField = () => {

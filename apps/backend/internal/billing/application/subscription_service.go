@@ -226,6 +226,12 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 			}
 			return fmt.Errorf("get tariff: %w", err)
 		}
+		// A hidden plan is not selectable by users (issue #256); it answers
+		// like a miss. Subscriptions already on it keep renewing — the guard
+		// only blocks new selection.
+		if !newTariff.IsActive {
+			return ErrTariffInactive
+		}
 
 		sub, err := stores.subscriptionForUpdate(ctx, userID)
 		if err != nil {

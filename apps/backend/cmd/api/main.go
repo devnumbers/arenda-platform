@@ -298,6 +298,7 @@ func run() error {
 		Audit:                    p.AuditRecorder,
 		MeEnricher:               wire.BillingMeEnricher(billingMod.Services.Subscriptions),
 		Tariffs:                  billingMod.Services.Tariffs,
+		AdminTariffs:             billingMod.Services.Tariffs,
 		Subscriptions:            billingMod.Services.Subscriptions,
 		SubscriptionManagers:     billingMod.Services.Subscriptions,
 		Payments:                 billingMod.Services.Payments,

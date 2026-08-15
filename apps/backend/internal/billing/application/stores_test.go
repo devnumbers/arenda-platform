@@ -132,6 +132,38 @@ func (r *fakeTariffRepo) ListAll(context.Context) ([]domain.Tariff, error) {
 	return all, nil
 }
 
+// Create mirrors the database's name uniqueness (issue #256).
+func (r *fakeTariffRepo) Create(_ context.Context, tariff domain.Tariff) (domain.Tariff, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, existing := range r.tariffs {
+		if existing.Name == tariff.Name {
+			return domain.Tariff{}, ErrAlreadyExists
+		}
+	}
+	r.tariffs = append(r.tariffs, tariff)
+	return tariff, nil
+}
+
+// Update keeps the name immutable, like the SQL query does (issue #256).
+func (r *fakeTariffRepo) Update(_ context.Context, tariff domain.Tariff) (domain.Tariff, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, existing := range r.tariffs {
+		if existing.ID == tariff.ID {
+			updated := tariff
+			updated.Name = existing.Name
+			r.tariffs[i] = updated
+			return updated, nil
+		}
+	}
+	return domain.Tariff{}, ErrNotFound
+}
+
+// Invalidate is a no-op: the fake caches nothing and its WithTx returns
+// itself, so writes are visible to reads immediately.
+func (r *fakeTariffRepo) Invalidate(context.Context) error { return nil }
+
 func (r *fakeTariffRepo) WithTx(transaction.Tx) (TariffRepository, error) { return r, nil }
 
 // fakeSubscriptionRepo is an in-memory SubscriptionRepository.

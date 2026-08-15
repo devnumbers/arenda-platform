@@ -40,6 +40,7 @@ type Deps struct {
 	Audit                auditapp.Recorder
 	MeEnricher           identityhttp.MeEnricher
 	Tariffs              billinghttp.TariffLister
+	AdminTariffs         billinghttp.AdminTariffManager
 	Subscriptions        billinghttp.SubscriptionViewer
 	SubscriptionManagers billinghttp.SubscriptionManager
 	Payments             billinghttp.PaymentManager
@@ -154,7 +155,7 @@ func New(deps Deps) http.Handler {
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
-	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.Subscriptions, deps.SubscriptionManagers, deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.AdminPayments, deps.AdminSubscriptions, deps.BillingDevEndpoints, deps.Logger)
+	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.AdminTariffs, deps.Subscriptions, deps.SubscriptionManagers, deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.AdminPayments, deps.AdminSubscriptions, deps.BillingDevEndpoints, deps.Logger)
 	financeHandlers := leaseshttp.NewFinanceHandlers(deps.Operations)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
@@ -194,6 +195,8 @@ func New(deps Deps) http.Handler {
 		ErrorHandlerFunc: httpsupport.OpenAPIErrorHandler,
 	}
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/tariffs", wrapper.ListAdminTariffs)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/tariffs", wrapper.CreateAdminTariff)
+	r.With(httpsupport.AdminOnlyMiddleware).Put("/admin/tariffs/{tariffId}", wrapper.UpdateAdminTariff)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/subscription/payments", wrapper.ListAdminSubscriptionPayments)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/subscription/payments/{paymentId}", wrapper.GetAdminSubscriptionPayment)
 	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/refund", wrapper.RefundSubscriptionPayment)
